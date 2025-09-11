@@ -1,0 +1,14 @@
+{
+  "name": "@acme/release-it",
+  "private": true,
+  "scripts": {
+    "release": "release-it --config ./.release-it.json"
+  },
+  "devDependencies": {
+    "@acme/prettier-config": "workspace:^0.1.0",
+    "@acme/tsconfig": "workspace:^0.1.0",
+    "@release-it/bumper": "^7.0.1",
+    "release-it": "^18.1.2"
+  },
+  "version": "2.2.5"
+}

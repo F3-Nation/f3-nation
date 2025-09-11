@@ -1,0 +1,55 @@
+{
+  "name": "f3-nation-map",
+  "version": "2.2.5",
+  "private": true,
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "packageManager": "pnpm@8.15.1",
+  "scripts": {
+    "build": "turbo build",
+    "clean": "rm -rf .turbo node_modules",
+    "clean:workspaces": "turbo clean && pnpm clean",
+    "db:pull": "pnpm -F db pull",
+    "db:push": "pnpm -F db push",
+    "db:studio": "pnpm -F db studio",
+    "db:generate": "pnpm -F db generate",
+    "db:generate_empty": "pnpm -F db generate:empty",
+    "db:migrate": "pnpm -F db migrate",
+    "db:drop": "pnpm -F db drop",
+    "db:reset": "pnpm -F db reset",
+    "db:seed": "pnpm -F db seed",
+    "dev": "turbo dev --parallel",
+    "format": "turbo format --continue -- --cache --cache-location node_modules/.cache/.prettiercache",
+    "format:fix": "turbo format --continue -- --write --cache --cache-location node_modules/.cache/.prettiercache",
+    "lint": "turbo run lint //#lint:ws --continue -- --cache --cache-location node_modules/.cache/.eslintcache",
+    "lint:fix": "turbo lint --continue -- --fix --cache --cache-location node_modules/.cache/.eslintcache",
+    "lint:ws": "pnpm dlx sherif@1.1.0",
+    "reset-test-db": "turbo run reset-test-db",
+    "typecheck": "turbo typecheck",
+    "test": "turbo test",
+    "with-env": "dotenv -e .env --",
+    "doppler": "pnpm exec ./tooling/scripts/doppler.sh",
+    "db:update-db": "pnpm -F db update-db",
+    "release": "pnpm -F release-it release"
+  },
+  "devDependencies": {
+    "@acme/prettier-config": "workspace:^0.1.0",
+    "@acme/release-it": "workspace:*",
+    "@turbo/gen": "^1.12.3",
+    "prettier": "^3.2.5",
+    "turbo": "^1.12.3",
+    "typescript": "^5.3.3"
+  },
+  "prettier": "@acme/prettier-config",
+  "pnpm": {
+    "patchedDependencies": {
+      "trpc-openapi@1.2.0": "patches/trpc-openapi@1.2.0.patch"
+    }
+  },
+  "resolutions": {
+    "axios": ">=1.7.4",
+    "braces": ">=3.0.3",
+    "cross-spawn": ">=7.0.5"
+  }
+}

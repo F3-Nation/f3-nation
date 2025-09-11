@@ -1,0 +1,10 @@
+{
+  "requestType": "Map Change Request",
+  "regionName": "Rey",
+  "workoutName": "Obi-Wan",
+  "submittedBy": "John Doe",
+  "recipientRole": "Admin",
+  "recipientOrg": "Test Org",
+  "requestsUrl": "http://localhost:3000/admin/requests",
+  "noAdminsNotice": true
+}

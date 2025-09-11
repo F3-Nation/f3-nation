@@ -1,0 +1,37 @@
+{
+  "name": "@acme/shared",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "license": "MIT",
+  "exports": {
+    "./app/*": [
+      "./src/app/*.ts",
+      "./src/app/*.tsx"
+    ],
+    "./common/*": "./src/common/*.ts"
+  },
+  "scripts": {
+    "clean": "rm -rf .turbo node_modules",
+    "lint": "eslint .",
+    "lint:fix": "yarn lint --fix",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@acme/eslint-config": "workspace:^0.2.0",
+    "@acme/prettier-config": "workspace:^0.1.0",
+    "@acme/tsconfig": "workspace:^0.1.0",
+    "@types/node": "^20.11.13",
+    "eslint": "^8.56.0",
+    "typescript": "^5.3.3"
+  },
+  "eslintConfig": {
+    "root": true,
+    "extends": [
+      "@acme/eslint-config/base"
+    ]
+  },
+  "prettier": "@acme/prettier-config"
+}

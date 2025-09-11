@@ -1,0 +1,56 @@
+{
+  "name": "@acme/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./lib/*": "./src/lib/*.ts"
+  },
+  "license": "MIT",
+  "scripts": {
+    "clean": "rm -rf .turbo node_modules",
+    "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
+    "lint": "eslint .",
+    "test": "pnpm with-env vitest --run",
+    "test:watch": "pnpm with-env vitest -w",
+    "test:org-hierarchy": "pnpm with-env tsx src/scripts/test-org-hierarchy.ts",
+    "typecheck": "tsc --noEmit",
+    "with-env": "dotenv -e ../../.env --"
+  },
+  "dependencies": {
+    "@acme/auth": "workspace:^0.1.0",
+    "@acme/db": "workspace:^0.1.0",
+    "@acme/env": "workspace:^0.1.0",
+    "@acme/shared": "workspace:^0.1.0",
+    "@acme/validators": "workspace:^0.1.0",
+    "@trpc/server": "^11.0.0-rc.477",
+    "google-spreadsheet": "^3.3.0",
+    "handlebars": "^4.7.8",
+    "lodash": "^4.17.21",
+    "nodemailer": "^6.10.0",
+    "superjson": "2.2.1",
+    "trpc-openapi": "^1.2.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@acme/eslint-config": "workspace:^0.2.0",
+    "@acme/prettier-config": "workspace:^0.1.0",
+    "@acme/tsconfig": "workspace:^0.1.0",
+    "@types/google-spreadsheet": "^3.3.2",
+    "@types/nodemailer": "^6.4.17",
+    "eslint": "^8.56.0",
+    "prettier": "^3.2.5",
+    "typescript": "^5.3.3"
+  },
+  "eslintConfig": {
+    "root": true,
+    "extends": [
+      "@acme/eslint-config/base"
+    ],
+    "ignorePatterns": [
+      "vitest.config.ts"
+    ]
+  },
+  "prettier": "@acme/prettier-config"
+}

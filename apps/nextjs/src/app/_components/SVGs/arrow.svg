@@ -1,0 +1,14 @@
+<svg viewBox="0 0 40 40">
+	<path d="M6 10.392 Q0 0 12 0 L28 0 Q40 0 34 10.392 L26 24.249 Q20 34.641 14 24.249 Z" fill="black" stroke="none" />
+	<!-- <circle cx="6" cy="10.392" r="0.1" fill="white" stroke="none" />
+	<circle cx="0" cy="0" r="0.1" fill="red" stroke="none" />
+	<circle cx="12" cy="0" r="0.1" fill="blue" stroke="none" />
+
+	<circle cx="28" cy="0" r="0.1" fill="white" stroke="none" />
+	<circle cx="40" cy="0" r="0.1" fill="red" stroke="none" />
+	<circle cx="34" cy="10.392" r="0.1" fill="blue" stroke="none" />
+
+	<circle cx="26" cy="24.249" r="0.1" fill="white" stroke="none" />
+	<circle cx="20" cy="34.641" r="0.1" fill="red" stroke="none" />
+	<circle cx="14" cy="24.249" r="0.1" fill="blue" stroke="none" /> -->
+</svg>

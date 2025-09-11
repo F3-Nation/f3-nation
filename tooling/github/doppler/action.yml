@@ -1,0 +1,27 @@
+name: "Download Environment Variables"
+description: "Downloads environment variables from Doppler"
+
+inputs:
+  doppler-token:
+    description: "Doppler token for authentication"
+    required: true
+  config:
+    description: "Configuration environment (dev/stg/prd)"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Download Doppler ENV vars
+      shell: bash
+      env:
+        DOPPLER_TOKEN: ${{ inputs.doppler-token }}
+        CONFIG: ${{ inputs.config }}
+      run: |
+        curl --get \
+          --url 'https://api.doppler.com/v3/configs/config/secrets/download' \
+          --header "authorization: Bearer ${{ env.DOPPLER_TOKEN }}" \
+          --data-urlencode "project=f3-2" \
+          --data-urlencode "config=${{ env.CONFIG }}" \
+          --data-urlencode 'format=env' \
+          -o .env

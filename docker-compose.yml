@@ -1,0 +1,13 @@
+services:
+  nextjs:
+    container_name: nextjs
+    build:
+      context: .
+      dockerfile: ./apps/nextjs/Dockerfile
+      args:
+        - DOPPLER_TOKEN=${DOPPLER_TOKEN}
+    restart: always
+    environment:
+      - DOPPLER_TOKEN={DOPPLER_TOKEN}
+    ports:
+      - 3000:3000

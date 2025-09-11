@@ -1,0 +1,26 @@
+{
+  "$schema": "https://unpkg.com/release-it@18/schema/release-it.json",
+  "git": {
+    "requireCommits": false,
+    "requireUpstream": false,
+    "push": false
+  },
+  "github": {
+    "release": false
+  },
+  "npm": {
+    "publish": false
+  },
+  "hooks": {
+    "before:release": "git add -A"
+  },
+  "plugins": {
+    "@release-it/bumper": {
+      "in": "../../package.json",
+      "out": [
+        "../../package.json",
+        "../../apps/nextjs/package.json"
+      ]
+    }
+  }
+}

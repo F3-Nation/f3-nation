@@ -1,0 +1,40 @@
+<html>
+  <head>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 0; padding: 20px;
+      background-color: #f4f4f4; } .container { max-width: 600px; margin: auto;
+      background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px
+      rgba(0, 0, 0, 0.1); } .header { font-size: 24px; margin-bottom: 20px;
+      color: #333; border-bottom: 2px solid #007bff; padding-bottom: 10px; }
+      .content { font-size: 16px; line-height: 1.6; margin-bottom: 20px; color:
+      #333; } .field-label { font-weight: bold; color: #333; } .field-value {
+      margin-top: 5px; margin-bottom: 15px; padding: 8px; background-color:
+      #f9f9f9; border-left: 3px solid #007bff; color: #222; } .highlight {
+      font-weight: bold; color: #007bff; } .footer { margin-top: 30px;
+      font-size: 14px; color: #777; text-align: center; border-top: 1px solid
+      #eee; padding-top: 15px; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">F3 Feedback Form Submission</div>
+      <div class="content">
+        <div class="field-label">Type:</div>
+        <div class="field-value">{{type}}</div>
+
+        <div class="field-label">Email:</div>
+        <div class="field-value">{{email}}</div>
+
+        <div class="field-label">Subject:</div>
+        <div class="field-value">{{subject}}</div>
+
+        <div class="field-label">Description:</div>
+        <div class="field-value">{{description}}</div>
+      </div>
+      <div class="footer">
+        This is an automated message from F3 Nation. Please do not reply to this
+        email.
+      </div>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - "**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  FORCE_COLOR: 3
+  TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+  TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  PROJECT: ${{ github.event.repository.name }}
+
+jobs:
+  env-setup:
+    runs-on: ubuntu-latest
+    outputs:
+      config: ${{ steps.set-config.outputs.config }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup
+        uses: ./tooling/github/setup
+
+      - id: set-config
+        run: |
+          case "${{ github.ref_name }}" in
+            "main" | "master" | "prod" | "production")
+              echo "config=prd" >> $GITHUB_OUTPUT
+              ;;
+            "staging" | "stage")
+              echo "config=stg" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "config=dev" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+      - name: Download Doppler ENV vars
+        uses: ./tooling/github/doppler
+        with:
+          doppler-token: ${{ secrets.DOPPLER_TOKEN }}
+          config: ${{ steps.set-config.outputs.config }}
+        # Hardcode project since we have f3-2 and f3-nation-map in github and only f3-2 is used in Doppler
+
+      - name: Check env
+        run: pnpm -F nextjs check-env
+
+  lint:
+    needs: env-setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup
+        uses: ./tooling/github/setup
+
+      - name: Download ENV vars
+        uses: ./tooling/github/doppler
+        with:
+          doppler-token: ${{ secrets.DOPPLER_TOKEN }}
+          config: ${{ needs.env-setup.outputs.config }}
+
+      - name: Lint
+        run: pnpm lint && pnpm lint:ws
+
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup
+        uses: ./tooling/github/setup
+
+      - name: Format
+        run: pnpm format
+
+  typecheck:
+    needs: env-setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup
+        uses: ./tooling/github/setup
+
+      - name: Download ENV vars
+        uses: ./tooling/github/doppler
+        with:
+          doppler-token: ${{ secrets.DOPPLER_TOKEN }}
+          config: ${{ needs.env-setup.outputs.config }}
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+  test:
+    needs: env-setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup
+        uses: ./tooling/github/setup
+
+      - name: Download ENV vars
+        uses: ./tooling/github/doppler
+        with:
+          doppler-token: ${{ secrets.DOPPLER_TOKEN }}
+          config: ${{ needs.env-setup.outputs.config }}
+
+      - name: Test
+        run: pnpm test

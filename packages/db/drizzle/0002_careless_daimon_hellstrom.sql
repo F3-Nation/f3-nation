@@ -1,0 +1,1 @@
+ALTER TABLE "update_requests" ADD COLUMN "ao_website" varchar;

@@ -1,0 +1,6 @@
+{
+  "type": "bug",
+  "email": "mary@example.org",
+  "subject": "Bug Report",
+  "description": "This is a bug report"
+}

@@ -1,0 +1,19 @@
+name: Close PR Preview Database
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [closed]
+    branches-ignore:
+      - staging
+      - master
+      - main
+jobs:
+  close-pr-db:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Delete Preview Database
+        uses: High-Country-Dev/cleanup-close-pr-action@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          doppler-token: ${{ secrets.DOPPLER_TOKEN }}

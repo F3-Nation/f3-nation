@@ -1,0 +1,56 @@
+{
+  "name": "@acme/db",
+  "version": "0.1.0",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts",
+    "./schema/schema": "./drizzle/schema.ts",
+    "./schema/relations": "./drizzle/relations.ts"
+  },
+  "license": "MIT",
+  "scripts": {
+    "clean": "rm -rf .turbo node_modules",
+    "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
+    "lint": "eslint .",
+    "push": "pnpm with-env drizzle-kit push",
+    "pull": "pnpm with-env drizzle-kit pull",
+    "generate": "pnpm with-env drizzle-kit generate",
+    "generate:empty": "pnpm with-env drizzle-kit generate --custom",
+    "migrate": "pnpm with-env node -r esbuild-register src/migrate.ts",
+    "reset": "pnpm with-env tsx ./src/reset.ts",
+    "seed": "pnpm with-env node -r esbuild-register src/seed.ts",
+    "studio": "pnpm with-env drizzle-kit studio",
+    "drop": "pnpm with-env drizzle-kit drop",
+    "reset-test-db": "NODE_ENV=test pnpm with-env tsx src/utils/reset-test-db.ts",
+    "typecheck": "tsc --noEmit",
+    "with-env": "dotenv -e ../../.env --",
+    "update-db": "pnpm with-env node -r esbuild-register src/update-db.ts"
+  },
+  "dependencies": {
+    "@acme/env": "workspace:*",
+    "@acme/shared": "workspace:*",
+    "dotenv-cli": "^7.3.0",
+    "drizzle-orm": "^0.38.4",
+    "esbuild-register": "^3.5.0",
+    "pg": "^8.11.3",
+    "postgres": "^3.4.3"
+  },
+  "devDependencies": {
+    "@acme/eslint-config": "workspace:*",
+    "@acme/prettier-config": "workspace:*",
+    "@acme/tsconfig": "workspace:*",
+    "@faker-js/faker": "^8.1.0",
+    "drizzle-kit": "^0.30.2",
+    "eslint": "^8.56.0",
+    "prettier": "^3.2.5",
+    "typescript": "^5.3.3"
+  },
+  "eslintConfig": {
+    "root": true,
+    "extends": [
+      "@acme/eslint-config/base"
+    ]
+  },
+  "prettier": "@acme/prettier-config"
+}
