@@ -18,8 +18,11 @@ import { GoogleAnalytics } from "~/app/_components/google-analytics";
 import { UserLocationProvider } from "~/app/_components/map/user-location-provider";
 import { ModalSwitcher } from "~/app/_components/modal/modal-switcher";
 import { ShadCnContainer } from "~/app/_components/shad-cn-container-ref";
+import { OrpcReactProvider } from "~/orpc/react";
 import { KeyPressProvider } from "~/utils/key-press/provider";
 import { RouteChangeTracker } from "./_components/route-change-tracker";
+
+import "../orpc/client.server"; // for pre-rendering
 
 export const metadata: Metadata = {
   metadataBase: new URL(
@@ -66,11 +69,13 @@ export default function RootLayout(props: { children: React.ReactNode }) {
 const DataProvider = ({ children }: { children: React.ReactNode }) => {
   return (
     <SessionProvider>
-      <TRPCReactProvider>
-        <UserLocationProvider>
-          <KeyPressProvider>{children}</KeyPressProvider>
-        </UserLocationProvider>
-      </TRPCReactProvider>
+      <OrpcReactProvider>
+        <TRPCReactProvider>
+          <UserLocationProvider>
+            <KeyPressProvider>{children}</KeyPressProvider>
+          </UserLocationProvider>
+        </TRPCReactProvider>
+      </OrpcReactProvider>
     </SessionProvider>
   );
 };

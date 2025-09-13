@@ -42,11 +42,6 @@
     "typescript": "^5.3.3"
   },
   "prettier": "@acme/prettier-config",
-  "pnpm": {
-    "patchedDependencies": {
-      "trpc-openapi@1.2.0": "patches/trpc-openapi@1.2.0.patch"
-    }
-  },
   "resolutions": {
     "axios": ">=1.7.4",
     "braces": ">=3.0.3",

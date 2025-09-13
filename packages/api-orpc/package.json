@@ -1,11 +1,10 @@
 {
-  "name": "@acme/api",
+  "name": "@acme/api-orpc",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./lib/*": "./src/lib/*.ts"
+    ".": "./src/index.ts"
   },
   "license": "MIT",
   "scripts": {
@@ -19,13 +18,14 @@
     "with-env": "dotenv -e ../../.env --"
   },
   "dependencies": {
+    "@acme/api": "workspace:^0.1.0",
     "@acme/auth": "workspace:^0.1.0",
     "@acme/db": "workspace:^0.1.0",
     "@acme/env": "workspace:^0.1.0",
     "@acme/shared": "workspace:^0.1.0",
     "@acme/validators": "workspace:^0.1.0",
-    "@trpc/server": "^11.0.0-rc.477",
-    "google-spreadsheet": "^3.3.0",
+    "@orpc/client": "^1.8.8",
+    "@orpc/server": "^1.8.8",
     "handlebars": "^4.7.8",
     "lodash": "^4.17.21",
     "nodemailer": "^6.10.0",
@@ -36,7 +36,6 @@
     "@acme/eslint-config": "workspace:^0.2.0",
     "@acme/prettier-config": "workspace:^0.1.0",
     "@acme/tsconfig": "workspace:^0.1.0",
-    "@types/google-spreadsheet": "^3.3.2",
     "@types/nodemailer": "^6.4.17",
     "eslint": "^8.56.0",
     "prettier": "^3.2.5",
