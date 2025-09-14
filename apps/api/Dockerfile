@@ -75,6 +75,5 @@ COPY --from=installer /app/apps/api/package.json ./
 COPY --from=installer --chown=api:nodejs /app/apps/api/.env ./apps/api/.env
 COPY --from=installer --chown=api:nodejs /app/apps/api/.next/standalone ./
 COPY --from=installer --chown=api:nodejs /app/apps/api/.next/static ./apps/api/.next/static
-COPY --from=installer --chown=api:nodejs /app/apps/api/public ./apps/api/public
 
 CMD node apps/api/server.js
