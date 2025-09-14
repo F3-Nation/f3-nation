@@ -1,6 +1,6 @@
 {
-  "name": "f3-nation-map",
-  "version": "2.2.5",
+  "name": "f3-nation-api",
+  "version": "0.0.1",
   "private": true,
   "type": "module",
   "scripts": {
