@@ -7,7 +7,16 @@ const handler = new RPCHandler(router);
 async function handleRequest(request: Request) {
   // Redirect to /docs if the request is for /
   if (new URL(request.url).pathname === "/") {
-    return Response.redirect(new URL("/docs", request.url));
+    const envBase = process.env.NEXT_PUBLIC_URL ?? undefined;
+    const forwardedProto =
+      request.headers.get("x-forwarded-proto") ?? undefined;
+    const forwardedHost = request.headers.get("x-forwarded-host") ?? undefined;
+    const url = new URL(request.url);
+    const host = forwardedHost ?? request.headers.get("host") ?? url.host;
+    const proto = forwardedProto ?? url.protocol.replace(":", "");
+    const derivedBase = `${proto}://${host}`;
+    const baseUrl = (envBase ?? derivedBase).replace(/\/$/, "");
+    return Response.redirect(`${baseUrl}/docs`);
   }
 
   // Handle the request

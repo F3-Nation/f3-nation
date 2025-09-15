@@ -5,7 +5,13 @@ import { router } from "@acme/api";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const baseUrl = `${url.protocol}//${url.host}`;
+  const envBase = process.env.NEXT_PUBLIC_URL ?? undefined;
+  const forwardedProto = request.headers.get("x-forwarded-proto") ?? undefined;
+  const forwardedHost = request.headers.get("x-forwarded-host") ?? undefined;
+  const host = forwardedHost ?? request.headers.get("host") ?? url.host;
+  const proto = forwardedProto ?? url.protocol.replace(":", "");
+  const derivedBase = `${proto}://${host}`;
+  const baseUrl = (envBase ?? derivedBase).replace(/\/$/, "");
 
   const generator = new OpenAPIGenerator({
     schemaConverters: [new ZodToJsonSchemaConverter()],
