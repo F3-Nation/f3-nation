@@ -321,6 +321,7 @@ export const eventTags = pgTable(
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
     specificOrgId: integer("specific_org_id"),
+    isActive: boolean("is_active").default(true).notNull(),
   },
   (table) => [
     foreignKey({
@@ -489,6 +490,7 @@ export const positions = pgTable(
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
     orgType: orgType("org_type"),
+    isActive: boolean("is_active").default(true).notNull(),
   },
   (table) => [
     foreignKey({
