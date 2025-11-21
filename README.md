@@ -136,9 +136,11 @@ The monorepo leverages Turbo's caching system:
 
 ### Current Applications
 
-| Application       | Directory   | Port | Description                                                                                   |
-| ----------------- | ----------- | ---- | --------------------------------------------------------------------------------------------- |
-| **F3 Nation Map** | `apps/map/` | 3000 | Interactive map application for F3 Nation locations and events - [README](apps/map/README.md) |
+| Application          | Directory               | Port | Description                                                                                     |
+| -------------------- | ----------------------- | ---- | ----------------------------------------------------------------------------------------------- |
+| **F3 Nation Map**    | `apps/map/`             | 3000 | Interactive map application for F3 Nation locations and events - [README](apps/map/README.md)   |
+| **API Service**      | `apps/api/`             | 3001 | Next.js app hosting API routes; runs on a dedicated port to avoid colliding with the map UI     |
+| **API Client (demo)** | `examples/api-client/` | 3002 | Example client for exercising the API locally; ships as a Next.js sandbox for integration demos |
 
 ### Future Applications (Planned)
 
