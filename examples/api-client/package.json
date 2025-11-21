@@ -6,7 +6,10 @@
     "dev": "next dev --port 3002",
     "build": "next build",
     "start": "next start --port 3002",
-    "lint": "eslint"
+    "lint": "eslint --max-warnings 0",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
+    "format:check": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore"
   },
   "dependencies": {
     "next": "16.0.3",
@@ -14,13 +17,16 @@
     "react-dom": "19.2.0"
   },
   "devDependencies": {
+    "@acme/prettier-config": "workspace:^0.1.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.0.3",
+    "prettier": "^3.2.5",
     "tailwindcss": "^4",
     "typescript": "^5"
-  }
+  },
+  "prettier": "@acme/prettier-config"
 }
