@@ -43,6 +43,10 @@
       "dependsOn": ["^topo", "reset-test-db", "^reset-test-db"],
       "outputs": ["node_modules/.cache/test.json"]
     },
+    "test:coverage": {
+      "dependsOn": ["^topo", "reset-test-db", "^reset-test-db"],
+      "outputs": ["coverage/**"]
+    },
     "clean": {
       "cache": false
     }
