@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
     "format:check": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
-    "test": "vitest"
+    "test": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@acme/env": "workspace:^0.1.0",
@@ -24,6 +25,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitest/coverage-v8": "^1.5.0",
     "eslint": "^9",
     "eslint-config-next": "16.0.3",
     "prettier": "^3.2.5",
