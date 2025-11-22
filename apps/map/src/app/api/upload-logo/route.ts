@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { GoogleAuth } from "google-auth-library";
 
-import { env } from "@acme/env";
+import { env } from "~/env";
 
 export async function POST(request: Request) {
   try {
