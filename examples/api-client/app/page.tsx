@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-type Region = {
+export type Region = {
   id: string;
   name: string;
   slug: string;
@@ -11,7 +11,7 @@ type Region = {
   description?: string | null;
 };
 
-type RegionsResponse = {
+export type RegionsResponse = {
   data: Region[];
   metadata: {
     page: number;
@@ -29,9 +29,9 @@ type PageProps = {
     | Promise<Record<string, string | string[] | undefined>>;
 };
 
-const PAGE_SIZE = 10;
+export const PAGE_SIZE = 10;
 
-const parsePositiveInt = (
+export const parsePositiveInt = (
   value: string | string[] | undefined,
   fallback: number,
 ) => {
@@ -41,14 +41,14 @@ const parsePositiveInt = (
   return wholeNumber > 0 ? wholeNumber : fallback;
 };
 
-const formatLocation = (region: Region) => {
+export const formatLocation = (region: Region) => {
   const parts = [region.city, region.state, region.country].filter(
     (part) => part && part.trim().length,
   );
   return parts.length ? parts.join(", ") : "Location coming soon";
 };
 
-const fetchRegions = async (page: number): Promise<RegionsResponse> => {
+export const fetchRegions = async (page: number): Promise<RegionsResponse> => {
   const apiBaseUrl = process.env.API_BASE_URL;
   const apiKey = process.env.API_KEY;
 
@@ -183,7 +183,7 @@ type PaginationLinkProps = {
   page: number | null;
 };
 
-function PaginationLink({ label, page }: PaginationLinkProps) {
+export function PaginationLink({ label, page }: PaginationLinkProps) {
   if (!page) {
     return (
       <span className="rounded-full bg-zinc-100 px-3 py-1.5 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500">
