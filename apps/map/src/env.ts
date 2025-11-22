@@ -27,6 +27,9 @@ export const env = createEnv({
   server: {
     DATABASE_URL: z.string(),
     TEST_DATABASE_URL: z.string(),
+    GOOGLE_LOGO_BUCKET_PRIVATE_KEY: z.string().min(1),
+    GOOGLE_LOGO_BUCKET_CLIENT_EMAIL: z.string().min(1),
+    GOOGLE_LOGO_BUCKET_BUCKET_NAME: z.string().min(1),
   },
   /**
    * Specify your client-side environment variables schema here.
