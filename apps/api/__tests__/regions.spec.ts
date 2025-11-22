@@ -10,6 +10,8 @@ const loadHandler = async () => {
 };
 
 describe("GET /api/v1/regions", () => {
+  const validHeaders = { "x-api-key": process.env.API_KEY! };
+
   it("returns 401 when no API key is provided", async () => {
     const { GET } = await loadHandler();
     const response = await GET(buildRequest("/api/v1/regions"));
@@ -60,5 +62,41 @@ describe("GET /api/v1/regions", () => {
       next: expect.any(Number),
       prev: expect.any(Number),
     });
+  });
+
+  it("falls back to defaults when pagination is omitted or invalid", async () => {
+    const { GET } = await loadHandler();
+    const response = await GET(buildRequest("/api/v1/regions", validHeaders));
+    const payload = await response.json();
+
+    expect(payload.metadata).toMatchObject({
+      page: 1,
+      pageSize: 100,
+      total: expect.any(Number),
+      totalPages: 1,
+      next: null,
+      prev: null,
+    });
+    expect(payload.data).toHaveLength(5);
+  });
+
+  it("accepts Bearer auth, floors pageSize, and clamps page to the last page", async () => {
+    const { GET } = await loadHandler();
+    const response = await GET(
+      buildRequest("/api/v1/regions?page=99&pageSize=2.7", {
+        authorization: `Bearer ${process.env.API_KEY!}`,
+      }),
+    );
+    const payload = await response.json();
+
+    expect(payload.metadata).toMatchObject({
+      page: 3,
+      pageSize: 2,
+      total: 5,
+      totalPages: 3,
+      next: null,
+      prev: 2,
+    });
+    expect(payload.data).toHaveLength(1);
   });
 });
