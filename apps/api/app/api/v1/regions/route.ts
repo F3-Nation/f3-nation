@@ -1,30 +1,37 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
+import { apiEnv } from "@acme/env/api";
+
 import { REGIONS } from "../../../../data/regions";
 
 const DEFAULT_PAGE_SIZE = 100;
-const API_KEY = process.env.API_KEY;
+const MAX_PAGE_SIZE = 250;
+const API_KEY = apiEnv.API_KEY;
 
 export const GET = async (request: NextRequest) => {
-  if (!API_KEY) {
-    return NextResponse.json(
-      { error: "Server misconfigured" },
-      { status: 500 },
-    );
-  }
-
   const providedApiKey =
     request.headers.get("x-api-key") ??
     request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
 
+  if (!providedApiKey) {
+    return NextResponse.json({ error: "Missing API key" }, { status: 401 });
+  }
+
   if (providedApiKey !== API_KEY) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: "Invalid API key" }, { status: 403 });
   }
 
   const { searchParams } = new URL(request.url);
   const requestedPage = Number(searchParams.get("page"));
   const requestedPageSize = Number(searchParams.get("pageSize"));
+
+  if (Number.isFinite(requestedPageSize) && requestedPageSize > MAX_PAGE_SIZE) {
+    return NextResponse.json(
+      { error: `pageSize cannot exceed ${MAX_PAGE_SIZE}` },
+      { status: 400 },
+    );
+  }
 
   const pageSize =
     Number.isFinite(requestedPageSize) && requestedPageSize > 0
