@@ -31,6 +31,7 @@ import type {
   UserMeta,
 } from "@acme/shared/app/types";
 import {
+  AchievementCadence,
   DayOfWeek,
   EventCadence,
   EventCategory,
@@ -54,6 +55,10 @@ export const updateRequestStatus = pgEnum(
 );
 export const userStatus = pgEnum("user_status", UserStatus);
 export const requestType = pgEnum("request_type", RequestType);
+export const achievementCadence = pgEnum(
+  "achievement_cadence",
+  AchievementCadence,
+);
 
 export const citext = customType<{ data: string }>({
   fromDriver(value) {
@@ -394,6 +399,13 @@ export const achievements = pgTable(
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
     specificOrgId: integer("specific_org_id"),
+    isActive: boolean("is_active").default(true).notNull(),
+    autoAward: boolean("auto_award").default(false).notNull(),
+    autoCadence: achievementCadence("auto_cadence"),
+    autoThresholdType: varchar("auto_threshold_type"),
+    autoThreshold: integer("auto_threshold"),
+    autoFilters: json("auto_filters"),
+    meta: json(),
   },
   (table) => [
     foreignKey({

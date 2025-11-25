@@ -94,3 +94,12 @@ export const FeedbackType = [
   "other",
 ] as const;
 export type FeedbackType = (typeof FeedbackType)[number];
+
+export const AchievementCadence = [
+  "weekly",
+  "monthly",
+  "quarterly",
+  "yearly",
+  "lifetime",
+] as const;
+export type AchievementCadence = (typeof AchievementCadence)[number];
