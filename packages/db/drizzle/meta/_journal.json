@@ -43,6 +43,13 @@
       "when": 1760007413490,
       "tag": "0005_outgoing_imperial_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1764076483059,
+      "tag": "0006_early_baron_zemo",
+      "breakpoints": true
     }
   ]
 }

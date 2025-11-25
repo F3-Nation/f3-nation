@@ -95,6 +95,7 @@ export const eventInstances = pgTable(
     backblastRich: json("backblast_rich"),
     preblastTs: doublePrecision("preblast_ts"),
     backblastTs: doublePrecision("backblast_ts"),
+    isPrivate: boolean("is_private").default(false).notNull(),
     meta: json(),
     created: timestamp({ mode: "string" })
       .default(sql`timezone('utc'::text, now())`)
@@ -521,6 +522,7 @@ export const events = pgTable(
     recurrenceInterval: integer("recurrence_interval"),
     indexWithinInterval: integer("index_within_interval"),
     meta: json().$type<EventMeta>(),
+    isPrivate: boolean("is_private").default(false).notNull(),
     created: timestamp({ mode: "string" })
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
