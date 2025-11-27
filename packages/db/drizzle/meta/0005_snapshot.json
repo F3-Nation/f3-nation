@@ -1,5 +1,5 @@
 {
-  "id": "86b29382-d438-4350-af4a-81217ba3fe67",
+  "id": "fbb3bd38-7d2b-4409-a283-3749408a1514",
   "prevId": "b170cce9-2438-44e6-848e-7291a58a2328",
   "version": "7",
   "dialect": "postgresql",
@@ -55,6 +55,51 @@
         "specific_org_id": {
           "name": "specific_org_id",
           "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "auto_award": {
+          "name": "auto_award",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "auto_cadence": {
+          "name": "auto_cadence",
+          "type": "achievement_cadence",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "auto_threshold_type": {
+          "name": "auto_threshold_type",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "auto_threshold": {
+          "name": "auto_threshold",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "auto_filters": {
+          "name": "auto_filters",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "meta": {
+          "name": "meta",
+          "type": "json",
           "primaryKey": false,
           "notNull": false
         }
@@ -723,6 +768,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "is_private": {
+          "name": "is_private",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "meta": {
           "name": "meta",
           "type": "json",
@@ -1291,6 +1343,13 @@
           "type": "json",
           "primaryKey": false,
           "notNull": false
+        },
+        "is_private": {
+          "name": "is_private",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "created": {
           "name": "created",
@@ -3146,6 +3205,17 @@
     }
   },
   "enums": {
+    "public.achievement_cadence": {
+      "name": "achievement_cadence",
+      "schema": "public",
+      "values": [
+        "weekly",
+        "monthly",
+        "quarterly",
+        "yearly",
+        "lifetime"
+      ]
+    },
     "public.day_of_week": {
       "name": "day_of_week",
       "schema": "public",
