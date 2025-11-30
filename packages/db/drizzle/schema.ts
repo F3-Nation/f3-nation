@@ -31,6 +31,7 @@ import type {
   UserMeta,
 } from "@acme/shared/app/types";
 import {
+  AchievementCadence,
   DayOfWeek,
   EventCadence,
   EventCategory,
@@ -54,6 +55,10 @@ export const updateRequestStatus = pgEnum(
 );
 export const userStatus = pgEnum("user_status", UserStatus);
 export const requestType = pgEnum("request_type", RequestType);
+export const achievementCadence = pgEnum(
+  "achievement_cadence",
+  AchievementCadence,
+);
 
 export const citext = customType<{ data: string }>({
   fromDriver(value) {
@@ -95,6 +100,7 @@ export const eventInstances = pgTable(
     backblastRich: json("backblast_rich"),
     preblastTs: doublePrecision("preblast_ts"),
     backblastTs: doublePrecision("backblast_ts"),
+    isPrivate: boolean("is_private").default(false).notNull(),
     meta: json(),
     created: timestamp({ mode: "string" })
       .default(sql`timezone('utc'::text, now())`)
@@ -321,6 +327,7 @@ export const eventTags = pgTable(
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
     specificOrgId: integer("specific_org_id"),
+    isActive: boolean("is_active").default(true).notNull(),
   },
   (table) => [
     foreignKey({
@@ -392,6 +399,13 @@ export const achievements = pgTable(
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
     specificOrgId: integer("specific_org_id"),
+    isActive: boolean("is_active").default(true).notNull(),
+    autoAward: boolean("auto_award").default(false).notNull(),
+    autoCadence: achievementCadence("auto_cadence"),
+    autoThresholdType: varchar("auto_threshold_type"),
+    autoThreshold: integer("auto_threshold"),
+    autoFilters: json("auto_filters"),
+    meta: json(),
   },
   (table) => [
     foreignKey({
@@ -489,6 +503,7 @@ export const positions = pgTable(
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
     orgType: orgType("org_type"),
+    isActive: boolean("is_active").default(true).notNull(),
   },
   (table) => [
     foreignKey({
@@ -519,6 +534,7 @@ export const events = pgTable(
     recurrenceInterval: integer("recurrence_interval"),
     indexWithinInterval: integer("index_within_interval"),
     meta: json().$type<EventMeta>(),
+    isPrivate: boolean("is_private").default(false).notNull(),
     created: timestamp({ mode: "string" })
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
