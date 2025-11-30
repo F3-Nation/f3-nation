@@ -20,6 +20,7 @@ const SHOWN_NAMES: (typeof COUNTRIES)["features"][number]["properties"]["NAME"][
     "Uganda",
     "United Kingdom",
     "France",
+    "Netherlands",
     // Need other states
     "Alaska",
     "Alabama",
