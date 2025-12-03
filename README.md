@@ -137,10 +137,10 @@ The monorepo leverages Turbo's caching system:
 
 ### Current Applications
 
-| Application       | Directory   | Port | Description                                                                                   |
-| ----------------- | ----------- | ---- | --------------------------------------------------------------------------------------------- |
-| **F3 Nation Map** | `apps/map/` | 3000 | Interactive map application for F3 Nation locations and events - [README](apps/map/README.md) |
-| **Admin (PaxMiner)** | `apps/admin/` | - | PaxMiner MySQL admin scripts for backups, migrations, and seeding - [README](apps/admin/README.md) |
+| Application          | Directory     | Port | Description                                                                                        |
+| -------------------- | ------------- | ---- | -------------------------------------------------------------------------------------------------- |
+| **F3 Nation Map**    | `apps/map/`   | 3000 | Interactive map application for F3 Nation locations and events - [README](apps/map/README.md)      |
+| **Admin (PaxMiner)** | `apps/admin/` | -    | PaxMiner MySQL admin scripts for backups, migrations, and seeding - [README](apps/admin/README.md) |
 
 ### Future Applications (Planned)
 
