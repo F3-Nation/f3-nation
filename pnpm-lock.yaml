@@ -837,6 +837,8 @@ importers:
 
   tooling/typescript: {}
 
+  utils/user-migrator: {}
+
 packages:
 
   /@aashutoshrathi/word-wrap@1.2.6:
