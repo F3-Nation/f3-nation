@@ -109,7 +109,7 @@ export async function* fetchTableRows(
 
     yield rows;
     const lastRow = rows[rows.length - 1]!;
-    lastKeys = primaryKeys.map((column) => lastRow[column] as unknown);
+    lastKeys = primaryKeys.map((column) => lastRow[column]);
   }
 }
 
