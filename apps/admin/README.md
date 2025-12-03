@@ -35,6 +35,15 @@ After seeding, point any app that needs PaxMiner data at the local `MYSQL_URL`.
 - `db:reset`: Truncate all PaxMiner tables in the target DB; intended for local-only use.
 - `migrate:user:posts`: Remap Slack user IDs across PaxMiner tables (with conflict checks). Use `migrate:user:posts:local` or `migrate:user:posts:prod` to target the right environment.
 
+## Backblast Attendance Scripts
+
+Use these to add or remove a single pax’s attendance for a specific AO/date. The scripts guard against missing backblasts and double-entry.
+
+- Add a missing record: `pnpm --filter f3-nation-admin attendance:ensure <slack-user-id> <ao-channel-id> <YYYY-MM-DD>`
+- Remove a mistaken record: `pnpm --filter f3-nation-admin attendance:remove <slack-user-id> <ao-channel-id> <YYYY-MM-DD>`
+- Target prod/local explicitly with `attendance:ensure:prod` / `attendance:remove:prod` or the `:local` variants; both respect `MYSQL_ENV_FILE`.
+- Find Slack user IDs in your workspace’s admin dashboard, e.g. `https://f3muletown.slack.com/admin` (replace `f3muletown` with your region).
+
 ## Notes
 
 - Backups/seeds rely on the Drizzle snapshot to know which tables to process. Run `db:pull` when the production schema changes.
