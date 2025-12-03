@@ -12,7 +12,9 @@
     "db:local:setup": "pnpm db:backup && pnpm db:down && pnpm db:up && pnpm db:migrate && pnpm db:seed",
     "db:reset": "pnpm exec tsx scripts/reset-db.ts",
     "db:seed": "pnpm exec tsx scripts/seed.ts",
-    "migrate:user:posts": "pnpm exec tsx scripts/migrate-user-posts.ts",
+    "migrate:user:posts": "pnpm run migrate:user:posts:local",
+    "migrate:user:posts:local": "MYSQL_ENV_FILE=.env.local pnpm exec tsx scripts/migrate-user-posts.ts",
+    "migrate:user:posts:prod": "MYSQL_ENV_FILE=.env.production pnpm exec tsx scripts/migrate-user-posts.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
