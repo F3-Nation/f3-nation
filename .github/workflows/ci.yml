@@ -91,8 +91,8 @@ jobs:
       - name: Download ENV vars
         uses: ./tooling/github/doppler
         with:
-        doppler-token: ${{ secrets.DOPPLER_TOKEN }}
-        config: ${{ needs.env-setup.outputs.config }}
+          doppler-token: ${{ secrets.DOPPLER_TOKEN }}
+          config: ${{ needs.env-setup.outputs.config }}
 
       - name: Typecheck
         run: pnpm typecheck
