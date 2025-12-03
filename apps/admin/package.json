@@ -6,6 +6,7 @@
   "scripts": {
     "db:pull": "drizzle-kit pull",
     "db:backup": "pnpm exec tsx scripts/backup.ts",
+    "migrate:user:posts": "pnpm exec tsx scripts/migrate-user-posts.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
