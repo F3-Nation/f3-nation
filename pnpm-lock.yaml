@@ -37,6 +37,28 @@ importers:
         specifier: ^5.3.3
         version: 5.3.3
 
+  apps/admin:
+    dependencies:
+      dotenv:
+        specifier: ^16.3.2
+        version: 16.4.5
+      drizzle-orm:
+        specifier: ^0.38.4
+        version: 0.38.4(mysql2@3.15.3)(pg@8.11.5)(postgres@3.4.4)
+      mysql2:
+        specifier: ^3.15.3
+        version: 3.15.3
+      pg:
+        specifier: ^8.11.3
+        version: 8.11.5
+      postgres:
+        specifier: ^3.4.3
+        version: 3.4.4
+    devDependencies:
+      drizzle-kit:
+        specifier: ^0.30.2
+        version: 0.30.4
+
   apps/map:
     dependencies:
       '@acme/api':
@@ -836,28 +858,6 @@ importers:
         version: 5.3.3
 
   tooling/typescript: {}
-
-  utils/user-migrator:
-    dependencies:
-      dotenv:
-        specifier: ^16.3.2
-        version: 16.4.5
-      drizzle-orm:
-        specifier: ^0.38.4
-        version: 0.38.4(mysql2@3.15.3)(pg@8.11.5)(postgres@3.4.4)
-      mysql2:
-        specifier: ^3.15.3
-        version: 3.15.3
-      pg:
-        specifier: ^8.11.3
-        version: 8.11.5
-      postgres:
-        specifier: ^3.4.3
-        version: 3.4.4
-    devDependencies:
-      drizzle-kit:
-        specifier: ^0.30.2
-        version: 0.30.4
 
 packages:
 
@@ -7529,7 +7529,7 @@ packages:
     peerDependencies:
       esbuild: '>=0.12 <1'
     dependencies:
-      debug: 4.3.4
+      debug: 4.4.0
       esbuild: 0.19.12
     transitivePeerDependencies:
       - supports-color
