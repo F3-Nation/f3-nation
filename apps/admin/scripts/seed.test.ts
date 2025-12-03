@@ -4,11 +4,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ensureLocalMysqlUrl, main, seedTable } from "./seed";
 import * as seedHelpers from "./seed-helpers";
 
+type QueryArgs = [string, unknown[]];
+type QueryMock = Mock<QueryArgs, Promise<void>>;
+
 const mysqlMocks = vi.hoisted(() => {
-  const query = vi.fn();
+  const query = vi.fn().mockResolvedValue(undefined);
   const release = vi.fn();
   const end = vi.fn();
-  const getConnection = vi.fn(async () => ({ query, release }));
+  const getConnection = vi.fn(() => Promise.resolve({ query, release }));
   const createPoolMock = vi.fn(() => ({ getConnection, end }));
 
   return { query, release, end, getConnection, createPoolMock };
@@ -20,20 +23,25 @@ vi.mock("mysql2/promise", () => ({
 }));
 
 vi.mock("./seed-helpers", async () => {
-  const actual =
-    await vi.importActual<typeof import("./seed-helpers")>("./seed-helpers");
+  const actual = await vi.importActual<typeof seedHelpers>("./seed-helpers");
 
   return {
     ...actual,
-    loadSnapshot: vi.fn(async () => ({ tables: { users: { columns: {} } } })),
-    findLatestBackupDir: vi.fn(async () => "/tmp/backups"),
+    loadSnapshot: vi
+      .fn()
+      .mockResolvedValue({ tables: { users: { columns: {} } } }),
+    findLatestBackupDir: vi.fn().mockResolvedValue("/tmp/backups"),
     loadTableNames: vi.fn(() => ["users"]),
-    loadBackupRows: vi.fn(async () => [{ id: 1, name: "Alpha" }]),
+    loadBackupRows: vi.fn().mockResolvedValue([{ id: 1, name: "Alpha" }]),
     normalizeRowsForTable: vi.fn(() => [{ id: 1, name: "Alpha" }]),
   };
 });
 
 const { query, release, end, getConnection, createPoolMock } = mysqlMocks;
+
+const createConnection = (): { query: QueryMock } => ({
+  query: vi.fn<QueryArgs, Promise<void>>().mockResolvedValue(undefined),
+});
 
 beforeEach(() => {
   query.mockReset();
@@ -58,8 +66,8 @@ describe("ensureLocalMysqlUrl", () => {
 
 describe("seedTable", () => {
   it("handles empty input rows", async () => {
-    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-    const connection = { query: vi.fn(async () => {}) };
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const connection = createConnection();
 
     await seedTable(connection as never, "users", []);
 
@@ -70,7 +78,7 @@ describe("seedTable", () => {
   });
 
   it("inserts rows with nulls for missing values", async () => {
-    const connection = { query: vi.fn(async () => {}) };
+    const connection = createConnection();
 
     await seedTable(connection as never, "users", [
       { id: 1, name: "One" },
@@ -80,19 +88,21 @@ describe("seedTable", () => {
     expect(connection.query).toHaveBeenCalledWith("TRUNCATE TABLE ??", [
       "users",
     ]);
-    const insertArgs = (connection.query as unknown as Mock).mock.calls[1][1];
+    const insertArgs = connection.query.mock.calls[1]?.[1];
 
-    expect(insertArgs[0]).toBe("users");
-    expect(insertArgs[1]).toEqual(["id", "name"]);
-    expect(insertArgs[2]).toEqual([
-      [1, "One"],
-      [2, null],
+    expect(insertArgs).toEqual([
+      "users",
+      ["id", "name"],
+      [
+        [1, "One"],
+        [2, null],
+      ],
     ]);
   });
 
   it("skips inserts when no columns are detected", async () => {
-    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-    const connection = { query: vi.fn(async () => {}) };
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const connection = createConnection();
 
     await seedTable(connection as never, "users", [{} as never]);
 

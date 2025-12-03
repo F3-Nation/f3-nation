@@ -7,7 +7,7 @@ const mysqlMocks = vi.hoisted(() => {
   const query = vi.fn();
   const release = vi.fn();
   const end = vi.fn();
-  const getConnection = vi.fn(async () => ({ query, release }));
+  const getConnection = vi.fn(() => Promise.resolve({ query, release }));
   const createPoolMock = vi.fn(() => ({ getConnection, end }));
 
   return { query, release, end, getConnection, createPoolMock };

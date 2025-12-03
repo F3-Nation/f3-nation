@@ -1,3 +1,4 @@
+import type { PoolConnection } from "mysql2/promise";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -16,14 +17,16 @@ const mysqlMocks = vi.hoisted(() => {
   const rollback = vi.fn();
   const release = vi.fn();
   const end = vi.fn();
-  const getConnection = vi.fn(async () => ({
-    beginTransaction,
-    query,
-    execute,
-    commit,
-    rollback,
-    release,
-  }));
+  const getConnection = vi.fn(() =>
+    Promise.resolve({
+      beginTransaction,
+      query,
+      execute,
+      commit,
+      rollback,
+      release,
+    }),
+  );
   const createPoolMock = vi.fn(() => ({ getConnection, end }));
 
   return {
@@ -104,10 +107,16 @@ describe("parseArgs", () => {
 describe("conflict detection", () => {
   it("detects beatdown conflicts", async () => {
     const connection = {
-      query: vi.fn(async () => [[{ ao_id: 1, bd_date: "2024-01-01" }], []]),
-    } as never;
+      query: vi.fn(() =>
+        Promise.resolve([[{ ao_id: 1, bd_date: "2024-01-01" }], []]),
+      ),
+    };
 
-    const conflict = await findBeatdownConflicts(connection, "current", "new");
+    const conflict = await findBeatdownConflicts(
+      connection as unknown as PoolConnection,
+      "current",
+      "new",
+    );
 
     expect(conflict?.table).toBe("beatdowns");
     expect(conflict?.details[0]).toContain("ao_id=1");
@@ -115,21 +124,23 @@ describe("conflict detection", () => {
 
   it("detects attendance conflicts", async () => {
     const connection = {
-      query: vi.fn(async () => [
-        [
-          {
-            ao_id: 2,
-            date: "2024-02-02",
-            target_user_id: "target",
-            target_q_user_id: "target-q",
-          },
-        ],
-        [],
-      ]),
-    } as never;
+      query: vi.fn(() =>
+        Promise.resolve([
+          [
+            {
+              ao_id: 2,
+              date: "2024-02-02",
+              target_user_id: "target",
+              target_q_user_id: "target-q",
+            },
+          ],
+          [],
+        ]),
+      ),
+    };
 
     const conflict = await findAttendanceConflicts(
-      connection,
+      connection as unknown as PoolConnection,
       "current",
       "new",
     );
@@ -142,11 +153,15 @@ describe("conflict detection", () => {
 describe("migrateUsersRow", () => {
   it("renames the user when only the current ID exists", async () => {
     const connection = {
-      query: vi.fn(async () => [[{ user_id: "current" }], []]),
-      execute: vi.fn(async () => [{ affectedRows: 1 }]),
-    } as never;
+      query: vi.fn(() => Promise.resolve([[{ user_id: "current" }], []])),
+      execute: vi.fn(() => Promise.resolve([{ affectedRows: 1 }])),
+    };
 
-    const result = await migrateUsersRow(connection, "current", "new");
+    const result = await migrateUsersRow(
+      connection as unknown as PoolConnection,
+      "current",
+      "new",
+    );
 
     expect(result).toMatch(/Renamed users\.user_id/);
     expect(connection.execute).toHaveBeenCalledWith(
@@ -157,14 +172,17 @@ describe("migrateUsersRow", () => {
 
   it("leaves rows alone when both IDs exist", async () => {
     const connection = {
-      query: vi.fn(async () => [
-        [{ user_id: "current" }, { user_id: "new" }],
-        [],
-      ]),
-      execute: vi.fn(async () => [{ affectedRows: 0 }]),
-    } as never;
+      query: vi.fn(() =>
+        Promise.resolve([[{ user_id: "current" }, { user_id: "new" }], []]),
+      ),
+      execute: vi.fn(() => Promise.resolve([{ affectedRows: 0 }])),
+    };
 
-    const result = await migrateUsersRow(connection, "current", "new");
+    const result = await migrateUsersRow(
+      connection as unknown as PoolConnection,
+      "current",
+      "new",
+    );
 
     expect(result).toMatch(/both Slack user IDs exist/i);
     expect(connection.execute).not.toHaveBeenCalled();
@@ -172,11 +190,15 @@ describe("migrateUsersRow", () => {
 
   it("assumes new user exists when only the target ID is present", async () => {
     const connection = {
-      query: vi.fn(async () => [[{ user_id: "new" }], []]),
-      execute: vi.fn(async () => [{ affectedRows: 0 }]),
-    } as never;
+      query: vi.fn(() => Promise.resolve([[{ user_id: "new" }], []])),
+      execute: vi.fn(() => Promise.resolve([{ affectedRows: 0 }])),
+    };
 
-    const result = await migrateUsersRow(connection, "current", "new");
+    const result = await migrateUsersRow(
+      connection as unknown as PoolConnection,
+      "current",
+      "new",
+    );
 
     expect(result).toMatch(/already exists/);
     expect(connection.execute).not.toHaveBeenCalled();
@@ -184,11 +206,15 @@ describe("migrateUsersRow", () => {
 
   it("reports when neither user ID is found", async () => {
     const connection = {
-      query: vi.fn(async () => [[], []]),
-      execute: vi.fn(async () => [{ affectedRows: 0 }]),
-    } as never;
+      query: vi.fn(() => Promise.resolve([[], []])),
+      execute: vi.fn(() => Promise.resolve([{ affectedRows: 0 }])),
+    };
 
-    const result = await migrateUsersRow(connection, "current", "new");
+    const result = await migrateUsersRow(
+      connection as unknown as PoolConnection,
+      "current",
+      "new",
+    );
 
     expect(result).toMatch(/No users rows found/);
   });
@@ -199,13 +225,16 @@ describe("main", () => {
     process.env.MYSQL_URL = "mysql://user:pass@localhost/db";
     process.argv = ["node", "script.ts", "old-user", "new-user"];
 
-    query.mockImplementation(async (sql: string) => {
-      if (sql.includes("FROM beatdowns")) return [[], []];
-      if (sql.includes("FROM bd_attendance")) return [[], []];
+    query.mockImplementation((sql: string) => {
+      if (sql.includes("FROM beatdowns")) return Promise.resolve([[], []]);
+      if (sql.includes("FROM bd_attendance")) return Promise.resolve([[], []]);
       if (sql.startsWith("SELECT user_id FROM users")) {
-        return [[{ user_id: "old-user" }, { user_id: "new-user" }], []];
+        return Promise.resolve([
+          [{ user_id: "old-user" }, { user_id: "new-user" }],
+          [],
+        ]);
       }
-      return [[], []];
+      return Promise.resolve([[], []]);
     });
     execute.mockResolvedValue([{ affectedRows: 1 }]);
 

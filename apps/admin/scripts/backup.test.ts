@@ -54,21 +54,22 @@ describe("loadTableNames", () => {
 describe("fetchTableRows", () => {
   it("yields rows in chunks until the source is empty", async () => {
     let call = 0;
-    const pool = {
-      query: vi.fn(async () => {
-        call += 1;
-        if (call === 1) return [[{ id: 1 }, { id: 2 }], []];
-        return [[] as unknown[], []];
-      }),
-    } as unknown as Parameters<typeof fetchTableRows>[0];
+    const query = vi.fn(() => {
+      call += 1;
+      if (call === 1) {
+        return Promise.resolve([[{ id: 1 }, { id: 2 }], []] as const);
+      }
+      return Promise.resolve([[] as unknown[], []] as const);
+    });
+    const pool = { query } as unknown as Parameters<typeof fetchTableRows>[0];
 
-    const chunks: Array<Array<Record<string, unknown>>> = [];
+    const chunks: Record<string, unknown>[][] = [];
     for await (const rows of fetchTableRows(pool, "users", 2)) {
       chunks.push(rows);
     }
 
     expect(chunks).toEqual([[{ id: 1 }, { id: 2 }]]);
-    expect(pool.query).toHaveBeenCalledTimes(2);
+    expect(query).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -76,30 +77,35 @@ describe("backupTable", () => {
   it("writes table rows to disk in JSON format", async () => {
     const rows = [{ id: 1 }, { id: 2 }, { id: 3 }];
     let call = 0;
-    const pool = {
-      query: vi.fn(async () => {
-        call += 1;
-        if (call === 1) return [[...rows.slice(0, 2)] as never[], []];
-        if (call === 2) return [[rows[2]] as never[], []];
-        return [[] as never[], []];
-      }),
-    } as unknown as Parameters<typeof backupTable>[0];
+    const query = vi.fn().mockImplementation(() => {
+      call += 1;
+      if (call === 1) {
+        return Promise.resolve([
+          [...rows.slice(0, 2)] as unknown[],
+          [],
+        ] as const);
+      }
+      if (call === 2) {
+        return Promise.resolve([[rows[2]] as unknown[], []] as const);
+      }
+      return Promise.resolve([[] as unknown[], []] as const);
+    });
+    const pool = { query } as unknown as Parameters<typeof backupTable>[0];
 
     const backupDir = await fs.promises.mkdtemp(path.join(tmpdir(), "backup-"));
 
     const count = await backupTable(pool, "users", backupDir);
     const savedRows = JSON.parse(
       await fs.promises.readFile(path.join(backupDir, "users.json"), "utf8"),
-    );
+    ) as typeof rows;
 
     expect(count).toBe(3);
     expect(savedRows).toEqual(rows);
   });
 
   it("writes an empty array when no rows are returned", async () => {
-    const pool = {
-      query: vi.fn(async () => [[], []]),
-    } as unknown as Parameters<typeof backupTable>[0];
+    const query = vi.fn().mockResolvedValue([[], []] as const);
+    const pool = { query } as unknown as Parameters<typeof backupTable>[0];
     const backupDir = await fs.promises.mkdtemp(
       path.join(tmpdir(), "backup-empty-"),
     );
@@ -107,7 +113,7 @@ describe("backupTable", () => {
     const count = await backupTable(pool, "users", backupDir);
     const savedRows = JSON.parse(
       await fs.promises.readFile(path.join(backupDir, "users.json"), "utf8"),
-    );
+    ) as Record<string, unknown>[];
 
     expect(count).toBe(0);
     expect(savedRows).toEqual([]);

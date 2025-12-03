@@ -11,7 +11,9 @@ const mysqlMocks = vi.hoisted(() => {
   const ping = vi.fn();
   const end = vi.fn();
   const query = vi.fn();
-  const createConnectionMock = vi.fn(async () => ({ ping, end, query }));
+  const createConnectionMock = vi.fn(() =>
+    Promise.resolve({ ping, end, query }),
+  );
   const escapeMock = vi.fn((value: unknown) => `escaped-${String(value)}`);
 
   return { ping, end, query, createConnectionMock, escapeMock };
@@ -98,7 +100,7 @@ describe("waitForMysql", () => {
     vi.useFakeTimers();
     createConnectionMock
       .mockRejectedValueOnce(new Error("not ready"))
-      .mockResolvedValue({ ping: vi.fn(), end: vi.fn() });
+      .mockResolvedValue({ ping: vi.fn(), end: vi.fn(), query: vi.fn() });
 
     const promise = waitForMysql(new URL("mysql://root:pass@localhost/mysql"));
     await vi.runAllTimersAsync();
