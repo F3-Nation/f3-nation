@@ -121,6 +121,7 @@ The monorepo leverages Turbo's caching system:
    - **Important**: Environment variables are application-specific. Place the `.env` file in the appropriate application directory, not the monorepo root
    - For the map app: place in `apps/map/.env`
    - See [F3 Nation Map README](apps/map/README.md) for app-specific setup details
+   - For PaxMiner data admin tooling, see [Admin README](apps/admin/README.md)
 
 5. **Start development**:
 
@@ -139,6 +140,7 @@ The monorepo leverages Turbo's caching system:
 | Application       | Directory   | Port | Description                                                                                   |
 | ----------------- | ----------- | ---- | --------------------------------------------------------------------------------------------- |
 | **F3 Nation Map** | `apps/map/` | 3000 | Interactive map application for F3 Nation locations and events - [README](apps/map/README.md) |
+| **Admin (PaxMiner)** | `apps/admin/` | - | PaxMiner MySQL admin scripts for backups, migrations, and seeding - [README](apps/admin/README.md) |
 
 ### Future Applications (Planned)
 
