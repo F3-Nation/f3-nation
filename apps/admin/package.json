@@ -9,6 +9,7 @@
     "db:pull": "MYSQL_ENV_FILE=.env.production drizzle-kit pull",
     "db:migrate": "MYSQL_ENV_FILE=.env.local pnpm exec tsx scripts/ensure-local-mysql-url.ts && MYSQL_ENV_FILE=.env.local drizzle-kit push",
     "db:backup": "MYSQL_ENV_FILE=.env.production pnpm exec tsx scripts/backup.ts",
+    "db:local:setup": "pnpm db:backup && pnpm db:down && pnpm db:up && pnpm db:migrate && pnpm db:seed",
     "db:reset": "pnpm exec tsx scripts/reset-db.ts",
     "db:seed": "pnpm exec tsx scripts/seed.ts",
     "migrate:user:posts": "pnpm exec tsx scripts/migrate-user-posts.ts",
