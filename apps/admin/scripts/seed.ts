@@ -21,8 +21,7 @@ const SNAPSHOT_PATH = path.resolve(
   "meta",
   "0000_snapshot.json",
 );
-const envFile = process.env.MYSQL_ENV_FILE ?? ".env.local";
-const ENV_PATH = path.resolve(__dirname, "..", envFile);
+const ENV_PATH = path.resolve(__dirname, "..", ".env.local");
 const INSERT_BATCH_SIZE = 500;
 
 config({ path: ENV_PATH });
@@ -32,7 +31,7 @@ export function requireEnv(name: string): string {
   const value = process.env[name];
   if (!value) {
     throw new Error(
-      `${name} is not set. Add it to ${envFile} before running the seed.`,
+      `${name} is not set. Add it to .env.local before running the seed.`,
     );
   }
   return value;
@@ -74,7 +73,7 @@ export async function seedTable(
   tableName: string,
   rows: TableRow[],
 ): Promise<void> {
-  await connection.query("DELETE FROM ??", [tableName]);
+  await connection.query("TRUNCATE TABLE ??", [tableName]);
 
   if (!rows.length) {
     console.log(`Cleared ${tableName}; no rows to insert.`);
@@ -123,14 +122,8 @@ export async function main() {
   const pool = mysql.createPool(mysqlUrl);
   const connection = await pool.getConnection();
 
-  let transactionStarted = false;
-  let foreignKeysDisabled = false;
-
   try {
     await connection.query("SET FOREIGN_KEY_CHECKS=0");
-    foreignKeysDisabled = true;
-    await connection.beginTransaction();
-    transactionStarted = true;
 
     for (const tableName of tableNames) {
       const rows = await loadBackupRows(tableName, backupDir);
@@ -138,23 +131,8 @@ export async function main() {
       await seedTable(connection, tableName, normalizedRows);
     }
 
-    await connection.commit();
-    transactionStarted = false;
+    await connection.query("SET FOREIGN_KEY_CHECKS=1");
   } finally {
-    if (transactionStarted) {
-      try {
-        await connection.rollback();
-      } catch {
-        // ignore rollback errors during cleanup
-      }
-    }
-    if (foreignKeysDisabled) {
-      try {
-        await connection.query("SET FOREIGN_KEY_CHECKS=1");
-      } catch {
-        // best-effort cleanup
-      }
-    }
     connection.release();
     await pool.end();
   }

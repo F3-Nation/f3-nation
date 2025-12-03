@@ -1,5 +1,4 @@
 import path from "node:path";
-import type { RowDataPacket } from "mysql2/promise";
 import { config } from "dotenv";
 import mysql from "mysql2/promise";
 
@@ -104,25 +103,13 @@ export async function ensureLocalPrivileges(mysqlUrl: URL) {
 
   const safeDbName = database.replace(/`/g, "``");
   const userEscaped = mysql.escape(user);
+  const hostEscaped = mysql.escape("%");
   const passwordEscaped = mysql.escape(password);
 
   await waitForMysql(rootUrl);
 
   const connection = await mysql.createConnection(rootUrl.toString());
   try {
-    const [hosts] = await connection.query<RowDataPacket[]>(
-      `
-      SELECT SUBSTRING_INDEX(host, ':', 1) AS client_host
-      FROM information_schema.processlist
-      WHERE ID = CONNECTION_ID()
-      `,
-    );
-    const clientHost =
-      typeof hosts[0]?.client_host === "string"
-        ? hosts[0].client_host
-        : "localhost";
-    const hostEscaped = mysql.escape(clientHost);
-
     await connection.query(`CREATE DATABASE IF NOT EXISTS \`${safeDbName}\``);
     await connection.query(
       `CREATE USER IF NOT EXISTS ${userEscaped}@${hostEscaped} IDENTIFIED BY ${passwordEscaped}`,

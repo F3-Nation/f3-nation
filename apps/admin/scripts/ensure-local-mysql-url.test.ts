@@ -121,18 +121,11 @@ describe("ensureLocalPrivileges", () => {
 
     createConnectionMock.mockResolvedValue(connection);
 
-    connection.query
-      .mockResolvedValueOnce([[{ client_host: "172.20.0.1" }], []] as never)
-      .mockResolvedValue([[]] as never);
-
     await ensureLocalPrivileges(
       new URL("mysql://tester:pw@localhost/test_db_name"),
     );
 
     expect(createConnectionMock).toHaveBeenCalled();
-    expect(connection.query).toHaveBeenCalledWith(
-      expect.stringContaining("FROM information_schema.processlist"),
-    );
     expect(connection.query).toHaveBeenCalledWith(
       expect.stringContaining("CREATE DATABASE IF NOT EXISTS `test_db_name`"),
     );

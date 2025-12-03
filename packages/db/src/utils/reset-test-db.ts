@@ -1,7 +1,4 @@
-import fs from "node:fs/promises";
-import path from "node:path";
-import type { MigrationConfig } from "drizzle-orm/migrator";
-import type { PgliteDatabase } from "drizzle-orm/pglite";
+import { migrate as migrator } from "drizzle-orm/postgres-js/migrator";
 
 import type { AppDb } from "../client";
 import drizzleConfig from "../../drizzle.config";
@@ -9,69 +6,23 @@ import { reset } from "../reset";
 import { testSeed } from "../test-seed";
 import { createDatabaseIfNotExists, getDb, getDbUrl } from "./functions";
 
-const runPgliteMigrations = async (
-  db: PgliteDatabase,
-  config: MigrationConfig,
-) => {
-  const migrationsFolder = path.resolve(process.cwd(), config.migrationsFolder);
-  const journalPath = path.join(migrationsFolder, "meta/_journal.json");
-  const journal = JSON.parse(await fs.readFile(journalPath, "utf8")) as {
-    entries: { idx: number; tag: string }[];
-  };
-
-  const sortedEntries = [...journal.entries].sort((a, b) => a.idx - b.idx);
-
-  for (const entry of sortedEntries) {
-    const migrationPath = path.join(migrationsFolder, `${entry.tag}.sql`);
-    const migrationSql = await fs.readFile(migrationPath, "utf8");
-    const sanitizedSql = migrationSql
-      // PGlite does not ship extensions such as citext
-      .replace(/CREATE EXTENSION[^;]+;/gi, "")
-      // Treat citext columns as plain text for in-memory runs
-      .replace(/"citext"/gi, "text");
-
-    const statements = sanitizedSql
-      .split(/-->\s*statement-breakpoint/g)
-      .map((statement) => statement.trim())
-      .filter(Boolean);
-
-    // Execute each statement directly through the underlying PGlite client so
-    // we can send raw SQL strings without prepared statement restrictions.
-    const client = (
-      db as unknown as { $client?: { exec: (sql: string) => Promise<void> } }
-    ).$client;
-    if (!client) {
-      throw new Error("PGlite client unavailable on database instance");
-    }
-
-    for (const statement of statements) {
-      await client.exec(statement);
-    }
-  }
-};
-
 export const resetTestDb = async (params?: {
   db?: AppDb;
   shouldReset?: boolean;
   shouldSeed?: boolean;
   seedType?: "test" | "project";
 }) => {
-  const { databaseUrl, databaseName, driver } = getDbUrl();
-  const usePglite = driver === "pglite";
+  const { databaseUrl, databaseName } = getDbUrl();
 
   const shouldReset = params?.shouldReset === true;
   const shouldSeed = params?.shouldSeed === true;
 
-  if (!usePglite) {
-    await createDatabaseIfNotExists(databaseUrl)
-      .then(() => console.log("Database check/creation completed."))
-      .catch((err) => console.error("Failed to check/create database:", err));
-  } else {
-    console.log("Using in-memory PGlite database for tests.");
-  }
+  await createDatabaseIfNotExists(databaseUrl)
+    .then(() => console.log("Database check/creation completed."))
+    .catch((err) => console.error("Failed to check/create database:", err));
 
   // If we have arg `--reset` then we should reset the database
-  if (shouldReset && !usePglite) {
+  if (shouldReset) {
     console.log("Resetting database");
     await reset();
   }
@@ -85,15 +36,7 @@ export const resetTestDb = async (params?: {
     shouldSeed,
     config,
   });
-  if (usePglite) {
-    await runPgliteMigrations((params?.db ?? getDb()) as PgliteDatabase, {
-      ...config,
-      migrationsFolder: config.migrationsFolder,
-    });
-  } else {
-    const { migrate } = await import("drizzle-orm/postgres-js/migrator");
-    await migrate(params?.db ?? getDb(), config);
-  }
+  await migrator(params?.db ?? getDb(), config);
 
   if (shouldSeed) {
     console.log("Seeding database...");

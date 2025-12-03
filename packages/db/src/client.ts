@@ -1,7 +1,9 @@
-import { getDb, getDbUrl } from "./utils/functions";
+import { env } from "@acme/env";
 
-// Ensure configuration is present; getDbUrl throws for missing Postgres URLs.
-getDbUrl();
+import { getDb } from "./utils/functions";
+
+const databaseUrl = env.DATABASE_URL;
+if (!databaseUrl) throw new Error("DATABASE_URL is not defined");
 
 export type AppDb = ReturnType<typeof getDb>;
 

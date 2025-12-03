@@ -100,8 +100,6 @@ jobs:
   test:
     needs: env-setup
     runs-on: ubuntu-latest
-    env:
-      TEST_USE_PGLITE: true
     steps:
       - uses: actions/checkout@v4
 

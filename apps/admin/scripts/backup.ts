@@ -52,64 +52,23 @@ export async function loadTableNames(snapshotPath: string): Promise<string[]> {
   return Object.keys(snapshot.tables);
 }
 
-export async function getPrimaryKeyColumns(
-  pool: Pool,
-  tableName: string,
-): Promise<string[]> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    `
-    SELECT COLUMN_NAME
-    FROM information_schema.KEY_COLUMN_USAGE
-    WHERE TABLE_SCHEMA = DATABASE()
-      AND TABLE_NAME = ?
-      AND CONSTRAINT_NAME = 'PRIMARY'
-    ORDER BY ORDINAL_POSITION
-    `,
-    [tableName],
-  );
-
-  return rows.map((row) => String(row.COLUMN_NAME));
-}
-
 export async function* fetchTableRows(
   pool: Pool,
   tableName: string,
   chunkSize: number,
 ): AsyncGenerator<DbRow[]> {
-  const primaryKeys = await getPrimaryKeyColumns(pool, tableName);
-
-  if (!primaryKeys.length) {
-    throw new Error(
-      `Cannot back up ${tableName} because it has no primary key defined.`,
-    );
-  }
-
-  const orderClause = primaryKeys
-    .map((column) => mysql.escapeId(column))
-    .join(", ");
-  const keyPlaceholders = primaryKeys.map(() => "?").join(", ");
-
-  let lastKeys: unknown[] | undefined;
+  let offset = 0;
 
   while (true) {
-    let sql = `SELECT * FROM ${mysql.escapeId(tableName)}`;
-    const params: unknown[] = [];
-
-    if (lastKeys) {
-      sql += ` WHERE (${orderClause}) > (${keyPlaceholders})`;
-      params.push(...lastKeys);
-    }
-
-    sql += ` ORDER BY ${orderClause} LIMIT ?`;
-    params.push(chunkSize);
-
-    const [rows] = await pool.query<DbRow[]>(sql, params);
+    const [rows] = await pool.query<DbRow[]>(
+      `SELECT * FROM ?? LIMIT ? OFFSET ?`,
+      [tableName, chunkSize, offset],
+    );
 
     if (rows.length === 0) break;
 
     yield rows;
-    const lastRow = rows[rows.length - 1]!;
-    lastKeys = primaryKeys.map((column) => lastRow[column]);
+    offset += rows.length;
   }
 }
 
