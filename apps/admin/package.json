@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "db:pull": "drizzle-kit pull",
+    "db:backup": "pnpm exec tsx scripts/backup.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -18,6 +19,7 @@
     "postgres": "^3.4.3"
   },
   "devDependencies": {
-    "drizzle-kit": "^0.30.2"
+    "drizzle-kit": "^0.30.2",
+    "tsx": "^4.7.1"
   }
 }
