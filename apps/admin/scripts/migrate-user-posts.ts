@@ -45,6 +45,14 @@ export function parseArgs() {
   return { currentSlackUserId, newSlackUserId };
 }
 
+const LOCAL_HOSTS = new Set([
+  "localhost",
+  "127.0.0.1",
+  "::1",
+  "0.0.0.0",
+  "host.docker.internal",
+]);
+
 export function requireEnv(name: string): string {
   const value = process.env[name];
   if (!value) {
@@ -52,6 +60,33 @@ export function requireEnv(name: string): string {
     process.exit(1);
   }
   return value;
+}
+
+export function ensureAllowedMysqlUrl(mysqlUrl: string) {
+  let parsed: URL;
+
+  try {
+    parsed = new URL(mysqlUrl);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`MYSQL_URL is not a valid URL: ${message}`);
+    process.exit(1);
+  }
+
+  const allowProdWrites = process.env.ALLOW_PROD_WRITES === "1";
+
+  if (!LOCAL_HOSTS.has(parsed.hostname) && !allowProdWrites) {
+    console.error(
+      `MYSQL_URL must point to a local MySQL instance. Refusing to migrate ${parsed.hostname}. Set ALLOW_PROD_WRITES=1 to target a remote host.`,
+    );
+    process.exit(1);
+  }
+
+  if (allowProdWrites) {
+    console.warn(
+      "ALLOW_PROD_WRITES=1 is set; proceeding against a non-local MYSQL_URL.",
+    );
+  }
 }
 
 export function logPlan(currentSlackUserId: string, newSlackUserId: string) {
@@ -202,6 +237,7 @@ export async function main() {
   }
 
   const mysqlUrl = requireEnv("MYSQL_URL");
+  ensureAllowedMysqlUrl(mysqlUrl);
   logPlan(currentSlackUserId, newSlackUserId);
 
   const pool = mysql.createPool(mysqlUrl);

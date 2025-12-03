@@ -2,6 +2,7 @@ import type { PoolConnection } from "mysql2/promise";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  ensureAllowedMysqlUrl,
   findAttendanceConflicts,
   findBeatdownConflicts,
   main,
@@ -77,6 +78,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   delete process.env.MYSQL_URL;
+  delete process.env.ALLOW_PROD_WRITES;
   process.argv = [...originalArgv];
 });
 
@@ -101,6 +103,30 @@ describe("parseArgs", () => {
       currentSlackUserId: "old-id",
       newSlackUserId: "new-id",
     });
+  });
+});
+
+describe("ensureAllowedMysqlUrl", () => {
+  it("exits when target host is not local and override is missing", () => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: number,
+    ) => {
+      throw new Error(`exit ${code}`);
+    }) as never);
+
+    expect(() =>
+      ensureAllowedMysqlUrl("mysql://user:pass@remote-host/db"),
+    ).toThrow(/exit 1/);
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it("warns but allows when ALLOW_PROD_WRITES is set", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    process.env.ALLOW_PROD_WRITES = "1";
+
+    ensureAllowedMysqlUrl("mysql://user:pass@remote-host/db");
+
+    expect(warnSpy).toHaveBeenCalled();
   });
 });
 

@@ -9,12 +9,26 @@ type QueryMock = Mock<QueryArgs, Promise<void>>;
 
 const mysqlMocks = vi.hoisted(() => {
   const query = vi.fn().mockResolvedValue(undefined);
+  const beginTransaction = vi.fn().mockResolvedValue(undefined);
+  const commit = vi.fn().mockResolvedValue(undefined);
+  const rollback = vi.fn().mockResolvedValue(undefined);
   const release = vi.fn();
   const end = vi.fn();
-  const getConnection = vi.fn(() => Promise.resolve({ query, release }));
+  const getConnection = vi.fn(() =>
+    Promise.resolve({ query, release, beginTransaction, commit, rollback }),
+  );
   const createPoolMock = vi.fn(() => ({ getConnection, end }));
 
-  return { query, release, end, getConnection, createPoolMock };
+  return {
+    query,
+    release,
+    end,
+    getConnection,
+    createPoolMock,
+    beginTransaction,
+    commit,
+    rollback,
+  };
 });
 
 vi.mock("mysql2/promise", () => ({
@@ -38,6 +52,7 @@ vi.mock("./seed-helpers", async () => {
 });
 
 const { query, release, end, getConnection, createPoolMock } = mysqlMocks;
+const { beginTransaction, commit, rollback } = mysqlMocks;
 
 const createConnection = (): { query: QueryMock } => ({
   query: vi.fn<QueryArgs, Promise<void>>().mockResolvedValue(undefined),
@@ -49,6 +64,9 @@ beforeEach(() => {
   end.mockReset();
   getConnection.mockClear();
   createPoolMock.mockClear();
+  beginTransaction.mockReset();
+  commit.mockReset();
+  rollback.mockReset();
 });
 
 afterEach(() => {
@@ -71,9 +89,7 @@ describe("seedTable", () => {
 
     await seedTable(connection as never, "users", []);
 
-    expect(connection.query).toHaveBeenCalledWith("TRUNCATE TABLE ??", [
-      "users",
-    ]);
+    expect(connection.query).toHaveBeenCalledWith("DELETE FROM ??", ["users"]);
     expect(logSpy).toHaveBeenCalledWith("Cleared users; no rows to insert.");
   });
 
@@ -85,9 +101,7 @@ describe("seedTable", () => {
       { id: 2 },
     ]);
 
-    expect(connection.query).toHaveBeenCalledWith("TRUNCATE TABLE ??", [
-      "users",
-    ]);
+    expect(connection.query).toHaveBeenCalledWith("DELETE FROM ??", ["users"]);
     const insertArgs = connection.query.mock.calls[1]?.[1];
 
     expect(insertArgs).toEqual([
@@ -106,9 +120,7 @@ describe("seedTable", () => {
 
     await seedTable(connection as never, "users", [{} as never]);
 
-    expect(connection.query).toHaveBeenCalledWith("TRUNCATE TABLE ??", [
-      "users",
-    ]);
+    expect(connection.query).toHaveBeenCalledWith("DELETE FROM ??", ["users"]);
     expect(logSpy).toHaveBeenCalledWith(
       "Cleared users; no columns detected to insert.",
     );
@@ -124,7 +136,9 @@ describe("main", () => {
     expect(seedHelpers.loadSnapshot).toHaveBeenCalled();
     expect(seedHelpers.findLatestBackupDir).toHaveBeenCalled();
     expect(seedHelpers.loadTableNames).toHaveBeenCalled();
-    expect(query).toHaveBeenCalledWith("TRUNCATE TABLE ??", ["users"]);
+    expect(beginTransaction).toHaveBeenCalled();
+    expect(query).toHaveBeenCalledWith("DELETE FROM ??", ["users"]);
+    expect(commit).toHaveBeenCalled();
     expect(end).toHaveBeenCalled();
     expect(release).toHaveBeenCalled();
   });

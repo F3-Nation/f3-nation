@@ -30,6 +30,7 @@
   "dependencies": {
     "@acme/env": "workspace:*",
     "@acme/shared": "workspace:*",
+    "@electric-sql/pglite": "^0.2.8",
     "dotenv-cli": "^7.3.0",
     "drizzle-orm": "^0.38.4",
     "esbuild-register": "^3.5.0",

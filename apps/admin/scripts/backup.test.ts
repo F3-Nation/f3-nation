@@ -53,13 +53,14 @@ describe("loadTableNames", () => {
 
 describe("fetchTableRows", () => {
   it("yields rows in chunks until the source is empty", async () => {
-    let call = 0;
-    const query = vi.fn(() => {
-      call += 1;
-      if (call === 1) {
-        return Promise.resolve([[{ id: 1 }, { id: 2 }], []] as const);
+    const query = vi.fn((sql: string) => {
+      if (sql.includes("FROM information_schema.KEY_COLUMN_USAGE")) {
+        return Promise.resolve([[{ COLUMN_NAME: "id" }], []] as const);
       }
-      return Promise.resolve([[] as unknown[], []] as const);
+      if (sql.includes("WHERE")) {
+        return Promise.resolve([[] as unknown[], []] as const);
+      }
+      return Promise.resolve([[{ id: 1 }, { id: 2 }], []] as const);
     });
     const pool = { query } as unknown as Parameters<typeof fetchTableRows>[0];
 
@@ -69,26 +70,42 @@ describe("fetchTableRows", () => {
     }
 
     expect(chunks).toEqual([[{ id: 1 }, { id: 2 }]]);
-    expect(query).toHaveBeenCalledTimes(2);
+    expect(query).toHaveBeenCalledTimes(3);
+    expect(query.mock.calls[0]?.[0]).toContain("information_schema");
+    expect(query.mock.calls[2]?.[0]).toContain("WHERE");
+  });
+
+  it("throws when a table has no primary key", async () => {
+    const query = vi.fn(() => Promise.resolve([[] as unknown[], []] as const));
+    const pool = { query } as unknown as Parameters<typeof fetchTableRows>[0];
+
+    await expect(
+      (async () => {
+        // eslint-disable-next-line no-unreachable-loop
+        for await (const _ of fetchTableRows(pool, "users", 1)) {
+          break;
+        }
+      })(),
+    ).rejects.toThrow(/no primary key/);
   });
 });
 
 describe("backupTable", () => {
   it("writes table rows to disk in JSON format", async () => {
     const rows = [{ id: 1 }, { id: 2 }, { id: 3 }];
-    let call = 0;
-    const query = vi.fn().mockImplementation(() => {
-      call += 1;
-      if (call === 1) {
-        return Promise.resolve([
-          [...rows.slice(0, 2)] as unknown[],
-          [],
-        ] as const);
+    let whereCall = 0;
+    const query = vi.fn().mockImplementation((sql: string) => {
+      if (sql.includes("information_schema.KEY_COLUMN_USAGE")) {
+        return Promise.resolve([[{ COLUMN_NAME: "id" }], []] as const);
       }
-      if (call === 2) {
-        return Promise.resolve([[rows[2]] as unknown[], []] as const);
+      if (sql.includes("WHERE")) {
+        whereCall += 1;
+        if (whereCall === 1) {
+          return Promise.resolve([[rows[2]] as unknown[], []] as const);
+        }
+        return Promise.resolve([[] as unknown[], []] as const);
       }
-      return Promise.resolve([[] as unknown[], []] as const);
+      return Promise.resolve([[...rows.slice(0, 2)] as unknown[], []] as const);
     });
     const pool = { query } as unknown as Parameters<typeof backupTable>[0];
 
@@ -104,7 +121,10 @@ describe("backupTable", () => {
   });
 
   it("writes an empty array when no rows are returned", async () => {
-    const query = vi.fn().mockResolvedValue([[], []] as const);
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce([[{ COLUMN_NAME: "id" }], []] as const)
+      .mockResolvedValue([[], []] as const);
     const pool = { query } as unknown as Parameters<typeof backupTable>[0];
     const backupDir = await fs.promises.mkdtemp(
       path.join(tmpdir(), "backup-empty-"),
