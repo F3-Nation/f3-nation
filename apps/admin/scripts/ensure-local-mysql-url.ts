@@ -8,12 +8,12 @@ const envPath = path.resolve(__dirname, "..", envFile);
 config({ path: envPath });
 config();
 
-function fail(message: string): never {
+export function fail(message: string): never {
   console.error(message);
   process.exit(1);
 }
 
-function requireEnv(name: string): string {
+export function requireEnv(name: string): string {
   const value = process.env[name];
   if (!value) {
     fail(`${name} is not set. Add it to ${envFile} before migrating.`);
@@ -21,13 +21,14 @@ function requireEnv(name: string): string {
   return value;
 }
 
-function ensureLocalMysqlUrl(url: string): URL {
+export function ensureLocalMysqlUrl(url: string): URL {
   let parsed: URL;
 
   try {
     parsed = new URL(url);
-  } catch (error) {
-    fail(`MYSQL_URL is not a valid URL: ${error}`);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    fail(`MYSQL_URL is not a valid URL: ${message}`);
   }
 
   if (parsed.protocol !== "mysql:") {
@@ -62,11 +63,11 @@ function ensureLocalMysqlUrl(url: string): URL {
   return parsed;
 }
 
-async function sleep(ms: number) {
+export async function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function waitForMysql(rootUrl: URL) {
+export async function waitForMysql(rootUrl: URL) {
   let lastError: unknown;
 
   for (let attempt = 1; attempt <= 10; attempt++) {
@@ -84,7 +85,7 @@ async function waitForMysql(rootUrl: URL) {
   throw lastError;
 }
 
-async function ensureLocalPrivileges(mysqlUrl: URL) {
+export async function ensureLocalPrivileges(mysqlUrl: URL) {
   const database = mysqlUrl.pathname.replace(/^\//, "");
   const user = mysqlUrl.username;
   const password = mysqlUrl.password;
@@ -132,7 +133,9 @@ async function main() {
   await ensureLocalPrivileges(parsed);
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+if (process.env.NODE_ENV !== "test") {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}

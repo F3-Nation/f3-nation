@@ -18,16 +18,16 @@ const SNAPSHOT_PATH = path.resolve(
 const envFile = process.env.MYSQL_ENV_FILE ?? ".env.local";
 const ENV_PATH = path.resolve(__dirname, "..", envFile);
 
-type Snapshot = {
+export interface Snapshot {
   tables?: Record<string, unknown>;
-};
+}
 
 type DbRow = RowDataPacket;
 
 config({ path: ENV_PATH });
 config();
 
-function requireEnv(name: string): string {
+export function requireEnv(name: string): string {
   const value = process.env[name];
   if (!value) {
     throw new Error(
@@ -37,11 +37,11 @@ function requireEnv(name: string): string {
   return value;
 }
 
-async function ensureDir(dir: string) {
+export async function ensureDir(dir: string) {
   await fs.promises.mkdir(dir, { recursive: true });
 }
 
-async function loadTableNames(snapshotPath: string): Promise<string[]> {
+export async function loadTableNames(snapshotPath: string): Promise<string[]> {
   const snapshotRaw = await fs.promises.readFile(snapshotPath, "utf8");
   const snapshot = JSON.parse(snapshotRaw) as Snapshot;
 
@@ -52,7 +52,7 @@ async function loadTableNames(snapshotPath: string): Promise<string[]> {
   return Object.keys(snapshot.tables);
 }
 
-async function* fetchTableRows(
+export async function* fetchTableRows(
   pool: Pool,
   tableName: string,
   chunkSize: number,
@@ -72,13 +72,13 @@ async function* fetchTableRows(
   }
 }
 
-async function writeChunk(stream: fs.WriteStream, chunk: string) {
+export async function writeChunk(stream: fs.WriteStream, chunk: string) {
   if (!stream.write(chunk)) {
     await once(stream, "drain");
   }
 }
 
-async function closeStream(stream: fs.WriteStream) {
+export async function closeStream(stream: fs.WriteStream) {
   await new Promise<void>((resolve, reject) => {
     stream.on("error", reject);
     stream.end(resolve);
@@ -86,7 +86,7 @@ async function closeStream(stream: fs.WriteStream) {
   await finished(stream);
 }
 
-async function backupTable(
+export async function backupTable(
   pool: Pool,
   tableName: string,
   backupDir: string,
@@ -126,7 +126,7 @@ async function backupTable(
   return total;
 }
 
-async function main() {
+export async function main() {
   const mysqlUrl = requireEnv("MYSQL_URL");
 
   await ensureDir(BACKUP_ROOT);
@@ -155,7 +155,9 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+if (process.env.NODE_ENV !== "test") {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}

@@ -13,14 +13,14 @@ const SNAPSHOT_PATH = path.resolve(
 const envFile = process.env.MYSQL_ENV_FILE ?? ".env.local";
 const ENV_PATH = path.resolve(__dirname, "..", envFile);
 
-type Snapshot = {
+interface Snapshot {
   tables?: Record<string, unknown>;
-};
+}
 
 config({ path: ENV_PATH });
 config();
 
-function requireEnv(name: string): string {
+export function requireEnv(name: string): string {
   const value = process.env[name];
   if (!value) {
     throw new Error(
@@ -30,13 +30,14 @@ function requireEnv(name: string): string {
   return value;
 }
 
-function ensureLocalMysqlUrl(url: string) {
+export function ensureLocalMysqlUrl(url: string) {
   let parsed: URL;
 
   try {
     parsed = new URL(url);
   } catch (error) {
-    throw new Error(`MYSQL_URL is not a valid URL: ${error}`);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    throw new Error(`MYSQL_URL is not a valid URL: ${errorMessage}`);
   }
 
   if (parsed.protocol !== "mysql:") {
@@ -60,7 +61,7 @@ function ensureLocalMysqlUrl(url: string) {
   }
 }
 
-async function loadTableNames(snapshotPath: string): Promise<string[]> {
+export async function loadTableNames(snapshotPath: string): Promise<string[]> {
   const snapshotRaw = await fs.promises.readFile(snapshotPath, "utf8");
   const snapshot = JSON.parse(snapshotRaw) as Snapshot;
 
@@ -71,7 +72,7 @@ async function loadTableNames(snapshotPath: string): Promise<string[]> {
   return Object.keys(snapshot.tables);
 }
 
-async function main() {
+export async function main() {
   const mysqlUrl = requireEnv("MYSQL_URL");
 
   ensureLocalMysqlUrl(mysqlUrl);
@@ -106,7 +107,9 @@ async function main() {
   console.log("Database tables reset. Ready for pnpm db:seed.");
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+if (process.env.NODE_ENV !== "test") {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}

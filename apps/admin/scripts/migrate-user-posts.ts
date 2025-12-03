@@ -13,12 +13,12 @@ const envPath = path.resolve(__dirname, "..", envFile);
 config({ path: envPath });
 config();
 
-type Conflict = {
+export interface Conflict {
   table: string;
   details: string[];
-};
+}
 
-const MIGRATION_MAP = [
+export const MIGRATION_MAP = [
   { table: "achievements_awarded", columns: ["pax_id"] },
   { table: "bd_attendance", columns: ["user_id", "q_user_id"] },
   { table: "beatdowns", columns: ["q_user_id", "coq_user_id"] },
@@ -26,13 +26,13 @@ const MIGRATION_MAP = [
   { table: "users", columns: ["user_id"] },
 ];
 
-const NOT_TRANSFERRED = [
+export const NOT_TRANSFERRED = [
   "Embedded Slack IDs inside JSON columns (bd_attendance.json, beatdowns.json).",
   "View definitions; they pick up changes automatically once base tables are updated.",
   "Any rows that do not reference the current Slack user ID.",
 ];
 
-function parseArgs() {
+export function parseArgs() {
   const [, , currentSlackUserId, newSlackUserId] = process.argv;
 
   if (!currentSlackUserId || !newSlackUserId) {
@@ -45,7 +45,7 @@ function parseArgs() {
   return { currentSlackUserId, newSlackUserId };
 }
 
-function requireEnv(name: string): string {
+export function requireEnv(name: string): string {
   const value = process.env[name];
   if (!value) {
     console.error(`${name} is not set. Add it to ${envFile} before migrating.`);
@@ -54,7 +54,7 @@ function requireEnv(name: string): string {
   return value;
 }
 
-function logPlan(currentSlackUserId: string, newSlackUserId: string) {
+export function logPlan(currentSlackUserId: string, newSlackUserId: string) {
   console.log("Migrating Slack user data");
   console.log(`Current Slack user ID: ${currentSlackUserId}`);
   console.log(`New Slack user ID: ${newSlackUserId}`);
@@ -69,7 +69,7 @@ function logPlan(currentSlackUserId: string, newSlackUserId: string) {
   console.log("");
 }
 
-async function findBeatdownConflicts(
+export async function findBeatdownConflicts(
   connection: PoolConnection,
   currentSlackUserId: string,
   newSlackUserId: string,
@@ -105,7 +105,7 @@ async function findBeatdownConflicts(
   };
 }
 
-async function findAttendanceConflicts(
+export async function findAttendanceConflicts(
   connection: PoolConnection,
   currentSlackUserId: string,
   newSlackUserId: string,
@@ -158,7 +158,7 @@ async function findAttendanceConflicts(
   };
 }
 
-async function migrateUsersRow(
+export async function migrateUsersRow(
   connection: PoolConnection,
   currentSlackUserId: string,
   newSlackUserId: string,
@@ -193,7 +193,7 @@ async function migrateUsersRow(
   return "No users rows found for either Slack ID; users table unchanged.";
 }
 
-async function main() {
+export async function main() {
   const { currentSlackUserId, newSlackUserId } = parseArgs();
 
   if (currentSlackUserId === newSlackUserId) {
@@ -323,7 +323,9 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+if (process.env.NODE_ENV !== "test") {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}

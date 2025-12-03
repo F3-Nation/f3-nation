@@ -4,6 +4,11 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "lint": "eslint .",
+    "lint:fix": "pnpm lint --fix",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "db:up": "docker compose -f docker-compose.mysql.yml up -d",
     "db:down": "docker compose -f docker-compose.mysql.yml down -v --remove-orphans",
     "db:pull": "MYSQL_ENV_FILE=.env.production drizzle-kit pull",
@@ -14,8 +19,7 @@
     "db:seed": "pnpm exec tsx scripts/seed.ts",
     "migrate:user:posts": "pnpm run migrate:user:posts:local",
     "migrate:user:posts:local": "MYSQL_ENV_FILE=.env.local pnpm exec tsx scripts/migrate-user-posts.ts",
-    "migrate:user:posts:prod": "MYSQL_ENV_FILE=.env.production pnpm exec tsx scripts/migrate-user-posts.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "migrate:user:posts:prod": "MYSQL_ENV_FILE=.env.production pnpm exec tsx scripts/migrate-user-posts.ts"
   },
   "keywords": [],
   "author": "",
@@ -28,7 +32,27 @@
     "postgres": "^3.4.3"
   },
   "devDependencies": {
+    "@acme/eslint-config": "workspace:*",
+    "@acme/prettier-config": "workspace:*",
+    "@acme/tsconfig": "workspace:*",
+    "@types/node": "^20.11.13",
+    "@vitest/coverage-v8": "1.5.0",
     "drizzle-kit": "^0.30.2",
-    "tsx": "^4.7.1"
-  }
+    "eslint": "^8.56.0",
+    "prettier": "^3.2.5",
+    "tsx": "^4.7.1",
+    "typescript": "^5.3.3",
+    "vitest": "1.5.0"
+  },
+  "eslintConfig": {
+    "root": true,
+    "extends": [
+      "@acme/eslint-config/base"
+    ],
+    "ignorePatterns": [
+      "drizzle/meta/**/*",
+      "coverage/**/*"
+    ]
+  },
+  "prettier": "@acme/prettier-config"
 }

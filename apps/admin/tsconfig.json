@@ -1,0 +1,14 @@
+{
+  "extends": "@acme/tsconfig/base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "node_modules/.cache/tsbuildinfo.json"
+  },
+  "include": [
+    "scripts",
+    "drizzle.config.ts",
+    "drizzle/**/*.ts",
+    "vitest.config.ts",
+    "coverage/**/*.js"
+  ],
+  "exclude": ["node_modules"]
+}
