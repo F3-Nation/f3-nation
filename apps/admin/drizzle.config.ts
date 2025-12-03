@@ -1,12 +1,14 @@
 import type { Config } from "drizzle-kit";
 import { config } from "dotenv";
 
-config({ path: ".env.local" });
+const envFile = process.env.MYSQL_ENV_FILE ?? ".env.local";
+
+config({ path: envFile });
 config();
 
 if (!process.env.MYSQL_URL) {
   throw new Error(
-    "MYSQL_URL is not set. Add it to .env.local before running drizzle-kit commands.",
+    `MYSQL_URL is not set. Add it to ${envFile} before running drizzle-kit commands.`,
   );
 }
 

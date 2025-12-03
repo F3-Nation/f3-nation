@@ -7,7 +7,7 @@ import { config } from "dotenv";
 import mysql from "mysql2/promise";
 
 const CHUNK_SIZE = 100;
-const BACKUP_ROOT = path.resolve(__dirname, "../../..", ".data", "backups");
+const BACKUP_ROOT = path.resolve(__dirname, "..", ".data", "backups");
 const SNAPSHOT_PATH = path.resolve(
   __dirname,
   "..",
@@ -15,7 +15,8 @@ const SNAPSHOT_PATH = path.resolve(
   "meta",
   "0000_snapshot.json",
 );
-const ENV_PATH = path.resolve(__dirname, "..", ".env.local");
+const envFile = process.env.MYSQL_ENV_FILE ?? ".env.local";
+const ENV_PATH = path.resolve(__dirname, "..", envFile);
 
 type Snapshot = {
   tables?: Record<string, unknown>;
@@ -30,7 +31,7 @@ function requireEnv(name: string): string {
   const value = process.env[name];
   if (!value) {
     throw new Error(
-      `${name} is not set. Add it to .env.local before running the backup.`,
+      `${name} is not set. Add it to ${envFile} before running the backup.`,
     );
   }
   return value;

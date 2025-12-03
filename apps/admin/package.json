@@ -4,8 +4,13 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "db:pull": "drizzle-kit pull",
-    "db:backup": "pnpm exec tsx scripts/backup.ts",
+    "db:up": "docker compose -f docker-compose.mysql.yml up -d",
+    "db:down": "docker compose -f docker-compose.mysql.yml down -v --remove-orphans",
+    "db:pull": "MYSQL_ENV_FILE=.env.production drizzle-kit pull",
+    "db:migrate": "MYSQL_ENV_FILE=.env.local pnpm exec tsx scripts/ensure-local-mysql-url.ts && MYSQL_ENV_FILE=.env.local drizzle-kit push",
+    "db:backup": "MYSQL_ENV_FILE=.env.production pnpm exec tsx scripts/backup.ts",
+    "db:reset": "pnpm exec tsx scripts/reset-db.ts",
+    "db:seed": "pnpm exec tsx scripts/seed.ts",
     "migrate:user:posts": "pnpm exec tsx scripts/migrate-user-posts.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
