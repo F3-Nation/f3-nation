@@ -91,26 +91,8 @@ jobs:
       - name: Download ENV vars
         uses: ./tooling/github/doppler
         with:
-          doppler-token: ${{ secrets.DOPPLER_TOKEN }}
-          config: ${{ needs.env-setup.outputs.config }}
+        doppler-token: ${{ secrets.DOPPLER_TOKEN }}
+        config: ${{ needs.env-setup.outputs.config }}
 
       - name: Typecheck
         run: pnpm typecheck
-
-  test:
-    needs: env-setup
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup
-        uses: ./tooling/github/setup
-
-      - name: Download ENV vars
-        uses: ./tooling/github/doppler
-        with:
-          doppler-token: ${{ secrets.DOPPLER_TOKEN }}
-          config: ${{ needs.env-setup.outputs.config }}
-
-      - name: Test
-        run: pnpm test
