@@ -121,7 +121,9 @@ describe("ensureAllowedMysqlUrl", () => {
   });
 
   it("warns but allows when ALLOW_PROD_WRITES is set", () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const warnSpy = vi
+      .spyOn(console, "warn")
+      .mockImplementation(() => undefined);
     process.env.ALLOW_PROD_WRITES = "1";
 
     ensureAllowedMysqlUrl("mysql://user:pass@remote-host/db");

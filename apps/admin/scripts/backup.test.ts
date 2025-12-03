@@ -81,7 +81,6 @@ describe("fetchTableRows", () => {
 
     await expect(
       (async () => {
-        // eslint-disable-next-line no-unreachable-loop
         for await (const _ of fetchTableRows(pool, "users", 1)) {
           break;
         }
