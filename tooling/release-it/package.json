@@ -10,5 +10,5 @@
     "@release-it/bumper": "^7.0.1",
     "release-it": "^18.1.2"
   },
-  "version": "2.2.5"
+  "version": "2.3.0"
 }
