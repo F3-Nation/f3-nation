@@ -10,5 +10,6 @@
 - **QA**: Manually verify an AO with unique socials shows its values, another without AO socials falls back to region, and one with neither hides the section. Optionally add a small unit test for the selector helper if extracted.
 
 Quick references:
+
 - https://map.f3nation.com/?eventId=45847&locationId=45849
 - https://f3nation.slack.com/archives/CHSE1P26R/p1765308525489189?thread_ts=1763731538.919699&cid=CHSE1P26R

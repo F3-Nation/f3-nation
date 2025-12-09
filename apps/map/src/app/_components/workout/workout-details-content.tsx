@@ -180,8 +180,8 @@ export const WorkoutDetailsContent = ({
               label: "Twitter",
               href: location.parentTwitter || location.regionTwitter,
             },
-          ].filter(
-            (link): link is { label: string; href: string } => Boolean(link.href),
+          ].filter((link): link is { label: string; href: string } =>
+            Boolean(link.href),
           )
         : [],
     [location],
