@@ -15,6 +15,13 @@ interface Webhook {
   method: "POST" | "GET";
 }
 
+export interface WebhookPayload {
+  eventId?: number;
+  locationId?: number;
+  orgId?: number;
+  action: "map.updated" | "map.created" | "map.deleted";
+}
+
 const webhooks: Webhook[] = [
   {
     url: `${env.NEXT_PUBLIC_API_URL}/api/orpc/ping`,
@@ -31,12 +38,7 @@ if (env.NOTIFY_WEBHOOK_URLS_COMMA_SEPARATED) {
   );
 }
 
-export const notifyWebhooks = async (mapData: {
-  eventId?: number;
-  locationId?: number;
-  orgId?: number;
-  action: "map.updated" | "map.created" | "map.deleted";
-}) => {
+export const notifyWebhooks = async (mapData: WebhookPayload) => {
   const { eventId, locationId, orgId, action } = mapData;
   const data = {
     version: "1.0",
