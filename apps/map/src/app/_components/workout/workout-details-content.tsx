@@ -164,6 +164,29 @@ export const WorkoutDetailsContent = ({
     [location],
   );
 
+  const socialLinks = useMemo(
+    () =>
+      location
+        ? [
+            {
+              label: "Facebook",
+              href: location.parentFacebook || location.regionFacebook,
+            },
+            {
+              label: "Instagram",
+              href: location.parentInstagram || location.regionInstagram,
+            },
+            {
+              label: "Twitter",
+              href: location.parentTwitter || location.regionTwitter,
+            },
+          ].filter(
+            (link): link is { label: string; href: string } => Boolean(link.href),
+          )
+        : [],
+    [location],
+  );
+
   if (!location || !event || isLoading) {
     return <WorkoutDetailsSkeleton />;
   }
@@ -361,6 +384,24 @@ export const WorkoutDetailsContent = ({
             ))}
         </dl>
       </div>
+
+      {socialLinks.length > 0 ? (
+        <div className="mt-4">
+          <div className="text-xl font-bold">Social</div>
+          <div className="mt-2 flex flex-col gap-2">
+            {socialLinks.map((link) => (
+              <Link
+                key={link.label}
+                href={link.href}
+                target="_blank"
+                className="inline-flex items-center gap-2 text-blue-600 underline hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+              >
+                <span>{link.label}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <div className="mt-6 flex justify-end">
         <button
