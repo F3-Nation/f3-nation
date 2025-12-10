@@ -50,6 +50,17 @@ jobs:
       - name: Check env
         run: pnpm -F nextjs check-env
 
+  format-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup
+        uses: ./tooling/github/setup
+
+      - name: Run format:check
+        run: pnpm format
+
   lint:
     needs: env-setup
     runs-on: ubuntu-latest
@@ -65,19 +76,43 @@ jobs:
           doppler-token: ${{ secrets.DOPPLER_TOKEN }}
           config: ${{ needs.env-setup.outputs.config }}
 
-      - name: Lint
-        run: pnpm lint && pnpm lint:ws
+      - name: Run lint
+        run: pnpm lint
 
-  format:
+      - name: Run lint:ws
+        run: pnpm lint:ws
+
+  build:
+    needs: env-setup
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgres://user:pass@localhost:5432/f3_ci
+      TEST_DATABASE_URL: postgres://user:pass@localhost:5432/f3_ci_test
+      EMAIL_SERVER: smtp://user:pass@example.com:587
+      EMAIL_FROM: dev@example.com
+      EMAIL_ADMIN_DESTINATIONS: dev@example.com
+      GOOGLE_LOGO_BUCKET_PRIVATE_KEY: dummy
+      GOOGLE_LOGO_BUCKET_CLIENT_EMAIL: dummy@example.com
+      GOOGLE_LOGO_BUCKET_BUCKET_NAME: dummy-bucket
+      API_KEY: dummy
+      SUPER_ADMIN_API_KEY: dummy
+      NEXT_PUBLIC_URL: http://localhost:3000
+      NEXT_PUBLIC_CHANNEL: ci
+      NEXT_PUBLIC_GOOGLE_API_KEY: dummy
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup
         uses: ./tooling/github/setup
 
-      - name: Format
-        run: pnpm format
+      - name: Download ENV vars
+        uses: ./tooling/github/doppler
+        with:
+          doppler-token: ${{ secrets.DOPPLER_TOKEN }}
+          config: ${{ needs.env-setup.outputs.config }}
+
+      - name: Run build
+        run: pnpm build
 
   typecheck:
     needs: env-setup
@@ -94,5 +129,137 @@ jobs:
           doppler-token: ${{ secrets.DOPPLER_TOKEN }}
           config: ${{ needs.env-setup.outputs.config }}
 
-      - name: Typecheck
+      - name: Run typecheck
         run: pnpm typecheck
+
+  test:
+    needs: env-setup
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        ports:
+          - 5433:5432
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: pass
+        options: >-
+          --health-cmd "pg_isready -U user -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://user:pass@localhost:5433/f3_ci
+      TEST_DATABASE_URL: postgres://user:pass@localhost:5433/f3_ci_test
+      EMAIL_SERVER: smtp://user:pass@example.com:587
+      EMAIL_FROM: dev@example.com
+      EMAIL_ADMIN_DESTINATIONS: dev@example.com
+      GOOGLE_LOGO_BUCKET_PRIVATE_KEY: dummy
+      GOOGLE_LOGO_BUCKET_CLIENT_EMAIL: dummy@example.com
+      GOOGLE_LOGO_BUCKET_BUCKET_NAME: dummy-bucket
+      API_KEY: dummy
+      SUPER_ADMIN_API_KEY: dummy
+      NEXT_PUBLIC_URL: http://localhost:3000
+      NEXT_PUBLIC_CHANNEL: ci
+      NEXT_PUBLIC_GOOGLE_API_KEY: dummy
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup
+        uses: ./tooling/github/setup
+
+      - name: Download ENV vars
+        uses: ./tooling/github/doppler
+        with:
+          doppler-token: ${{ secrets.DOPPLER_TOKEN }}
+          config: ${{ needs.env-setup.outputs.config }}
+
+      - name: Wait for Postgres
+        run: |
+          python - <<'PY'
+          import socket
+          import time
+
+          host, port = "localhost", 5433
+          deadline = time.time() + 60
+
+          while time.time() < deadline:
+            try:
+              with socket.create_connection((host, port), timeout=2):
+                print("Postgres is ready")
+                break
+            except OSError:
+              print("Postgres not ready yet, retrying...")
+              time.sleep(2)
+          else:
+            raise SystemExit("Postgres did not become ready in time")
+          PY
+
+      - name: Run test
+        run: pnpm test
+
+  test-coverage:
+    needs: env-setup
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        ports:
+          - 5433:5432
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: pass
+        options: >-
+          --health-cmd "pg_isready -U user -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://user:pass@localhost:5433/f3_ci
+      TEST_DATABASE_URL: postgres://user:pass@localhost:5433/f3_ci_test
+      EMAIL_SERVER: smtp://user:pass@example.com:587
+      EMAIL_FROM: dev@example.com
+      EMAIL_ADMIN_DESTINATIONS: dev@example.com
+      GOOGLE_LOGO_BUCKET_PRIVATE_KEY: dummy
+      GOOGLE_LOGO_BUCKET_CLIENT_EMAIL: dummy@example.com
+      GOOGLE_LOGO_BUCKET_BUCKET_NAME: dummy-bucket
+      API_KEY: dummy
+      SUPER_ADMIN_API_KEY: dummy
+      NEXT_PUBLIC_URL: http://localhost:3000
+      NEXT_PUBLIC_CHANNEL: ci
+      NEXT_PUBLIC_GOOGLE_API_KEY: dummy
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup
+        uses: ./tooling/github/setup
+
+      - name: Download ENV vars
+        uses: ./tooling/github/doppler
+        with:
+          doppler-token: ${{ secrets.DOPPLER_TOKEN }}
+          config: ${{ needs.env-setup.outputs.config }}
+
+      - name: Wait for Postgres
+        run: |
+          python - <<'PY'
+          import socket
+          import time
+
+          host, port = "localhost", 5433
+          deadline = time.time() + 60
+
+          while time.time() < deadline:
+            try:
+              with socket.create_connection((host, port), timeout=2):
+                print("Postgres is ready")
+                break
+            except OSError:
+              print("Postgres not ready yet, retrying...")
+              time.sleep(2)
+          else:
+            raise SystemExit("Postgres did not become ready in time")
+          PY
+
+      - name: Run test:coverage
+        run: pnpm test:coverage
