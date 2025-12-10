@@ -22,7 +22,7 @@
     "seed": "pnpm with-env node -r esbuild-register src/seed.ts",
     "studio": "pnpm with-env drizzle-kit studio",
     "drop": "pnpm with-env drizzle-kit drop",
-    "reset-test-db": "NODE_ENV=test pnpm with-env tsx src/utils/reset-test-db.ts",
+    "reset-test-db": "SKIP_ENV_VALIDATION=1 NODE_ENV=test pnpm with-env node -r esbuild-register src/utils/run-reset-test-db.ts",
     "typecheck": "tsc --noEmit",
     "with-env": "dotenv -e ../../.env --",
     "update-db": "pnpm with-env node -r esbuild-register src/update-db.ts"
