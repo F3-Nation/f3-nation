@@ -28,6 +28,7 @@
     "reset-test-db": "turbo run reset-test-db",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
+    "test:coverage": "turbo test -- --coverage",
     "with-env": "dotenv -e .env --",
     "doppler": "pnpm exec ./tooling/scripts/doppler.sh",
     "db:update-db": "pnpm -F db update-db",
