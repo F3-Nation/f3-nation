@@ -204,7 +204,7 @@ export const slackUsers = pgTable(
     stravaExpiresAt: timestamp("strava_expires_at", { mode: "string" }),
     stravaAthleteId: integer("strava_athlete_id"),
     meta: json().$type<SlackUserMeta>(),
-    slackUpdated: timestamp("slack_updated", { mode: "string" }),
+    slackUpdated: integer("slack_updated"),
     created: timestamp({ mode: "string" })
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
@@ -390,7 +390,6 @@ export const achievements = pgTable(
     id: serial().primaryKey().notNull(),
     name: varchar().notNull(),
     description: varchar(),
-    verb: varchar().notNull(),
     imageUrl: varchar("image_url"),
     created: timestamp({ mode: "string" })
       .default(sql`timezone('utc'::text, now())`)
@@ -829,6 +828,8 @@ export const achievementsXUsers = pgTable(
   {
     achievementId: integer("achievement_id").notNull(),
     userId: integer("user_id").notNull(),
+    awardYear: integer("award_year").notNull().default(-1),
+    awardPeriod: integer("award_period").notNull().default(-1),
     dateAwarded: timestamp("date_awarded", { mode: "string" })
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
@@ -845,7 +846,12 @@ export const achievementsXUsers = pgTable(
       name: "achievements_x_users_user_id_fkey",
     }),
     primaryKey({
-      columns: [table.achievementId, table.userId],
+      columns: [
+        table.achievementId,
+        table.userId,
+        table.awardYear,
+        table.awardPeriod,
+      ],
       name: "achievements_x_users_pkey",
     }),
   ],
