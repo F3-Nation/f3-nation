@@ -33,7 +33,7 @@ import {
 import { Textarea } from "@acme/ui/textarea";
 import { toast } from "@acme/ui/toast";
 
-import { api } from "~/trpc/react";
+import { orpc, useMutation } from "~/orpc/react";
 
 const typeToTitle = (type: FeedbackType) => {
   switch (type) {
@@ -50,7 +50,9 @@ const typeToTitle = (type: FeedbackType) => {
 
 export const SubmitBugReportCard = () => {
   const id = React.useId();
-  const submitFeedback = api.feedback.submitFeedback.useMutation();
+  const submitFeedback = useMutation(
+    orpc.feedback.submitFeedback.mutationOptions(),
+  );
   const form = useForm({
     schema: feedbackSchema,
     defaultValues: {

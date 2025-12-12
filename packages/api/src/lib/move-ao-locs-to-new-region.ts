@@ -1,9 +1,9 @@
-import { TRPCError } from "@trpc/server";
+import { ORPCError } from "@orpc/server";
 
 import { eq, inArray, schema } from "@acme/db";
 import { isTruthy } from "@acme/shared/common/functions";
 
-import type { Context } from "../trpc";
+import type { Context } from "../shared";
 
 /**
  * Moves the locations for an org to a new parent org
@@ -54,8 +54,7 @@ export const moveAOLocsToNewRegion = async (
 
   for (const aoEventLocation of aoEventsLocations) {
     if (aoEventLocation.orgId !== oldRegionId) {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
+      throw new ORPCError("BAD_REQUEST", {
         message: "Locations to move are not in the old region",
       });
     }
@@ -71,8 +70,7 @@ export const moveAOLocsToNewRegion = async (
       .returning();
 
     if (!newLocation) {
-      throw new TRPCError({
-        code: "INTERNAL_SERVER_ERROR",
+      throw new ORPCError("INTERNAL_SERVER_ERROR", {
         message: "Failed to create new location",
       });
     }

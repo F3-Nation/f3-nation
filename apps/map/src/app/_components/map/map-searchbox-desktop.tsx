@@ -17,7 +17,7 @@ import { Label } from "@acme/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@acme/ui/popover";
 import { Spinner } from "@acme/ui/spinner";
 
-import { api } from "~/trpc/react";
+import { orpc, useQuery } from "~/orpc/react";
 import { useOnKeyPress } from "~/utils/hooks/use-on-key-press";
 import { useKeyPress } from "~/utils/key-press/hook";
 import { onClickPlaceRowMap } from "~/utils/on-click-place-row-map";
@@ -51,7 +51,9 @@ export function MapSearchBox({
   });
   const text = searchStore.use.text();
   const [isFocused, setIsFocused] = useState(false);
-  const { data: workoutCount } = api.location.getWorkoutCount.useQuery();
+  const { data: workoutCount } = useQuery(
+    orpc.location.getWorkoutCount.queryOptions({ input: undefined }),
+  );
   const { combinedResults } = useTextSearchResults();
   const [focusedIndex, setFocusedIndex] = useState(0);
   const shouldRedirectOnResult = useRef(false);

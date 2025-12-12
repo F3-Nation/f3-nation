@@ -1,9 +1,9 @@
 services:
-  nextjs:
-    container_name: nextjs
+  map:
+    container_name: map
     build:
       context: .
-      dockerfile: ./apps/nextjs/Dockerfile
+      dockerfile: ./apps/map/Dockerfile
       args:
         - DOPPLER_TOKEN=${DOPPLER_TOKEN}
     restart: always

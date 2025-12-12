@@ -1,11 +1,11 @@
 import { Suspense } from "react";
 
-import { api } from "~/trpc/server";
+import { client } from "~/orpc/client";
 import Layout from "../admin-layout";
 import { NationsTable } from "./nations-table";
 
 const NationsPage = async () => {
-  const { orgs: nations } = await api.org.all({ orgTypes: ["nation"] });
+  const { orgs: nations } = await client.org.all({ orgTypes: ["nation"] });
 
   return (
     <Layout>

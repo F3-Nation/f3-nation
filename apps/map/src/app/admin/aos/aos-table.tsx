@@ -4,7 +4,6 @@ import type { TableOptions } from "@tanstack/react-table";
 import { useCallback, useState } from "react";
 import { DotsHorizontalIcon } from "@radix-ui/react-icons";
 
-import type { RouterOutputs } from "@acme/api";
 import type { IsActiveStatus } from "@acme/shared/app/enums";
 import type { SortingSchema } from "@acme/validators";
 import { Button } from "@acme/ui/button";
@@ -17,9 +16,10 @@ import {
 import { MDTable, usePagination } from "@acme/ui/md-table";
 import { Cell, Header } from "@acme/ui/table";
 
+import type { RouterOutputs } from "~/orpc/types";
 import { IsActiveFilter } from "~/app/admin/_components/is-active-filter";
 import { RegionFilter } from "~/app/admin/_components/region-filter";
-import { api } from "~/trpc/react";
+import { orpc, useQuery } from "~/orpc/react";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
 
 type Org = RouterOutputs["org"]["all"]["orgs"][number];
@@ -33,15 +33,19 @@ export const AOsTable = () => {
   const [sorting, setSorting] = useState<SortingSchema>([]);
   const [selectedRegions, setSelectedRegions] = useState<Org[]>([]);
 
-  const { data: aos } = api.org.all.useQuery({
-    orgTypes: ["ao"],
-    pageIndex: pagination.pageIndex,
-    pageSize: pagination.pageSize,
-    searchTerm: searchTerm,
-    sorting: sorting,
-    parentOrgIds: selectedRegions.map((region) => region.id),
-    statuses: selectedStatuses,
-  });
+  const { data: aos } = useQuery(
+    orpc.org.all.queryOptions({
+      input: {
+        orgTypes: ["ao"],
+        pageIndex: pagination.pageIndex,
+        pageSize: pagination.pageSize,
+        searchTerm: searchTerm,
+        sorting: sorting,
+        parentOrgIds: selectedRegions.map((region) => region.id),
+        statuses: selectedStatuses,
+      },
+    }),
+  );
 
   const handleStatusSelect = useCallback((status: IsActiveStatus) => {
     setSelectedStatuses((prev) => {

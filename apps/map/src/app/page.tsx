@@ -8,15 +8,15 @@ import { GoogleMapComponent } from "~/app/_components/map/google-map";
 import { InitialLocationProvider } from "~/app/_components/map/initial-location-provider";
 import { ReactQueryHydrator } from "~/app/_components/map/react-query-hydrator";
 import { TextSearchResultsProvider } from "~/app/_components/map/search-results-provider";
-import { ssg } from "~/trpc/ssg";
+import { client } from "~/orpc/client";
 import { SecondaryEffectsProvider } from "~/utils/secondary-effects-provider";
 import { TouchDeviceProvider } from "~/utils/touch-device-provider";
 
 export default async function MapPage() {
   const mapEventAndLocationData =
-    await ssg.location.getMapEventAndLocationData.fetch();
+    await client.location.getMapEventAndLocationData();
   const regionsWithLocationData =
-    await ssg.location.getRegionsWithLocation.fetch();
+    await client.location.getRegionsWithLocation();
 
   RERENDER_LOGS && console.log("MapPage rerender");
 

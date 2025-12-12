@@ -27,9 +27,15 @@ import {
 import { toast } from "@acme/ui/toast";
 import { CrupdateUserSchema } from "@acme/validators";
 
-import type { RouterOutputs } from "~/trpc/types";
+import type { RouterOutputs } from "~/orpc/types";
 import { VirtualizedCombobox } from "~/app/_components/virtualized-combobox";
-import { api } from "~/trpc/react";
+import {
+  invalidateQueries,
+  orpc,
+  ORPCError,
+  useMutation,
+  useQuery,
+} from "~/orpc/react";
 
 export default function UserMutate({
   user,
@@ -37,8 +43,9 @@ export default function UserMutate({
   user: RouterOutputs["user"]["byId"];
 }) {
   const router = useRouter();
-  const utils = api.useUtils();
-  const { data: regions } = api.org.all.useQuery({ orgTypes: ["region"] });
+  const { data: regions } = useQuery(
+    orpc.org.all.queryOptions({ input: { orgTypes: ["region"] } }),
+  );
   const sortedRegions = useMemo(() => {
     return regions?.orgs.sort((a, b) => a.name.localeCompare(b.name)) ?? [];
   }, [regions]);
@@ -55,20 +62,24 @@ export default function UserMutate({
     },
   });
 
-  const crupdateUser = api.user.crupdate.useMutation({
-    onSuccess: async () => {
-      await utils.user.invalidate();
-      router.push("/admin/users");
-      toast.success("Successfully upserted user");
-    },
-    onError: (err) => {
-      toast.error(
-        err?.data?.code === "UNAUTHORIZED"
-          ? "You must be logged in to upsert users"
-          : "Failed to upsert user",
-      );
-    },
-  });
+  const crupdateUser = useMutation(
+    orpc.user.crupdate.mutationOptions({
+      onSuccess: async () => {
+        await invalidateQueries({
+          predicate: (query) => query.queryKey[0] === "user",
+        });
+        router.push("/admin/users");
+        toast.success("Successfully upserted user");
+      },
+      onError: (err) => {
+        toast.error(
+          err instanceof ORPCError && err?.code === "UNAUTHORIZED"
+            ? "You must be logged in to upsert users"
+            : "Failed to upsert user",
+        );
+      },
+    }),
+  );
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50">

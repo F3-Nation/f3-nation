@@ -37,7 +37,7 @@ import { AOInsertSchema } from "@acme/validators";
 
 import type { DataType } from "~/utils/store/modal";
 import { env } from "~/env";
-import { api } from "~/trpc/react";
+import { invalidateQueries, orpc, useMutation, useQuery } from "~/orpc/react";
 import {
   closeModal,
   DeleteType,
@@ -51,12 +51,14 @@ export default function AdminAOsModal({
 }: {
   data: DataType[ModalType.ADMIN_AOS];
 }) {
-  const utils = api.useUtils();
-  const { data: ao } = api.org.byId.useQuery({
-    id: data.id ?? -1,
-    orgType: "ao",
-  });
-  const { data: regions } = api.org.all.useQuery({ orgTypes: ["region"] });
+  const { data: ao } = useQuery(
+    orpc.org.byId.queryOptions({
+      input: { id: data.id ?? -1, orgType: "ao" },
+    }),
+  );
+  const { data: regions } = useQuery(
+    orpc.org.all.queryOptions({ input: { orgTypes: ["region"] } }),
+  );
   const router = useRouter();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -82,7 +84,7 @@ export default function AdminAOsModal({
     });
   }, [form, ao]);
 
-  const crupdateAO = api.org.crupdate.useMutation();
+  const crupdateAO = useMutation(orpc.org.crupdate.mutationOptions());
 
   return (
     <Dialog open={true} onOpenChange={() => closeModal()}>
@@ -104,7 +106,11 @@ export default function AdminAOsModal({
                 await crupdateAO
                   .mutateAsync({ ...data, orgType: "ao" })
                   .then(() => {
-                    void utils.org.invalidate();
+                    void invalidateQueries(
+                      orpc.org.all.queryOptions({
+                        input: { orgTypes: ["ao"] },
+                      }),
+                    );
                     closeModal();
                     toast.success("Successfully updated ao");
                     router.refresh();

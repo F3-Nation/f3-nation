@@ -12,8 +12,8 @@ import {
 } from "@acme/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@acme/ui/popover";
 
-import type { RouterOutputs } from "~/trpc/types";
-import { api } from "~/trpc/react";
+import type { RouterOutputs } from "~/orpc/types";
+import { orpc, useQuery } from "~/orpc/react";
 
 type Area = RouterOutputs["org"]["all"]["orgs"][number];
 type Sector = RouterOutputs["org"]["all"]["orgs"][number];
@@ -27,7 +27,9 @@ export const AreaFilter = ({
   selectedAreas: Area[];
   selectedSectors?: Sector[];
 }) => {
-  const { data: areas } = api.org.all.useQuery({ orgTypes: ["area"] });
+  const { data: areas } = useQuery(
+    orpc.org.all.queryOptions({ input: { orgTypes: ["area"] } }),
+  );
   const [open, setOpen] = useState(false);
 
   const availableAreas = useMemo(() => {

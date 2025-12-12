@@ -9,7 +9,7 @@ RUN yarn global add turbo@^1.12.3
 COPY . .
 
 # Prune the workspace to only include nextjs and its dependencies
-RUN turbo prune @acme/nextjs --docker
+RUN turbo prune f3-nation-map --docker
 
 FROM --platform=linux/amd64 node:20-alpine AS installer
 RUN apk add --no-cache libc6-compat openssl && apk update
@@ -53,8 +53,8 @@ RUN echo "Received DOPPLER_TOKEN (first 5 chars): ${DOPPLER_TOKEN:0:5}" && \
 # Use the token explicitly
 RUN doppler setup -p f3-2 --token "$DOPPLER_TOKEN"
     
-RUN doppler secrets download --no-file --format env > /app/apps/nextjs/.env
-RUN doppler run -- sh -c "pnpm turbo build --filter=nextjs && pnpm -F db migrate"
+RUN doppler secrets download --no-file --format env > /app/apps/map/.env
+RUN doppler run -- sh -c "pnpm turbo build --filter=f3-nation-map && pnpm -F db migrate"
 
 FROM --platform=linux/amd64 node:20-alpine AS runner
 RUN apk add --no-cache libc6-compat openssl && apk update
@@ -62,19 +62,19 @@ WORKDIR /app
 
 # Don't run production as root
 RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
-USER nextjs
+RUN adduser --system --uid 1001 map
+USER map
 EXPOSE 3000
 ENV PORT 3000
 
 ENV NODE_ENV production
 
-COPY --from=installer /app/apps/nextjs/next.config.js ./
-COPY --from=installer /app/apps/nextjs/package.json ./
+COPY --from=installer /app/apps/map/next.config.js ./
+COPY --from=installer /app/apps/map/package.json ./
 
-COPY --from=installer --chown=nextjs:nodejs /app/apps/nextjs/.env ./apps/nextjs/.env
-COPY --from=installer --chown=nextjs:nodejs /app/apps/nextjs/.next/standalone ./
-COPY --from=installer --chown=nextjs:nodejs /app/apps/nextjs/.next/static ./apps/nextjs/.next/static
-COPY --from=installer --chown=nextjs:nodejs /app/apps/nextjs/public ./apps/nextjs/public
+COPY --from=installer --chown=map:nodejs /app/apps/map/.env ./apps/map/.env
+COPY --from=installer --chown=map:nodejs /app/apps/map/.next/standalone ./
+COPY --from=installer --chown=map:nodejs /app/apps/map/.next/static ./apps/map/.next/static
+COPY --from=installer --chown=map:nodejs /app/apps/map/public ./apps/map/public
 
-CMD node apps/nextjs/server.js
+CMD node apps/map/server.js

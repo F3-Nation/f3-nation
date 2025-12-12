@@ -5,7 +5,6 @@ import { useState } from "react";
 import dayjs from "dayjs";
 import { Check, Filter, X } from "lucide-react";
 
-import type { RouterOutputs } from "@acme/api";
 import { UpdateRequestStatus } from "@acme/shared/app/enums";
 import { ZustandStore } from "@acme/shared/common/classes";
 import { cn } from "@acme/ui";
@@ -21,7 +20,8 @@ import { MDTable } from "@acme/ui/md-table";
 import { Popover, PopoverContent, PopoverTrigger } from "@acme/ui/popover";
 import { Cell, Header } from "@acme/ui/table";
 
-import { api } from "~/trpc/react";
+import type { RouterOutputs } from "~/orpc/types";
+import { orpc, useQuery } from "~/orpc/react";
 import { ModalType, openModal } from "~/utils/store/modal";
 
 const initialState = {
@@ -54,14 +54,18 @@ export const RequestsTable = () => {
   const pagination = requestTableStore.use.pagination();
   const statuses = requestTableStore.use.statuses();
 
-  const { data: requests } = api.request.all.useQuery({
-    pageIndex: pagination.pageIndex,
-    pageSize: pagination.pageSize,
-    searchTerm: searchTerm,
-    sorting: sorting,
-    onlyMine,
-    statuses,
-  });
+  const { data: requests } = useQuery(
+    orpc.request.all.queryOptions({
+      input: {
+        pageIndex: pagination.pageIndex,
+        pageSize: pagination.pageSize,
+        searchTerm: searchTerm,
+        sorting: sorting,
+        onlyMine,
+        statuses,
+      },
+    }),
+  );
 
   const setValue =
     <T extends keyof RequestTableStore>(key: T) =>

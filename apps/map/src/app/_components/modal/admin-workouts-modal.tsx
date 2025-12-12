@@ -45,7 +45,13 @@ import { toast } from "@acme/ui/toast";
 import { EventInsertSchema } from "@acme/validators";
 
 import type { DataType } from "~/utils/store/modal";
-import { api } from "~/trpc/react";
+import {
+  invalidateQueries,
+  orpc,
+  ORPCError,
+  useMutation,
+  useQuery,
+} from "~/orpc/react";
 import {
   closeModal,
   DeleteType,
@@ -78,15 +84,26 @@ export default function AdminWorkoutsModal({
 }: {
   data: DataType[ModalType.ADMIN_EVENTS];
 }) {
-  const utils = api.useUtils();
-  const { data: regions } = api.org.all.useQuery({ orgTypes: ["region"] });
-  const { data: locations } = api.location.all.useQuery();
-  const { data: aos } = api.org.all.useQuery({ orgTypes: ["ao"] });
-  const { data: event } = api.event.byId.useQuery({ id: data.id ?? -1 });
-  const { data: eventTypes } = api.eventType.all.useQuery({
-    pageSize: 200,
-    orgIds: event?.regions.map((r) => r.regionId),
-  });
+  const { data: regions } = useQuery(
+    orpc.org.all.queryOptions({ input: { orgTypes: ["region"] } }),
+  );
+  const { data: locations } = useQuery(
+    orpc.location.all.queryOptions({ input: undefined }),
+  );
+  const { data: aos } = useQuery(
+    orpc.org.all.queryOptions({ input: { orgTypes: ["ao"] } }),
+  );
+  const { data: event } = useQuery(
+    orpc.event.byId.queryOptions({ input: { id: data.id ?? -1 } }),
+  );
+  const { data: eventTypes } = useQuery(
+    orpc.eventType.all.queryOptions({
+      input: {
+        pageSize: 200,
+        orgIds: event?.regions.map((r) => r.regionId),
+      },
+    }),
+  );
   const router = useRouter();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -116,21 +133,25 @@ export default function AdminWorkoutsModal({
     });
   }, [form, event]);
 
-  const crupdateEvent = api.event.crupdate.useMutation({
-    onSuccess: async () => {
-      await utils.event.invalidate();
-      closeModal();
-      toast.success("Successfully updated event");
-      router.refresh();
-    },
-    onError: (err) => {
-      toast.error(
-        err?.data?.code === "UNAUTHORIZED"
-          ? "You must be logged in to update events"
-          : "Failed to update event",
-      );
-    },
-  });
+  const crupdateEvent = useMutation(
+    orpc.event.crupdate.mutationOptions({
+      onSuccess: async () => {
+        await invalidateQueries({
+          predicate: (query) => query.queryKey[0] === "event",
+        });
+        closeModal();
+        toast.success("Successfully updated event");
+        router.refresh();
+      },
+      onError: (err) => {
+        toast.error(
+          err instanceof ORPCError && err?.code === "UNAUTHORIZED"
+            ? "You must be logged in to update events"
+            : "Failed to update event",
+        );
+      },
+    }),
+  );
 
   const onSubmit = async (data: EventInsertFormType) => {
     // Validate times

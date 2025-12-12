@@ -276,3 +276,9 @@ declare global {
     gtag: (type: "event" | "config", event: string, params: unknown) => void;
   }
 }
+
+// Provide a global NoInfer utility type for libraries that reference it in d.ts
+// This prevents inference while acting as a passthrough for T
+declare global {
+  type NoInfer<T> = [T][T extends any ? 0 : never];
+}

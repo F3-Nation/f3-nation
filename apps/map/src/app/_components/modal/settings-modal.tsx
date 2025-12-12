@@ -19,7 +19,7 @@ import { signIn } from "next-auth/react";
 import { useTheme } from "next-themes";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
-import { isDevelopment } from "@acme/shared/common/constants";
+import { isDevelopment, isProd } from "@acme/shared/common/constants";
 import { ProviderId } from "@acme/shared/common/enums";
 import { cn } from "@acme/ui";
 import {
@@ -30,8 +30,7 @@ import {
 } from "@acme/ui/dialog";
 import { toast } from "@acme/ui/toast";
 
-import { isProd } from "~/trpc/util";
-import { vanillaApi } from "~/trpc/vanilla";
+import { orpc } from "~/orpc/react";
 import { useAuth } from "~/utils/hooks/use-auth";
 import { appStore } from "~/utils/store/app";
 import { mapStore } from "~/utils/store/map";
@@ -318,8 +317,8 @@ export default function SettingsModal() {
                   "flex w-full flex-row items-center justify-center gap-1 rounded-md bg-card p-2 text-foreground shadow-sm hover:bg-accent",
                 )}
                 onClick={() => {
-                  void vanillaApi.org.revalidate
-                    .mutate()
+                  void orpc.org.revalidate
+                    .call()
                     .then(() => {
                       toast.success("Nation revalidated");
                     })

@@ -1,34 +1,23 @@
-import type { inferRouterInputs, inferRouterOutputs } from "@trpc/server";
+import { apiRouter } from "./router/api";
+import { authRouter } from "./router/auth";
+import { eventRouter } from "./router/event";
+import { eventTypeRouter } from "./router/event-type";
+import { feedbackRouter } from "./router/feedback";
+import { locationRouter } from "./router/location";
+import { orgRouter } from "./router/org";
+import { pingRouter } from "./router/ping";
+import { requestRouter } from "./router/request";
+import { userRouter } from "./router/user";
 
-import type { AppRouter } from "./root";
-import { appRouter } from "./root";
-import { createCallerFactory, createTRPCContext } from "./trpc";
-
-/**
- * Create a server-side caller for the tRPC API
- * @example
- * const trpc = createCaller(createContext);
- * const res = await trpc.post.all();
- *       ^? Post[]
- */
-const createCaller = createCallerFactory(appRouter);
-
-/**
- * Inference helpers for input types
- * @example
- * type PostByIdInput = RouterInputs['post']['byId']
- *      ^? { id: number }
- **/
-type RouterInputs = inferRouterInputs<AppRouter>;
-
-/**
- * Inference helpers for output types
- * @example
- * type AllPostsOutput = RouterOutputs['post']['all']
- *      ^? Post[]
- **/
-type RouterOutputs = inferRouterOutputs<AppRouter>;
-
-export { openApiDocument } from "./openApi";
-export { appRouter, createCaller, createTRPCContext };
-export type { AppRouter, RouterInputs, RouterOutputs };
+export const router = {
+  api: apiRouter,
+  auth: authRouter,
+  org: orgRouter,
+  feedback: feedbackRouter,
+  ping: pingRouter,
+  location: locationRouter,
+  user: userRouter,
+  request: requestRouter,
+  event: eventRouter,
+  eventType: eventTypeRouter,
+};

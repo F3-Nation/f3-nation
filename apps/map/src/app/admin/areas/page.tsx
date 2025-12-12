@@ -1,13 +1,13 @@
 import { Suspense } from "react";
 
-import { api } from "~/trpc/server";
+import { client } from "~/orpc/client";
 import Layout from "../admin-layout";
 import { AddAreaButton } from "./[id]/add-area-button";
 import { AreasTable } from "./areas-table";
 
 const AreasPage = async () => {
-  const { orgs: areas } = await api.org.all({ orgTypes: ["area"] });
-  const { orgs: sectors } = await api.org.all({ orgTypes: ["sector"] });
+  const { orgs: areas } = await client.org.all({ orgTypes: ["area"] });
+  const { orgs: sectors } = await client.org.all({ orgTypes: ["sector"] });
   return (
     <Layout>
       <div className="flex w-full  flex-col">

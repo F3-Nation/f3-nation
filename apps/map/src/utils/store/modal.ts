@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import type { DayOfWeek, RequestType } from "@acme/shared/app/enums";
 import { ZustandStore } from "@acme/shared/common/classes";
 
-import type { RouterOutputs } from "~/trpc/types";
+import type { RouterOutputs } from "~/orpc/types";
 import { mapStore } from "./map";
 
 export enum ModalType {

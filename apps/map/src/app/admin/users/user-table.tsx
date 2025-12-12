@@ -3,9 +3,9 @@
 import type { TableOptions } from "@tanstack/react-table";
 import { useCallback, useState } from "react";
 import { DotsHorizontalIcon } from "@radix-ui/react-icons";
+import { useQuery } from "@tanstack/react-query";
 import { Check, ChevronsUpDown } from "lucide-react";
 
-import type { RouterOutputs } from "@acme/api";
 import { UserRole, UserStatus } from "@acme/shared/app/enums";
 import { cn } from "@acme/ui";
 import { Button } from "@acme/ui/button";
@@ -26,7 +26,8 @@ import { MDTable, usePagination } from "@acme/ui/md-table";
 import { Popover, PopoverContent, PopoverTrigger } from "@acme/ui/popover";
 import { Cell, Header } from "@acme/ui/table";
 
-import { api } from "~/trpc/react";
+import type { RouterOutputs } from "~/orpc/types";
+import { orpc } from "~/orpc/react";
 import { useDebounce } from "~/utils/hooks/use-debounce";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
 import { OrgFilter } from "./org-filter";
@@ -196,14 +197,18 @@ export const UserTable = () => {
     });
   }, []);
 
-  const { data } = api.user.all.useQuery({
-    roles: selectedRoles,
-    statuses: selectedStatuses,
-    searchTerm: debouncedSearchTerm,
-    pageSize: pagination.pageSize,
-    pageIndex: pagination.pageIndex,
-    orgIds: selectedOrgs.map((org) => org.id),
-  });
+  const { data } = useQuery(
+    orpc.user.all.queryOptions({
+      input: {
+        roles: selectedRoles,
+        statuses: selectedStatuses,
+        searchTerm: debouncedSearchTerm,
+        pageSize: pagination.pageSize,
+        pageIndex: pagination.pageIndex,
+        orgIds: selectedOrgs.map((org) => org.id),
+      },
+    }),
+  );
 
   return (
     <div className="relative">

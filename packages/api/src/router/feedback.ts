@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { MailService, Templates } from "../mail";
-import { createTRPCRouter, publicProcedure } from "../trpc";
+import { publicProcedure } from "../shared";
 
 export const feedbackSchema = z.object({
   type: z.string(),
@@ -10,10 +10,10 @@ export const feedbackSchema = z.object({
   description: z.string(),
 });
 
-export const feedbackRouter = createTRPCRouter({
+export const feedbackRouter = {
   submitFeedback: publicProcedure
     .input(feedbackSchema)
-    .mutation(async ({ input }) => {
+    .handler(async ({ input }) => {
       // testing type validation of overridden next-auth Session in @acme/auth package
 
       const mailService = new MailService();
@@ -21,4 +21,4 @@ export const feedbackRouter = createTRPCRouter({
 
       return { success: true };
     }),
-});
+};

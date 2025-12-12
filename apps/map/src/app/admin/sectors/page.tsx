@@ -1,12 +1,12 @@
 import { Suspense } from "react";
 
-import { api } from "~/trpc/server";
+import { client } from "~/orpc/client";
 import Layout from "../admin-layout";
 import { AddSectorButton } from "./[id]/add-sector-button";
 import { SectorsTable } from "./sectors-table";
 
 const SectorsPage = async () => {
-  const { orgs: sectors } = await api.org.all({ orgTypes: ["sector"] });
+  const { orgs: sectors } = await client.org.all({ orgTypes: ["sector"] });
 
   return (
     <Layout>

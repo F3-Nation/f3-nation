@@ -35,7 +35,13 @@ import { toast } from "@acme/ui/toast";
 import { AreaInsertSchema } from "@acme/validators";
 
 import type { DataType } from "~/utils/store/modal";
-import { api } from "~/trpc/react";
+import {
+  invalidateQueries,
+  orpc,
+  ORPCError,
+  useMutation,
+  useQuery,
+} from "~/orpc/react";
 import {
   closeModal,
   DeleteType,
@@ -48,14 +54,14 @@ export default function AdminAreasModal({
 }: {
   data: DataType[ModalType.ADMIN_AREAS];
 }) {
-  const utils = api.useUtils();
-  const { data: area } = api.org.byId.useQuery({
-    id: data.id ?? -1,
-    orgType: "area",
-  });
-  const { data: sectors } = api.org.all.useQuery({
-    orgTypes: ["sector"],
-  });
+  const { data: area } = useQuery(
+    orpc.org.byId.queryOptions({
+      input: { id: data.id ?? -1, orgType: "area" },
+    }),
+  );
+  const { data: sectors } = useQuery(
+    orpc.org.all.queryOptions({ input: { orgTypes: ["sector"] } }),
+  );
   const router = useRouter();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -98,21 +104,25 @@ export default function AdminAreasModal({
     });
   }, [form, area]);
 
-  const crupdateArea = api.org.crupdate.useMutation({
-    onSuccess: async () => {
-      await utils.org.invalidate();
-      closeModal();
-      toast.success("Successfully updated area");
-      router.refresh();
-    },
-    onError: (err) => {
-      toast.error(
-        err?.data?.code === "UNAUTHORIZED"
-          ? "You must be logged in to update areas"
-          : "Failed to update area",
-      );
-    },
-  });
+  const crupdateArea = useMutation(
+    orpc.org.crupdate.mutationOptions({
+      onSuccess: async () => {
+        await invalidateQueries({
+          predicate: (query) => query.queryKey[0] === "org",
+        });
+        closeModal();
+        toast.success("Successfully updated area");
+        router.refresh();
+      },
+      onError: (err) => {
+        toast.error(
+          err instanceof ORPCError && err?.code === "UNAUTHORIZED"
+            ? "You must be logged in to update areas"
+            : "Failed to update area",
+        );
+      },
+    }),
+  );
 
   return (
     <Dialog open={true} onOpenChange={() => closeModal()}>

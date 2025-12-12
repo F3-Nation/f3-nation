@@ -10,7 +10,7 @@ import {
 } from "@acme/shared/app/constants";
 import { cn } from "@acme/ui";
 
-import { api } from "~/trpc/react";
+import { getQueryClient, orpc } from "~/orpc/react";
 import { mapStore } from "~/utils/store/map";
 import { selectedItemStore } from "~/utils/store/selected-item";
 import { SelectedItem } from "./selected-item";
@@ -20,7 +20,6 @@ const SelectedItemWrapper = () => {
   const hideSelectedItem = selectedItemStore.use.hideSelectedItem();
   const mapEvent = mapStore.use.event();
   const selectedItem = useSelectedItem();
-  const utils = api.useUtils();
 
   const [debouncedSelectedItem, setDebouncedSelectedItem] = useState<
     typeof selectedItem | undefined
@@ -41,9 +40,11 @@ const SelectedItemWrapper = () => {
       setDebouncedSelectedItem(undefined);
       return;
     } else if (typeof selectedItem.selectedLocation?.id === "number") {
-      void utils.location.getLocationWorkoutData.prefetch({
-        locationId: selectedItem.selectedLocation?.id,
-      });
+      void getQueryClient().prefetchQuery(
+        orpc.location.getLocationWorkoutData.queryOptions({
+          input: { locationId: selectedItem.selectedLocation?.id },
+        }),
+      );
     }
 
     debouncedSetSelectedItem(selectedItem);

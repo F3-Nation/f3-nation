@@ -11,7 +11,7 @@ import type {
   F3RegionMapSearchResult,
   GeoMapSearchResult,
 } from "~/utils/types";
-import { api } from "~/trpc/react";
+import { orpc, useQuery } from "~/orpc/react";
 import { useIsMobileWidth } from "~/utils/hooks/use-is-mobile-width";
 import { placesAutocomplete } from "~/utils/place-autocomplete";
 import { mapStore } from "~/utils/store/map";
@@ -39,10 +39,12 @@ export const TextSearchResultsProvider = ({
 }: {
   children: React.ReactNode;
 }) => {
-  const { data: regions } =
-    api.location.getRegionsWithLocation.useQuery(undefined);
-  const { data: eventIdToRegionNameLookup } =
-    api.event.eventIdToRegionNameLookup.useQuery();
+  const { data: regions } = useQuery(
+    orpc.location.getRegionsWithLocation.queryOptions({ input: undefined }),
+  );
+  const { data: eventIdToRegionNameLookup } = useQuery(
+    orpc.event.eventIdToRegionNameLookup.queryOptions({ input: undefined }),
+  );
   const isMobileWidth = useIsMobileWidth();
   RERENDER_LOGS && console.log("TextSearchResultsProvider rerender");
   const text = searchStore.use.text();

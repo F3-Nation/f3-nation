@@ -1,10 +1,10 @@
 import { revalidatePath } from "next/cache";
 
-import { apiKeyProcedure, createTRPCRouter } from "../trpc";
+import { apiKeyProcedure } from "../shared";
 
-export const apiRouter = createTRPCRouter({
-  revalidate: apiKeyProcedure.mutation(async () => {
+export const apiRouter = {
+  revalidate: apiKeyProcedure.handler(async () => {
     revalidatePath("/");
     return Promise.resolve();
   }),
-});
+};

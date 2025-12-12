@@ -1,4 +1,4 @@
-import { TRPCError } from "@trpc/server";
+import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 
 import {
@@ -19,10 +19,10 @@ import { EventInsertSchema } from "@acme/validators";
 
 import { getFullAddress } from "../../../shared/src/app/functions";
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
-import { createTRPCRouter, editorProcedure, publicProcedure } from "../trpc";
+import { editorProcedure, publicProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
-export const eventRouter = createTRPCRouter({
+export const eventRouter = {
   all: publicProcedure
     .input(
       z
@@ -39,7 +39,7 @@ export const eventRouter = createTRPCRouter({
         })
         .optional(),
     )
-    .query(async ({ ctx, input }) => {
+    .handler(async ({ context: ctx, input }) => {
       const regionOrg = aliasedTable(schema.orgs, "region_org");
       const parentOrg = aliasedTable(schema.orgs, "parent_org");
       const limit = input?.pageSize ?? 10;
@@ -204,7 +204,7 @@ export const eventRouter = createTRPCRouter({
     }),
   byId: publicProcedure
     .input(z.object({ id: z.number() }))
-    .query(async ({ ctx, input }) => {
+    .handler(async ({ context: ctx, input }) => {
       const regionOrg = aliasedTable(schema.orgs, "region_org");
       const aoOrg = aliasedTable(schema.orgs, "ao_org");
       const [event] = await ctx.db
@@ -297,7 +297,7 @@ export const eventRouter = createTRPCRouter({
     }),
   crupdate: editorProcedure
     .input(EventInsertSchema.partial({ id: true }))
-    .mutation(async ({ ctx, input }) => {
+    .handler(async ({ context: ctx, input }) => {
       const [existingEvent] = input.id
         ? await ctx.db
             .select()
@@ -307,8 +307,7 @@ export const eventRouter = createTRPCRouter({
 
       const orgIdToCheck = input.aoId ?? input.regionId;
       if (!orgIdToCheck) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
+        throw new ORPCError("BAD_REQUEST", {
           message: "AO ID or Region ID is required",
         });
       }
@@ -319,8 +318,7 @@ export const eventRouter = createTRPCRouter({
         roleName: "editor",
       });
       if (!roleCheckResult.success) {
-        throw new TRPCError({
-          code: "UNAUTHORIZED",
+        throw new ORPCError("UNAUTHORIZED", {
           message: "You are not authorized to update this Event",
         });
       }
@@ -348,8 +346,7 @@ export const eventRouter = createTRPCRouter({
         .returning();
 
       if (!result) {
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
+        throw new ORPCError("INTERNAL_SERVER_ERROR", {
           message: "Failed to create/update event",
         });
       }
@@ -370,57 +367,59 @@ export const eventRouter = createTRPCRouter({
 
       return result;
     }),
-  eventIdToRegionNameLookup: publicProcedure.query(async ({ ctx }) => {
-    const regionOrg = aliasedTable(schema.orgs, "region_org");
-    const parentOrg = aliasedTable(schema.orgs, "parent_org");
-    const result = await ctx.db
-      .select({
-        eventId: schema.events.id,
-        regionName: regionOrg.name,
-      })
-      .from(schema.events)
-      .leftJoin(parentOrg, eq(schema.events.orgId, parentOrg.id))
-      .leftJoin(
-        regionOrg,
-        or(
-          and(
-            eq(schema.events.orgId, regionOrg.id),
-            eq(regionOrg.orgType, "region"),
+  eventIdToRegionNameLookup: publicProcedure.handler(
+    async ({ context: ctx }) => {
+      const regionOrg = aliasedTable(schema.orgs, "region_org");
+      const parentOrg = aliasedTable(schema.orgs, "parent_org");
+      const result = await ctx.db
+        .select({
+          eventId: schema.events.id,
+          regionName: regionOrg.name,
+        })
+        .from(schema.events)
+        .leftJoin(parentOrg, eq(schema.events.orgId, parentOrg.id))
+        .leftJoin(
+          regionOrg,
+          or(
+            and(
+              eq(schema.events.orgId, regionOrg.id),
+              eq(regionOrg.orgType, "region"),
+            ),
+            and(
+              eq(parentOrg.orgType, "ao"),
+              eq(parentOrg.parentId, regionOrg.id),
+              eq(regionOrg.orgType, "region"),
+            ),
           ),
-          and(
-            eq(parentOrg.orgType, "ao"),
-            eq(parentOrg.parentId, regionOrg.id),
-            eq(regionOrg.orgType, "region"),
-          ),
-        ),
-      )
-      .groupBy(schema.events.id, regionOrg.id);
+        )
+        .groupBy(schema.events.id, regionOrg.id);
 
-    const lookup = result.reduce(
-      (acc, curr) => {
-        if (curr.regionName) {
-          acc[curr.eventId] = curr.regionName;
-        }
-        return acc;
-      },
-      {} as Record<number, string>,
-    );
+      const lookup = result.reduce(
+        (acc, curr) => {
+          if (curr.regionName) {
+            acc[curr.eventId] = curr.regionName;
+          }
+          return acc;
+        },
+        {} as Record<number, string>,
+      );
 
-    return lookup;
-  }),
+      return lookup;
+    },
+  ),
   delete: editorProcedure
     .input(z.object({ id: z.number() }))
-    .mutation(async ({ ctx, input }) => {
+    .handler(async ({ context: ctx, input }) => {
       const [event] = await ctx.db
         .select()
         .from(schema.events)
         .where(eq(schema.events.id, input.id));
       if (!event) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
+        throw new ORPCError("NOT_FOUND", {
           message: "Event not found",
         });
       }
+
       const roleCheckResult = await checkHasRoleOnOrg({
         orgId: event.orgId,
         session: ctx.session,
@@ -428,8 +427,7 @@ export const eventRouter = createTRPCRouter({
         roleName: "admin",
       });
       if (!roleCheckResult.success) {
-        throw new TRPCError({
-          code: "UNAUTHORIZED",
+        throw new ORPCError("UNAUTHORIZED", {
           message: "You are not authorized to delete this Event",
         });
       }
@@ -442,4 +440,4 @@ export const eventRouter = createTRPCRouter({
 
       return { eventId: input.id };
     }),
-});
+};

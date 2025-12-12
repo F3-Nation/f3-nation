@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { TRPCClientError } from "@trpc/client";
 import { Trash } from "lucide-react";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
@@ -17,8 +16,7 @@ import { Spinner } from "@acme/ui/spinner";
 import { toast } from "@acme/ui/toast";
 
 import type { DataType, ModalType } from "~/utils/store/modal";
-import { api } from "~/trpc/react";
-import { vanillaApi } from "~/trpc/vanilla";
+import { invalidateQueries, orpc, ORPCError, useQuery } from "~/orpc/react";
 import { closeModal, modalStore } from "~/utils/store/modal";
 
 export default function AdminDeleteRequestModal({
@@ -26,29 +24,31 @@ export default function AdminDeleteRequestModal({
 }: {
   data: DataType[ModalType.ADMIN_DELETE_REQUEST];
 }) {
-  const { data: regions } = api.org.all.useQuery({
-    orgTypes: ["region"],
-  });
+  const { data: regions } = useQuery(
+    orpc.org.all.queryOptions({ input: { orgTypes: ["region"] } }),
+  );
   const router = useRouter();
   const [status, setStatus] = useState<"approving" | "rejecting" | "idle">(
     "idle",
   );
-  const { data: request } = api.request.byId.useQuery({ id: requestData.id });
-
-  const utils = api.useUtils();
+  const { data: request } = useQuery(
+    orpc.request.byId.queryOptions({ input: { id: requestData.id } }),
+  );
 
   const onReject = async () => {
     setStatus("rejecting");
     try {
-      await vanillaApi.request.rejectSubmission.mutate({
+      await orpc.request.rejectSubmission.call({
         id: requestData.id,
       });
-      void utils.request.invalidate();
+      void invalidateQueries({
+        predicate: (query) => query.queryKey[0] === "request",
+      });
       router.refresh();
       toast.error("Rejected delete request");
       closeModal();
     } catch (error) {
-      if (error instanceof TRPCClientError) {
+      if (error instanceof ORPCError) {
         toast.error(error.message);
       } else {
         toast.error("Failed to reject delete request");
@@ -76,20 +76,20 @@ export default function AdminDeleteRequestModal({
     }
 
     try {
-      await vanillaApi.request.validateDeleteByAdmin.mutate({
+      await orpc.request.validateDeleteByAdmin.call({
         eventId: request.eventId,
         eventName: request.eventName,
         regionId: request.regionId,
         submittedBy: request.submittedBy,
       });
 
-      void utils.request.all.invalidate();
+      void invalidateQueries(orpc.request.all.queryOptions());
       router.refresh();
       toast.success("Delete request submitted");
       modalStore.setState({ modals: [] });
     } catch (error) {
       console.error(error);
-      if (error instanceof TRPCClientError) {
+      if (error instanceof ORPCError) {
         toast.error(error.message);
       } else {
         toast.error("Failed to submit delete request");

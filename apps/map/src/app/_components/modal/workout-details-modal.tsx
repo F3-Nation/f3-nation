@@ -4,7 +4,7 @@ import { BreakPoints, Z_INDEX } from "@acme/shared/app/constants";
 import { Dialog, DialogContent, DialogHeader } from "@acme/ui/dialog";
 
 import type { DataType, ModalType } from "~/utils/store/modal";
-import { api } from "~/trpc/react";
+import { orpc, useQuery } from "~/orpc/react";
 import { closeModal } from "~/utils/store/modal";
 import { selectedItemStore } from "~/utils/store/selected-item";
 import { WorkoutDetailsContent } from "../workout/workout-details-content";
@@ -19,9 +19,11 @@ export const WorkoutDetailsModal = ({
   const providedLocationId =
     typeof data.locationId === "number" ? data.locationId : -1;
   const locationId = selectedLocationId ?? providedLocationId;
-  const { data: results } = api.location.getLocationWorkoutData.useQuery(
-    { locationId },
-    { enabled: locationId >= 0 },
+  const { data: results } = useQuery(
+    orpc.location.getLocationWorkoutData.queryOptions({
+      input: { locationId },
+      enabled: locationId >= 0,
+    }),
   );
   const modalEventId =
     results?.location.events.find((e) => e.id === selectedEventId)?.id ??

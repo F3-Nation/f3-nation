@@ -6,6 +6,7 @@ import { CircleHelp } from "lucide-react";
 import { z } from "zod";
 
 import { COUNTRIES, DEFAULT_CENTER, Z_INDEX } from "@acme/shared/app/constants";
+import { isProd } from "@acme/shared/common/constants";
 import { safeParseFloat, safeParseInt } from "@acme/shared/common/functions";
 import { cn } from "@acme/ui";
 import { Button } from "@acme/ui/button";
@@ -37,8 +38,13 @@ import {
 import { LocationInsertSchema } from "@acme/validators";
 
 import type { DataType } from "~/utils/store/modal";
-import { api } from "~/trpc/react";
-import { isProd } from "~/trpc/util";
+import {
+  invalidateQueries,
+  orpc,
+  ORPCError,
+  useMutation,
+  useQuery,
+} from "~/orpc/react";
 import {
   closeModal,
   DeleteType,
@@ -53,9 +59,12 @@ export default function AdminLocationsModal({
 }: {
   data: DataType[ModalType.ADMIN_LOCATIONS];
 }) {
-  const utils = api.useUtils();
-  const { data: location } = api.location.byId.useQuery({ id: data.id ?? -1 });
-  const { data: regions } = api.org.all.useQuery({ orgTypes: ["region"] });
+  const { data: location } = useQuery(
+    orpc.location.byId.queryOptions({ input: { id: data.id ?? -1 } }),
+  );
+  const { data: regions } = useQuery(
+    orpc.org.all.queryOptions({ input: { orgTypes: ["region"] } }),
+  );
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -93,21 +102,25 @@ export default function AdminLocationsModal({
     });
   }, [form, location]);
 
-  const crupdateLocation = api.location.crupdate.useMutation({
-    onSuccess: async () => {
-      await utils.location.invalidate();
-      closeModal();
-      toast.success("Successfully updated location");
-      router.refresh();
-    },
-    onError: (err) => {
-      toast.error(
-        err?.data?.code === "UNAUTHORIZED"
-          ? "You must be logged in to update users"
-          : "Failed to update user",
-      );
-    },
-  });
+  const crupdateLocation = useMutation(
+    orpc.location.crupdate.mutationOptions({
+      onSuccess: async () => {
+        await invalidateQueries({
+          predicate: (query) => query.queryKey[0] === "location",
+        });
+        closeModal();
+        toast.success("Successfully updated location");
+        router.refresh();
+      },
+      onError: (err) => {
+        toast.error(
+          err instanceof ORPCError && err?.code === "UNAUTHORIZED"
+            ? "You must be logged in to update users"
+            : "Failed to update user",
+        );
+      },
+    }),
+  );
 
   const sortedCountries = useMemo(() => {
     return [...COUNTRIES].sort((a, b) => a.name.localeCompare(b.name));

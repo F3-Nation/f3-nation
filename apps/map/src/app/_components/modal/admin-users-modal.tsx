@@ -2,7 +2,6 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { TRPCClientError } from "@trpc/client";
 import { Plus, X } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { z } from "zod";
@@ -40,7 +39,13 @@ import { toast } from "@acme/ui/toast";
 import { CrupdateUserSchema } from "@acme/validators";
 
 import type { DataType, ModalType } from "~/utils/store/modal";
-import { api } from "~/trpc/react";
+import {
+  invalidateQueries,
+  orpc,
+  ORPCError,
+  useMutation,
+  useQuery,
+} from "~/orpc/react";
 import { closeModal } from "~/utils/store/modal";
 import { VirtualizedCombobox } from "../virtualized-combobox";
 
@@ -50,11 +55,14 @@ export default function UserModal({
   data: DataType[ModalType.ADMIN_USERS];
 }) {
   const { data: session, update } = useSession();
-  const utils = api.useUtils();
-  const { data: user } = api.user.byId.useQuery({ id: data.id ?? -1 });
-  const { data: orgs } = api.org.all.useQuery({
-    orgTypes: ["region", "area", "sector", "nation"], // not ao
-  });
+  const { data: user } = useQuery(
+    orpc.user.byId.queryOptions({ input: { id: data.id ?? -1 } }),
+  );
+  const { data: orgs } = useQuery(
+    orpc.org.all.queryOptions({
+      input: { orgTypes: ["region", "area", "sector", "nation"] },
+    }),
+  );
   const router = useRouter();
 
   const form = useForm({
@@ -87,29 +95,33 @@ export default function UserModal({
     }
   }, [form, user]);
 
-  const crupdateUser = api.user.crupdate.useMutation({
-    onSuccess: async (data) => {
-      await utils.user.invalidate();
-      const { roles } = data;
-      if (session?.id === data.id && data.roles?.length > 0) {
-        await update({ ...session, roles });
-      }
-      closeModal();
-      toast.success("Successfully updated user");
-      router.refresh();
-    },
-    onError: (err) => {
-      if (err instanceof TRPCClientError) {
-        toast.error(err.message);
-      } else {
-        toast.error(
-          err?.data?.code === "UNAUTHORIZED"
-            ? "You must be logged in to update users"
-            : "Failed to update user",
-        );
-      }
-    },
-  });
+  const crupdateUser = useMutation(
+    orpc.user.crupdate.mutationOptions({
+      onSuccess: async (data) => {
+        await invalidateQueries({
+          predicate: (query) => query.queryKey[0] === "user",
+        });
+        const { roles } = data;
+        if (session?.id === data.id && data.roles?.length > 0) {
+          await update({ ...session, roles });
+        }
+        closeModal();
+        toast.success("Successfully updated user");
+        router.refresh();
+      },
+      onError: (err) => {
+        if (err instanceof ORPCError) {
+          toast.error(err.message);
+        } else {
+          toast.error(
+            err instanceof ORPCError && err?.code === "UNAUTHORIZED"
+              ? "You must be logged in to update users"
+              : "Failed to update user",
+          );
+        }
+      },
+    }),
+  );
 
   return (
     <Dialog open={true} onOpenChange={() => closeModal()}>

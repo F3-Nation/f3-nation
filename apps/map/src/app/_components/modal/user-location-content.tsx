@@ -1,6 +1,6 @@
+import { isProd } from "@acme/shared/common/constants";
 import { cn } from "@acme/ui";
 
-import { isProd } from "~/trpc/util";
 import { useUserLocation } from "../map/user-location-provider";
 
 export const UserLocationContent = (params?: {
