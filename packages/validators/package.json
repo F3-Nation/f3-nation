@@ -18,7 +18,7 @@
     "@acme/db": "workspace:*",
     "@acme/shared": "workspace:*",
     "drizzle-zod": "^0.6.1",
-    "zod": "^3.24.1"
+    "zod": "^3.25.8"
   },
   "devDependencies": {
     "@acme/eslint-config": "workspace:*",

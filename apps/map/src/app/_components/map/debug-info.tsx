@@ -3,14 +3,16 @@
 import { Z_INDEX } from "@acme/shared/app/constants";
 import { cn } from "@acme/ui";
 
-import { api } from "~/trpc/react";
+import { orpc, useQuery } from "~/orpc/react";
 import { mapStore } from "~/utils/store/map";
 import { useFilteredMapResults } from "./filtered-map-results-provider";
 
 export const DebugInfo = () => {
   const zoom = mapStore.use.zoom();
   const center = mapStore.use.center();
-  const { data: workoutCount } = api.location.getWorkoutCount.useQuery();
+  const { data: workoutCount } = useQuery(
+    orpc.location.getWorkoutCount.queryOptions(),
+  );
   const { filteredLocationMarkers } = useFilteredMapResults();
 
   return (

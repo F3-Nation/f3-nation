@@ -4,7 +4,6 @@ import type { TableOptions } from "@tanstack/react-table";
 import { useCallback, useMemo, useState } from "react";
 import { DotsHorizontalIcon } from "@radix-ui/react-icons";
 
-import type { RouterOutputs } from "@acme/api";
 import type { IsActiveStatus } from "@acme/shared/app/enums";
 import { Button } from "@acme/ui/button";
 import {
@@ -16,6 +15,7 @@ import {
 import { MDTable } from "@acme/ui/md-table";
 import { Cell, Header } from "@acme/ui/table";
 
+import type { RouterOutputs } from "~/orpc/types";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
 import { SectorFilter } from "../regions/sector-filter";
 import { AreaIsActiveFilter } from "./area-is-active-filter";

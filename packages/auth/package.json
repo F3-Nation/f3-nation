@@ -26,7 +26,7 @@
     "nodemailer": "^6.10.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "zod": "^3.24.1"
+    "zod": "^3.25.8"
   },
   "devDependencies": {
     "@acme/eslint-config": "workspace:^0.2.0",

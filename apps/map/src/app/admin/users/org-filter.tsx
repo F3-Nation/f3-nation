@@ -1,6 +1,6 @@
-import type { RouterOutputs } from "~/trpc/types";
+import type { RouterOutputs } from "~/orpc/types";
 import { VirtualizedCombobox } from "~/app/_components/virtualized-combobox";
-import { api } from "~/trpc/react";
+import { orpc, useQuery } from "~/orpc/react";
 
 type Org = RouterOutputs["org"]["all"]["orgs"][number];
 
@@ -11,9 +11,11 @@ export const OrgFilter = ({
   onOrgSelect: (org: Org) => void;
   selectedOrgs: Org[];
 }) => {
-  const { data: orgs } = api.org.all.useQuery({
-    orgTypes: ["region", "area", "sector"],
-  });
+  const { data: orgs } = useQuery(
+    orpc.org.all.queryOptions({
+      input: { orgTypes: ["region", "area", "sector"] },
+    }),
+  );
 
   return (
     <div className="max-w-80">

@@ -1,12 +1,12 @@
 import { aliasedTable, and, eq, inArray, not, schema } from "@acme/db";
 
 import type { OrgType } from "../../shared/src/app/enums";
-import type { Context } from "./trpc";
+import type { Context } from "./shared";
 
 /**
  * Get the organization IDs that a user can edit
  *
- * @param ctx - The TRPC context containing the database and session
+ * @param ctx - The ORPC context containing the database and session
  * @returns An object with editable region IDs and a flag indicating if user has nation-level admin privileges
  */
 export const getEditableOrgIdsForUser = async (

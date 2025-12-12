@@ -12,7 +12,7 @@ import {
 import { safeParseFloat, safeParseInt } from "@acme/shared/common/functions";
 
 import type { SparseF3Marker } from "~/utils/types";
-import { api } from "~/trpc/react";
+import { getQueryData, orpc } from "~/orpc/react";
 import { mapStore } from "~/utils/store/map";
 import { setSelectedItem } from "~/utils/store/selected-item";
 
@@ -40,7 +40,6 @@ export const InitialLocationProvider = (params: { children: ReactNode }) => {
 };
 
 const SuspendedInitialLocationProvider = (params: { children: ReactNode }) => {
-  const utils = api.useUtils();
   const searchParams = useSearchParams();
   const queryLat = safeParseFloat(searchParams?.get("lat"));
   const queryLon = safeParseFloat(
@@ -55,9 +54,11 @@ const SuspendedInitialLocationProvider = (params: { children: ReactNode }) => {
   const hasAttemptedSetInitialSelectedItem = useRef(false);
 
   if (center.current === null) {
-    const locationLatLng = utils.location.getMapEventAndLocationData
-      .getData()
-      ?.find((location) => location[0] === queryLocationId);
+    const locationLatLng = getQueryData(
+      orpc.location.getMapEventAndLocationData.queryKey({
+        input: undefined,
+      }),
+    )?.find((location) => location[0] === queryLocationId);
     const locLat = locationLatLng?.[3];
     const locLon = locationLatLng?.[4];
 

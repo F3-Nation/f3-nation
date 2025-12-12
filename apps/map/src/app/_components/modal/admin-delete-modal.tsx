@@ -15,8 +15,7 @@ import {
 import { toast } from "@acme/ui/toast";
 
 import type { DataType, ModalType } from "~/utils/store/modal";
-import { api } from "~/trpc/react";
-import { vanillaApi } from "~/trpc/vanilla";
+import { invalidateQueries, orpc } from "~/orpc/react";
 import { closeModal, DeleteType } from "~/utils/store/modal";
 
 export default function AdminDeleteModal({
@@ -26,7 +25,6 @@ export default function AdminDeleteModal({
 }) {
   const [isPending, setIsPending] = useState(false);
   const router = useRouter();
-  const utils = api.useUtils();
 
   let mutation: ({ id }: { id: number }) => Promise<{
     orgId?: number;
@@ -42,19 +40,19 @@ export default function AdminDeleteModal({
     case DeleteType.AREA:
     case DeleteType.REGION:
     case DeleteType.AO:
-      mutation = vanillaApi.org.delete.mutate;
+      mutation = orpc.org.delete.call;
       break;
     case DeleteType.EVENT:
-      mutation = vanillaApi.event.delete.mutate;
+      mutation = orpc.event.delete.call;
       break;
     case DeleteType.EVENT_TYPE:
-      mutation = vanillaApi.eventType.delete.mutate;
+      mutation = orpc.eventType.delete.call;
       break;
     case DeleteType.USER:
-      mutation = vanillaApi.user.delete.mutate;
+      mutation = orpc.user.delete.call;
       break;
     case DeleteType.LOCATION:
-      mutation = vanillaApi.location.delete.mutate;
+      mutation = orpc.location.delete.call;
       break;
     default:
       // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
@@ -74,19 +72,29 @@ export default function AdminDeleteModal({
           case DeleteType.AREA:
           case DeleteType.REGION:
           case DeleteType.AO:
-            void utils.org.invalidate();
+            void invalidateQueries({
+              predicate: (query) => query.queryKey[0] === "org",
+            });
             break;
           case DeleteType.EVENT:
-            void utils.event.invalidate();
+            void invalidateQueries({
+              predicate: (query) => query.queryKey[0] === "event",
+            });
             break;
           case DeleteType.EVENT_TYPE:
-            void utils.eventType.invalidate();
+            void invalidateQueries({
+              predicate: (query) => query.queryKey[0] === "eventType",
+            });
             break;
           case DeleteType.USER:
-            void utils.user.invalidate();
+            void invalidateQueries({
+              predicate: (query) => query.queryKey[0] === "user",
+            });
             break;
           case DeleteType.LOCATION:
-            void utils.location.invalidate();
+            void invalidateQueries({
+              predicate: (query) => query.queryKey[0] === "location",
+            });
             break;
           default:
             // eslint-disable-next-line @typescript-eslint/restrict-template-expressions

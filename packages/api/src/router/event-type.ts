@@ -1,4 +1,4 @@
-import { TRPCError } from "@trpc/server";
+import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 
 import type { InferInsertModel } from "@acme/db";
@@ -18,10 +18,10 @@ import { IsActiveStatus } from "@acme/shared/app/enums";
 import { EventTypeInsertSchema, SortingSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
-import { createTRPCRouter, editorProcedure, publicProcedure } from "../trpc";
+import { editorProcedure, publicProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
-export const eventTypeRouter = createTRPCRouter({
+export const eventTypeRouter = {
   /**
    * By default this gets all the event types available for the orgIds (meaning that general, nation-wide event types are included)
    * To get only the event types for a specific org, set ignoreNationEventTypes to true
@@ -40,7 +40,7 @@ export const eventTypeRouter = createTRPCRouter({
         })
         .optional(),
     )
-    .query(async ({ ctx, input }) => {
+    .handler(async ({ context: ctx, input }) => {
       const limit = input?.pageSize ?? 10;
       const offset = (input?.pageIndex ?? 0) * limit;
       const usePagination =
@@ -105,8 +105,7 @@ export const eventTypeRouter = createTRPCRouter({
         .where(where);
 
       if (!eventTypeCount) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
+        throw new ORPCError("NOT_FOUND", {
           message: "Event type not found",
         });
       }
@@ -134,7 +133,7 @@ export const eventTypeRouter = createTRPCRouter({
     }),
   byOrgId: publicProcedure
     .input(z.object({ orgId: z.number(), isActive: z.boolean().optional() }))
-    .query(async ({ ctx, input }) => {
+    .handler(async ({ context: ctx, input }) => {
       const eventTypes = await ctx.db
         .select()
         .from(schema.eventTypes)
@@ -151,15 +150,14 @@ export const eventTypeRouter = createTRPCRouter({
     }),
   byId: publicProcedure
     .input(z.object({ id: z.number() }))
-    .query(async ({ ctx, input }) => {
+    .handler(async ({ context: ctx, input }) => {
       const [result] = await ctx.db
         .select()
         .from(schema.eventTypes)
         .where(eq(schema.eventTypes.id, input.id));
 
       if (!result) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
+        throw new ORPCError("NOT_FOUND", {
           message: "Event type not found",
         });
       }
@@ -168,7 +166,7 @@ export const eventTypeRouter = createTRPCRouter({
     }),
   crupdate: editorProcedure
     .input(EventTypeInsertSchema)
-    .mutation(async ({ ctx, input }) => {
+    .handler(async ({ context: ctx, input }) => {
       const [existingEventType] = input.id
         ? await ctx.db
             .select()
@@ -182,8 +180,7 @@ export const eventTypeRouter = createTRPCRouter({
         .where(eq(schema.orgs.orgType, "nation"));
 
       if (!nationOrg) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
+        throw new ORPCError("NOT_FOUND", {
           message: "Nation organization not found",
         });
       }
@@ -207,8 +204,7 @@ export const eventTypeRouter = createTRPCRouter({
       });
 
       if (!roleCheckResult.success) {
-        throw new TRPCError({
-          code: "UNAUTHORIZED",
+        throw new ORPCError("UNAUTHORIZED", {
           message: "You are not authorized to update this Event Type",
         });
       }
@@ -229,7 +225,7 @@ export const eventTypeRouter = createTRPCRouter({
     }),
   delete: editorProcedure
     .input(z.object({ id: z.number() }))
-    .mutation(async ({ ctx, input }) => {
+    .handler(async ({ context: ctx, input }) => {
       const [existingEventType] = await ctx.db
         .select()
         .from(schema.eventTypes)
@@ -241,11 +237,11 @@ export const eventTypeRouter = createTRPCRouter({
         .where(eq(schema.orgs.orgType, "nation"));
 
       if (!nationOrg) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
+        throw new ORPCError("NOT_FOUND", {
           message: "Nation organization not found",
         });
       }
+
       const roleCheckResult = await checkHasRoleOnOrg({
         orgId: existingEventType?.specificOrgId ?? nationOrg.id,
         session: ctx.session,
@@ -253,8 +249,7 @@ export const eventTypeRouter = createTRPCRouter({
         roleName: "editor",
       });
       if (!roleCheckResult.success) {
-        throw new TRPCError({
-          code: "UNAUTHORIZED",
+        throw new ORPCError("UNAUTHORIZED", {
           message: "You are not authorized to delete this Event Type",
         });
       }
@@ -268,4 +263,4 @@ export const eventTypeRouter = createTRPCRouter({
         .set({ isActive: false })
         .where(eq(schema.eventTypes.id, input.id));
     }),
-});
+};

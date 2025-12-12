@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { TRPCClientError } from "@trpc/client";
 import { v4 as uuid } from "uuid";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
@@ -10,6 +9,7 @@ import {
   convertHH_mmToHHmm,
   convertHHmmToHH_mm,
 } from "@acme/shared/app/functions";
+import { isProd } from "@acme/shared/common/constants";
 import { Button } from "@acme/ui/button";
 import {
   Dialog,
@@ -22,8 +22,13 @@ import { Spinner } from "@acme/ui/spinner";
 import { toast } from "@acme/ui/toast";
 
 import type { DataType, ModalType } from "~/utils/store/modal";
-import { api } from "~/trpc/react";
-import { isProd } from "~/trpc/util";
+import {
+  invalidateQueries,
+  orpc,
+  ORPCError,
+  useMutation,
+  useQuery,
+} from "~/orpc/react";
 import { useUpdateLocationForm } from "~/utils/forms";
 import { closeModal } from "~/utils/store/modal";
 import { FormDebugData, LocationEventForm } from "../forms/location-event-form";
@@ -37,19 +42,25 @@ export default function AdminRequestsModal({
   const [status, setStatus] = useState<"approving" | "rejecting" | "idle">(
     "idle",
   );
-  const { data: request } = api.request.byId.useQuery({ id: requestData.id });
+  const { data: request } = useQuery(
+    orpc.request.byId.queryOptions({ input: { id: requestData.id } }),
+  );
   const form = useUpdateLocationForm({
     defaultValues: { id: request?.id ?? uuid() },
   });
 
   const formId = form.watch("id");
 
-  const utils = api.useUtils();
-  const { data: eventTypes } = api.eventType.all.useQuery();
+  const { data: eventTypes } = useQuery(
+    orpc.eventType.all.queryOptions({ input: undefined }),
+  );
 
-  const validateSubmissionByAdmin =
-    api.request.validateSubmissionByAdmin.useMutation();
-  const rejectSubmissionByAdmin = api.request.rejectSubmission.useMutation();
+  const validateSubmissionByAdmin = useMutation(
+    orpc.request.validateSubmissionByAdmin.mutationOptions(),
+  );
+  const rejectSubmissionByAdmin = useMutation(
+    orpc.request.rejectSubmission.mutationOptions(),
+  );
 
   const onSubmit = form.handleSubmit(
     async (values) => {
@@ -60,15 +71,18 @@ export default function AdminRequestsModal({
           eventStartTime: convertHH_mmToHHmm(values.eventStartTime ?? ""),
           eventEndTime: convertHH_mmToHHmm(values.eventEndTime ?? ""),
         });
-        void utils.event.invalidate();
-        void utils.location.invalidate();
-        void utils.request.invalidate();
+        void invalidateQueries({
+          predicate: (query) =>
+            query.queryKey[0] === "request" ||
+            query.queryKey[0] === "event" ||
+            query.queryKey[0] === "location",
+        });
         router.refresh();
         toast.success("Approved update");
         closeModal();
       } catch (error) {
         console.log(error);
-        if (!(error instanceof TRPCClientError)) {
+        if (!(error instanceof ORPCError)) {
           toast.error("Failed to approve update");
           return;
         }
@@ -99,7 +113,9 @@ export default function AdminRequestsModal({
         id: formId,
       })
       .then(() => {
-        void utils.request.invalidate();
+        void invalidateQueries({
+          predicate: (query) => query.queryKey[0] === "request",
+        });
         router.refresh();
         setStatus("idle");
         toast.error("Rejected update");

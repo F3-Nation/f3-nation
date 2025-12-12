@@ -4,7 +4,6 @@ import type { SortingState, TableOptions } from "@tanstack/react-table";
 import { useCallback, useState } from "react";
 import { DotsHorizontalIcon } from "@radix-ui/react-icons";
 
-import type { RouterOutputs } from "@acme/api";
 import type { IsActiveStatus } from "@acme/shared/app/enums";
 import { dayOfWeekToShortDayOfWeek } from "@acme/shared/app/functions";
 import { Button } from "@acme/ui/button";
@@ -17,7 +16,8 @@ import {
 import { MDTable, usePagination } from "@acme/ui/md-table";
 import { Cell, Header } from "@acme/ui/table";
 
-import { api } from "~/trpc/react";
+import type { RouterOutputs } from "~/orpc/types";
+import { orpc, useQuery } from "~/orpc/react";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
 import { AOSFilter } from "../_components/ao-filter";
 import { RegionFilter } from "../_components/region-filter";
@@ -34,15 +34,19 @@ export const WorkoutsTable = () => {
     "active",
   ]);
   const [searchTerm, setSearchTerm] = useState("");
-  const { data: workouts } = api.event.all.useQuery({
-    pageIndex: pagination.pageIndex,
-    pageSize: pagination.pageSize,
-    searchTerm: searchTerm,
-    sorting: sorting,
-    statuses: selectedStatuses,
-    regionIds: selectedRegions.map((region) => region.id),
-    aoIds: selectedAos.map((ao) => ao.id),
-  });
+  const { data: workouts } = useQuery(
+    orpc.event.all.queryOptions({
+      input: {
+        pageIndex: pagination.pageIndex,
+        pageSize: pagination.pageSize,
+        searchTerm: searchTerm,
+        sorting: sorting,
+        statuses: selectedStatuses,
+        regionIds: selectedRegions.map((region) => region.id),
+        aoIds: selectedAos.map((ao) => ao.id),
+      },
+    }),
+  );
 
   const handleStatusSelect = useCallback((status: IsActiveStatus) => {
     setSelectedStatuses((prev) => {

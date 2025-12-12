@@ -7,7 +7,7 @@ import { DEFAULT_CENTER } from "@acme/shared/app/constants";
 import { RERENDER_LOGS } from "@acme/shared/common/constants";
 
 import type { SparseF3Marker } from "~/utils/types";
-import { api } from "~/trpc/react";
+import { orpc, useQuery } from "~/orpc/react";
 import { filterData } from "~/utils/filtered-data";
 import { filterStore } from "~/utils/store/filter";
 import { mapStore } from "~/utils/store/map";
@@ -36,8 +36,9 @@ const FilteredMapResultsContext = createContext<{
 export const FilteredMapResultsProvider = (params: { children: ReactNode }) => {
   RERENDER_LOGS && console.log("FilteredMapResultsProvider rerender");
   const nearbyLocationCenter = mapStore.use.nearbyLocationCenter();
-  const { data: mapEventAndLocationData } =
-    api.location.getMapEventAndLocationData.useQuery();
+  const { data: mapEventAndLocationData } = useQuery(
+    orpc.location.getMapEventAndLocationData.queryOptions({ input: undefined }),
+  );
 
   const filters = filterStore.useBoundStore();
 

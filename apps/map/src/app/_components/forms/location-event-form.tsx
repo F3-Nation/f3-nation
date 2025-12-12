@@ -15,7 +15,7 @@ import { Textarea } from "@acme/ui/textarea";
 import { toast } from "@acme/ui/toast";
 import { RequestInsertSchema } from "@acme/validators";
 
-import { api } from "~/trpc/react";
+import { orpc, useQuery } from "~/orpc/react";
 import { useUpdateLocationFormContext } from "~/utils/forms";
 import { scaleAndCropImage } from "~/utils/image/scale-and-crop-image";
 import { uploadLogo } from "~/utils/image/upload-logo";
@@ -44,12 +44,18 @@ export const LocationEventForm = ({
   console.log("form eventTypeIds", form.getValues().eventTypeIds);
 
   // Get form values
-  const { data: regions } = api.location.getRegions.useQuery();
-  const { data: allAoData } = api.org.all.useQuery({ orgTypes: ["ao"] });
-  const { data: locations } = api.location.all.useQuery();
-  const { data: eventTypes } = api.eventType.all.useQuery({
-    orgIds: formRegionId ? [formRegionId] : [],
-  });
+  const { data: regions } = useQuery(orpc.location.getRegions.queryOptions());
+  const { data: allAoData } = useQuery(
+    orpc.org.all.queryOptions({ input: { orgTypes: ["ao"] } }),
+  );
+  const { data: locations } = useQuery(orpc.location.all.queryOptions());
+  const { data: eventTypes } = useQuery(
+    orpc.eventType.all.queryOptions({
+      input: {
+        orgIds: formRegionId ? [formRegionId] : [],
+      },
+    }),
+  );
   const aos = useMemo(() => allAoData?.orgs, [allAoData]);
 
   const sortedRegionLocationOptions = useMemo(() => {

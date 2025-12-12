@@ -1,8 +1,8 @@
 import { Suspense } from "react";
 
-import type { RouterOutputs } from "@acme/api";
 import { RERENDER_LOGS } from "@acme/shared/common/constants";
 
+import type { RouterOutputs } from "~/orpc/types";
 import { MapPageWrapper } from "~/app/_components/map-page-wrapper";
 import { FilteredMapResultsProvider } from "~/app/_components/map/filtered-map-results-provider";
 import { GoogleMapComponent } from "~/app/_components/map/google-map";
@@ -30,12 +30,12 @@ export default async function MapPage() {
           regionsWithLocationData: [],
         }
       : await (async () => {
-          const { ssg } = await import("~/trpc/ssg");
+          const { client } = await import("~/orpc/client");
 
           const mapEventAndLocationData =
-            await ssg.location.getMapEventAndLocationData.fetch();
+            await client.location.getMapEventAndLocationData();
           const regionsWithLocationData =
-            await ssg.location.getRegionsWithLocation.fetch();
+            await client.location.getRegionsWithLocation();
 
           return { mapEventAndLocationData, regionsWithLocationData };
         })();

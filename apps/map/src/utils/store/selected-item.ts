@@ -1,7 +1,7 @@
 import { ZustandStore } from "@acme/shared/common/classes";
 import { isDevelopment } from "@acme/shared/common/constants";
 
-import { queryClientUtils } from "~/trpc/react";
+import { getQueryData, orpc } from "~/orpc/react";
 import { appStore } from "./app";
 import { ModalType, openModal } from "./modal";
 
@@ -101,9 +101,11 @@ export const setSelectedItem = (item: {
     newSelectedItemStore.locationId !== null &&
     newSelectedItemStore.eventId == null
   ) {
-    const dataArray = queryClientUtils.location.getMapEventAndLocationData
-      .getData()
-      ?.find((location) => location[0] === item.locationId);
+    const dataArray = getQueryData(
+      orpc.location.getMapEventAndLocationData.queryKey({
+        input: undefined,
+      }),
+    )?.find((location) => location[0] === item.locationId);
     const events = dataArray?.[6];
     newSelectedItemStore.eventId = events?.[0]?.[0] ?? null;
   }

@@ -1,4 +1,4 @@
-import { queryClientUtils } from "~/trpc/react";
+import { orpc } from "~/orpc/react";
 import {
   selectedItemStore,
   setSelectedItem,
@@ -18,9 +18,9 @@ export const groupMarkerClick = async ({
   const isAlreadySelected =
     selectedItemStore.get("locationId") === locationId &&
     selectedItemStore.get("eventId") === eventId;
-  const location = await queryClientUtils.location.getLocationWorkoutData.fetch(
-    { locationId },
-  );
+  const location = await orpc.location.getLocationWorkoutData.call({
+    locationId,
+  });
   if (!location) return;
 
   const modifiedLocation = mapStore.get("modifiedLocationMarkers")[locationId];

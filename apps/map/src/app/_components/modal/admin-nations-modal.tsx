@@ -35,7 +35,13 @@ import { toast } from "@acme/ui/toast";
 import { NationInsertSchema } from "@acme/validators";
 
 import type { DataType, ModalType } from "~/utils/store/modal";
-import { api } from "~/trpc/react";
+import {
+  invalidateQueries,
+  orpc,
+  ORPCError,
+  useMutation,
+  useQuery,
+} from "~/orpc/react";
 import { closeModal } from "~/utils/store/modal";
 
 export default function AdminNationsModal({
@@ -43,11 +49,11 @@ export default function AdminNationsModal({
 }: {
   data: DataType[ModalType.ADMIN_NATIONS];
 }) {
-  const utils = api.useUtils();
-  const { data: nation } = api.org.byId.useQuery({
-    id: data.id ?? -1,
-    orgType: "nation",
-  });
+  const { data: nation } = useQuery(
+    orpc.org.byId.queryOptions({
+      input: { id: data.id ?? -1, orgType: "nation" },
+    }),
+  );
   const router = useRouter();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -86,22 +92,25 @@ export default function AdminNationsModal({
     });
   }, [form, nation]);
 
-  const crupdateNation = api.org.crupdate.useMutation({
-    onSuccess: async () => {
-      await utils.org.invalidate();
-      closeModal();
-      toast.success("Successfully updated nation");
-      router.refresh();
-    },
-    onError: (err) => {
-      console.log(err);
-      toast.error(
-        err?.data?.code === "UNAUTHORIZED"
-          ? "You must be logged in to update nations"
-          : "Failed to update nation",
-      );
-    },
-  });
+  const crupdateNation = useMutation(
+    orpc.org.crupdate.mutationOptions({
+      onSuccess: async () => {
+        await invalidateQueries({
+          predicate: (query) => query.queryKey[0] === "org",
+        });
+        closeModal();
+        toast.success("Successfully updated nation");
+        router.refresh();
+      },
+      onError: (err) => {
+        toast.error(
+          err instanceof ORPCError && err?.code === "UNAUTHORIZED"
+            ? "You must be logged in to update nations"
+            : "Failed to update nation",
+        );
+      },
+    }),
+  );
 
   return (
     <Dialog open={true} onOpenChange={() => closeModal()}>

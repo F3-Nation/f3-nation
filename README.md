@@ -152,7 +152,7 @@ _Additional applications will be added to this registry as they are developed_
 
 | Package        | Directory              | Description                                 |
 | -------------- | ---------------------- | ------------------------------------------- |
-| **API**        | `packages/api/`        | Backend API routes and TRPC routers         |
+| **API**        | `packages/api/`        | Backend API routes and ORPC routers         |
 | **Auth**       | `packages/auth/`       | Authentication utilities and configurations |
 | **DB**         | `packages/db/`         | Database client, schema, and migrations     |
 | **Shared**     | `packages/shared/`     | Common utilities and shared logic           |

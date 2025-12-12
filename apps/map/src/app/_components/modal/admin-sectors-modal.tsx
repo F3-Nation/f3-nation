@@ -36,7 +36,13 @@ import { toast } from "@acme/ui/toast";
 import { SectorInsertSchema } from "@acme/validators";
 
 import type { DataType } from "~/utils/store/modal";
-import { api } from "~/trpc/react";
+import {
+  invalidateQueries,
+  orpc,
+  ORPCError,
+  useMutation,
+  useQuery,
+} from "~/orpc/react";
 import {
   closeModal,
   DeleteType,
@@ -49,12 +55,14 @@ export default function AdminSectorsModal({
 }: {
   data: DataType[ModalType.ADMIN_SECTORS];
 }) {
-  const utils = api.useUtils();
-  const { data: sector } = api.org.byId.useQuery({
-    id: data.id ?? -1,
-    orgType: "sector",
-  });
-  const { data: nations } = api.org.all.useQuery({ orgTypes: ["nation"] });
+  const { data: sector } = useQuery(
+    orpc.org.byId.queryOptions({
+      input: { id: data.id ?? -1, orgType: "sector" },
+    }),
+  );
+  const { data: nations } = useQuery(
+    orpc.org.all.queryOptions({ input: { orgTypes: ["nation"] } }),
+  );
   const router = useRouter();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -95,21 +103,25 @@ export default function AdminSectorsModal({
     });
   }, [form, sector]);
 
-  const crupdateSector = api.org.crupdate.useMutation({
-    onSuccess: async () => {
-      await utils.org.invalidate();
-      closeModal();
-      toast.success("Successfully updated sector");
-      router.refresh();
-    },
-    onError: (err) => {
-      toast.error(
-        err?.data?.code === "UNAUTHORIZED"
-          ? "You must be logged in to update sectors"
-          : "Failed to update sector",
-      );
-    },
-  });
+  const crupdateSector = useMutation(
+    orpc.org.crupdate.mutationOptions({
+      onSuccess: async () => {
+        await invalidateQueries({
+          predicate: (query) => query.queryKey[0] === "org",
+        });
+        closeModal();
+        toast.success("Successfully updated sector");
+        router.refresh();
+      },
+      onError: (err) => {
+        toast.error(
+          err instanceof ORPCError && err?.code === "UNAUTHORIZED"
+            ? "You must be logged in to update sectors"
+            : "Failed to update sector",
+        );
+      },
+    }),
+  );
 
   return (
     <Dialog open={true} onOpenChange={() => closeModal()}>

@@ -3,7 +3,6 @@
 import type { TableOptions } from "@tanstack/react-table";
 import { DotsHorizontalIcon } from "@radix-ui/react-icons";
 
-import type { RouterOutputs } from "@acme/api";
 import { Button } from "@acme/ui/button";
 import {
   DropdownMenu,
@@ -14,6 +13,7 @@ import {
 import { MDTable } from "@acme/ui/md-table";
 import { Cell, Header } from "@acme/ui/table";
 
+import type { RouterOutputs } from "~/orpc/types";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
 
 type Nation = RouterOutputs["org"]["all"]["orgs"][number];

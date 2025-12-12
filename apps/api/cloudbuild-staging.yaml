@@ -1,0 +1,48 @@
+steps:
+  # Debug step
+  - name: "gcr.io/cloud-builders/docker"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        echo "Debug: DOPPLER_TOKEN available: ${_DOPPLER_TOKEN:0:5}..."
+    secretEnv: ["_DOPPLER_TOKEN"]
+
+  # Build step with correct secret handling
+  - name: "gcr.io/cloud-builders/docker"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        docker build \
+          --build-arg "DOPPLER_TOKEN=$$_DOPPLER_TOKEN" \
+          --build-arg "ENVIRONMENT=$$_ENVIRONMENT" \
+          -t gcr.io/f3-api-472214/f3-nation-api-staging \
+          -f apps/api/Dockerfile \
+          .
+    secretEnv: ["_DOPPLER_TOKEN"]
+
+  # Push step
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "gcr.io/f3-api-472214/f3-nation-api-staging"]
+
+  - name: "gcr.io/cloud-builders/gcloud"
+    args:
+      - "run"
+      - "deploy"
+      - "f3-nation-api-staging" # Name for your Cloud Run service
+      - "--image"
+      - "gcr.io/f3-api-472214/f3-nation-api-staging" # The image you built
+      - "--region"
+      - "us-central1" # e.g., us-central1
+      - "--platform"
+      - "managed"
+      - "--allow-unauthenticated"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/614333864021/secrets/DOPPLER_TOKEN_STAGING/versions/latest
+      env: "_DOPPLER_TOKEN"

@@ -1,5 +1,5 @@
 import { revalidatePath } from "next/cache";
-import { TRPCError } from "@trpc/server";
+import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 
 import type { OrgMeta } from "@acme/shared/app/types";
@@ -19,7 +19,7 @@ import { OrgInsertSchema, SortingSchema } from "@acme/validators";
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getSortingColumns } from "../get-sorting-columns";
 import { moveAOLocsToNewRegion } from "../lib/move-ao-locs-to-new-region";
-import { adminProcedure, createTRPCRouter, editorProcedure } from "../trpc";
+import { adminProcedure, editorProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
 interface Org {
@@ -43,7 +43,7 @@ interface Org {
   parentOrgType: "ao" | "region" | "area" | "sector" | "nation";
 }
 
-export const orgRouter = createTRPCRouter({
+export const orgRouter = {
   all: editorProcedure
     .input(
       z.object({
@@ -56,7 +56,7 @@ export const orgRouter = createTRPCRouter({
         parentOrgIds: z.number().array().optional(),
       }),
     )
-    .query(async ({ ctx, input }) => {
+    .handler(async ({ context: ctx, input }) => {
       const org = aliasedTable(schema.orgs, "org");
       const parentOrg = aliasedTable(schema.orgs, "parent_org");
       const pageSize = input?.pageSize ?? 10;
@@ -145,7 +145,7 @@ export const orgRouter = createTRPCRouter({
 
   byId: editorProcedure
     .input(z.object({ id: z.number(), orgType: z.enum(OrgType).optional() }))
-    .query(async ({ ctx, input }) => {
+    .handler(async ({ context: ctx, input }) => {
       const [org] = await ctx.db
         .select()
         .from(schema.orgs)
@@ -160,11 +160,10 @@ export const orgRouter = createTRPCRouter({
 
   crupdate: editorProcedure
     .input(OrgInsertSchema.partial({ id: true, parentId: true }))
-    .mutation(async ({ ctx, input }) => {
+    .handler(async ({ context: ctx, input }) => {
       const orgIdToCheck = input.id ?? input.parentId;
       if (!orgIdToCheck) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
+        throw new ORPCError("BAD_REQUEST", {
           message: "Parent ID or ID is required",
         });
       }
@@ -175,8 +174,7 @@ export const orgRouter = createTRPCRouter({
         roleName: "editor",
       });
       if (!roleCheckResult.success) {
-        throw new TRPCError({
-          code: "UNAUTHORIZED",
+        throw new ORPCError("UNAUTHORIZED", {
           message: "You are not authorized to update this org",
         });
       }
@@ -201,15 +199,13 @@ export const orgRouter = createTRPCRouter({
         .where(eq(schema.orgs.id, input.id));
 
       if (!existingOrg) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
+        throw new ORPCError("NOT_FOUND", {
           message: "Org not found",
         });
       }
 
       if (existingOrg?.orgType !== input.orgType) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
+        throw new ORPCError("BAD_REQUEST", {
           message: `org to edit is not a ${input.orgType}`,
         });
       }
@@ -247,7 +243,7 @@ export const orgRouter = createTRPCRouter({
     }),
   delete: adminProcedure
     .input(z.object({ id: z.number(), orgType: z.enum(OrgType).optional() }))
-    .mutation(async ({ ctx, input }) => {
+    .handler(async ({ context: ctx, input }) => {
       const roleCheckResult = await checkHasRoleOnOrg({
         orgId: input.id,
         session: ctx.session,
@@ -255,8 +251,7 @@ export const orgRouter = createTRPCRouter({
         roleName: "admin",
       });
       if (!roleCheckResult.success) {
-        throw new TRPCError({
-          code: "UNAUTHORIZED",
+        throw new ORPCError("UNAUTHORIZED", {
           message: "You are not authorized to delete this org",
         });
       }
@@ -272,14 +267,13 @@ export const orgRouter = createTRPCRouter({
         );
       return { orgId: input.id };
     }),
-  revalidate: adminProcedure.mutation(async ({ ctx }) => {
+  revalidate: adminProcedure.handler(async ({ context: ctx }) => {
     const [nation] = await ctx.db
       .select({ id: schema.orgs.id })
       .from(schema.orgs)
       .where(eq(schema.orgs.orgType, "nation"));
     if (!nation) {
-      throw new TRPCError({
-        code: "NOT_FOUND",
+      throw new ORPCError("NOT_FOUND", {
         message: "Nation not found",
       });
     }
@@ -291,12 +285,11 @@ export const orgRouter = createTRPCRouter({
       roleName: "admin",
     });
     if (!roleCheckResult.success) {
-      throw new TRPCError({
-        code: "UNAUTHORIZED",
+      throw new ORPCError("UNAUTHORIZED", {
         message: "You are not authorized to revalidate this Nation",
       });
     }
 
     revalidatePath("/");
   }),
-});
+};

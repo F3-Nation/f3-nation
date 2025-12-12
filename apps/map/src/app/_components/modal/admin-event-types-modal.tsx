@@ -32,7 +32,13 @@ import { toast } from "@acme/ui/toast";
 import { EventTypeInsertSchema } from "@acme/validators";
 
 import type { DataType } from "~/utils/store/modal";
-import { api } from "~/trpc/react";
+import {
+  invalidateQueries,
+  orpc,
+  ORPCError,
+  useMutation,
+  useQuery,
+} from "~/orpc/react";
 import {
   closeModal,
   DeleteType,
@@ -49,12 +55,15 @@ export default function AdminEventTypesModal({
 }: {
   data: DataType[ModalType.ADMIN_EVENT_TYPES];
 }) {
-  const utils = api.useUtils();
-  const { data: eventType } = api.eventType.byId.useQuery(
-    { id: data.id ?? -1 },
-    { enabled: !!data.id },
+  const { data: eventType } = useQuery(
+    orpc.eventType.byId.queryOptions({
+      input: { id: data.id ?? -1 },
+      enabled: !!data.id,
+    }),
   );
-  const { data: regions } = api.org.all.useQuery({ orgTypes: ["region"] });
+  const { data: regions } = useQuery(
+    orpc.org.all.queryOptions({ input: { orgTypes: ["region"] } }),
+  );
   const sortedRegions = useMemo(() => {
     return regions?.orgs.sort((a, b) => {
       return a.orgType.localeCompare(b.orgType) || a.name.localeCompare(b.name);
@@ -77,21 +86,25 @@ export default function AdminEventTypesModal({
     });
   }, [form, eventType]);
 
-  const crupdateEventType = api.eventType.crupdate.useMutation({
-    onSuccess: async () => {
-      await utils.eventType.invalidate();
-      closeModal();
-      toast.success("Successfully updated event type");
-      router.refresh();
-    },
-    onError: (err) => {
-      toast.error(
-        err?.data?.code === "UNAUTHORIZED"
-          ? "You must be logged in to update events"
-          : "Failed to update event",
-      );
-    },
-  });
+  const crupdateEventType = useMutation(
+    orpc.eventType.crupdate.mutationOptions({
+      onSuccess: async () => {
+        await invalidateQueries({
+          predicate: (query) => query.queryKey[0] === "eventType",
+        });
+        closeModal();
+        toast.success("Successfully updated event type");
+        router.refresh();
+      },
+      onError: (err) => {
+        toast.error(
+          err instanceof ORPCError && err?.code === "UNAUTHORIZED"
+            ? "You must be logged in to update events"
+            : "Failed to update event",
+        );
+      },
+    }),
+  );
 
   const onSubmit = async (data: EventTypeInsertFormType) => {
     // // Validate event type

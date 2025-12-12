@@ -5,13 +5,12 @@ import gte from "lodash/gte";
 import { Edit, PlusCircle, Trash } from "lucide-react";
 import { useSession } from "next-auth/react";
 
+import { isProd } from "@acme/shared/common/constants";
 import { isTruthy } from "@acme/shared/common/functions";
 import { cn } from "@acme/ui";
 import { toast } from "@acme/ui/toast";
 
-import { api } from "~/trpc/react";
-import { isProd } from "~/trpc/util";
-import { vanillaApi } from "~/trpc/vanilla";
+import { invalidateQueries, orpc, useQuery } from "~/orpc/react";
 import { getWhenFromWorkout } from "~/utils/get-when-from-workout";
 import { useUpdateEventSearchParams } from "~/utils/hooks/use-update-event-search-params";
 import { appStore } from "~/utils/store/app";
@@ -40,22 +39,24 @@ export const WorkoutDetailsContent = ({
   chipSize,
 }: WorkoutDetailsContentProps) => {
   const router = useRouter();
-  const utils = api.useUtils();
   const { data: session } = useSession();
-  const { data: results, isLoading } =
-    api.location.getLocationWorkoutData.useQuery(
-      { locationId },
-      { enabled: locationId >= 0 },
-    );
+  const { data: results, isLoading } = useQuery(
+    orpc.location.getLocationWorkoutData.queryOptions({
+      input: { locationId },
+      enabled: locationId >= 0,
+    }),
+  );
 
   const selectedEventId = useMemo(() => {
     if (providedEventId) return providedEventId;
     return results?.location.events?.[0]?.id ?? null;
   }, [providedEventId, results]);
 
-  const { data: canDeleteEvent } = api.request.canDeleteEvent.useQuery(
-    { eventId: selectedEventId ?? 0 },
-    { enabled: !!selectedEventId },
+  const { data: canDeleteEvent } = useQuery(
+    orpc.request.canDeleteEvent.queryOptions({
+      input: { eventId: selectedEventId ?? 0 },
+      enabled: !!selectedEventId,
+    }),
   );
 
   const mode = appStore.use.mode();
@@ -427,16 +428,23 @@ export const WorkoutDetailsContent = ({
                   );
                   if (!event) return;
 
-                  void vanillaApi.request.submitDeleteRequest
-                    .mutate({
+                  void orpc.request.submitDeleteRequest
+                    .call({
                       regionId: results.location.regionId,
                       eventId: event.id,
                       eventName: event.name,
                       submittedBy: session?.user?.email ?? "",
                     })
                     .then((result) => {
-                      void utils.location.invalidate();
-                      void utils.request.canDeleteEvent.invalidate();
+                      void invalidateQueries({
+                        predicate: (query) => query.queryKey[0] === "location",
+                      });
+                      void invalidateQueries({
+                        queryKey: orpc.request.canDeleteEvent.queryKey({
+                          input: { eventId: event.id },
+                        }),
+                        exact: false,
+                      });
                       router.refresh();
                       toast.success(
                         result.status === "pending"

@@ -5,7 +5,7 @@ import debounce from "lodash/debounce";
 import { CLOSE_ZOOM } from "@acme/shared/app/constants";
 import { RERENDER_LOGS } from "@acme/shared/common/constants";
 
-import { api } from "~/trpc/react";
+import { orpc, useQuery } from "~/orpc/react";
 import { mapStore } from "~/utils/store/map";
 import { selectedItemStore } from "~/utils/store/selected-item";
 
@@ -20,9 +20,11 @@ export const useSelectedItem = () => {
   const eventId = selectedItemStore.use.eventId();
   const modifiedLocationMarkers = mapStore.use.modifiedLocationMarkers();
   const [debouncedLocationId, setDebouncedLocationId] = useState(locationId);
-  const { data } = api.location.getLocationWorkoutData.useQuery(
-    { locationId: debouncedLocationId ?? -1 },
-    { enabled: typeof debouncedLocationId === "number" },
+  const { data } = useQuery(
+    orpc.location.getLocationWorkoutData.queryOptions({
+      input: { locationId: debouncedLocationId ?? -1 },
+      enabled: typeof debouncedLocationId === "number",
+    }),
   );
 
   const selectedLocation = useMemo(() => {

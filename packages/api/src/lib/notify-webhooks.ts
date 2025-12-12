@@ -17,7 +17,7 @@ interface Webhook {
 
 const webhooks: Webhook[] = [
   {
-    url: `${env.NEXT_PUBLIC_URL}/api/trpc/ping`,
+    url: `${env.NEXT_PUBLIC_URL}/api/orpc/ping`,
     method: "GET",
   },
 ];

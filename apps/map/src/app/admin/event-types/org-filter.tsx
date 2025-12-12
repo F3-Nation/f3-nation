@@ -12,8 +12,8 @@ import {
 } from "@acme/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@acme/ui/popover";
 
-import type { RouterOutputs } from "~/trpc/types";
-import { api } from "~/trpc/react";
+import type { RouterOutputs } from "~/orpc/types";
+import { orpc, useQuery } from "~/orpc/react";
 
 type Org = RouterOutputs["org"]["all"]["orgs"][number];
 
@@ -24,9 +24,11 @@ export const OrgFilter = ({
   onOrgSelect: (org: Org) => void;
   selectedOrgs: Org[];
 }) => {
-  const { data: orgs } = api.org.all.useQuery({
-    orgTypes: ["area", "sector", "region", "nation"],
-  });
+  const { data: orgs } = useQuery(
+    orpc.org.all.queryOptions({
+      input: { orgTypes: ["area", "sector", "region", "nation"] },
+    }),
+  );
   const [open, setOpen] = useState(false);
 
   return (

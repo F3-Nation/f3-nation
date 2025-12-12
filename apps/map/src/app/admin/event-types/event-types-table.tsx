@@ -4,7 +4,6 @@ import type { TableOptions } from "@tanstack/react-table";
 import { useState } from "react";
 import { DotsHorizontalIcon } from "@radix-ui/react-icons";
 
-import type { RouterOutputs } from "@acme/api";
 import type { IsActiveStatus } from "@acme/shared/app/enums";
 import type { SortingSchema } from "@acme/validators";
 import { Button } from "@acme/ui/button";
@@ -17,7 +16,8 @@ import {
 import { MDTable, usePagination } from "@acme/ui/md-table";
 import { Cell, Header } from "@acme/ui/table";
 
-import { api } from "~/trpc/react";
+import type { RouterOutputs } from "~/orpc/types";
+import { orpc, useQuery } from "~/orpc/react";
 import { useDebounce } from "~/utils/hooks/use-debounce";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
 import { EventTypeIsActiveFilter } from "./event-type-is-active-filter";
@@ -37,15 +37,19 @@ export const EventTypesTable = () => {
     pageSize: 20,
   });
 
-  const { data: eventTypes } = api.eventType.all.useQuery({
-    orgIds: selectedOrgs.map((org) => org.id),
-    statuses: selectedStatuses,
-    searchTerm: debouncedSearchTerm,
-    pageSize: pagination.pageSize,
-    pageIndex: pagination.pageIndex,
-    ignoreNationEventTypes: true,
-    sorting: sorting,
-  });
+  const { data: eventTypes } = useQuery(
+    orpc.eventType.all.queryOptions({
+      input: {
+        orgIds: selectedOrgs.map((org) => org.id),
+        statuses: selectedStatuses,
+        searchTerm: debouncedSearchTerm,
+        pageSize: pagination.pageSize,
+        pageIndex: pagination.pageIndex,
+        ignoreNationEventTypes: true,
+        sorting: sorting,
+      },
+    }),
+  );
 
   const handleOrgSelect = (org: Org) => {
     setSelectedOrgs((prev) => {

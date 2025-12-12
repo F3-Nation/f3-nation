@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/prefer-nullish-coalescing */
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { TRPCClientError } from "@trpc/client";
 import gte from "lodash/gte";
 import { useSession } from "next-auth/react";
 import { v4 as uuid } from "uuid";
@@ -11,6 +10,7 @@ import {
   convertHH_mmToHHmm,
   convertHHmmToHH_mm,
 } from "@acme/shared/app/functions";
+import { isProd } from "@acme/shared/common/constants";
 import { Button } from "@acme/ui/button";
 import {
   Dialog,
@@ -23,8 +23,13 @@ import { Spinner } from "@acme/ui/spinner";
 import { toast } from "@acme/ui/toast";
 
 import type { DataType, ModalType } from "~/utils/store/modal";
-import { api } from "~/trpc/react";
-import { isProd } from "~/trpc/util";
+import {
+  invalidateQueries,
+  orpc,
+  ORPCError,
+  useMutation,
+  useQuery,
+} from "~/orpc/react";
 import { useUpdateLocationForm } from "~/utils/forms";
 import { appStore } from "~/utils/store/app";
 import { closeModal } from "~/utils/store/modal";
@@ -40,11 +45,11 @@ export const UpdateLocationModal = ({
   data: DataType[ModalType.UPDATE_LOCATION];
 }) => {
   const router = useRouter();
-  const utils = api.useUtils();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { mutateAsync: submitUpdateRequest } =
-    api.request.submitUpdateRequest.useMutation();
+  const { mutateAsync: submitUpdateRequest } = useMutation(
+    orpc.request.submitUpdateRequest.mutationOptions(),
+  );
 
   const form = useUpdateLocationForm({
     defaultValues: {
@@ -54,13 +59,17 @@ export const UpdateLocationModal = ({
   });
 
   const formRegionId = form.watch("regionId");
-  const { data: canEditRegion } = api.request.canEditRegions.useQuery(
-    { orgIds: [formRegionId] },
-    { enabled: !!formRegionId && formRegionId !== -1 },
+  const { data: canEditRegion } = useQuery(
+    orpc.request.canEditRegions.queryOptions({
+      input: { orgIds: [formRegionId] },
+      enabled: !!formRegionId && formRegionId !== -1,
+    }),
   );
 
   const { data: session } = useSession();
-  const { data: eventTypes } = api.eventType.all.useQuery();
+  const { data: eventTypes } = useQuery(
+    orpc.eventType.all.queryOptions({ input: undefined }),
+  );
 
   const onSubmit = form.handleSubmit(
     async (values) => {
@@ -89,7 +98,9 @@ export const UpdateLocationModal = ({
           toast.error("Failed to submit update request");
           throw new Error("Failed to submit update request");
         } else if (result.status === "approved") {
-          void utils.invalidate();
+          void invalidateQueries({
+            predicate: () => true,
+          });
           toast.success("Update request automatically applied");
           router.refresh();
         }
@@ -102,7 +113,7 @@ export const UpdateLocationModal = ({
           return;
         }
 
-        if (!(error instanceof TRPCClientError)) {
+        if (!(error instanceof ORPCError)) {
           toast.error(error.message);
           return;
         }

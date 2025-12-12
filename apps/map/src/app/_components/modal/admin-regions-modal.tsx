@@ -37,7 +37,13 @@ import { toast } from "@acme/ui/toast";
 import { RegionInsertSchema } from "@acme/validators";
 
 import type { DataType } from "~/utils/store/modal";
-import { api } from "~/trpc/react";
+import {
+  invalidateQueries,
+  orpc,
+  ORPCError,
+  useMutation,
+  useQuery,
+} from "~/orpc/react";
 import { scaleAndCropImage } from "~/utils/image/scale-and-crop-image";
 import { uploadLogo } from "~/utils/image/upload-logo";
 import {
@@ -53,12 +59,14 @@ export default function AdminRegionsModal({
 }: {
   data: DataType[ModalType.ADMIN_REGIONS];
 }) {
-  const utils = api.useUtils();
-  const { data: region } = api.org.byId.useQuery({
-    id: data.id ?? -1,
-    orgType: "region",
-  });
-  const { data: areas } = api.org.all.useQuery({ orgTypes: ["area"] });
+  const { data: region } = useQuery(
+    orpc.org.byId.queryOptions({
+      input: { id: data.id ?? -1, orgType: "region" },
+    }),
+  );
+  const { data: areas } = useQuery(
+    orpc.org.all.queryOptions({ input: { orgTypes: ["area"] } }),
+  );
   const router = useRouter();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -104,21 +112,26 @@ export default function AdminRegionsModal({
     });
   }, [form, region]);
 
-  const crupdateRegion = api.org.crupdate.useMutation({
-    onSuccess: async () => {
-      await utils.org.invalidate();
-      closeModal();
-      toast.success("Successfully updated region");
-      router.refresh();
-    },
-    onError: (err) => {
-      toast.error(
-        err?.data?.code === "UNAUTHORIZED"
-          ? "You must be logged in to update regions"
-          : "Failed to update region",
-      );
-    },
-  });
+  const crupdateRegion = useMutation(
+    orpc.org.crupdate.mutationOptions({
+      onSuccess: async () => {
+        await invalidateQueries({
+          predicate: (query) => query.queryKey[0] === "org",
+        });
+        closeModal();
+        toast.success("Successfully updated region");
+        router.refresh();
+      },
+      onError: (err) => {
+        toast.error(
+          // ORPCError code = "UNAUTHORIZED", message, data
+          err instanceof ORPCError && err?.code === "UNAUTHORIZED"
+            ? "You must be logged in to update regions"
+            : "Failed to update region",
+        );
+      },
+    }),
+  );
 
   const formRegionId = form.watch("id");
 

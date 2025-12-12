@@ -17,14 +17,14 @@ steps:
         docker build \
           --build-arg "DOPPLER_TOKEN=$$_DOPPLER_TOKEN" \
           --build-arg "ENVIRONMENT=$$_ENVIRONMENT" \
-          -t gcr.io/pin-mastery/f3-nextjs \
-          -f apps/nextjs/Dockerfile \
+          -t gcr.io/f3-api-472214/f3-nation-map \
+          -f apps/map/Dockerfile \
           .
     secretEnv: ["_DOPPLER_TOKEN"]
 
   # Push step
   - name: "gcr.io/cloud-builders/docker"
-    args: ["push", "gcr.io/pin-mastery/f3-nextjs"]
+    args: ["push", "gcr.io/f3-api-472214/f3-nation-map"]
 
   - name: "gcr.io/cloud-builders/gcloud"
     args:
@@ -32,7 +32,7 @@ steps:
       - "deploy"
       - "f3-2" # Name for your Cloud Run service
       - "--image"
-      - "gcr.io/pin-mastery/f3-nextjs" # The image you built
+      - "gcr.io/f3-api-472214/f3-nation-map" # The image you built
       - "--region"
       - "us-central1" # e.g., us-central1
       - "--platform"
@@ -44,5 +44,5 @@ options:
 
 availableSecrets:
   secretManager:
-    - versionName: projects/233824588998/secrets/DOPPLER_TOKEN/versions/latest
+    - versionName: projects/614333864021/secrets/DOPPLER_TOKEN/versions/latest
       env: "_DOPPLER_TOKEN"

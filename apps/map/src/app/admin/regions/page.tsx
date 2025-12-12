@@ -1,16 +1,16 @@
 import { Suspense } from "react";
 
-import { api } from "~/trpc/server";
+import { client } from "~/orpc/client";
 import Layout from "../admin-layout";
 import { AddRegionButton } from "./[id]/add-region-button";
 import { RegionsTable } from "./regions-table";
 
 const RegionsPage = async () => {
-  const { orgs: regions } = await api.org.all({ orgTypes: ["region"] });
-  const { orgs: sectors } = await api.org.all({
+  const { orgs: regions } = await client.org.all({ orgTypes: ["region"] });
+  const { orgs: sectors } = await client.org.all({
     orgTypes: ["sector"],
   });
-  const { orgs: areas } = await api.org.all({
+  const { orgs: areas } = await client.org.all({
     orgTypes: ["area"],
   });
 

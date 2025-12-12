@@ -1,6 +1,6 @@
 import type { DayOfWeek } from "@acme/shared/app/enums";
 
-import type { RouterOutputs } from "~/trpc/types";
+import type { RouterOutputs } from "~/orpc/types";
 
 export type F3MarkerLocation =
   RouterOutputs["location"]["getMapEventAndLocationData"][number];
