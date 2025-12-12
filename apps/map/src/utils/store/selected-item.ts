@@ -1,6 +1,7 @@
 import { ZustandStore } from "@acme/shared/common/classes";
 import { isDevelopment } from "@acme/shared/common/constants";
 
+import type { RouterOutputs } from "~/orpc/types";
 import { getQueryData, orpc } from "~/orpc/react";
 import { appStore } from "./app";
 import { ModalType, openModal } from "./modal";
@@ -101,7 +102,9 @@ export const setSelectedItem = (item: {
     newSelectedItemStore.locationId !== null &&
     newSelectedItemStore.eventId == null
   ) {
-    const dataArray = getQueryData(
+    const dataArray = getQueryData<
+      RouterOutputs["location"]["getMapEventAndLocationData"]
+    >(
       orpc.location.getMapEventAndLocationData.queryKey({
         input: undefined,
       }),

@@ -20,5 +20,12 @@ export default defineConfig({
         inline: ["vitest-canvas-mock"],
       },
     },
+    alias: {
+      // Mock server-only modules in test environment
+      "server-only": new URL(
+        "./__tests__/mocks/server-only.ts",
+        import.meta.url,
+      ).pathname,
+    },
   },
 });

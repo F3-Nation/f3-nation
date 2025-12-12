@@ -2,10 +2,10 @@
  * Run this seed with:
  * pnpm -F db seed ./src/seed/core.ts
  */
-import { insertDatabaseStructure } from "../seed";
 
 const main = async () => {
-  await insertDatabaseStructure();
+  console.log("Seeding core data; nothing to do");
+  return Promise.resolve();
 };
 
 void main();

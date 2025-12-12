@@ -14,14 +14,14 @@ import { getDb } from "./utils/functions";
 
 // import { getLocationDataFromGravityForms } from "./utils/get-location-data-gravity-forms";
 
-const EVENT_TAGS = [
+const _EVENT_TAGS = [
   { name: EventTags.Open, color: "Green" },
   { name: EventTags.VQ, color: "Blue" },
   { name: EventTags.Manniversary, color: "Yellow" },
   { name: EventTags.Convergence, color: "Orange" },
 ];
 
-const GRAVITY_FORMS_TIME_FORMAT = "hh:mm a" as const;
+const _GRAVITY_FORMS_TIME_FORMAT = "hh:mm a" as const;
 dayjs.extend(customParseFormat);
 
 if (!("DATABASE_URL" in env))
@@ -406,7 +406,7 @@ export async function insertUsers() {
     .onConflictDoNothing();
 }
 
-const getLatLonKey = ({
+const _getLatLonKey = ({
   latitude,
   longitude,
 }: {
@@ -425,7 +425,7 @@ const getLatLonKey = ({
   return `${latStr},${lonStr}`;
 };
 
-const getCleanedEventType = (eventTypeRaw: string) => {
+const _getCleanedEventType = (eventTypeRaw: string) => {
   if (eventTypeRaw === "Cycling") return "Bike";
   if (
     eventTypeRaw === "Strength/Conditioning/Tabata/WIB" ||
