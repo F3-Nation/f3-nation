@@ -39,7 +39,7 @@ export const locationRouter = {
         })
         .optional(),
     )
-    .route({ method: "GET", path: "/locations/all" })
+    .route({ method: "GET" })
     .handler(async ({ context: ctx, input }) => {
       const regionOrg = aliasedTable(schema.orgs, "region_org");
       const limit = input?.pageSize ?? 10;

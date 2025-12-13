@@ -10,3 +10,5 @@ export const isTestNodeEnv = process.env.NODE_ENV === "test";
 export const isProd = process.env.NEXT_PUBLIC_CHANNEL === "prod";
 
 export const RERENDER_LOGS = false;
+
+export const COOKIE_NAME = "authjs";

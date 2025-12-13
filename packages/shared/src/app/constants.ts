@@ -177,6 +177,10 @@ export const routes = {
       __path: "/admin/requests",
       __auth: "editor",
     },
+    apiKeys: {
+      __path: "/admin/api-keys",
+      __auth: "admin",
+    },
     locations: {
       __path: "/admin/locations",
       __auth: "editor",

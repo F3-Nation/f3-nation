@@ -54,7 +54,7 @@ export const createSignInUrlFromTokenResponse = (params: {
   email: string;
 }) => {
   const props = new URLSearchParams(params);
-  const url = `${env.NEXT_PUBLIC_URL}/api/auth/callback/${
+  const url = `${env.NEXT_PUBLIC_MAP_URL}/api/auth/callback/${
     localEmailProvider.id
   }?${props.toString()}`;
   return { url };
@@ -66,7 +66,7 @@ export const createVerifyUrlFromTokenResponse = (params: {
   email: string;
 }) => {
   const props = new URLSearchParams(params);
-  const url = `${env.NEXT_PUBLIC_URL}/auth/verify-email?${props.toString()}`;
+  const url = `${env.NEXT_PUBLIC_MAP_URL}/auth/verify-email?${props.toString()}`;
   return { url };
 };
 

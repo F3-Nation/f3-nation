@@ -1,13 +1,15 @@
 import { RPCHandler } from "@orpc/server/fetch";
+import { RequestHeadersPlugin } from "@orpc/server/plugins";
 
 import { router } from "@acme/api";
 
-const handler = new RPCHandler(router);
+const handler = new RPCHandler(router, {
+  plugins: [new RequestHeadersPlugin()],
+});
 
 async function handleRequest(request: Request) {
   const { response } = await handler.handle(request, {
     prefix: "/api/orpc",
-    context: {},
   });
 
   return response ?? new Response("Not found", { status: 404 });

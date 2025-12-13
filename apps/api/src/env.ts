@@ -33,7 +33,7 @@ export const env = createEnv({
    * For them to be exposed to the client, prefix them with `NEXT_PUBLIC_`.
    */
   client: {
-    NEXT_PUBLIC_URL: z.string().min(1),
+    NEXT_PUBLIC_API_URL: z.string().min(1),
     NEXT_PUBLIC_GOOGLE_API_KEY: z.string().min(1),
     // NEXT_PUBLIC_CLIENTVAR: z.string(),
   },
@@ -42,7 +42,7 @@ export const env = createEnv({
    */
   experimental__runtimeEnv: {
     NEXT_PUBLIC_GOOGLE_API_KEY: process.env.NEXT_PUBLIC_GOOGLE_API_KEY,
-    NEXT_PUBLIC_URL: process.env.NEXT_PUBLIC_URL,
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
     VERCEL_ENV: process.env.VERCEL_ENV,
     NODE_ENV: process.env.NODE_ENV,
     NEXT_PUBLIC_CHANNEL: process.env.NEXT_PUBLIC_CHANNEL,

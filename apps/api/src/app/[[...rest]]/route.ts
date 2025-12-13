@@ -1,13 +1,48 @@
+import { OpenAPIHandler } from "@orpc/openapi/fetch"; // or '@orpc/server/node'
+import { onError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
+import { CORSPlugin, RequestHeadersPlugin } from "@orpc/server/plugins";
 
 import { router } from "@acme/api";
 
-const handler = new RPCHandler(router);
+const handler = new RPCHandler(router, {
+  plugins: [
+    new CORSPlugin({
+      origin: [
+        "https://map.f3nation.test",
+        "https://maps.f3nation.com",
+        "http://localhost:3000",
+      ],
+      allowMethods: [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE",
+        "HEAD",
+        "OPTIONS",
+      ],
+      allowHeaders: ["Content-Type", "Authorization"],
+      maxAge: 600,
+      credentials: true,
+    }),
+    new RequestHeadersPlugin(),
+  ],
+});
+
+const _handler = new OpenAPIHandler(router, {
+  plugins: [new CORSPlugin(), new RequestHeadersPlugin()],
+  interceptors: [
+    onError((error) => {
+      console.error(error);
+    }),
+  ],
+});
 
 async function handleRequest(request: Request) {
   // Redirect to /docs if the request is for /
   if (new URL(request.url).pathname === "/") {
-    const envBase = process.env.NEXT_PUBLIC_URL ?? undefined;
+    const envBase = process.env.NEXT_PUBLIC_API_URL ?? undefined;
     const forwardedProto =
       request.headers.get("x-forwarded-proto") ?? undefined;
     const forwardedHost = request.headers.get("x-forwarded-host") ?? undefined;
@@ -22,7 +57,6 @@ async function handleRequest(request: Request) {
   // Handle the request
   const { response } = await handler.handle(request, {
     prefix: "/",
-    context: {},
   });
 
   return response ?? new Response("Not found", { status: 404 });
@@ -34,6 +68,7 @@ export const POST = handleRequest;
 export const PUT = handleRequest;
 export const PATCH = handleRequest;
 export const DELETE = handleRequest;
+export const OPTIONS = handleRequest; // Important for CORS preflight!
 
 // Backup - old API route
 // TODO ORPC - notify webhooks

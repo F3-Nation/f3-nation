@@ -8,6 +8,7 @@ import type { UserRole } from "@acme/shared/app/enums";
 import { db } from "@acme/db/client";
 import { orgs } from "@acme/db/schema/schema";
 import { env } from "@acme/env";
+import { COOKIE_NAME } from "@acme/shared/common/constants";
 import { ProviderId } from "@acme/shared/common/enums";
 
 import { emailProvider } from "./lib/email-provider";
@@ -17,6 +18,63 @@ import OtpProvider from "./lib/otp-provider";
 export type { Session } from "next-auth";
 
 const isProd = env.NEXT_PUBLIC_CHANNEL === "prod";
+
+// Cookie configuration for cross-subdomain auth (map.f3nation.com <-> api.f3nation.com)
+// In production: use __Secure- prefix (requires HTTPS) and .f3nation.com domain
+// In development: use simpler config for localhost
+/**
+ * Determine the cookie domain dynamically, handling:
+ * - localhost (dev): no domain (so cookies only for localhost)
+ * - map.f3nation.com, api.f3nation.com, etc: use .f3nation.com
+ * - map.f3nation.test, api.f3nation.test: use .f3nation.test
+ *
+ * If running in Vercel, use NEXT_PUBLIC_VERCEL_URL if available (or some runtime value if available).
+ * Else, fallback to window.location if possible (for client-side usage), or process.env if on server.
+ * If all else fails, default to undefined (scopes to current host).
+ */
+function getCookieDomain() {
+  const hostname =
+    typeof window !== "undefined"
+      ? window.location.hostname
+      : // Try Vercel env first (it won't have protocol in NEXT_PUBLIC_VERCEL_URL)
+        process.env.NEXT_PUBLIC_VERCEL_URL?.replace(/^https?:\/\//, "") ??
+        process.env.VERCEL_URL?.replace(/^https?:\/\//, "") ??
+        env.NEXT_PUBLIC_API_URL?.replace(/^https?:\/\//, "") ??
+        env.NEXT_PUBLIC_MAP_URL?.replace(/^https?:\/\//, "") ??
+        undefined;
+
+  if (
+    !hostname ||
+    hostname.startsWith("localhost") ||
+    hostname === "127.0.0.1"
+  ) {
+    return undefined; // don't set domain in local dev (scopes to current host)
+  }
+
+  if (hostname.endsWith(".f3nation.com")) return ".f3nation.com";
+  if (hostname.endsWith(".f3nation.test")) return ".f3nation.test";
+
+  // fallback: scope cookie to current base domain (e.g. .example.com)
+  const parts = hostname.split(".");
+  if (parts.length > 2) {
+    // e.g. api.sub.example.com => .example.com
+    return "." + parts.slice(-2).join(".");
+  }
+  // e.g. my-demo.com => .my-demo.com
+  if (parts.length === 2) return "." + hostname;
+
+  return undefined;
+}
+
+const cookiePrefix =
+  (typeof process !== "undefined" &&
+    process.env.NEXT_PUBLIC_CHANNEL === "prod") ||
+  (typeof window !== "undefined" &&
+    window.location.hostname.endsWith(".f3nation.com"))
+    ? "__Secure-"
+    : "";
+
+const cookieDomain = getCookieDomain();
 
 const providers: Provider[] = [emailProvider, OtpProvider];
 
@@ -65,6 +123,38 @@ export const authConfig: NextAuthConfig = {
   // https://github.com/nextauthjs/next-auth/issues/9819#issuecomment-1912903196
   basePath: "/api/auth",
   trustHost: true,
+  cookies: {
+    sessionToken: {
+      name: `${cookiePrefix}${COOKIE_NAME}.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: isProd,
+        domain: cookieDomain,
+      },
+    },
+    callbackUrl: {
+      name: `${cookiePrefix}${COOKIE_NAME}.callback-url`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: isProd,
+        domain: cookieDomain,
+      },
+    },
+    csrfToken: {
+      name: `${cookiePrefix}${COOKIE_NAME}.csrf-token`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: isProd,
+        domain: cookieDomain,
+      },
+    },
+  },
   pages: {
     signIn: "/auth/sign-in",
     verifyRequest: "/auth/verify-request",

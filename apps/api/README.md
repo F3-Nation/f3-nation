@@ -104,3 +104,33 @@ This application is built with:
 - [Main Monorepo README](../README.md) - Overview of the entire monorepo structure
 - [API Package README](../../packages/api/README.md) - Backend API documentation
 - [UI Package README](../../packages/ui/README.md) - Shared UI components
+
+# NOTES
+
+F3 API ideas
+⁃ most queries will be by id
+⁃ filters by region
+⁃ Filters by lat, lng
+⁃ versioning - v1
+
+API Data hierarchy
+⁃ Slackbot
+⁃ specific logic here
+⁃ Maps
+⁃ Near me
+⁃ Region pages
+
+Public (get and lists and counts)
+⁃ Orgs
+⁃ Regions
+⁃ Locations
+⁃ Events
+
+Materialized views (or live joins)
+⁃ region with location summary
+⁃ maps (get all lat,lngs with some supplemental data)
+⁃ maps (get data for a particular location)
+⁃ Continue conversation on slack
+⁃ Slackbot: f3-nation-slack-bot/docs/api/endpoint_requirements.md at main · F3-Nation/f3-nation-slack-bot · GitHub
+
+API Key can be for a region or a userId

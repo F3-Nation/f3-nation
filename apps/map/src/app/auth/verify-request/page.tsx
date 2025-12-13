@@ -7,7 +7,7 @@ import { env } from "~/env";
 import { AuthWrapper } from "../components/auth-components";
 
 export default function VerifyRequestPage() {
-  const url = new URL(env.NEXT_PUBLIC_URL);
+  const url = new URL(env.NEXT_PUBLIC_MAP_URL);
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col items-center">

@@ -9,6 +9,7 @@ import { ModalType, useOpenModal } from "~/utils/store/modal";
 import { AboutMapModal } from "../map/about-map-modal";
 import { MapHelpModal } from "../map/map-help-modal";
 import AdminAOsModal from "./admin-aos-modal";
+import AdminApiKeysModal from "./admin-api-keys-modal";
 import AdminAreasModal from "./admin-areas-modal";
 import AdminDeleteModal from "./admin-delete-modal";
 import AdminDeleteRequestModal from "./admin-delete-request-modal";
@@ -77,6 +78,8 @@ export const ModalSwitcher = () => {
           data={data as DataType[ModalType.ADMIN_EVENT_TYPES]}
         />
       );
+    case ModalType.ADMIN_API_KEYS:
+      return <AdminApiKeysModal />;
     case ModalType.ADMIN_LOCATIONS:
       return (
         <AdminLocationsModal

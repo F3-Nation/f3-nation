@@ -27,6 +27,7 @@ const MIN_WIDTH = 300;
 interface Option<T> {
   value: string;
   label: string;
+  disabled?: boolean;
   labelComponent?: React.ReactNode;
   data?: T;
 }
@@ -118,11 +119,21 @@ const VirtualizedCommand = <T,>({
               }}
               key={sortedFilteredOptions[virtualOption.index]?.value}
               value={sortedFilteredOptions[virtualOption.index]?.value}
+              // Pass disabled to CommandItem if option's disabled is true
+              disabled={!!sortedFilteredOptions[virtualOption.index]?.disabled}
               onSelect={(selectedItem) => {
+                // Do nothing if item is disabled
+                if (sortedFilteredOptions[virtualOption.index]?.disabled) {
+                  return;
+                }
                 const item = sortedFilteredOptions[virtualOption.index]?.value;
                 onSelectOption?.(item ?? selectedItem);
               }}
-              className="flex items-center justify-between"
+              className={cn(
+                "flex items-center justify-between",
+                sortedFilteredOptions[virtualOption.index]?.disabled &&
+                  "pointer-events-none cursor-not-allowed opacity-50",
+              )}
             >
               <Check
                 className={cn("mr-2 h-4 w-4 opacity-0", {
@@ -136,6 +147,9 @@ const VirtualizedCommand = <T,>({
                   {sortedFilteredOptions[virtualOption.index]?.labelComponent ??
                     sortedFilteredOptions[virtualOption.index]?.label}
                 </div>
+                {sortedFilteredOptions[virtualOption.index]?.disabled && (
+                  <span className="text-xs text-gray-500">(Disabled)</span>
+                )}
               </div>
             </CommandItem>
           ))}

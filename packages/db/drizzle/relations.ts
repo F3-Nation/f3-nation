@@ -3,6 +3,7 @@ import { relations } from "drizzle-orm/relations";
 import {
   achievements,
   achievementsXUsers,
+  apiKeys,
   attendance,
   attendanceTypes,
   attendanceXAttendanceTypes,
@@ -125,6 +126,7 @@ export const attendanceRelations = relations(attendance, ({ one, many }) => ({
 export const usersRelations = relations(users, ({ one, many }) => ({
   attendances: many(attendance),
   slackUsers: many(slackUsers),
+  apiKeys: many(apiKeys),
   org: one(orgs, {
     fields: [users.homeRegionId],
     references: [orgs.id],
@@ -392,6 +394,13 @@ export const expansionsRelations = relations(expansions, ({ many }) => ({
 export const authAccountsRelations = relations(authAccounts, ({ one }) => ({
   user: one(users, {
     fields: [authAccounts.userId],
+    references: [users.id],
+  }),
+}));
+
+export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
+  owner: one(users, {
+    fields: [apiKeys.ownerId],
     references: [users.id],
   }),
 }));

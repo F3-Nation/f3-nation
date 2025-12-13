@@ -3,6 +3,7 @@ import { usePathname } from "next/navigation";
 import {
   Earth,
   Globe,
+  KeyRound,
   MapPin,
   PersonStanding,
   SquareChartGantt,
@@ -108,6 +109,16 @@ export const AdminNavLinks = ({
       label: "The Nation",
       type: "link",
     },
+    {
+      label: "Integrations",
+      type: "section",
+    },
+    {
+      href: routes.admin.apiKeys.__path,
+      icon: KeyRound,
+      label: "API Keys",
+      type: "link",
+    },
   ];
 
   return (
@@ -118,7 +129,7 @@ export const AdminNavLinks = ({
             <div
               key={link.label}
               className={cn(
-                "mb-2 mt-4 text-base font-semibold",
+                "mb-2 mt-2 text-base font-semibold",
                 sectionClassName,
               )}
             >
