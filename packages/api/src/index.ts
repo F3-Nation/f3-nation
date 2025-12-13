@@ -1,4 +1,5 @@
 import { apiRouter } from "./router/api";
+import { apiKeyRouter } from "./router/api-key";
 import { authRouter } from "./router/auth";
 import { eventRouter } from "./router/event";
 import { eventTypeRouter } from "./router/event-type";
@@ -11,6 +12,7 @@ import { userRouter } from "./router/user";
 
 export const router = {
   api: apiRouter,
+  apiKey: apiKeyRouter,
   auth: authRouter,
   org: orgRouter,
   feedback: feedbackRouter,

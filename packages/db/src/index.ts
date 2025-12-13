@@ -1,6 +1,7 @@
 import {
   attendance,
   attendanceTypes,
+  apiKeys,
   authAccounts,
   authSessions,
   authVerificationTokens,
@@ -24,6 +25,7 @@ import {
 export const schema = {
   attendance,
   attendanceTypes,
+  apiKeys,
   authAccounts,
   authSessions,
   authVerificationTokens,

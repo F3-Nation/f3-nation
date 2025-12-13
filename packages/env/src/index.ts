@@ -23,7 +23,8 @@ export const env = createEnv({
     NOTIFY_WEBHOOK_URLS_COMMA_SEPARATED: z.string().optional(),
   },
   client: {
-    NEXT_PUBLIC_URL: z.string().min(1),
+    NEXT_PUBLIC_API_URL: z.string().min(1),
+    NEXT_PUBLIC_MAP_URL: z.string().min(1),
     NEXT_PUBLIC_CHANNEL: z.enum([
       "local",
       "ci",
@@ -34,7 +35,8 @@ export const env = createEnv({
     ]),
   },
   experimental__runtimeEnv: {
-    NEXT_PUBLIC_URL: process.env.NEXT_PUBLIC_URL,
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+    NEXT_PUBLIC_MAP_URL: process.env.NEXT_PUBLIC_MAP_URL,
     NEXT_PUBLIC_CHANNEL: process.env.NEXT_PUBLIC_CHANNEL,
   },
   skipValidation: !!process.env.CI || !!process.env.SKIP_ENV_VALIDATION,

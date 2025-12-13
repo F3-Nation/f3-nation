@@ -1021,3 +1021,32 @@ export const authVerificationTokens = pgTable(
     }),
   ],
 );
+
+export const apiKeys = pgTable(
+  "api_keys",
+  {
+    id: serial().primaryKey().notNull(),
+    key: varchar().notNull(),
+    name: varchar().notNull(),
+    description: varchar(),
+    ownerId: integer("owner_id"),
+    orgIds: json("org_ids").$type<number[]>().default(sql`'[]'::json`),
+    revokedAt: timestamp("revoked_at", { mode: "string" }),
+    lastUsedAt: timestamp("last_used_at", { mode: "string" }),
+    expiresAt: timestamp("expires_at", { mode: "string" }),
+    created: timestamp({ mode: "string" })
+      .default(sql`timezone('utc'::text, now())`)
+      .notNull(),
+    updated: timestamp({ mode: "string" })
+      .default(sql`timezone('utc'::text, now())`)
+      .notNull(),
+  },
+  (table) => [
+    unique("api_keys_key_key").on(table.key),
+    foreignKey({
+      columns: [table.ownerId],
+      foreignColumns: [users.id],
+      name: "api_keys_owner_id_fkey",
+    }),
+  ],
+);

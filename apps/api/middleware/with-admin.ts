@@ -5,6 +5,7 @@ import { getToken } from "next-auth/jwt";
 
 import { env } from "@acme/env";
 import { ADMIN_PATHS, routes } from "@acme/shared/app/constants";
+import { COOKIE_NAME } from "@acme/shared/common/constants";
 
 import type { MiddlewareFactory } from "./types";
 
@@ -18,7 +19,7 @@ const withAdmin: MiddlewareFactory = (next: NextMiddleware) => {
 
     const [cookieToken] = request.cookies
       .getAll()
-      .filter((o) => o.name.includes("authjs.session-token"));
+      .filter((o) => o.name.includes(`${COOKIE_NAME}.session-token`));
 
     // Must use process.env so that we don't try to validate all the other envs
     const secret = env.AUTH_SECRET;

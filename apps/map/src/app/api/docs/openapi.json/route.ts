@@ -5,7 +5,7 @@ import { router } from "@acme/api";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const envBase = process.env.NEXT_PUBLIC_URL ?? undefined;
+  const envBase = process.env.NEXT_PUBLIC_MAP_URL ?? undefined;
   const forwardedProto = request.headers.get("x-forwarded-proto") ?? undefined;
   const forwardedHost = request.headers.get("x-forwarded-host") ?? undefined;
   const host = forwardedHost ?? request.headers.get("host") ?? url.host;

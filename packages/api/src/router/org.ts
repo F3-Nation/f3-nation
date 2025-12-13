@@ -56,6 +56,7 @@ export const orgRouter = {
         parentOrgIds: z.number().array().optional(),
       }),
     )
+    .route({ method: "GET" })
     .handler(async ({ context: ctx, input }) => {
       const org = aliasedTable(schema.orgs, "org");
       const parentOrg = aliasedTable(schema.orgs, "parent_org");
@@ -241,6 +242,57 @@ export const orgRouter = {
         .returning();
       return result;
     }),
+  mine: editorProcedure.handler(async ({ context: ctx }) => {
+    if (!ctx.session?.id) {
+      throw new ORPCError("UNAUTHORIZED", {
+        message: "You are not authorized to get your orgs",
+      });
+    }
+
+    const orgsQuery = await ctx.db
+      .select()
+      .from(schema.rolesXUsersXOrg)
+      .innerJoin(schema.orgs, eq(schema.rolesXUsersXOrg.orgId, schema.orgs.id))
+      .innerJoin(
+        schema.roles,
+        eq(schema.rolesXUsersXOrg.roleId, schema.roles.id),
+      )
+      .where(eq(schema.rolesXUsersXOrg.userId, ctx.session.id));
+
+    // Reduce multiple rows per org down to one row per org with possibly multiple roles
+    const orgMap: Record<
+      number,
+      {
+        orgs: (typeof orgsQuery)[number]["orgs"];
+        roles_x_users_x_org: (typeof orgsQuery)[number]["roles_x_users_x_org"];
+        roles: (typeof orgsQuery)[number]["roles"]["name"][];
+      }
+    > = {};
+
+    for (const row of orgsQuery) {
+      const orgId = row.orgs.id;
+      if (!orgMap[orgId]) {
+        orgMap[orgId] = {
+          orgs: row.orgs,
+          roles_x_users_x_org: row.roles_x_users_x_org,
+          roles: [],
+        };
+      }
+      if (row.roles?.name) {
+        orgMap[orgId]?.roles.push(row.roles.name);
+      }
+    }
+
+    return {
+      orgs: Object.values(orgMap).map((org) => ({
+        id: org.orgs.id,
+        name: org.orgs.name,
+        orgType: org.orgs.orgType,
+        parentId: org.orgs.parentId,
+        roles: org.roles,
+      })),
+    };
+  }),
   delete: adminProcedure
     .input(z.object({ id: z.number(), orgType: z.enum(OrgType).optional() }))
     .handler(async ({ context: ctx, input }) => {

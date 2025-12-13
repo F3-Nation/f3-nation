@@ -84,7 +84,7 @@ const Layout = ({
             </div>
             <AdminNavLinks
               className="flex flex-col"
-              linkClassName="flex flex-row items-center gap-3 rounded-lg px-3 py-4"
+              linkClassName="flex flex-row items-center gap-1 rounded-lg px-1 py-2"
             />
           </div>
         </div>

@@ -1,0 +1,9 @@
+map.f3nation.test:443 {
+  tls map.f3nation.test+1-cert.pem map.f3nation.test+1-key.pem
+  reverse_proxy localhost:3000
+}
+
+api.f3nation.test {
+  tls map.f3nation.test+1-cert.pem map.f3nation.test+1-key.pem
+	reverse_proxy localhost:3001
+}
