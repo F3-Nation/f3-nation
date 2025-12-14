@@ -21,6 +21,25 @@
       "console": "integratedTerminal"
     },
     {
+      "name": "Next.js: Full Stack Debug",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/apps/nextjs",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev"],
+      "serverReadyAction": {
+        "pattern": "started server on .+, url: (https?://.+)",
+        "uriFormat": "%s",
+        "action": "debugWithChrome"
+      },
+      "skipFiles": ["<node_internals>/**"],
+      "outFiles": ["${workspaceFolder}/**/*.js"],
+      "console": "integratedTerminal",
+      "env": {
+        "NODE_OPTIONS": "--inspect"
+      }
+    },
+    {
       "type": "node",
       "request": "launch",
       "name": "Debug Playwright Tests",

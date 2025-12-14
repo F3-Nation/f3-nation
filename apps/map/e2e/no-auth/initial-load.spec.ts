@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import { TestId } from "@acme/shared/common/enums";
 
-import { setStore, setupTestEnvironment, waitForMap } from "./helpers";
+import { setStore, setupTestEnvironment, waitForMap } from "../helpers";
 
 test.describe("Initial Load", () => {
   test.beforeEach(async ({ page, context }) => {

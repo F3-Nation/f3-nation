@@ -62,10 +62,10 @@ import { ControlledTimeInput } from "../time-input";
 import { VirtualizedCombobox } from "../virtualized-combobox";
 
 const EventInsertForm = EventInsertSchema.extend({
-  startTime: z.string().regex(/^\d{2}:\d{2}$/, {
+  startTime: z.string().refine((val) => !val || /^\d{2}:\d{2}$/.test(val), {
     message: "Start time must be in 24hr format (HH:mm)",
   }),
-  endTime: z.string().regex(/^\d{2}:\d{2}$/, {
+  endTime: z.string().refine((val) => !val || /^\d{2}:\d{2}$/.test(val), {
     message: "End time must be in 24hr format (HH:mm)",
   }),
   eventTypeIds: z

@@ -6,6 +6,7 @@ import dayjs from "dayjs";
 import { Check, Filter, X } from "lucide-react";
 
 import { UpdateRequestStatus } from "@acme/shared/app/enums";
+import { requestTypeToTitle } from "@acme/shared/app/functions";
 import { ZustandStore } from "@acme/shared/common/classes";
 import { cn } from "@acme/ui";
 import { Badge } from "@acme/ui/badge";
@@ -19,10 +20,12 @@ import {
 import { MDTable } from "@acme/ui/md-table";
 import { Popover, PopoverContent, PopoverTrigger } from "@acme/ui/popover";
 import { Cell, Header } from "@acme/ui/table";
+import { toast } from "@acme/ui/toast";
 
 import type { RouterOutputs } from "~/orpc/types";
 import { orpc, useQuery } from "~/orpc/react";
-import { ModalType, openModal } from "~/utils/store/modal";
+import { vanillaApi } from "~/trpc/vanilla";
+import { openRequestModal } from "~/utils/open-request-modal";
 
 const initialState = {
   searchTerm: "",
@@ -86,12 +89,18 @@ export const RequestsTable = () => {
       paginationOptions={{ pageSize: 20 }}
       totalCount={requests?.totalCount}
       columns={columns}
-      onRowClick={(row) => {
-        if (row.original.requestType === "delete_event") {
-          openModal(ModalType.ADMIN_DELETE_REQUEST, { id: row.original.id });
-        } else {
-          openModal(ModalType.ADMIN_REQUESTS, { id: row.original.id });
+      onRowClick={async (row) => {
+        const request = await vanillaApi.request.byId.query({
+          id: row.original.id,
+        });
+        if (!request) {
+          toast.error("Request not found");
+          return;
         }
+        void openRequestModal({
+          type: row.original.requestType,
+          review: { request },
+        });
       }}
       rowClassName={(row) =>
         `${row.original.status !== "pending" ? "opacity-30" : ""} ${
@@ -143,19 +152,10 @@ const columns: TableOptions<
     meta: { name: "Request Type" },
     header: Header,
     cell: ({ row }) => {
-      const requestTypeText =
-        row.original.requestType === "delete_event"
-          ? "Delete Workout"
-          : row.original.requestType === "create_event"
-            ? "Create Workout"
-            : row.original.requestType === "create_location"
-              ? "Create Location"
-              : row.original.requestType === "edit"
-                ? "Edit"
-                : row.original.requestType;
+      const title = requestTypeToTitle(row.original.requestType);
       return (
         <div className="flex items-center justify-start gap-1">
-          <p>{requestTypeText}</p>
+          <p>{title}</p>
         </div>
       );
     },

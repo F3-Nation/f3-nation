@@ -107,6 +107,8 @@ export const Z_INDEX = {
 
   // Default station button
   HOVER_CARD: 9000,
+
+  LOADING_MODAL: 9001,
 } as const;
 
 export const MOBILE_SEARCH_RESULT_ITEM_HEIGHT = 128;
@@ -463,6 +465,8 @@ export const TEST_SECTOR_ORG_ID = 5;
 export const TEST_AREA_ORG_ID = 6;
 export const TEST_AO_1_ORG_ID = 7;
 export const TEST_AO_2_ORG_ID = 8;
+export const TEST_REGION_1_LOCATION_ID = 21;
+export const TEST_REGION_1_AO_ID = 22;
 export const TEST_EDITOR_USER_ID = 1;
 export const TEST_ADMIN_USER_ID = 2;
 export const TEST_EDITOR_ROLE_ID = 1;

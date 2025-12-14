@@ -8,6 +8,7 @@ import {
 import { Z_INDEX } from "@acme/shared/app/constants";
 import { dayOfWeekToShortDayOfWeek } from "@acme/shared/app/functions";
 import { cn } from "@acme/ui";
+import { toast } from "@acme/ui/toast";
 
 import { groupMarkerClick } from "~/utils/actions/group-marker-click";
 import { appStore } from "~/utils/store/app";
@@ -89,6 +90,11 @@ export const FeatureMarker = ({
           [id]: { lat, lng },
         },
       });
+
+      toast.success(
+        'Marker moved! Latitude and longitude updated in draft. Click "Edit AO" → "Edit AO details" and Save to persist these changes to the database.',
+        { duration: 10000 },
+      );
     },
     [id],
   );

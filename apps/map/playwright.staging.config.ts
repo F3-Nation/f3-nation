@@ -1,15 +1,13 @@
 import type { PlaywrightTestConfig } from "@playwright/test";
 
-import baseConfig from "./playwright.config";
-
 const config: PlaywrightTestConfig = {
-  ...baseConfig,
+  testDir: "./e2e",
+  timeout: 120000,
   use: {
-    ...baseConfig.use,
     baseURL: "https://staging.map.f3nation.com",
+    headless: true,
+    viewport: { width: 1280, height: 720 },
   },
-  // Don't start a web server for staging tests
-  webServer: undefined,
 };
 
 export default config;

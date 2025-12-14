@@ -1,7 +1,8 @@
 import type Supercluster from "supercluster";
 import { useCallback, useMemo } from "react";
 import { useMap } from "@vis.gl/react-google-maps";
-import { CLOSE_ZOOM } from "node_modules/@acme/shared/src/app/constants";
+
+import { CLOSE_ZOOM } from "@acme/shared/app/constants";
 
 import type {
   F3ClusterProperties,

@@ -2,17 +2,34 @@ import { expect, test } from "@playwright/test";
 
 import { TestId } from "@acme/shared/common/enums";
 
-import { setupAdminTestEnvironment } from "./helpers";
+import {
+  cleanupTestData,
+  setupAdminTestEnvironment,
+  turnOnEditMode,
+} from "../helpers";
 
-test.describe("Manage Event Workflow", () => {
+test.describe("Manage Workout Workflow", () => {
+  test.beforeAll(async ({ browser }) => {
+    // Create a new page for cleanup only
+    const context = await browser.newContext();
+    const page = await context.newPage();
+
+    // Clean up any leftover test data before starting tests
+    await cleanupTestData({ page, prefix: "MAP TEST" });
+
+    // Close the context when done
+    await context.close();
+  });
+
   test.beforeEach(async ({ page }) => {
     await setupAdminTestEnvironment(page);
+    await turnOnEditMode(page);
   });
 
   test("Find test AO if it exists and delete it", async ({ page }) => {
     const mapSearchboxInput = page.getByTestId(TestId.MAP_SEARCHBOX_INPUT);
     await mapSearchboxInput.click();
-    await mapSearchboxInput.fill("Test event");
+    await mapSearchboxInput.fill("Test workout");
     await page.waitForTimeout(2000);
 
     const searchResults = page.getByTestId(
@@ -22,7 +39,7 @@ test.describe("Manage Event Workflow", () => {
     const testAoButtonText = await testAoButton.textContent();
     console.log("testAoButtonText", testAoButtonText);
     if (
-      !testAoButtonText?.toLowerCase().includes("test event") ||
+      !testAoButtonText?.toLowerCase().includes("test workout") ||
       !testAoButtonText?.toLowerCase().includes("workout")
     ) {
       console.log("Exiting: testAoButtonText", testAoButtonText);
@@ -31,14 +48,14 @@ test.describe("Manage Event Workflow", () => {
     await testAoButton.click();
     const selectedItem = page.getByTestId(TestId.SELECTED_ITEM_DESKTOP);
     await expect(selectedItem).toBeVisible();
-    await expect(selectedItem).toContainText("Test event", {
+    await expect(selectedItem).toContainText("Test workout", {
       ignoreCase: true,
     });
     await selectedItem.click();
 
     const panel = page.getByTestId(TestId.PANEL);
     await expect(panel).toBeVisible();
-    await expect(panel).toContainText("Test event", {
+    await expect(panel).toContainText("Test workout", {
       ignoreCase: true,
     });
 
@@ -97,24 +114,26 @@ test.describe("Manage Event Workflow", () => {
 
     const mapSearchboxInput = page.getByTestId(TestId.MAP_SEARCHBOX_INPUT);
     await mapSearchboxInput.click();
-    await mapSearchboxInput.fill("test event");
+    await mapSearchboxInput.fill("test workout");
 
-    await page.getByRole("button", { name: "item Test Event Workout" }).click();
+    await page
+      .getByRole("button", { name: "item Test Workout Workout" })
+      .click();
     const selectedItem = page.getByTestId(TestId.SELECTED_ITEM_DESKTOP);
     await expect(selectedItem).toBeVisible();
-    await expect(selectedItem).toContainText("Test Event");
+    await expect(selectedItem).toContainText("Test Workout");
     await selectedItem.click();
 
     const panel = page.getByTestId(TestId.PANEL);
     await expect(panel).toBeVisible();
-    await expect(panel).toContainText("Test Event");
+    await expect(panel).toContainText("Test Workout");
 
     const editButton = page
       .getByRole("button", { name: "Edit Workout" })
       .first();
     await editButton.click();
     await page.locator('input[name="eventName"]').click();
-    await page.locator('input[name="eventName"]').fill("Test Event 1234");
+    await page.locator('input[name="eventName"]').fill("Test Workout 1234");
     await page.waitForTimeout(500);
     await page.getByRole("button", { name: "Save Changes" }).click();
     await page.waitForTimeout(2000); // wait for the map to update

@@ -7,6 +7,7 @@
     "build": "pnpm with-env next build",
     "clean": "rm -rf .turbo node_modules .next",
     "dev": "TZ=UTC pnpm with-env next dev",
+    "dev:inspect": "NODE_OPTIONS='--inspect' TZ=UTC pnpm with-env next dev",
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
     "lint": "dotenv -v SKIP_ENV_VALIDATION=1 next lint",
     "start": "pnpm with-env next start",

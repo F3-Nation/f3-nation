@@ -132,6 +132,18 @@ export const OPTIONS = handleRequest; // Important for CORS preflight!
 //     | RouterOutputs["request"]["submitDeleteRequest"]
 //     | RouterOutputs["request"]["validateSubmissionByAdmin"]
 //     | RouterOutputs["request"]["validateDeleteByAdmin"],
+// TODO: Ensure all these are handled correctly
+// | RouterOutputs["request"]["submitCreateEventRequest"]
+// | RouterOutputs["request"]["submitCreateAOAndLocationAndEventRequest"]
+// | RouterOutputs["request"]["submitEditEventRequest"]
+// | RouterOutputs["request"]["submitEditAOAndLocationRequest"]
+// | RouterOutputs["request"]["submitMoveAOToDifferentRegionRequest"]
+// | RouterOutputs["request"]["submitMoveAOToNewLocationRequest"]
+// | RouterOutputs["request"]["submitMoveAOToDifferentLocationRequest"]
+// | RouterOutputs["request"]["submitMoveEventToDifferentAoRequest"]
+// | RouterOutputs["request"]["submitMoveEventToNewLocationRequest"]
+// | RouterOutputs["request"]["submitDeleteEventRequest"]
+// | RouterOutputs["request"]["submitDeleteAORequest"]
 // > {
 //   result: { data: { json: T } };
 // }

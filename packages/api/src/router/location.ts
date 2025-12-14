@@ -372,6 +372,12 @@ export const locationRouter = {
       const location = results[0]?.location;
       const events = results.map((r) => r.event);
 
+      if (!location?.regionId) {
+        throw new ORPCError("NOT_FOUND", {
+          message: `Region id not found for location id: ${input.locationId}`,
+        });
+      }
+
       if (location?.lat == null || location?.lon == null) {
         throw new ORPCError("NOT_FOUND", {
           message: `Lat lng not found for location id: ${input.locationId}`,
@@ -385,6 +391,7 @@ export const locationRouter = {
         regionLogo: !location.regionLogo ? null : location.regionLogo,
         lat: location.lat,
         lon: location.lon,
+        regionId: location.regionId,
         fullAddress: getFullAddress(location),
         events: events.sort(
           (a, b) =>
@@ -508,6 +515,66 @@ export const locationRouter = {
       return lookup;
     },
   ),
+  getAOById: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .handler(async ({ context: ctx, input }) => {
+      const [ao] = await ctx.db
+        .select()
+        .from(schema.orgs)
+        .where(
+          and(
+            eq(schema.orgs.id, input.id),
+            eq(schema.orgs.orgType, "ao"),
+            eq(schema.orgs.isActive, true),
+          ),
+        );
+      return { ao };
+    }),
+  getAOsInRegion: publicProcedure
+    .input(z.object({ regionId: z.number() }))
+    .handler(async ({ context: ctx, input }) => {
+      const aos = await ctx.db
+        .select({
+          id: schema.orgs.id,
+          parentId: schema.orgs.parentId,
+          name: schema.orgs.name,
+          orgType: schema.orgs.orgType,
+          defaultLocationId: schema.orgs.defaultLocationId,
+          description: schema.orgs.description,
+          isActive: schema.orgs.isActive,
+          logoUrl: schema.orgs.logoUrl,
+          website: schema.orgs.website,
+          email: schema.orgs.email,
+          twitter: schema.orgs.twitter,
+          facebook: schema.orgs.facebook,
+          instagram: schema.orgs.instagram,
+          lastAnnualReview: schema.orgs.lastAnnualReview,
+          meta: schema.orgs.meta,
+          created: schema.orgs.created,
+          workouts: sql<string[]>`COALESCE(
+            ARRAY_AGG(DISTINCT ${schema.events.name})
+            FILTER (WHERE ${schema.events.name} IS NOT NULL),
+            ARRAY[]::text[]
+          )`,
+        })
+        .from(schema.orgs)
+        .leftJoin(
+          schema.events,
+          and(
+            eq(schema.events.orgId, schema.orgs.id),
+            eq(schema.events.isActive, true),
+          ),
+        )
+        .where(
+          and(
+            eq(schema.orgs.parentId, input.regionId),
+            eq(schema.orgs.orgType, "ao"),
+            eq(schema.orgs.isActive, true),
+          ),
+        )
+        .groupBy(schema.orgs.id);
+      return { aos };
+    }),
   byId: publicProcedure
     .input(z.object({ id: z.number() }))
     .route({

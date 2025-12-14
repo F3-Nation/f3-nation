@@ -591,7 +591,7 @@ export const updateRequests = pgTable(
     eventStartTime: varchar("event_start_time"),
     eventEndTime: varchar("event_end_time"),
     eventDayOfWeek: dayOfWeek("event_day_of_week"),
-    eventName: varchar("event_name").notNull(),
+    eventName: varchar("event_name"),
     eventDescription: varchar("event_description"),
     eventRecurrencePattern: eventCadence("event_recurrence_pattern"),
     eventRecurrenceInterval: integer("event_recurrence_interval"),

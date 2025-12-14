@@ -29,7 +29,9 @@ export const CountrySelect = <T extends FieldValues>({
   disabled = false,
 }: CountrySelectProps<T>) => {
   const sortedCountries = useMemo(() => {
-    return [...COUNTRIES].sort((a, b) => a.name.localeCompare(b.name));
+    return [...COUNTRIES].sort((a, b) =>
+      a.code === "US" ? -1 : b.code === "US" ? 1 : a.name.localeCompare(b.name),
+    );
   }, []);
 
   return (

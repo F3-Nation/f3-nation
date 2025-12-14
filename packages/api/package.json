@@ -37,6 +37,7 @@
     "@acme/prettier-config": "workspace:^0.1.0",
     "@acme/tsconfig": "workspace:^0.1.0",
     "@types/nodemailer": "^6.4.17",
+    "@types/uuid": "^11.0.0",
     "eslint": "^8.56.0",
     "prettier": "^3.2.5",
     "typescript": "^5.3.3"

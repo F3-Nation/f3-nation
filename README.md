@@ -174,4 +174,11 @@ Environment variables are application-specific in this monorepo. The `.env` file
    ```
 4. **Commit changes** - Turbo will handle optimal task execution
 
-TRIGGER BUILD
+# WIP
+
+- ensure we can't submit with no time and no events for new events
+- add tests for approvals in the admin portal
+- test image issues
+- better text of where we're moving aos and regions
+- decide which things you can change region and and which you can't
+- TODO: Think through AO and location appearance

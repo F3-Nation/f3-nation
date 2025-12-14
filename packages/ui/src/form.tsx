@@ -21,14 +21,15 @@ import {
 import { cn } from ".";
 import { Label } from "./label";
 
-function useForm<TSchema extends ZodType>(
-  props: Omit<UseFormProps<TSchema["_input"]>, "resolver"> & {
-    schema: TSchema;
-  },
-) {
+function useForm<TSchema extends ZodType>({
+  schema,
+  ...props
+}: Omit<UseFormProps<TSchema["_input"]>, "resolver"> & {
+  schema: TSchema;
+}) {
   const form = __useForm<TSchema["_input"]>({
     ...props,
-    resolver: zodResolver(props.schema, undefined),
+    resolver: zodResolver(schema, undefined),
   });
 
   return form;
