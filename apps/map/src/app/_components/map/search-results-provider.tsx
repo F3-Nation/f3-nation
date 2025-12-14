@@ -45,6 +45,11 @@ export const TextSearchResultsProvider = ({
   const { data: eventIdToRegionNameLookup } = useQuery(
     orpc.event.eventIdToRegionNameLookup.queryOptions({ input: undefined }),
   );
+  const { data: locationIdToRegionNameLookup } = useQuery(
+    orpc.location.locationIdToRegionNameLookup.queryOptions({
+      input: undefined,
+    }),
+  );
   const isMobileWidth = useIsMobileWidth();
   RERENDER_LOGS && console.log("TextSearchResultsProvider rerender");
   const text = searchStore.use.text();
@@ -99,7 +104,7 @@ export const TextSearchResultsProvider = ({
               logo: data.logo ?? "",
               item: { eventId: null, locationId: data.id },
               placeId: null,
-              regionName: eventIdToRegionNameLookup?.[data.id] ?? null,
+              regionName: locationIdToRegionNameLookup?.[data.id] ?? null,
             },
           };
           return searchResult;

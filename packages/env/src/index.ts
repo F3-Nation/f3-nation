@@ -1,6 +1,17 @@
 import { createEnv } from "@t3-oss/env-nextjs";
 import { z } from "zod";
 
+// Only override DATABASE_URL from --url flag if in non-production (i.e., development or test) environment
+
+const nodeEnv = process.env.NODE_ENV || "development";
+if (nodeEnv !== "production") {
+  const args = process.argv;
+  const urlFlagIndex = args.indexOf("--url");
+  if (urlFlagIndex !== -1 && args[urlFlagIndex + 1]) {
+    process.env.DATABASE_URL = args[urlFlagIndex + 1];
+  }
+}
+
 export const env = createEnv({
   server: {
     AUTH_SECRET:

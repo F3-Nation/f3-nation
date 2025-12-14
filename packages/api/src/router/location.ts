@@ -462,6 +462,44 @@ export const locationRouter = {
 
     return { count: result?.count };
   }),
+  locationIdToRegionNameLookup: publicProcedure.query(async ({ ctx }) => {
+    const regionOrg = aliasedTable(schema.orgs, "region_org");
+    const parentOrg = aliasedTable(schema.orgs, "parent_org");
+    const result = await ctx.db
+      .select({
+        locationId: schema.locations.id,
+        regionName: regionOrg.name,
+      })
+      .from(schema.locations)
+      .leftJoin(parentOrg, eq(schema.locations.orgId, parentOrg.id))
+      .leftJoin(
+        regionOrg,
+        or(
+          and(
+            eq(schema.locations.orgId, regionOrg.id),
+            eq(regionOrg.orgType, "region"),
+          ),
+          and(
+            eq(parentOrg.orgType, "ao"),
+            eq(parentOrg.parentId, regionOrg.id),
+            eq(regionOrg.orgType, "region"),
+          ),
+        ),
+      )
+      .groupBy(schema.locations.id, regionOrg.id);
+
+    const lookup = result.reduce(
+      (acc, curr) => {
+        if (curr.regionName) {
+          acc[curr.locationId] = curr.regionName;
+        }
+        return acc;
+      },
+      {} as Record<number, string>,
+    );
+
+    return lookup;
+  }),
   byId: publicProcedure
     .input(z.object({ id: z.number() }))
     .handler(async ({ context: ctx, input }) => {
