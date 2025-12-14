@@ -13,10 +13,6 @@ declare global {
 
 const link = new RPCLink({
   url: env.NEXT_PUBLIC_API_URL,
-  // typeof window !== "undefined"
-  //   ? // ? `${window.location.origin}/api/orpc`
-  //     `${env.NEXT_PUBLIC_API_URL}/`
-  //   : "/api/orpc",
   // fetch: ensure cookies are sent along for auth
   fetch: (input, init) => fetch(input, { ...init, credentials: "include" }),
   interceptors: [
