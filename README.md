@@ -173,3 +173,5 @@ Environment variables are application-specific in this monorepo. The `.env` file
    pnpm test --filter <your-workspace>
    ```
 4. **Commit changes** - Turbo will handle optimal task execution
+
+TRIGGER BUILD

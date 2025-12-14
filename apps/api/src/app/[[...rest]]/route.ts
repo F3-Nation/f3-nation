@@ -4,15 +4,26 @@ import { RPCHandler } from "@orpc/server/fetch";
 import { CORSPlugin, RequestHeadersPlugin } from "@orpc/server/plugins";
 
 import { router } from "@acme/api";
+import { isProductionNodeEnv } from "@acme/shared/common/constants";
 
 const handler = new RPCHandler(router, {
   plugins: [
     new CORSPlugin({
-      origin: [
-        "https://map.f3nation.test",
-        "https://maps.f3nation.com",
-        "http://localhost:3000",
-      ],
+      origin: (origin) => {
+        const allowedOrigins = [];
+        if (isProductionNodeEnv) {
+          if (origin.endsWith(".f3nation.com")) {
+            allowedOrigins.push(origin);
+          }
+        } else {
+          if (origin.endsWith(".f3nation.test")) {
+            allowedOrigins.push(origin);
+          }
+          allowedOrigins.push("http://localhost:3000", "http://127.0.0.1:3000");
+        }
+
+        return allowedOrigins;
+      },
       allowMethods: [
         "GET",
         "POST",
