@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { MoreHorizontal, RotateCcw, Trash2 } from "lucide-react";
 
 import { Badge } from "@acme/ui/badge";
@@ -61,7 +61,6 @@ const deriveStatus = (row: ApiKeyRow): Status => {
 };
 
 export const ApiKeysTable = () => {
-  const [visibleKeys, setVisibleKeys] = useState<Record<number, boolean>>({});
   const { data, isLoading } = useQuery(orpc.apiKey.list.queryOptions());
 
   const revokeKey = useMutation(
@@ -140,10 +139,7 @@ export const ApiKeysTable = () => {
               <TableBody>
                 {rows.map((row) => {
                   const status = deriveStatus(row);
-                  const isVisible = Boolean(visibleKeys[row.id]);
-                  const displayKey = isVisible
-                    ? row.keySignature
-                    : `•••• ${row.keySignature}`;
+                  const displayKey = `•••• ${row.keySignature}`;
                   const scope =
                     row.orgIds && row.orgIds.length > 0
                       ? `${row.orgIds.length} org${

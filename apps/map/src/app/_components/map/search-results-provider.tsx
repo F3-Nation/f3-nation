@@ -160,7 +160,13 @@ export const TextSearchResultsProvider = ({
         })) ?? [],
       );
     });
-  }, [filteredLocationMarkers, regions, text, eventIdToRegionNameLookup]);
+  }, [
+    filteredLocationMarkers,
+    regions,
+    text,
+    eventIdToRegionNameLookup,
+    locationIdToRegionNameLookup,
+  ]);
 
   const combinedResults = useMemo(
     () =>

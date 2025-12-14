@@ -1030,7 +1030,9 @@ export const apiKeys = pgTable(
     name: varchar().notNull(),
     description: varchar(),
     ownerId: integer("owner_id"),
-    orgIds: json("org_ids").$type<number[]>().default(sql`'[]'::json`),
+    orgIds: json("org_ids")
+      .$type<number[]>()
+      .default(sql`'[]'::json`),
     revokedAt: timestamp("revoked_at", { mode: "string" }),
     lastUsedAt: timestamp("last_used_at", { mode: "string" }),
     expiresAt: timestamp("expires_at", { mode: "string" }),

@@ -1,7 +1,7 @@
 import {
+  apiKeys,
   attendance,
   attendanceTypes,
-  apiKeys,
   authAccounts,
   authSessions,
   authVerificationTokens,

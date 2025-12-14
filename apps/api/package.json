@@ -49,7 +49,7 @@
     "handlebars-loader": "^1.7.3",
     "lodash": "^4.17.21",
     "lottie-react": "^2.4.0",
-    "next": "^15.3.1",
+    "next": "^15.3.6",
     "next-plausible": "^3.12.0",
     "react": "18.3.1",
     "react-div-100vh": "^0.7.0",
