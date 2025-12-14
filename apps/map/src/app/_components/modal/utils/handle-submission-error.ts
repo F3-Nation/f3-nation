@@ -1,4 +1,4 @@
-import { TRPCClientError } from "@trpc/client";
+import { ORPCError } from "@orpc/client";
 import isObject from "lodash/isObject";
 import { ZodError } from "zod";
 
@@ -44,7 +44,7 @@ export const handleSubmissionError = (error: unknown): void => {
         : "Form validation failed";
   } else if (!(error instanceof Error)) {
     errorMessage = "Failed to submit update request";
-  } else if (!(error instanceof TRPCClientError)) {
+  } else if (!(error instanceof ORPCError)) {
     errorMessage = error.message;
   } else {
     errorMessage = "Failed to submit update request";

@@ -2,7 +2,7 @@ import { Controller, useFormContext } from "react-hook-form";
 
 import { dayOfWeekToShortDayOfWeek } from "@acme/shared/app/functions";
 
-import { api } from "~/trpc/react";
+import { orpc, useQuery } from "~/orpc/react";
 import { useOptions } from "~/utils/use-options";
 import { VirtualizedCombobox } from "../../virtualized-combobox";
 
@@ -49,25 +49,27 @@ export const SelectionForm = <_T extends SelectionFormValues>(
   const _formOriginalEventId = form.watch("originalEventId");
   const _formNewEventId = form.watch("newEventId");
 
-  const { data: regions } = api.location.getRegions.useQuery();
+  const { data: regions } = useQuery(orpc.location.getRegions.queryOptions());
 
-  const { data: events } = api.event.all.useQuery(
-    {
-      ...(formNewAOId ? { aoIds: [formNewAOId] } : {}),
-      ...(formNewRegionId ? { regionIds: [formNewRegionId] } : {}),
-    },
-    {
+  const { data: events } = useQuery(
+    orpc.event.all.queryOptions({
+      input: {
+        ...(formNewAOId ? { aoIds: [formNewAOId] } : {}),
+        ...(formNewRegionId ? { regionIds: [formNewRegionId] } : {}),
+      },
       enabled: formNewRegionId != null,
-    },
+    }),
   );
 
-  const { data: aos } = api.org.all.useQuery(
-    {
-      orgTypes: ["ao"],
-      parentOrgIds: formNewRegionId ? [formNewRegionId] : undefined,
-      pageSize: 200,
-    },
-    { enabled: formNewRegionId != null },
+  const { data: aos } = useQuery(
+    orpc.org.all.queryOptions({
+      input: {
+        orgTypes: ["ao"],
+        parentOrgIds: formNewRegionId ? [formNewRegionId] : undefined,
+        pageSize: 200,
+      },
+      enabled: formNewRegionId != null,
+    }),
   );
 
   const regionOptions = useOptions(

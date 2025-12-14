@@ -4,7 +4,7 @@ import { X } from "lucide-react";
 import { BreakPoints } from "@acme/shared/app/constants";
 import { TestId } from "@acme/shared/common/enums";
 
-import { api } from "~/trpc/react";
+import { orpc, useQuery } from "~/orpc/react";
 import { appStore } from "~/utils/store/app";
 import { closePanel, selectedItemStore } from "~/utils/store/selected-item";
 import { WorkoutDetailsContent } from "../workout/workout-details-content";
@@ -23,9 +23,11 @@ export const DesktopLocationPanelContent = () => {
   const mode = appStore.use.mode();
 
   // Get location data including events
-  const { data: locationData } = api.location.getLocationWorkoutData.useQuery(
-    { locationId: panelLocationId ?? -1 },
-    { enabled: panelLocationId !== null },
+  const { data: locationData } = useQuery(
+    orpc.location.getLocationWorkoutData.queryOptions({
+      input: { locationId: panelLocationId ?? -1 },
+      enabled: panelLocationId !== null,
+    }),
   );
 
   // Get AO name and selected event name

@@ -158,6 +158,7 @@ export const requestTypeToTitle = (requestType: RequestType) => {
     case "delete_ao":
       return "Delete AO";
     default:
+      // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
       return `Update (${requestType})`;
   }
 };

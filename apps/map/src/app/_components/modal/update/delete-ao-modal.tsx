@@ -34,7 +34,7 @@ export const DeleteAoModal = ({
           <ContactDetailsForm<DeleteAOType> />
           <SubmitSection<DeleteAOType>
             mutationFn={(values) =>
-              vanillaApi.request.submitDeleteAORequest.mutate(values)
+              vanillaApi.request.submitDeleteAORequest(values)
             }
             text="Delete AO"
             className="bg-destructive hover:bg-destructive/80"

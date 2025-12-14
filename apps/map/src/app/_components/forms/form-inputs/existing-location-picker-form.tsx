@@ -3,7 +3,7 @@ import { Controller, useFormContext } from "react-hook-form";
 
 import { isTruthy } from "@acme/shared/common/functions";
 
-import { api } from "~/trpc/react";
+import { orpc, useQuery } from "~/orpc/react";
 import { VirtualizedCombobox } from "../../virtualized-combobox";
 
 interface ExistingLocationPickerFormValues {
@@ -27,7 +27,7 @@ export const ExistingLocationPickerForm = <
     (params.region === "originalRegion" && !formOriginalRegionId);
 
   // Get location data
-  const { data: locations } = api.location.all.useQuery();
+  const { data: locations } = useQuery(orpc.location.all.queryOptions());
 
   const sortedRegionLocationOptions = useMemo(() => {
     return (

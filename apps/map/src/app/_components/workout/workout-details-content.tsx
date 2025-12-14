@@ -10,7 +10,6 @@ import { toast } from "@acme/ui/toast";
 import { orpc, useQuery } from "~/orpc/react";
 import { getWhenFromWorkout } from "~/utils/get-when-from-workout";
 import { useUpdateEventSearchParams } from "~/utils/hooks/use-update-event-search-params";
-import { appStore } from "~/utils/store/app";
 import { ModalType, openModal } from "~/utils/store/modal";
 import textLink from "~/utils/text-link";
 import { ImageWithFallback } from "../image-with-fallback";
@@ -28,8 +27,6 @@ export const WorkoutDetailsContent = ({
   providedEventId,
   chipSize,
 }: WorkoutDetailsContentProps) => {
-  const router = useRouter();
-  const { data: session } = useSession();
   const { data: results, isLoading } = useQuery(
     orpc.map.location.locationWorkout.queryOptions({
       input: { locationId },
@@ -41,15 +38,6 @@ export const WorkoutDetailsContent = ({
     if (providedEventId) return providedEventId;
     return results?.location.events?.[0]?.id ?? null;
   }, [providedEventId, results]);
-
-  const { data: canDeleteEvent } = useQuery(
-    orpc.request.canDeleteEvent.queryOptions({
-      input: { eventId: selectedEventId ?? 0 },
-      enabled: !!selectedEventId,
-    }),
-  );
-
-  const mode = appStore.use.mode();
 
   const event = useMemo(
     () =>

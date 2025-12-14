@@ -9,7 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@acme/ui/dropdown-menu";
 
-import { api } from "~/trpc/react";
+import { orpc, useQuery } from "~/orpc/react";
 import { openRequestModal } from "~/utils/open-request-modal";
 import { appStore } from "~/utils/store/app";
 import { useFilteredMapResults } from "./filtered-map-results-provider";
@@ -36,9 +36,11 @@ export const LocationEditButtons = ({
   const mode = appStore.use.mode();
   const { locationOrderedLocationMarkers } = useFilteredMapResults();
 
-  const { data: workoutInfo } = api.location.getLocationWorkoutData.useQuery(
-    { locationId: locationOrderedLocationMarkers?.[0]?.id ?? -1 },
-    { enabled: mode === "edit" && !!locationOrderedLocationMarkers?.[0]?.id },
+  const { data: workoutInfo } = useQuery(
+    orpc.location.getLocationWorkoutData.queryOptions({
+      input: { locationId: locationOrderedLocationMarkers?.[0]?.id ?? -1 },
+      enabled: mode === "edit" && !!locationOrderedLocationMarkers?.[0]?.id,
+    }),
   );
 
   return (

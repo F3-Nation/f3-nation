@@ -33,7 +33,7 @@ export const CreateEventModal = ({
           <ContactDetailsForm<CreateEventType> />
           <SubmitSection<CreateEventType>
             mutationFn={(values) =>
-              vanillaApi.request.submitCreateEventRequest.mutate(values)
+              vanillaApi.request.submitCreateEventRequest(values)
             }
             text="Create New Event"
           />

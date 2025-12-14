@@ -93,9 +93,11 @@ const SuspendedInitialLocationProvider = (params: { children: ReactNode }) => {
     if (hasInitialized.current) return;
     hasInitialized.current = true;
 
-    const locationLatLng = utils.location.getMapEventAndLocationData
-      .getData()
-      ?.find((location) => location[0] === queryLocationId);
+    const locationLatLng = getQueryData(
+      orpc.location.getMapEventAndLocationData.queryKey({
+        input: undefined,
+      }),
+    )?.find((location) => location[0] === queryLocationId);
     const locLat = locationLatLng?.[3];
     const locLon = locationLatLng?.[4];
 
@@ -133,7 +135,7 @@ const SuspendedInitialLocationProvider = (params: { children: ReactNode }) => {
         showPanel: true,
       });
     }
-  }, [utils, queryLocationId, queryEventId, queryLat, queryLon]);
+  }, [queryLocationId, queryEventId, queryLat, queryLon]);
 
   return (
     <InitialLocationContext.Provider

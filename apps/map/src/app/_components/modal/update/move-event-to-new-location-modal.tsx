@@ -44,9 +44,7 @@ export const MoveEventToNewLocationModal = ({
           <ContactDetailsForm<MoveEventToNewLocationType> />
           <SubmitSection<MoveEventToNewLocationType>
             mutationFn={(values) =>
-              vanillaApi.request.submitMoveEventToNewLocationRequest.mutate(
-                values,
-              )
+              vanillaApi.request.submitMoveEventToNewLocationRequest(values)
             }
             text="Move Event to New Location"
           />

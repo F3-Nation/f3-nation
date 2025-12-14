@@ -34,7 +34,7 @@ export const DeleteEventModal = ({
           <ContactDetailsForm<DeleteEventType> />
           <SubmitSection<DeleteEventType>
             mutationFn={(values) =>
-              vanillaApi.request.submitDeleteEventRequest.mutate(values)
+              vanillaApi.request.submitDeleteEventRequest(values)
             }
             text="Delete Event"
             className="bg-destructive hover:bg-destructive/80"

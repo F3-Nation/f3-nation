@@ -307,67 +307,67 @@ export const requestRouter = {
     }),
   submitCreateAOAndLocationAndEventRequest: protectedProcedure
     .input(CreateAOAndLocationAndEventSchema)
-    .mutation(async ({ ctx, input }) => {
+    .handler(async ({ context: ctx, input }) => {
       const handler = handleCreateLocationAndEvent;
       return await handleRequest({ ctx, input, handler });
     }),
   submitCreateEventRequest: protectedProcedure
     .input(CreateEventSchema)
-    .mutation(async ({ ctx, input }) => {
+    .handler(async ({ context: ctx, input }) => {
       const handler = handleCreateEvent;
       return await handleRequest({ ctx, input, handler });
     }),
   submitEditEventRequest: protectedProcedure
     .input(EditEventSchema)
-    .mutation(async ({ ctx, input }) => {
+    .handler(async ({ context: ctx, input }) => {
       const handler = handleEditEvent;
       return await handleRequest({ ctx, input, handler });
     }),
   submitEditAOAndLocationRequest: protectedProcedure
     .input(EditAOAndLocationSchema)
-    .mutation(async ({ ctx, input }) => {
+    .handler(async ({ context: ctx, input }) => {
       const handler = handleEditAOAndLocation;
       return await handleRequest({ ctx, input, handler });
     }),
   submitMoveAOToDifferentRegionRequest: protectedProcedure
     .input(MoveAOToDifferentRegionSchema)
-    .mutation(async ({ ctx, input }) => {
+    .handler(async ({ context: ctx, input }) => {
       const handler = handleMoveAOToDifferentRegion;
       return await handleRequest({ ctx, input, handler });
     }),
   submitMoveAOToDifferentLocationRequest: protectedProcedure
     .input(MoveAOToDifferentLocationSchema)
-    .mutation(async ({ ctx, input }) => {
+    .handler(async ({ context: ctx, input }) => {
       const handler = handleMoveAOToDifferentLocation;
       return await handleRequest({ ctx, input, handler });
     }),
   submitMoveAOToNewLocationRequest: protectedProcedure
     .input(MoveAOToNewLocationSchema)
-    .mutation(async ({ ctx, input }) => {
+    .handler(async ({ context: ctx, input }) => {
       const handler = handleMoveAOToNewLocation;
       return await handleRequest({ ctx, input, handler });
     }),
   submitMoveEventToDifferentAoRequest: protectedProcedure
     .input(MoveEventToDifferentAOSchema)
-    .mutation(async ({ ctx, input }) => {
+    .handler(async ({ context: ctx, input }) => {
       const handler = handleMoveEventToDifferentAo;
       return await handleRequest({ ctx, input, handler });
     }),
   submitMoveEventToNewLocationRequest: protectedProcedure
     .input(MoveEventToNewLocationSchema)
-    .mutation(async ({ ctx, input }) => {
+    .handler(async ({ context: ctx, input }) => {
       const handler = handleMoveEventToNewLocation;
       return await handleRequest({ ctx, input, handler });
     }),
   submitDeleteEventRequest: protectedProcedure
     .input(DeleteEventSchema)
-    .mutation(async ({ ctx, input }) => {
+    .handler(async ({ context: ctx, input }) => {
       const handler = handleDeleteEvent;
       return await handleRequest({ ctx, input, handler });
     }),
   submitDeleteAORequest: protectedProcedure
     .input(DeleteAOSchema)
-    .mutation(async ({ ctx, input }) => {
+    .handler(async ({ context: ctx, input }) => {
       const handler = handleDeleteAO;
       return await handleRequest({ ctx, input, handler });
     }),

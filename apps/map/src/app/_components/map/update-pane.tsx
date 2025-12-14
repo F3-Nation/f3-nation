@@ -6,7 +6,7 @@ import { TestId } from "@acme/shared/common/enums";
 import { Button } from "@acme/ui/button";
 import { toast } from "@acme/ui/toast";
 
-import { api } from "~/trpc/react";
+import { orpc, useQuery } from "~/orpc/react";
 import { openRequestModal } from "~/utils/open-request-modal";
 import { appStore } from "~/utils/store/app";
 import { mapStore } from "~/utils/store/map";
@@ -17,9 +17,11 @@ export const UpdatePane = () => {
   const { locationOrderedLocationMarkers } = useFilteredMapResults();
   const mode = appStore.use.mode();
 
-  const { data: workoutInfo } = api.location.getLocationWorkoutData.useQuery(
-    { locationId: locationOrderedLocationMarkers?.[0]?.id ?? -1 },
-    { enabled: mode === "edit" && !!locationOrderedLocationMarkers?.[0]?.id },
+  const { data: workoutInfo } = useQuery(
+    orpc.location.getLocationWorkoutData.queryOptions({
+      input: { locationId: locationOrderedLocationMarkers?.[0]?.id ?? -1 },
+      enabled: mode === "edit" && !!locationOrderedLocationMarkers?.[0]?.id,
+    }),
   );
 
   // Function to clear the update location pin

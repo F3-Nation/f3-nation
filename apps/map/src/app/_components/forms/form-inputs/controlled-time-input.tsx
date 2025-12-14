@@ -31,8 +31,10 @@ export const ControlledTimeInput = <T extends FieldValues>({
               value={
                 typeof field.value === "string"
                   ? // Accepts both "0530" (stored) and "05:30" (displayed)
+                    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
                     field.value.length === 4 && !field.value.includes(":")
-                    ? `${field.value.slice(0, 2)}:${field.value.slice(2)}`
+                    ? // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+                      `${field.value.slice(0, 2)}:${field.value.slice(2)}`
                     : field.value
                   : ""
               }

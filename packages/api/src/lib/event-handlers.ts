@@ -5,7 +5,7 @@ import type { DayOfWeek } from "@acme/shared/app/enums";
 import type { EventMeta } from "@acme/shared/app/types";
 import { schema } from "@acme/db";
 
-import type { Context } from "../trpc";
+import type { Context } from "../shared";
 
 export const updateEvent = async (
   ctx: Context,

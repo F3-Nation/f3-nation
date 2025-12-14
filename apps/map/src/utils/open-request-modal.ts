@@ -7,8 +7,8 @@ import { requestTypeToTitle } from "@acme/shared/app/functions";
 import { toast } from "@acme/ui/toast";
 
 import type { UpdateRequestById } from "./types";
-import { queryClientUtils } from "~/trpc/react";
-import { vanillaApi } from "~/trpc/vanilla";
+import { client } from "~/orpc/client";
+import { getQueryData, orpc } from "~/orpc/react";
 import { mapStore } from "./store/map";
 import { ModalType, openModal } from "./store/modal";
 
@@ -359,14 +359,16 @@ const getFormValues = async (params: {
   let loc = null;
   if (params.locationId) {
     // Try to get from queryClientUtils first
-    loc = queryClientUtils.location.getLocationWorkoutData.getData({
-      locationId: params.locationId,
-    })?.location;
+    loc = getQueryData(
+      orpc.location.getLocationWorkoutData.queryKey({
+        input: { locationId: params.locationId },
+      }),
+    )?.location;
   }
   // If we don't have a location try to get it from the update request
   if (!loc && req?.originalLocationId) {
     loc = (
-      await vanillaApi.location.getLocationWorkoutData.query({
+      await client.location.getLocationWorkoutData({
         locationId: req?.originalLocationId,
       })
     ).location;

@@ -9,7 +9,7 @@ import { MultiSelect } from "@acme/ui/multi-select";
 import { ControlledSelect } from "@acme/ui/select";
 import { Textarea } from "@acme/ui/textarea";
 
-import { api } from "~/trpc/react";
+import { orpc, useQuery } from "~/orpc/react";
 import { ControlledTimeInput } from "./controlled-time-input";
 
 interface EventDetailsFormValues {
@@ -36,9 +36,12 @@ export const EventDetailsForm = <_T extends EventDetailsFormValues>() => {
   const formEventName = form.watch("eventName");
 
   // Get event types for the region
-  const { data: eventTypes } = api.eventType.all.useQuery({
-    orgIds: formRegionId ? [formRegionId] : [],
-  });
+  const { data: eventTypes } = useQuery(
+    orpc.eventType.all.queryOptions({
+      input: { orgIds: formRegionId ? [formRegionId] : [] },
+      enabled: formRegionId != null,
+    }),
+  );
 
   return (
     <>

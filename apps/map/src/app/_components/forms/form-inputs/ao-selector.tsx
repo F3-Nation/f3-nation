@@ -1,6 +1,6 @@
 import { Controller, useFormContext } from "react-hook-form";
 
-import { api } from "~/trpc/react";
+import { orpc, useQuery } from "~/orpc/react";
 import { VirtualizedCombobox } from "../../virtualized-combobox";
 
 interface AOSelectorProps {
@@ -32,9 +32,11 @@ export function AOSelector<_T extends AOSelectorFormValues>({
   const form = useFormContext<AOSelectorFormValues>();
   const regionId = form.watch(regionFieldName);
 
-  const { data: results } = api.location.getAOsInRegion.useQuery(
-    { regionId: regionId ?? -1 },
-    { enabled: regionId != null },
+  const { data: results } = useQuery(
+    orpc.location.getAOsInRegion.queryOptions({
+      input: { regionId: regionId ?? -1 },
+      enabled: regionId != null,
+    }),
   );
 
   const aoOptions =

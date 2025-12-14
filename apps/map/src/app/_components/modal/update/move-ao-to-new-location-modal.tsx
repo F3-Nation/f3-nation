@@ -43,7 +43,7 @@ export const MoveAOToNewLocationModal = ({
           <ContactDetailsForm<MoveAOToNewLocationType> />
           <SubmitSection<MoveAOToNewLocationType>
             mutationFn={(values) =>
-              vanillaApi.request.submitMoveAOToNewLocationRequest.mutate(values)
+              vanillaApi.request.submitMoveAOToNewLocationRequest(values)
             }
             text="Move AO to New Location"
           />

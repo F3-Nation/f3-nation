@@ -1,6 +1,6 @@
 import { Controller, useFormContext } from "react-hook-form";
 
-import { api } from "~/trpc/react";
+import { orpc, useQuery } from "~/orpc/react";
 import { useOptions } from "~/utils/use-options";
 import { VirtualizedCombobox } from "../../virtualized-combobox";
 
@@ -12,7 +12,7 @@ interface InRegionFormValues {
 export const InRegionForm = <_T extends InRegionFormValues>() => {
   const form = useFormContext<InRegionFormValues>();
 
-  const { data: regions } = api.location.getRegions.useQuery();
+  const { data: regions } = useQuery(orpc.location.getRegions.queryOptions());
 
   const regionOptions = useOptions(
     regions,

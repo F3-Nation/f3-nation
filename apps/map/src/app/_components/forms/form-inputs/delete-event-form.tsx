@@ -2,14 +2,16 @@ import { useFormContext } from "react-hook-form";
 
 import type { DeleteEventType } from "@acme/validators/request-schemas";
 
-import { api } from "~/trpc/react";
+import { orpc, useQuery } from "~/orpc/react";
 
 export const DeleteEventForm = <_T extends DeleteEventType>() => {
   const form = useFormContext<DeleteEventType>();
   const originalEventId = form.watch("originalEventId");
-  const { data: event } = api.event.byId.useQuery(
-    { id: originalEventId },
-    { enabled: !!originalEventId },
+  const { data: event } = useQuery(
+    orpc.event.byId.queryOptions({
+      input: { id: originalEventId },
+      enabled: !!originalEventId,
+    }),
   );
   return (
     <div className="my-6 rounded-md bg-red-50 p-4 dark:bg-red-900/20">

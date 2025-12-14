@@ -45,9 +45,7 @@ export const MoveAOToDifferentRegionModal = ({
           <ContactDetailsForm<MoveAoToDifferentRegionType> />
           <SubmitSection<MoveAoToDifferentRegionType>
             mutationFn={(values) =>
-              vanillaApi.request.submitMoveAOToDifferentRegionRequest.mutate(
-                values,
-              )
+              vanillaApi.request.submitMoveAOToDifferentRegionRequest(values)
             }
             text="Move AO to Different Region"
           />

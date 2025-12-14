@@ -2,14 +2,14 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFormContext } from "react-hook-form";
 
+import { isProductionNodeEnv } from "@acme/shared/common/constants";
 import { isTruthy } from "@acme/shared/common/functions";
 import { cn } from "@acme/ui";
 import { Button } from "@acme/ui/button";
 import { Spinner } from "@acme/ui/spinner";
 import { toast } from "@acme/ui/toast";
 
-import { api } from "~/trpc/react";
-import { isProd } from "~/trpc/util";
+import { invalidateQueries, orpc, useMutation, useQuery } from "~/orpc/react";
 import { closeModal } from "~/utils/store/modal";
 import { DevLoadTestData } from "../forms/dev-debug-component";
 import { handleSubmissionError } from "../modal/utils/handle-submission-error";
@@ -62,9 +62,11 @@ function useRegionPermissions(params: {
     [params.originalRegionId, params.newRegionId],
   );
 
-  const { data: canEditRegion } = api.request.canEditRegions.useQuery(
-    { orgIds },
-    { enabled: orgIds.length > 0 },
+  const { data: canEditRegion } = useQuery(
+    orpc.request.canEditRegions.queryOptions({
+      input: { orgIds },
+      enabled: orgIds.length > 0,
+    }),
   );
 
   const canEdit = useMemo(
@@ -83,7 +85,6 @@ function useRegionPermissions(params: {
  */
 function useRequestStatusHandler() {
   const router = useRouter();
-  const utils = api.useUtils();
 
   const handleMutationResult = async (result: MutationResult) => {
     switch (result.status) {
@@ -99,7 +100,9 @@ function useRequestStatusHandler() {
         throw new Error("Failed to submit update request");
 
       case "approved":
-        void utils.invalidate();
+        void invalidateQueries({
+          predicate: (query) => query.queryKey[0] === "request",
+        });
         toast.success("Update request automatically applied");
         closeModal();
         router.refresh();
@@ -120,8 +123,9 @@ function useFormSubmission<T extends SubmitSectionFormValues>(params: {
   mutationFn: (values: T) => Promise<MutationResult>;
   enableLogging?: boolean;
 }) {
-  const { mutateAsync: rejectSubmission } =
-    api.request.rejectSubmission.useMutation();
+  const { mutateAsync: rejectSubmission } = useMutation(
+    orpc.request.rejectSubmission.mutationOptions(),
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const form = useFormContext<SubmitSectionFormValues>();
   const { handleMutationResult } = useRequestStatusHandler();
@@ -338,7 +342,7 @@ export function SubmitSection<T extends SubmitSectionFormValues>({
         Cancel
       </Button>
 
-      {!isProd && <DevLoadTestData />}
+      {!isProductionNodeEnv && <DevLoadTestData />}
     </div>
   );
 }

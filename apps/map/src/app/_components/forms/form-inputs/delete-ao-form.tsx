@@ -2,14 +2,16 @@ import { useFormContext } from "react-hook-form";
 
 import type { DeleteAOType } from "@acme/validators/request-schemas";
 
-import { api } from "~/trpc/react";
+import { orpc, useQuery } from "~/orpc/react";
 
 export const DeleteAoForm = <_T extends DeleteAOType>() => {
   const form = useFormContext<DeleteAOType>();
   const originalAoId = form.watch("originalAoId");
-  const { data: result } = api.location.getAOById.useQuery(
-    { id: originalAoId },
-    { enabled: !!originalAoId },
+  const { data: result } = useQuery(
+    orpc.location.getAOById.queryOptions({
+      input: { id: originalAoId },
+      enabled: !!originalAoId,
+    }),
   );
   return (
     <div className="my-6 rounded-md bg-red-50 p-4 dark:bg-red-900/20">

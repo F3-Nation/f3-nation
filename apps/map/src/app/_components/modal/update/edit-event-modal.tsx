@@ -34,7 +34,7 @@ export const EditEventModal = ({
           <ContactDetailsForm<EditEventType> />
           <SubmitSection<EditEventType>
             mutationFn={(values) =>
-              vanillaApi.request.submitEditEventRequest.mutate(values)
+              vanillaApi.request.submitEditEventRequest(values)
             }
             text="Edit Workout Details"
           />

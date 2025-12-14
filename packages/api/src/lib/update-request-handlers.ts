@@ -15,7 +15,7 @@ import type {
 } from "@acme/validators/request-schemas";
 import { eq, schema } from "@acme/db";
 
-import type { Context } from "../trpc";
+import type { Context } from "../shared";
 import type { UpdateRequestData } from "./types";
 import { createAO, updateAO } from "./ao-handlers";
 import { insertEvent, updateEvent, updateEventTypes } from "./event-handlers";

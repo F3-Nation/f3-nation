@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 
 import { schema } from "@acme/db";
 
-import type { Context } from "../trpc";
+import type { Context } from "../shared";
 
 /**
  * Insert a new location into the database

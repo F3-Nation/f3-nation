@@ -2,7 +2,7 @@ import { Controller, useFormContext } from "react-hook-form";
 
 import { dayOfWeekToShortDayOfWeek } from "@acme/shared/app/functions";
 
-import { api } from "~/trpc/react";
+import { orpc, useQuery } from "~/orpc/react";
 import { useOptions } from "~/utils/use-options";
 import { VirtualizedCombobox } from "../../virtualized-combobox";
 
@@ -37,14 +37,14 @@ export function EventSelector<_T extends EventSelectorFormValues>({
   const regionId = form.watch(regionFieldName);
   const aoId = form.watch(aoFieldName);
 
-  const { data: events } = api.event.all.useQuery(
-    {
-      ...(aoId ? { aoIds: [aoId] } : {}),
-      ...(regionId ? { regionIds: [regionId] } : {}),
-    },
-    {
+  const { data: events } = useQuery(
+    orpc.event.all.queryOptions({
+      input: {
+        ...(aoId ? { aoIds: [aoId] } : {}),
+        ...(regionId ? { regionIds: [regionId] } : {}),
+      },
       enabled: regionId != null,
-    },
+    }),
   );
 
   const eventOptions = useOptions(

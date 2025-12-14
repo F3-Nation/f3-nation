@@ -90,9 +90,7 @@ export const RequestsTable = () => {
       totalCount={requests?.totalCount}
       columns={columns}
       onRowClick={async (row) => {
-        const request = await vanillaApi.request.byId.query({
-          id: row.original.id,
-        });
+        const request = await vanillaApi.request.byId({ id: row.original.id });
         if (!request) {
           toast.error("Request not found");
           return;

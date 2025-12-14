@@ -48,9 +48,7 @@ export const MoveEventToDifferentAoModal = ({
           <ContactDetailsForm<MoveEventToDifferentAOType> />
           <SubmitSection<MoveEventToDifferentAOType>
             mutationFn={(values) =>
-              vanillaApi.request.submitMoveEventToDifferentAoRequest.mutate(
-                values,
-              )
+              vanillaApi.request.submitMoveEventToDifferentAoRequest(values)
             }
             text="Move Event to Different AO"
           />

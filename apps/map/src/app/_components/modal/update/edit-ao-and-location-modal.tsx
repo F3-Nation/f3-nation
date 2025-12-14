@@ -32,9 +32,7 @@ export const EditAoAndLocationModal = ({
       throw new Error("Invalid image URL");
     }
 
-    return await vanillaApi.request.submitEditAOAndLocationRequest.mutate(
-      values,
-    );
+    return await vanillaApi.request.submitEditAOAndLocationRequest(values);
   };
 
   return (

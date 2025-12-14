@@ -6,7 +6,7 @@ import {
   removeUndefinedFromObject,
 } from "@acme/shared/common/functions";
 
-import type { Context } from "../trpc";
+import type { Context } from "../shared";
 import { moveAOLocsToNewRegion } from "./move-ao-locs-to-new-region";
 
 /**
