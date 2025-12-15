@@ -3,6 +3,8 @@ import { createORPCClient, onError } from "@orpc/client";
 import { RPCLink } from "@orpc/client/fetch";
 
 import type { router } from "@acme/api";
+import { API_PREFIX_V1 } from "@acme/shared/app/constants";
+import { Client, Header } from "@acme/shared/common/enums";
 
 import { env } from "~/env";
 
@@ -12,9 +14,18 @@ declare global {
 }
 
 const link = new RPCLink({
-  url: env.NEXT_PUBLIC_API_URL,
+  url: `${env.NEXT_PUBLIC_API_URL}${API_PREFIX_V1}`,
   // fetch: ensure cookies are sent along for auth
-  fetch: (input, init) => fetch(input, { ...init, credentials: "include" }),
+  fetch: (input, init) => {
+    if (input.headers instanceof Headers) {
+      input.headers.set(Header.Client, Client.ORPC); // Identifies this as an oRPC client request
+    }
+    return fetch(input, {
+      ...init,
+      credentials: "include",
+      headers: input.headers,
+    });
+  },
   interceptors: [
     onError((error: unknown) => {
       console.error(error);

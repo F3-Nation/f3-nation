@@ -1,8 +1,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { notifyWebhooks } from "../lib/notify-webhooks";
-import { apiKeyProcedure } from "../shared";
+import { notifyWebhooks } from "../../lib/notify-webhooks";
+import { apiKeyProcedure } from "../../shared";
 
 export const apiRouter = {
   revalidate: apiKeyProcedure
@@ -16,6 +16,14 @@ export const apiRouter = {
         })
         .optional(),
     )
+    .route({
+      method: "POST",
+      path: "/revalidate",
+      tags: ["api"],
+      summary: "Revalidate cache",
+      description:
+        "Trigger cache revalidation and notify webhooks about map changes",
+    })
     .handler(async ({ input }) => {
       revalidatePath("/");
       if (input) {

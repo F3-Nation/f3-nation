@@ -19,33 +19,32 @@ const shouldSkipSsg =
 
 export default async function MapPage() {
   interface MapPageData {
-    mapEventAndLocationData: RouterOutputs["location"]["getMapEventAndLocationData"];
-    regionsWithLocationData: RouterOutputs["location"]["getRegionsWithLocation"];
+    eventsAndLocations: RouterOutputs["map"]["location"]["eventsAndLocations"];
+    regionsWithLocation: RouterOutputs["map"]["location"]["regionsWithLocation"];
   }
 
-  const { mapEventAndLocationData, regionsWithLocationData }: MapPageData =
-    shouldSkipSsg
-      ? {
-          mapEventAndLocationData: [],
-          regionsWithLocationData: [],
-        }
-      : await (async () => {
-          const { client } = await import("~/orpc/client");
+  const { eventsAndLocations, regionsWithLocation }: MapPageData = shouldSkipSsg
+    ? {
+        eventsAndLocations: [],
+        regionsWithLocation: [],
+      }
+    : await (async () => {
+        const { client } = await import("~/orpc/client");
 
-          const mapEventAndLocationData =
-            await client.location.getMapEventAndLocationData();
-          const regionsWithLocationData =
-            await client.location.getRegionsWithLocation();
+        const eventsAndLocations =
+          await client.map.location.eventsAndLocations();
+        const regionsWithLocation =
+          await client.map.location.regionsWithLocation();
 
-          return { mapEventAndLocationData, regionsWithLocationData };
-        })();
+        return { eventsAndLocations, regionsWithLocation };
+      })();
 
   RERENDER_LOGS && console.log("MapPage rerender");
 
   return (
     <ReactQueryHydrator
-      mapEventAndLocationData={mapEventAndLocationData}
-      regionsWithLocationData={regionsWithLocationData}
+      eventsAndLocations={eventsAndLocations}
+      regionsWithLocation={regionsWithLocation}
     >
       <TouchDeviceProvider>
         <InitialLocationProvider>

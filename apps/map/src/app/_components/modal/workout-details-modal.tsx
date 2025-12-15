@@ -20,7 +20,7 @@ export const WorkoutDetailsModal = ({
     typeof data.locationId === "number" ? data.locationId : -1;
   const locationId = selectedLocationId ?? providedLocationId;
   const { data: results } = useQuery(
-    orpc.location.getLocationWorkoutData.queryOptions({
+    orpc.map.location.locationWorkout.queryOptions({
       input: { locationId },
       enabled: locationId >= 0,
     }),

@@ -80,3 +80,8 @@ export enum TestId {
   SELECTED_ITEM_DESKTOP = "selected-item-desktop",
   SECTOR_NATION_SELECT = "sector-nation-select",
 }
+
+export enum Client {
+  ORPC = "orpc",
+  ORPC_SSG = "orpc-ssg",
+}

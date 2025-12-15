@@ -55,7 +55,7 @@ const SuspendedInitialLocationProvider = (params: { children: ReactNode }) => {
 
   if (center.current === null) {
     const locationLatLng = getQueryData(
-      orpc.location.getMapEventAndLocationData.queryKey({
+      orpc.map.location.eventsAndLocations.queryKey({
         input: undefined,
       }),
     )?.find((location) => location[0] === queryLocationId);

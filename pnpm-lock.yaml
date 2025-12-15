@@ -128,6 +128,9 @@ importers:
       '@react-hook/window-size':
         specifier: ^3.1.1
         version: 3.1.1(react@18.3.1)
+      '@scalar/nextjs-api-reference':
+        specifier: ^0.9.5
+        version: 0.9.5(next@15.5.9)(react@18.3.1)
       '@sentry/nextjs':
         specifier: ^9.15.0
         version: 9.15.0(@opentelemetry/context-async-hooks@1.30.1)(@opentelemetry/core@1.30.1)(@opentelemetry/instrumentation@0.57.2)(@opentelemetry/sdk-trace-base@1.30.1)(next@15.5.9)(react@18.3.1)(webpack@5.103.0)
@@ -5741,6 +5744,34 @@ packages:
     dev: true
     optional: true
 
+  /@scalar/core@0.3.26:
+    resolution: {integrity: sha512-CTwhU0zteyhFvlGbiErUC/nt7o4VMraXC4E52x2Cz+s/rgGrmS00pTYtnjO3NVQXXqjScq8BqMTqBZrHQEJhWw==}
+    engines: {node: '>=20'}
+    dependencies:
+      '@scalar/types': 0.5.2
+    dev: false
+
+  /@scalar/nextjs-api-reference@0.9.5(next@15.5.9)(react@18.3.1):
+    resolution: {integrity: sha512-6nbtUgvygCR9FRTgKGR0RP663vgKOpF1eOkryohjXOg1SQnc8QAx2/YshK03nXE1sX5sloY8POXksrmnrNkXXw==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      next: ^15.0.0 || ^16.0.0
+      react: ^19.0.0
+    dependencies:
+      '@scalar/core': 0.3.26
+      next: 15.5.9(@babel/core@7.23.9)(@opentelemetry/api@1.9.0)(@playwright/test@1.52.0)(react-dom@18.3.1)(react@18.3.1)
+      react: 18.3.1
+    dev: false
+
+  /@scalar/types@0.5.2:
+    resolution: {integrity: sha512-F5wyb/B/Mu56PpNqhgSfuKwiwVnmhNhzTOo+k5b++HvYhjwAnqnw8BzbDzwXhhn172IPw8kSkupA/vphw61IRA==}
+    engines: {node: '>=20'}
+    dependencies:
+      nanoid: 5.1.5
+      type-fest: 5.0.0
+      zod: 4.1.13
+    dev: false
+
   /@sec-ant/readable-stream@0.4.1:
     resolution: {integrity: sha512-831qok9r2t8AlxLko40y2ebgSDhenenCatLVeW/uBtnHPyhHOvG0C7TvfgecV+wHzIm5KUICgzmVpWS+IMEAeg==}
     dev: true
@@ -10728,6 +10759,12 @@ packages:
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
+  /nanoid@5.1.5:
+    resolution: {integrity: sha512-Ir/+ZpE9fDsNH0hQ3C68uyThDXzYcim2EqcZ8zn8Chtt1iylPT9xXJB0kPCnqzgcEGikO9RxSrh63MsmVCU7Fw==}
+    engines: {node: ^18 || >=20}
+    hasBin: true
+    dev: false
+
   /natural-compare@1.4.0:
     resolution: {integrity: sha512-OWND8ei3VtNC9h7V60qff3SVobHr996CTwgxubgyQYEpg290h9J0buyECNNJexkFm5sOajh5G116RYA1c8ZMSw==}
 
@@ -13252,6 +13289,13 @@ packages:
     engines: {node: '>=16'}
     dev: true
 
+  /type-fest@5.0.0:
+    resolution: {integrity: sha512-GeJop7+u7BYlQ6yQCAY1nBQiRSHR+6OdCEtd8Bwp9a3NK3+fWAVjOaPKJDteB9f6cIJ0wt4IfnScjLG450EpXA==}
+    engines: {node: '>=20'}
+    dependencies:
+      tagged-tag: 1.0.0
+    dev: false
+
   /type-fest@5.3.1:
     resolution: {integrity: sha512-VCn+LMHbd4t6sF3wfU/+HKT63C9OoyrSIf4b+vtWHpt2U7/4InZG467YDNMFMR70DdHjAdpPWmw2lzRdg0Xqqg==}
     engines: {node: '>=20'}
@@ -14023,6 +14067,10 @@ packages:
 
   /zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
+
+  /zod@4.1.13:
+    resolution: {integrity: sha512-AvvthqfqrAhNH9dnfmrfKzX5upOdjUVJYFqNSlkmGf64gRaTzlPwz99IHYnVs28qYAybvAlBV+H7pn0saFY4Ig==}
+    dev: false
 
   /zustand@4.5.2(@types/react@18.3.20)(react@18.3.1):
     resolution: {integrity: sha512-2cN1tPkDVkwCy5ickKrI7vijSjPksFRfqS6237NzT0vqSsztTNnQdHw9mmN7uBdk3gceVXU0a+21jFzFzAc9+g==}

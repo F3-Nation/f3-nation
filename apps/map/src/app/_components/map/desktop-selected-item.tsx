@@ -41,7 +41,7 @@ const SelectedItemWrapper = () => {
       return;
     } else if (typeof selectedItem.selectedLocation?.id === "number") {
       void getQueryClient().prefetchQuery(
-        orpc.location.getLocationWorkoutData.queryOptions({
+        orpc.map.location.locationWorkout.queryOptions({
           input: { locationId: selectedItem.selectedLocation?.id },
         }),
       );

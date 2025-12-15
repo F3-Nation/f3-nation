@@ -8,7 +8,7 @@ import nodemailer, { createTestAccount } from "nodemailer";
 
 import { env } from "@acme/env";
 
-import type { feedbackSchema } from "./router/feedback";
+import type { feedbackSchema } from "./router/map/index";
 
 const isLocalDevelopment = process.env.NODE_ENV !== "production";
 export enum Templates {

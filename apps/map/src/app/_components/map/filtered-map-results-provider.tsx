@@ -37,7 +37,9 @@ export const FilteredMapResultsProvider = (params: { children: ReactNode }) => {
   RERENDER_LOGS && console.log("FilteredMapResultsProvider rerender");
   const nearbyLocationCenter = mapStore.use.nearbyLocationCenter();
   const { data: mapEventAndLocationData } = useQuery(
-    orpc.location.getMapEventAndLocationData.queryOptions({ input: undefined }),
+    orpc.map.location.eventsAndLocations.queryOptions({
+      input: undefined,
+    }),
   );
 
   const filters = filterStore.useBoundStore();

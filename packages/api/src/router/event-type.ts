@@ -40,6 +40,14 @@ export const eventTypeRouter = {
         })
         .optional(),
     )
+    .route({
+      method: "GET",
+      path: "/all",
+      tags: ["event-type"],
+      summary: "List all event types",
+      description:
+        "Get a paginated list of event types with optional filtering by organization",
+    })
     .handler(async ({ context: ctx, input }) => {
       const limit = input?.pageSize ?? 10;
       const offset = (input?.pageIndex ?? 0) * limit;
@@ -133,6 +141,13 @@ export const eventTypeRouter = {
     }),
   byOrgId: publicProcedure
     .input(z.object({ orgId: z.number(), isActive: z.boolean().optional() }))
+    .route({
+      method: "GET",
+      path: "/by-org-id",
+      tags: ["event-type"],
+      summary: "Get event types by organization",
+      description: "Retrieve all event types for a specific organization",
+    })
     .handler(async ({ context: ctx, input }) => {
       const eventTypes = await ctx.db
         .select()
@@ -150,6 +165,13 @@ export const eventTypeRouter = {
     }),
   byId: publicProcedure
     .input(z.object({ id: z.number() }))
+    .route({
+      method: "GET",
+      path: "/by-id",
+      tags: ["event-type"],
+      summary: "Get event type by ID",
+      description: "Retrieve detailed information about a specific event type",
+    })
     .handler(async ({ context: ctx, input }) => {
       const [result] = await ctx.db
         .select()
@@ -166,6 +188,13 @@ export const eventTypeRouter = {
     }),
   crupdate: editorProcedure
     .input(EventTypeInsertSchema)
+    .route({
+      method: "POST",
+      path: "/crupdate",
+      tags: ["event-type"],
+      summary: "Create or update event type",
+      description: "Create a new event type or update an existing one",
+    })
     .handler(async ({ context: ctx, input }) => {
       const [existingEventType] = input.id
         ? await ctx.db
@@ -225,6 +254,13 @@ export const eventTypeRouter = {
     }),
   delete: editorProcedure
     .input(z.object({ id: z.number() }))
+    .route({
+      method: "DELETE",
+      path: "/delete",
+      tags: ["event-type"],
+      summary: "Delete event type",
+      description: "Soft delete an event type by marking it as inactive",
+    })
     .handler(async ({ context: ctx, input }) => {
       const [existingEventType] = await ctx.db
         .select()

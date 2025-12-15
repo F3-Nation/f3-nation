@@ -21,7 +21,7 @@ export const useSelectedItem = () => {
   const modifiedLocationMarkers = mapStore.use.modifiedLocationMarkers();
   const [debouncedLocationId, setDebouncedLocationId] = useState(locationId);
   const { data } = useQuery(
-    orpc.location.getLocationWorkoutData.queryOptions({
+    orpc.map.location.locationWorkout.queryOptions({
       input: { locationId: debouncedLocationId ?? -1 },
       enabled: typeof debouncedLocationId === "number",
     }),

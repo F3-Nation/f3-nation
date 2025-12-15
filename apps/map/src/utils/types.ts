@@ -3,10 +3,10 @@ import type { DayOfWeek } from "@acme/shared/app/enums";
 import type { RouterOutputs } from "~/orpc/types";
 
 export type F3MarkerLocation =
-  RouterOutputs["location"]["getMapEventAndLocationData"][number];
+  RouterOutputs["map"]["location"]["eventsAndLocations"][number];
 
 export type F3Marker = NonNullable<
-  RouterOutputs["location"]["getLocationWorkoutData"]
+  RouterOutputs["map"]["location"]["locationWorkout"]
 >;
 
 export interface SparseF3Marker {

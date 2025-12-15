@@ -39,6 +39,14 @@ export const eventRouter = {
         })
         .optional(),
     )
+    .route({
+      method: "GET",
+      path: "/all",
+      tags: ["event"],
+      summary: "List all events",
+      description:
+        "Get a paginated list of workout events with optional filtering and sorting",
+    })
     .handler(async ({ context: ctx, input }) => {
       const regionOrg = aliasedTable(schema.orgs, "region_org");
       const parentOrg = aliasedTable(schema.orgs, "parent_org");
@@ -204,6 +212,13 @@ export const eventRouter = {
     }),
   byId: publicProcedure
     .input(z.object({ id: z.number() }))
+    .route({
+      method: "GET",
+      path: "/by-id",
+      tags: ["event"],
+      summary: "Get event by ID",
+      description: "Retrieve detailed information about a specific event",
+    })
     .handler(async ({ context: ctx, input }) => {
       const regionOrg = aliasedTable(schema.orgs, "region_org");
       const aoOrg = aliasedTable(schema.orgs, "ao_org");
@@ -297,6 +312,13 @@ export const eventRouter = {
     }),
   crupdate: editorProcedure
     .input(EventInsertSchema.partial({ id: true }))
+    .route({
+      method: "POST",
+      path: "/crupdate",
+      tags: ["event"],
+      summary: "Create or update event",
+      description: "Create a new event or update an existing one",
+    })
     .handler(async ({ context: ctx, input }) => {
       const [existingEvent] = input.id
         ? await ctx.db
@@ -367,8 +389,15 @@ export const eventRouter = {
 
       return result;
     }),
-  eventIdToRegionNameLookup: publicProcedure.handler(
-    async ({ context: ctx }) => {
+  eventIdToRegionNameLookup: publicProcedure
+    .route({
+      method: "GET",
+      path: "/event-id-to-region-name-lookup",
+      tags: ["event"],
+      summary: "Event to region lookup",
+      description: "Get a mapping of event IDs to their region names",
+    })
+    .handler(async ({ context: ctx }) => {
       const regionOrg = aliasedTable(schema.orgs, "region_org");
       const parentOrg = aliasedTable(schema.orgs, "parent_org");
       const result = await ctx.db
@@ -405,10 +434,16 @@ export const eventRouter = {
       );
 
       return lookup;
-    },
-  ),
+    }),
   delete: editorProcedure
     .input(z.object({ id: z.number() }))
+    .route({
+      method: "DELETE",
+      path: "/delete",
+      tags: ["event"],
+      summary: "Delete event",
+      description: "Soft delete an event by marking it as inactive",
+    })
     .handler(async ({ context: ctx, input }) => {
       const [event] = await ctx.db
         .select()

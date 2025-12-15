@@ -10,21 +10,21 @@ import { orpc, useQuery } from "~/orpc/react";
  * with ssg.
  */
 export const ReactQueryHydrator = (params: {
-  mapEventAndLocationData: RouterOutputs["location"]["getMapEventAndLocationData"];
-  regionsWithLocationData: RouterOutputs["location"]["getRegionsWithLocation"];
+  eventsAndLocations: RouterOutputs["map"]["location"]["eventsAndLocations"];
+  regionsWithLocation: RouterOutputs["map"]["location"]["regionsWithLocation"];
   children: ReactNode;
 }) => {
   useQuery(
-    orpc.location.getMapEventAndLocationData.queryOptions({
+    orpc.map.location.eventsAndLocations.queryOptions({
       input: undefined,
       // hydrate via initialData to keep same behavior
-      initialData: params.mapEventAndLocationData,
+      initialData: params.eventsAndLocations,
     }),
   );
   useQuery(
-    orpc.location.getRegionsWithLocation.queryOptions({
+    orpc.map.location.regionsWithLocation.queryOptions({
       input: undefined,
-      initialData: params.regionsWithLocationData,
+      initialData: params.regionsWithLocation,
     }),
   );
 

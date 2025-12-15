@@ -21,7 +21,20 @@ const isProd = env.NEXT_PUBLIC_CHANNEL === "prod";
 
 // Cookie configuration for cross-subdomain auth (map.f3nation.com <-> api.f3nation.com)
 // In production: use __Secure- prefix (requires HTTPS) and .f3nation.com domain
-// In development: use simpler config for localhost
+// In development with .f3nation.test: still use HTTPS (via Caddy/mkcert), so secure: true
+/**
+ * Extract hostname from URL, stripping protocol and path/port
+ */
+function extractHostname(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  // Remove protocol
+  let hostname = url.replace(/^https?:\/\//, "");
+  // Remove port and path
+  hostname = hostname.split(":")[0] ?? hostname;
+  hostname = hostname.split("/")[0] ?? hostname;
+  return hostname || undefined;
+}
+
 /**
  * Determine the cookie domain dynamically, handling:
  * - localhost (dev): no domain (so cookies only for localhost)
@@ -32,15 +45,15 @@ const isProd = env.NEXT_PUBLIC_CHANNEL === "prod";
  * Else, fallback to window.location if possible (for client-side usage), or process.env if on server.
  * If all else fails, default to undefined (scopes to current host).
  */
-function getCookieDomain() {
+function getCookieDomain(): string | undefined {
   const hostname =
     typeof window !== "undefined"
       ? window.location.hostname
       : // Try Vercel env first (it won't have protocol in NEXT_PUBLIC_VERCEL_URL)
-        process.env.NEXT_PUBLIC_VERCEL_URL?.replace(/^https?:\/\//, "") ??
-        process.env.VERCEL_URL?.replace(/^https?:\/\//, "") ??
-        env.NEXT_PUBLIC_API_URL?.replace(/^https?:\/\//, "") ??
-        env.NEXT_PUBLIC_MAP_URL?.replace(/^https?:\/\//, "") ??
+        extractHostname(process.env.NEXT_PUBLIC_VERCEL_URL) ??
+        extractHostname(process.env.VERCEL_URL) ??
+        extractHostname(env.NEXT_PUBLIC_API_URL) ??
+        extractHostname(env.NEXT_PUBLIC_MAP_URL) ??
         undefined;
 
   if (
@@ -66,15 +79,28 @@ function getCookieDomain() {
   return undefined;
 }
 
-const cookiePrefix =
-  (typeof process !== "undefined" &&
-    process.env.NEXT_PUBLIC_CHANNEL === "prod") ||
-  (typeof window !== "undefined" &&
-    window.location.hostname.endsWith(".f3nation.com"))
-    ? "__Secure-"
-    : "";
+/**
+ * Determine if we should use secure cookies.
+ * True when: production OR using HTTPS URLs (e.g., .f3nation.test with Caddy/mkcert)
+ */
+function shouldUseSecureCookies(): boolean {
+  if (isProd) return true;
 
+  // Check if any URL is HTTPS (for local HTTPS dev with .f3nation.test)
+  const urls = [
+    env.NEXT_PUBLIC_API_URL,
+    env.NEXT_PUBLIC_MAP_URL,
+    typeof window !== "undefined" ? window.location.href : undefined,
+  ];
+
+  return urls.some((url) => url?.startsWith("https://"));
+}
+
+const useSecureCookies = shouldUseSecureCookies();
 const cookieDomain = getCookieDomain();
+
+// Use __Secure- prefix only in production (requires HTTPS AND specific cookie attributes)
+const cookiePrefix = isProd ? "__Secure-" : "";
 
 const providers: Provider[] = [emailProvider, OtpProvider];
 
@@ -130,7 +156,7 @@ export const authConfig: NextAuthConfig = {
         httpOnly: true,
         sameSite: "lax",
         path: "/",
-        secure: isProd,
+        secure: useSecureCookies,
         domain: cookieDomain,
       },
     },
@@ -140,7 +166,7 @@ export const authConfig: NextAuthConfig = {
         httpOnly: true,
         sameSite: "lax",
         path: "/",
-        secure: isProd,
+        secure: useSecureCookies,
         domain: cookieDomain,
       },
     },
@@ -150,7 +176,7 @@ export const authConfig: NextAuthConfig = {
         httpOnly: true,
         sameSite: "lax",
         path: "/",
-        secure: isProd,
+        secure: useSecureCookies,
         domain: cookieDomain,
       },
     },
