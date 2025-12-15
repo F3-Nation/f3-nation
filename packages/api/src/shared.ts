@@ -7,7 +7,7 @@ import { auth } from "@acme/auth";
 import { and, eq, gt, inArray, isNull, or, schema, sql } from "@acme/db";
 import { db } from "@acme/db/client";
 import { env } from "@acme/env";
-import { Header } from "@acme/shared/common/enums";
+import { Client, Header } from "@acme/shared/common/enums";
 
 type BaseContext = RequestHeadersPluginContext;
 
@@ -87,7 +87,14 @@ export const apiKeyProcedure = publicProcedure.use(
 );
 
 export const getSession = async ({ context }: { context: BaseContext }) => {
-  let session = await auth();
+  let session: Session | null = null;
+
+  // Skip auth() during static generation - it uses cookies() which opts out of SSG
+  if (context.reqHeaders?.get(Header.Client) === Client.ORPC_SSG) {
+    return MOCK_ADMIN_SESSION;
+  }
+
+  session = await auth();
   if (session) return session;
 
   // If there is no session, check for Bearer token ("api key") and attempt to build a replica session
@@ -169,4 +176,17 @@ export const getSession = async ({ context }: { context: BaseContext }) => {
     expires: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString(),
   };
   return session;
+};
+
+const MOCK_ADMIN_SESSION: Session = {
+  id: 1,
+  email: "admin@ssg.mock",
+  expires: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString(),
+  user: {
+    id: "mock-admin-id",
+    email: "admin@ssg.mock",
+    name: "MapMockSSGAdmin",
+    roles: [{ orgId: 1, orgName: "Nation", roleName: "admin" }],
+  },
+  roles: [{ orgId: 1, orgName: "Nation", roleName: "admin" }],
 };

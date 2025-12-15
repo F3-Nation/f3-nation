@@ -4,7 +4,7 @@ import { RPCLink } from "@orpc/client/fetch";
 
 import type { router } from "@acme/api";
 import { API_PREFIX_V1 } from "@acme/shared/app/constants";
-import { Header } from "@acme/shared/common/enums";
+import { Client, Header } from "@acme/shared/common/enums";
 
 import { env } from "~/env";
 
@@ -18,7 +18,7 @@ const link = new RPCLink({
   // fetch: ensure cookies are sent along for auth
   fetch: (input, init) => {
     if (input.headers instanceof Headers) {
-      input.headers.set(Header.ORPCClient, "true"); // Identifies this as an oRPC client request
+      input.headers.set(Header.Client, Client.ORPC); // Identifies this as an oRPC client request
     }
     return fetch(input, {
       ...init,

@@ -1,3 +1,7 @@
+// https://orpc.dev/docs/best-practices/optimize-ssr
+// for pre-rendering
+import "~/orpc/client.server";
+
 import type { Metadata, Viewport } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
@@ -20,8 +24,6 @@ import { ShadCnContainer } from "~/app/_components/shad-cn-container-ref";
 import { OrpcReactProvider } from "~/orpc/react";
 import { KeyPressProvider } from "~/utils/key-press/provider";
 import { RouteChangeTracker } from "./_components/route-change-tracker";
-
-import "../orpc/client.server"; // for pre-rendering
 
 export const metadata: Metadata = {
   metadataBase: new URL(

@@ -6,7 +6,6 @@ export enum Header {
   MobileVersion = "mobile_version",
   MobileBuild = "mobile_build",
   Source = "x-source",
-  ORPCClient = "x-orpc-client",
 }
 
 export enum Case {
@@ -80,4 +79,9 @@ export enum TestId {
   SELECTED_ITEM_MOBILE = "selected-item-mobile",
   SELECTED_ITEM_DESKTOP = "selected-item-desktop",
   SECTOR_NATION_SELECT = "sector-nation-select",
+}
+
+export enum Client {
+  ORPC = "orpc",
+  ORPC_SSG = "orpc-ssg",
 }

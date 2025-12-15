@@ -6,7 +6,7 @@ import { CORSPlugin, RequestHeadersPlugin } from "@orpc/server/plugins";
 import { router } from "@acme/api";
 import { API_PREFIX_V1 } from "@acme/shared/app/constants";
 import { isProductionNodeEnv } from "@acme/shared/common/constants";
-import { Header } from "@acme/shared/common/enums";
+import { Client, Header } from "@acme/shared/common/enums";
 
 const corsPlugin = new CORSPlugin({
   origin: (origin) => {
@@ -25,7 +25,7 @@ const corsPlugin = new CORSPlugin({
     return allowedOrigins;
   },
   allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
-  allowHeaders: [Header.ContentType, Header.Authorization, Header.ORPCClient],
+  allowHeaders: [Header.ContentType, Header.Authorization, Header.Client],
   maxAge: 600,
   credentials: true,
 });
@@ -60,7 +60,9 @@ async function handleRequest(request: Request) {
 
   // Check if this is an oRPC client request (from the map app)
   // oRPC client sends a custom header to identify itself
-  const isOrpcClient = request.headers.get(Header.ORPCClient) === "true";
+  const isOrpcClient =
+    request.headers.get(Header.Client) === Client.ORPC ||
+    request.headers.get(Header.Client) === Client.ORPC_SSG;
 
   if (isOrpcClient) {
     // Use RPC handler for oRPC client requests
