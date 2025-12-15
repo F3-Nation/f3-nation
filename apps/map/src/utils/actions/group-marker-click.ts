@@ -18,7 +18,7 @@ export const groupMarkerClick = async ({
   const isAlreadySelected =
     selectedItemStore.get("locationId") === locationId &&
     selectedItemStore.get("eventId") === eventId;
-  const location = await orpc.location.getLocationWorkoutData.call({
+  const location = await orpc.map.location.locationWorkout.call({
     locationId,
   });
   if (!location) return;

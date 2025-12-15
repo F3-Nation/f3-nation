@@ -52,7 +52,7 @@ export function MapSearchBox({
   const text = searchStore.use.text();
   const [isFocused, setIsFocused] = useState(false);
   const { data: workoutCount } = useQuery(
-    orpc.location.getWorkoutCount.queryOptions({ input: undefined }),
+    orpc.map.location.workoutCount.queryOptions({ input: undefined }),
   );
   const { combinedResults } = useTextSearchResults();
   const [focusedIndex, setFocusedIndex] = useState(0);

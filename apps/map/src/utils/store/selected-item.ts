@@ -103,9 +103,9 @@ export const setSelectedItem = (item: {
     newSelectedItemStore.eventId == null
   ) {
     const dataArray = getQueryData<
-      RouterOutputs["location"]["getMapEventAndLocationData"]
+      RouterOutputs["map"]["location"]["eventsAndLocations"]
     >(
-      orpc.location.getMapEventAndLocationData.queryKey({
+      orpc.map.location.eventsAndLocations.queryKey({
         input: undefined,
       }),
     )?.find((location) => location[0] === item.locationId);

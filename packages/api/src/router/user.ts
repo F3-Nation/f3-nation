@@ -37,6 +37,14 @@ export const userRouter = {
         })
         .optional(),
     )
+    .route({
+      method: "GET",
+      path: "/all",
+      tags: ["user"],
+      summary: "List all users",
+      description:
+        "Get a paginated list of users with optional filtering by role, status, and organization",
+    })
     .handler(async ({ context: ctx, input }) => {
       const limit = input?.pageSize ?? 10;
       const offset = (input?.pageIndex ?? 0) * limit;
@@ -165,6 +173,14 @@ export const userRouter = {
     }),
   byId: editorProcedure
     .input(z.object({ id: z.number() }))
+    .route({
+      method: "GET",
+      path: "/by-id",
+      tags: ["user"],
+      summary: "Get user by ID",
+      description:
+        "Retrieve detailed information about a specific user including their roles",
+    })
     .handler(async ({ context: ctx, input }) => {
       const [user] = await ctx.db
         .select({
@@ -207,6 +223,14 @@ export const userRouter = {
     }),
   crupdate: editorProcedure
     .input(CrupdateUserSchema)
+    .route({
+      method: "POST",
+      path: "/crupdate",
+      tags: ["user"],
+      summary: "Create or update user",
+      description:
+        "Create a new user or update an existing one, including role assignments",
+    })
     .handler(async ({ context: ctx, input }) => {
       const { roles, ...rest } = input;
       const [user] = await ctx.db
@@ -338,6 +362,14 @@ export const userRouter = {
 
   delete: editorProcedure
     .input(z.object({ id: z.number() }))
+    .route({
+      method: "DELETE",
+      path: "/delete",
+      tags: ["user"],
+      summary: "Delete user",
+      description:
+        "Permanently delete a user and all their role assignments (requires nation admin)",
+    })
     .handler(async ({ context: ctx, input }) => {
       const [f3nationOrg] = await ctx.db
         .select()

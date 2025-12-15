@@ -48,6 +48,14 @@ export const requestRouter = {
         })
         .optional(),
     )
+    .route({
+      method: "GET",
+      path: "/all",
+      tags: ["request"],
+      summary: "List all requests",
+      description:
+        "Get a paginated list of map change requests with optional filtering and sorting",
+    })
     .handler(async ({ context: ctx, input }) => {
       const onlyMine = input?.onlyMine ?? false;
       const oldAoOrg = aliasedTable(schema.orgs, "old_ao_org");
@@ -205,6 +213,14 @@ export const requestRouter = {
     }),
   byId: editorProcedure
     .input(z.object({ id: z.string() }))
+    .route({
+      method: "GET",
+      path: "/by-id",
+      tags: ["request"],
+      summary: "Get request by ID",
+      description:
+        "Retrieve detailed information about a specific map change request",
+    })
     .handler(async ({ context: ctx, input }) => {
       const [request] = await ctx.db
         .select()
@@ -214,6 +230,14 @@ export const requestRouter = {
     }),
   canDeleteEvent: publicProcedure
     .input(z.object({ eventId: z.number() }))
+    .route({
+      method: "GET",
+      path: "/can-delete-event",
+      tags: ["request"],
+      summary: "Check if event can be deleted",
+      description:
+        "Check if there is a pending delete request for a specific event",
+    })
     .handler(async ({ context: ctx, input }) => {
       const [request] = await ctx.db
         .select()
@@ -229,6 +253,14 @@ export const requestRouter = {
     }),
   canEditRegions: publicProcedure
     .input(z.object({ orgIds: z.array(z.number()) }))
+    .route({
+      method: "POST",
+      path: "/can-edit-regions",
+      tags: ["request"],
+      summary: "Check region edit permissions",
+      description:
+        "Check if the current user has editor permissions for specified organizations",
+    })
     .handler(async ({ context: ctx, input }) => {
       const session = ctx.session;
       if (!session) {
@@ -254,6 +286,13 @@ export const requestRouter = {
     }),
   submitDeleteRequest: publicProcedure
     .input(DeleteRequestSchema)
+    .route({
+      method: "POST",
+      path: "/submit-delete-request",
+      tags: ["request"],
+      summary: "Submit delete request",
+      description: "Submit a request to delete an event or location",
+    })
     .handler(async ({ context: ctx, input }) => {
       const submittedBy = ctx.session?.user?.email ?? input.submittedBy;
       if (!submittedBy) {
@@ -334,6 +373,13 @@ export const requestRouter = {
     }),
   submitUpdateRequest: publicProcedure
     .input(RequestInsertSchema)
+    .route({
+      method: "POST",
+      path: "/submit-update-request",
+      tags: ["request"],
+      summary: "Submit update request",
+      description: "Submit a request to create or update a workout on the map",
+    })
     .handler(async ({ context: ctx, input }) => {
       const submittedBy = ctx.session?.user?.email ?? input.submittedBy;
       if (!submittedBy) {
@@ -453,6 +499,13 @@ export const requestRouter = {
     }),
   validateDeleteByAdmin: editorProcedure
     .input(DeleteRequestSchema)
+    .route({
+      method: "POST",
+      path: "/validate-delete-by-admin",
+      tags: ["request"],
+      summary: "Approve delete request",
+      description: "Approve and apply a delete request as an admin",
+    })
     .handler(async ({ context: ctx, input }) => {
       const result = await applyDeleteRequest(ctx, {
         ...input,
@@ -462,6 +515,13 @@ export const requestRouter = {
     }),
   validateSubmissionByAdmin: editorProcedure
     .input(RequestInsertSchema)
+    .route({
+      method: "POST",
+      path: "/validate-submission-by-admin",
+      tags: ["request"],
+      summary: "Approve update request",
+      description: "Approve and apply an update request as an admin",
+    })
     .handler(async ({ context: ctx, input }) => {
       const reviewedBy = ctx.session?.user?.email;
       if (!reviewedBy) {
@@ -510,6 +570,13 @@ export const requestRouter = {
     }),
   rejectSubmission: editorProcedure
     .input(z.object({ id: z.string() }))
+    .route({
+      method: "POST",
+      path: "/reject-submission",
+      tags: ["request"],
+      summary: "Reject request",
+      description: "Reject a pending map change request",
+    })
     .handler(async ({ context: ctx, input }) => {
       const [updateRequest] = await ctx.db
         .select()

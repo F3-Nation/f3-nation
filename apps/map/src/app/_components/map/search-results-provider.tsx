@@ -40,13 +40,13 @@ export const TextSearchResultsProvider = ({
   children: React.ReactNode;
 }) => {
   const { data: regions } = useQuery(
-    orpc.location.getRegionsWithLocation.queryOptions({ input: undefined }),
+    orpc.map.location.regionsWithLocation.queryOptions({ input: undefined }),
   );
   const { data: eventIdToRegionNameLookup } = useQuery(
     orpc.event.eventIdToRegionNameLookup.queryOptions({ input: undefined }),
   );
   const { data: locationIdToRegionNameLookup } = useQuery(
-    orpc.location.locationIdToRegionNameLookup.queryOptions({
+    orpc.map.location.locationIdToRegionNameLookup.queryOptions({
       input: undefined,
     }),
   );

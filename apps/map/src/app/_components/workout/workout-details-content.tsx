@@ -41,7 +41,7 @@ export const WorkoutDetailsContent = ({
   const router = useRouter();
   const { data: session } = useSession();
   const { data: results, isLoading } = useQuery(
-    orpc.location.getLocationWorkoutData.queryOptions({
+    orpc.map.location.locationWorkout.queryOptions({
       input: { locationId },
       enabled: locationId >= 0,
     }),

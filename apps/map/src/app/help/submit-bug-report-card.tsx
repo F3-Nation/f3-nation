@@ -50,9 +50,7 @@ const typeToTitle = (type: FeedbackType) => {
 
 export const SubmitBugReportCard = () => {
   const id = React.useId();
-  const submitFeedback = useMutation(
-    orpc.feedback.submitFeedback.mutationOptions(),
-  );
+  const submitFeedback = useMutation(orpc.map.submitFeedback.mutationOptions());
   const form = useForm({
     schema: feedbackSchema,
     defaultValues: {

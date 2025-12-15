@@ -467,3 +467,20 @@ export const TEST_EDITOR_USER_ID = 1;
 export const TEST_ADMIN_USER_ID = 2;
 export const TEST_EDITOR_ROLE_ID = 1;
 export const TEST_ADMIN_ROLE_ID = 2;
+
+export const API_PREFIX_V1 = "/v1" as const;
+export const MAP_API_PREFIX = "/map" as const;
+
+export enum ApiKeyTags {
+  API = "api",
+  API_KEY = "api-key",
+  AUTH = "auth",
+  EVENT = "event",
+  EVENT_TYPE = "event-type",
+  FEEDBACK = "feedback",
+  LOCATION = "location",
+  ORG = "org",
+  PING = "ping",
+  REQUEST = "request",
+  USER = "user",
+}

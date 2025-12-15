@@ -79,11 +79,11 @@ export const eventAndLocationToUpdateRequest = ({
 }: {
   event:
     | NonNullable<
-        RouterOutputs["location"]["getLocationWorkoutData"]
+        RouterOutputs["map"]["location"]["locationWorkout"]
       >["location"]["events"][number]
     | undefined;
   location: NonNullable<
-    RouterOutputs["location"]["getLocationWorkoutData"]
+    RouterOutputs["map"]["location"]["locationWorkout"]
   >["location"];
 }): Omit<DataType[ModalType.UPDATE_LOCATION], "mode" | "requestType"> => {
   const possiblyEditedLoc = mapStore.get("modifiedLocationMarkers")[

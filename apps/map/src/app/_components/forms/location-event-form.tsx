@@ -44,7 +44,7 @@ export const LocationEventForm = ({
   console.log("form eventTypeIds", form.getValues().eventTypeIds);
 
   // Get form values
-  const { data: regions } = useQuery(orpc.location.getRegions.queryOptions());
+  const { data: regions } = useQuery(orpc.map.location.regions.queryOptions());
   const { data: allAoData } = useQuery(
     orpc.org.all.queryOptions({ input: { orgTypes: ["ao"] } }),
   );

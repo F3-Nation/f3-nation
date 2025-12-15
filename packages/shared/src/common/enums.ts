@@ -6,6 +6,7 @@ export enum Header {
   MobileVersion = "mobile_version",
   MobileBuild = "mobile_build",
   Source = "x-source",
+  ORPCClient = "x-orpc-client",
 }
 
 export enum Case {

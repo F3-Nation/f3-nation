@@ -5,10 +5,10 @@ import { z } from "zod";
 
 const nodeEnv = process.env.NODE_ENV || "development";
 if (nodeEnv !== "production") {
-  const args = process.argv;
-  const urlFlagIndex = args.indexOf("--url");
-  if (urlFlagIndex !== -1 && args[urlFlagIndex + 1]) {
-    process.env.DATABASE_URL = args[urlFlagIndex + 1];
+  const args = process.argv as string[] | undefined;
+  const urlFlagIndex = args?.indexOf("--url") ?? -1;
+  if (urlFlagIndex !== -1 && args?.[urlFlagIndex + 1]) {
+    process.env.DATABASE_URL = args?.[urlFlagIndex + 1];
   }
 }
 

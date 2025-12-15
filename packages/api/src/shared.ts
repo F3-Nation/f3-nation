@@ -7,6 +7,7 @@ import { auth } from "@acme/auth";
 import { and, eq, gt, inArray, isNull, or, schema, sql } from "@acme/db";
 import { db } from "@acme/db/client";
 import { env } from "@acme/env";
+import { Header } from "@acme/shared/common/enums";
 
 type BaseContext = RequestHeadersPluginContext;
 
@@ -91,8 +92,8 @@ export const getSession = async ({ context }: { context: BaseContext }) => {
 
   // If there is no session, check for Bearer token ("api key") and attempt to build a replica session
   const authHeader =
-    context.reqHeaders?.get("authorization") ??
-    context.reqHeaders?.get("Authorization");
+    context.reqHeaders?.get(Header.Authorization) ??
+    context.reqHeaders?.get(Header.Authorization.toLowerCase());
 
   let apiKey: string | null = null;
   if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
