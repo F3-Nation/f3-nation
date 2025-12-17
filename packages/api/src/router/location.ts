@@ -14,7 +14,8 @@ import {
   sql,
 } from "@acme/db";
 import { DayOfWeek, IsActiveStatus } from "@acme/shared/app/enums";
-import { LocationInsertSchema, LowBandwidthF3Marker, SortingSchema } from "@acme/validators";
+import type { LowBandwidthF3Marker} from "@acme/validators";
+import { LocationInsertSchema, SortingSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getSortingColumns } from "../get-sorting-columns";
@@ -30,11 +31,17 @@ export const locationRouter = {
       z
         .object({
           searchTerm: z.string().optional(),
-          pageIndex: z.number().optional(),
-          pageSize: z.number().optional(),
+          pageIndex: z.coerce.number().optional(),
+          pageSize: z.coerce.number().optional(),
           sorting: SortingSchema.optional(),
-          statuses: z.enum(IsActiveStatus).array().optional(),
-          regionIds: z.number().array().optional(),
+          statuses: z.preprocess(
+            (val) => {
+              if (typeof val === "string") return val.split(",");
+              return val;
+            },
+            z.enum(IsActiveStatus).array()
+          ).optional(),
+          regionIds: z.coerce.number().array().optional(),
         })
         .optional(),
     )
@@ -576,7 +583,7 @@ export const locationRouter = {
       return { aos };
     }),
   byId: publicProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.coerce.number() }))
     .route({
       method: "GET",
       path: "/by-id",

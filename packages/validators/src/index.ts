@@ -39,7 +39,11 @@ export const LocationInsertSchema = createInsertSchema(locations);
 export const LocationSelectSchema = createSelectSchema(locations);
 
 // EVENT TYPE SCHEMA
-export const EventTypeInsertSchema = createInsertSchema(eventTypes);
+export const EventTypeInsertSchema = createInsertSchema(eventTypes, {
+  id: z.coerce.number().optional(),
+  specificOrgId: z.coerce.number().nullish(),
+  isActive: z.coerce.boolean().optional(),
+});
 export const EventTypeSelectSchema = createSelectSchema(eventTypes);
 
 // EVENT SCHEMA

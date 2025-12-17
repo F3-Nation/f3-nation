@@ -47,13 +47,25 @@ export const orgRouter = {
   all: editorProcedure
     .input(
       z.object({
-        orgTypes: z.enum(OrgType).array().min(1),
-        pageIndex: z.number().optional(),
-        pageSize: z.number().optional(),
+        orgTypes: z.preprocess(
+          (val) => {
+            if (typeof val === "string") return val.split(",");
+            return val;
+          },
+          z.enum(OrgType).array().min(1),
+        ),
+        pageIndex: z.coerce.number().optional(),
+        pageSize: z.coerce.number().optional(),
         searchTerm: z.string().optional(),
         sorting: SortingSchema.optional(),
-        statuses: z.enum(IsActiveStatus).array().optional(),
-        parentOrgIds: z.number().array().optional(),
+        statuses: z.preprocess(
+          (val) => {
+            if (typeof val === "string") return val.split(",");
+            return val;
+          },
+          z.enum(IsActiveStatus).array(),
+        ).optional(),
+        parentOrgIds: z.coerce.number().array().optional(),
       }),
     )
     .route({
@@ -105,11 +117,12 @@ export const orgRouter = {
         "id",
       );
 
-      const [orgCount] = await ctx.db
+      const orgCountResult = (await ctx.db
         .select({ count: countDistinct(org.id) })
         .from(org)
         .leftJoin(parentOrg, eq(org.parentId, parentOrg.id))
-        .where(where);
+        .where(where)) as { count: number }[];
+      const orgCount = orgCountResult[0];
 
       const select = {
         id: org.id,
@@ -152,7 +165,15 @@ export const orgRouter = {
     }),
 
   byId: editorProcedure
-    .input(z.object({ id: z.number(), orgType: z.enum(OrgType).optional() }))
+    .input(
+      z.object({
+        id: z.coerce.number(),
+        orgType: z.preprocess(
+          (val) => (val === "" ? undefined : val),
+          z.enum(OrgType).optional(),
+        ),
+      }),
+    )
     .route({
       method: "GET",
       path: "/by-id",

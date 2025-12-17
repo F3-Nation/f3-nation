@@ -211,7 +211,7 @@ export const eventRouter = {
       return { events: eventsWithLocation, totalCount: eventCount?.count ?? 0 };
     }),
   byId: publicProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.coerce.number() }))
     .route({
       method: "GET",
       path: "/by-id",

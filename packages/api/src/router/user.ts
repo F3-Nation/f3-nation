@@ -27,13 +27,25 @@ export const userRouter = {
     .input(
       z
         .object({
-          roles: z.array(z.enum(UserRole)).optional(),
+          roles: z.preprocess(
+            (val) => {
+              if (typeof val === "string") return val.split(",");
+              return val;
+            },
+            z.array(z.enum(UserRole)),
+          ).optional(),
           searchTerm: z.string().optional(),
-          pageIndex: z.number().optional(),
-          pageSize: z.number().optional(),
+          pageIndex: z.coerce.number().optional(),
+          pageSize: z.coerce.number().optional(),
           sorting: SortingSchema.optional(),
-          statuses: z.array(z.enum(UserStatus)).optional(),
-          orgIds: z.number().array().optional(),
+          statuses: z.preprocess(
+            (val) => {
+              if (typeof val === "string") return val.split(",");
+              return val;
+            },
+            z.array(z.enum(UserStatus)),
+          ).optional(),
+          orgIds: z.coerce.number().array().optional(),
         })
         .optional(),
     )
@@ -172,7 +184,7 @@ export const userRouter = {
       };
     }),
   byId: editorProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.coerce.number() }))
     .route({
       method: "GET",
       path: "/by-id",

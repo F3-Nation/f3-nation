@@ -250,7 +250,7 @@ export const requestRouter = {
       return request;
     }),
   canDeleteEvent: publicProcedure
-    .input(z.object({ eventId: z.number() }))
+    .input(z.object({ eventId: z.coerce.number() }))
     .route({
       method: "GET",
       path: "/can-delete-event",

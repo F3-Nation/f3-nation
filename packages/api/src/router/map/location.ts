@@ -161,7 +161,7 @@ export const mapLocationRouter = os.router({
       return lowBandwidthLocationEvents;
     }),
   locationWorkout: publicProcedure
-    .input(z.object({ locationId: z.number() }))
+    .input(z.object({ locationId: z.coerce.number() }))
     .route({
       method: "GET",
       path: "/location-workout",

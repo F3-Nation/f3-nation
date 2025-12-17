@@ -30,13 +30,13 @@ export const eventTypeRouter = {
     .input(
       z
         .object({
-          orgIds: z.number().array().optional(),
+          orgIds: z.coerce.number().array().optional(),
           statuses: z.enum(IsActiveStatus).array().optional(),
-          pageIndex: z.number().optional(),
-          pageSize: z.number().optional(),
+          pageIndex: z.coerce.number().optional(),
+          pageSize: z.coerce.number().optional(),
           searchTerm: z.string().optional(),
           sorting: SortingSchema.optional(),
-          ignoreNationEventTypes: z.boolean().optional(),
+          ignoreNationEventTypes: z.coerce.boolean().optional(),
         })
         .optional(),
     )
@@ -140,7 +140,7 @@ export const eventTypeRouter = {
       return { eventTypes, totalCount };
     }),
   byOrgId: publicProcedure
-    .input(z.object({ orgId: z.number(), isActive: z.boolean().optional() }))
+    .input(z.object({ orgId: z.coerce.number(), isActive: z.coerce.boolean().optional() }))
     .route({
       method: "GET",
       path: "/by-org-id",
@@ -164,7 +164,7 @@ export const eventTypeRouter = {
       return eventTypes;
     }),
   byId: publicProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.coerce.number() }))
     .route({
       method: "GET",
       path: "/by-id",
