@@ -19,7 +19,7 @@ ALTER TABLE "event_instances_x_event_types" ADD CONSTRAINT "event_instances_x_ev
 ALTER TABLE "event_tags_x_event_instances" ADD CONSTRAINT "event_tags_x_event_instances_event_instance_id_fkey" FOREIGN KEY ("event_instance_id") REFERENCES "public"."event_instances"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "event_tags_x_events" ADD CONSTRAINT "event_tags_x_events_event_id_fkey" FOREIGN KEY ("event_id") REFERENCES "public"."events"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "events_x_event_types" ADD CONSTRAINT "events_x_event_types_event_id_fkey" FOREIGN KEY ("event_id") REFERENCES "public"."events"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX CONCURRENTLY "idx_attendance_event_instance_id" ON "attendance" USING btree ("event_instance_id" int4_ops);
+CREATE INDEX "idx_attendance_event_instance_id" ON "attendance" USING btree ("event_instance_id" int4_ops);
 
 -- Everything below is manually added to keep updated columns current
 CREATE OR REPLACE FUNCTION public.set_updated_column()
