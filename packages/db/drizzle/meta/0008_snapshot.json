@@ -1,5 +1,5 @@
 {
-  "id": "9d36045d-fd56-491d-8fd4-54203d0a3bea",
+  "id": "fc370bd1-7e63-43c9-96df-4031ff6a2cee",
   "prevId": "ab13b2bd-9b68-4071-975f-bc78ba0bb05e",
   "version": "7",
   "dialect": "postgresql",
@@ -375,7 +375,24 @@
           "notNull": true
         }
       },
-      "indexes": {},
+      "indexes": {
+        "idx_attendance_event_instance_id": {
+          "name": "idx_attendance_event_instance_id",
+          "columns": [
+            {
+              "expression": "event_instance_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last",
+              "opclass": "int4_ops"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "event_instance_id_fkey": {
           "name": "event_instance_id_fkey",

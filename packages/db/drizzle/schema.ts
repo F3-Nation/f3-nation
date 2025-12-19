@@ -237,6 +237,10 @@ export const attendance = pgTable(
     eventInstanceId: integer("event_instance_id").notNull(),
   },
   (table) => [
+    index("idx_attendance_event_instance_id").using(
+      "btree",
+      table.eventInstanceId.asc().nullsLast().op("int4_ops"),
+    ),
     foreignKey({
       columns: [table.eventInstanceId],
       foreignColumns: [eventInstances.id],
