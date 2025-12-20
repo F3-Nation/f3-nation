@@ -44,5 +44,5 @@ options:
 
 availableSecrets:
   secretManager:
-    - versionName: projects/614333864021/secrets/DOPPLER_TOKEN_STAGING/versions/latest
+    - versionName: projects/614333864021/secrets/DOPPLER_TOKEN_API_STAGING/versions/latest
       env: "_DOPPLER_TOKEN"
