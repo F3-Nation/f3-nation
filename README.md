@@ -174,4 +174,9 @@ Environment variables are application-specific in this monorepo. The `.env` file
    ```
 4. **Commit changes** - Turbo will handle optimal task execution
 
-TRIGGER BUILD
+# DB Commands
+
+- Use ADMIN_BASE_DATABASE_URL from doppler if available
+- For dev migrations use the `dev_generic` user
+- For staging migrations use the `dev_generic` user
+- For production migrations use the `f3slackbot` user
