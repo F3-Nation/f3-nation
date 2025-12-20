@@ -57,6 +57,13 @@
       "when": 1765645515212,
       "tag": "0007_lumpy_rictor",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1766009115770,
+      "tag": "0008_nice_leech",
+      "breakpoints": true
     }
   ]
 }

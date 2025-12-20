@@ -136,7 +136,7 @@ export const eventInstances = pgTable(
       columns: [table.seriesId],
       foreignColumns: [events.id],
       name: "event_instances_series_id_fkey",
-    }),
+    }).onDelete("cascade"),
   ],
 );
 
@@ -237,11 +237,15 @@ export const attendance = pgTable(
     eventInstanceId: integer("event_instance_id").notNull(),
   },
   (table) => [
+    index("idx_attendance_event_instance_id").using(
+      "btree",
+      table.eventInstanceId.asc().nullsLast().op("int4_ops"),
+    ),
     foreignKey({
       columns: [table.eventInstanceId],
       foreignColumns: [eventInstances.id],
       name: "event_instance_id_fkey",
-    }),
+    }).onDelete("cascade"),
     foreignKey({
       columns: [table.userId],
       foreignColumns: [users.id],
@@ -658,7 +662,7 @@ export const eventInstancesXEventTypes = pgTable(
       columns: [table.eventInstanceId],
       foreignColumns: [eventInstances.id],
       name: "event_instances_x_event_types_event_instance_id_fkey",
-    }),
+    }).onDelete("cascade"),
     foreignKey({
       columns: [table.eventTypeId],
       foreignColumns: [eventTypes.id],
@@ -682,7 +686,7 @@ export const eventTagsXEventInstances = pgTable(
       columns: [table.eventInstanceId],
       foreignColumns: [eventInstances.id],
       name: "event_tags_x_event_instances_event_instance_id_fkey",
-    }),
+    }).onDelete("cascade"),
     foreignKey({
       columns: [table.eventTagId],
       foreignColumns: [eventTags.id],
@@ -730,7 +734,7 @@ export const eventTagsXEvents = pgTable(
       columns: [table.eventId],
       foreignColumns: [events.id],
       name: "event_tags_x_events_event_id_fkey",
-    }),
+    }).onDelete("cascade"),
     foreignKey({
       columns: [table.eventTagId],
       foreignColumns: [eventTags.id],
@@ -762,7 +766,7 @@ export const eventsXEventTypes = pgTable(
       columns: [table.eventId],
       foreignColumns: [events.id],
       name: "events_x_event_types_event_id_fkey",
-    }),
+    }).onDelete("cascade"),
     foreignKey({
       columns: [table.eventTypeId],
       foreignColumns: [eventTypes.id],
@@ -786,7 +790,7 @@ export const attendanceXAttendanceTypes = pgTable(
       columns: [table.attendanceId],
       foreignColumns: [attendance.id],
       name: "attendance_x_attendance_types_attendance_id_fkey",
-    }),
+    }).onDelete("cascade"),
     foreignKey({
       columns: [table.attendanceTypeId],
       foreignColumns: [attendanceTypes.id],
