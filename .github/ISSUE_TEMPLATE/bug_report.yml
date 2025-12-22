@@ -3,6 +3,21 @@ description: Create a bug report to help us improve
 title: "bug: "
 labels: ["🐞❔ unconfirmed bug"]
 body:
+  - type: checkboxes
+    id: affected_apps
+    attributes:
+      label: Affected application(s)
+      description: Select all apps this issue applies to
+      options:
+        - label: Admin
+        - label: API
+        - label: Auth
+        - label: Codex
+        - label: Database
+        - label: Map
+        - label: PAX Vault
+        - label: Region Pages
+        - label: Slackbot
   - type: textarea
     attributes:
       label: Provide environment information
