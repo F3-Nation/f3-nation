@@ -10,6 +10,7 @@ import { mapRouter } from "./router/map/index";
 import { orgRouter } from "./router/org";
 import { pingRouter } from "./router/ping";
 import { requestRouter } from "./router/request";
+import { slackRouter } from "./router/slack";
 import { userRouter } from "./router/user";
 
 export const router = os.prefix(API_PREFIX_V1).router({
@@ -21,5 +22,6 @@ export const router = os.prefix(API_PREFIX_V1).router({
   map: os.prefix("/map").router(mapRouter),
   org: os.prefix("/org").router(orgRouter),
   request: os.prefix("/request").router(requestRouter),
+  slack: os.prefix("/slack").router(slackRouter),
   user: os.prefix("/user").router(userRouter),
 });
