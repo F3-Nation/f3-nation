@@ -99,6 +99,8 @@ jobs:
       NEXT_PUBLIC_URL: http://localhost:3000
       NEXT_PUBLIC_CHANNEL: ci
       NEXT_PUBLIC_GOOGLE_API_KEY: dummy
+      NEXT_PUBLIC_API_URL: http://localhost:3000
+      NEXT_PUBLIC_MAP_URL: http://localhost:3001
     steps:
       - uses: actions/checkout@v4
 
@@ -162,6 +164,8 @@ jobs:
       NEXT_PUBLIC_URL: http://localhost:3000
       NEXT_PUBLIC_CHANNEL: ci
       NEXT_PUBLIC_GOOGLE_API_KEY: dummy
+      NEXT_PUBLIC_API_URL: http://localhost:3000
+      NEXT_PUBLIC_MAP_URL: http://localhost:3001
     steps:
       - uses: actions/checkout@v4
 
@@ -228,6 +232,8 @@ jobs:
       NEXT_PUBLIC_URL: http://localhost:3000
       NEXT_PUBLIC_CHANNEL: ci
       NEXT_PUBLIC_GOOGLE_API_KEY: dummy
+      NEXT_PUBLIC_API_URL: http://localhost:3000
+      NEXT_PUBLIC_MAP_URL: http://localhost:3001
     steps:
       - uses: actions/checkout@v4
 
