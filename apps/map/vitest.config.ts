@@ -26,6 +26,11 @@ export default defineConfig({
         "./__tests__/mocks/server-only.ts",
         import.meta.url,
       ).pathname,
+      // Mock oRPC server client to avoid database initialization
+      "~/orpc/client.server": new URL(
+        "./__tests__/mocks/orpc-client-server.ts",
+        import.meta.url,
+      ).pathname,
     },
   },
 });
