@@ -1,5 +1,3 @@
-const path = require("path");
-
 /** @typedef {import("prettier").Config} PrettierConfig */
 /** @typedef {import("prettier-plugin-tailwindcss").PluginOptions} TailwindConfig */
 /** @typedef {import("@ianvs/prettier-plugin-sort-imports").PluginConfig} SortImportsConfig */
@@ -17,7 +15,6 @@ const config = {
     "@ianvs/prettier-plugin-sort-imports",
     "prettier-plugin-tailwindcss",
   ],
-  tailwindConfig: path.resolve(__dirname, "../../tooling/tailwind/web.ts"),
   tailwindFunctions: ["cn", "cva"],
   importOrder: [
     "<TYPES>",
