@@ -63,3 +63,5 @@ test-results/
 
 # sentry
 .env.sentry-build-plugin 
+
+pr.md
