@@ -12,9 +12,10 @@ BASE_CLIENT_SECRETS=("client-nextauth-secret" "client-nextauth-url" "client-next
 # Environment prefixes
 ENV_PREFIXES=("" "staging-")
 
-DEFAULT_APPS=("auth-provider" "auth-client")
+DEFAULT_APPS=("auth-provider")
 
 DRY_RUN=false
+CHECK_ORPHANS=false
 KEEP_VERSIONS=1
 declare -a SELECTED_APPS=()
 SELECTED_ENV=""
@@ -33,6 +34,7 @@ Options:
   --keep <count>      Number of newest versions to keep for each secret (default: 1)
   --app <name>        Limit pruning to a specific app (can be provided multiple times)
   --env <name>        Limit pruning to a specific environment (prod or staging)
+  --check-orphans     Find and optionally delete orphaned secrets not in apphosting yaml files
   -h, --help          Show this help message
 
 Examples:
@@ -40,6 +42,7 @@ Examples:
   scripts/prune-old-secrets.sh --dry-run
   scripts/prune-old-secrets.sh --keep 2 --app auth-provider
   scripts/prune-old-secrets.sh --env staging --app auth-provider
+  scripts/prune-old-secrets.sh --check-orphans
 EOF
 }
 
@@ -71,6 +74,91 @@ require_command() {
   fi
 }
 
+get_expected_secrets_from_yaml() {
+  local yaml_file="$1"
+  grep -E "^\s+secret:" "$yaml_file" | sed 's/.*secret:\s*//' | tr -d ' '
+}
+
+check_orphaned_secrets() {
+  local project_id="$1"
+  local script_dir
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  local app_dir
+  app_dir="$(dirname "$script_dir")"
+
+  # Get expected secrets from yaml files
+  local expected_secrets=()
+  for yaml in "$app_dir"/apphosting.*.yaml; do
+    if [[ -f "$yaml" ]]; then
+      while IFS= read -r secret; do
+        [[ -n "$secret" ]] && expected_secrets+=("$secret")
+      done < <(get_expected_secrets_from_yaml "$yaml")
+    fi
+  done
+
+  if [[ ${#expected_secrets[@]} -eq 0 ]]; then
+    log_warning "No apphosting.*.yaml files found or no secrets defined"
+    return
+  fi
+
+  log_info "Found ${#expected_secrets[@]} expected secrets from apphosting yaml files"
+
+  # Get actual secrets from GCP (filter for provider- prefix)
+  local actual_secrets
+  actual_secrets=$(gcloud secrets list --project="$project_id" \
+    --filter="name~provider-" --format="value(name)" 2>/dev/null || true)
+
+  if [[ -z "$actual_secrets" ]]; then
+    log_info "No secrets with 'provider-' prefix found in project"
+    return
+  fi
+
+  # Find orphans
+  local orphans=()
+  while IFS= read -r secret; do
+    [[ -z "$secret" ]] && continue
+    local found=false
+    for expected in "${expected_secrets[@]}"; do
+      if [[ "$secret" == "$expected" ]]; then
+        found=true
+        break
+      fi
+    done
+    if [[ "$found" == false ]]; then
+      orphans+=("$secret")
+    fi
+  done <<< "$actual_secrets"
+
+  # Prompt to delete
+  if [[ ${#orphans[@]} -gt 0 ]]; then
+    log_warning "Found ${#orphans[@]} orphaned secrets:"
+    for orphan in "${orphans[@]}"; do
+      echo "  - $orphan"
+    done
+
+    if [[ "$DRY_RUN" == true ]]; then
+      log_info "[DRY RUN] Would prompt to delete these orphaned secrets"
+      return
+    fi
+
+    read -p "Delete these orphaned secrets? [y/N] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+      for orphan in "${orphans[@]}"; do
+        if gcloud secrets delete "$orphan" --project="$project_id" --quiet 2>/dev/null; then
+          log_success "Deleted: $orphan"
+        else
+          log_warning "Failed to delete: $orphan"
+        fi
+      done
+    else
+      log_info "Skipping orphan deletion"
+    fi
+  else
+    log_info "No orphaned secrets found"
+  fi
+}
+
 validate_keep_value() {
   local value="$1"
   if ! [[ "$value" =~ ^[0-9]+$ ]]; then
@@ -89,6 +177,10 @@ parse_args() {
     case "$1" in
       --dry-run)
         DRY_RUN=true
+        shift
+        ;;
+      --check-orphans)
+        CHECK_ORPHANS=true
         shift
         ;;
       --keep)
@@ -295,6 +387,13 @@ main() {
 
   if [[ -n "$SELECTED_ENV" ]]; then
     log_info "Filtering to environment: $SELECTED_ENV"
+  fi
+
+  # Handle orphan check mode
+  if [[ "$CHECK_ORPHANS" == true ]]; then
+    log_step "Checking for orphaned secrets..."
+    check_orphaned_secrets "f3-nation-auth"
+    return
   fi
 
   for app in "${SELECTED_APPS[@]}"; do
