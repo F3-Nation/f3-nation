@@ -32,7 +32,7 @@ get_backend_id_for_env() {
   if [[ "$env" == "staging" ]]; then
     echo "auth-provider-staging"
   else
-    echo "f3-nation-auth-provider"
+    echo "auth-provider-prod"
   fi
 }
 
