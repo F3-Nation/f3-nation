@@ -20,6 +20,8 @@
     "firebase:secrets": "scripts/firebase-secrets.sh all",
     "firebase:secrets:prod": "scripts/firebase-secrets.sh prod",
     "firebase:secrets:staging": "scripts/firebase-secrets.sh staging",
+    "prune:secrets": "scripts/prune-old-secrets.sh",
+    "prune:secrets:dry-run": "scripts/prune-old-secrets.sh --dry-run",
     "db:snapshot": "scripts/db/snapshot.sh",
     "db:local:up": "scripts/db/local/up.sh",
     "db:local:down": "scripts/db/local/down.sh",
