@@ -1,11 +1,9 @@
-# Settings for Backend (on Cloud Run).
+# Settings for Backend (on Cloud Run) - STAGING
 # See https://firebase.google.com/docs/app-hosting/configure#cloud-run
 runConfig:
   minInstances: 0
-  # cpu: 1
-  # memoryMiB: 2048
 
-# Environment variables and secrets.
+# Environment variables and secrets (staging uses "staging-provider-*" prefix)
 env:
   - variable: DATABASE_URL
     secret: staging-provider-database-url
