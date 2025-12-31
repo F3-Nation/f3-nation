@@ -1,0 +1,46 @@
+# Settings for Backend (on Cloud Run) - STAGING
+# See https://firebase.google.com/docs/app-hosting/configure#cloud-run
+runConfig:
+  minInstances: 0
+  # maxInstances: 100
+  # concurrency: 80
+  # cpu: 1
+  # memoryMiB: 512
+
+# Environment variables and secrets (staging uses "staging-client-*" prefix)
+env:
+  - variable: NEXTAUTH_SECRET
+    secret: staging-client-nextauth-secret
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: AUTH_PROVIDER_URL
+    secret: staging-client-auth-provider-url
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXTAUTH_URL
+    secret: staging-client-nextauth-url
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_NEXTAUTH_URL
+    secret: staging-client-next-public-nextauth-url
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: OAUTH_CLIENT_ID
+    secret: staging-client-oauth-client-id
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: OAUTH_CLIENT_SECRET
+    secret: staging-client-oauth-client-secret
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: OAUTH_REDIRECT_URI
+    secret: staging-client-oauth-redirect-uri
+    availability:
+      - BUILD
+      - RUNTIME

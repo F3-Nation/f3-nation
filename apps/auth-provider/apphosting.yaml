@@ -1,0 +1,54 @@
+# Settings for Backend (on Cloud Run).
+# See https://firebase.google.com/docs/app-hosting/configure#cloud-run
+runConfig:
+  minInstances: 0
+  # cpu: 1
+  # memoryMiB: 2048
+
+# Environment variables and secrets.
+env:
+  - variable: DATABASE_URL
+    secret: provider-database-url
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXTAUTH_SECRET
+    secret: provider-nextauth-secret
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXTAUTH_URL
+    secret: provider-nextauth-url
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_NEXTAUTH_URL
+    secret: provider-next-public-nextauth-url
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: TWILIO_SENDGRID_API_KEY
+    secret: provider-twilio-sendgrid-api-key
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: TWILIO_SENDGRID_TEMPLATE_ID
+    secret: provider-twilio-sendgrid-template-id
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: EMAIL_VERIFICATION_SENDER
+    secret: provider-email-verification-sender
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NODE_ENV
+    secret: provider-node-env
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: ALLOWED_ORIGINS
+    secret: provider-allowed-origins
+    availability:
+      - BUILD
+      - RUNTIME

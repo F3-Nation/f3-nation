@@ -1,0 +1,36 @@
+{
+  "name": "f3-nation-auth-client",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack --port 3001 --experimental-https",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint --max-warnings 0",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,mdx,css,scss,yaml,yml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,mdx,css,scss,yaml,yml}\"",
+    "firebase:secrets": "scripts/firebase-secrets.sh all",
+    "firebase:secrets:staging": "scripts/firebase-secrets.sh staging",
+    "firebase:secrets:prod": "scripts/firebase-secrets.sh prod"
+  },
+  "dependencies": {
+    "f3-nation-auth-sdk": "^0.1.4",
+    "next": "15.4.10",
+    "next-themes": "^0.4.6",
+    "react": "19.1.4",
+    "react-dom": "19.1.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "dotenv": "^17.2.1",
+    "eslint": "9.32.0",
+    "eslint-config-next": "15.4.5",
+    "prettier": "^3.6.2",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

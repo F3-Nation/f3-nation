@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: f3-auth-postgres-local
+    environment:
+      POSTGRES_USER: f3prod
+      POSTGRES_PASSWORD: f3prod_local_dev
+      POSTGRES_DB: f3prod_dev
+    ports:
+      - '5433:5432'
+    volumes:
+      - f3prod_postgres_data:/var/lib/postgresql/data
+      - ./scripts/db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U f3prod -d f3prod_dev']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  f3prod_postgres_data:
