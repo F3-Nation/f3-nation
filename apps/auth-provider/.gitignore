@@ -49,3 +49,5 @@ certificates
 db-snapshots/
 
 users.json
+
+firebase-debug.log
