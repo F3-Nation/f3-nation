@@ -18,9 +18,9 @@ function EmailVerifyContent() {
   const [resendMessage, setResendMessage] = useState<InfoMessage | null>(null);
   const hasAutoSubmitted = useRef(false);
   const searchParams = useSearchParams();
-  const email = searchParams.get('email');
-  const callbackUrl = searchParams.get('callbackUrl') || '/';
-  const urlCode = searchParams.get('code');
+  const email = searchParams?.get('email');
+  const callbackUrl = searchParams?.get('callbackUrl') || '/';
+  const urlCode = searchParams?.get('code');
 
   useEffect(() => {
     setMounted(true);

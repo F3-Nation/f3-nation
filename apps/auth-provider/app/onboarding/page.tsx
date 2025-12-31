@@ -74,7 +74,7 @@ function OnboardingForm() {
       if (pendingGoogleLink) {
         setShowGoogleLinking(true);
       } else {
-        const callbackUrl = searchParams.get('callbackUrl');
+        const callbackUrl = searchParams?.get('callbackUrl');
         router.push(callbackUrl || '/');
       }
     } catch (err) {
@@ -90,7 +90,7 @@ function OnboardingForm() {
     try {
       const response = await fetch('/api/link-google', { method: 'POST' });
       if (!response.ok) throw new Error('Failed to link Google account');
-      router.push(searchParams.get('callbackUrl') || '/');
+      router.push(searchParams?.get('callbackUrl') || '/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to link Google account');
     } finally {
@@ -104,7 +104,7 @@ function OnboardingForm() {
     try {
       const response = await fetch('/api/link-google', { method: 'DELETE' });
       if (!response.ok) throw new Error('Failed to skip Google linking');
-      router.push(searchParams.get('callbackUrl') || '/');
+      router.push(searchParams?.get('callbackUrl') || '/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to skip Google linking');
     } finally {

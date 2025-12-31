@@ -35,9 +35,9 @@ function CallbackContent() {
     if (!oauthConfig) return;
 
     const handleCallback = async () => {
-      const code = searchParams.get('code');
-      const state = searchParams.get('state');
-      const errorParam = searchParams.get('error');
+      const code = searchParams?.get('code');
+      const state = searchParams?.get('state');
+      const errorParam = searchParams?.get('error');
 
       // Debug logging
       console.log('Callback debug:', {

@@ -9,9 +9,9 @@ function EmailLoginContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get('callbackUrl') || '/';
-  const googlePending = searchParams.get('google_pending') === 'true';
-  const prefilledEmail = searchParams.get('email') || '';
+  const callbackUrl = searchParams?.get('callbackUrl') || '/';
+  const googlePending = searchParams?.get('google_pending') === 'true';
+  const prefilledEmail = searchParams?.get('email') || '';
 
   useEffect(() => {
     setMounted(true);

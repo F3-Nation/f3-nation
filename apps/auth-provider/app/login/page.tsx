@@ -5,7 +5,7 @@ import ThemeImage from '../components/ThemeImage';
 
 function LoginContent() {
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get('callbackUrl') || process.env.NEXT_PUBLIC_NEXTAUTH_URL!;
+  const callbackUrl = searchParams?.get('callbackUrl') || process.env.NEXT_PUBLIC_NEXTAUTH_URL!;
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {

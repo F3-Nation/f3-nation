@@ -12,7 +12,7 @@ function LinkAccountsContent() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const searchParams = useSearchParams();
-  const linkType = searchParams.get('type'); // "google" or "email"
+  const linkType = searchParams?.get('type'); // "google" or "email"
   const { data: session } = useSession();
 
   useEffect(() => {
