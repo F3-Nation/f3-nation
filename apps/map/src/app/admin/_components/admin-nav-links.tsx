@@ -2,10 +2,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Earth,
+  CircleSmall,
+  CirclePile,
   Globe,
   KeyRound,
   MapPin,
   PersonStanding,
+  Shield,
   SquareChartGantt,
   Turtle,
   UserCheck,
@@ -88,13 +91,13 @@ export const AdminNavLinks = ({
     },
     {
       href: routes.admin.aos.__path,
-      icon: Globe,
+      icon: CircleSmall,
       label: "AOs",
       type: "link",
     },
     {
       href: routes.admin.regions.__path,
-      icon: Globe,
+      icon: CirclePile,
       label: "Regions",
       type: "link",
     },
@@ -106,13 +109,13 @@ export const AdminNavLinks = ({
     },
     {
       href: routes.admin.sectors.__path,
-      icon: Earth,
+      icon: Globe,
       label: "Sectors",
       type: "link",
     },
     {
       href: routes.admin.theNation.__path,
-      icon: Earth,
+      icon: Shield,
       label: "The Nation",
       type: "link",
     },

@@ -86,14 +86,20 @@ export default function AdminGrantAccessModal({
 
   // Fetch user by ID if userId is provided in data or when a user is selected
   const userIdToFetch = selectedUserId ?? data?.userId;
+  const hasValidUserId =
+    userIdToFetch !== undefined &&
+    userIdToFetch !== null &&
+    typeof userIdToFetch === "number" &&
+    userIdToFetch > 0;
   const { data: userByIdData } = useQuery({
     ...orpc.user.byId.queryOptions({
       input: {
-        id: userIdToFetch ?? -1,
+        id: hasValidUserId ? userIdToFetch : -1,
         includePii: true,
       },
     }),
-    enabled: userIdToFetch !== undefined && userIdToFetch !== null,
+    enabled: hasValidUserId,
+    retry: false,
   });
 
   // Search users by email (exact match only)
