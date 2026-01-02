@@ -30,18 +30,18 @@ import { VirtualizedCombobox } from "~/app/_components/virtualized-combobox";
 import { invalidateQueries, orpc, useMutation, useQuery } from "~/orpc/react";
 import { closeModal } from "~/utils/store/modal";
 
+const NO_ORGS_VALUE = "__NO_ORGS__";
+
 const ApiKeyFormSchema = z.object({
   name: z.string().min(1, { message: "Name is required" }),
   description: z.string().optional(),
-  orgIds: z
-    .number()
-    .array()
-    .min(1, { message: "At least one org is required" }),
+  orgIds: z.number().array(),
   expiresAt: z.string().optional(),
 });
 
 export default function AdminApiKeysModal() {
   const [createdSecret, setCreatedSecret] = useState<string | null>(null);
+  const [hasNoOrgsSelected, setHasNoOrgsSelected] = useState(false);
   const { data: orgQuery, isLoading: isLoadingOrgs } = useQuery(
     orpc.org.mine.queryOptions(),
   );
@@ -58,8 +58,15 @@ export default function AdminApiKeysModal() {
 
   const orgOptions = useMemo(() => {
     const orgs = orgQuery?.orgs ?? [];
+
+    // Add the "No orgs - Read only" option at the beginning
+    const noOrgsOption = {
+      value: NO_ORGS_VALUE,
+      label: "No orgs - Read only",
+    };
+
     if (!orgs.length) {
-      return [];
+      return [noOrgsOption];
     }
 
     const formattedOptions = orgs.map((org) => ({
@@ -72,7 +79,7 @@ export default function AdminApiKeysModal() {
 
     // Only show orgs where the user has direct admin access
     // (not inherited from parent orgs)
-    return formattedOptions.map(({ value, label, roles }) => {
+    const orgOptionsList = formattedOptions.map(({ value, label, roles }) => {
       const isAdmin = roles.includes("admin");
       return {
         value,
@@ -80,6 +87,8 @@ export default function AdminApiKeysModal() {
         disabled: !isAdmin,
       };
     });
+
+    return [noOrgsOption, ...orgOptionsList];
   }, [orgQuery?.orgs]);
 
   const createApiKey = useMutation(
@@ -93,6 +102,7 @@ export default function AdminApiKeysModal() {
           orgIds: [],
           expiresAt: "",
         });
+        setHasNoOrgsSelected(false);
 
         // Force refetch of the API keys list
         // Query key structure: [["apiKey", "list"], {"type": "query"}]
@@ -168,17 +178,26 @@ export default function AdminApiKeysModal() {
                 className="space-y-4"
                 onSubmit={form.handleSubmit(
                   async (values) => {
-                    if (!values.orgIds?.length) {
-                      toast.error("Please select at least one org");
+                    // Validate that either orgs are selected or "No orgs" is explicitly selected
+                    if (
+                      (!values.orgIds || values.orgIds.length === 0) &&
+                      !hasNoOrgsSelected
+                    ) {
+                      form.setError("orgIds", {
+                        type: "manual",
+                        message:
+                          "Please select at least one org or 'No orgs - Read only'",
+                      });
                       return;
                     }
+
                     const expiresAt = values.expiresAt
                       ? new Date(values.expiresAt).toISOString()
                       : undefined;
                     await createApiKey.mutateAsync({
                       name: values.name,
                       description: values.description ?? undefined,
-                      orgIds: values.orgIds,
+                      orgIds: values.orgIds ?? [],
                       expiresAt,
                     });
                   },
@@ -227,21 +246,66 @@ export default function AdminApiKeysModal() {
                       <FormControl>
                         <VirtualizedCombobox
                           disabled={isLoadingOrgs}
-                          value={field.value?.map((value) => value.toString())}
+                          value={
+                            field.value?.length === 0 && hasNoOrgsSelected
+                              ? [NO_ORGS_VALUE]
+                              : field.value?.length === 0
+                                ? []
+                                : field.value?.map((value) => value.toString())
+                          }
                           options={orgOptions}
                           isMulti
                           searchPlaceholder="Select orgs"
                           onSelect={(items) => {
                             const list = Array.isArray(items) ? items : [items];
-                            const ids = list
+
+                            // Handle empty selection - clear selection
+                            if (list.length === 0) {
+                              field.onChange([]);
+                              setHasNoOrgsSelected(false);
+                              // Trigger validation to show error
+                              void form.trigger("orgIds");
+                              return;
+                            }
+
+                            // Check if NO_ORGS_VALUE is in the selection
+                            const hasNoOrgs = list.includes(NO_ORGS_VALUE);
+
+                            // Filter out NO_ORGS_VALUE and convert org IDs to numbers
+                            const orgIdsList = list
+                              .filter((item) => item !== NO_ORGS_VALUE)
                               .filter(Boolean)
                               .map((value) => Number(value));
-                            field.onChange(ids);
+
+                            // If NO_ORGS_VALUE is selected alone, set to no orgs
+                            if (hasNoOrgs && orgIdsList.length === 0) {
+                              field.onChange([]);
+                              setHasNoOrgsSelected(true);
+                              // Clear validation error since "No orgs" is selected
+                              form.clearErrors("orgIds");
+                              return;
+                            }
+
+                            // If orgs are selected (with or without NO_ORGS_VALUE), use the orgs
+                            // This handles the case where user selects an org while NO_ORGS_VALUE is selected
+                            if (orgIdsList.length > 0) {
+                              field.onChange(orgIdsList);
+                              setHasNoOrgsSelected(false);
+                              // Clear validation error since orgs are selected
+                              form.clearErrors("orgIds");
+                              return;
+                            }
+
+                            // Fallback: should not reach here, but set to empty
+                            field.onChange([]);
+                            setHasNoOrgsSelected(false);
+                            void form.trigger("orgIds");
                           }}
                         />
                       </FormControl>
                       <FormDescription>
-                        Select orgs where you have admin access. Only orgs you
+                        Select "No orgs - Read only" for read-only access, or
+                        select orgs where you have admin access. Only orgs you
                         are a direct admin of can be selected.
                       </FormDescription>
                       <FormMessage />
@@ -277,7 +341,13 @@ export default function AdminApiKeysModal() {
                   >
                     Close
                   </Button>
-                  <Button type="submit" disabled={createApiKey.isPending}>
+                  <Button
+                    type="submit"
+                    disabled={
+                      createApiKey.isPending ||
+                      (!form.watch("orgIds") && !hasNoOrgsSelected)
+                    }
+                  >
                     {createApiKey.isPending ? (
                       <span className="flex items-center gap-2">
                         Creating <Spinner className="h-4 w-4" />

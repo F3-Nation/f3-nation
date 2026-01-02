@@ -62,14 +62,14 @@ export const apiKeyRouter = {
         .orderBy(desc(schema.apiKeys.created));
 
       const allOrgIds = keyQuery
-        .map((key) => key.orgIds)
+        .map((key) => key.orgIds ?? [])
         .flat()
         .filter(isTruthy);
 
       const orgs =
         allOrgIds.length > 0
           ? await ctx.db
-              .select({ name: schema.orgs.name })
+              .select({ id: schema.orgs.id, name: schema.orgs.name })
               .from(schema.orgs)
               .where(
                 and(
@@ -79,10 +79,14 @@ export const apiKeyRouter = {
               )
           : [];
 
+      const orgMap = new Map(orgs.map((org) => [org.id, org.name]));
+
       return keyQuery.map((key) => ({
         ...key,
         keySignature: key.key.slice(-4),
-        orgNames: orgs.map((org) => org.name),
+        orgNames: (key.orgIds ?? [])
+          .map((orgId) => orgMap.get(orgId) ?? "")
+          .filter(isTruthy),
       }));
     }),
   create: adminProcedure

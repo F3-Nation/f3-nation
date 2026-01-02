@@ -140,12 +140,7 @@ export const ApiKeysTable = () => {
                 {rows.map((row) => {
                   const status = deriveStatus(row);
                   const displayKey = `•••• ${row.keySignature}`;
-                  const scope =
-                    row.orgIds && row.orgIds.length > 0
-                      ? `${row.orgIds.length} org${
-                          row.orgIds.length > 1 ? "s" : ""
-                        }`
-                      : "All orgs";
+                  const hasOrgs = row.orgNames && row.orgNames.length > 0;
 
                   return (
                     <TableRow key={row.id}>
@@ -172,7 +167,24 @@ export const ApiKeysTable = () => {
                           </span>
                         </div>
                       </TableCell>
-                      <TableCell>{scope}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {hasOrgs ? (
+                            row.orgNames.map((orgName, index) => (
+                              <span
+                                key={`${row.id}-${orgName}-${index}`}
+                                className="inline-flex items-center whitespace-nowrap rounded-full border border-purple-200 bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700"
+                              >
+                                {orgName}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="inline-flex items-center whitespace-nowrap rounded-full border border-gray-200 bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
+                              Read only
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <Badge variant={statusBadgeVariant[status]}>
                           {status.charAt(0).toUpperCase() + status.slice(1)}
