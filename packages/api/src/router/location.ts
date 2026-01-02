@@ -12,6 +12,7 @@ import {
   schema,
 } from "@acme/db";
 import { IsActiveStatus } from "@acme/shared/app/enums";
+import { arrayOrSingle } from "@acme/shared/app/functions";
 import { LocationInsertSchema, SortingSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
@@ -25,11 +26,11 @@ export const locationRouter = {
       z
         .object({
           searchTerm: z.string().optional(),
-          pageIndex: z.number().optional(),
-          pageSize: z.number().optional(),
+          pageIndex: z.coerce.number().optional(),
+          pageSize: z.coerce.number().optional(),
           sorting: SortingSchema.optional(),
-          statuses: z.enum(IsActiveStatus).array().optional(),
-          regionIds: z.number().array().optional(),
+          statuses: arrayOrSingle(z.enum(IsActiveStatus)).optional(),
+          regionIds: arrayOrSingle(z.coerce.number()).optional(),
         })
         .optional(),
     )
@@ -124,7 +125,7 @@ export const locationRouter = {
     }),
 
   byId: protectedProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.coerce.number() }))
     .route({
       method: "GET",
       path: "/by-id",

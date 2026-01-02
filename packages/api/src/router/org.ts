@@ -14,6 +14,7 @@ import {
   schema,
 } from "@acme/db";
 import { IsActiveStatus, OrgType } from "@acme/shared/app/enums";
+import { arrayOrSingle } from "@acme/shared/app/functions";
 import { OrgInsertSchema, SortingSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
@@ -47,13 +48,16 @@ export const orgRouter = {
   all: editorProcedure
     .input(
       z.object({
-        orgTypes: z.enum(OrgType).array().min(1),
-        pageIndex: z.number().optional(),
-        pageSize: z.number().optional(),
+        orgTypes: arrayOrSingle(z.enum(OrgType)).refine(
+          (val) => val.length >= 1,
+          { message: "At least one orgType is required" },
+        ),
+        pageIndex: z.coerce.number().optional(),
+        pageSize: z.coerce.number().optional(),
         searchTerm: z.string().optional(),
         sorting: SortingSchema.optional(),
-        statuses: z.enum(IsActiveStatus).array().optional(),
-        parentOrgIds: z.number().array().optional(),
+        statuses: arrayOrSingle(z.enum(IsActiveStatus)).optional(),
+        parentOrgIds: arrayOrSingle(z.coerce.number()).optional(),
       }),
     )
     .route({
@@ -152,7 +156,9 @@ export const orgRouter = {
     }),
 
   byId: editorProcedure
-    .input(z.object({ id: z.number(), orgType: z.enum(OrgType).optional() }))
+    .input(
+      z.object({ id: z.coerce.number(), orgType: z.enum(OrgType).optional() }),
+    )
     .route({
       method: "GET",
       path: "/by-id",

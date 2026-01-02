@@ -15,9 +15,9 @@ import {
   sql,
 } from "@acme/db";
 import { IsActiveStatus } from "@acme/shared/app/enums";
+import { arrayOrSingle, getFullAddress } from "@acme/shared/app/functions";
 import { EventInsertSchema } from "@acme/validators";
 
-import { getFullAddress } from "../../../shared/src/app/functions";
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
@@ -27,15 +27,15 @@ export const eventRouter = {
     .input(
       z
         .object({
-          pageIndex: z.number().optional(),
-          pageSize: z.number().optional(),
+          pageIndex: z.coerce.number().optional(),
+          pageSize: z.coerce.number().optional(),
           searchTerm: z.string().optional(),
-          statuses: z.enum(["active", "inactive"]).array().optional(),
+          statuses: arrayOrSingle(z.enum(["active", "inactive"])).optional(),
           sorting: z
             .array(z.object({ id: z.string(), desc: z.boolean() }))
             .optional(),
-          regionIds: z.number().array().optional(),
-          aoIds: z.number().array().optional(),
+          regionIds: arrayOrSingle(z.coerce.number()).optional(),
+          aoIds: arrayOrSingle(z.coerce.number()).optional(),
         })
         .optional(),
     )
@@ -211,7 +211,7 @@ export const eventRouter = {
       return { events: eventsWithLocation, totalCount: eventCount?.count ?? 0 };
     }),
   byId: protectedProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.coerce.number() }))
     .route({
       method: "GET",
       path: "/by-id",

@@ -20,6 +20,7 @@ import {
   schema,
 } from "@acme/db";
 import { UpdateRequestStatus } from "@acme/shared/app/enums";
+import { arrayOrSingle } from "@acme/shared/app/functions";
 import {
   DeleteRequestSchema,
   RequestInsertSchema,
@@ -39,12 +40,12 @@ export const requestRouter = {
     .input(
       z
         .object({
-          pageIndex: z.number().optional(),
-          pageSize: z.number().optional(),
+          pageIndex: z.coerce.number().optional(),
+          pageSize: z.coerce.number().optional(),
           sorting: SortingSchema.optional(),
           searchTerm: z.string().optional(),
           onlyMine: z.boolean().optional(),
-          statuses: z.enum(UpdateRequestStatus).array().optional(),
+          statuses: arrayOrSingle(z.enum(UpdateRequestStatus)).optional(),
         })
         .optional(),
     )
@@ -229,7 +230,7 @@ export const requestRouter = {
       return request;
     }),
   canDeleteEvent: protectedProcedure
-    .input(z.object({ eventId: z.number() }))
+    .input(z.object({ eventId: z.coerce.number() }))
     .route({
       method: "GET",
       path: "/can-delete-event",

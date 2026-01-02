@@ -13,6 +13,7 @@ import {
   sql,
 } from "@acme/db";
 import { UserRole, UserStatus } from "@acme/shared/app/enums";
+import { arrayOrSingle } from "@acme/shared/app/functions";
 import {
   CrupdateUserSchema,
   InviteUserSchema,
@@ -30,13 +31,13 @@ const schema = { ...schemaRaw, users: schemaRaw.users };
 
 // Base input schema object (before optional)
 const userListInputSchema = z.object({
-  roles: z.array(z.enum(UserRole)).optional(),
+  roles: arrayOrSingle(z.enum(UserRole)).optional(),
   searchTerm: z.string().optional(),
-  pageIndex: z.number().optional(),
-  pageSize: z.number().optional(),
+  pageIndex: z.coerce.number().optional(),
+  pageSize: z.coerce.number().optional(),
   sorting: SortingSchema.optional(),
-  statuses: z.array(z.enum(UserStatus)).optional(),
-  orgIds: z.number().array().optional(),
+  statuses: arrayOrSingle(z.enum(UserStatus)).optional(),
+  orgIds: arrayOrSingle(z.coerce.number()).optional(),
   includePii: z.boolean().optional().default(false),
 });
 
@@ -287,7 +288,7 @@ export const userRouter = {
   byId: editorProcedure
     .input(
       z.object({
-        id: z.number(),
+        id: z.coerce.number(),
         includePii: z.boolean().optional().default(false),
       }),
     )

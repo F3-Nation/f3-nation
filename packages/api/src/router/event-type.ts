@@ -15,6 +15,7 @@ import {
   schema,
 } from "@acme/db";
 import { IsActiveStatus } from "@acme/shared/app/enums";
+import { arrayOrSingle } from "@acme/shared/app/functions";
 import { EventTypeInsertSchema, SortingSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
@@ -30,10 +31,10 @@ export const eventTypeRouter = {
     .input(
       z
         .object({
-          orgIds: z.number().array().optional(),
-          statuses: z.enum(IsActiveStatus).array().optional(),
-          pageIndex: z.number().optional(),
-          pageSize: z.number().optional(),
+          orgIds: arrayOrSingle(z.coerce.number()).optional(),
+          statuses: arrayOrSingle(z.enum(IsActiveStatus)).optional(),
+          pageIndex: z.coerce.number().optional(),
+          pageSize: z.coerce.number().optional(),
           searchTerm: z.string().optional(),
           sorting: SortingSchema.optional(),
           ignoreNationEventTypes: z.boolean().optional(),
@@ -140,7 +141,9 @@ export const eventTypeRouter = {
       return { eventTypes, totalCount };
     }),
   byOrgId: protectedProcedure
-    .input(z.object({ orgId: z.number(), isActive: z.boolean().optional() }))
+    .input(
+      z.object({ orgId: z.coerce.number(), isActive: z.boolean().optional() }),
+    )
     .route({
       method: "GET",
       path: "/by-org-id",
@@ -164,7 +167,7 @@ export const eventTypeRouter = {
       return eventTypes;
     }),
   byId: protectedProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.coerce.number() }))
     .route({
       method: "GET",
       path: "/by-id",

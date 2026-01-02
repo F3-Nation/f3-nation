@@ -161,3 +161,10 @@ export const requestTypeToTitle = (requestType: RequestType) => {
       return "Update";
   }
 };
+
+// Helper to normalize query params that can be single value or array
+export const arrayOrSingle = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess(
+    (val) => (val === undefined ? undefined : Array.isArray(val) ? val : [val]),
+    z.array(schema),
+  );
