@@ -20,6 +20,14 @@ const link = new RPCLink({
     if (input.headers instanceof Headers) {
       input.headers.set(Header.Client, Client.ORPC); // Identifies this as an oRPC client request
     }
+
+    // Always include the public API key for map access
+    // This allows unauthenticated users to view the map
+    const publicApiKey = env.NEXT_PUBLIC_MAP_API_KEY;
+    if (publicApiKey) {
+      input.headers.set(Header.Authorization, `Bearer ${publicApiKey}`);
+    }
+
     return fetch(input, {
       ...init,
       credentials: "include",

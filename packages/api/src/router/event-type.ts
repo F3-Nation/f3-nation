@@ -18,7 +18,7 @@ import { IsActiveStatus } from "@acme/shared/app/enums";
 import { EventTypeInsertSchema, SortingSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
-import { editorProcedure, publicProcedure } from "../shared";
+import { editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
 export const eventTypeRouter = {
@@ -26,7 +26,7 @@ export const eventTypeRouter = {
    * By default this gets all the event types available for the orgIds (meaning that general, nation-wide event types are included)
    * To get only the event types for a specific org, set ignoreNationEventTypes to true
    */
-  all: publicProcedure
+  all: protectedProcedure
     .input(
       z
         .object({
@@ -139,7 +139,7 @@ export const eventTypeRouter = {
 
       return { eventTypes, totalCount };
     }),
-  byOrgId: publicProcedure
+  byOrgId: protectedProcedure
     .input(z.object({ orgId: z.number(), isActive: z.boolean().optional() }))
     .route({
       method: "GET",
@@ -163,7 +163,7 @@ export const eventTypeRouter = {
 
       return eventTypes;
     }),
-  byId: publicProcedure
+  byId: protectedProcedure
     .input(z.object({ id: z.number() }))
     .route({
       method: "GET",

@@ -17,7 +17,7 @@ import { CrupdateUserSchema, SortingSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getSortingColumns } from "../get-sorting-columns";
-import { editorProcedure } from "../shared";
+import { adminProcedure, editorProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
 const schema = { ...schemaRaw, users: schemaRaw.users };
@@ -221,7 +221,7 @@ export const userRouter = {
         .where(eq(schema.users.id, input.id));
       return user ?? null;
     }),
-  crupdate: editorProcedure
+  crupdate: adminProcedure
     .input(CrupdateUserSchema)
     .route({
       method: "POST",
@@ -360,7 +360,7 @@ export const userRouter = {
       };
     }),
 
-  delete: editorProcedure
+  delete: adminProcedure
     .input(z.object({ id: z.number() }))
     .route({
       method: "DELETE",

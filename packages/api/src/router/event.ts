@@ -19,11 +19,11 @@ import { EventInsertSchema } from "@acme/validators";
 
 import { getFullAddress } from "../../../shared/src/app/functions";
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
-import { editorProcedure, publicProcedure } from "../shared";
+import { editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
 export const eventRouter = {
-  all: publicProcedure
+  all: protectedProcedure
     .input(
       z
         .object({
@@ -210,7 +210,7 @@ export const eventRouter = {
 
       return { events: eventsWithLocation, totalCount: eventCount?.count ?? 0 };
     }),
-  byId: publicProcedure
+  byId: protectedProcedure
     .input(z.object({ id: z.number() }))
     .route({
       method: "GET",
@@ -389,7 +389,7 @@ export const eventRouter = {
 
       return result;
     }),
-  eventIdToRegionNameLookup: publicProcedure
+  eventIdToRegionNameLookup: protectedProcedure
     .route({
       method: "GET",
       path: "/event-id-to-region-name-lookup",

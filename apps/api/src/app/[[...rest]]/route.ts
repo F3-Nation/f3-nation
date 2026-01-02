@@ -34,7 +34,12 @@ const handler = new RPCHandler(router, {
   plugins: [corsPlugin, new RequestHeadersPlugin()],
   interceptors: [
     onError((error) => {
-      console.error("RPC handler error", { error, message: error?.message, stack: error?.stack });
+      const typedError = error as { message?: string; stack?: string };
+      console.error("RPC handler error", {
+        error,
+        message: typedError?.message,
+        stack: typedError?.stack,
+      });
     }),
   ],
 });

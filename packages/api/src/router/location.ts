@@ -16,11 +16,11 @@ import { LocationInsertSchema, SortingSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getSortingColumns } from "../get-sorting-columns";
-import { adminProcedure, editorProcedure, publicProcedure } from "../shared";
+import { adminProcedure, editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
 export const locationRouter = {
-  all: publicProcedure
+  all: protectedProcedure
     .input(
       z
         .object({
@@ -123,7 +123,7 @@ export const locationRouter = {
       return { locations, totalCount: locationCount?.count ?? 0 };
     }),
 
-  byId: publicProcedure
+  byId: protectedProcedure
     .input(z.object({ id: z.number() }))
     .route({
       method: "GET",

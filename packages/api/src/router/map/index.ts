@@ -2,7 +2,7 @@ import { os } from "@orpc/server";
 import { z } from "zod";
 
 import { MailService, Templates } from "../../mail";
-import { publicProcedure } from "../../shared";
+import { protectedProcedure } from "../../shared";
 import { mapLocationRouter } from "./location";
 
 export const feedbackSchema = z.object({
@@ -15,7 +15,7 @@ export const feedbackSchema = z.object({
 export const mapRouter = os.router({
   location: os.prefix("/location").router(mapLocationRouter),
 
-  submitFeedback: publicProcedure
+  submitFeedback: protectedProcedure
     .input(feedbackSchema)
     .route({
       method: "POST",

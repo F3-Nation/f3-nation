@@ -31,7 +31,7 @@ import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
 import { notifyMapChangeRequest } from "../services/map-request-notification";
-import { editorProcedure, publicProcedure } from "../shared";
+import { editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
 export const requestRouter = {
@@ -228,7 +228,7 @@ export const requestRouter = {
         .where(eq(schema.updateRequests.id, input.id));
       return request;
     }),
-  canDeleteEvent: publicProcedure
+  canDeleteEvent: protectedProcedure
     .input(z.object({ eventId: z.number() }))
     .route({
       method: "GET",
@@ -251,7 +251,7 @@ export const requestRouter = {
         );
       return !!request;
     }),
-  canEditRegions: publicProcedure
+  canEditRegions: protectedProcedure
     .input(z.object({ orgIds: z.array(z.number()) }))
     .route({
       method: "POST",
@@ -284,7 +284,7 @@ export const requestRouter = {
       );
       return results;
     }),
-  submitDeleteRequest: publicProcedure
+  submitDeleteRequest: protectedProcedure
     .input(DeleteRequestSchema)
     .route({
       method: "POST",
@@ -371,7 +371,7 @@ export const requestRouter = {
         deleteRequest: request,
       };
     }),
-  submitUpdateRequest: publicProcedure
+  submitUpdateRequest: protectedProcedure
     .input(RequestInsertSchema)
     .route({
       method: "POST",
