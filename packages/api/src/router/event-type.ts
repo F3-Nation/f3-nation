@@ -170,7 +170,7 @@ export const eventTypeRouter = {
     .input(z.object({ id: z.coerce.number() }))
     .route({
       method: "GET",
-      path: "/{id}",
+      path: "/id/{id}",
       tags: ["event-type"],
       summary: "Get event type by ID",
       description: "Retrieve detailed information about a specific event type",
@@ -259,7 +259,7 @@ export const eventTypeRouter = {
     .input(z.object({ id: z.number() }))
     .route({
       method: "DELETE",
-      path: "/{id}",
+      path: "/id/{id}",
       tags: ["event-type"],
       summary: "Delete event type",
       description: "Soft delete an event type by marking it as inactive",

@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { CheckCircle2, Plus, UserPlus, X } from "lucide-react";
 
 import type { RoleEntry } from "@acme/shared/app/types";
 import { Z_INDEX } from "@acme/shared/app/constants";
+import { isValidEmail } from "@acme/shared/app/functions";
 import { safeParseInt } from "@acme/shared/common/functions";
 import { cn } from "@acme/ui";
 import { Button } from "@acme/ui/button";
@@ -35,7 +35,7 @@ import {
   SelectValue,
 } from "@acme/ui/select";
 import { toast } from "@acme/ui/toast";
-import { InviteUserSchema } from "@acme/validators";
+import { CrupdateUserSchema } from "@acme/validators";
 
 import type { DataType, ModalType } from "~/utils/store/modal";
 import {
@@ -54,7 +54,13 @@ export default function AdminGrantAccessModal({
   data: DataType[ModalType.ADMIN_GRANT_ACCESS];
 }) {
   const [emailPopoverOpen, setEmailPopoverOpen] = useState(false);
-  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(() => {
+    if (data && typeof data === "object" && "userId" in data) {
+      const id = data.userId;
+      return typeof id === "number" ? id : null;
+    }
+    return null;
+  });
   const [isCreatingNew, setIsCreatingNew] = useState(false);
 
   const { data: orgs } = useQuery(
@@ -64,10 +70,10 @@ export default function AdminGrantAccessModal({
   );
 
   const form = useForm({
-    schema: InviteUserSchema,
+    schema: CrupdateUserSchema,
     defaultValues: {
       email: "",
-      userId: undefined,
+      id: undefined,
       firstName: "",
       lastName: "",
       f3Name: "",
@@ -77,6 +83,18 @@ export default function AdminGrantAccessModal({
   });
 
   const emailValue = form.watch("email");
+
+  // Fetch user by ID if userId is provided in data or when a user is selected
+  const userIdToFetch = selectedUserId ?? data?.userId;
+  const { data: userByIdData } = useQuery({
+    ...orpc.user.byId.queryOptions({
+      input: {
+        id: userIdToFetch ?? -1,
+        includePii: true,
+      },
+    }),
+    enabled: userIdToFetch !== undefined && userIdToFetch !== null,
+  });
 
   // Search users by email (exact match only)
   const { data: userSearchResults } = useQuery({
@@ -88,8 +106,33 @@ export default function AdminGrantAccessModal({
         pageIndex: 0,
       },
     }),
-    enabled: emailValue.length > 0 && emailValue.includes("@"),
+    enabled: isValidEmail(emailValue),
   });
+
+  // Pre-fill form when user is loaded by ID
+  useEffect(() => {
+    if (userByIdData?.user && data?.userId) {
+      const user = userByIdData.user;
+      if (user.email) {
+        form.setValue("email", user.email);
+      }
+      form.setValue("id", user.id);
+      setSelectedUserId(user.id);
+      setIsCreatingNew(false);
+      if (user.firstName) {
+        form.setValue("firstName", user.firstName);
+      }
+      if (user.lastName) {
+        form.setValue("lastName", user.lastName);
+      }
+      if (user.f3Name) {
+        form.setValue("f3Name", user.f3Name);
+      }
+      if (user.phone) {
+        form.setValue("phone", user.phone);
+      }
+    }
+  }, [userByIdData, data?.userId, form]);
 
   // Filter to exact email matches only
   const exactEmailMatches = useMemo(() => {
@@ -112,21 +155,9 @@ export default function AdminGrantAccessModal({
     })[];
   }, [userSearchResults, emailValue]);
 
-  // Validate email format more strictly
-  const isValidEmail = useMemo(() => {
-    if (!emailValue || !emailValue.includes("@")) return false;
-    const parts = emailValue.split("@");
-    if (parts.length !== 2) return false;
-    const local = parts[0];
-    const domain = parts[1];
-    if (!local || !domain) return false;
-    // Check that local part exists and domain has at least one dot with content after it
-    const domainParts = domain.split(".");
-    return (
-      local.length > 0 &&
-      domainParts.length >= 2 &&
-      (domainParts[domainParts.length - 1]?.length ?? 0) > 0
-    );
+  // Validate email format using robust validation
+  const isEmailValid = useMemo(() => {
+    return isValidEmail(emailValue);
   }, [emailValue]);
 
   // Build options for the email dropdown
@@ -134,7 +165,7 @@ export default function AdminGrantAccessModal({
     const options: {
       value: string;
       label: string;
-      userId?: number;
+      id?: number;
       isCreateNew?: boolean;
     }[] = [];
 
@@ -143,14 +174,14 @@ export default function AdminGrantAccessModal({
       if (user.email) {
         options.push({
           value: user.email,
-          label: `${user.email}${user.firstName || user.lastName ? ` (${[user.firstName, user.lastName].filter(Boolean).join(" ")})` : ""}`,
-          userId: user.id,
+          label: `${user.email}${user.firstName ?? user.lastName ? ` (${[user.firstName, user.lastName].filter(Boolean).join(" ")})` : ""}`,
+          id: user.id,
         });
       }
     });
 
     // Add "Create New User" option if email is valid and no exact match
-    if (isValidEmail && exactEmailMatches.length === 0) {
+    if (isEmailValid && exactEmailMatches.length === 0) {
       options.push({
         value: `__create_new__${emailValue}`,
         label: `Create New User: ${emailValue}`,
@@ -159,12 +190,10 @@ export default function AdminGrantAccessModal({
     }
 
     return options;
-  }, [exactEmailMatches, emailValue, isValidEmail]);
-
-  const router = useRouter();
+  }, [exactEmailMatches, emailValue, isEmailValid]);
 
   const grantAccess = useMutation(
-    orpc.user.invite.mutationOptions({
+    orpc.user.crupdate.mutationOptions({
       onSuccess: async () => {
         // Invalidate all user-related queries to refresh tables
         await invalidateQueries({
@@ -204,7 +233,7 @@ export default function AdminGrantAccessModal({
       // Extract email from the create new option
       const email = value.replace("__create_new__", "");
       form.setValue("email", email);
-      form.setValue("userId", undefined);
+      form.setValue("id", undefined);
       setIsCreatingNew(true);
       setSelectedUserId(null);
       setEmailPopoverOpen(false);
@@ -213,7 +242,7 @@ export default function AdminGrantAccessModal({
       const user = exactEmailMatches.find((u) => u.email === value);
       if (user) {
         form.setValue("email", user.email ?? "");
-        form.setValue("userId", user.id);
+        form.setValue("id", user.id);
         setIsCreatingNew(false);
         setSelectedUserId(user.id);
         setEmailPopoverOpen(false);
@@ -236,15 +265,58 @@ export default function AdminGrantAccessModal({
 
   const handleClearSelection = () => {
     form.setValue("email", "");
-    form.setValue("userId", undefined);
+    form.setValue("id", undefined);
     form.setValue("firstName", "");
     form.setValue("lastName", "");
     form.setValue("f3Name", "");
     form.setValue("phone", "");
+    form.setValue("roles", []);
     setSelectedUserId(null);
     setIsCreatingNew(false);
     setEmailPopoverOpen(false);
   };
+
+  // Populate form fields when user data is loaded (from data prop or selected user)
+  useEffect(() => {
+    if (userByIdData?.user) {
+      const user = userByIdData.user;
+      // Set user ID
+      form.setValue("id", user.id);
+      setSelectedUserId(user.id);
+      setIsCreatingNew(false);
+
+      // Set email if available and not already set
+      if (user.email && !form.getValues("email")) {
+        form.setValue("email", user.email);
+      }
+
+      // Set other user fields if available and not already set
+      if (user.firstName && !form.getValues("firstName")) {
+        form.setValue("firstName", user.firstName);
+      }
+      if (user.lastName && !form.getValues("lastName")) {
+        form.setValue("lastName", user.lastName);
+      }
+      if (user.f3Name && !form.getValues("f3Name")) {
+        form.setValue("f3Name", user.f3Name);
+      }
+      if (user.phone && !form.getValues("phone")) {
+        form.setValue("phone", user.phone);
+      }
+
+      // Always set existing roles from the API (source of truth)
+      if (user.roles && Array.isArray(user.roles)) {
+        const existingRoles: RoleEntry[] = user.roles.map((role) => ({
+          orgId: role.orgId,
+          roleName: role.roleName as "editor" | "admin",
+        }));
+        form.setValue("roles", existingRoles);
+      } else {
+        // If no roles found, clear the roles field
+        form.setValue("roles", []);
+      }
+    }
+  }, [userByIdData, form]);
 
   // Check if we can submit (either user selected or creating new)
   const canSubmit = selectedUserId !== null || isCreatingNew;
@@ -330,14 +402,25 @@ export default function AdminGrantAccessModal({
                             }}
                             onBlur={(e) => {
                               // Delay closing to allow click events on dropdown items
+                              // Check if the blur is happening because we clicked on a dropdown item
+                              const relatedTarget =
+                                e.relatedTarget as HTMLElement;
+                              if (
+                                !!relatedTarget?.closest('[role="listbox"]') ||
+                                !!relatedTarget?.closest("[cmdk-item]")
+                              ) {
+                                // Don't close if clicking on dropdown
+                                return;
+                              }
                               setTimeout(() => {
                                 const activeElement = document.activeElement;
                                 if (
-                                  !activeElement?.closest('[role="listbox"]')
+                                  !activeElement?.closest('[role="listbox"]') &&
+                                  !activeElement?.closest("[cmdk-item]")
                                 ) {
                                   setEmailPopoverOpen(false);
                                 }
-                              }, 150);
+                              }, 200);
                             }}
                           />
                           {emailOptions.length > 0 && emailPopoverOpen && (
@@ -349,6 +432,12 @@ export default function AdminGrantAccessModal({
                                       key={option.value}
                                       value={option.value}
                                       onSelect={() => {
+                                        handleEmailSelect(option.value);
+                                        setEmailPopoverOpen(false);
+                                      }}
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
                                         handleEmailSelect(option.value);
                                         setEmailPopoverOpen(false);
                                       }}
@@ -368,7 +457,7 @@ export default function AdminGrantAccessModal({
                       </FormControl>
                       <FormMessage />
                       {/* Show selected user or new user indicator */}
-                      {(selectedUser || isCreatingNew) && (
+                      {(!!selectedUser || !!isCreatingNew) && (
                         <div className="mt-2 rounded-md border bg-muted/50 p-3">
                           {selectedUser ? (
                             <div className="flex items-start justify-between gap-2">
@@ -381,8 +470,8 @@ export default function AdminGrantAccessModal({
                                   <p className="truncate text-sm text-muted-foreground">
                                     {selectedUser.email}
                                   </p>
-                                  {(selectedUser.firstName ||
-                                    selectedUser.lastName ||
+                                  {(selectedUser.firstName ??
+                                    selectedUser.lastName ??
                                     selectedUser.f3Name) && (
                                     <p className="mt-1 text-xs text-muted-foreground">
                                       {[
@@ -530,8 +619,9 @@ export default function AdminGrantAccessModal({
                     <FormItem>
                       <FormLabel>Roles</FormLabel>
                       <FormDescription>
-                        Assign roles to the user. They will be added to any
-                        existing roles.
+                        {selectedUserId && userByIdData?.user?.roles?.length
+                          ? `Existing roles are shown below. Add or modify roles as needed.`
+                          : `Assign roles to the user. They will be added to any existing roles.`}
                       </FormDescription>
                       <div className="space-y-2">
                         {((field.value as RoleEntry[]) || []).map(

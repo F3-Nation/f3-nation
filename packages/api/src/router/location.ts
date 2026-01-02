@@ -128,7 +128,7 @@ export const locationRouter = {
     .input(z.object({ id: z.coerce.number() }))
     .route({
       method: "GET",
-      path: "/{id}",
+      path: "/id/{id}",
       tags: ["location"],
       summary: "Get location by ID",
       description: "Retrieve detailed information about a specific location",
@@ -215,7 +215,7 @@ export const locationRouter = {
     .input(z.object({ id: z.number() }))
     .route({
       method: "DELETE",
-      path: "/{id}",
+      path: "/delete/{id}",
       tags: ["location"],
       summary: "Delete location",
       description: "Soft delete a location by marking it as inactive",

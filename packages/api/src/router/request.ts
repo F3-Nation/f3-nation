@@ -216,7 +216,7 @@ export const requestRouter = {
     .input(z.object({ id: z.string() }))
     .route({
       method: "GET",
-      path: "/{id}",
+      path: "/id/{id}",
       tags: ["request"],
       summary: "Get request by ID",
       description:

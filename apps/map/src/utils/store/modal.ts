@@ -161,7 +161,9 @@ export interface DataType {
   [ModalType.ADMIN_USERS]: {
     id?: number | null;
   };
-  [ModalType.ADMIN_GRANT_ACCESS]: null;
+  [ModalType.ADMIN_GRANT_ACCESS]: {
+    userId?: number;
+  } | null;
   [ModalType.ADMIN_REQUESTS]: {
     id: string;
   };

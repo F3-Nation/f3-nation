@@ -1,7 +1,8 @@
-import { ORPCError } from "@orpc/server";
 import { revalidatePath } from "next/cache";
+import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 
+import type { OrgMeta } from "@acme/shared/app/types";
 import {
   aliasedTable,
   and,
@@ -14,13 +15,12 @@ import {
 } from "@acme/db";
 import { IsActiveStatus, OrgType } from "@acme/shared/app/enums";
 import { arrayOrSingle } from "@acme/shared/app/functions";
-import type { OrgMeta } from "@acme/shared/app/types";
 import { OrgInsertSchema, SortingSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getSortingColumns } from "../get-sorting-columns";
 import { moveAOLocsToNewRegion } from "../lib/move-ao-locs-to-new-region";
-import { adminProcedure, editorProcedure } from "../shared";
+import { adminProcedure, editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
 interface Org {
@@ -45,7 +45,7 @@ interface Org {
 }
 
 export const orgRouter = {
-  all: editorProcedure
+  all: protectedProcedure
     .input(
       z.object({
         orgTypes: arrayOrSingle(z.enum(OrgType)).refine(
@@ -155,13 +155,13 @@ export const orgRouter = {
       return { orgs: orgs_untyped as Org[], total: orgCount?.count ?? 0 };
     }),
 
-  byId: editorProcedure
+  byId: protectedProcedure
     .input(
       z.object({ id: z.coerce.number(), orgType: z.enum(OrgType).optional() }),
     )
     .route({
       method: "GET",
-      path: "/{id}",
+      path: "/id/{id}",
       tags: ["org"],
       summary: "Get organization by ID",
       description:
@@ -270,7 +270,7 @@ export const orgRouter = {
         .returning();
       return result;
     }),
-  mine: editorProcedure
+  mine: protectedProcedure
     .route({
       method: "GET",
       path: "/mine",
@@ -336,7 +336,7 @@ export const orgRouter = {
     .input(z.object({ id: z.number(), orgType: z.enum(OrgType).optional() }))
     .route({
       method: "DELETE",
-      path: "/{id}",
+      path: "/delete/{id}",
       tags: ["org"],
       summary: "Delete organization",
       description: "Soft delete an organization by marking it as inactive",

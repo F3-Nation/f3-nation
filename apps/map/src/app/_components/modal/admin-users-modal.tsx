@@ -144,10 +144,10 @@ export default function UserModal({
                   // For updates without PII access, don't send PII fields
                   // Keep email (required by schema) but exclude other PII
                   const {
-                    phone,
-                    emergencyContact,
-                    emergencyPhone,
-                    emergencyNotes,
+                    phone: _phone,
+                    emergencyContact: _emergencyContact,
+                    emergencyPhone: _emergencyPhone,
+                    emergencyNotes: _emergencyNotes,
                     ...nonPiiData
                   } = data;
                   submitData = {

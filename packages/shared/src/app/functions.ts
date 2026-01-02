@@ -168,3 +168,53 @@ export const arrayOrSingle = <T extends z.ZodTypeAny>(schema: T) =>
     (val) => (val === undefined ? undefined : Array.isArray(val) ? val : [val]),
     z.array(schema),
   );
+
+/**
+ * Robust email validation function that checks:
+ * - Basic format (contains @)
+ * - Local part exists and is not empty
+ * - Domain exists and has at least one dot
+ * - Top-level domain has content
+ * - Uses Zod's email validation for RFC compliance
+ *
+ * @param email - Email string to validate
+ * @returns boolean indicating if email is valid
+ */
+export function isValidEmail(email: string | null | undefined): boolean {
+  if (!email || typeof email !== "string") return false;
+
+  // Trim whitespace
+  const trimmed = email.trim();
+  if (!trimmed) return false;
+
+  // Basic format check: must contain @
+  if (!trimmed.includes("@")) return false;
+
+  // Split into local and domain parts
+  const parts = trimmed.split("@");
+  if (parts.length !== 2) return false;
+
+  const [local, domain] = parts;
+
+  // Local part must exist and not be empty
+  if (!local || local.length === 0) return false;
+
+  // Domain must exist and not be empty
+  if (!domain || domain.length === 0) return false;
+
+  // Domain must have at least one dot
+  const domainParts = domain.split(".");
+  if (domainParts.length < 2) return false;
+
+  // Top-level domain must have content
+  const tld = domainParts[domainParts.length - 1];
+  if (!tld || tld.length === 0) return false;
+
+  // Use Zod's email validation for RFC compliance
+  try {
+    z.string().email().parse(trimmed);
+    return true;
+  } catch {
+    return false;
+  }
+}

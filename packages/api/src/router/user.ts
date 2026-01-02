@@ -13,12 +13,8 @@ import {
   sql,
 } from "@acme/db";
 import { UserRole, UserStatus } from "@acme/shared/app/enums";
-import { arrayOrSingle } from "@acme/shared/app/functions";
-import {
-  CrupdateUserSchema,
-  InviteUserSchema,
-  SortingSchema,
-} from "@acme/validators";
+import { arrayOrSingle, isValidEmail } from "@acme/shared/app/functions";
+import { CrupdateUserSchema, SortingSchema } from "@acme/validators";
 
 import type { Context } from "../shared";
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
@@ -28,6 +24,19 @@ import { adminProcedure, editorProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
 const schema = { ...schemaRaw, users: schemaRaw.users };
+
+// Helper to check if error is a duplicate email constraint violation
+const isDuplicateEmailError = (error: unknown): boolean => {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: string }).code === "23505" &&
+    "constraint_name" in error &&
+    (error as { constraint_name?: string }).constraint_name ===
+      "users_email_key"
+  );
+};
 
 // Base input schema object (before optional)
 const userListInputSchema = z.object({
@@ -294,7 +303,7 @@ export const userRouter = {
     )
     .route({
       method: "GET",
-      path: "/{id}",
+      path: "/id/{id}",
       tags: ["user"],
       summary: "Get user by ID",
       description:
@@ -469,25 +478,48 @@ export const userRouter = {
 
       if (!input.id && !_email) {
         throw new ORPCError("BAD_REQUEST", {
-          message: "Email is required",
+          message: "Email is required for new users",
         });
       }
 
-      const [user] = await ctx.db
-        .insert(schema.users)
-        .values({
-          ...rest,
-          email: _email ?? "", // Ensure required email is not undefined
-        })
-        .onConflictDoUpdate({
-          target: [schema.users.id],
-          set: updateSet,
-        })
-        .returning();
-
-      if (!user) {
-        throw new Error("User not found");
+      if (!isValidEmail(_email)) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: "Invalid email format",
+        });
       }
+
+      console.log("Update set", updateSet);
+
+      let user: typeof schema.users.$inferSelect;
+      try {
+        const result = await ctx.db
+          .insert(schema.users)
+          .values({
+            ...rest,
+            email: _email ?? "", // Ensure required email is not undefined
+          })
+          .onConflictDoUpdate({
+            target: [schema.users.id],
+            set: updateSet,
+          })
+          .returning();
+
+        const insertedUser = result[0];
+        if (!insertedUser) {
+          throw new Error("User not found");
+        }
+        user = insertedUser;
+      } catch (error) {
+        if (isDuplicateEmailError(error)) {
+          throw new ORPCError("BAD_REQUEST", {
+            message: `A user with the email address "${_email}" already exists. Please use a different email address.`,
+          });
+        }
+        // Re-throw other errors
+        throw error;
+      }
+
+      console.log("User", user);
 
       const dbRoles = await ctx.db.select().from(schema.roles);
 
@@ -581,138 +613,7 @@ export const userRouter = {
         );
       }
 
-      const updatedRoles = await ctx.db
-        .select({
-          orgId: schema.rolesXUsersXOrg.orgId,
-          orgName: schema.orgs.name,
-          roleName: schema.roles.name,
-        })
-        .from(schema.rolesXUsersXOrg)
-        .leftJoin(schema.orgs, eq(schema.orgs.id, schema.rolesXUsersXOrg.orgId))
-        .leftJoin(
-          schema.roles,
-          eq(schema.roles.id, schema.rolesXUsersXOrg.roleId),
-        )
-        .where(eq(schema.rolesXUsersXOrg.userId, user.id));
-
-      return {
-        ...user,
-        roles: updatedRoles,
-      };
-    }),
-
-  invite: adminProcedure
-    .input(InviteUserSchema)
-    .route({
-      method: "POST",
-      path: "/invite",
-      tags: ["user"],
-      summary: "Invite or upgrade user by email",
-      description:
-        "Invite a user by email address and assign them roles. If the user already exists, their roles will be updated. Only admins can invite users.",
-    })
-    .handler(async ({ context: ctx, input }) => {
-      // Check if requester has admin access to all orgs being assigned
-      for (const role of input.roles) {
-        const { success } = await checkHasRoleOnOrg({
-          orgId: role.orgId,
-          session: ctx.session,
-          db: ctx.db,
-          roleName: "admin",
-        });
-        if (!success) {
-          throw new ORPCError("UNAUTHORIZED", {
-            message:
-              "You do not have permission to assign roles to this organization",
-          });
-        }
-      }
-
-      // Find or create user
-      let user: typeof schema.users.$inferSelect;
-      if (input.userId) {
-        // User exists, use the provided ID
-        const [existingUser] = await ctx.db
-          .select()
-          .from(schema.users)
-          .where(eq(schema.users.id, input.userId))
-          .limit(1);
-
-        if (!existingUser) {
-          throw new ORPCError("NOT_FOUND", {
-            message: "User not found",
-          });
-        }
-
-        // Verify email matches
-        if (existingUser.email !== input.email) {
-          throw new ORPCError("BAD_REQUEST", {
-            message: "Email does not match the selected user",
-          });
-        }
-
-        user = existingUser;
-      } else {
-        // Create new user with provided details
-        const result = await ctx.db
-          .insert(schema.users)
-          .values({
-            email: input.email,
-            firstName: input.firstName ?? null,
-            lastName: input.lastName ?? null,
-            f3Name: input.f3Name ?? "",
-            phone: input.phone ?? null,
-            status: "active",
-          })
-          .returning();
-
-        const newUser = result[0];
-        if (!newUser) {
-          throw new Error("Failed to create user");
-        }
-        user = newUser;
-      }
-
-      // Get role IDs
-      const dbRoles = await ctx.db.select().from(schema.roles);
-      const roleNameToId = dbRoles.reduce(
-        (acc, role) => {
-          if (role.name) {
-            acc[role.name] = role.id;
-          }
-          return acc;
-        },
-        {} as Record<UserRole, number>,
-      );
-
-      // Get existing roles
-      const existingRoles = await ctx.db
-        .select()
-        .from(schema.rolesXUsersXOrg)
-        .where(eq(schema.rolesXUsersXOrg.userId, user.id));
-
-      // Find roles to add (not already assigned)
-      const newRolesToInsert = input.roles.filter(
-        (role) =>
-          !existingRoles.some(
-            (existingRole) =>
-              existingRole.roleId === roleNameToId[role.roleName] &&
-              existingRole.orgId === role.orgId,
-          ),
-      );
-
-      // Insert new roles
-      if (newRolesToInsert.length > 0) {
-        await ctx.db.insert(schema.rolesXUsersXOrg).values(
-          newRolesToInsert.map((role) => ({
-            userId: user.id,
-            roleId: roleNameToId[role.roleName],
-            orgId: role.orgId,
-          })),
-        );
-      }
-
-      // Get updated roles
+      console.log("New roles to insert", newRolesToInsert);
       const updatedRoles = await ctx.db
         .select({
           orgId: schema.rolesXUsersXOrg.orgId,
@@ -737,7 +638,7 @@ export const userRouter = {
     .input(z.object({ id: z.number() }))
     .route({
       method: "DELETE",
-      path: "/{id}",
+      path: "/delete/{id}",
       tags: ["user"],
       summary: "Delete user",
       description:
