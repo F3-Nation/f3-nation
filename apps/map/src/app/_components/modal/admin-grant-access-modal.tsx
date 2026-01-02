@@ -387,14 +387,16 @@ export default function AdminGrantAccessModal({
                           <Input
                             placeholder="user@example.com"
                             type="email"
+                            disabled={!!data?.userId}
                             {...field}
                             value={field.value ?? ""}
+                            autoComplete="off"
                             onChange={(e) => {
                               field.onChange(e);
                               setSelectedUserId(null);
                               setIsCreatingNew(false);
                               // Show dropdown when typing if there are options
-                              if (emailOptions.length > 0) {
+                              if (e.target.value.length > 0) {
                                 setEmailPopoverOpen(true);
                               } else {
                                 setEmailPopoverOpen(false);
@@ -496,6 +498,7 @@ export default function AdminGrantAccessModal({
                                 variant="ghost"
                                 size="sm"
                                 onClick={handleClearSelection}
+                                disabled={!!data?.userId}
                                 className="h-8 w-8 flex-shrink-0 p-0"
                               >
                                 <X className="h-4 w-4" />

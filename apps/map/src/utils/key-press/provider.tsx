@@ -16,7 +16,7 @@ export const KeyPressProvider = ({
 
   useEffect(() => {
     const isEscapePressed = keyPress.isPressed("Escape");
-    
+
     // Only close modal when Escape is first pressed (not on every render)
     if (isEscapePressed && !escapePressedRef.current) {
       escapePressedRef.current = true;

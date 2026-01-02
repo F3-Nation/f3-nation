@@ -377,6 +377,16 @@ const columns: TableOptions<
             <DropdownMenuItem
               onClick={(e) => {
                 e.stopPropagation();
+                openModal(ModalType.ADMIN_GRANT_ACCESS, {
+                  userId: Number(row.original.id),
+                });
+              }}
+            >
+              <div>Grant Access</div>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
                 openModal(ModalType.ADMIN_DELETE_CONFIRMATION, {
                   id: Number(row.original.id),
                   type: DeleteType.USER,

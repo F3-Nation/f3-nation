@@ -15,7 +15,7 @@ import {
 import { toast } from "@acme/ui/toast";
 
 import type { DataType, ModalType } from "~/utils/store/modal";
-import { invalidateQueries, orpc } from "~/orpc/react";
+import { invalidateQueries, orpc, ORPCError } from "~/orpc/react";
 import { closeModal, DeleteType } from "~/utils/store/modal";
 
 export default function AdminDeleteModal({
@@ -104,7 +104,11 @@ export default function AdminDeleteModal({
       })
       .catch((err) => {
         console.error("delete-modal err", err);
-        toast.error(`Failed to delete ${data.type}`);
+        if (err instanceof ORPCError) {
+          toast.error(err.message);
+        } else {
+          toast.error(`Failed to delete ${data.type}`);
+        }
       })
       .finally(() => {
         setIsPending(false);

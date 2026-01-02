@@ -671,7 +671,7 @@ export const userRouter = {
 
       if (!roleCheckResult.success) {
         throw new ORPCError("UNAUTHORIZED", {
-          message: "User doesn't have an Admin F3 Nation role.",
+          message: "You must be an F3 Nation admin to delete users.",
         });
       }
 
