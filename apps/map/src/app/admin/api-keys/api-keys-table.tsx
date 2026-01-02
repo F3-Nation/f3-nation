@@ -140,7 +140,6 @@ export const ApiKeysTable = () => {
                 {rows.map((row) => {
                   const status = deriveStatus(row);
                   const displayKey = `•••• ${row.keySignature}`;
-                  const hasRoles = row.roles && row.roles.length > 0;
 
                   return (
                     <TableRow key={row.id}>
@@ -172,8 +171,10 @@ export const ApiKeysTable = () => {
                           {row.roles && row.roles.length > 0 ? (
                             row.roles.map((role, index) => {
                               const roleStyles = {
-                                admin: "bg-purple-100 text-purple-700 border-purple-200",
-                                editor: "bg-blue-100 text-blue-700 border-blue-200",
+                                admin:
+                                  "bg-purple-100 text-purple-700 border-purple-200",
+                                editor:
+                                  "bg-blue-100 text-blue-700 border-blue-200",
                               } as const;
 
                               const roleLabels = {

@@ -251,6 +251,7 @@ export default function AdminApiKeysModal() {
                                 value={roleEntry.orgId.toString()}
                                 options={orgOptions}
                                 searchPlaceholder="Select an org"
+                                disabled={isLoadingOrgs}
                                 onSelect={(value) => {
                                   const orgId = safeParseInt(value as string);
                                   if (orgId == undefined) {

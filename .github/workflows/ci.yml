@@ -30,6 +30,8 @@ env:
   NEXT_PUBLIC_API_URL: http://localhost:3001
   NEXT_PUBLIC_MAP_URL: http://localhost:3000
   NEXT_PUBLIC_CHANNEL: ci
+  NEXT_PUBLIC_GOOGLE_API_KEY: ci-google-api-key-placeholder
+  NEXT_PUBLIC_MAP_API_KEY: ci-map-api-key-placeholder
 
 jobs:
   format-check:

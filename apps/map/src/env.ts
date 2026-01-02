@@ -19,6 +19,7 @@ export const env = createEnv({
     NEXT_PUBLIC_GIT_COMMIT_HASH: z.string().optional(),
     NEXT_PUBLIC_GIT_BRANCH: z.string().optional(),
     NEXT_PUBLIC_GA_MEASUREMENT_ID: z.string().optional(),
+    NEXT_PUBLIC_MAP_API_KEY: z.string().min(1),
   },
   /**
    * Specify your server-side environment variables schema here.
@@ -36,7 +37,6 @@ export const env = createEnv({
     NEXT_PUBLIC_MAP_URL: z.string().min(1),
     NEXT_PUBLIC_API_URL: z.string().min(1),
     NEXT_PUBLIC_GOOGLE_API_KEY: z.string().min(1),
-    NEXT_PUBLIC_MAP_API_KEY: z.string().min(1),
   },
   /**
    * Destructure all variables from `process.env` to make sure they aren't tree-shaken away.
