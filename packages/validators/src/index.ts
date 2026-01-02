@@ -25,7 +25,27 @@ export const CrupdateUserSchema = UserInsertSchema.extend({
     })
     .array(),
   f3Name: z.string().min(1, { message: "F3 Name is required" }),
+  email: z
+    .string()
+    .email({ message: "Invalid email format" })
+    .or(z.literal(""))
+    .optional(),
+});
+
+export const InviteUserSchema = z.object({
   email: z.string().email({ message: "Invalid email format" }),
+  userId: z.number().optional(), // If provided, user exists; if not, create new
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+  f3Name: z.string().optional(),
+  phone: z.string().optional(),
+  roles: z
+    .object({
+      orgId: z.number(),
+      roleName: z.enum(["editor", "admin"]),
+    })
+    .array()
+    .min(1, { message: "At least one role is required" }),
 });
 // AUTH SCHEMA
 export const EmailAuthSchema = UserInsertSchema.pick({

@@ -5,6 +5,9 @@ export default async function UserEditPage(props: {
   params: Promise<{ id: string }>;
 }) {
   const params = await props.params;
-  const user = await client.user.byId({ id: Number(params.id) });
-  return <UserMutate user={user} />;
+  const userResponse = await client.user.byId({
+    id: Number(params.id),
+    includePii: true,
+  });
+  return <UserMutate user={userResponse.user} />;
 }

@@ -20,16 +20,6 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 
-import type {
-  AttendanceMeta,
-  EventMeta,
-  LocationMeta,
-  OrgMeta,
-  SlackSpacesMeta,
-  SlackUserMeta,
-  UpdateRequestMeta,
-  UserMeta,
-} from "@acme/shared/app/types";
 import {
   AchievementCadence,
   DayOfWeek,
@@ -42,6 +32,16 @@ import {
   UserRole,
   UserStatus,
 } from "@acme/shared/app/enums";
+import type {
+  AttendanceMeta,
+  EventMeta,
+  LocationMeta,
+  OrgMeta,
+  SlackSpacesMeta,
+  SlackUserMeta,
+  UpdateRequestMeta,
+  UserMeta,
+} from "@acme/shared/app/types";
 
 export const userRole = pgEnum("user_role", UserRole);
 export const dayOfWeek = pgEnum("day_of_week", DayOfWeek);

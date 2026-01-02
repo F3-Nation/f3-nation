@@ -8,7 +8,8 @@ import {
   PersonStanding,
   SquareChartGantt,
   Turtle,
-  User,
+  UserCheck,
+  Users,
 } from "lucide-react";
 
 import { routes } from "@acme/shared/app/constants";
@@ -46,9 +47,15 @@ export const AdminNavLinks = ({
       type: "section",
     },
     {
-      href: routes.admin.users.__path,
-      icon: User,
-      label: "Users",
+      href: routes.admin.users.all.__path,
+      icon: Users,
+      label: "All Users",
+      type: "link",
+    },
+    {
+      href: routes.admin.users.mine.__path,
+      icon: UserCheck,
+      label: "My Users",
       type: "link",
     },
     {

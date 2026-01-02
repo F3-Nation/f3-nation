@@ -172,6 +172,14 @@ export const routes = {
     users: {
       __path: "/admin/users",
       __auth: "editor",
+      all: {
+        __path: "/admin/users/all",
+        __auth: "editor",
+      },
+      mine: {
+        __path: "/admin/users/mine",
+        __auth: "editor",
+      },
     },
     requests: {
       __path: "/admin/requests",
