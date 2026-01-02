@@ -140,7 +140,7 @@ export const ApiKeysTable = () => {
                 {rows.map((row) => {
                   const status = deriveStatus(row);
                   const displayKey = `•••• ${row.keySignature}`;
-                  const hasOrgs = row.orgNames && row.orgNames.length > 0;
+                  const hasRoles = row.roles && row.roles.length > 0;
 
                   return (
                     <TableRow key={row.id}>
@@ -169,15 +169,29 @@ export const ApiKeysTable = () => {
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap items-center gap-2">
-                          {hasOrgs ? (
-                            row.orgNames.map((orgName, index) => (
-                              <span
-                                key={`${row.id}-${orgName}-${index}`}
-                                className="inline-flex items-center whitespace-nowrap rounded-full border border-purple-200 bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700"
-                              >
-                                {orgName}
-                              </span>
-                            ))
+                          {row.roles && row.roles.length > 0 ? (
+                            row.roles.map((role, index) => {
+                              const roleStyles = {
+                                admin: "bg-purple-100 text-purple-700 border-purple-200",
+                                editor: "bg-blue-100 text-blue-700 border-blue-200",
+                              } as const;
+
+                              const roleLabels = {
+                                admin: "Admin",
+                                editor: "Editor",
+                              } as const;
+
+                              return (
+                                <span
+                                  key={`${row.id}-${role.orgId}-${index}`}
+                                  className={`inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium ${
+                                    roleStyles[role.roleName]
+                                  }`}
+                                >
+                                  {role.orgName} ({roleLabels[role.roleName]})
+                                </span>
+                              );
+                            })
                           ) : (
                             <span className="inline-flex items-center whitespace-nowrap rounded-full border border-gray-200 bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
                               Read only

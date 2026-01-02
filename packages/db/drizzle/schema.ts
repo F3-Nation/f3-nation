@@ -1034,9 +1034,6 @@ export const apiKeys = pgTable(
     name: varchar().notNull(),
     description: varchar(),
     ownerId: integer("owner_id"),
-    orgIds: json("org_ids")
-      .$type<number[]>()
-      .default(sql`'[]'::json`),
     revokedAt: timestamp("revoked_at", { mode: "string" }),
     lastUsedAt: timestamp("last_used_at", { mode: "string" }),
     expiresAt: timestamp("expires_at", { mode: "string" }),
@@ -1053,6 +1050,36 @@ export const apiKeys = pgTable(
       columns: [table.ownerId],
       foreignColumns: [users.id],
       name: "api_keys_owner_id_fkey",
+    }),
+  ],
+);
+
+export const rolesXApiKeysXOrg = pgTable(
+  "roles_x_api_keys_x_org",
+  {
+    roleId: integer("role_id").notNull(),
+    apiKeyId: integer("api_key_id").notNull(),
+    orgId: integer("org_id").notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.roleId],
+      foreignColumns: [roles.id],
+      name: "roles_x_api_keys_x_org_role_id_fkey",
+    }),
+    foreignKey({
+      columns: [table.apiKeyId],
+      foreignColumns: [apiKeys.id],
+      name: "roles_x_api_keys_x_org_api_key_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.orgId],
+      foreignColumns: [orgs.id],
+      name: "roles_x_api_keys_x_org_org_id_fkey",
+    }),
+    primaryKey({
+      columns: [table.roleId, table.apiKeyId, table.orgId],
+      name: "roles_x_api_keys_x_org_pkey",
     }),
   ],
 );
