@@ -40,7 +40,7 @@ export const apiKeyRouter = {
   list: adminProcedure
     .route({
       method: "GET",
-      path: "/list",
+      path: "/",
       tags: ["api-key"],
       summary: "List API keys",
       description: "List all API keys",
@@ -128,7 +128,7 @@ export const apiKeyRouter = {
     .input(createApiKeySchema)
     .route({
       method: "POST",
-      path: "/create",
+      path: "/",
       tags: ["api-key"],
       summary: "Create API key",
       description: "Generate a new API key for programmatic access",
@@ -201,7 +201,7 @@ export const apiKeyRouter = {
     .input(revokeApiKeySchema)
     .route({
       method: "POST",
-      path: "/revoke",
+      path: "/{id}/revoke",
       tags: ["api-key"],
       summary: "Revoke API key",
       description: "Revoke or restore an API key",
@@ -233,7 +233,7 @@ export const apiKeyRouter = {
     .input(z.object({ id: z.number() }))
     .route({
       method: "DELETE",
-      path: "/purge",
+      path: "/{id}/purge",
       tags: ["api-key"],
       summary: "Purge API key",
       description: "Permanently delete an API key",
@@ -259,7 +259,7 @@ export const apiKeyRouter = {
     .input(z.object({ key: z.string() }))
     .route({
       method: "POST",
-      path: "/validate",
+      path: "/{key}/validate",
       tags: ["api-key"],
       summary: "Validate API key",
       description: "Check if an API key is valid and not expired or revoked",

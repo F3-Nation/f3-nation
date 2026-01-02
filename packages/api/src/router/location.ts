@@ -36,7 +36,7 @@ export const locationRouter = {
     )
     .route({
       method: "GET",
-      path: "/all",
+      path: "/",
       tags: ["location"],
       summary: "List all locations",
       description:
@@ -128,7 +128,7 @@ export const locationRouter = {
     .input(z.object({ id: z.coerce.number() }))
     .route({
       method: "GET",
-      path: "/by-id",
+      path: "/{id}",
       tags: ["location"],
       summary: "Get location by ID",
       description: "Retrieve detailed information about a specific location",
@@ -166,7 +166,7 @@ export const locationRouter = {
     .input(LocationInsertSchema.partial({ id: true }))
     .route({
       method: "POST",
-      path: "/crupdate",
+      path: "/",
       tags: ["location"],
       summary: "Create or update location",
       description: "Create a new location or update an existing one",
@@ -215,7 +215,7 @@ export const locationRouter = {
     .input(z.object({ id: z.number() }))
     .route({
       method: "DELETE",
-      path: "/delete",
+      path: "/{id}",
       tags: ["location"],
       summary: "Delete location",
       description: "Soft delete a location by marking it as inactive",

@@ -51,7 +51,7 @@ export const requestRouter = {
     )
     .route({
       method: "GET",
-      path: "/all",
+      path: "/",
       tags: ["request"],
       summary: "List all requests",
       description:
@@ -216,7 +216,7 @@ export const requestRouter = {
     .input(z.object({ id: z.string() }))
     .route({
       method: "GET",
-      path: "/by-id",
+      path: "/{id}",
       tags: ["request"],
       summary: "Get request by ID",
       description:
@@ -289,7 +289,7 @@ export const requestRouter = {
     .input(DeleteRequestSchema)
     .route({
       method: "POST",
-      path: "/submit-delete-request",
+      path: "/delete-request",
       tags: ["request"],
       summary: "Submit delete request",
       description: "Submit a request to delete an event or location",
@@ -376,7 +376,7 @@ export const requestRouter = {
     .input(RequestInsertSchema)
     .route({
       method: "POST",
-      path: "/submit-update-request",
+      path: "/update-request",
       tags: ["request"],
       summary: "Submit update request",
       description: "Submit a request to create or update a workout on the map",

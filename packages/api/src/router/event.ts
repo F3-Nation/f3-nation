@@ -41,7 +41,7 @@ export const eventRouter = {
     )
     .route({
       method: "GET",
-      path: "/all",
+      path: "/",
       tags: ["event"],
       summary: "List all events",
       description:
@@ -214,7 +214,7 @@ export const eventRouter = {
     .input(z.object({ id: z.coerce.number() }))
     .route({
       method: "GET",
-      path: "/by-id",
+      path: "/{id}",
       tags: ["event"],
       summary: "Get event by ID",
       description: "Retrieve detailed information about a specific event",
@@ -314,7 +314,7 @@ export const eventRouter = {
     .input(EventInsertSchema.partial({ id: true }))
     .route({
       method: "POST",
-      path: "/crupdate",
+      path: "/",
       tags: ["event"],
       summary: "Create or update event",
       description: "Create a new event or update an existing one",
@@ -439,7 +439,7 @@ export const eventRouter = {
     .input(z.object({ id: z.number() }))
     .route({
       method: "DELETE",
-      path: "/delete",
+      path: "/{id}",
       tags: ["event"],
       summary: "Delete event",
       description: "Soft delete an event by marking it as inactive",

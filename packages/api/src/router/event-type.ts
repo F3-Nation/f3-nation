@@ -43,7 +43,7 @@ export const eventTypeRouter = {
     )
     .route({
       method: "GET",
-      path: "/all",
+      path: "/",
       tags: ["event-type"],
       summary: "List all event types",
       description:
@@ -146,7 +146,7 @@ export const eventTypeRouter = {
     )
     .route({
       method: "GET",
-      path: "/by-org-id",
+      path: "/org/{orgId}",
       tags: ["event-type"],
       summary: "Get event types by organization",
       description: "Retrieve all event types for a specific organization",
@@ -170,7 +170,7 @@ export const eventTypeRouter = {
     .input(z.object({ id: z.coerce.number() }))
     .route({
       method: "GET",
-      path: "/by-id",
+      path: "/{id}",
       tags: ["event-type"],
       summary: "Get event type by ID",
       description: "Retrieve detailed information about a specific event type",
@@ -193,7 +193,7 @@ export const eventTypeRouter = {
     .input(EventTypeInsertSchema)
     .route({
       method: "POST",
-      path: "/crupdate",
+      path: "/",
       tags: ["event-type"],
       summary: "Create or update event type",
       description: "Create a new event type or update an existing one",
@@ -259,7 +259,7 @@ export const eventTypeRouter = {
     .input(z.object({ id: z.number() }))
     .route({
       method: "DELETE",
-      path: "/delete",
+      path: "/{id}",
       tags: ["event-type"],
       summary: "Delete event type",
       description: "Soft delete an event type by marking it as inactive",

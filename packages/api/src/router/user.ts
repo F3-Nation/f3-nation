@@ -187,7 +187,7 @@ export const userRouter = {
     .input(userListInputSchema)
     .route({
       method: "GET",
-      path: "/all",
+      path: "/",
       tags: ["user"],
       summary: "List all users",
       description:
@@ -225,11 +225,11 @@ export const userRouter = {
 
       return buildUserListQuery({ ctx, input, includePii });
     }),
-  byOrg: editorProcedure
+  byOrgs: editorProcedure
     .input(userListInputSchema)
     .route({
       method: "GET",
-      path: "/by-org",
+      path: "/orgs",
       tags: ["user"],
       summary: "List users by organization",
       description:
@@ -294,7 +294,7 @@ export const userRouter = {
     )
     .route({
       method: "GET",
-      path: "/by-id",
+      path: "/{id}",
       tags: ["user"],
       summary: "Get user by ID",
       description:
@@ -737,7 +737,7 @@ export const userRouter = {
     .input(z.object({ id: z.number() }))
     .route({
       method: "DELETE",
-      path: "/delete",
+      path: "/{id}",
       tags: ["user"],
       summary: "Delete user",
       description:

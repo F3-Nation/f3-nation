@@ -193,7 +193,7 @@ export const MyUsersTable = () => {
   }, []);
 
   const { data } = useQuery({
-    ...orpc.user.byOrg.queryOptions({
+    ...orpc.user.byOrgs.queryOptions({
       input: {
         roles: selectedRoles,
         statuses: selectedStatuses,
@@ -254,7 +254,7 @@ export const MyUsersTable = () => {
 };
 
 const columns: TableOptions<
-  RouterOutputs["user"]["byOrg"]["users"][number]
+  RouterOutputs["user"]["byOrgs"]["users"][number]
 >["columns"] = [
   {
     accessorKey: "name",

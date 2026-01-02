@@ -1,8 +1,7 @@
-import { revalidatePath } from "next/cache";
 import { ORPCError } from "@orpc/server";
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import type { OrgMeta } from "@acme/shared/app/types";
 import {
   aliasedTable,
   and,
@@ -15,6 +14,7 @@ import {
 } from "@acme/db";
 import { IsActiveStatus, OrgType } from "@acme/shared/app/enums";
 import { arrayOrSingle } from "@acme/shared/app/functions";
+import type { OrgMeta } from "@acme/shared/app/types";
 import { OrgInsertSchema, SortingSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
@@ -62,7 +62,7 @@ export const orgRouter = {
     )
     .route({
       method: "GET",
-      path: "/all",
+      path: "/",
       tags: ["org"],
       summary: "List all organizations",
       description:
@@ -161,7 +161,7 @@ export const orgRouter = {
     )
     .route({
       method: "GET",
-      path: "/by-id",
+      path: "/{id}",
       tags: ["org"],
       summary: "Get organization by ID",
       description:
@@ -184,7 +184,7 @@ export const orgRouter = {
     .input(OrgInsertSchema.partial({ id: true, parentId: true }))
     .route({
       method: "POST",
-      path: "/crupdate",
+      path: "/",
       tags: ["org"],
       summary: "Create or update organization",
       description: "Create a new organization or update an existing one",
@@ -336,7 +336,7 @@ export const orgRouter = {
     .input(z.object({ id: z.number(), orgType: z.enum(OrgType).optional() }))
     .route({
       method: "DELETE",
-      path: "/delete",
+      path: "/{id}",
       tags: ["org"],
       summary: "Delete organization",
       description: "Soft delete an organization by marking it as inactive",
