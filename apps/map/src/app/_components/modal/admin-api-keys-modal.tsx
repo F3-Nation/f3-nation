@@ -1,9 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Plus, X } from "lucide-react";
 import { z } from "zod";
 
+import type { RoleEntry } from "@acme/shared/app/types";
 import { Z_INDEX } from "@acme/shared/app/constants";
+import { safeParseInt } from "@acme/shared/common/functions";
 import { Button } from "@acme/ui/button";
 import {
   Dialog,
@@ -22,6 +25,13 @@ import {
   useForm,
 } from "@acme/ui/form";
 import { Input } from "@acme/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@acme/ui/select";
 import { Spinner } from "@acme/ui/spinner";
 import { Textarea } from "@acme/ui/textarea";
 import { toast } from "@acme/ui/toast";
@@ -33,54 +43,37 @@ import { closeModal } from "~/utils/store/modal";
 const ApiKeyFormSchema = z.object({
   name: z.string().min(1, { message: "Name is required" }),
   description: z.string().optional(),
-  orgIds: z
-    .number()
-    .array()
-    .min(1, { message: "At least one org is required" }),
+  roles: z
+    .object({
+      orgId: z.number(),
+      roleName: z.enum(["editor", "admin"]),
+    })
+    .array(),
   expiresAt: z.string().optional(),
 });
 
 export default function AdminApiKeysModal() {
   const [createdSecret, setCreatedSecret] = useState<string | null>(null);
-  const { data: orgQuery, isLoading: isLoadingOrgs } = useQuery(
+  const { data: allOrgs, isLoading: isLoadingOrgs } = useQuery(
     orpc.org.mine.queryOptions(),
   );
-
   const form = useForm({
     schema: ApiKeyFormSchema,
     defaultValues: {
       name: "",
       description: "",
-      orgIds: [],
+      roles: [] as RoleEntry[],
       expiresAt: "",
     },
   });
 
   const orgOptions = useMemo(() => {
-    const orgs = orgQuery?.orgs ?? [];
-    if (!orgs.length) {
-      return [];
-    }
-
-    const formattedOptions = orgs.map((org) => ({
+    const orgs = allOrgs?.orgs ?? [];
+    return orgs.map((org) => ({
       value: org.id.toString(),
-      label: `${org.name} (${org.orgType.toUpperCase()})`,
-      orgId: org.id,
-      parentId: org.parentId,
-      roles: org.roles,
+      label: `${org.name} (${org.orgType})`,
     }));
-
-    // Only show orgs where the user has direct admin access
-    // (not inherited from parent orgs)
-    return formattedOptions.map(({ value, label, roles }) => {
-      const isAdmin = roles.includes("admin");
-      return {
-        value,
-        label: !isAdmin ? `${label} (No direct admin access)` : label,
-        disabled: !isAdmin,
-      };
-    });
-  }, [orgQuery?.orgs]);
+  }, [allOrgs?.orgs]);
 
   const createApiKey = useMutation(
     orpc.apiKey.create.mutationOptions({
@@ -90,7 +83,7 @@ export default function AdminApiKeysModal() {
         form.reset({
           name: "",
           description: "",
-          orgIds: [],
+          roles: [],
           expiresAt: "",
         });
 
@@ -168,17 +161,13 @@ export default function AdminApiKeysModal() {
                 className="space-y-4"
                 onSubmit={form.handleSubmit(
                   async (values) => {
-                    if (!values.orgIds?.length) {
-                      toast.error("Please select at least one org");
-                      return;
-                    }
                     const expiresAt = values.expiresAt
                       ? new Date(values.expiresAt).toISOString()
                       : undefined;
                     await createApiKey.mutateAsync({
                       name: values.name,
                       description: values.description ?? undefined,
-                      orgIds: values.orgIds,
+                      roles: values.roles ?? [],
                       expiresAt,
                     });
                   },
@@ -220,30 +209,118 @@ export default function AdminApiKeysModal() {
                 />
                 <FormField
                   control={form.control}
-                  name="orgIds"
+                  name="roles"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Org access</FormLabel>
-                      <FormControl>
-                        <VirtualizedCombobox
-                          disabled={isLoadingOrgs}
-                          value={field.value?.map((value) => value.toString())}
-                          options={orgOptions}
-                          isMulti
-                          searchPlaceholder="Select orgs"
-                          onSelect={(items) => {
-                            const list = Array.isArray(items) ? items : [items];
-                            const ids = list
-                              .filter(Boolean)
-                              .map((value) => Number(value));
-                            field.onChange(ids);
-                          }}
-                        />
-                      </FormControl>
+                      <FormLabel>Roles</FormLabel>
                       <FormDescription>
-                        Select orgs where you have admin access. Only orgs you
-                        are a direct admin of can be selected.
+                        Assign roles to orgs for this API key.
                       </FormDescription>
+                      <div className="space-y-2">
+                        {((field.value as RoleEntry[]) || []).map(
+                          (roleEntry, index) => (
+                            <div
+                              key={index}
+                              className="flex items-center gap-2"
+                            >
+                              <Select
+                                onValueChange={(value) => {
+                                  const newRoles = [
+                                    ...(field.value as RoleEntry[]),
+                                  ];
+                                  newRoles[index] = {
+                                    orgId: roleEntry.orgId,
+                                    roleName: value as "editor" | "admin",
+                                  };
+                                  field.onChange(newRoles);
+                                }}
+                                value={roleEntry.roleName}
+                              >
+                                <FormControl>
+                                  <SelectTrigger className="w-[200px]">
+                                    <SelectValue placeholder="Select a role" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="editor">Editor</SelectItem>
+                                  <SelectItem value="admin">Admin</SelectItem>
+                                </SelectContent>
+                              </Select>
+
+                              <VirtualizedCombobox
+                                value={roleEntry.orgId.toString()}
+                                options={orgOptions}
+                                searchPlaceholder="Select an org"
+                                disabled={isLoadingOrgs}
+                                onSelect={(value) => {
+                                  const orgId = safeParseInt(value as string);
+                                  if (orgId == undefined) {
+                                    toast.error("Invalid orgId");
+                                    return;
+                                  }
+                                  const newRoles = [
+                                    ...(field.value as RoleEntry[]),
+                                  ];
+                                  newRoles[index] = {
+                                    roleName:
+                                      newRoles[index]?.roleName ?? "editor",
+                                    orgId,
+                                  };
+                                  field.onChange(newRoles);
+                                }}
+                                isMulti={false}
+                              />
+
+                              <Button
+                                variant="ghost"
+                                type="button"
+                                size="sm"
+                                onClick={() => {
+                                  const newRoles = [
+                                    ...(field.value as RoleEntry[]),
+                                  ];
+                                  newRoles.splice(index, 1);
+                                  field.onChange(newRoles);
+                                }}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ),
+                        )}
+
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex flex-col">
+                            <p className="text-xs text-gray-500">
+                              Admins can invite & edit
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              Editors can edit
+                            </p>
+                          </div>
+
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="mt-2"
+                            onClick={() => {
+                              const firstOrgId = allOrgs?.orgs?.[0]?.id ?? 1;
+                              const newRoleEntry: RoleEntry = {
+                                roleName: "editor",
+                                orgId: firstOrgId,
+                              };
+                              field.onChange([
+                                ...((field.value as RoleEntry[]) ?? []),
+                                newRoleEntry,
+                              ]);
+                            }}
+                          >
+                            <Plus className="mr-2 h-4 w-4" />
+                            Add Role
+                          </Button>
+                        </div>
+                      </div>
                       <FormMessage />
                     </FormItem>
                   )}

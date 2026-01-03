@@ -20,16 +20,6 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 
-import type {
-  AttendanceMeta,
-  EventMeta,
-  LocationMeta,
-  OrgMeta,
-  SlackSpacesMeta,
-  SlackUserMeta,
-  UpdateRequestMeta,
-  UserMeta,
-} from "@acme/shared/app/types";
 import {
   AchievementCadence,
   DayOfWeek,
@@ -42,6 +32,16 @@ import {
   UserRole,
   UserStatus,
 } from "@acme/shared/app/enums";
+import type {
+  AttendanceMeta,
+  EventMeta,
+  LocationMeta,
+  OrgMeta,
+  SlackSpacesMeta,
+  SlackUserMeta,
+  UpdateRequestMeta,
+  UserMeta,
+} from "@acme/shared/app/types";
 
 export const userRole = pgEnum("user_role", UserRole);
 export const dayOfWeek = pgEnum("day_of_week", DayOfWeek);
@@ -136,7 +136,7 @@ export const eventInstances = pgTable(
       columns: [table.seriesId],
       foreignColumns: [events.id],
       name: "event_instances_series_id_fkey",
-    }),
+    }).onDelete("cascade"),
   ],
 );
 
@@ -237,11 +237,15 @@ export const attendance = pgTable(
     eventInstanceId: integer("event_instance_id").notNull(),
   },
   (table) => [
+    index("idx_attendance_event_instance_id").using(
+      "btree",
+      table.eventInstanceId.asc().nullsLast().op("int4_ops"),
+    ),
     foreignKey({
       columns: [table.eventInstanceId],
       foreignColumns: [eventInstances.id],
       name: "event_instance_id_fkey",
-    }),
+    }).onDelete("cascade"),
     foreignKey({
       columns: [table.userId],
       foreignColumns: [users.id],
@@ -658,7 +662,7 @@ export const eventInstancesXEventTypes = pgTable(
       columns: [table.eventInstanceId],
       foreignColumns: [eventInstances.id],
       name: "event_instances_x_event_types_event_instance_id_fkey",
-    }),
+    }).onDelete("cascade"),
     foreignKey({
       columns: [table.eventTypeId],
       foreignColumns: [eventTypes.id],
@@ -682,7 +686,7 @@ export const eventTagsXEventInstances = pgTable(
       columns: [table.eventInstanceId],
       foreignColumns: [eventInstances.id],
       name: "event_tags_x_event_instances_event_instance_id_fkey",
-    }),
+    }).onDelete("cascade"),
     foreignKey({
       columns: [table.eventTagId],
       foreignColumns: [eventTags.id],
@@ -730,7 +734,7 @@ export const eventTagsXEvents = pgTable(
       columns: [table.eventId],
       foreignColumns: [events.id],
       name: "event_tags_x_events_event_id_fkey",
-    }),
+    }).onDelete("cascade"),
     foreignKey({
       columns: [table.eventTagId],
       foreignColumns: [eventTags.id],
@@ -762,7 +766,7 @@ export const eventsXEventTypes = pgTable(
       columns: [table.eventId],
       foreignColumns: [events.id],
       name: "events_x_event_types_event_id_fkey",
-    }),
+    }).onDelete("cascade"),
     foreignKey({
       columns: [table.eventTypeId],
       foreignColumns: [eventTypes.id],
@@ -786,7 +790,7 @@ export const attendanceXAttendanceTypes = pgTable(
       columns: [table.attendanceId],
       foreignColumns: [attendance.id],
       name: "attendance_x_attendance_types_attendance_id_fkey",
-    }),
+    }).onDelete("cascade"),
     foreignKey({
       columns: [table.attendanceTypeId],
       foreignColumns: [attendanceTypes.id],
@@ -1030,9 +1034,6 @@ export const apiKeys = pgTable(
     name: varchar().notNull(),
     description: varchar(),
     ownerId: integer("owner_id"),
-    orgIds: json("org_ids")
-      .$type<number[]>()
-      .default(sql`'[]'::json`),
     revokedAt: timestamp("revoked_at", { mode: "string" }),
     lastUsedAt: timestamp("last_used_at", { mode: "string" }),
     expiresAt: timestamp("expires_at", { mode: "string" }),
@@ -1049,6 +1050,36 @@ export const apiKeys = pgTable(
       columns: [table.ownerId],
       foreignColumns: [users.id],
       name: "api_keys_owner_id_fkey",
+    }),
+  ],
+);
+
+export const rolesXApiKeysXOrg = pgTable(
+  "roles_x_api_keys_x_org",
+  {
+    roleId: integer("role_id").notNull(),
+    apiKeyId: integer("api_key_id").notNull(),
+    orgId: integer("org_id").notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.roleId],
+      foreignColumns: [roles.id],
+      name: "roles_x_api_keys_x_org_role_id_fkey",
+    }),
+    foreignKey({
+      columns: [table.apiKeyId],
+      foreignColumns: [apiKeys.id],
+      name: "roles_x_api_keys_x_org_api_key_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.orgId],
+      foreignColumns: [orgs.id],
+      name: "roles_x_api_keys_x_org_org_id_fkey",
+    }),
+    primaryKey({
+      columns: [table.roleId, table.apiKeyId, table.orgId],
+      name: "roles_x_api_keys_x_org_pkey",
     }),
   ],
 );

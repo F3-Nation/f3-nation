@@ -5,6 +5,8 @@ import { createRouterClient } from "@orpc/server";
 import { router } from "@acme/api";
 import { Client, Header } from "@acme/shared/common/enums";
 
+import { env } from "~/env";
+
 /**
  * Server-side oRPC client for static generation (SSG).
  *
@@ -20,6 +22,7 @@ globalThis.$client = createRouterClient(router, {
   context: async () => ({
     reqHeaders: new Headers({
       [Header.Client]: Client.ORPC_SSG,
+      [Header.Authorization]: `Bearer ${env.NEXT_PUBLIC_MAP_API_KEY}`,
     }),
   }),
 });

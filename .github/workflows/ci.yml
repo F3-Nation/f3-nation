@@ -2,264 +2,134 @@ name: CI
 
 on:
   push:
-    branches:
-      - "**"
+    branches: ["**"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/dev' }}
 
 env:
-  FORCE_COLOR: 3
-  TURBO_TEAM: ${{ vars.TURBO_TEAM }}
-  TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-  PROJECT: ${{ github.event.repository.name }}
+  CI: true
+  # Database (for test jobs - matches PostgreSQL service)
+  DATABASE_URL: postgres://postgres:postgres@localhost:5432/f3_test
+  TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/f3_test
+  # Auth (mock)
+  AUTH_SECRET: ci-auth-secret-placeholder-32chars
+  # Email (mocks)
+  EMAIL_SERVER: smtp://user:pass@localhost:587
+  EMAIL_FROM: ci@example.com
+  EMAIL_ADMIN_DESTINATIONS: ci@example.com
+  # Google (mocks)
+  GOOGLE_LOGO_BUCKET_PRIVATE_KEY: mock-private-key
+  GOOGLE_LOGO_BUCKET_CLIENT_EMAIL: mock@example.iam.gserviceaccount.com
+  GOOGLE_LOGO_BUCKET_BUCKET_NAME: mock-bucket
+  # API (mocks)
+  API_KEY: ci-api-key-placeholder
+  SUPER_ADMIN_API_KEY: ci-super-admin-key-placeholder
+  # Next.js (mocks)
+  NEXT_PUBLIC_API_URL: http://localhost:3001
+  NEXT_PUBLIC_MAP_URL: http://localhost:3000
+  NEXT_PUBLIC_CHANNEL: ci
+  NEXT_PUBLIC_GOOGLE_API_KEY: ci-google-api-key-placeholder
+  NEXT_PUBLIC_MAP_API_KEY: ci-map-api-key-placeholder
 
 jobs:
-  env-setup:
-    runs-on: ubuntu-latest
-    outputs:
-      config: ${{ steps.set-config.outputs.config }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup
-        uses: ./tooling/github/setup
-
-      - id: set-config
-        run: |
-          case "${{ github.ref_name }}" in
-            "main" | "master" | "prod" | "production")
-              echo "config=prd" >> $GITHUB_OUTPUT
-              ;;
-            "staging" | "stage")
-              echo "config=stg" >> $GITHUB_OUTPUT
-              ;;
-            *)
-              echo "config=dev" >> $GITHUB_OUTPUT
-              ;;
-          esac
-
-      - name: Download Doppler ENV vars
-        uses: ./tooling/github/doppler
-        with:
-          doppler-token: ${{ secrets.DOPPLER_TOKEN }}
-          config: ${{ steps.set-config.outputs.config }}
-        # Hardcode project since we have f3-2 and f3-nation-map in github and only f3-2 is used in Doppler
-
-      - name: Check env
-        run: pnpm -F nextjs check-env
-
   format-check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup
-        uses: ./tooling/github/setup
-
-      - name: Run format:check
-        run: pnpm format
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format
 
   lint:
-    needs: env-setup
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup
-        uses: ./tooling/github/setup
-
-      - name: Download ENV vars
-        uses: ./tooling/github/doppler
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
         with:
-          doppler-token: ${{ secrets.DOPPLER_TOKEN }}
-          config: ${{ needs.env-setup.outputs.config }}
-
-      - name: Run lint
-        run: pnpm lint
-
-      - name: Run lint:ws
-        run: pnpm lint:ws
-
-  build:
-    needs: env-setup
-    runs-on: ubuntu-latest
-    env:
-      DATABASE_URL: postgres://user:pass@localhost:5432/f3_ci
-      TEST_DATABASE_URL: postgres://user:pass@localhost:5432/f3_ci_test
-      EMAIL_SERVER: smtp://user:pass@example.com:587
-      EMAIL_FROM: dev@example.com
-      EMAIL_ADMIN_DESTINATIONS: dev@example.com
-      GOOGLE_LOGO_BUCKET_PRIVATE_KEY: dummy
-      GOOGLE_LOGO_BUCKET_CLIENT_EMAIL: dummy@example.com
-      GOOGLE_LOGO_BUCKET_BUCKET_NAME: dummy-bucket
-      API_KEY: dummy
-      SUPER_ADMIN_API_KEY: dummy
-      NEXT_PUBLIC_URL: http://localhost:3000
-      NEXT_PUBLIC_CHANNEL: ci
-      NEXT_PUBLIC_GOOGLE_API_KEY: dummy
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup
-        uses: ./tooling/github/setup
-
-      - name: Download ENV vars
-        uses: ./tooling/github/doppler
-        with:
-          doppler-token: ${{ secrets.DOPPLER_TOKEN }}
-          config: ${{ needs.env-setup.outputs.config }}
-
-      - name: Run build
-        run: pnpm build
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
 
   typecheck:
-    needs: env-setup
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup
-        uses: ./tooling/github/setup
-
-      - name: Download ENV vars
-        uses: ./tooling/github/doppler
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
         with:
-          doppler-token: ${{ secrets.DOPPLER_TOKEN }}
-          config: ${{ needs.env-setup.outputs.config }}
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
 
-      - name: Run typecheck
-        run: pnpm typecheck
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
 
   test:
-    needs: env-setup
     runs-on: ubuntu-latest
     services:
       postgres:
         image: postgres:16
-        ports:
-          - 5433:5432
         env:
-          POSTGRES_USER: user
-          POSTGRES_PASSWORD: pass
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: f3_test
+        ports:
+          - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U user -d postgres"
+          --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-    env:
-      DATABASE_URL: postgres://user:pass@localhost:5433/f3_ci
-      TEST_DATABASE_URL: postgres://user:pass@localhost:5433/f3_ci_test
-      EMAIL_SERVER: smtp://user:pass@example.com:587
-      EMAIL_FROM: dev@example.com
-      EMAIL_ADMIN_DESTINATIONS: dev@example.com
-      GOOGLE_LOGO_BUCKET_PRIVATE_KEY: dummy
-      GOOGLE_LOGO_BUCKET_CLIENT_EMAIL: dummy@example.com
-      GOOGLE_LOGO_BUCKET_BUCKET_NAME: dummy-bucket
-      API_KEY: dummy
-      SUPER_ADMIN_API_KEY: dummy
-      NEXT_PUBLIC_URL: http://localhost:3000
-      NEXT_PUBLIC_CHANNEL: ci
-      NEXT_PUBLIC_GOOGLE_API_KEY: dummy
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup
-        uses: ./tooling/github/setup
-
-      - name: Download ENV vars
-        uses: ./tooling/github/doppler
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
         with:
-          doppler-token: ${{ secrets.DOPPLER_TOKEN }}
-          config: ${{ needs.env-setup.outputs.config }}
-
-      - name: Wait for Postgres
-        run: |
-          python - <<'PY'
-          import socket
-          import time
-
-          host, port = "localhost", 5433
-          deadline = time.time() + 60
-
-          while time.time() < deadline:
-            try:
-              with socket.create_connection((host, port), timeout=2):
-                print("Postgres is ready")
-                break
-            except OSError:
-              print("Postgres not ready yet, retrying...")
-              time.sleep(2)
-          else:
-            raise SystemExit("Postgres did not become ready in time")
-          PY
-
-      - name: Run test
-        run: pnpm test
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
 
   test-coverage:
-    needs: env-setup
     runs-on: ubuntu-latest
     services:
       postgres:
         image: postgres:16
-        ports:
-          - 5433:5432
         env:
-          POSTGRES_USER: user
-          POSTGRES_PASSWORD: pass
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: f3_test
+        ports:
+          - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U user -d postgres"
+          --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-    env:
-      DATABASE_URL: postgres://user:pass@localhost:5433/f3_ci
-      TEST_DATABASE_URL: postgres://user:pass@localhost:5433/f3_ci_test
-      EMAIL_SERVER: smtp://user:pass@example.com:587
-      EMAIL_FROM: dev@example.com
-      EMAIL_ADMIN_DESTINATIONS: dev@example.com
-      GOOGLE_LOGO_BUCKET_PRIVATE_KEY: dummy
-      GOOGLE_LOGO_BUCKET_CLIENT_EMAIL: dummy@example.com
-      GOOGLE_LOGO_BUCKET_BUCKET_NAME: dummy-bucket
-      API_KEY: dummy
-      SUPER_ADMIN_API_KEY: dummy
-      NEXT_PUBLIC_URL: http://localhost:3000
-      NEXT_PUBLIC_CHANNEL: ci
-      NEXT_PUBLIC_GOOGLE_API_KEY: dummy
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup
-        uses: ./tooling/github/setup
-
-      - name: Download ENV vars
-        uses: ./tooling/github/doppler
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
         with:
-          doppler-token: ${{ secrets.DOPPLER_TOKEN }}
-          config: ${{ needs.env-setup.outputs.config }}
-
-      - name: Wait for Postgres
-        run: |
-          python - <<'PY'
-          import socket
-          import time
-
-          host, port = "localhost", 5433
-          deadline = time.time() + 60
-
-          while time.time() < deadline:
-            try:
-              with socket.create_connection((host, port), timeout=2):
-                print("Postgres is ready")
-                break
-            except OSError:
-              print("Postgres not ready yet, retrying...")
-              time.sleep(2)
-          else:
-            raise SystemExit("Postgres did not become ready in time")
-          PY
-
-      - name: Run test:coverage
-        run: pnpm test:coverage
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:coverage

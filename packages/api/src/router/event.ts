@@ -15,33 +15,33 @@ import {
   sql,
 } from "@acme/db";
 import { IsActiveStatus } from "@acme/shared/app/enums";
+import { arrayOrSingle, getFullAddress } from "@acme/shared/app/functions";
 import { EventInsertSchema } from "@acme/validators";
 
-import { getFullAddress } from "../../../shared/src/app/functions";
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
-import { editorProcedure, publicProcedure } from "../shared";
+import { editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
 export const eventRouter = {
-  all: publicProcedure
+  all: protectedProcedure
     .input(
       z
         .object({
-          pageIndex: z.number().optional(),
-          pageSize: z.number().optional(),
+          pageIndex: z.coerce.number().optional(),
+          pageSize: z.coerce.number().optional(),
           searchTerm: z.string().optional(),
-          statuses: z.enum(["active", "inactive"]).array().optional(),
+          statuses: arrayOrSingle(z.enum(["active", "inactive"])).optional(),
           sorting: z
-            .array(z.object({ id: z.string(), desc: z.boolean() }))
+            .array(z.object({ id: z.string(), desc: z.coerce.boolean() }))
             .optional(),
-          regionIds: z.number().array().optional(),
-          aoIds: z.number().array().optional(),
+          regionIds: arrayOrSingle(z.coerce.number()).optional(),
+          aoIds: arrayOrSingle(z.coerce.number()).optional(),
         })
         .optional(),
     )
     .route({
       method: "GET",
-      path: "/all",
+      path: "/",
       tags: ["event"],
       summary: "List all events",
       description:
@@ -201,7 +201,7 @@ export const eventRouter = {
 
       const events = usePagination
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
-        : await query;
+        : await query.orderBy(...sortedColumns);
 
       const eventsWithLocation = events.map((event) => ({
         ...event,
@@ -210,11 +210,11 @@ export const eventRouter = {
 
       return { events: eventsWithLocation, totalCount: eventCount?.count ?? 0 };
     }),
-  byId: publicProcedure
-    .input(z.object({ id: z.number() }))
+  byId: protectedProcedure
+    .input(z.object({ id: z.coerce.number() }))
     .route({
       method: "GET",
-      path: "/by-id",
+      path: "/id/{id}",
       tags: ["event"],
       summary: "Get event by ID",
       description: "Retrieve detailed information about a specific event",
@@ -314,7 +314,7 @@ export const eventRouter = {
     .input(EventInsertSchema.partial({ id: true }))
     .route({
       method: "POST",
-      path: "/crupdate",
+      path: "/",
       tags: ["event"],
       summary: "Create or update event",
       description: "Create a new event or update an existing one",
@@ -389,7 +389,7 @@ export const eventRouter = {
 
       return result;
     }),
-  eventIdToRegionNameLookup: publicProcedure
+  eventIdToRegionNameLookup: protectedProcedure
     .route({
       method: "GET",
       path: "/event-id-to-region-name-lookup",
@@ -439,7 +439,7 @@ export const eventRouter = {
     .input(z.object({ id: z.number() }))
     .route({
       method: "DELETE",
-      path: "/delete",
+      path: "/delete/{id}",
       tags: ["event"],
       summary: "Delete event",
       description: "Soft delete an event by marking it as inactive",

@@ -12,30 +12,31 @@ import {
   schema,
 } from "@acme/db";
 import { IsActiveStatus } from "@acme/shared/app/enums";
-import { LocationInsertSchema, SortingSchema } from "@acme/validators";
+import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
+import { LocationInsertSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getSortingColumns } from "../get-sorting-columns";
-import { adminProcedure, editorProcedure, publicProcedure } from "../shared";
+import { adminProcedure, editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
 export const locationRouter = {
-  all: publicProcedure
+  all: protectedProcedure
     .input(
       z
         .object({
           searchTerm: z.string().optional(),
-          pageIndex: z.number().optional(),
-          pageSize: z.number().optional(),
-          sorting: SortingSchema.optional(),
-          statuses: z.enum(IsActiveStatus).array().optional(),
-          regionIds: z.number().array().optional(),
+          pageIndex: z.coerce.number().optional(),
+          pageSize: z.coerce.number().optional(),
+          sorting: parseSorting(),
+          statuses: arrayOrSingle(z.enum(IsActiveStatus)).optional(),
+          regionIds: arrayOrSingle(z.coerce.number()).optional(),
         })
         .optional(),
     )
     .route({
       method: "GET",
-      path: "/all",
+      path: "/",
       tags: ["location"],
       summary: "List all locations",
       description:
@@ -118,16 +119,16 @@ export const locationRouter = {
 
       const locations = usePagination
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
-        : await query;
+        : await query.orderBy(...sortedColumns);
 
       return { locations, totalCount: locationCount?.count ?? 0 };
     }),
 
-  byId: publicProcedure
-    .input(z.object({ id: z.number() }))
+  byId: protectedProcedure
+    .input(z.object({ id: z.coerce.number() }))
     .route({
       method: "GET",
-      path: "/by-id",
+      path: "/id/{id}",
       tags: ["location"],
       summary: "Get location by ID",
       description: "Retrieve detailed information about a specific location",
@@ -165,7 +166,7 @@ export const locationRouter = {
     .input(LocationInsertSchema.partial({ id: true }))
     .route({
       method: "POST",
-      path: "/crupdate",
+      path: "/",
       tags: ["location"],
       summary: "Create or update location",
       description: "Create a new location or update an existing one",
@@ -214,7 +215,7 @@ export const locationRouter = {
     .input(z.object({ id: z.number() }))
     .route({
       method: "DELETE",
-      path: "/delete",
+      path: "/delete/{id}",
       tags: ["location"],
       summary: "Delete location",
       description: "Soft delete a location by marking it as inactive",

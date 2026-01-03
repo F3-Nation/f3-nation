@@ -15,10 +15,11 @@ import {
   schema,
 } from "@acme/db";
 import { IsActiveStatus } from "@acme/shared/app/enums";
-import { EventTypeInsertSchema, SortingSchema } from "@acme/validators";
+import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
+import { EventTypeInsertSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
-import { editorProcedure, publicProcedure } from "../shared";
+import { editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
 export const eventTypeRouter = {
@@ -26,23 +27,23 @@ export const eventTypeRouter = {
    * By default this gets all the event types available for the orgIds (meaning that general, nation-wide event types are included)
    * To get only the event types for a specific org, set ignoreNationEventTypes to true
    */
-  all: publicProcedure
+  all: protectedProcedure
     .input(
       z
         .object({
-          orgIds: z.number().array().optional(),
-          statuses: z.enum(IsActiveStatus).array().optional(),
-          pageIndex: z.number().optional(),
-          pageSize: z.number().optional(),
+          orgIds: arrayOrSingle(z.coerce.number()).optional(),
+          statuses: arrayOrSingle(z.enum(IsActiveStatus)).optional(),
+          pageIndex: z.coerce.number().optional(),
+          pageSize: z.coerce.number().optional(),
           searchTerm: z.string().optional(),
-          sorting: SortingSchema.optional(),
-          ignoreNationEventTypes: z.boolean().optional(),
+          sorting: parseSorting(),
+          ignoreNationEventTypes: z.coerce.boolean().optional(),
         })
         .optional(),
     )
     .route({
       method: "GET",
-      path: "/all",
+      path: "/",
       tags: ["event-type"],
       summary: "List all event types",
       description:
@@ -135,15 +136,17 @@ export const eventTypeRouter = {
 
       const eventTypes = usePagination
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
-        : await query;
+        : await query.orderBy(...sortedColumns);
 
       return { eventTypes, totalCount };
     }),
-  byOrgId: publicProcedure
-    .input(z.object({ orgId: z.number(), isActive: z.boolean().optional() }))
+  byOrgId: protectedProcedure
+    .input(
+      z.object({ orgId: z.coerce.number(), isActive: z.boolean().optional() }),
+    )
     .route({
       method: "GET",
-      path: "/by-org-id",
+      path: "/org/{orgId}",
       tags: ["event-type"],
       summary: "Get event types by organization",
       description: "Retrieve all event types for a specific organization",
@@ -163,11 +166,11 @@ export const eventTypeRouter = {
 
       return eventTypes;
     }),
-  byId: publicProcedure
-    .input(z.object({ id: z.number() }))
+  byId: protectedProcedure
+    .input(z.object({ id: z.coerce.number() }))
     .route({
       method: "GET",
-      path: "/by-id",
+      path: "/id/{id}",
       tags: ["event-type"],
       summary: "Get event type by ID",
       description: "Retrieve detailed information about a specific event type",
@@ -190,7 +193,7 @@ export const eventTypeRouter = {
     .input(EventTypeInsertSchema)
     .route({
       method: "POST",
-      path: "/crupdate",
+      path: "/",
       tags: ["event-type"],
       summary: "Create or update event type",
       description: "Create a new event type or update an existing one",
@@ -256,7 +259,7 @@ export const eventTypeRouter = {
     .input(z.object({ id: z.number() }))
     .route({
       method: "DELETE",
-      path: "/delete",
+      path: "/id/{id}",
       tags: ["event-type"],
       summary: "Delete event type",
       description: "Soft delete an event type by marking it as inactive",

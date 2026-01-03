@@ -14,12 +14,13 @@ import {
   schema,
 } from "@acme/db";
 import { IsActiveStatus, OrgType } from "@acme/shared/app/enums";
-import { OrgInsertSchema, SortingSchema } from "@acme/validators";
+import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
+import { OrgInsertSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getSortingColumns } from "../get-sorting-columns";
 import { moveAOLocsToNewRegion } from "../lib/move-ao-locs-to-new-region";
-import { adminProcedure, editorProcedure } from "../shared";
+import { adminProcedure, editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
 interface Org {
@@ -44,21 +45,24 @@ interface Org {
 }
 
 export const orgRouter = {
-  all: editorProcedure
+  all: protectedProcedure
     .input(
       z.object({
-        orgTypes: z.enum(OrgType).array().min(1),
-        pageIndex: z.number().optional(),
-        pageSize: z.number().optional(),
+        orgTypes: arrayOrSingle(z.enum(OrgType)).refine(
+          (val) => val.length >= 1,
+          { message: "At least one orgType is required" },
+        ),
+        pageIndex: z.coerce.number().optional(),
+        pageSize: z.coerce.number().optional(),
         searchTerm: z.string().optional(),
-        sorting: SortingSchema.optional(),
-        statuses: z.enum(IsActiveStatus).array().optional(),
-        parentOrgIds: z.number().array().optional(),
+        sorting: parseSorting(),
+        statuses: arrayOrSingle(z.enum(IsActiveStatus)).optional(),
+        parentOrgIds: arrayOrSingle(z.coerce.number()).optional(),
       }),
     )
     .route({
       method: "GET",
-      path: "/all",
+      path: "/",
       tags: ["org"],
       summary: "List all organizations",
       description:
@@ -145,17 +149,19 @@ export const orgRouter = {
             pageIndex,
             pageSize,
           )
-        : await query;
+        : await query.orderBy(...sortedColumns);
 
       // Something is broken with org to org types
       return { orgs: orgs_untyped as Org[], total: orgCount?.count ?? 0 };
     }),
 
-  byId: editorProcedure
-    .input(z.object({ id: z.number(), orgType: z.enum(OrgType).optional() }))
+  byId: protectedProcedure
+    .input(
+      z.object({ id: z.coerce.number(), orgType: z.enum(OrgType).optional() }),
+    )
     .route({
       method: "GET",
-      path: "/by-id",
+      path: "/id/{id}",
       tags: ["org"],
       summary: "Get organization by ID",
       description:
@@ -178,7 +184,7 @@ export const orgRouter = {
     .input(OrgInsertSchema.partial({ id: true, parentId: true }))
     .route({
       method: "POST",
-      path: "/crupdate",
+      path: "/",
       tags: ["org"],
       summary: "Create or update organization",
       description: "Create a new organization or update an existing one",
@@ -264,7 +270,7 @@ export const orgRouter = {
         .returning();
       return result;
     }),
-  mine: editorProcedure
+  mine: protectedProcedure
     .route({
       method: "GET",
       path: "/mine",
@@ -330,7 +336,7 @@ export const orgRouter = {
     .input(z.object({ id: z.number(), orgType: z.enum(OrgType).optional() }))
     .route({
       method: "DELETE",
-      path: "/delete",
+      path: "/delete/{id}",
       tags: ["org"],
       summary: "Delete organization",
       description: "Soft delete an organization by marking it as inactive",

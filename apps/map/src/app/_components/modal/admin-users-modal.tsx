@@ -1,14 +1,12 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, X } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { z } from "zod";
 
-import type { RoleEntry } from "@acme/shared/app/types";
 import { Z_INDEX } from "@acme/shared/app/constants";
-import { safeParseInt } from "@acme/shared/common/functions";
 import { cn } from "@acme/ui";
 import { Button } from "@acme/ui/button";
 import {
@@ -20,7 +18,6 @@ import {
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -47,7 +44,6 @@ import {
   useQuery,
 } from "~/orpc/react";
 import { closeModal } from "~/utils/store/modal";
-import { VirtualizedCombobox } from "../virtualized-combobox";
 
 export default function UserModal({
   data,
@@ -55,14 +51,17 @@ export default function UserModal({
   data: DataType[ModalType.ADMIN_USERS];
 }) {
   const { data: session, update } = useSession();
-  const { data: user } = useQuery(
-    orpc.user.byId.queryOptions({ input: { id: data.id ?? -1 } }),
-  );
-  const { data: orgs } = useQuery(
-    orpc.org.all.queryOptions({
-      input: { orgTypes: ["region", "area", "sector", "nation"] },
+  const { data: userResponse } = useQuery(
+    orpc.user.byId.queryOptions({
+      input: {
+        id: data.id ?? -1,
+        includePii: true, // Request PII to check if we have access
+      },
     }),
   );
+
+  const user = userResponse?.user ?? null;
+  const hasPiiAccess = userResponse?.includePii ?? false;
   const router = useRouter();
 
   const form = useForm({
@@ -139,7 +138,26 @@ export default function UserModal({
           <form
             onSubmit={form.handleSubmit(
               (data) => {
-                crupdateUser.mutate(data);
+                // Only include PII fields if we have access to them
+                let submitData: typeof data;
+                if (!hasPiiAccess && user?.id) {
+                  // For updates without PII access, don't send PII fields
+                  // Keep email (required by schema) but exclude other PII
+                  const {
+                    phone: _phone,
+                    emergencyContact: _emergencyContact,
+                    emergencyPhone: _emergencyPhone,
+                    emergencyNotes: _emergencyNotes,
+                    ...nonPiiData
+                  } = data;
+                  submitData = {
+                    ...nonPiiData,
+                    email: data.email ?? "", // Keep email as it's required by schema
+                  } as typeof data;
+                } else {
+                  submitData = data;
+                }
+                crupdateUser.mutate(submitData);
               },
               (error) => {
                 toast.error("Failed to update user");
@@ -224,46 +242,50 @@ export default function UserModal({
                 />
               </div>
 
-              <div className="mb-4 w-1/2 px-2">
-                <FormField
-                  control={form.control}
-                  name="email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Email</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="Email"
-                          type="email"
-                          {...field}
-                          value={field.value ?? ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
+              {hasPiiAccess && (
+                <>
+                  <div className="mb-4 w-1/2 px-2">
+                    <FormField
+                      control={form.control}
+                      name="email"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Email</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="Email"
+                              type="email"
+                              {...field}
+                              value={field.value ?? ""}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
 
-              <div className="mb-4 w-1/2 px-2">
-                <FormField
-                  control={form.control}
-                  name="phone"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Phone</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="Phone"
-                          {...field}
-                          value={field.value ?? ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
+                  <div className="mb-4 w-1/2 px-2">
+                    <FormField
+                      control={form.control}
+                      name="phone"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Phone</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="Phone"
+                              {...field}
+                              value={field.value ?? ""}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </>
+              )}
 
               <div className="mb-4 w-1/2 px-2">
                 <FormField
@@ -294,221 +316,14 @@ export default function UserModal({
               </div>
 
               <div className="mb-4 w-full px-2">
-                <FormField
-                  control={form.control}
-                  name="roles"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Roles</FormLabel>
-                      <FormDescription>
-                        Must sign out and back in to apply these new roles.
-                      </FormDescription>
-                      <div className="space-y-2">
-                        {((field.value as RoleEntry[]) || []).map(
-                          (roleEntry, index) => (
-                            <div
-                              key={index}
-                              className="flex items-center gap-2"
-                            >
-                              <Select
-                                onValueChange={(value) => {
-                                  const newRoles = [
-                                    ...(field.value as RoleEntry[]),
-                                  ];
-                                  newRoles[index] = {
-                                    orgId: roleEntry.orgId,
-                                    roleName: value as "editor" | "admin",
-                                  };
-                                  field.onChange(newRoles);
-                                }}
-                                value={roleEntry.roleName}
-                              >
-                                <FormControl>
-                                  <SelectTrigger className="w-[200px]">
-                                    <SelectValue placeholder="Select a role" />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  <SelectItem value="editor">Editor</SelectItem>
-                                  <SelectItem value="admin">Admin</SelectItem>
-                                </SelectContent>
-                              </Select>
-
-                              <VirtualizedCombobox
-                                value={roleEntry.orgId.toString()}
-                                options={
-                                  orgs?.orgs.map((region) => ({
-                                    value: region.id.toString(),
-                                    label: `${region.name} (${region.orgType})`,
-                                  })) ?? []
-                                }
-                                searchPlaceholder="Select a region"
-                                onSelect={(value) => {
-                                  const orgId = safeParseInt(value as string);
-                                  if (orgId == undefined) {
-                                    toast.error("Invalid orgId");
-                                    return;
-                                  }
-                                  const newRoles = [
-                                    ...(field.value as RoleEntry[]),
-                                  ];
-                                  newRoles[index] = {
-                                    roleName:
-                                      newRoles[index]?.roleName ?? "editor",
-                                    orgId,
-                                  };
-                                  field.onChange(newRoles);
-                                }}
-                                isMulti={false}
-                              />
-
-                              <Button
-                                variant="ghost"
-                                type="button"
-                                size="sm"
-                                onClick={() => {
-                                  const newRoles = [
-                                    ...(field.value as RoleEntry[]),
-                                  ];
-                                  newRoles.splice(index, 1);
-                                  field.onChange(newRoles);
-                                }}
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          ),
-                        )}
-
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex flex-col">
-                            <p className="text-xs text-gray-500">
-                              Admins can invite & edit
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              Editors can edit
-                            </p>
-                          </div>
-
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="mt-2"
-                            onClick={() => {
-                              const newRoleEntry: RoleEntry = {
-                                roleName: "editor",
-                                orgId: 1,
-                              };
-                              field.onChange([
-                                ...((field.value as RoleEntry[]) ?? []),
-                                newRoleEntry,
-                              ]);
-                            }}
-                          >
-                            <Plus className="mr-2 h-4 w-4" />
-                            Add Role
-                          </Button>
-                        </div>
-                      </div>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <div className="text-sm">
+                  <p className="font-medium">Roles</p>
+                  <div className="text-muted-foreground">
+                    To assign roles to new or existing users, go through the{" "}
+                    <Link href="/admin/users/mine">my users</Link> page.
+                  </div>
+                </div>
               </div>
-              {/* <div className="mb-4 w-1/2 px-2">
-                <FormField
-                  control={form.control}
-                  name="emergencyContact"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Emergency Contact</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="Emergency Contact"
-                          {...field}
-                          value={field.value ?? ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <div className="mb-4 w-1/2 px-2">
-                <FormField
-                  control={form.control}
-                  name="emergencyPhone"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Emergency Phone</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="Emergency Phone"
-                          {...field}
-                          value={field.value ?? ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <div className="mb-4 w-1/2 px-2">
-                <FormField
-                  control={form.control}
-                  name="emergencyNotes"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Emergency Notes</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="Emergency Notes"
-                          {...field}
-                          value={field.value ?? ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div> */}
-
-              {/* <div className="mb-4 w-1/2 px-2">
-                {form.getValues("role") === UserRole[1] && (
-                  <FormField
-                    control={form.control}
-                    name="homeRegionIds"
-                    render={({ field }) => {
-                      return (
-                        <FormItem>
-                          <FormLabel>Region</FormLabel>
-                          <FormControl>
-                            {regions ? (
-                              <MultiSelect
-                                defaultValue={(field.value ?? []).map(String)}
-                                value={(field.value ?? []).map(String)}
-                                options={regions.map((region) => ({
-                                  label: region.name,
-                                  value: region.id.toString(),
-                                }))}
-                                onValueChange={(values) =>
-                                  field.onChange(values.map(Number))
-                                }
-                                placeholder="Select regions"
-                              />
-                            ) : (
-                              <p>Loading regions...</p>
-                            )}
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      );
-                    }}
-                  />
-                )}
-              </div> */}
-
               <div className="mb-4 w-full px-2">
                 <div className="flex space-x-4 pt-4">
                   <Button

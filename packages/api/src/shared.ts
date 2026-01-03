@@ -4,10 +4,10 @@ import { ORPCError, os } from "@orpc/server";
 import type { Session } from "@acme/auth";
 import type { AppDb } from "@acme/db/client";
 import { auth } from "@acme/auth";
-import { and, eq, gt, inArray, isNull, or, schema, sql } from "@acme/db";
+import { and, eq, gt, isNull, or, schema, sql } from "@acme/db";
 import { db } from "@acme/db/client";
 import { env } from "@acme/env";
-import { Client, Header } from "@acme/shared/common/enums";
+import { Header } from "@acme/shared/common/enums";
 
 type BaseContext = RequestHeadersPluginContext;
 
@@ -24,7 +24,7 @@ export const withSessionAndDb = base.use(async ({ context, next }) => {
   return next({ context: newContext });
 });
 
-export const publicProcedure = withSessionAndDb;
+export const publicProcedure = base;
 
 export const protectedProcedure = withSessionAndDb.use(({ context, next }) => {
   if (!context.session?.user) {
@@ -33,7 +33,7 @@ export const protectedProcedure = withSessionAndDb.use(({ context, next }) => {
   return next({ context });
 });
 
-export const editorProcedure = protectedProcedure.use(({ context, next }) => {
+export const editorProcedure = withSessionAndDb.use(({ context, next }) => {
   const isEditorOrAdmin = context.session?.roles?.some((r) =>
     ["editor", "admin"].includes(r.roleName),
   );
@@ -43,7 +43,7 @@ export const editorProcedure = protectedProcedure.use(({ context, next }) => {
   return next({ context });
 });
 
-export const adminProcedure = protectedProcedure.use(({ context, next }) => {
+export const adminProcedure = withSessionAndDb.use(({ context, next }) => {
   const isAdmin = context.session?.roles?.some((r) => r.roleName === "admin");
   if (!isAdmin) {
     throw new ORPCError("UNAUTHORIZED");
@@ -51,7 +51,7 @@ export const adminProcedure = protectedProcedure.use(({ context, next }) => {
   return next({ context });
 });
 
-export const apiKeyProcedure = publicProcedure.use(
+export const apiKeyProcedure = withSessionAndDb.use(
   async ({ context, next }) => {
     const apiKey = context.reqHeaders?.get("x-api-key") ?? "";
 
@@ -89,11 +89,6 @@ export const apiKeyProcedure = publicProcedure.use(
 export const getSession = async ({ context }: { context: BaseContext }) => {
   let session: Session | null = null;
 
-  // Skip auth() during static generation - it uses cookies() which opts out of SSG
-  if (context.reqHeaders?.get(Header.Client) === Client.ORPC_SSG) {
-    return MOCK_ADMIN_SESSION;
-  }
-
   session = await auth();
   if (session) return session;
 
@@ -110,7 +105,6 @@ export const getSession = async ({ context }: { context: BaseContext }) => {
   if (!apiKey) return null;
 
   // Get the api key info and associated owner and orgs
-  // (to condense: we fetch all matching orgs and aggregate to one object)
   const [apiKeyRecord] = await db
     .select({
       apiKeyId: schema.apiKeys.id,
@@ -121,7 +115,6 @@ export const getSession = async ({ context }: { context: BaseContext }) => {
       f3Name: schema.users.f3Name,
       revokedAt: schema.apiKeys.revokedAt,
       expiresAt: schema.apiKeys.expiresAt,
-      orgIds: schema.apiKeys.orgIds,
     })
     .from(schema.apiKeys)
     .innerJoin(schema.users, eq(schema.users.id, schema.apiKeys.ownerId))
@@ -138,19 +131,27 @@ export const getSession = async ({ context }: { context: BaseContext }) => {
 
   if (!apiKeyRecord) return null;
 
-  const orgs = apiKeyRecord?.orgIds?.length
-    ? await db
-        .select({ id: schema.orgs.id, name: schema.orgs.name })
-        .from(schema.orgs)
-        .where(inArray(schema.orgs.id, apiKeyRecord.orgIds))
-    : [];
+  // Get orgs and roles associated with this API key via join table
+  const orgRoles = await db
+    .select({
+      orgId: schema.orgs.id,
+      orgName: schema.orgs.name,
+      roleName: schema.roles.name,
+    })
+    .from(schema.rolesXApiKeysXOrg)
+    .innerJoin(schema.orgs, eq(schema.orgs.id, schema.rolesXApiKeysXOrg.orgId))
+    .innerJoin(
+      schema.roles,
+      eq(schema.roles.id, schema.rolesXApiKeysXOrg.roleId),
+    )
+    .where(eq(schema.rolesXApiKeysXOrg.apiKeyId, apiKeyRecord.apiKeyId));
 
   const roles =
-    orgs.length > 0
-      ? orgs.map((o) => ({
-          orgId: o.id,
-          orgName: o.name,
-          roleName: "admin" as const,
+    orgRoles.length > 0
+      ? orgRoles.map((or) => ({
+          orgId: or.orgId,
+          orgName: or.orgName,
+          roleName: or.roleName,
         }))
       : [];
 
@@ -164,29 +165,15 @@ export const getSession = async ({ context }: { context: BaseContext }) => {
       name: apiKeyRecord.f3Name ?? undefined,
       roles,
     },
-    // @ts-expect-error - TODO: fix this by allowing apiKey to be optional in the session type
     apiKey: {
       id: apiKeyRecord.apiKeyId,
       key: `${apiKeyRecord.apiKey.slice(0, 4)}...${apiKeyRecord.apiKey.slice(-4)}`,
       ownerId: apiKeyRecord.ownerId,
       revokedAt: apiKeyRecord.revokedAt,
       expiresAt: apiKeyRecord.expiresAt,
-      orgIds: apiKeyRecord.orgIds,
+      orgIds: orgRoles.map((or) => or.orgId),
     },
     expires: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString(),
   };
   return session;
-};
-
-const MOCK_ADMIN_SESSION: Session = {
-  id: 1,
-  email: "admin@ssg.mock",
-  expires: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString(),
-  user: {
-    id: "mock-admin-id",
-    email: "admin@ssg.mock",
-    name: "MapMockSSGAdmin",
-    roles: [{ orgId: 1, orgName: "Nation", roleName: "admin" }],
-  },
-  roles: [{ orgId: 1, orgName: "Nation", roleName: "admin" }],
 };

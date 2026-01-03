@@ -2,13 +2,17 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Earth,
+  CircleSmall,
+  CirclePile,
   Globe,
   KeyRound,
   MapPin,
   PersonStanding,
+  Shield,
   SquareChartGantt,
   Turtle,
-  User,
+  UserCheck,
+  Users,
 } from "lucide-react";
 
 import { routes } from "@acme/shared/app/constants";
@@ -46,9 +50,15 @@ export const AdminNavLinks = ({
       type: "section",
     },
     {
-      href: routes.admin.users.__path,
-      icon: User,
-      label: "Users",
+      href: routes.admin.users.all.__path,
+      icon: Users,
+      label: "All Users",
+      type: "link",
+    },
+    {
+      href: routes.admin.users.mine.__path,
+      icon: UserCheck,
+      label: "My Users",
       type: "link",
     },
     {
@@ -81,13 +91,13 @@ export const AdminNavLinks = ({
     },
     {
       href: routes.admin.aos.__path,
-      icon: Globe,
+      icon: CircleSmall,
       label: "AOs",
       type: "link",
     },
     {
       href: routes.admin.regions.__path,
-      icon: Globe,
+      icon: CirclePile,
       label: "Regions",
       type: "link",
     },
@@ -99,13 +109,13 @@ export const AdminNavLinks = ({
     },
     {
       href: routes.admin.sectors.__path,
-      icon: Earth,
+      icon: Globe,
       label: "Sectors",
       type: "link",
     },
     {
       href: routes.admin.theNation.__path,
-      icon: Earth,
+      icon: Shield,
       label: "The Nation",
       type: "link",
     },

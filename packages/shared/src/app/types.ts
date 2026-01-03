@@ -1,3 +1,7 @@
+import type { DefaultSession } from "next-auth";
+
+import type { UserRole } from "./enums";
+
 export interface WorkoutData {
   WorkoutName: string;
   "Day of week":
@@ -379,4 +383,28 @@ export type AttendanceMeta = Record<string, unknown>;
 export interface RoleEntry {
   orgId: number;
   roleName: "editor" | "admin";
+}
+
+export interface ApiKeyInfo {
+  id: number;
+  key: string;
+  ownerId: number | null;
+  revokedAt: string | null;
+  expiresAt: string | null;
+  orgIds: number[] | null;
+}
+
+export interface OrgRole {
+  orgId: number;
+  orgName: string;
+  roleName: UserRole;
+}
+
+declare module "next-auth" {
+  interface Session extends DefaultSession {
+    id: number;
+    email: string | undefined;
+    roles?: OrgRole[];
+    apiKey?: ApiKeyInfo;
+  }
 }

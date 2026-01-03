@@ -51,7 +51,7 @@ RUN echo "Received DOPPLER_TOKEN (first 5 chars): ${DOPPLER_TOKEN:0:5}" && \
     echo "Using token starting with: ${DOPPLER_TOKEN:0:5}"
 
 # Use the token explicitly
-RUN doppler setup -p f3-2 --token "$DOPPLER_TOKEN"
+RUN doppler setup -p f3-api --token "$DOPPLER_TOKEN"
     
 RUN doppler secrets download --no-file --format env > /app/apps/api/.env
 RUN doppler run -- sh -c "pnpm turbo build --filter=f3-nation-api && pnpm -F db migrate"

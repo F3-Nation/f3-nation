@@ -13,9 +13,8 @@ import { SecondaryEffectsProvider } from "~/utils/secondary-effects-provider";
 import { TouchDeviceProvider } from "~/utils/touch-device-provider";
 
 const shouldSkipSsg =
-  process.env.CI === "true" ||
-  process.env.SKIP_SSG === "1" ||
-  process.env.NEXT_PUBLIC_CHANNEL === "ci";
+  // process.env.CI === "true" || // Needed to turn this off so that docker builds do SSG for inital location loads
+  process.env.SKIP_SSG === "1" || process.env.NEXT_PUBLIC_CHANNEL === "ci";
 
 export default async function MapPage() {
   interface MapPageData {

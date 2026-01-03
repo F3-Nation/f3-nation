@@ -20,18 +20,15 @@ import {
   schema,
 } from "@acme/db";
 import { UpdateRequestStatus } from "@acme/shared/app/enums";
-import {
-  DeleteRequestSchema,
-  RequestInsertSchema,
-  SortingSchema,
-} from "@acme/validators";
+import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
+import { DeleteRequestSchema, RequestInsertSchema } from "@acme/validators";
 
 import type { Context } from "../shared";
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
 import { notifyMapChangeRequest } from "../services/map-request-notification";
-import { editorProcedure, publicProcedure } from "../shared";
+import { editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
 export const requestRouter = {
@@ -39,18 +36,18 @@ export const requestRouter = {
     .input(
       z
         .object({
-          pageIndex: z.number().optional(),
-          pageSize: z.number().optional(),
-          sorting: SortingSchema.optional(),
+          pageIndex: z.coerce.number().optional(),
+          pageSize: z.coerce.number().optional(),
+          sorting: parseSorting(),
           searchTerm: z.string().optional(),
-          onlyMine: z.boolean().optional(),
-          statuses: z.enum(UpdateRequestStatus).array().optional(),
+          onlyMine: z.coerce.boolean().optional(),
+          statuses: arrayOrSingle(z.enum(UpdateRequestStatus)).optional(),
         })
         .optional(),
     )
     .route({
       method: "GET",
-      path: "/all",
+      path: "/",
       tags: ["request"],
       summary: "List all requests",
       description:
@@ -207,7 +204,7 @@ export const requestRouter = {
 
       const requests = usePagination
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
-        : await query;
+        : await query.orderBy(...sortedColumns);
 
       return { requests, totalCount: totalCount?.count ?? 0 };
     }),
@@ -215,7 +212,7 @@ export const requestRouter = {
     .input(z.object({ id: z.string() }))
     .route({
       method: "GET",
-      path: "/by-id",
+      path: "/id/{id}",
       tags: ["request"],
       summary: "Get request by ID",
       description:
@@ -228,8 +225,8 @@ export const requestRouter = {
         .where(eq(schema.updateRequests.id, input.id));
       return request;
     }),
-  canDeleteEvent: publicProcedure
-    .input(z.object({ eventId: z.number() }))
+  canDeleteEvent: protectedProcedure
+    .input(z.object({ eventId: z.coerce.number() }))
     .route({
       method: "GET",
       path: "/can-delete-event",
@@ -251,7 +248,7 @@ export const requestRouter = {
         );
       return !!request;
     }),
-  canEditRegions: publicProcedure
+  canEditRegions: protectedProcedure
     .input(z.object({ orgIds: z.array(z.number()) }))
     .route({
       method: "POST",
@@ -284,11 +281,11 @@ export const requestRouter = {
       );
       return results;
     }),
-  submitDeleteRequest: publicProcedure
+  submitDeleteRequest: protectedProcedure
     .input(DeleteRequestSchema)
     .route({
       method: "POST",
-      path: "/submit-delete-request",
+      path: "/delete-request",
       tags: ["request"],
       summary: "Submit delete request",
       description: "Submit a request to delete an event or location",
@@ -371,11 +368,11 @@ export const requestRouter = {
         deleteRequest: request,
       };
     }),
-  submitUpdateRequest: publicProcedure
+  submitUpdateRequest: protectedProcedure
     .input(RequestInsertSchema)
     .route({
       method: "POST",
-      path: "/submit-update-request",
+      path: "/update-request",
       tags: ["request"],
       summary: "Submit update request",
       description: "Submit a request to create or update a workout on the map",

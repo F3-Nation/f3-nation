@@ -3,7 +3,6 @@ import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 
 import { and, desc, eq, gt, inArray, isNull, or, schema, sql } from "@acme/db";
-import { isTruthy } from "@acme/shared/common/functions";
 
 import { adminProcedure } from "../shared";
 
@@ -12,13 +11,19 @@ const createApiKeySchema = z.object({
   description: z.string().optional(),
   ownerId: z.number().optional(),
   ownerEmail: z.string().email().optional(),
-  orgIds: z.array(z.number()).optional(),
+  roles: z
+    .object({
+      orgId: z.number(),
+      roleName: z.enum(["editor", "admin"]),
+    })
+    .array()
+    .optional(),
   expiresAt: z.string().datetime().nullable().optional(),
 });
 
 const revokeApiKeySchema = z.object({
   id: z.number(),
-  revoke: z.boolean().optional(),
+  revoke: z.coerce.boolean().optional(),
 });
 
 const isUniqueError = (error: unknown) =>
@@ -35,7 +40,7 @@ export const apiKeyRouter = {
   list: adminProcedure
     .route({
       method: "GET",
-      path: "/list",
+      path: "/",
       tags: ["api-key"],
       summary: "List API keys",
       description: "List all API keys",
@@ -48,7 +53,6 @@ export const apiKeyRouter = {
           name: schema.apiKeys.name,
           description: schema.apiKeys.description,
           ownerId: schema.apiKeys.ownerId,
-          orgIds: schema.apiKeys.orgIds,
           revokedAt: schema.apiKeys.revokedAt,
           lastUsedAt: schema.apiKeys.lastUsedAt,
           expiresAt: schema.apiKeys.expiresAt,
@@ -61,41 +65,76 @@ export const apiKeyRouter = {
         .leftJoin(schema.users, eq(schema.users.id, schema.apiKeys.ownerId))
         .orderBy(desc(schema.apiKeys.created));
 
-      const allOrgIds = keyQuery
-        .map((key) => key.orgIds)
-        .flat()
-        .filter(isTruthy);
-
-      const orgs =
-        allOrgIds.length > 0
+      // Get all role-org associations for all API keys
+      const apiKeyIds = keyQuery.map((key) => key.id);
+      const roleAssociations =
+        apiKeyIds.length > 0
           ? await ctx.db
-              .select({ name: schema.orgs.name })
-              .from(schema.orgs)
+              .select({
+                apiKeyId: schema.rolesXApiKeysXOrg.apiKeyId,
+                orgId: schema.orgs.id,
+                orgName: schema.orgs.name,
+                roleName: schema.roles.name,
+              })
+              .from(schema.rolesXApiKeysXOrg)
+              .innerJoin(
+                schema.orgs,
+                eq(schema.orgs.id, schema.rolesXApiKeysXOrg.orgId),
+              )
+              .innerJoin(
+                schema.roles,
+                eq(schema.roles.id, schema.rolesXApiKeysXOrg.roleId),
+              )
               .where(
                 and(
+                  inArray(schema.rolesXApiKeysXOrg.apiKeyId, apiKeyIds),
                   eq(schema.orgs.isActive, true),
-                  inArray(schema.orgs.id, allOrgIds),
                 ),
               )
           : [];
 
-      return keyQuery.map((key) => ({
-        ...key,
-        keySignature: key.key.slice(-4),
-        orgNames: orgs.map((org) => org.name),
-      }));
+      // Group roles by API key ID
+      const rolesByApiKeyId = new Map<
+        number,
+        { orgId: number; orgName: string; roleName: string }[]
+      >();
+      for (const assoc of roleAssociations) {
+        if (!rolesByApiKeyId.has(assoc.apiKeyId)) {
+          rolesByApiKeyId.set(assoc.apiKeyId, []);
+        }
+        rolesByApiKeyId.get(assoc.apiKeyId)?.push({
+          orgId: assoc.orgId,
+          orgName: assoc.orgName,
+          roleName: assoc.roleName,
+        });
+      }
+
+      return keyQuery.map((key) => {
+        const roles = rolesByApiKeyId.get(key.id) ?? [];
+        return {
+          ...key,
+          keySignature: key.key.slice(-4),
+          roles: roles.map((r) => ({
+            orgId: r.orgId,
+            orgName: r.orgName,
+            roleName: r.roleName as "editor" | "admin",
+          })),
+          orgIds: roles.map((r) => r.orgId),
+          orgNames: roles.map((r) => r.orgName),
+        };
+      });
     }),
   create: adminProcedure
     .input(createApiKeySchema)
     .route({
       method: "POST",
-      path: "/create",
+      path: "/",
       tags: ["api-key"],
       summary: "Create API key",
       description: "Generate a new API key for programmatic access",
     })
     .handler(async ({ context: ctx, input }) => {
-      const orgIds = input.orgIds?.length ? input.orgIds : [];
+      const roles = input.roles ?? [];
       const expiresAt = input.expiresAt ?? null;
 
       for (let attempt = 0; attempt < 5; attempt++) {
@@ -108,10 +147,42 @@ export const apiKeyRouter = {
               name: input.name,
               description: input.description,
               ownerId: ctx.session?.id,
-              orgIds,
               expiresAt,
             })
             .returning();
+
+          if (apiKey && roles.length > 0) {
+            // Get role IDs for all unique role names
+            const roleNames = [...new Set(roles.map((r) => r.roleName))];
+            const roleRecords = await ctx.db
+              .select({ id: schema.roles.id, name: schema.roles.name })
+              .from(schema.roles)
+              .where(inArray(schema.roles.name, roleNames));
+
+            const roleMap = new Map(roleRecords.map((r) => [r.name, r.id]));
+
+            // Verify all roles exist
+            for (const roleName of roleNames) {
+              if (!roleMap.has(roleName)) {
+                throw new Error(`Role "${roleName}" not found`);
+              }
+            }
+
+            // Insert org associations with roles
+            await ctx.db.insert(schema.rolesXApiKeysXOrg).values(
+              roles.map((role) => {
+                const roleId = roleMap.get(role.roleName);
+                if (!roleId) {
+                  throw new Error(`Role "${role.roleName}" not found`);
+                }
+                return {
+                  roleId,
+                  apiKeyId: apiKey.id,
+                  orgId: role.orgId,
+                };
+              }),
+            );
+          }
 
           if (apiKey) {
             return { ...apiKey, secret: generatedKey };
@@ -130,7 +201,7 @@ export const apiKeyRouter = {
     .input(revokeApiKeySchema)
     .route({
       method: "POST",
-      path: "/revoke",
+      path: "/{id}/revoke",
       tags: ["api-key"],
       summary: "Revoke API key",
       description: "Revoke or restore an API key",
@@ -162,12 +233,17 @@ export const apiKeyRouter = {
     .input(z.object({ id: z.number() }))
     .route({
       method: "DELETE",
-      path: "/purge",
+      path: "/{id}/purge",
       tags: ["api-key"],
       summary: "Purge API key",
       description: "Permanently delete an API key",
     })
     .handler(async ({ context: ctx, input }) => {
+      // Delete org associations first (cascade should handle this, but being explicit)
+      await ctx.db
+        .delete(schema.rolesXApiKeysXOrg)
+        .where(eq(schema.rolesXApiKeysXOrg.apiKeyId, input.id));
+
       const [apiKey] = await ctx.db
         .delete(schema.apiKeys)
         .where(eq(schema.apiKeys.id, input.id))
@@ -183,7 +259,7 @@ export const apiKeyRouter = {
     .input(z.object({ key: z.string() }))
     .route({
       method: "POST",
-      path: "/validate",
+      path: "/{key}/validate",
       tags: ["api-key"],
       summary: "Validate API key",
       description: "Check if an API key is valid and not expired or revoked",
