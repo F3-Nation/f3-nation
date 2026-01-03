@@ -23,7 +23,7 @@ const createApiKeySchema = z.object({
 
 const revokeApiKeySchema = z.object({
   id: z.number(),
-  revoke: z.boolean().optional(),
+  revoke: z.coerce.boolean().optional(),
 });
 
 const isUniqueError = (error: unknown) =>

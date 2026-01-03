@@ -16,10 +16,10 @@ import { UserRole, UserStatus } from "@acme/shared/app/enums";
 import { arrayOrSingle, isValidEmail } from "@acme/shared/app/functions";
 import { CrupdateUserSchema, SortingSchema } from "@acme/validators";
 
-import type { Context } from "../shared";
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
+import type { Context } from "../shared";
 import { adminProcedure, editorProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
@@ -47,7 +47,7 @@ const userListInputSchema = z.object({
   sorting: SortingSchema.optional(),
   statuses: arrayOrSingle(z.enum(UserStatus)).optional(),
   orgIds: arrayOrSingle(z.coerce.number()).optional(),
-  includePii: z.boolean().optional().default(false),
+  includePii: z.coerce.boolean().optional().default(false),
 });
 
 // Shared query logic
@@ -298,7 +298,7 @@ export const userRouter = {
     .input(
       z.object({
         id: z.coerce.number(),
-        includePii: z.boolean().optional().default(false),
+        includePii: z.coerce.boolean().optional().default(false),
       }),
     )
     .route({

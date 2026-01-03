@@ -32,7 +32,7 @@ export const eventRouter = {
           searchTerm: z.string().optional(),
           statuses: arrayOrSingle(z.enum(["active", "inactive"])).optional(),
           sorting: z
-            .array(z.object({ id: z.string(), desc: z.boolean() }))
+            .array(z.object({ id: z.string(), desc: z.coerce.boolean() }))
             .optional(),
           regionIds: arrayOrSingle(z.coerce.number()).optional(),
           aoIds: arrayOrSingle(z.coerce.number()).optional(),

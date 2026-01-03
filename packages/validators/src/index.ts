@@ -224,7 +224,7 @@ export type LowBandwidthF3Marker = z.infer<typeof LowBandwidthF3Marker>;
 export const SortingSchema = z
   .object({
     id: z.string(),
-    desc: z.boolean(),
+    desc: z.coerce.boolean(),
   })
   .array();
 

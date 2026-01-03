@@ -37,7 +37,7 @@ export const eventTypeRouter = {
           pageSize: z.coerce.number().optional(),
           searchTerm: z.string().optional(),
           sorting: SortingSchema.optional(),
-          ignoreNationEventTypes: z.boolean().optional(),
+          ignoreNationEventTypes: z.coerce.boolean().optional(),
         })
         .optional(),
     )

@@ -44,7 +44,7 @@ export const requestRouter = {
           pageSize: z.coerce.number().optional(),
           sorting: SortingSchema.optional(),
           searchTerm: z.string().optional(),
-          onlyMine: z.boolean().optional(),
+          onlyMine: z.coerce.boolean().optional(),
           statuses: arrayOrSingle(z.enum(UpdateRequestStatus)).optional(),
         })
         .optional(),
