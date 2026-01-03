@@ -12,8 +12,8 @@ import {
   schema,
 } from "@acme/db";
 import { IsActiveStatus } from "@acme/shared/app/enums";
-import { arrayOrSingle } from "@acme/shared/app/functions";
-import { LocationInsertSchema, SortingSchema } from "@acme/validators";
+import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
+import { LocationInsertSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getSortingColumns } from "../get-sorting-columns";
@@ -28,7 +28,7 @@ export const locationRouter = {
           searchTerm: z.string().optional(),
           pageIndex: z.coerce.number().optional(),
           pageSize: z.coerce.number().optional(),
-          sorting: SortingSchema.optional(),
+          sorting: parseSorting(),
           statuses: arrayOrSingle(z.enum(IsActiveStatus)).optional(),
           regionIds: arrayOrSingle(z.coerce.number()).optional(),
         })
@@ -119,7 +119,7 @@ export const locationRouter = {
 
       const locations = usePagination
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
-        : await query;
+        : await query.orderBy(...sortedColumns);
 
       return { locations, totalCount: locationCount?.count ?? 0 };
     }),

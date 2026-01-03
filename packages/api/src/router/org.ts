@@ -14,8 +14,8 @@ import {
   schema,
 } from "@acme/db";
 import { IsActiveStatus, OrgType } from "@acme/shared/app/enums";
-import { arrayOrSingle } from "@acme/shared/app/functions";
-import { OrgInsertSchema, SortingSchema } from "@acme/validators";
+import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
+import { OrgInsertSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getSortingColumns } from "../get-sorting-columns";
@@ -55,7 +55,7 @@ export const orgRouter = {
         pageIndex: z.coerce.number().optional(),
         pageSize: z.coerce.number().optional(),
         searchTerm: z.string().optional(),
-        sorting: SortingSchema.optional(),
+        sorting: parseSorting(),
         statuses: arrayOrSingle(z.enum(IsActiveStatus)).optional(),
         parentOrgIds: arrayOrSingle(z.coerce.number()).optional(),
       }),
@@ -149,7 +149,7 @@ export const orgRouter = {
             pageIndex,
             pageSize,
           )
-        : await query;
+        : await query.orderBy(...sortedColumns);
 
       // Something is broken with org to org types
       return { orgs: orgs_untyped as Org[], total: orgCount?.count ?? 0 };

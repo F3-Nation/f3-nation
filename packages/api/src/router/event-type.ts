@@ -15,8 +15,8 @@ import {
   schema,
 } from "@acme/db";
 import { IsActiveStatus } from "@acme/shared/app/enums";
-import { arrayOrSingle } from "@acme/shared/app/functions";
-import { EventTypeInsertSchema, SortingSchema } from "@acme/validators";
+import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
+import { EventTypeInsertSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { editorProcedure, protectedProcedure } from "../shared";
@@ -36,7 +36,7 @@ export const eventTypeRouter = {
           pageIndex: z.coerce.number().optional(),
           pageSize: z.coerce.number().optional(),
           searchTerm: z.string().optional(),
-          sorting: SortingSchema.optional(),
+          sorting: parseSorting(),
           ignoreNationEventTypes: z.coerce.boolean().optional(),
         })
         .optional(),
@@ -136,7 +136,7 @@ export const eventTypeRouter = {
 
       const eventTypes = usePagination
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
-        : await query;
+        : await query.orderBy(...sortedColumns);
 
       return { eventTypes, totalCount };
     }),

@@ -169,52 +169,58 @@ export const arrayOrSingle = <T extends z.ZodTypeAny>(schema: T) =>
     z.array(schema),
   );
 
+// Helper to parse sorting parameter from query string (can be JSON stringified)
+export const parseSorting = () =>
+  z.preprocess(
+    (val) => {
+      if (val === undefined || val === null) return undefined;
+      console.log("val", val);
+      // If it's an array of strings (happens when query params are split)
+      // Try to join them and parse as JSON
+      if (Array.isArray(val) && val.every((v) => typeof v === "string")) {
+        try {
+          return JSON.parse(val.join(","));
+        } catch {
+          // If joining fails, try parsing each string individually
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+            return val.map((v: string) => JSON.parse(v));
+          } catch {
+            return undefined;
+          }
+        }
+      }
+
+      // If it's a string, parse it as JSON
+      if (typeof val === "string") {
+        console.log("val is string");
+        try {
+          return JSON.parse(val);
+        } catch {
+          return undefined;
+        }
+      }
+
+      // If it's already an array or object, return as is
+      return val;
+    },
+    z
+      .array(
+        z.object({
+          id: z.string(),
+          desc: z.boolean().optional().default(false),
+        }),
+      )
+      .optional(),
+  );
+
 /**
- * Robust email validation function that checks:
- * - Basic format (contains @)
- * - Local part exists and is not empty
- * - Domain exists and has at least one dot
- * - Top-level domain has content
- * - Uses Zod's email validation for RFC compliance
- *
  * @param email - Email string to validate
  * @returns boolean indicating if email is valid
  */
 export function isValidEmail(email: string | null | undefined): boolean {
-  if (!email || typeof email !== "string") return false;
-
-  // Trim whitespace
+  if (typeof email !== "string") return false;
   const trimmed = email.trim();
   if (!trimmed) return false;
-
-  // Basic format check: must contain @
-  if (!trimmed.includes("@")) return false;
-
-  // Split into local and domain parts
-  const parts = trimmed.split("@");
-  if (parts.length !== 2) return false;
-
-  const [local, domain] = parts;
-
-  // Local part must exist and not be empty
-  if (!local || local.length === 0) return false;
-
-  // Domain must exist and not be empty
-  if (!domain || domain.length === 0) return false;
-
-  // Domain must have at least one dot
-  const domainParts = domain.split(".");
-  if (domainParts.length < 2) return false;
-
-  // Top-level domain must have content
-  const tld = domainParts[domainParts.length - 1];
-  if (!tld || tld.length === 0) return false;
-
-  // Use Zod's email validation for RFC compliance
-  try {
-    z.string().email().parse(trimmed);
-    return true;
-  } catch {
-    return false;
-  }
+  return z.string().email().safeParse(trimmed).success;
 }

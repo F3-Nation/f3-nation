@@ -13,13 +13,17 @@ import {
   sql,
 } from "@acme/db";
 import { UserRole, UserStatus } from "@acme/shared/app/enums";
-import { arrayOrSingle, isValidEmail } from "@acme/shared/app/functions";
-import { CrupdateUserSchema, SortingSchema } from "@acme/validators";
+import {
+  arrayOrSingle,
+  isValidEmail,
+  parseSorting,
+} from "@acme/shared/app/functions";
+import { CrupdateUserSchema } from "@acme/validators";
 
+import type { Context } from "../shared";
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
-import type { Context } from "../shared";
 import { adminProcedure, editorProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
@@ -44,7 +48,7 @@ const userListInputSchema = z.object({
   searchTerm: z.string().optional(),
   pageIndex: z.coerce.number().optional(),
   pageSize: z.coerce.number().optional(),
-  sorting: SortingSchema.optional(),
+  sorting: parseSorting(),
   statuses: arrayOrSingle(z.enum(UserStatus)).optional(),
   orgIds: arrayOrSingle(z.coerce.number()).optional(),
   includePii: z.coerce.boolean().optional().default(false),
@@ -179,7 +183,7 @@ const buildUserListQuery = async ({
 
   const users = usePagination
     ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
-    : await query;
+    : await query.orderBy(...sortedColumns);
 
   return {
     users: users.map((user: (typeof users)[number]) => ({

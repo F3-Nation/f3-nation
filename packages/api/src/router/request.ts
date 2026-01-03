@@ -20,12 +20,8 @@ import {
   schema,
 } from "@acme/db";
 import { UpdateRequestStatus } from "@acme/shared/app/enums";
-import { arrayOrSingle } from "@acme/shared/app/functions";
-import {
-  DeleteRequestSchema,
-  RequestInsertSchema,
-  SortingSchema,
-} from "@acme/validators";
+import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
+import { DeleteRequestSchema, RequestInsertSchema } from "@acme/validators";
 
 import type { Context } from "../shared";
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
@@ -42,7 +38,7 @@ export const requestRouter = {
         .object({
           pageIndex: z.coerce.number().optional(),
           pageSize: z.coerce.number().optional(),
-          sorting: SortingSchema.optional(),
+          sorting: parseSorting(),
           searchTerm: z.string().optional(),
           onlyMine: z.coerce.boolean().optional(),
           statuses: arrayOrSingle(z.enum(UpdateRequestStatus)).optional(),
@@ -208,7 +204,7 @@ export const requestRouter = {
 
       const requests = usePagination
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
-        : await query;
+        : await query.orderBy(...sortedColumns);
 
       return { requests, totalCount: totalCount?.count ?? 0 };
     }),
