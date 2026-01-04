@@ -1,6 +1,6 @@
 {
   "name": "f3-nation",
-  "version": "3.0.1",
+  "version": "3.0.2",
   "private": true,
   "engines": {
     "node": ">=20.19.0"
