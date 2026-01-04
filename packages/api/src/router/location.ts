@@ -6,8 +6,12 @@ import {
   and,
   count,
   eq,
+  gt,
+  gte,
   ilike,
   inArray,
+  isNotNull,
+  lte,
   or,
   schema,
 } from "@acme/db";
@@ -254,5 +258,85 @@ export const locationRouter = {
         );
 
       return { locationId: input.id };
+    }),
+
+  inBoundingBox: protectedProcedure
+    .input(
+      z.object({
+        minLat: z.coerce.number(),
+        maxLat: z.coerce.number(),
+        minLng: z.coerce.number(),
+        maxLng: z.coerce.number(),
+        since: z.string().datetime().optional(),
+        isActive: z.coerce.boolean().optional(),
+      }),
+    )
+    .route({
+      method: "GET",
+      path: "/in-bounding-box",
+      tags: ["location"],
+      summary: "Get locations in bounding box",
+      description:
+        "Retrieve locations within a geographic bounding box, optionally filtered by creation date",
+    })
+    .handler(async ({ context: ctx, input }) => {
+      const regionOrg = aliasedTable(schema.orgs, "region_org");
+
+      const where = and(
+        // Bounding box: latitude between minLat and maxLat
+        gte(schema.locations.latitude, input.minLat),
+        lte(schema.locations.latitude, input.maxLat),
+        // Bounding box: longitude between minLng and maxLng
+        gte(schema.locations.longitude, input.minLng),
+        lte(schema.locations.longitude, input.maxLng),
+        // Only include locations with coordinates
+        isNotNull(schema.locations.latitude),
+        isNotNull(schema.locations.longitude),
+        // Only active locations
+        input.isActive !== undefined
+          ? eq(schema.locations.isActive, input.isActive)
+          : undefined,
+        // Optional: filter by creation date
+        input.since
+          ? gt(schema.locations.created, new Date(input.since).toISOString())
+          : undefined,
+      );
+
+      const locations = await ctx.db
+        .select({
+          id: schema.locations.id,
+          locationName: schema.locations.name,
+          regionId: regionOrg.id,
+          regionName: regionOrg.name,
+          description: schema.locations.description,
+          isActive: schema.locations.isActive,
+          latitude: schema.locations.latitude,
+          longitude: schema.locations.longitude,
+          email: schema.locations.email,
+          addressStreet: schema.locations.addressStreet,
+          addressStreet2: schema.locations.addressStreet2,
+          addressCity: schema.locations.addressCity,
+          addressState: schema.locations.addressState,
+          addressZip: schema.locations.addressZip,
+          addressCountry: schema.locations.addressCountry,
+          meta: schema.locations.meta,
+          created: schema.locations.created,
+        })
+        .from(schema.locations)
+        .leftJoin(regionOrg, eq(schema.locations.orgId, regionOrg.id))
+        .where(where)
+        .orderBy(schema.locations.created);
+
+      return {
+        locations,
+        count: locations.length,
+        boundingBox: {
+          minLat: input.minLat,
+          maxLat: input.maxLat,
+          minLng: input.minLng,
+          maxLng: input.maxLng,
+        },
+        since: input.since ?? null,
+      };
     }),
 };
