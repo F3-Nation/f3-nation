@@ -1,8 +1,8 @@
 "use client";
 "use client";
 
-import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { z } from "zod";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
@@ -44,7 +44,7 @@ import { Textarea } from "@acme/ui/textarea";
 import { toast } from "@acme/ui/toast";
 import { EventInsertSchema } from "@acme/validators";
 
-import type { DataType } from "~/utils/store/modal";
+import gte from "lodash/gte";
 import {
   invalidateQueries,
   orpc,
@@ -52,6 +52,7 @@ import {
   useMutation,
   useQuery,
 } from "~/orpc/react";
+import type { DataType } from "~/utils/store/modal";
 import {
   closeModal,
   DeleteType,
@@ -94,7 +95,10 @@ export default function AdminWorkoutsModal({
     orpc.org.all.queryOptions({ input: { orgTypes: ["ao"] } }),
   );
   const { data: event } = useQuery(
-    orpc.event.byId.queryOptions({ input: { id: data.id ?? -1 } }),
+    orpc.event.byId.queryOptions({
+      input: { id: data.id ?? -1 },
+      enabled: gte(data.id, 0),
+    }),
   );
   const { data: eventTypes } = useQuery(
     orpc.eventType.all.queryOptions({

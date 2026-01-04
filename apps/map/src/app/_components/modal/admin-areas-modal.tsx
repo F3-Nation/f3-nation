@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
 import { cn } from "@acme/ui";
@@ -33,8 +33,8 @@ import { Spinner } from "@acme/ui/spinner";
 import { Textarea } from "@acme/ui/textarea";
 import { toast } from "@acme/ui/toast";
 import { AreaInsertSchema } from "@acme/validators";
+import gte from "lodash/gte";
 
-import type { DataType } from "~/utils/store/modal";
 import {
   invalidateQueries,
   orpc,
@@ -42,6 +42,7 @@ import {
   useMutation,
   useQuery,
 } from "~/orpc/react";
+import type { DataType } from "~/utils/store/modal";
 import {
   closeModal,
   DeleteType,
@@ -57,6 +58,7 @@ export default function AdminAreasModal({
   const { data: area } = useQuery(
     orpc.org.byId.queryOptions({
       input: { id: data.id ?? -1, orgType: "area" },
+      enabled: gte(data.id, 0),
     }),
   );
   const { data: sectors } = useQuery(

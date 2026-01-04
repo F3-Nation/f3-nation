@@ -1,9 +1,9 @@
 "use client";
 "use client";
 
-import type { z } from "zod";
-import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import type { z } from "zod";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
 import { safeParseInt } from "@acme/shared/common/functions";
@@ -31,7 +31,7 @@ import { Textarea } from "@acme/ui/textarea";
 import { toast } from "@acme/ui/toast";
 import { EventTypeInsertSchema } from "@acme/validators";
 
-import type { DataType } from "~/utils/store/modal";
+import gte from "lodash/gte";
 import {
   invalidateQueries,
   orpc,
@@ -39,6 +39,7 @@ import {
   useMutation,
   useQuery,
 } from "~/orpc/react";
+import type { DataType } from "~/utils/store/modal";
 import {
   closeModal,
   DeleteType,
@@ -58,7 +59,7 @@ export default function AdminEventTypesModal({
   const { data: eventType } = useQuery(
     orpc.eventType.byId.queryOptions({
       input: { id: data.id ?? -1 },
-      enabled: !!data.id,
+      enabled: gte(data.id, 0),
     }),
   );
   const { data: regions } = useQuery(

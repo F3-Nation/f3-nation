@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { CircleHelp } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 
 import { COUNTRIES, DEFAULT_CENTER, Z_INDEX } from "@acme/shared/app/constants";
@@ -37,7 +37,7 @@ import {
 } from "@acme/ui/tooltip";
 import { LocationInsertSchema } from "@acme/validators";
 
-import type { DataType } from "~/utils/store/modal";
+import gte from "lodash/gte";
 import {
   invalidateQueries,
   orpc,
@@ -45,6 +45,7 @@ import {
   useMutation,
   useQuery,
 } from "~/orpc/react";
+import type { DataType } from "~/utils/store/modal";
 import {
   closeModal,
   DeleteType,
@@ -60,7 +61,10 @@ export default function AdminLocationsModal({
   data: DataType[ModalType.ADMIN_LOCATIONS];
 }) {
   const { data: location } = useQuery(
-    orpc.location.byId.queryOptions({ input: { id: data.id ?? -1 } }),
+    orpc.location.byId.queryOptions({
+      input: { id: data.id ?? -1 },
+      enabled: gte(data.id, 0),
+    }),
   );
   const { data: regions } = useQuery(
     orpc.org.all.queryOptions({ input: { orgTypes: ["region"] } }),

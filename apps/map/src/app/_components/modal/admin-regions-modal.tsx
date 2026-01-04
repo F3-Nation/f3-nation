@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { Controller } from "react-hook-form";
 import { z } from "zod";
 
@@ -36,7 +36,7 @@ import { Textarea } from "@acme/ui/textarea";
 import { toast } from "@acme/ui/toast";
 import { RegionInsertSchema } from "@acme/validators";
 
-import type { DataType } from "~/utils/store/modal";
+import gte from "lodash/gte";
 import {
   invalidateQueries,
   orpc,
@@ -46,6 +46,7 @@ import {
 } from "~/orpc/react";
 import { scaleAndCropImage } from "~/utils/image/scale-and-crop-image";
 import { uploadLogo } from "~/utils/image/upload-logo";
+import type { DataType } from "~/utils/store/modal";
 import {
   closeModal,
   DeleteType,
@@ -62,6 +63,7 @@ export default function AdminRegionsModal({
   const { data: region } = useQuery(
     orpc.org.byId.queryOptions({
       input: { id: data.id ?? -1, orgType: "region" },
+      enabled: gte(data.id, 0),
     }),
   );
   const { data: areas } = useQuery(

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { v4 as uuid } from "uuid";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
@@ -21,18 +21,18 @@ import { Form } from "@acme/ui/form";
 import { Spinner } from "@acme/ui/spinner";
 import { toast } from "@acme/ui/toast";
 
-import type { DataType, ModalType } from "~/utils/store/modal";
+import gte from "lodash/gte";
 import {
+  ORPCError,
   invalidateQueries,
   orpc,
-  ORPCError,
   useMutation,
   useQuery,
 } from "~/orpc/react";
 import { useUpdateLocationForm } from "~/utils/forms";
+import type { DataType, ModalType } from "~/utils/store/modal";
 import { closeModal } from "~/utils/store/modal";
 import { FormDebugData, LocationEventForm } from "../forms/location-event-form";
-
 export default function AdminRequestsModal({
   data: requestData,
 }: {
@@ -43,7 +43,10 @@ export default function AdminRequestsModal({
     "idle",
   );
   const { data: request } = useQuery(
-    orpc.request.byId.queryOptions({ input: { id: requestData.id } }),
+    orpc.request.byId.queryOptions({
+      input: { id: requestData.id },
+      enabled: gte(requestData.id, 0),
+    }),
   );
   const form = useUpdateLocationForm({
     defaultValues: { id: request?.id ?? uuid() },

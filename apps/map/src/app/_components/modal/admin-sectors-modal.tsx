@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
 import { TestId } from "@acme/shared/common/enums";
@@ -35,7 +35,7 @@ import { Textarea } from "@acme/ui/textarea";
 import { toast } from "@acme/ui/toast";
 import { SectorInsertSchema } from "@acme/validators";
 
-import type { DataType } from "~/utils/store/modal";
+import gte from "lodash/gte";
 import {
   invalidateQueries,
   orpc,
@@ -43,6 +43,7 @@ import {
   useMutation,
   useQuery,
 } from "~/orpc/react";
+import type { DataType } from "~/utils/store/modal";
 import {
   closeModal,
   DeleteType,
@@ -58,6 +59,7 @@ export default function AdminSectorsModal({
   const { data: sector } = useQuery(
     orpc.org.byId.queryOptions({
       input: { id: data.id ?? -1, orgType: "sector" },
+      enabled: gte(data.id, 0),
     }),
   );
   const { data: nations } = useQuery(
