@@ -2,8 +2,8 @@
 
 import type { ReactNode } from "react";
 
-import type { RouterOutputs } from "~/orpc/types";
 import { orpc, useQuery } from "~/orpc/react";
+import type { RouterOutputs } from "~/orpc/types";
 
 /**
  * Hydrates the map event and location data on the client that were generated

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
 import { cn } from "@acme/ui";
@@ -34,14 +34,15 @@ import { Textarea } from "@acme/ui/textarea";
 import { toast } from "@acme/ui/toast";
 import { NationInsertSchema } from "@acme/validators";
 
-import type { DataType, ModalType } from "~/utils/store/modal";
+import gte from "lodash/gte";
 import {
+  ORPCError,
   invalidateQueries,
   orpc,
-  ORPCError,
   useMutation,
   useQuery,
 } from "~/orpc/react";
+import type { DataType, ModalType } from "~/utils/store/modal";
 import { closeModal } from "~/utils/store/modal";
 
 export default function AdminNationsModal({
@@ -49,11 +50,13 @@ export default function AdminNationsModal({
 }: {
   data: DataType[ModalType.ADMIN_NATIONS];
 }) {
-  const { data: nation } = useQuery(
+  const { data: nationResponse } = useQuery(
     orpc.org.byId.queryOptions({
       input: { id: data.id ?? -1, orgType: "nation" },
+      enabled: gte(data.id, 0),
     }),
   );
+  const nation = nationResponse?.org;
   const router = useRouter();
 
   const [isSubmitting, setIsSubmitting] = useState(false);

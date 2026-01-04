@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect } from "react";
+import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useEffect } from "react";
 import { z } from "zod";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
@@ -35,14 +35,15 @@ import {
 import { toast } from "@acme/ui/toast";
 import { CrupdateUserSchema } from "@acme/validators";
 
-import type { DataType, ModalType } from "~/utils/store/modal";
+import gte from "lodash/gte";
 import {
+  ORPCError,
   invalidateQueries,
   orpc,
-  ORPCError,
   useMutation,
   useQuery,
 } from "~/orpc/react";
+import type { DataType, ModalType } from "~/utils/store/modal";
 import { closeModal } from "~/utils/store/modal";
 
 export default function UserModal({
@@ -57,10 +58,11 @@ export default function UserModal({
         id: data.id ?? -1,
         includePii: true, // Request PII to check if we have access
       },
+      enabled: gte(data.id, 0),
     }),
   );
 
-  const user = userResponse?.user ?? null;
+  const user = userResponse?.user;
   const hasPiiAccess = userResponse?.includePii ?? false;
   const router = useRouter();
 

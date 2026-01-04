@@ -1,7 +1,6 @@
 import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 
-import type { OrgType } from "@acme/shared/app/enums";
 import {
   aliasedTable,
   and,
@@ -12,6 +11,7 @@ import {
   or,
   schema,
 } from "@acme/db";
+import type { OrgType, UserRole } from "@acme/shared/app/enums";
 import { UpdateRequestStatus } from "@acme/shared/app/enums";
 import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
 import {
@@ -32,6 +32,7 @@ import {
 import type { CheckUpdatePermissionsInput } from "../lib/check-update-permissions";
 import type { UpdateRequestData } from "../lib/types";
 import type { Context } from "../shared";
+
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
@@ -245,7 +246,7 @@ export const requestRouter = {
         .select()
         .from(schema.updateRequests)
         .where(eq(schema.updateRequests.id, input.id));
-      return request;
+      return { request: request ?? null };
     }),
   canDeleteEvent: protectedProcedure
     .input(z.object({ eventId: z.coerce.number() }))
@@ -268,7 +269,7 @@ export const requestRouter = {
             eq(schema.updateRequests.status, "pending"),
           ),
         );
-      return !!request;
+      return { canDelete: !!request };
     }),
   canEditRegions: protectedProcedure
     .input(z.object({ orgIds: z.array(z.number()) }))
@@ -281,27 +282,39 @@ export const requestRouter = {
         "Check if the current user has editor permissions for specified organizations",
     })
     .handler(async ({ context: ctx, input }) => {
+      let results: {
+        success: boolean;
+        mode:
+          | "public"
+          | "org-admin"
+          | "mtndev-override"
+          | "direct-permission"
+          | "no-permission";
+        orgId: number | null;
+        roleName: UserRole | null;
+      }[] = [];
+
       const session = ctx.session;
       if (!session) {
-        return input.orgIds.map((orgId) => ({
+        results = input.orgIds.map((orgId) => ({
           success: false,
           mode: "public",
           orgId,
-          roleName: "editor",
+          roleName: "editor" as const,
         }));
+      } else {
+        results = await Promise.all(
+          input.orgIds.map((orgId) =>
+            checkHasRoleOnOrg({
+              orgId,
+              session,
+              db: ctx.db,
+              roleName: "editor" as const,
+            }),
+          ),
+        );
       }
-
-      const results = await Promise.all(
-        input.orgIds.map((orgId) =>
-          checkHasRoleOnOrg({
-            orgId,
-            session,
-            db: ctx.db,
-            roleName: "editor",
-          }),
-        ),
-      );
-      return results;
+      return { results };
     }),
   submitCreateAOAndLocationAndEventRequest: protectedProcedure
     .input(CreateAOAndLocationAndEventSchema)

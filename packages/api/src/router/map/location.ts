@@ -2,7 +2,6 @@ import { ORPCError, os } from "@orpc/server";
 import omit from "lodash/omit";
 import { z } from "zod";
 
-import type { LowBandwidthF3Marker } from "@acme/validators";
 import {
   aliasedTable,
   and,
@@ -16,6 +15,7 @@ import {
 import { DayOfWeek } from "@acme/shared/app/enums";
 import { getFullAddress } from "@acme/shared/app/functions";
 import { isTruthy } from "@acme/shared/common/functions";
+import type { LowBandwidthF3Marker } from "@acme/validators";
 
 import { protectedProcedure } from "../../shared";
 
@@ -316,12 +316,14 @@ export const mapLocationRouter = os.router({
         .select()
         .from(schema.orgs)
         .where(eq(schema.orgs.orgType, "region"));
-      return regions.map((region) => ({
-        id: region.id,
-        name: region.name,
-        logo: region.logoUrl,
-        website: region.website,
-      }));
+      return {
+        regions: regions.map((region) => ({
+          id: region.id,
+          name: region.name,
+          logo: region.logoUrl,
+          website: region.website,
+        })),
+      };
     }),
   regionsWithLocation: protectedProcedure
     .route({
@@ -367,7 +369,7 @@ export const mapLocationRouter = os.router({
             index ===
             self.findIndex((t) => t.id === region.id && t.name === region.name),
         );
-      return uniqueRegionsWithLocation;
+      return { regionsWithLocation: uniqueRegionsWithLocation };
     }),
   workoutCount: protectedProcedure
     .route({
@@ -454,7 +456,7 @@ export const mapLocationRouter = os.router({
         {} as Record<number, string>,
       );
 
-      return lookup;
+      return { lookup };
     }),
   getAOsInRegion: protectedProcedure
     .input(z.object({ regionId: z.number() }))

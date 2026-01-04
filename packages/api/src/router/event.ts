@@ -308,7 +308,7 @@ export const eventRouter = {
         .where(eq(schema.events.id, input.id))
         .groupBy(schema.events.id, aoOrg.id, regionOrg.id);
 
-      return event;
+      return { event: event ?? null };
     }),
   crupdate: editorProcedure
     .input(EventInsertSchema.partial({ id: true }))
@@ -387,7 +387,7 @@ export const eventRouter = {
         );
       }
 
-      return result;
+      return { event: result ?? null };
     }),
   eventIdToRegionNameLookup: protectedProcedure
     .route({
@@ -433,7 +433,7 @@ export const eventRouter = {
         {} as Record<number, string>,
       );
 
-      return lookup;
+      return { lookup };
     }),
   delete: editorProcedure
     .input(z.object({ id: z.number() }))

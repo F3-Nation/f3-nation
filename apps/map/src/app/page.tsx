@@ -2,13 +2,13 @@ import { Suspense } from "react";
 
 import { RERENDER_LOGS } from "@acme/shared/common/constants";
 
-import type { RouterOutputs } from "~/orpc/types";
 import { MapPageWrapper } from "~/app/_components/map-page-wrapper";
 import { FilteredMapResultsProvider } from "~/app/_components/map/filtered-map-results-provider";
 import { GoogleMapComponent } from "~/app/_components/map/google-map";
 import { InitialLocationProvider } from "~/app/_components/map/initial-location-provider";
 import { ReactQueryHydrator } from "~/app/_components/map/react-query-hydrator";
 import { TextSearchResultsProvider } from "~/app/_components/map/search-results-provider";
+import type { RouterOutputs } from "~/orpc/types";
 import { SecondaryEffectsProvider } from "~/utils/secondary-effects-provider";
 import { TouchDeviceProvider } from "~/utils/touch-device-provider";
 
@@ -25,7 +25,7 @@ export default async function MapPage() {
   const { eventsAndLocations, regionsWithLocation }: MapPageData = shouldSkipSsg
     ? {
         eventsAndLocations: [],
-        regionsWithLocation: [],
+        regionsWithLocation: { regionsWithLocation: [] },
       }
     : await (async () => {
         const { client } = await import("~/orpc/client");

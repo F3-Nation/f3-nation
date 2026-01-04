@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
 import { MoreHorizontal, RotateCcw, Trash2 } from "lucide-react";
+import { useMemo } from "react";
 
 import { Badge } from "@acme/ui/badge";
 import { Button } from "@acme/ui/button";
@@ -25,10 +25,10 @@ import {
 } from "@acme/ui/table";
 import { toast } from "@acme/ui/toast";
 
-import type { RouterOutputs } from "~/orpc/types";
 import { invalidateQueries, orpc, useMutation, useQuery } from "~/orpc/react";
+import type { RouterOutputs } from "~/orpc/types";
 
-type ApiKeyRow = RouterOutputs["apiKey"]["list"][number];
+type ApiKeyRow = RouterOutputs["apiKey"]["list"]["apiKeys"][number];
 
 type Status = "active" | "revoked" | "expired";
 
@@ -95,7 +95,7 @@ export const ApiKeysTable = () => {
     }),
   );
 
-  const rows = useMemo(() => data ?? [], [data]);
+  const rows = useMemo(() => data?.apiKeys ?? [], [data?.apiKeys]);
 
   const confirmDelete = (id: number) => {
     const shouldDelete = window.confirm(
@@ -116,7 +116,7 @@ export const ApiKeysTable = () => {
           <div className="flex items-center justify-center py-12">
             <Spinner className="h-5 w-5" />
           </div>
-        ) : rows.length === 0 ? (
+        ) : data?.apiKeys.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 py-10 text-center text-sm text-muted-foreground">
             <p>No API keys yet.</p>
             <p>Create one to get started.</p>

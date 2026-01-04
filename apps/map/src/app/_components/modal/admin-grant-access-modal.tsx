@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Plus, UserPlus, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
-import type { RoleEntry } from "@acme/shared/app/types";
 import { Z_INDEX } from "@acme/shared/app/constants";
 import { isValidEmail } from "@acme/shared/app/functions";
+import type { RoleEntry } from "@acme/shared/app/types";
 import { safeParseInt } from "@acme/shared/common/functions";
 import { cn } from "@acme/ui";
 import { Button } from "@acme/ui/button";
@@ -37,14 +37,14 @@ import {
 import { toast } from "@acme/ui/toast";
 import { CrupdateUserSchema } from "@acme/validators";
 
-import type { DataType, ModalType } from "~/utils/store/modal";
 import {
+  ORPCError,
   invalidateQueries,
   orpc,
-  ORPCError,
   useMutation,
   useQuery,
 } from "~/orpc/react";
+import type { DataType, ModalType } from "~/utils/store/modal";
 import { closeModal } from "~/utils/store/modal";
 import { VirtualizedCombobox } from "../virtualized-combobox";
 
@@ -103,17 +103,17 @@ export default function AdminGrantAccessModal({
   });
 
   // Search users by email (exact match only)
-  const { data: userSearchResults } = useQuery({
-    ...orpc.user.all.queryOptions({
+  const { data: userSearchResults } = useQuery(
+    orpc.user.all.queryOptions({
       input: {
         searchTerm: emailValue,
         includePii: true,
         pageSize: 10,
         pageIndex: 0,
       },
+      enabled: isValidEmail(emailValue),
     }),
-    enabled: isValidEmail(emailValue),
-  });
+  );
 
   // Pre-fill form when user is loaded by ID
   useEffect(() => {

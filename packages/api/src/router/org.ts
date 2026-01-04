@@ -1,8 +1,7 @@
-import { revalidatePath } from "next/cache";
 import { ORPCError } from "@orpc/server";
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import type { OrgMeta } from "@acme/shared/app/types";
 import {
   aliasedTable,
   and,
@@ -15,6 +14,7 @@ import {
 } from "@acme/db";
 import { IsActiveStatus, OrgType } from "@acme/shared/app/enums";
 import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
+import type { OrgMeta } from "@acme/shared/app/types";
 import { OrgInsertSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
@@ -177,7 +177,7 @@ export const orgRouter = {
             input.orgType ? eq(schema.orgs.orgType, input.orgType) : undefined,
           ),
         );
-      return org;
+      return { org: org ?? null };
     }),
 
   crupdate: editorProcedure
@@ -218,7 +218,7 @@ export const orgRouter = {
           })
           .returning();
 
-        return result;
+        return { org: result ?? null };
       }
 
       // CASE 2: Update existing org
@@ -268,7 +268,7 @@ export const orgRouter = {
           set: orgToCrupdate,
         })
         .returning();
-      return result;
+      return { org: result ?? null };
     }),
   mine: protectedProcedure
     .route({

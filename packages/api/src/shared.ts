@@ -97,12 +97,20 @@ export const getSession = async ({ context }: { context: BaseContext }) => {
     context.reqHeaders?.get(Header.Authorization) ??
     context.reqHeaders?.get(Header.Authorization.toLowerCase());
 
+  const appClient = context.reqHeaders?.get(Header.Client);
+
   let apiKey: string | null = null;
   if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
     apiKey = authHeader.slice(7).trim();
   }
 
   if (!apiKey) return null;
+
+  if (apiKey && !appClient) {
+    throw new ORPCError("UNAUTHORIZED", {
+      message: "You must provide a client header when using an API key",
+    });
+  }
 
   // Get the api key info and associated owner and orgs
   const [apiKeyRecord] = await db

@@ -1,5 +1,5 @@
-import { randomBytes } from "crypto";
 import { ORPCError } from "@orpc/server";
+import { randomBytes } from "crypto";
 import { z } from "zod";
 
 import { and, desc, eq, gt, inArray, isNull, or, schema, sql } from "@acme/db";
@@ -109,20 +109,22 @@ export const apiKeyRouter = {
         });
       }
 
-      return keyQuery.map((key) => {
-        const roles = rolesByApiKeyId.get(key.id) ?? [];
-        return {
-          ...key,
-          keySignature: key.key.slice(-4),
-          roles: roles.map((r) => ({
-            orgId: r.orgId,
-            orgName: r.orgName,
-            roleName: r.roleName as "editor" | "admin",
-          })),
-          orgIds: roles.map((r) => r.orgId),
-          orgNames: roles.map((r) => r.orgName),
-        };
-      });
+      return {
+        apiKeys: keyQuery.map((key) => {
+          const roles = rolesByApiKeyId.get(key.id) ?? [];
+          return {
+            ...key,
+            keySignature: key.key.slice(-4),
+            roles: roles.map((r) => ({
+              orgId: r.orgId,
+              orgName: r.orgName,
+              roleName: r.roleName as "editor" | "admin",
+            })),
+            orgIds: roles.map((r) => r.orgId),
+            orgNames: roles.map((r) => r.orgName),
+          };
+        }),
+      };
     }),
   create: adminProcedure
     .input(createApiKeySchema)
@@ -227,7 +229,7 @@ export const apiKeyRouter = {
         throw new ORPCError("NOT_FOUND");
       }
 
-      return apiKey;
+      return { apiKey: apiKey ?? null };
     }),
   purge: adminProcedure
     .input(z.object({ id: z.number() }))
@@ -253,7 +255,7 @@ export const apiKeyRouter = {
         throw new ORPCError("NOT_FOUND");
       }
 
-      return apiKey;
+      return { apiKey: apiKey ?? null };
     }),
   validate: adminProcedure
     .input(z.object({ key: z.string() }))
