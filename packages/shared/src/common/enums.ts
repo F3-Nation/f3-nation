@@ -84,4 +84,5 @@ export enum TestId {
 export enum Client {
   ORPC = "orpc",
   ORPC_SSG = "orpc-ssg",
+  SCALAR_API = "scalar-api",
 }
