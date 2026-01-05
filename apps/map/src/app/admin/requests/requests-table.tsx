@@ -1,9 +1,9 @@
 "use client";
 
 import type { TableOptions, Updater } from "@tanstack/react-table";
-import { useState } from "react";
 import dayjs from "dayjs";
 import { Check, Filter, X } from "lucide-react";
+import { useState } from "react";
 
 import { UpdateRequestStatus } from "@acme/shared/app/enums";
 import { ZustandStore } from "@acme/shared/common/classes";
@@ -20,8 +20,8 @@ import { MDTable } from "@acme/ui/md-table";
 import { Popover, PopoverContent, PopoverTrigger } from "@acme/ui/popover";
 import { Cell, Header } from "@acme/ui/table";
 
-import type { RouterOutputs } from "~/orpc/types";
 import { orpc, useQuery } from "~/orpc/react";
+import type { RouterOutputs } from "~/orpc/types";
 import { ModalType, openModal } from "~/utils/store/modal";
 
 const initialState = {
@@ -87,10 +87,15 @@ export const RequestsTable = () => {
       totalCount={requests?.totalCount}
       columns={columns}
       onRowClick={(row) => {
+        const requestId = String(row.original.id);
+        if (!requestId || requestId === "undefined" || requestId === "null") {
+          console.error("Request ID is missing or invalid:", row.original);
+          return;
+        }
         if (row.original.requestType === "delete_event") {
-          openModal(ModalType.ADMIN_DELETE_REQUEST, { id: row.original.id });
+          openModal(ModalType.ADMIN_DELETE_REQUEST, { id: requestId });
         } else {
-          openModal(ModalType.ADMIN_REQUESTS, { id: row.original.id });
+          openModal(ModalType.ADMIN_REQUESTS, { id: requestId });
         }
       }}
       rowClassName={(row) =>
