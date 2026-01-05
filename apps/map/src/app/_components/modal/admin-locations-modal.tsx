@@ -1,6 +1,6 @@
 "use client";
 
-import { CircleHelp } from "lucide-react";
+import { CircleQuestionMark } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
@@ -204,7 +204,7 @@ export default function AdminLocationsModal({
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger type="button">
-                                <CircleHelp
+                                <CircleQuestionMark
                                   size={14}
                                   className="display-inline ml-2"
                                 />

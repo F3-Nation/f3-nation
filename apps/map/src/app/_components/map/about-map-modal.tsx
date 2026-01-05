@@ -1,7 +1,7 @@
 "use client";
 
+import { CircleQuestionMark } from "lucide-react";
 import Link from "next/link";
-import { CircleHelp } from "lucide-react";
 
 import { BOONE_CENTER, Z_INDEX } from "@acme/shared/app/constants";
 import { cn } from "@acme/ui";
@@ -71,7 +71,7 @@ export function AboutMapModal() {
             openModal(ModalType.MAP_HELP);
           }}
         >
-          <CircleHelp className="size-4 text-primary" />
+          <CircleQuestionMark className="size-4 text-primary" />
           <span className="text-sm text-primary">Need Help?</span>
         </button>
       </DialogContent>

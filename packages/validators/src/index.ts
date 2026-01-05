@@ -15,6 +15,9 @@ import { DayOfWeek } from "@acme/shared/app/enums";
 export const UserSelectSchema = createSelectSchema(users);
 export const UserInsertSchema = createInsertSchema(users);
 
+export type UserSelectType = z.infer<typeof UserSelectSchema>;
+export type UserInsertType = z.infer<typeof UserInsertSchema>;
+
 export const CrupdateUserSchema = UserInsertSchema.extend({
   id: z.number().optional(),
 

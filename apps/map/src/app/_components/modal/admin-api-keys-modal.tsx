@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
 import { Plus, X } from "lucide-react";
+import { useMemo, useState } from "react";
 import { z } from "zod";
 
-import type { RoleEntry } from "@acme/shared/app/types";
 import { Z_INDEX } from "@acme/shared/app/constants";
+import type { RoleEntry } from "@acme/shared/app/types";
 import { safeParseInt } from "@acme/shared/common/functions";
 import { Button } from "@acme/ui/button";
 import {
@@ -68,11 +68,12 @@ export default function AdminApiKeysModal() {
   });
 
   const orgOptions = useMemo(() => {
-    const orgs = allOrgs?.orgs ?? [];
-    return orgs.map((org) => ({
-      value: org.id.toString(),
-      label: `${org.name} (${org.orgType})`,
-    }));
+    return (
+      allOrgs?.orgs.map((org) => ({
+        value: org.id.toString(),
+        label: `${org.name} (${org.orgType})`,
+      })) ?? []
+    );
   }, [allOrgs?.orgs]);
 
   const createApiKey = useMutation(

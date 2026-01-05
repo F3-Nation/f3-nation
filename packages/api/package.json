@@ -11,8 +11,8 @@
     "clean": "rm -rf .turbo node_modules",
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
     "lint": "eslint .",
-    "test": "if [ -z \"$CI\" ] && [ -z \"$TEST_DATABASE_URL\" ]; then echo \"Skipping @acme/api tests: TEST_DATABASE_URL is not set\"; exit 0; fi; SKIP_ENV_VALIDATION=1 pnpm with-env vitest --run --passWithNoTests \"$@\"",
-    "test:watch": "if [ -z \"$CI\" ] && [ -z \"$TEST_DATABASE_URL\" ]; then echo \"Skipping @acme/api tests: TEST_DATABASE_URL is not set\"; exit 0; fi; SKIP_ENV_VALIDATION=1 pnpm with-env vitest -w \"$@\"",
+    "test": "pnpm with-env vitest --run",
+    "test:watch": "pnpm with-env vitest -w",
     "test:org-hierarchy": "pnpm with-env tsx src/scripts/test-org-hierarchy.ts",
     "typecheck": "tsc --noEmit",
     "with-env": "dotenv -e ../../.env --"

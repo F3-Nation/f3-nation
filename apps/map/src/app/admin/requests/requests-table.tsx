@@ -1,9 +1,9 @@
 "use client";
 
 import type { TableOptions, Updater } from "@tanstack/react-table";
-import { useState } from "react";
 import dayjs from "dayjs";
 import { Check, Filter, X } from "lucide-react";
+import { useState } from "react";
 
 import { UpdateRequestStatus } from "@acme/shared/app/enums";
 import { getFullAddress, requestTypeToTitle } from "@acme/shared/app/functions";
@@ -22,8 +22,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@acme/ui/popover";
 import { Cell, Header } from "@acme/ui/table";
 import { toast } from "@acme/ui/toast";
 
-import type { RouterOutputs } from "~/orpc/types";
 import { orpc, useQuery } from "~/orpc/react";
+import type { RouterOutputs } from "~/orpc/types";
 import { vanillaApi } from "~/trpc/vanilla";
 import { openRequestModal } from "~/utils/open-request-modal";
 
@@ -226,7 +226,6 @@ const columns: TableOptions<
     meta: { name: "Location" },
     header: Header,
     cell: ({ row }) => {
-
       const newLocation = getFullAddress({
         locationAddress: row.original.newLocationAddress,
         locationAddress2: row.original.newLocationAddress2,

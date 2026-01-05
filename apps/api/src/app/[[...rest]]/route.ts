@@ -5,25 +5,10 @@ import { CORSPlugin, RequestHeadersPlugin } from "@orpc/server/plugins";
 
 import { router } from "@acme/api";
 import { API_PREFIX_V1 } from "@acme/shared/app/constants";
-import { isProductionNodeEnv } from "@acme/shared/common/constants";
 import { Client, Header } from "@acme/shared/common/enums";
 
 const corsPlugin = new CORSPlugin({
-  origin: (origin) => {
-    const allowedOrigins = [];
-    if (isProductionNodeEnv) {
-      if (origin.endsWith(".f3nation.com")) {
-        allowedOrigins.push(origin);
-      }
-    } else {
-      if (origin.endsWith(".f3nation.test")) {
-        allowedOrigins.push(origin);
-      }
-      allowedOrigins.push("http://localhost:3000", "http://127.0.0.1:3000");
-    }
-
-    return allowedOrigins;
-  },
+  origin: (origin) => origin,
   allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
   allowHeaders: [Header.ContentType, Header.Authorization, Header.Client],
   maxAge: 600,
