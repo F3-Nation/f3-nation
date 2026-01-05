@@ -21,7 +21,6 @@ import { Form } from "@acme/ui/form";
 import { Spinner } from "@acme/ui/spinner";
 import { toast } from "@acme/ui/toast";
 
-import gte from "lodash/gte";
 import {
   ORPCError,
   invalidateQueries,
@@ -45,7 +44,7 @@ export default function AdminRequestsModal({
   const { data: requestResponse } = useQuery(
     orpc.request.byId.queryOptions({
       input: { id: requestData.id },
-      enabled: gte(requestData.id, 0),
+      enabled: !!requestData.id,
     }),
   );
   const request = requestResponse?.request;
@@ -159,61 +158,66 @@ export default function AdminRequestsModal({
     });
   }, [request, form, eventTypes]);
 
-  if (!request) return <div>Loading...</div>;
   return (
     <Dialog open={true} onOpenChange={() => closeModal()}>
       <DialogContent
         style={{ zIndex: Z_INDEX.HOW_TO_JOIN_MODAL }}
         className="mb-40 rounded-lg px-4 sm:px-6 lg:px-8"
       >
-        <Form {...form}>
-          <form className="w-[inherit] overflow-x-hidden" onSubmit={onSubmit}>
-            <DialogHeader>
-              <DialogTitle className="text-2xl font-bold sm:text-4xl">
-                Edit Request
-                {!isProd && <FormDebugData />}
-              </DialogTitle>
-            </DialogHeader>
-            <LocationEventForm isAdminForm={true} />
-            <div className="mt-4 flex justify-between gap-2">
-              <Button
-                type="button"
-                className="bg-foreground text-background hover:bg-foreground/80"
-                onClick={() => onReject()}
-              >
-                {status === "rejecting" ? (
-                  <div className="flex items-center gap-2">
-                    Rejecting... <Spinner className="size-4" />
-                  </div>
-                ) : (
-                  "Reject"
-                )}
-              </Button>
-              <div className="flex gap-2">
+        {!request ? (
+          <div className="flex items-center justify-center p-8">
+            <Spinner className="size-8" />
+          </div>
+        ) : (
+          <Form {...form}>
+            <form className="w-[inherit] overflow-x-hidden" onSubmit={onSubmit}>
+              <DialogHeader>
+                <DialogTitle className="text-2xl font-bold sm:text-4xl">
+                  Edit Request
+                  {!isProd && <FormDebugData />}
+                </DialogTitle>
+              </DialogHeader>
+              <LocationEventForm isAdminForm={true} />
+              <div className="mt-4 flex justify-between gap-2">
                 <Button
                   type="button"
-                  variant="outline"
-                  onClick={() => closeModal()}
+                  className="bg-foreground text-background hover:bg-foreground/80"
+                  onClick={() => onReject()}
                 >
-                  Cancel
-                </Button>
-                <Button
-                  type="button"
-                  className="bg-primary text-white hover:bg-primary/80"
-                  onClick={() => onSubmit()}
-                >
-                  {status === "approving" ? (
+                  {status === "rejecting" ? (
                     <div className="flex items-center gap-2">
-                      Submitting... <Spinner className="size-4" />
+                      Rejecting... <Spinner className="size-4" />
                     </div>
                   ) : (
-                    "Approve"
+                    "Reject"
                   )}
                 </Button>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => closeModal()}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    className="bg-primary text-white hover:bg-primary/80"
+                    onClick={() => onSubmit()}
+                  >
+                    {status === "approving" ? (
+                      <div className="flex items-center gap-2">
+                        Submitting... <Spinner className="size-4" />
+                      </div>
+                    ) : (
+                      "Approve"
+                    )}
+                  </Button>
+                </div>
               </div>
-            </div>
-          </form>
-        </Form>
+            </form>
+          </Form>
+        )}
       </DialogContent>
     </Dialog>
   );
