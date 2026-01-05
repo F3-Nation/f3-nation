@@ -1,5 +1,6 @@
-import { useEffect } from "react";
 import { APIProvider, Map, useMap } from "@vis.gl/react-google-maps";
+import { MapPinIcon } from "lucide-react";
+import { useEffect } from "react";
 
 import { DEFAULT_CENTER } from "@acme/shared/app/constants";
 
@@ -61,9 +62,11 @@ const ProvidedGoogleMapSimple = ({
           onCenterChanged({ lat, lng });
         }
       }}
+      cameraControl={false}
+      zoomControl={true}
     >
-      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-4xl">
-        📍
+      <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-full">
+        <MapPinIcon className="size-10 fill-red-600 text-red-600 drop-shadow-lg" />
       </div>
     </Map>
   );
