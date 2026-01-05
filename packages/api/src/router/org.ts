@@ -18,6 +18,8 @@ import type { OrgMeta } from "@acme/shared/app/types";
 import { OrgInsertSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
+import { getDescendantOrgIds } from "../get-descendant-org-ids";
+import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
 import { moveAOLocsToNewRegion } from "../lib/move-ao-locs-to-new-region";
 import { adminProcedure, editorProcedure, protectedProcedure } from "../shared";
@@ -58,6 +60,7 @@ export const orgRouter = {
         sorting: parseSorting(),
         statuses: arrayOrSingle(z.enum(IsActiveStatus)).optional(),
         parentOrgIds: arrayOrSingle(z.coerce.number()).optional(),
+        onlyMine: z.coerce.boolean().optional(),
       }),
     )
     .route({
@@ -75,6 +78,30 @@ export const orgRouter = {
       const pageIndex = (input?.pageIndex ?? 0) * pageSize;
       const usePagination =
         input?.pageIndex !== undefined && input?.pageSize !== undefined;
+
+      // Determine if filter by editable org IDs is needed
+      let editableOrgIds: number[] = [];
+      let isNationAdmin = false;
+
+      if (input?.onlyMine) {
+        const result = await getEditableOrgIdsForUser(ctx);
+        const editableOrgs = result.editableOrgs;
+        isNationAdmin = result.isNationAdmin;
+
+        if (!isNationAdmin && editableOrgs.length > 0) {
+          // Get all descendant org IDs (including AOs) for the editable orgs
+          const editableOrgIdsList = editableOrgs.map((org) => org.id);
+          editableOrgIds = await getDescendantOrgIds(
+            ctx.db,
+            editableOrgIdsList,
+          );
+        }
+
+        // If user has no editable orgs and is not a nation admin, return empty
+        if (editableOrgIds.length === 0 && !isNationAdmin) {
+          return { orgs: [], total: 0 };
+        }
+      }
 
       const where = and(
         inArray(org.orgType, input.orgTypes),
@@ -94,6 +121,10 @@ export const orgRouter = {
           : undefined,
         input?.parentOrgIds?.length
           ? inArray(org.parentId, input.parentOrgIds)
+          : undefined,
+        // Filter by editable org IDs if onlyMine is true and not a nation admin
+        input?.onlyMine && !isNationAdmin && editableOrgIds.length > 0
+          ? inArray(org.id, editableOrgIds)
           : undefined,
       );
 

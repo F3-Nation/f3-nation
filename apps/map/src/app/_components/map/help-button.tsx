@@ -1,5 +1,5 @@
+import { CircleQuestionMark } from "lucide-react";
 import Link from "next/link";
-import { HelpCircle } from "lucide-react";
 
 import { filterButtonClassName } from "@acme/shared/app/constants";
 import { cn } from "@acme/ui";
@@ -14,7 +14,7 @@ export const HelpButton = () => {
           "flex w-auto whitespace-nowrap bg-foreground text-background",
         )}
       >
-        <HelpCircle strokeWidth={2} className={cn("size-4")} />
+        <CircleQuestionMark strokeWidth={2} className={cn("size-4")} />
         <div className="whitespace-nowrap">Help / feedback</div>
       </Link>
     </div>

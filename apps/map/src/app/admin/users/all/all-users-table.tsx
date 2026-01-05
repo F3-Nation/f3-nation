@@ -1,10 +1,10 @@
 "use client";
 
-import type { TableOptions } from "@tanstack/react-table";
-import { useCallback, useState } from "react";
 import { DotsHorizontalIcon } from "@radix-ui/react-icons";
 import { useQuery } from "@tanstack/react-query";
+import type { TableOptions } from "@tanstack/react-table";
 import { Check, ChevronsUpDown } from "lucide-react";
+import { useCallback, useState } from "react";
 
 import { UserRole, UserStatus } from "@acme/shared/app/enums";
 import { cn } from "@acme/ui";
@@ -26,8 +26,8 @@ import { MDTable, usePagination } from "@acme/ui/md-table";
 import { Popover, PopoverContent, PopoverTrigger } from "@acme/ui/popover";
 import { Cell, Header } from "@acme/ui/table";
 
-import type { RouterOutputs } from "~/orpc/types";
 import { orpc } from "~/orpc/react";
+import type { RouterOutputs } from "~/orpc/types";
 import { useDebounce } from "~/utils/hooks/use-debounce";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
 import { OrgFilter } from "../org-filter";
@@ -205,7 +205,6 @@ export const AllUsersTable = () => {
         pageSize: pagination.pageSize,
         pageIndex: pagination.pageIndex,
         orgIds: selectedOrgs.map((org) => org.id),
-        includePii: false,
       },
     }),
   );

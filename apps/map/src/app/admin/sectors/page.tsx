@@ -2,14 +2,11 @@ export const dynamic = "force-dynamic";
 
 import { Suspense } from "react";
 
-import { client } from "~/orpc/client";
 import Layout from "../admin-layout";
 import { AddSectorButton } from "./[id]/add-sector-button";
 import { SectorsTable } from "./sectors-table";
 
 const SectorsPage = async () => {
-  const { orgs: sectors } = await client.org.all({ orgTypes: ["sector"] });
-
   return (
     <Layout>
       <div className="flex w-full  flex-col">
@@ -21,7 +18,7 @@ const SectorsPage = async () => {
         </div>
         <Suspense fallback={<div>Loading...</div>}>
           <div className="flex w-full flex-col overflow-hidden">
-            <SectorsTable sectors={sectors} />
+            <SectorsTable />
           </div>
         </Suspense>
       </div>

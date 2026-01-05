@@ -120,8 +120,14 @@ export const AdminNavLinks = ({
       type: "link",
     },
     {
-      label: "Integrations",
+      label: "Applications",
       type: "section",
+    },
+    {
+      href: "/",
+      icon: MapPin,
+      label: "Map",
+      type: "link",
     },
     {
       href: routes.admin.apiKeys.__path,
