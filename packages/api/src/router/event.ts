@@ -19,6 +19,8 @@ import { arrayOrSingle, getFullAddress } from "@acme/shared/app/functions";
 import { EventInsertSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
+import { getDescendantOrgIds } from "../get-descendant-org-ids";
+import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
@@ -36,6 +38,7 @@ export const eventRouter = {
             .optional(),
           regionIds: arrayOrSingle(z.coerce.number()).optional(),
           aoIds: arrayOrSingle(z.coerce.number()).optional(),
+          onlyMine: z.coerce.boolean().optional(),
         })
         .optional(),
     )
@@ -54,6 +57,31 @@ export const eventRouter = {
       const offset = (input?.pageIndex ?? 0) * limit;
       const usePagination =
         input?.pageIndex !== undefined && input?.pageSize !== undefined;
+
+      // Determine if filter by editable org IDs is needed
+      let editableOrgIds: number[] = [];
+      let isNationAdmin = false;
+
+      if (input?.onlyMine) {
+        const result = await getEditableOrgIdsForUser(ctx);
+        const editableOrgs = result.editableOrgs;
+        isNationAdmin = result.isNationAdmin;
+
+        if (!isNationAdmin && editableOrgs.length > 0) {
+          // Get all descendant org IDs (including regions and AOs) for the editable orgs
+          const editableOrgIdsList = editableOrgs.map((org) => org.id);
+          editableOrgIds = await getDescendantOrgIds(
+            ctx.db,
+            editableOrgIdsList,
+          );
+        }
+
+        // If user has no editable orgs and is not a nation admin, return empty
+        if (editableOrgIds.length === 0 && !isNationAdmin) {
+          return { events: [], totalCount: 0 };
+        }
+      }
+
       const where = and(
         !input?.statuses?.length // no statuses provided, default to active
           ? eq(schema.events.isActive, true)
@@ -70,6 +98,14 @@ export const eventRouter = {
           ? inArray(regionOrg.id, input.regionIds)
           : undefined,
         input?.aoIds?.length ? inArray(parentOrg.id, input.aoIds) : undefined,
+        // Filter by editable org IDs if onlyMine is true and not a nation admin
+        // Events can be filtered by region (through location) or AO (parentOrg)
+        input?.onlyMine && !isNationAdmin && editableOrgIds.length > 0
+          ? or(
+              inArray(regionOrg.id, editableOrgIds),
+              inArray(parentOrg.id, editableOrgIds),
+            )
+          : undefined,
       );
       const sortedColumns = input?.sorting?.map((sorting) => {
         const direction = sorting.desc ? desc : asc;

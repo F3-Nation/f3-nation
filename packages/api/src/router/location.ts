@@ -20,6 +20,8 @@ import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
 import { LocationInsertSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
+import { getDescendantOrgIds } from "../get-descendant-org-ids";
+import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
 import { adminProcedure, editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
@@ -35,6 +37,7 @@ export const locationRouter = {
           sorting: parseSorting(),
           statuses: arrayOrSingle(z.enum(IsActiveStatus)).optional(),
           regionIds: arrayOrSingle(z.coerce.number()).optional(),
+          onlyMine: z.coerce.boolean().optional(),
         })
         .optional(),
     )
@@ -52,6 +55,31 @@ export const locationRouter = {
       const offset = (input?.pageIndex ?? 0) * limit;
       const usePagination =
         input?.pageIndex !== undefined && input?.pageSize !== undefined;
+
+      // Determine if filter by editable org IDs is needed
+      let editableOrgIds: number[] = [];
+      let isNationAdmin = false;
+
+      if (input?.onlyMine) {
+        const result = await getEditableOrgIdsForUser(ctx);
+        const editableOrgs = result.editableOrgs;
+        isNationAdmin = result.isNationAdmin;
+
+        if (!isNationAdmin && editableOrgs.length > 0) {
+          // Get all descendant org IDs (including regions) for the editable orgs
+          const editableOrgIdsList = editableOrgs.map((org) => org.id);
+          editableOrgIds = await getDescendantOrgIds(
+            ctx.db,
+            editableOrgIdsList,
+          );
+        }
+
+        // If user has no editable orgs and is not a nation admin, return empty
+        if (editableOrgIds.length === 0 && !isNationAdmin) {
+          return { locations: [], totalCount: 0 };
+        }
+      }
+
       const where = and(
         !input?.statuses?.length ||
           input.statuses.length === IsActiveStatus.length
@@ -67,6 +95,10 @@ export const locationRouter = {
           : undefined,
         input?.regionIds?.length
           ? inArray(schema.locations.orgId, input.regionIds)
+          : undefined,
+        // Filter by editable org IDs if onlyMine is true and not a nation admin
+        input?.onlyMine && !isNationAdmin && editableOrgIds.length > 0
+          ? inArray(schema.locations.orgId, editableOrgIds)
           : undefined,
       );
 
