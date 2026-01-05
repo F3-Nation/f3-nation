@@ -2,9 +2,7 @@
 
 import type { ReactNode } from "react";
 import Image from "next/image";
-import Link from "next/link";
-import { MapPin, Menu } from "lucide-react";
-import { signOut } from "next-auth/react";
+import { Menu } from "lucide-react";
 
 import {
   ADMIN_HEADER_HEIGHT,
@@ -22,6 +20,7 @@ import {
 
 import { VersionInfo } from "~/app/_components/version-info";
 import { AdminNavLinks } from "./_components/admin-nav-links";
+import { AdminUserMenu } from "./_components/admin-user-menu";
 
 const Layout = ({
   children,
@@ -39,12 +38,6 @@ const Layout = ({
         <div className="flex h-full w-full flex-row items-center justify-between px-4">
           <Image src="/f3_logo.png" alt="F3" width={48} height={48} />
           <div className="flex items-center gap-2">
-            <Link
-              href="/"
-              className="flex flex-row items-center justify-center gap-2 rounded-md bg-primary p-2 text-base font-medium text-background"
-            >
-              <MapPin className="h-5 w-5" />
-            </Link>
             <Sheet>
               <SheetTrigger asChild>
                 <Button variant="ghost" size="icon">
@@ -57,16 +50,9 @@ const Layout = ({
                 </SheetHeader>
                 <div className="flex flex-col gap-4 py-4">
                   <AdminNavLinks linkClassName="flex flex-row items-center gap-3 rounded-lg px-3 py-3" />
-                  <button
-                    className="mt-4 flex w-full flex-row items-center justify-center gap-2 rounded-md bg-foreground px-4 py-2 text-base font-medium text-background"
-                    onClick={async () => {
-                      await signOut({
-                        callbackUrl: "/",
-                      });
-                    }}
-                  >
-                    Sign Out
-                  </button>
+                  <div className="mt-4 border-t pt-4">
+                    <AdminUserMenu />
+                  </div>
                 </div>
               </SheetContent>
             </Sheet>
@@ -88,25 +74,9 @@ const Layout = ({
             />
           </div>
         </div>
-        {/* Link to the main map */}
-        <div className="flex w-full flex-col items-center justify-end gap-2">
-          <Link
-            href="/"
-            className="flex flex-row items-center justify-center gap-2 rounded-md bg-primary p-2 text-base font-medium text-background"
-          >
-            <MapPin />
-            Map
-          </Link>
-          <button
-            className="rounded-md bg-foreground px-4 py-2 text-base font-medium text-background"
-            onClick={async () => {
-              await signOut({
-                callbackUrl: "/",
-              });
-            }}
-          >
-            Sign Out
-          </button>
+        {/* User menu and version info */}
+        <div className="flex w-full flex-col items-center justify-end gap-2 border-t p-2">
+          <AdminUserMenu />
           <VersionInfo className="mt-2 text-center text-gray-600" />
         </div>
       </div>

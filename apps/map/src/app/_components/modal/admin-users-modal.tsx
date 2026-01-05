@@ -140,7 +140,7 @@ export default function UserModal({
           <form
             onSubmit={form.handleSubmit(
               (data) => {
-                // Only include PII fields if we have access to them
+                // Only exclude PII fields when editing an existing user without PII access
                 let submitData: typeof data;
                 if (!hasPiiAccess && user?.id) {
                   // For updates without PII access, don't send PII fields
@@ -157,6 +157,7 @@ export default function UserModal({
                     email: data.email ?? "", // Keep email as it's required by schema
                   } as typeof data;
                 } else {
+                  // For new users or users with PII access, send all data
                   submitData = data;
                 }
                 crupdateUser.mutate(submitData);
@@ -244,7 +245,7 @@ export default function UserModal({
                 />
               </div>
 
-              {hasPiiAccess && (
+              {(hasPiiAccess || !user?.id) && (
                 <>
                   <div className="mb-4 w-1/2 px-2">
                     <FormField

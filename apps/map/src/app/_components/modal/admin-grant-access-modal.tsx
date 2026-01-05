@@ -1,5 +1,6 @@
 "use client";
 
+import isNumber from "lodash/isNumber";
 import { CheckCircle2, Plus, UserPlus, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -55,11 +56,7 @@ export default function AdminGrantAccessModal({
 }) {
   const [emailPopoverOpen, setEmailPopoverOpen] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<number | null>(() => {
-    if (data && typeof data === "object" && "userId" in data) {
-      const id = data.userId;
-      return typeof id === "number" ? id : null;
-    }
-    return null;
+    return isNumber(data?.userId) ? data.userId : null;
   });
   const [isCreatingNew, setIsCreatingNew] = useState(false);
 
@@ -91,75 +88,54 @@ export default function AdminGrantAccessModal({
     userIdToFetch !== null &&
     typeof userIdToFetch === "number" &&
     userIdToFetch > 0;
-  const { data: userByIdData } = useQuery({
-    ...orpc.user.byId.queryOptions({
+  const { data: userByIdData } = useQuery(
+    orpc.user.byId.queryOptions({
       input: {
         id: hasValidUserId ? userIdToFetch : -1,
-        includePii: true,
+        // Must be false to avoid crashes
+        includePii: false,
       },
-    }),
-    enabled: hasValidUserId,
-    retry: false,
-  });
-
-  // Search users by email (exact match only)
-  const { data: userSearchResults } = useQuery(
-    orpc.user.all.queryOptions({
-      input: {
-        searchTerm: emailValue,
-        includePii: true,
-        pageSize: 10,
-        pageIndex: 0,
-      },
-      enabled: isValidEmail(emailValue),
+      enabled: hasValidUserId,
+      retry: false,
     }),
   );
 
-  // Pre-fill form when user is loaded by ID
-  useEffect(() => {
-    if (userByIdData?.user && data?.userId) {
-      const user = userByIdData.user;
-      if (user.email) {
-        form.setValue("email", user.email);
-      }
-      form.setValue("id", user.id);
-      setSelectedUserId(user.id);
-      setIsCreatingNew(false);
-      if (user.firstName) {
-        form.setValue("firstName", user.firstName);
-      }
-      if (user.lastName) {
-        form.setValue("lastName", user.lastName);
-      }
-      if (user.f3Name) {
-        form.setValue("f3Name", user.f3Name);
-      }
-      if (user.phone) {
-        form.setValue("phone", user.phone);
-      }
-    }
-  }, [userByIdData, data?.userId, form]);
+  // Search user by email (exact match)
+  const emailToSearch = emailValue?.trim();
+  const { data: userByEmailResponse } = useQuery(
+    orpc.user.byEmail.queryOptions({
+      input: {
+        email: emailToSearch ?? "",
+        includePii: false,
+      },
+      enabled: isValidEmail(emailValue) && !!emailToSearch,
+    }),
+  );
 
-  // Filter to exact email matches only
-  const exactEmailMatches = useMemo(() => {
-    if (!userSearchResults?.users || !emailValue) return [];
+  // Pre-fill form when user is loaded by ID (this is redundant with the useEffect below, but keeping for now)
+
+  // Get exact email match (byEmail returns a single user or null)
+  const exactEmailMatch = useMemo(() => {
+    if (!userByEmailResponse?.user || !emailValue) return null;
+    const user = userByEmailResponse.user;
     const lowerSearch = emailValue.toLowerCase().trim();
-    return userSearchResults.users.filter((user) => {
-      // Type guard: check if user has email (PII included)
-      return (
-        "email" in user &&
-        user.email &&
-        typeof user.email === "string" &&
-        user.email.toLowerCase() === lowerSearch
-      );
-    }) as ((typeof userSearchResults.users)[number] & {
-      email: string;
-      phone?: string | null;
-      firstName?: string | null;
-      lastName?: string | null;
-      f3Name?: string | null;
-    })[];
-  }, [userSearchResults, emailValue]);
+    // Verify the email matches exactly (case-insensitive)
+    if (
+      "email" in user &&
+      user.email &&
+      typeof user.email === "string" &&
+      user.email.toLowerCase() === lowerSearch
+    ) {
+      return user as typeof user & {
+        email: string;
+        phone?: string | null;
+        firstName?: string | null;
+        lastName?: string | null;
+        f3Name?: string | null;
+      };
+    }
+    return null;
+  }, [userByEmailResponse, emailValue]);
 
   // Validate email format using robust validation
   const isEmailValid = useMemo(() => {
@@ -175,19 +151,17 @@ export default function AdminGrantAccessModal({
       isCreateNew?: boolean;
     }[] = [];
 
-    // Add exact email matches
-    exactEmailMatches.forEach((user) => {
-      if (user.email) {
-        options.push({
-          value: user.email,
-          label: `${user.email}${user.firstName ?? user.lastName ? ` (${[user.firstName, user.lastName].filter(Boolean).join(" ")})` : ""}`,
-          id: user.id,
-        });
-      }
-    });
+    // Add exact email match if found
+    if (exactEmailMatch?.email) {
+      options.push({
+        value: exactEmailMatch.email,
+        label: `${exactEmailMatch.email}${exactEmailMatch.firstName ?? exactEmailMatch.lastName ? ` (${[exactEmailMatch.firstName, exactEmailMatch.lastName].filter(Boolean).join(" ")})` : ""}`,
+        id: exactEmailMatch.id,
+      });
+    }
 
     // Add "Create New User" option if email is valid and no exact match
-    if (isEmailValid && exactEmailMatches.length === 0) {
+    if (isEmailValid && !exactEmailMatch) {
       options.push({
         value: `__create_new__${emailValue}`,
         label: `Create New User: ${emailValue}`,
@@ -196,7 +170,7 @@ export default function AdminGrantAccessModal({
     }
 
     return options;
-  }, [exactEmailMatches, emailValue, isEmailValid]);
+  }, [exactEmailMatch, emailValue, isEmailValid]);
 
   const grantAccess = useMutation(
     orpc.user.crupdate.mutationOptions({
@@ -227,12 +201,20 @@ export default function AdminGrantAccessModal({
   );
 
   // Get the selected user object for display
+  // Show user from email match if available, otherwise show user loaded by ID
   const selectedUser = useMemo(() => {
     if (selectedUserId) {
-      return exactEmailMatches.find((u) => u.id === selectedUserId);
+      // Prefer email match if available (has email)
+      if (exactEmailMatch?.id === selectedUserId) {
+        return exactEmailMatch;
+      }
+      // Fall back to user loaded by ID (may not have email/PII)
+      if (userByIdData?.user?.id === selectedUserId) {
+        return userByIdData.user;
+      }
     }
     return null;
-  }, [selectedUserId, exactEmailMatches]);
+  }, [selectedUserId, exactEmailMatch, userByIdData]);
 
   const handleEmailSelect = (value: string) => {
     if (value.startsWith("__create_new__")) {
@@ -244,26 +226,25 @@ export default function AdminGrantAccessModal({
       setSelectedUserId(null);
       setEmailPopoverOpen(false);
     } else {
-      // Find the selected user
-      const user = exactEmailMatches.find((u) => u.email === value);
-      if (user) {
-        form.setValue("email", user.email ?? "");
-        form.setValue("id", user.id);
+      // Find the selected user (should match exactEmailMatch)
+      if (exactEmailMatch && exactEmailMatch.email === value) {
+        form.setValue("email", exactEmailMatch.email);
+        form.setValue("id", exactEmailMatch.id);
         setIsCreatingNew(false);
-        setSelectedUserId(user.id);
+        setSelectedUserId(exactEmailMatch.id);
         setEmailPopoverOpen(false);
         // Pre-fill user data if available
-        if (user.firstName) {
-          form.setValue("firstName", user.firstName);
+        if (exactEmailMatch.firstName) {
+          form.setValue("firstName", exactEmailMatch.firstName);
         }
-        if (user.lastName) {
-          form.setValue("lastName", user.lastName);
+        if (exactEmailMatch.lastName) {
+          form.setValue("lastName", exactEmailMatch.lastName);
         }
-        if (user.f3Name) {
-          form.setValue("f3Name", user.f3Name);
+        if (exactEmailMatch.f3Name) {
+          form.setValue("f3Name", exactEmailMatch.f3Name);
         }
-        if (user.phone) {
-          form.setValue("phone", user.phone);
+        if (exactEmailMatch.phone) {
+          form.setValue("phone", exactEmailMatch.phone);
         }
       }
     }
@@ -286,29 +267,25 @@ export default function AdminGrantAccessModal({
   useEffect(() => {
     if (userByIdData?.user) {
       const user = userByIdData.user;
-      // Set user ID
+      // Set user ID - this marks it as an update operation
       form.setValue("id", user.id);
       setSelectedUserId(user.id);
       setIsCreatingNew(false);
 
-      // Set email if available and not already set
-      if (user.email && !form.getValues("email")) {
+      // Set email if available (may not be available without PII access)
+      // Don't check if already set - always update from API response
+      if (user.email) {
         form.setValue("email", user.email);
+      } else {
+        // Clear email if not available (user doesn't have PII access)
+        form.setValue("email", "");
       }
 
-      // Set other user fields if available and not already set
-      if (user.firstName && !form.getValues("firstName")) {
-        form.setValue("firstName", user.firstName);
-      }
-      if (user.lastName && !form.getValues("lastName")) {
-        form.setValue("lastName", user.lastName);
-      }
-      if (user.f3Name && !form.getValues("f3Name")) {
-        form.setValue("f3Name", user.f3Name);
-      }
-      if (user.phone && !form.getValues("phone")) {
-        form.setValue("phone", user.phone);
-      }
+      // Set other user fields if available
+      form.setValue("firstName", user.firstName ?? "");
+      form.setValue("lastName", user.lastName ?? "");
+      form.setValue("f3Name", user.f3Name ?? "");
+      form.setValue("phone", user.phone ?? "");
 
       // Always set existing roles from the API (source of truth)
       if (user.roles && Array.isArray(user.roles)) {
@@ -361,7 +338,13 @@ export default function AdminGrantAccessModal({
                   );
                   return;
                 }
-                grantAccess.mutate(data);
+                // When updating an existing user (has id), email is not required
+                // The API will handle PII restrictions and won't update email if not provided
+                // For new users, email is required by the schema
+                const submitData = data.id
+                  ? { ...data, email: data.email ?? "" } // Allow empty email for updates
+                  : data; // New users must have email (schema validation)
+                grantAccess.mutate(submitData);
               },
               (error) => {
                 toast.error("Failed to grant access");
@@ -379,13 +362,18 @@ export default function AdminGrantAccessModal({
                     <FormItem>
                       <FormLabel>Email</FormLabel>
                       <FormDescription>
-                        Type an email address to search for existing users or
-                        create a new user.
+                        {data?.userId && !field.value
+                          ? "Email is not available (no PII access). You can still update roles for this user."
+                          : "Type an email address to search for existing users or create a new user."}
                       </FormDescription>
                       <FormControl>
                         <div className="relative">
                           <Input
-                            placeholder="user@example.com"
+                            placeholder={
+                              data?.userId && !field.value
+                                ? "Email not available"
+                                : "user@example.com"
+                            }
                             type="email"
                             disabled={!!data?.userId}
                             {...field}
@@ -473,22 +461,27 @@ export default function AdminGrantAccessModal({
                                 <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-green-600" />
                                 <div className="min-w-0 flex-1">
                                   <p className="text-sm font-medium text-foreground">
-                                    Selected User
-                                  </p>
-                                  <p className="truncate text-sm text-muted-foreground">
-                                    {selectedUser.email}
-                                  </p>
-                                  {(selectedUser.firstName ??
-                                    selectedUser.lastName ??
-                                    selectedUser.f3Name) && (
-                                    <p className="mt-1 text-xs text-muted-foreground">
-                                      {[
-                                        selectedUser.f3Name,
+                                    {(() => {
+                                      const nameParts = [
                                         selectedUser.firstName,
                                         selectedUser.lastName,
-                                      ]
-                                        .filter(Boolean)
-                                        .join(" ")}
+                                      ].filter(Boolean);
+                                      const displayName =
+                                        nameParts.length > 0
+                                          ? nameParts.join(" ")
+                                          : "Selected User";
+                                      return selectedUser.f3Name
+                                        ? `${displayName} (${selectedUser.f3Name})`
+                                        : displayName;
+                                    })()}
+                                  </p>
+                                  {selectedUser.email ? (
+                                    <p className="truncate text-sm text-muted-foreground">
+                                      {selectedUser.email}
+                                    </p>
+                                  ) : (
+                                    <p className="truncate text-sm text-muted-foreground italic">
+                                      Email not available
                                     </p>
                                   )}
                                 </div>
