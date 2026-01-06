@@ -130,6 +130,7 @@ export const eventRouter = {
         name: schema.events.name,
         description: schema.events.description,
         isActive: schema.events.isActive,
+        isPrivate: schema.events.isPrivate,
         parent: parentOrg.name,
         locationId: schema.events.locationId,
         startDate: schema.events.startDate,
@@ -274,6 +275,7 @@ export const eventRouter = {
           highlight: schema.events.highlight,
           created: schema.events.created,
           meta: schema.events.meta,
+          isPrivate: schema.events.isPrivate,
           aos: sql<{ aoId: number; aoName: string }[]>`COALESCE(
             json_agg(
               DISTINCT jsonb_build_object(

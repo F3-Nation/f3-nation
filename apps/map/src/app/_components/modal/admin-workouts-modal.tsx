@@ -135,6 +135,7 @@ export default function AdminWorkoutsModal({
         mapSeed: event?.meta?.mapSeed ?? false,
       },
       description: event?.description ?? "",
+      isPrivate: event?.isPrivate ?? false,
     });
   }, [form, event]);
 
@@ -142,7 +143,15 @@ export default function AdminWorkoutsModal({
     orpc.event.crupdate.mutationOptions({
       onSuccess: async () => {
         await invalidateQueries({
-          predicate: (query) => query.queryKey[0] === "event",
+          predicate: (query) => {
+            const key = query.queryKey;
+            return (
+              Array.isArray(key) &&
+              key.length > 0 &&
+              (key[0] === "event" ||
+                (Array.isArray(key[0]) && key[0][0] === "event"))
+            );
+          },
         });
         closeModal();
         toast.success("Successfully updated event");
@@ -520,6 +529,35 @@ export default function AdminWorkoutsModal({
                           value={field.value ?? ""}
                         />
                       </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="mb-4 w-1/2 px-2">
+                <FormField
+                  control={form.control}
+                  name="isPrivate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Visibility</FormLabel>
+                      <Select
+                        onValueChange={(value) =>
+                          value &&
+                          field.onChange(value === "true" ? true : false)
+                        }
+                        value={field.value === true ? "true" : "false"}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select visibility" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="false">Public</SelectItem>
+                          <SelectItem value="true">Private</SelectItem>
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}

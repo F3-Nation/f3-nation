@@ -72,6 +72,7 @@ export const mapLocationRouter = os.router({
           and(
             eq(schema.events.locationId, schema.locations.id),
             eq(schema.events.isActive, true),
+            eq(schema.events.isPrivate, false),
           ),
         )
         .leftJoin(aoOrg, eq(schema.events.orgId, aoOrg.id))
@@ -236,6 +237,7 @@ export const mapLocationRouter = os.router({
           and(
             eq(schema.locations.id, schema.events.locationId),
             eq(schema.events.isActive, true),
+            eq(schema.events.isPrivate, false),
           ),
         )
         .leftJoin(parentOrg, eq(schema.events.orgId, parentOrg.id))
