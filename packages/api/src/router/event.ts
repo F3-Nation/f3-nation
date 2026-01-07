@@ -15,33 +15,36 @@ import {
   sql,
 } from "@acme/db";
 import { IsActiveStatus } from "@acme/shared/app/enums";
+import { arrayOrSingle, getFullAddress } from "@acme/shared/app/functions";
 import { EventInsertSchema } from "@acme/validators";
 
-import { getFullAddress } from "../../../shared/src/app/functions";
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
-import { editorProcedure, publicProcedure } from "../shared";
+import { getDescendantOrgIds } from "../get-descendant-org-ids";
+import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
+import { editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
 export const eventRouter = {
-  all: publicProcedure
+  all: protectedProcedure
     .input(
       z
         .object({
-          pageIndex: z.number().optional(),
-          pageSize: z.number().optional(),
+          pageIndex: z.coerce.number().optional(),
+          pageSize: z.coerce.number().optional(),
           searchTerm: z.string().optional(),
-          statuses: z.enum(["active", "inactive"]).array().optional(),
+          statuses: arrayOrSingle(z.enum(["active", "inactive"])).optional(),
           sorting: z
-            .array(z.object({ id: z.string(), desc: z.boolean() }))
+            .array(z.object({ id: z.string(), desc: z.coerce.boolean() }))
             .optional(),
-          regionIds: z.number().array().optional(),
-          aoIds: z.number().array().optional(),
+          regionIds: arrayOrSingle(z.coerce.number()).optional(),
+          aoIds: arrayOrSingle(z.coerce.number()).optional(),
+          onlyMine: z.coerce.boolean().optional(),
         })
         .optional(),
     )
     .route({
       method: "GET",
-      path: "/all",
+      path: "/",
       tags: ["event"],
       summary: "List all events",
       description:
@@ -54,6 +57,31 @@ export const eventRouter = {
       const offset = (input?.pageIndex ?? 0) * limit;
       const usePagination =
         input?.pageIndex !== undefined && input?.pageSize !== undefined;
+
+      // Determine if filter by editable org IDs is needed
+      let editableOrgIds: number[] = [];
+      let isNationAdmin = false;
+
+      if (input?.onlyMine) {
+        const result = await getEditableOrgIdsForUser(ctx);
+        const editableOrgs = result.editableOrgs;
+        isNationAdmin = result.isNationAdmin;
+
+        if (!isNationAdmin && editableOrgs.length > 0) {
+          // Get all descendant org IDs (including regions and AOs) for the editable orgs
+          const editableOrgIdsList = editableOrgs.map((org) => org.id);
+          editableOrgIds = await getDescendantOrgIds(
+            ctx.db,
+            editableOrgIdsList,
+          );
+        }
+
+        // If user has no editable orgs and is not a nation admin, return empty
+        if (editableOrgIds.length === 0 && !isNationAdmin) {
+          return { events: [], totalCount: 0 };
+        }
+      }
+
       const where = and(
         !input?.statuses?.length // no statuses provided, default to active
           ? eq(schema.events.isActive, true)
@@ -70,6 +98,14 @@ export const eventRouter = {
           ? inArray(regionOrg.id, input.regionIds)
           : undefined,
         input?.aoIds?.length ? inArray(parentOrg.id, input.aoIds) : undefined,
+        // Filter by editable org IDs if onlyMine is true and not a nation admin
+        // Events can be filtered by region (through location) or AO (parentOrg)
+        input?.onlyMine && !isNationAdmin && editableOrgIds.length > 0
+          ? or(
+              inArray(regionOrg.id, editableOrgIds),
+              inArray(parentOrg.id, editableOrgIds),
+            )
+          : undefined,
       );
       const sortedColumns = input?.sorting?.map((sorting) => {
         const direction = sorting.desc ? desc : asc;
@@ -201,7 +237,7 @@ export const eventRouter = {
 
       const events = usePagination
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
-        : await query;
+        : await query.orderBy(...sortedColumns);
 
       const eventsWithLocation = events.map((event) => ({
         ...event,
@@ -210,11 +246,11 @@ export const eventRouter = {
 
       return { events: eventsWithLocation, totalCount: eventCount?.count ?? 0 };
     }),
-  byId: publicProcedure
-    .input(z.object({ id: z.number() }))
+  byId: protectedProcedure
+    .input(z.object({ id: z.coerce.number() }))
     .route({
       method: "GET",
-      path: "/by-id",
+      path: "/id/{id}",
       tags: ["event"],
       summary: "Get event by ID",
       description: "Retrieve detailed information about a specific event",
@@ -308,13 +344,13 @@ export const eventRouter = {
         .where(eq(schema.events.id, input.id))
         .groupBy(schema.events.id, aoOrg.id, regionOrg.id);
 
-      return event;
+      return { event: event ?? null };
     }),
   crupdate: editorProcedure
     .input(EventInsertSchema.partial({ id: true }))
     .route({
       method: "POST",
-      path: "/crupdate",
+      path: "/",
       tags: ["event"],
       summary: "Create or update event",
       description: "Create a new event or update an existing one",
@@ -387,9 +423,9 @@ export const eventRouter = {
         );
       }
 
-      return result;
+      return { event: result ?? null };
     }),
-  eventIdToRegionNameLookup: publicProcedure
+  eventIdToRegionNameLookup: protectedProcedure
     .route({
       method: "GET",
       path: "/event-id-to-region-name-lookup",
@@ -433,13 +469,13 @@ export const eventRouter = {
         {} as Record<number, string>,
       );
 
-      return lookup;
+      return { lookup };
     }),
   delete: editorProcedure
     .input(z.object({ id: z.number() }))
     .route({
       method: "DELETE",
-      path: "/delete",
+      path: "/delete/{id}",
       tags: ["event"],
       summary: "Delete event",
       description: "Soft delete an event by marking it as inactive",

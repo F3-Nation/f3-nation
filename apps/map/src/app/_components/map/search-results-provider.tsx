@@ -6,16 +6,16 @@ import { MIN_TEXT_LENGTH_FOR_SEARCH_RESULTS } from "@acme/shared/app/constants";
 import { RERENDER_LOGS } from "@acme/shared/common/constants";
 import { isTruthy } from "@acme/shared/common/functions";
 
-import type {
-  F3LocationMapSearchResult,
-  F3RegionMapSearchResult,
-  GeoMapSearchResult,
-} from "~/utils/types";
 import { orpc, useQuery } from "~/orpc/react";
 import { useIsMobileWidth } from "~/utils/hooks/use-is-mobile-width";
 import { placesAutocomplete } from "~/utils/place-autocomplete";
 import { mapStore } from "~/utils/store/map";
 import { searchStore } from "~/utils/store/search";
+import type {
+  F3LocationMapSearchResult,
+  F3RegionMapSearchResult,
+  GeoMapSearchResult,
+} from "~/utils/types";
 import { useFilteredMapResults } from "./filtered-map-results-provider";
 
 const TextSearchResultsContext = createContext<{
@@ -39,17 +39,21 @@ export const TextSearchResultsProvider = ({
 }: {
   children: React.ReactNode;
 }) => {
-  const { data: regions } = useQuery(
+  const { data: regionsResponse } = useQuery(
     orpc.map.location.regionsWithLocation.queryOptions({ input: undefined }),
   );
-  const { data: eventIdToRegionNameLookup } = useQuery(
+  const regions = regionsResponse?.regionsWithLocation;
+  const { data: eventIdToRegionNameLookupResponse } = useQuery(
     orpc.event.eventIdToRegionNameLookup.queryOptions({ input: undefined }),
   );
-  const { data: locationIdToRegionNameLookup } = useQuery(
+  const eventIdToRegionNameLookup = eventIdToRegionNameLookupResponse?.lookup;
+  const { data: locationIdToRegionNameLookupResponse } = useQuery(
     orpc.map.location.locationIdToRegionNameLookup.queryOptions({
       input: undefined,
     }),
   );
+  const locationIdToRegionNameLookup =
+    locationIdToRegionNameLookupResponse?.lookup;
   const isMobileWidth = useIsMobileWidth();
   RERENDER_LOGS && console.log("TextSearchResultsProvider rerender");
   const text = searchStore.use.text();

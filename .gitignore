@@ -66,3 +66,5 @@ test-results/
 
 # pnpm store
 .pnpm-store/
+
+pr.md

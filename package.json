@@ -1,6 +1,6 @@
 {
   "name": "f3-nation",
-  "version": "2.3.0",
+  "version": "3.1.2",
   "private": true,
   "engines": {
     "node": ">=20.19.0"
@@ -20,7 +20,7 @@
     "db:reset": "pnpm -F db reset",
     "db:seed": "pnpm -F db seed",
     "dev": "turbo dev --parallel",
-    "format": "turbo format --continue -- --cache --cache-location node_modules/.cache/.prettiercache",
+    "format": "turbo format --continue",
     "format:fix": "turbo format --continue -- --write --cache --cache-location node_modules/.cache/.prettiercache",
     "lint": "turbo run lint //#lint:ws --continue -- --cache --cache-location node_modules/.cache/.eslintcache",
     "lint:fix": "turbo lint --continue -- --fix --cache --cache-location node_modules/.cache/.eslintcache",

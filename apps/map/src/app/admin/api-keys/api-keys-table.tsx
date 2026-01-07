@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
 import { MoreHorizontal, RotateCcw, Trash2 } from "lucide-react";
+import { useMemo } from "react";
 
 import { Badge } from "@acme/ui/badge";
 import { Button } from "@acme/ui/button";
@@ -25,10 +25,10 @@ import {
 } from "@acme/ui/table";
 import { toast } from "@acme/ui/toast";
 
-import type { RouterOutputs } from "~/orpc/types";
 import { invalidateQueries, orpc, useMutation, useQuery } from "~/orpc/react";
+import type { RouterOutputs } from "~/orpc/types";
 
-type ApiKeyRow = RouterOutputs["apiKey"]["list"][number];
+type ApiKeyRow = RouterOutputs["apiKey"]["list"]["apiKeys"][number];
 
 type Status = "active" | "revoked" | "expired";
 
@@ -95,7 +95,7 @@ export const ApiKeysTable = () => {
     }),
   );
 
-  const rows = useMemo(() => data ?? [], [data]);
+  const rows = useMemo(() => data?.apiKeys ?? [], [data?.apiKeys]);
 
   const confirmDelete = (id: number) => {
     const shouldDelete = window.confirm(
@@ -116,7 +116,7 @@ export const ApiKeysTable = () => {
           <div className="flex items-center justify-center py-12">
             <Spinner className="h-5 w-5" />
           </div>
-        ) : rows.length === 0 ? (
+        ) : data?.apiKeys.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 py-10 text-center text-sm text-muted-foreground">
             <p>No API keys yet.</p>
             <p>Create one to get started.</p>
@@ -140,12 +140,6 @@ export const ApiKeysTable = () => {
                 {rows.map((row) => {
                   const status = deriveStatus(row);
                   const displayKey = `•••• ${row.keySignature}`;
-                  const scope =
-                    row.orgIds && row.orgIds.length > 0
-                      ? `${row.orgIds.length} org${
-                          row.orgIds.length > 1 ? "s" : ""
-                        }`
-                      : "All orgs";
 
                   return (
                     <TableRow key={row.id}>
@@ -172,7 +166,40 @@ export const ApiKeysTable = () => {
                           </span>
                         </div>
                       </TableCell>
-                      <TableCell>{scope}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {row.roles && row.roles.length > 0 ? (
+                            row.roles.map((role, index) => {
+                              const roleStyles = {
+                                admin:
+                                  "bg-purple-100 text-purple-700 border-purple-200",
+                                editor:
+                                  "bg-blue-100 text-blue-700 border-blue-200",
+                              } as const;
+
+                              const roleLabels = {
+                                admin: "Admin",
+                                editor: "Editor",
+                              } as const;
+
+                              return (
+                                <span
+                                  key={`${row.id}-${role.orgId}-${index}`}
+                                  className={`inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium ${
+                                    roleStyles[role.roleName]
+                                  }`}
+                                >
+                                  {role.orgName} ({roleLabels[role.roleName]})
+                                </span>
+                              );
+                            })
+                          ) : (
+                            <span className="inline-flex items-center whitespace-nowrap rounded-full border border-gray-200 bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
+                              Read only
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <Badge variant={statusBadgeVariant[status]}>
                           {status.charAt(0).toUpperCase() + status.slice(1)}

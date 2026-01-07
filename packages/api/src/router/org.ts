@@ -1,8 +1,7 @@
-import { revalidatePath } from "next/cache";
 import { ORPCError } from "@orpc/server";
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import type { OrgMeta } from "@acme/shared/app/types";
 import {
   aliasedTable,
   and,
@@ -14,12 +13,16 @@ import {
   schema,
 } from "@acme/db";
 import { IsActiveStatus, OrgType } from "@acme/shared/app/enums";
-import { OrgInsertSchema, SortingSchema } from "@acme/validators";
+import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
+import type { OrgMeta } from "@acme/shared/app/types";
+import { OrgInsertSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
+import { getDescendantOrgIds } from "../get-descendant-org-ids";
+import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
 import { moveAOLocsToNewRegion } from "../lib/move-ao-locs-to-new-region";
-import { adminProcedure, editorProcedure } from "../shared";
+import { adminProcedure, editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
 interface Org {
@@ -44,21 +47,25 @@ interface Org {
 }
 
 export const orgRouter = {
-  all: editorProcedure
+  all: protectedProcedure
     .input(
       z.object({
-        orgTypes: z.enum(OrgType).array().min(1),
-        pageIndex: z.number().optional(),
-        pageSize: z.number().optional(),
+        orgTypes: arrayOrSingle(z.enum(OrgType)).refine(
+          (val) => val.length >= 1,
+          { message: "At least one orgType is required" },
+        ),
+        pageIndex: z.coerce.number().optional(),
+        pageSize: z.coerce.number().optional(),
         searchTerm: z.string().optional(),
-        sorting: SortingSchema.optional(),
-        statuses: z.enum(IsActiveStatus).array().optional(),
-        parentOrgIds: z.number().array().optional(),
+        sorting: parseSorting(),
+        statuses: arrayOrSingle(z.enum(IsActiveStatus)).optional(),
+        parentOrgIds: arrayOrSingle(z.coerce.number()).optional(),
+        onlyMine: z.coerce.boolean().optional(),
       }),
     )
     .route({
       method: "GET",
-      path: "/all",
+      path: "/",
       tags: ["org"],
       summary: "List all organizations",
       description:
@@ -71,6 +78,30 @@ export const orgRouter = {
       const pageIndex = (input?.pageIndex ?? 0) * pageSize;
       const usePagination =
         input?.pageIndex !== undefined && input?.pageSize !== undefined;
+
+      // Determine if filter by editable org IDs is needed
+      let editableOrgIds: number[] = [];
+      let isNationAdmin = false;
+
+      if (input?.onlyMine) {
+        const result = await getEditableOrgIdsForUser(ctx);
+        const editableOrgs = result.editableOrgs;
+        isNationAdmin = result.isNationAdmin;
+
+        if (!isNationAdmin && editableOrgs.length > 0) {
+          // Get all descendant org IDs (including AOs) for the editable orgs
+          const editableOrgIdsList = editableOrgs.map((org) => org.id);
+          editableOrgIds = await getDescendantOrgIds(
+            ctx.db,
+            editableOrgIdsList,
+          );
+        }
+
+        // If user has no editable orgs and is not a nation admin, return empty
+        if (editableOrgIds.length === 0 && !isNationAdmin) {
+          return { orgs: [], total: 0 };
+        }
+      }
 
       const where = and(
         inArray(org.orgType, input.orgTypes),
@@ -90,6 +121,10 @@ export const orgRouter = {
           : undefined,
         input?.parentOrgIds?.length
           ? inArray(org.parentId, input.parentOrgIds)
+          : undefined,
+        // Filter by editable org IDs if onlyMine is true and not a nation admin
+        input?.onlyMine && !isNationAdmin && editableOrgIds.length > 0
+          ? inArray(org.id, editableOrgIds)
           : undefined,
       );
 
@@ -145,17 +180,19 @@ export const orgRouter = {
             pageIndex,
             pageSize,
           )
-        : await query;
+        : await query.orderBy(...sortedColumns);
 
       // Something is broken with org to org types
       return { orgs: orgs_untyped as Org[], total: orgCount?.count ?? 0 };
     }),
 
-  byId: editorProcedure
-    .input(z.object({ id: z.number(), orgType: z.enum(OrgType).optional() }))
+  byId: protectedProcedure
+    .input(
+      z.object({ id: z.coerce.number(), orgType: z.enum(OrgType).optional() }),
+    )
     .route({
       method: "GET",
-      path: "/by-id",
+      path: "/id/{id}",
       tags: ["org"],
       summary: "Get organization by ID",
       description:
@@ -171,14 +208,14 @@ export const orgRouter = {
             input.orgType ? eq(schema.orgs.orgType, input.orgType) : undefined,
           ),
         );
-      return org;
+      return { org: org ?? null };
     }),
 
   crupdate: editorProcedure
     .input(OrgInsertSchema.partial({ id: true, parentId: true }))
     .route({
       method: "POST",
-      path: "/crupdate",
+      path: "/",
       tags: ["org"],
       summary: "Create or update organization",
       description: "Create a new organization or update an existing one",
@@ -212,7 +249,7 @@ export const orgRouter = {
           })
           .returning();
 
-        return result;
+        return { org: result ?? null };
       }
 
       // CASE 2: Update existing org
@@ -262,9 +299,9 @@ export const orgRouter = {
           set: orgToCrupdate,
         })
         .returning();
-      return result;
+      return { org: result ?? null };
     }),
-  mine: editorProcedure
+  mine: protectedProcedure
     .route({
       method: "GET",
       path: "/mine",
@@ -330,7 +367,7 @@ export const orgRouter = {
     .input(z.object({ id: z.number(), orgType: z.enum(OrgType).optional() }))
     .route({
       method: "DELETE",
-      path: "/delete",
+      path: "/delete/{id}",
       tags: ["org"],
       summary: "Delete organization",
       description: "Soft delete an organization by marking it as inactive",

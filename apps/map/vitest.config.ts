@@ -8,6 +8,16 @@ export default defineConfig({
     globals: true,
     environment: "jsdom",
     setupFiles: ["__tests__/setup.tsx"],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "html"],
+      thresholds: {
+        statements: 0,
+        branches: 0,
+        functions: 0,
+        lines: 0,
+      },
+    },
     exclude: [
       "**/tests/**/*.spec.ts", // Exclude Playwright tests
       "**/node_modules/**",
@@ -24,6 +34,11 @@ export default defineConfig({
       // Mock server-only modules in test environment
       "server-only": new URL(
         "./__tests__/mocks/server-only.ts",
+        import.meta.url,
+      ).pathname,
+      // Mock oRPC server client to avoid database initialization
+      "~/orpc/client.server": new URL(
+        "./__tests__/mocks/orpc-client-server.ts",
         import.meta.url,
       ).pathname,
     },

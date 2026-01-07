@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Trash } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
 import { Button } from "@acme/ui/button";
@@ -15,8 +15,8 @@ import {
 import { Spinner } from "@acme/ui/spinner";
 import { toast } from "@acme/ui/toast";
 
+import { ORPCError, invalidateQueries, orpc, useQuery } from "~/orpc/react";
 import type { DataType, ModalType } from "~/utils/store/modal";
-import { invalidateQueries, orpc, ORPCError, useQuery } from "~/orpc/react";
 import { closeModal, modalStore } from "~/utils/store/modal";
 
 export default function AdminDeleteRequestModal({
@@ -31,9 +31,10 @@ export default function AdminDeleteRequestModal({
   const [status, setStatus] = useState<"approving" | "rejecting" | "idle">(
     "idle",
   );
-  const { data: request } = useQuery(
+  const { data: requestResponse } = useQuery(
     orpc.request.byId.queryOptions({ input: { id: requestData.id } }),
   );
+  const request = requestResponse?.request;
 
   const onReject = async () => {
     setStatus("rejecting");

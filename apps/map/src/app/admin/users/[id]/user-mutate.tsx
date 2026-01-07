@@ -40,7 +40,7 @@ import {
 export default function UserMutate({
   user,
 }: {
-  user: RouterOutputs["user"]["byId"];
+  user: RouterOutputs["user"]["byId"]["user"];
 }) {
   const router = useRouter();
   const { data: regions } = useQuery(

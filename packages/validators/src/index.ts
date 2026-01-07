@@ -15,6 +15,9 @@ import { DayOfWeek } from "@acme/shared/app/enums";
 export const UserSelectSchema = createSelectSchema(users);
 export const UserInsertSchema = createInsertSchema(users);
 
+export type UserSelectType = z.infer<typeof UserSelectSchema>;
+export type UserInsertType = z.infer<typeof UserInsertSchema>;
+
 export const CrupdateUserSchema = UserInsertSchema.extend({
   id: z.number().optional(),
 
@@ -25,8 +28,13 @@ export const CrupdateUserSchema = UserInsertSchema.extend({
     })
     .array(),
   f3Name: z.string().min(1, { message: "F3 Name is required" }),
-  email: z.string().email({ message: "Invalid email format" }),
+  email: z
+    .string()
+    .email({ message: "Invalid email format" })
+    .or(z.literal(""))
+    .optional(),
 });
+
 // AUTH SCHEMA
 export const EmailAuthSchema = UserInsertSchema.pick({
   email: true,
@@ -219,7 +227,7 @@ export type LowBandwidthF3Marker = z.infer<typeof LowBandwidthF3Marker>;
 export const SortingSchema = z
   .object({
     id: z.string(),
-    desc: z.boolean(),
+    desc: z.coerce.boolean(),
   })
   .array();
 

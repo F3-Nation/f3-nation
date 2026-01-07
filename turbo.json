@@ -21,8 +21,8 @@
       "cache": false
     },
     "format": {
-      "outputs": ["node_modules/.cache/.prettiercache"],
-      "outputMode": "new-only"
+      "outputs": [],
+      "outputMode": "full"
     },
     "//#lint:ws": {
       "cache": false

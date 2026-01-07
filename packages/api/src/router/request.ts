@@ -3,12 +3,6 @@ import dayjs from "dayjs";
 import omit from "lodash/omit";
 import { z } from "zod";
 
-import type { DayOfWeek, OrgType } from "@acme/shared/app/enums";
-import type { EventMeta, UpdateRequestMeta } from "@acme/shared/app/types";
-import type {
-  DeleteRequestResponse,
-  UpdateRequestResponse,
-} from "@acme/validators";
 import {
   aliasedTable,
   and,
@@ -19,19 +13,22 @@ import {
   or,
   schema,
 } from "@acme/db";
+import type { DayOfWeek, OrgType, UserRole } from "@acme/shared/app/enums";
 import { UpdateRequestStatus } from "@acme/shared/app/enums";
-import {
-  DeleteRequestSchema,
-  RequestInsertSchema,
-  SortingSchema,
+import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
+import type { EventMeta, UpdateRequestMeta } from "@acme/shared/app/types";
+import type {
+  DeleteRequestResponse,
+  UpdateRequestResponse,
 } from "@acme/validators";
+import { DeleteRequestSchema, RequestInsertSchema } from "@acme/validators";
 
-import type { Context } from "../shared";
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
 import { notifyMapChangeRequest } from "../services/map-request-notification";
-import { editorProcedure, publicProcedure } from "../shared";
+import type { Context } from "../shared";
+import { editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
 export const requestRouter = {
@@ -39,18 +36,18 @@ export const requestRouter = {
     .input(
       z
         .object({
-          pageIndex: z.number().optional(),
-          pageSize: z.number().optional(),
-          sorting: SortingSchema.optional(),
+          pageIndex: z.coerce.number().optional(),
+          pageSize: z.coerce.number().optional(),
+          sorting: parseSorting(),
           searchTerm: z.string().optional(),
-          onlyMine: z.boolean().optional(),
-          statuses: z.enum(UpdateRequestStatus).array().optional(),
+          onlyMine: z.coerce.boolean().optional(),
+          statuses: arrayOrSingle(z.enum(UpdateRequestStatus)).optional(),
         })
         .optional(),
     )
     .route({
       method: "GET",
-      path: "/all",
+      path: "/",
       tags: ["request"],
       summary: "List all requests",
       description:
@@ -207,7 +204,7 @@ export const requestRouter = {
 
       const requests = usePagination
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
-        : await query;
+        : await query.orderBy(...sortedColumns);
 
       return { requests, totalCount: totalCount?.count ?? 0 };
     }),
@@ -215,7 +212,7 @@ export const requestRouter = {
     .input(z.object({ id: z.string() }))
     .route({
       method: "GET",
-      path: "/by-id",
+      path: "/id/{id}",
       tags: ["request"],
       summary: "Get request by ID",
       description:
@@ -226,10 +223,10 @@ export const requestRouter = {
         .select()
         .from(schema.updateRequests)
         .where(eq(schema.updateRequests.id, input.id));
-      return request;
+      return { request: request ?? null };
     }),
-  canDeleteEvent: publicProcedure
-    .input(z.object({ eventId: z.number() }))
+  canDeleteEvent: protectedProcedure
+    .input(z.object({ eventId: z.coerce.number() }))
     .route({
       method: "GET",
       path: "/can-delete-event",
@@ -249,9 +246,9 @@ export const requestRouter = {
             eq(schema.updateRequests.status, "pending"),
           ),
         );
-      return !!request;
+      return { canDelete: !!request };
     }),
-  canEditRegions: publicProcedure
+  canEditRegions: protectedProcedure
     .input(z.object({ orgIds: z.array(z.number()) }))
     .route({
       method: "POST",
@@ -262,33 +259,45 @@ export const requestRouter = {
         "Check if the current user has editor permissions for specified organizations",
     })
     .handler(async ({ context: ctx, input }) => {
+      let results: {
+        success: boolean;
+        mode:
+          | "public"
+          | "org-admin"
+          | "mtndev-override"
+          | "direct-permission"
+          | "no-permission";
+        orgId: number | null;
+        roleName: UserRole | null;
+      }[] = [];
+
       const session = ctx.session;
       if (!session) {
-        return input.orgIds.map((orgId) => ({
+        results = input.orgIds.map((orgId) => ({
           success: false,
           mode: "public",
           orgId,
-          roleName: "editor",
+          roleName: "editor" as const,
         }));
+      } else {
+        results = await Promise.all(
+          input.orgIds.map((orgId) =>
+            checkHasRoleOnOrg({
+              orgId,
+              session,
+              db: ctx.db,
+              roleName: "editor" as const,
+            }),
+          ),
+        );
       }
-
-      const results = await Promise.all(
-        input.orgIds.map((orgId) =>
-          checkHasRoleOnOrg({
-            orgId,
-            session,
-            db: ctx.db,
-            roleName: "editor",
-          }),
-        ),
-      );
-      return results;
+      return { results };
     }),
-  submitDeleteRequest: publicProcedure
+  submitDeleteRequest: protectedProcedure
     .input(DeleteRequestSchema)
     .route({
       method: "POST",
-      path: "/submit-delete-request",
+      path: "/delete-request",
       tags: ["request"],
       summary: "Submit delete request",
       description: "Submit a request to delete an event or location",
@@ -335,7 +344,7 @@ export const requestRouter = {
           ...input,
           reviewedBy: ctx.session?.user?.email,
         });
-        return result;
+        return { status: result.status, deleteRequest: result.deleteRequest };
       }
 
       const [request] = await ctx.db
@@ -371,11 +380,11 @@ export const requestRouter = {
         deleteRequest: request,
       };
     }),
-  submitUpdateRequest: publicProcedure
+  submitUpdateRequest: protectedProcedure
     .input(RequestInsertSchema)
     .route({
       method: "POST",
-      path: "/submit-update-request",
+      path: "/update-request",
       tags: ["request"],
       summary: "Submit update request",
       description: "Submit a request to create or update a workout on the map",
@@ -450,7 +459,7 @@ export const requestRouter = {
           ...input,
           reviewedBy: ctx.session?.user?.email,
         });
-        return result;
+        return { status: result.status, updateRequest: result.updateRequest };
       }
 
       const updateRequest: typeof schema.updateRequests.$inferInsert = {
@@ -511,7 +520,7 @@ export const requestRouter = {
         ...input,
         reviewedBy: ctx.session?.user?.email,
       });
-      return result;
+      return { status: result.status, deleteRequest: result.deleteRequest };
     }),
   validateSubmissionByAdmin: editorProcedure
     .input(RequestInsertSchema)

@@ -1,9 +1,9 @@
-import { useCallback, useMemo } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import gte from "lodash/gte";
 import { Edit, PlusCircle, Trash } from "lucide-react";
 import { useSession } from "next-auth/react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useCallback, useMemo } from "react";
 
 import { isProd } from "@acme/shared/common/constants";
 import { isTruthy } from "@acme/shared/common/functions";
@@ -16,10 +16,10 @@ import { useUpdateEventSearchParams } from "~/utils/hooks/use-update-event-searc
 import { appStore } from "~/utils/store/app";
 import {
   DeleteType,
+  ModalType,
   eventAndLocationToUpdateRequest,
   eventDefaults,
   modalStore,
-  ModalType,
   openModal,
 } from "~/utils/store/modal";
 import textLink from "~/utils/text-link";
@@ -52,12 +52,13 @@ export const WorkoutDetailsContent = ({
     return results?.location.events?.[0]?.id ?? null;
   }, [providedEventId, results]);
 
-  const { data: canDeleteEvent } = useQuery(
+  const { data: canDeleteEventResponse } = useQuery(
     orpc.request.canDeleteEvent.queryOptions({
       input: { eventId: selectedEventId ?? 0 },
       enabled: !!selectedEventId,
     }),
   );
+  const canDeleteEvent = canDeleteEventResponse?.canDelete;
 
   const mode = appStore.use.mode();
 

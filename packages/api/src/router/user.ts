@@ -1,252 +1,323 @@
+import { and, eq, schema } from "@acme/db";
+import type { UserRole } from "@acme/shared/app/enums";
+import { isValidEmail } from "@acme/shared/app/functions";
+import { CrupdateUserSchema } from "@acme/validators";
 import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 
-import {
-  and,
-  count,
-  eq,
-  ilike,
-  inArray,
-  isNull,
-  or,
-  schema as schemaRaw,
-  sql,
-} from "@acme/db";
-import { UserRole, UserStatus } from "@acme/shared/app/enums";
-import { CrupdateUserSchema, SortingSchema } from "@acme/validators";
-
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
-import { getSortingColumns } from "../get-sorting-columns";
-import { editorProcedure } from "../shared";
-import { withPagination } from "../with-pagination";
-
-const schema = { ...schemaRaw, users: schemaRaw.users };
+import { getDescendantOrgIds } from "../get-descendant-org-ids";
+import {
+  buildSingleUserQuery,
+  buildUserListQuery,
+  checkUserPiiAccess,
+  isDuplicateEmailError,
+  userListInputSchema,
+} from "../lib/user";
+import { adminProcedure, editorProcedure } from "../shared";
 
 export const userRouter = {
   all: editorProcedure
-    .input(
-      z
-        .object({
-          roles: z.array(z.enum(UserRole)).optional(),
-          searchTerm: z.string().optional(),
-          pageIndex: z.number().optional(),
-          pageSize: z.number().optional(),
-          sorting: SortingSchema.optional(),
-          statuses: z.array(z.enum(UserStatus)).optional(),
-          orgIds: z.number().array().optional(),
-        })
-        .optional(),
-    )
+    .input(userListInputSchema)
     .route({
       method: "GET",
-      path: "/all",
+      path: "/",
       tags: ["user"],
       summary: "List all users",
       description:
-        "Get a paginated list of users with optional filtering by role, status, and organization",
+        "Get a paginated list of users with optional filtering by role, status, and organization. Includes PII fields (email, phone, emergency contacts) if includePii is true and the user is an F3 Nation admin.",
     })
     .handler(async ({ context: ctx, input }) => {
-      const limit = input?.pageSize ?? 10;
-      const offset = (input?.pageIndex ?? 0) * limit;
-      const usePagination =
-        input?.pageIndex !== undefined && input?.pageSize !== undefined;
-      const where = and(
-        !input?.statuses?.length || input.statuses.length === UserStatus.length
-          ? undefined
-          : input.statuses.includes("active")
-            ? eq(schema.users.status, "active")
-            : eq(schema.users.status, "inactive"),
-        !input?.roles?.length || input.roles.length === UserRole.length
-          ? undefined
-          : input.roles.includes("user")
-            ? isNull(schema.roles.name)
-            : inArray(schema.roles.name, input.roles),
-        input?.searchTerm
-          ? or(
-              ilike(schema.users.f3Name, `%${input?.searchTerm}%`),
-              ilike(schema.users.firstName, `%${input?.searchTerm}%`),
-              ilike(schema.users.lastName, `%${input?.searchTerm}%`),
-              ilike(schema.users.email, `%${input?.searchTerm}%`),
-            )
-          : undefined,
-        input?.orgIds?.length
-          ? inArray(schema.rolesXUsersXOrg.orgId, input.orgIds)
-          : undefined,
-      );
+      // Always set to false by default
+      let includePii = false;
 
-      const sortedColumns = getSortingColumns(
-        input?.sorting,
-        {
-          id: schema.users.id,
-          name: schema.users.firstName,
-          f3Name: schema.users.f3Name,
-          roles: schema.roles.name,
-          status: schema.users.status,
-          email: schema.users.email,
-          phone: schema.users.phone,
-          regions: schema.orgs.name,
-          created: schema.users.created,
-        },
-        "id",
-      );
+      if (input?.includePii) {
+        const [nation] = await ctx.db
+          .select({ id: schema.orgs.id })
+          .from(schema.orgs)
+          .where(eq(schema.orgs.orgType, "nation"));
 
-      const select = {
-        id: schema.users.id,
-        f3Name: schema.users.f3Name,
-        firstName: schema.users.firstName,
-        lastName: schema.users.lastName,
-        email: schema.users.email,
-        emailVerified: schema.users.emailVerified,
-        phone: schema.users.phone,
-        homeRegionId: schema.users.homeRegionId,
-        avatarUrl: schema.users.avatarUrl,
-        emergencyContact: schema.users.emergencyContact,
-        emergencyPhone: schema.users.emergencyPhone,
-        emergencyNotes: schema.users.emergencyNotes,
-        status: schema.users.status,
-        meta: schema.users.meta,
-        created: schema.users.created,
-        updated: schema.users.updated,
-        roles: sql<
-          { orgId: number; orgName: string; roleName: UserRole }[]
-        >`COALESCE(
-          json_agg(
-            json_build_object(
-              'orgId', ${schema.orgs.id}, 
-              'orgName', ${schema.orgs.name}, 
-              'roleName', ${schema.roles.name}
-            )
-          ) 
-          FILTER (
-            WHERE ${schema.orgs.id} IS NOT NULL
-          ), 
-          '[]'
-        )`,
-      };
+        if (!nation) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Nation not found",
+          });
+        }
 
-      const userIdsQuery = ctx.db
-        .selectDistinct({ id: schema.users.id })
-        .from(schema.users)
-        .leftJoin(
-          schema.rolesXUsersXOrg,
-          eq(schema.users.id, schema.rolesXUsersXOrg.userId),
-        )
-        .leftJoin(schema.orgs, eq(schema.orgs.id, schema.rolesXUsersXOrg.orgId))
-        .leftJoin(
-          schema.roles,
-          eq(schema.roles.id, schema.rolesXUsersXOrg.roleId),
-        )
-        .where(where);
+        const { success } = await checkHasRoleOnOrg({
+          orgId: nation.id,
+          session: ctx.session,
+          db: ctx.db,
+          roleName: "admin",
+        });
+        if (!success) {
+          throw new ORPCError("UNAUTHORIZED", {
+            message: "You do not have permission to view PII",
+          });
+        }
+        includePii = true;
+      }
 
-      const countResult = await ctx.db
-        .select({ count: count() })
-        .from(userIdsQuery.as("distinct_users"));
-
-      const userCount = countResult[0];
-
-      const query = ctx.db
-        .select(select)
-        .from(schema.users)
-        .leftJoin(
-          schema.rolesXUsersXOrg,
-          eq(schema.users.id, schema.rolesXUsersXOrg.userId),
-        )
-        .leftJoin(schema.orgs, eq(schema.orgs.id, schema.rolesXUsersXOrg.orgId))
-        .leftJoin(
-          schema.roles,
-          eq(schema.roles.id, schema.rolesXUsersXOrg.roleId),
-        )
-        .where(where)
-        .groupBy(schema.users.id);
-
-      const users = usePagination
-        ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
-        : await query;
-
-      return {
-        users: users.map((user) => ({
-          ...user,
-          name: `${user.firstName} ${user.lastName}`,
-        })),
-        totalCount: userCount?.count ?? 0,
-      };
+      return buildUserListQuery({ ctx, input, includePii });
     }),
-  byId: editorProcedure
-    .input(z.object({ id: z.number() }))
+  byOrgs: editorProcedure
+    .input(userListInputSchema)
     .route({
       method: "GET",
-      path: "/by-id",
+      path: "/orgs",
+      tags: ["user"],
+      summary: "List users by organization",
+      description:
+        "Get a paginated list of users associated with the specified organizations and all their descendant organizations through their roles. PII fields (email, phone, emergency contacts) are only included if the requester is an admin for all of the specified organizations.",
+    })
+    .handler(async ({ context: ctx, input }) => {
+      if (!input?.orgIds || input.orgIds.length === 0) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: "At least one orgId is required",
+        });
+      }
+
+      // Get all descendant org IDs (including the requested orgs themselves)
+      const allOrgIds = await getDescendantOrgIds(ctx.db, input.orgIds);
+
+      if (allOrgIds.length === 0) {
+        return {
+          users: [],
+          totalCount: 0,
+        };
+      }
+
+      // Always set to false by default
+      let includePii = false;
+
+      if (input?.includePii) {
+        // Check if user is an admin for all of the specified parent orgs
+        // (not all descendants, just the ones they requested)
+        for (const orgId of input.orgIds) {
+          const { success } = await checkHasRoleOnOrg({
+            orgId,
+            session: ctx.session,
+            db: ctx.db,
+            roleName: "admin",
+          });
+          if (!success) {
+            includePii = false;
+            break;
+          }
+        }
+        includePii = true;
+      }
+
+      // Update input to use all descendant org IDs
+      const inputWithDescendants = {
+        ...input,
+        orgIds: allOrgIds,
+      };
+
+      return buildUserListQuery({
+        ctx,
+        input: inputWithDescendants,
+        includePii,
+      });
+    }),
+  byId: editorProcedure
+    .input(
+      z.object({
+        id: z.coerce.number(),
+        includePii: z.coerce.boolean().optional().default(false),
+      }),
+    )
+    .route({
+      method: "GET",
+      path: "/id/{id}",
       tags: ["user"],
       summary: "Get user by ID",
       description:
-        "Retrieve detailed information about a specific user including their roles",
+        "Retrieve detailed information about a specific user including their roles. PII fields (email, phone) are only included if the requested user belongs to an organization where the requester is an admin.",
     })
     .handler(async ({ context: ctx, input }) => {
-      const [user] = await ctx.db
-        .select({
-          id: schema.users.id,
-          f3Name: schema.users.f3Name,
-          firstName: schema.users.firstName,
-          lastName: schema.users.lastName,
-          email: schema.users.email,
-          status: schema.users.status,
-          phone: schema.users.phone,
-          roles: sql<
-            { orgId: number; orgName: string; roleName: UserRole }[]
-          >`COALESCE(
-            json_agg(
-              json_build_object(
-                'orgId', ${schema.orgs.id}, 
-                'orgName', ${schema.orgs.name}, 
-                'roleName', ${schema.roles.name}
-              )
-            ) 
-            FILTER (
-              WHERE ${schema.orgs.id} IS NOT NULL
-            ), 
-            '[]'
-          )`,
-        })
-        .from(schema.users)
-        .leftJoin(
-          schema.rolesXUsersXOrg,
-          eq(schema.users.id, schema.rolesXUsersXOrg.userId),
-        )
-        .leftJoin(schema.orgs, eq(schema.orgs.id, schema.rolesXUsersXOrg.orgId))
-        .leftJoin(
-          schema.roles,
-          eq(schema.roles.id, schema.rolesXUsersXOrg.roleId),
-        )
-        .groupBy(schema.users.id)
-        .where(eq(schema.users.id, input.id));
-      return user ?? null;
+      let includePii = false;
+      if (input?.includePii) {
+        // First, get the user's orgs to check if requester is admin of any
+        const userOrgs = await ctx.db
+          .selectDistinct({
+            orgId: schema.rolesXUsersXOrg.orgId,
+          })
+          .from(schema.rolesXUsersXOrg)
+          .where(eq(schema.rolesXUsersXOrg.userId, input.id));
+
+        // Check if requester is an admin for any of the user's orgs
+        for (const userOrg of userOrgs) {
+          const { success } = await checkHasRoleOnOrg({
+            orgId: userOrg.orgId,
+            session: ctx.session,
+            db: ctx.db,
+            roleName: "admin",
+          });
+          if (success) {
+            includePii = true;
+            break;
+          }
+        }
+      }
+
+      return buildSingleUserQuery({
+        ctx,
+        whereCondition: eq(schema.users.id, input.id),
+        includePii,
+      });
     }),
-  crupdate: editorProcedure
+  byEmail: editorProcedure
+    .input(
+      z.object({
+        email: z.string().email(),
+        includePii: z.coerce.boolean().optional().default(false),
+      }),
+    )
+    .route({
+      method: "GET",
+      path: "/email/{email}",
+      tags: ["user"],
+      summary: "Get user by email",
+      description:
+        "Retrieve a user by their email address. PII fields (email, phone) are only included if the requested user belongs to an organization where the requester is an admin.",
+    })
+    .handler(async ({ context: ctx, input }) => {
+      let includePii = false;
+      if (input?.includePii) {
+        // First, get the user to check their orgs
+        const [user] = await ctx.db
+          .select({ id: schema.users.id })
+          .from(schema.users)
+          .where(eq(schema.users.email, input.email));
+
+        if (user) {
+          includePii = await checkUserPiiAccess({
+            ctx,
+            userId: user.id,
+          });
+        }
+      }
+
+      return buildSingleUserQuery({
+        ctx,
+        whereCondition: eq(schema.users.email, input.email),
+        includePii,
+        includeEmail: true, // Always include email when searching by email
+      });
+    }),
+  crupdate: adminProcedure
     .input(CrupdateUserSchema)
     .route({
       method: "POST",
-      path: "/crupdate",
+      path: "/",
       tags: ["user"],
       summary: "Create or update user",
       description:
-        "Create a new user or update an existing one, including role assignments",
+        "Create a new user or update an existing one, including role assignments. PII fields (email, phone) are only updated if the requester has admin access to the user's organizations.",
     })
     .handler(async ({ context: ctx, input }) => {
       const { roles, ...rest } = input;
-      const [user] = await ctx.db
-        .insert(schema.users)
-        .values({
-          ...rest,
-        })
-        .onConflictDoUpdate({
-          target: [schema.users.id],
-          set: input,
-        })
-        .returning();
 
-      if (!user) {
-        throw new Error("User not found");
+      // Check if this is an update (has id) and if requester has PII access
+      let hasPiiAccess = false;
+      if (input.id) {
+        // Get the user's orgs to check if requester is admin of any
+        const userOrgs = await ctx.db
+          .selectDistinct({
+            orgId: schema.rolesXUsersXOrg.orgId,
+          })
+          .from(schema.rolesXUsersXOrg)
+          .where(eq(schema.rolesXUsersXOrg.userId, input.id));
+
+        // Check if requester is an admin for any of the user's orgs
+        for (const userOrg of userOrgs) {
+          const { success } = await checkHasRoleOnOrg({
+            orgId: userOrg.orgId,
+            session: ctx.session,
+            db: ctx.db,
+            roleName: "admin",
+          });
+          if (success) {
+            hasPiiAccess = true;
+            break;
+          }
+        }
+      } else {
+        // For new users, check if requester has admin access to the orgs being assigned
+        for (const role of roles) {
+          const { success } = await checkHasRoleOnOrg({
+            orgId: role.orgId,
+            session: ctx.session,
+            db: ctx.db,
+            roleName: "admin",
+          });
+          if (success) {
+            hasPiiAccess = true;
+            break;
+          }
+        }
       }
+
+      // Prepare update data - only include PII if user has access
+      const {
+        email: _email,
+        phone: _phone,
+        emergencyContact: _emergencyContact,
+        emergencyPhone: _emergencyPhone,
+        emergencyNotes: _emergencyNotes,
+        ...nonPiiData
+      } = rest;
+
+      const updateSet =
+        input.id && !hasPiiAccess
+          ? nonPiiData // Exclude PII fields for updates without access
+          : rest; // Include all fields for new users or users with access
+
+      if (!input.id && !_email) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: "Email is required for new users",
+        });
+      }
+
+      // Only validate email format if email is provided (required for new users, optional for updates)
+      if (_email && !isValidEmail(_email)) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: "Invalid email format",
+        });
+      }
+
+      console.log("Update set", updateSet);
+
+      let user: typeof schema.users.$inferSelect;
+      try {
+        const result = await ctx.db
+          .insert(schema.users)
+          .values({
+            ...rest,
+            email: _email ?? "", // Ensure required email is not undefined
+          })
+          .onConflictDoUpdate({
+            target: [schema.users.id],
+            set: updateSet,
+          })
+          .returning();
+
+        const insertedUser = result[0];
+        if (!insertedUser) {
+          throw new Error("User not found");
+        }
+        user = insertedUser;
+      } catch (error) {
+        if (isDuplicateEmailError(error)) {
+          throw new ORPCError("BAD_REQUEST", {
+            message: `A user with the email address "${_email}" already exists. Please use a different email address.`,
+          });
+        }
+        // Re-throw other errors
+        throw error;
+      }
+
+      console.log("User", user);
 
       const dbRoles = await ctx.db.select().from(schema.roles);
 
@@ -340,6 +411,7 @@ export const userRouter = {
         );
       }
 
+      console.log("New roles to insert", newRolesToInsert);
       const updatedRoles = await ctx.db
         .select({
           orgId: schema.rolesXUsersXOrg.orgId,
@@ -360,11 +432,11 @@ export const userRouter = {
       };
     }),
 
-  delete: editorProcedure
+  delete: adminProcedure
     .input(z.object({ id: z.number() }))
     .route({
       method: "DELETE",
-      path: "/delete",
+      path: "/delete/{id}",
       tags: ["user"],
       summary: "Delete user",
       description:
@@ -397,7 +469,7 @@ export const userRouter = {
 
       if (!roleCheckResult.success) {
         throw new ORPCError("UNAUTHORIZED", {
-          message: "User doesn't have an Admin F3 Nation role.",
+          message: "You must be an F3 Nation admin to delete users.",
         });
       }
 

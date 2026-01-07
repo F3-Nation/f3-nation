@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/prefer-nullish-coalescing */
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import gte from "lodash/gte";
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { v4 as uuid } from "uuid";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
@@ -22,16 +22,16 @@ import { Form } from "@acme/ui/form";
 import { Spinner } from "@acme/ui/spinner";
 import { toast } from "@acme/ui/toast";
 
-import type { DataType, ModalType } from "~/utils/store/modal";
 import {
+  ORPCError,
   invalidateQueries,
   orpc,
-  ORPCError,
   useMutation,
   useQuery,
 } from "~/orpc/react";
 import { useUpdateLocationForm } from "~/utils/forms";
 import { appStore } from "~/utils/store/app";
+import type { DataType, ModalType } from "~/utils/store/modal";
 import { closeModal } from "~/utils/store/modal";
 import {
   DevLoadTestData,
@@ -59,12 +59,13 @@ export const UpdateLocationModal = ({
   });
 
   const formRegionId = form.watch("regionId");
-  const { data: canEditRegion } = useQuery(
+  const { data: canEditRegionResponse } = useQuery(
     orpc.request.canEditRegions.queryOptions({
       input: { orgIds: [formRegionId] },
       enabled: !!formRegionId && formRegionId !== -1,
     }),
   );
+  const canEditRegion = canEditRegionResponse?.results;
 
   const { data: session } = useSession();
   const { data: eventTypes } = useQuery(

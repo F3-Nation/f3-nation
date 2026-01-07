@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import gte from "lodash/gte";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
 import { safeParseInt } from "@acme/shared/common/functions";
@@ -35,13 +36,13 @@ import { Textarea } from "@acme/ui/textarea";
 import { toast } from "@acme/ui/toast";
 import { AOInsertSchema } from "@acme/validators";
 
-import type { DataType } from "~/utils/store/modal";
 import { env } from "~/env";
 import { invalidateQueries, orpc, useMutation, useQuery } from "~/orpc/react";
+import type { DataType } from "~/utils/store/modal";
 import {
-  closeModal,
   DeleteType,
   ModalType,
+  closeModal,
   openModal,
 } from "~/utils/store/modal";
 import { VirtualizedCombobox } from "../virtualized-combobox";
@@ -51,11 +52,13 @@ export default function AdminAOsModal({
 }: {
   data: DataType[ModalType.ADMIN_AOS];
 }) {
-  const { data: ao } = useQuery(
+  const { data: aoResponse } = useQuery(
     orpc.org.byId.queryOptions({
       input: { id: data.id ?? -1, orgType: "ao" },
+      enabled: gte(data.id, 0),
     }),
   );
+  const ao = aoResponse?.org;
   const { data: regions } = useQuery(
     orpc.org.all.queryOptions({ input: { orgTypes: ["region"] } }),
   );

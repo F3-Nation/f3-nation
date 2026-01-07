@@ -1,6 +1,6 @@
-import { useMemo } from "react";
 import lt from "lodash/lt";
 import { X } from "lucide-react";
+import { useMemo } from "react";
 import { Controller } from "react-hook-form";
 import { z } from "zod";
 
@@ -44,7 +44,10 @@ export const LocationEventForm = ({
   console.log("form eventTypeIds", form.getValues().eventTypeIds);
 
   // Get form values
-  const { data: regions } = useQuery(orpc.map.location.regions.queryOptions());
+  const { data: regionsResponse } = useQuery(
+    orpc.map.location.regions.queryOptions(),
+  );
+  const regions = regionsResponse?.regions;
   const { data: allAoData } = useQuery(
     orpc.org.all.queryOptions({ input: { orgTypes: ["ao"] } }),
   );

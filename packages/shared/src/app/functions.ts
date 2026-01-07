@@ -161,3 +161,66 @@ export const requestTypeToTitle = (requestType: RequestType) => {
       return "Update";
   }
 };
+
+// Helper to normalize query params that can be single value or array
+export const arrayOrSingle = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess(
+    (val) => (val === undefined ? undefined : Array.isArray(val) ? val : [val]),
+    z.array(schema),
+  );
+
+// Helper to parse sorting parameter from query string (can be JSON stringified)
+export const parseSorting = () =>
+  z.preprocess(
+    (val) => {
+      if (val === undefined || val === null) return undefined;
+      console.log("val", val);
+      // If it's an array of strings (happens when query params are split)
+      // Try to join them and parse as JSON
+      if (Array.isArray(val) && val.every((v) => typeof v === "string")) {
+        try {
+          return JSON.parse(val.join(","));
+        } catch {
+          // If joining fails, try parsing each string individually
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+            return val.map((v: string) => JSON.parse(v));
+          } catch {
+            return undefined;
+          }
+        }
+      }
+
+      // If it's a string, parse it as JSON
+      if (typeof val === "string") {
+        console.log("val is string");
+        try {
+          return JSON.parse(val);
+        } catch {
+          return undefined;
+        }
+      }
+
+      // If it's already an array or object, return as is
+      return val;
+    },
+    z
+      .array(
+        z.object({
+          id: z.string(),
+          desc: z.boolean().optional().default(false),
+        }),
+      )
+      .optional(),
+  );
+
+/**
+ * @param email - Email string to validate
+ * @returns boolean indicating if email is valid
+ */
+export function isValidEmail(email: string | null | undefined): boolean {
+  if (typeof email !== "string") return false;
+  const trimmed = email.trim();
+  if (!trimmed) return false;
+  return z.string().email().safeParse(trimmed).success;
+}
