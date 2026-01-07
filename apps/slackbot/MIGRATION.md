@@ -385,6 +385,53 @@ These are database operations currently done directly via SQLAlchemy that should
 
 ## 6. New API Endpoints Required
 
+### 6.0 API Design Philosophy: Task-Oriented vs Entity CRUD
+
+The API should expose **task-oriented endpoints** for complex business operations, not just entity-level CRUD. This distinction is critical for reusability across apps (slackbot, web, mobile, map).
+
+#### Entity-Level CRUD (Low-Level)
+
+Direct table operations — useful for admin tools or simple lookups:
+
+```typescript
+// Examples of entity CRUD (use sparingly from clients)
+attendance.getById({ id: 123 });
+attendance.create({ eventInstanceId, userId, ... });
+attendanceType.list();
+```
+
+#### Task-Oriented Endpoints (Preferred)
+
+Business logic operations that may span multiple tables atomically:
+
+```typescript
+// High-level operations that encapsulate business rules
+event.signUpAsQ({ eventInstanceId, userId });
+event.signUpAsPax({ eventInstanceId, userId });
+event.removeFromQ({ eventInstanceId, userId });
+backblast.submitWithAttendance({ backblastData, attendeeUserIds, qUserIds });
+```
+
+**Example: "Sign up as Q" Operation**
+
+When a user signs up to Q an event, the following must happen atomically:
+
+1. Create or update an `attendance` record for the user/event
+2. Create an `attendance_x_attendance_type` record linking to the "Q" attendance type
+3. (Optional) Update the event instance's `q_user_id` if applicable
+
+This should be a **single API call** like `event.signUpAsQ`, not multiple calls from the client to manipulate individual tables. Benefits:
+
+- **Atomicity**: All-or-nothing transaction
+- **Encapsulation**: Clients don't need to know schema details
+- **Reusability**: Same logic works for slackbot, web, mobile
+- **Evolvability**: Schema changes don't break clients
+
+> [!IMPORTANT]
+> The slackbot should call task-oriented endpoints wherever possible. Direct entity CRUD should be reserved for simple lookups or admin operations.
+
+---
+
 ### 6.1 Slack Router Extensions (`packages/api/src/router/slack.ts`)
 
 ```typescript
