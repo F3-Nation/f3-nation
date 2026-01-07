@@ -126,13 +126,7 @@ export default function AdminGrantAccessModal({
       typeof user.email === "string" &&
       user.email.toLowerCase() === lowerSearch
     ) {
-      return user as typeof user & {
-        email: string;
-        phone?: string | null;
-        firstName?: string | null;
-        lastName?: string | null;
-        f3Name?: string | null;
-      };
+      return user;
     }
     return null;
   }, [userByEmailResponse, emailValue]);
@@ -251,13 +245,7 @@ export default function AdminGrantAccessModal({
   };
 
   const handleClearSelection = () => {
-    form.setValue("email", "");
-    form.setValue("id", undefined);
-    form.setValue("firstName", "");
-    form.setValue("lastName", "");
-    form.setValue("f3Name", "");
-    form.setValue("phone", "");
-    form.setValue("roles", []);
+    form.reset();
     setSelectedUserId(null);
     setIsCreatingNew(false);
     setEmailPopoverOpen(false);

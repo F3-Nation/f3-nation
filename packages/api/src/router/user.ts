@@ -268,10 +268,30 @@ export const userRouter = {
         ...nonPiiData
       } = rest;
 
-      const updateSet =
-        input.id && !hasPiiAccess
-          ? nonPiiData // Exclude PII fields for updates without access
-          : rest; // Include all fields for new users or users with access
+      // Build updateSet based on access and whether values are provided
+      let updateSet: typeof rest;
+      if (input.id && !hasPiiAccess) {
+        // Exclude PII fields for updates without access
+        updateSet = nonPiiData;
+      } else if (input.id) {
+        // For updates with PII access, only include PII fields that are actually provided
+        updateSet = {
+          ...nonPiiData,
+          ...(_email !== undefined && _email !== "" && { email: _email }),
+          ...(_phone !== undefined && _phone !== "" && { phone: _phone }),
+          ...(_emergencyContact !== undefined &&
+            _emergencyContact !== "" && {
+              emergencyContact: _emergencyContact,
+            }),
+          ...(_emergencyPhone !== undefined &&
+            _emergencyPhone !== "" && { emergencyPhone: _emergencyPhone }),
+          ...(_emergencyNotes !== undefined &&
+            _emergencyNotes !== "" && { emergencyNotes: _emergencyNotes }),
+        };
+      } else {
+        // For new users, include all fields
+        updateSet = rest;
+      }
 
       if (!input.id && !_email) {
         throw new ORPCError("BAD_REQUEST", {
