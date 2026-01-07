@@ -39,17 +39,20 @@ const openAPIHandler = new OpenAPIHandler(router, {
 });
 
 async function handleRequest(request: Request) {
-  // Redirect to /docs if the request is for /
-  if (new URL(request.url).pathname === "/") {
+  const url = new URL(request.url);
+  // Redirect to /api/docs if the request is for /api
+  if (url.pathname === "/api" || url.pathname === "/api/") {
     const envBase = process.env.NEXT_PUBLIC_API_URL ?? undefined;
     const forwardedProto =
       request.headers.get("x-forwarded-proto") ?? undefined;
     const forwardedHost = request.headers.get("x-forwarded-host") ?? undefined;
-    const url = new URL(request.url);
     const host = forwardedHost ?? request.headers.get("host") ?? url.host;
     const proto = forwardedProto ?? url.protocol.replace(":", "");
     const derivedBase = `${proto}://${host}`;
-    const baseUrl = (envBase ?? derivedBase).replace(/\/$/, "");
+    let baseUrl = (envBase ?? derivedBase).replace(/\/$/, "");
+    if (!baseUrl.endsWith("/api")) {
+      baseUrl = `${baseUrl}/api`;
+    }
     return Response.redirect(`${baseUrl}/docs`);
   }
 
@@ -62,14 +65,14 @@ async function handleRequest(request: Request) {
   if (isOrpcClient) {
     // Use RPC handler for oRPC client requests
     const { response } = await handler.handle(request, {
-      prefix: API_PREFIX_V1,
+      prefix: `/api${API_PREFIX_V1}`,
     });
     return response ?? new Response("Not found", { status: 404 });
   }
 
   // Use OpenAPI handler for REST-style calls (docs, curl, external clients)
   const { response: openApiResponse } = await openAPIHandler.handle(request, {
-    prefix: "/",
+    prefix: "/api",
   });
 
   return openApiResponse ?? new Response("Not found", { status: 404 });

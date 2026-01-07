@@ -46,7 +46,10 @@ export async function GET(request: Request) {
   const host = forwardedHost ?? request.headers.get("host") ?? url.host;
   const proto = forwardedProto ?? url.protocol.replace(":", "");
   const derivedBase = `${proto}://${host}`;
-  const baseUrl = (envBase ?? derivedBase).replace(/\/$/, "");
+  let baseUrl = (envBase ?? derivedBase).replace(/\/$/, "");
+  if (!baseUrl.endsWith("/api")) {
+    baseUrl = `${baseUrl}/api`;
+  }
 
   const generator = new OpenAPIGenerator({
     schemaConverters: [new ZodToJsonSchemaConverter()],
