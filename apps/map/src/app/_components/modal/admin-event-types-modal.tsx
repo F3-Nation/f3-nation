@@ -195,7 +195,7 @@ export default function AdminEventTypesModal({
                 control={form.control}
                 name="specificOrgId"
                 render={({ field }) => (
-                  <FormItem key={`region-${field.value}`}>
+                  <FormItem key={`region-${String(field.value ?? "new")}`}>
                     <FormLabel>Specific Org</FormLabel>
                     <VirtualizedCombobox
                       value={field.value?.toString()}

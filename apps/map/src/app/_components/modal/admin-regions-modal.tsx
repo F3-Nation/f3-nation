@@ -228,7 +228,7 @@ export default function AdminRegionsModal({
                   control={form.control}
                   name="parentId"
                   render={({ field }) => (
-                    <FormItem key={`area-${field.value}`}>
+                    <FormItem key={`area-${String(field.value ?? "new")}`}>
                       <FormLabel>Area</FormLabel>
                       <Select
                         value={field.value?.toString()}

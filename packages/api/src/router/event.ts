@@ -416,7 +416,7 @@ export const eventRouter = {
           .where(eq(schema.eventsXEventTypes.eventId, result.id));
 
         await ctx.db.insert(schema.eventsXEventTypes).values(
-          eventTypeIds.map((eventTypeId) => ({
+          eventTypeIds.map((eventTypeId: number) => ({
             eventId: result.id,
             eventTypeId,
           })),

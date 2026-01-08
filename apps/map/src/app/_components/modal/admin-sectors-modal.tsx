@@ -204,7 +204,7 @@ export default function AdminSectorsModal({
                   control={form.control}
                   name="parentId"
                   render={({ field }) => (
-                    <FormItem key={`nation-${field.value}`}>
+                    <FormItem key={`nation-${String(field.value ?? "new")}`}>
                       <FormLabel>Nation</FormLabel>
                       <Select
                         value={field.value?.toString()}

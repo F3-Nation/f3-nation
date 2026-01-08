@@ -201,7 +201,7 @@ export default function AdminAreasModal({
                   control={form.control}
                   name="parentId"
                   render={({ field }) => (
-                    <FormItem key={`sector-${field.value}`}>
+                    <FormItem key={`sector-${String(field.value ?? "new")}`}>
                       <FormLabel>Sector</FormLabel>
                       <Select
                         value={field.value?.toString()}
