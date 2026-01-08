@@ -216,7 +216,7 @@ export const buildUserListQuery = async ({
   return {
     users: users.map((user: (typeof users)[number]) => ({
       ...user,
-      name: `${user.firstName} ${user.lastName}`,
+      name: [user.firstName, user.lastName].join(" ").trim(),
     })),
     totalCount: userCount?.count ?? 0,
     includePii,
