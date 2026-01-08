@@ -1,10 +1,10 @@
-import type { RequestHeadersPluginContext } from "@orpc/server/plugins";
 import { ORPCError, os } from "@orpc/server";
+import type { RequestHeadersPluginContext } from "@orpc/server/plugins";
 
 import type { Session } from "@acme/auth";
-import type { AppDb } from "@acme/db/client";
 import { auth } from "@acme/auth";
 import { and, eq, gt, isNull, or, schema, sql } from "@acme/db";
+import type { AppDb } from "@acme/db/client";
 import { db } from "@acme/db/client";
 import { env } from "@acme/env";
 import { Header } from "@acme/shared/common/enums";
@@ -104,8 +104,10 @@ export const getSession = async ({ context }: { context: BaseContext }) => {
     apiKey = authHeader.slice(7).trim();
   }
 
+  // No session or API key provided - return with no session
   if (!apiKey) return null;
 
+  // API key provided but no client header
   if (apiKey && !appClient) {
     throw new ORPCError("UNAUTHORIZED", {
       message: "You must provide a client header when using an API key",
@@ -137,7 +139,16 @@ export const getSession = async ({ context }: { context: BaseContext }) => {
       ),
     );
 
-  if (!apiKeyRecord) return null;
+  if (!apiKeyRecord) {
+    if (apiKey) {
+      console.log("getSession", {
+        apiKey: apiKey ? `${apiKey.slice(0, 4)}...${apiKey.slice(-4)}` : null,
+        appClient,
+        message: "API key not found in database or invalid",
+      });
+    }
+    return null;
+  }
 
   // Get orgs and roles associated with this API key via join table
   const orgRoles = await db
