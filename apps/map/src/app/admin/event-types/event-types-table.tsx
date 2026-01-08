@@ -22,6 +22,7 @@ import { useDebounce } from "~/utils/hooks/use-debounce";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
 import { EventTypeIsActiveFilter } from "./event-type-is-active-filter";
 import { OrgFilter } from "./org-filter";
+import { ResetFilter } from "../_components/reset-filter";
 
 type Org = RouterOutputs["org"]["all"]["orgs"][number];
 
@@ -98,6 +99,13 @@ export const EventTypesTable = () => {
           <OrgFilter
             onOrgSelect={handleOrgSelect}
             selectedOrgs={selectedOrgs}
+          />
+          <ResetFilter
+            onClick={() => {
+              setSelectedStatuses(["active"]);
+              setSelectedOrgs([]);
+              setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+            }}
           />
         </>
       }
