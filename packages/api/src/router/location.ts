@@ -106,7 +106,7 @@ export const locationRouter = {
         input?.sorting,
         {
           id: schema.locations.id,
-          name: schema.locations.name,
+          locationName: schema.locations.name,
           regionName: regionOrg.name,
           isActive: schema.locations.isActive,
           latitude: schema.locations.latitude,
