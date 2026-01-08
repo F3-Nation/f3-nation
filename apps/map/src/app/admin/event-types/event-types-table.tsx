@@ -59,6 +59,7 @@ export const EventTypesTable = () => {
         return [...prev, org];
       }
     });
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
   };
 
   const handleStatusSelect = (status: IsActiveStatus) => {
@@ -69,6 +70,7 @@ export const EventTypesTable = () => {
         return [...prev, status];
       }
     });
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
   };
 
   return (
