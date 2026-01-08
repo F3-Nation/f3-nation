@@ -71,23 +71,25 @@ export const buildUserSelect = ({
       : {}),
   };
 
-  // Add other PII fields if requested
-  select = includePii
-    ? {
-        ...select,
-        phone: schema.users.phone,
-        emergencyContact: schema.users.emergencyContact,
-        emergencyPhone: schema.users.emergencyPhone,
-        emergencyNotes: schema.users.emergencyNotes,
-      }
-    : // Add email if requested
-      includeEmail
-      ? {
-          ...select,
-          email: schema.users.email,
-          emailVerified: schema.users.emailVerified,
-        }
-      : select;
+  // Add PII fields if requested
+  if (includePii) {
+    select = {
+      ...select,
+      email: schema.users.email,
+      emailVerified: schema.users.emailVerified,
+      phone: schema.users.phone,
+      emergencyContact: schema.users.emergencyContact,
+      emergencyPhone: schema.users.emergencyPhone,
+      emergencyNotes: schema.users.emergencyNotes,
+    };
+  } else if (includeEmail) {
+    // Add only email if requested (without full PII)
+    select = {
+      ...select,
+      email: schema.users.email,
+      emailVerified: schema.users.emailVerified,
+    };
+  }
 
   return select;
 };
@@ -214,7 +216,7 @@ export const buildUserListQuery = async ({
   return {
     users: users.map((user: (typeof users)[number]) => ({
       ...user,
-      name: `${user.firstName} ${user.lastName}`,
+      name: [user.firstName, user.lastName].join(" ").trim(),
     })),
     totalCount: userCount?.count ?? 0,
     includePii,

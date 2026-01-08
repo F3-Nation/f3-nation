@@ -60,9 +60,12 @@ export default function AdminGrantAccessModal({
   });
   const [isCreatingNew, setIsCreatingNew] = useState(false);
 
-  const { data: orgs } = useQuery(
+  const { data: orgs, isLoading: isLoadingOrgs } = useQuery(
     orpc.org.all.queryOptions({
-      input: { orgTypes: ["region", "area", "sector", "nation"] },
+      input: {
+        orgTypes: ["region", "area", "sector", "nation"],
+        onlyMine: true,
+      },
     }),
   );
 
@@ -92,8 +95,8 @@ export default function AdminGrantAccessModal({
     orpc.user.byId.queryOptions({
       input: {
         id: hasValidUserId ? userIdToFetch : -1,
-        // Must be false to avoid crashes
-        includePii: false,
+        // Server checks if current user is admin for the target user's orgs
+        includePii: true,
       },
       enabled: hasValidUserId,
       retry: false,
@@ -106,7 +109,7 @@ export default function AdminGrantAccessModal({
     orpc.user.byEmail.queryOptions({
       input: {
         email: emailToSearch ?? "",
-        includePii: false,
+        includePii: true,
       },
       enabled: isValidEmail(emailValue) && !!emailToSearch,
     }),
@@ -185,6 +188,7 @@ export default function AdminGrantAccessModal({
         toast.success("Successfully granted access");
       },
       onError: (err) => {
+        console.error("error granting access", err);
         if (err instanceof ORPCError) {
           toast.error(err.message);
         } else {
@@ -312,7 +316,7 @@ export default function AdminGrantAccessModal({
         className={cn(`max-w-[90%] rounded-lg lg:max-w-[600px]`)}
       >
         <DialogHeader>
-          <DialogTitle className="text-center">Grant Access</DialogTitle>
+          <DialogTitle className="text-center">Grant Access 2</DialogTitle>
         </DialogHeader>
 
         <Form {...form}>
@@ -336,7 +340,7 @@ export default function AdminGrantAccessModal({
               },
               (error) => {
                 toast.error("Failed to grant access");
-                console.log(error);
+                console.log("error granting access", error);
               },
             )}
             className="space-y-4"
@@ -348,98 +352,108 @@ export default function AdminGrantAccessModal({
                   name="email"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Email</FormLabel>
-                      <FormDescription>
-                        {data?.userId && !field.value
-                          ? "Email is not available (no PII access). You can still update roles for this user."
-                          : "Type an email address to search for existing users or create a new user."}
-                      </FormDescription>
-                      <FormControl>
-                        <div className="relative">
-                          <Input
-                            placeholder={
-                              data?.userId && !field.value
-                                ? "Email not available"
-                                : "user@example.com"
-                            }
-                            type="email"
-                            disabled={!!data?.userId}
-                            {...field}
-                            value={field.value ?? ""}
-                            autoComplete="off"
-                            onChange={(e) => {
-                              field.onChange(e);
-                              setSelectedUserId(null);
-                              setIsCreatingNew(false);
-                              // Show dropdown when typing if there are options
-                              if (e.target.value.length > 0) {
-                                setEmailPopoverOpen(true);
-                              } else {
-                                setEmailPopoverOpen(false);
-                              }
-                            }}
-                            onFocus={() => {
-                              // Only open dropdown if there are options to show
-                              if (emailOptions.length > 0) {
-                                setEmailPopoverOpen(true);
-                              }
-                            }}
-                            onBlur={(e) => {
-                              // Delay closing to allow click events on dropdown items
-                              // Check if the blur is happening because we clicked on a dropdown item
-                              const relatedTarget =
-                                e.relatedTarget as HTMLElement;
-                              if (
-                                !!relatedTarget?.closest('[role="listbox"]') ||
-                                !!relatedTarget?.closest("[cmdk-item]")
-                              ) {
-                                // Don't close if clicking on dropdown
-                                return;
-                              }
-                              setTimeout(() => {
-                                const activeElement = document.activeElement;
-                                if (
-                                  !activeElement?.closest('[role="listbox"]') &&
-                                  !activeElement?.closest("[cmdk-item]")
-                                ) {
-                                  setEmailPopoverOpen(false);
+                      {!data?.userId && (
+                        <>
+                          <FormLabel>User</FormLabel>
+                          <FormDescription>
+                            {data?.userId && !field.value
+                              ? "Email is not available (no PII access). You can still update roles for this user."
+                              : "Type an email address to search for existing users or create a new user."}
+                          </FormDescription>
+                          <FormControl>
+                            <div className="relative">
+                              <Input
+                                placeholder={
+                                  data?.userId
+                                    ? field.value
+                                      ? userByIdData?.user?.email ?? ""
+                                      : "Email not available"
+                                    : ""
                                 }
-                              }, 200);
-                            }}
-                          />
-                          {emailOptions.length > 0 && emailPopoverOpen && (
-                            <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md">
-                              <Command shouldFilter={false}>
-                                <CommandGroup>
-                                  {emailOptions.map((option) => (
-                                    <CommandItem
-                                      key={option.value}
-                                      value={option.value}
-                                      onSelect={() => {
-                                        handleEmailSelect(option.value);
-                                        setEmailPopoverOpen(false);
-                                      }}
-                                      onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        handleEmailSelect(option.value);
-                                        setEmailPopoverOpen(false);
-                                      }}
-                                      onMouseDown={(e) => {
-                                        // Prevent input blur when clicking
-                                        e.preventDefault();
-                                      }}
-                                    >
-                                      {option.label}
-                                    </CommandItem>
-                                  ))}
-                                </CommandGroup>
-                              </Command>
+                                type="email"
+                                {...field}
+                                value={field.value ?? ""}
+                                autoComplete="off"
+                                onChange={(e) => {
+                                  field.onChange(e);
+                                  setSelectedUserId(null);
+                                  setIsCreatingNew(false);
+                                  // Show dropdown when typing if there are options
+                                  if (e.target.value.length > 0) {
+                                    setEmailPopoverOpen(true);
+                                  } else {
+                                    setEmailPopoverOpen(false);
+                                  }
+                                }}
+                                onFocus={() => {
+                                  // Only open dropdown if there are options to show
+                                  if (emailOptions.length > 0) {
+                                    setEmailPopoverOpen(true);
+                                  }
+                                }}
+                                onBlur={(e) => {
+                                  // Delay closing to allow click events on dropdown items
+                                  // Check if the blur is happening because we clicked on a dropdown item
+                                  const relatedTarget =
+                                    e.relatedTarget as HTMLElement;
+                                  if (
+                                    !!relatedTarget?.closest(
+                                      '[role="listbox"]',
+                                    ) ||
+                                    !!relatedTarget?.closest("[cmdk-item]")
+                                  ) {
+                                    // Don't close if clicking on dropdown
+                                    return;
+                                  }
+                                  setTimeout(() => {
+                                    const activeElement =
+                                      document.activeElement;
+                                    if (
+                                      !activeElement?.closest(
+                                        '[role="listbox"]',
+                                      ) &&
+                                      !activeElement?.closest("[cmdk-item]")
+                                    ) {
+                                      setEmailPopoverOpen(false);
+                                    }
+                                  }, 200);
+                                }}
+                              />
+                              {emailOptions.length > 0 && emailPopoverOpen && (
+                                <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md">
+                                  <Command shouldFilter={false}>
+                                    <CommandGroup>
+                                      {emailOptions.map((option) => (
+                                        <CommandItem
+                                          key={option.value}
+                                          value={option.value}
+                                          onSelect={() => {
+                                            handleEmailSelect(option.value);
+                                            setEmailPopoverOpen(false);
+                                          }}
+                                          onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            handleEmailSelect(option.value);
+                                            setEmailPopoverOpen(false);
+                                          }}
+                                          onMouseDown={(e) => {
+                                            // Prevent input blur when clicking
+                                            e.preventDefault();
+                                          }}
+                                        >
+                                          {option.label}
+                                        </CommandItem>
+                                      ))}
+                                    </CommandGroup>
+                                  </Command>
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                      </FormControl>
-                      <FormMessage />
+                          </FormControl>
+                          <FormMessage />
+                        </>
+                      )}
                       {/* Show selected user or new user indicator */}
                       {(!!selectedUser || !!isCreatingNew) && (
                         <div className="mt-2 rounded-md border bg-muted/50 p-3">
@@ -474,16 +488,18 @@ export default function AdminGrantAccessModal({
                                   )}
                                 </div>
                               </div>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={handleClearSelection}
-                                disabled={!!data?.userId}
-                                className="h-8 w-8 flex-shrink-0 p-0"
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
+                              {!data?.userId && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={handleClearSelection}
+                                  disabled={!!data?.userId}
+                                  className="h-8 w-8 flex-shrink-0 p-0"
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              )}
                             </div>
                           ) : isCreatingNew ? (
                             <div className="flex items-start justify-between gap-2">
@@ -653,6 +669,7 @@ export default function AdminGrantAccessModal({
                                   })) ?? []
                                 }
                                 searchPlaceholder="Select an organization"
+                                disabled={isLoadingOrgs}
                                 onSelect={(value) => {
                                   const orgId = safeParseInt(value as string);
                                   if (orgId == undefined) {
@@ -706,9 +723,10 @@ export default function AdminGrantAccessModal({
                             size="sm"
                             className="mt-2"
                             onClick={() => {
+                              const firstOrgId = orgs?.orgs?.[0]?.id ?? 1;
                               const newRoleEntry: RoleEntry = {
                                 roleName: "editor",
-                                orgId: 1,
+                                orgId: firstOrgId,
                               };
                               field.onChange([
                                 ...((field.value as RoleEntry[]) ?? []),

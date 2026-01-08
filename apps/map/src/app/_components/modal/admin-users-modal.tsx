@@ -1,12 +1,13 @@
 "use client";
 
+import { UserPlus } from "lucide-react";
 import { useSession } from "next-auth/react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { z } from "zod";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
+import type { UserRole } from "@acme/shared/app/enums";
 import { cn } from "@acme/ui";
 import { Button } from "@acme/ui/button";
 import {
@@ -43,8 +44,8 @@ import {
   useMutation,
   useQuery,
 } from "~/orpc/react";
-import type { DataType, ModalType } from "~/utils/store/modal";
-import { closeModal } from "~/utils/store/modal";
+import type { DataType } from "~/utils/store/modal";
+import { ModalType, closeModal, openModal } from "~/utils/store/modal";
 
 export default function UserModal({
   data,
@@ -319,15 +320,6 @@ export default function UserModal({
               </div>
 
               <div className="mb-4 w-full px-2">
-                <div className="text-sm">
-                  <p className="font-medium">Roles</p>
-                  <div className="text-muted-foreground">
-                    To assign roles to new or existing users, go through the{" "}
-                    <Link href="/admin/users/mine">my users</Link> page.
-                  </div>
-                </div>
-              </div>
-              <div className="mb-4 w-full px-2">
                 <div className="flex space-x-4 pt-4">
                   <Button
                     type="button"
@@ -342,6 +334,72 @@ export default function UserModal({
                   </Button>
                 </div>
               </div>
+              {user?.id && (
+                <>
+                  <div className="w-full border-t border-border" />
+                  <div className="mb-4 w-full px-2">
+                    <div className="flex flex-col gap-2 pt-4">
+                      {user.roles && user.roles.length > 0 && (
+                        <div className="flex flex-col gap-2">
+                          <p className="text-sm font-medium text-foreground">
+                            Current Roles
+                          </p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            {user.roles.map(
+                              (role: {
+                                orgId: number;
+                                orgName: string;
+                                roleName: UserRole;
+                              }) => {
+                                const roleStyles = {
+                                  admin:
+                                    "bg-purple-100 text-purple-700 border-purple-200",
+                                  editor:
+                                    "bg-blue-100 text-blue-700 border-blue-200",
+                                  user: "bg-green-100 text-green-700 border-green-200",
+                                } as const;
+
+                                const roleLabels = {
+                                  admin: "Admin",
+                                  editor: "Editor",
+                                  user: "User",
+                                } as const;
+
+                                return (
+                                  <span
+                                    key={`${role.orgId}-${role.roleName}`}
+                                    className={`inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium ${
+                                      roleStyles[role.roleName]
+                                    }`}
+                                  >
+                                    {role.orgName} ({roleLabels[role.roleName]})
+                                  </span>
+                                );
+                              },
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          openModal(ModalType.ADMIN_GRANT_ACCESS, {
+                            userId: Number(user.id),
+                          });
+                        }}
+                        className="w-full"
+                      >
+                        <UserPlus className="mr-2 h-4 w-4" />
+                        Grant Access
+                      </Button>
+                      <p className="text-xs text-muted-foreground text-center">
+                        Progress here will be lost
+                      </p>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </form>
         </Form>

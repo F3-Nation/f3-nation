@@ -27,7 +27,7 @@ export const CrupdateUserSchema = UserInsertSchema.extend({
       roleName: z.enum(["user", "editor", "admin"]),
     })
     .array(),
-  f3Name: z.string().min(1, { message: "F3 Name is required" }),
+  f3Name: z.string().optional(),
   email: z
     .string()
     .email({ message: "Invalid email format" })

@@ -61,7 +61,7 @@ export const AreaFilter = ({
           <Command>
             <CommandInput placeholder="Search statuses..." />
             <CommandEmpty>No statuses found.</CommandEmpty>
-            <CommandGroup>
+            <CommandGroup className="max-h-96 overflow-y-auto">
               {availableAreas?.map((area) => (
                 <CommandItem
                   key={area.id}
