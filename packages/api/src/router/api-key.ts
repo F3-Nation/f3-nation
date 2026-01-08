@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { and, desc, eq, gt, inArray, isNull, or, schema, sql } from "@acme/db";
 
+import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { adminProcedure } from "../shared";
 
 const createApiKeySchema = z.object({
@@ -113,7 +114,17 @@ export const apiKeyRouter = {
         apiKeys: keyQuery.map((key) => {
           const roles = rolesByApiKeyId.get(key.id) ?? [];
           return {
-            ...key,
+            id: key.id,
+            name: key.name,
+            description: key.description,
+            ownerId: key.ownerId,
+            revokedAt: key.revokedAt,
+            lastUsedAt: key.lastUsedAt,
+            expiresAt: key.expiresAt,
+            created: key.created,
+            updated: key.updated,
+            ownerName: key.ownerName,
+            ownerEmail: key.ownerEmail,
             keySignature: key.key.slice(-4),
             roles: roles.map((r) => ({
               orgId: r.orgId,
@@ -139,62 +150,80 @@ export const apiKeyRouter = {
       const roles = input.roles ?? [];
       const expiresAt = input.expiresAt ?? null;
 
-      for (let attempt = 0; attempt < 5; attempt++) {
-        const generatedKey = buildApiKey();
-        try {
-          const [apiKey] = await ctx.db
-            .insert(schema.apiKeys)
-            .values({
-              key: generatedKey,
-              name: input.name,
-              description: input.description,
-              ownerId: ctx.session?.id,
-              expiresAt,
-            })
-            .returning();
+      // Check permissions for each org-role combination
+      if (roles.length > 0) {
+        for (const role of roles) {
+          const permissionCheck = await checkHasRoleOnOrg({
+            session: ctx.session,
+            orgId: role.orgId,
+            db: ctx.db,
+            roleName: role.roleName,
+          });
 
-          if (apiKey && roles.length > 0) {
-            // Get role IDs for all unique role names
-            const roleNames = [...new Set(roles.map((r) => r.roleName))];
-            const roleRecords = await ctx.db
-              .select({ id: schema.roles.id, name: schema.roles.name })
-              .from(schema.roles)
-              .where(inArray(schema.roles.name, roleNames));
-
-            const roleMap = new Map(roleRecords.map((r) => [r.name, r.id]));
-
-            // Verify all roles exist
-            for (const roleName of roleNames) {
-              if (!roleMap.has(roleName)) {
-                throw new Error(`Role "${roleName}" not found`);
-              }
-            }
-
-            // Insert org associations with roles
-            await ctx.db.insert(schema.rolesXApiKeysXOrg).values(
-              roles.map((role) => {
-                const roleId = roleMap.get(role.roleName);
-                if (!roleId) {
-                  throw new Error(`Role "${role.roleName}" not found`);
-                }
-                return {
-                  roleId,
-                  apiKeyId: apiKey.id,
-                  orgId: role.orgId,
-                };
-              }),
-            );
+          if (!permissionCheck.success) {
+            throw new ORPCError("FORBIDDEN", {
+              message: `You do not have permission to grant "${role.roleName}" role on organization ${role.orgId}`,
+            });
           }
-
-          if (apiKey) {
-            return { ...apiKey, secret: generatedKey };
-          }
-        } catch (error) {
-          if (isUniqueError(error)) {
-            continue;
-          }
-          throw error;
         }
+      }
+
+      const generatedKey = buildApiKey();
+      try {
+        const [apiKey] = await ctx.db
+          .insert(schema.apiKeys)
+          .values({
+            key: generatedKey,
+            name: input.name,
+            description: input.description,
+            ownerId: ctx.session?.id,
+            expiresAt,
+          })
+          .returning();
+
+        if (apiKey && roles.length > 0) {
+          // Get role IDs for all unique role names
+          const roleNames = [...new Set(roles.map((r) => r.roleName))];
+          const roleRecords = await ctx.db
+            .select({ id: schema.roles.id, name: schema.roles.name })
+            .from(schema.roles)
+            .where(inArray(schema.roles.name, roleNames));
+
+          const roleMap = new Map(roleRecords.map((r) => [r.name, r.id]));
+
+          // Verify all roles exist
+          for (const roleName of roleNames) {
+            if (!roleMap.has(roleName)) {
+              throw new Error(`Role "${roleName}" not found`);
+            }
+          }
+
+          // Insert org associations with roles
+          await ctx.db.insert(schema.rolesXApiKeysXOrg).values(
+            roles.map((role) => {
+              const roleId = roleMap.get(role.roleName);
+              if (!roleId) {
+                throw new Error(`Role "${role.roleName}" not found`);
+              }
+              return {
+                roleId,
+                apiKeyId: apiKey.id,
+                orgId: role.orgId,
+              };
+            }),
+          );
+        }
+
+        if (apiKey) {
+          return { ...apiKey, secret: generatedKey };
+        }
+      } catch (error) {
+        if (isUniqueError(error)) {
+          throw new ORPCError("INTERNAL_SERVER_ERROR", {
+            message: "Unable to generate unique API key. Please try again.",
+          });
+        }
+        throw error;
       }
 
       throw new Error("Unable to generate unique API key");

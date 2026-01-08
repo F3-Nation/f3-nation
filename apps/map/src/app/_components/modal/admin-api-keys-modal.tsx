@@ -38,6 +38,7 @@ import { toast } from "@acme/ui/toast";
 
 import { VirtualizedCombobox } from "~/app/_components/virtualized-combobox";
 import { invalidateQueries, orpc, useMutation, useQuery } from "~/orpc/react";
+import { useAuth } from "~/utils/hooks/use-auth";
 import { closeModal } from "~/utils/store/modal";
 
 const ApiKeyFormSchema = z.object({
@@ -54,6 +55,7 @@ const ApiKeyFormSchema = z.object({
 
 export default function AdminApiKeysModal() {
   const [createdSecret, setCreatedSecret] = useState<string | null>(null);
+  const { isNationAdmin } = useAuth();
   const { data: allOrgs, isLoading: isLoadingOrgs } = useQuery(
     orpc.org.mine.queryOptions(),
   );
@@ -208,124 +210,128 @@ export default function AdminApiKeysModal() {
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={form.control}
-                  name="roles"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Roles</FormLabel>
-                      <FormDescription>
-                        Assign roles to orgs for this API key.
-                      </FormDescription>
-                      <div className="space-y-2">
-                        {((field.value as RoleEntry[]) || []).map(
-                          (roleEntry, index) => (
-                            <div
-                              key={index}
-                              className="flex items-center gap-2"
-                            >
-                              <Select
-                                onValueChange={(value) => {
-                                  const newRoles = [
-                                    ...(field.value as RoleEntry[]),
-                                  ];
-                                  newRoles[index] = {
-                                    orgId: roleEntry.orgId,
-                                    roleName: value as "editor" | "admin",
-                                  };
-                                  field.onChange(newRoles);
-                                }}
-                                value={roleEntry.roleName}
+                {isNationAdmin && (
+                  <FormField
+                    control={form.control}
+                    name="roles"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Roles</FormLabel>
+                        <FormDescription>
+                          Assign roles to orgs for this API key.
+                        </FormDescription>
+                        <div className="space-y-2">
+                          {((field.value as RoleEntry[]) || []).map(
+                            (roleEntry, index) => (
+                              <div
+                                key={index}
+                                className="flex items-center gap-2"
                               >
-                                <FormControl>
-                                  <SelectTrigger className="w-[200px]">
-                                    <SelectValue placeholder="Select a role" />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  <SelectItem value="editor">Editor</SelectItem>
-                                  <SelectItem value="admin">Admin</SelectItem>
-                                </SelectContent>
-                              </Select>
+                                <Select
+                                  onValueChange={(value) => {
+                                    const newRoles = [
+                                      ...(field.value as RoleEntry[]),
+                                    ];
+                                    newRoles[index] = {
+                                      orgId: roleEntry.orgId,
+                                      roleName: value as "editor" | "admin",
+                                    };
+                                    field.onChange(newRoles);
+                                  }}
+                                  value={roleEntry.roleName}
+                                >
+                                  <FormControl>
+                                    <SelectTrigger className="w-[200px]">
+                                      <SelectValue placeholder="Select a role" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="editor">
+                                      Editor
+                                    </SelectItem>
+                                    <SelectItem value="admin">Admin</SelectItem>
+                                  </SelectContent>
+                                </Select>
 
-                              <VirtualizedCombobox
-                                value={roleEntry.orgId.toString()}
-                                options={orgOptions}
-                                searchPlaceholder="Select an org"
-                                disabled={isLoadingOrgs}
-                                onSelect={(value) => {
-                                  const orgId = safeParseInt(value as string);
-                                  if (orgId == undefined) {
-                                    toast.error("Invalid orgId");
-                                    return;
-                                  }
-                                  const newRoles = [
-                                    ...(field.value as RoleEntry[]),
-                                  ];
-                                  newRoles[index] = {
-                                    roleName:
-                                      newRoles[index]?.roleName ?? "editor",
-                                    orgId,
-                                  };
-                                  field.onChange(newRoles);
-                                }}
-                                isMulti={false}
-                              />
+                                <VirtualizedCombobox
+                                  value={roleEntry.orgId.toString()}
+                                  options={orgOptions}
+                                  searchPlaceholder="Select an org"
+                                  disabled={isLoadingOrgs}
+                                  onSelect={(value) => {
+                                    const orgId = safeParseInt(value as string);
+                                    if (orgId == undefined) {
+                                      toast.error("Invalid orgId");
+                                      return;
+                                    }
+                                    const newRoles = [
+                                      ...(field.value as RoleEntry[]),
+                                    ];
+                                    newRoles[index] = {
+                                      roleName:
+                                        newRoles[index]?.roleName ?? "editor",
+                                      orgId,
+                                    };
+                                    field.onChange(newRoles);
+                                  }}
+                                  isMulti={false}
+                                />
 
-                              <Button
-                                variant="ghost"
-                                type="button"
-                                size="sm"
-                                onClick={() => {
-                                  const newRoles = [
-                                    ...(field.value as RoleEntry[]),
-                                  ];
-                                  newRoles.splice(index, 1);
-                                  field.onChange(newRoles);
-                                }}
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
+                                <Button
+                                  variant="ghost"
+                                  type="button"
+                                  size="sm"
+                                  onClick={() => {
+                                    const newRoles = [
+                                      ...(field.value as RoleEntry[]),
+                                    ];
+                                    newRoles.splice(index, 1);
+                                    field.onChange(newRoles);
+                                  }}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            ),
+                          )}
+
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex flex-col">
+                              <p className="text-xs text-gray-500">
+                                Admins can invite & edit
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                Editors can edit
+                              </p>
                             </div>
-                          ),
-                        )}
 
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex flex-col">
-                            <p className="text-xs text-gray-500">
-                              Admins can invite & edit
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              Editors can edit
-                            </p>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="mt-2"
+                              onClick={() => {
+                                const firstOrgId = allOrgs?.orgs?.[0]?.id ?? 1;
+                                const newRoleEntry: RoleEntry = {
+                                  roleName: "editor",
+                                  orgId: firstOrgId,
+                                };
+                                field.onChange([
+                                  ...((field.value as RoleEntry[]) ?? []),
+                                  newRoleEntry,
+                                ]);
+                              }}
+                            >
+                              <Plus className="mr-2 h-4 w-4" />
+                              Add Role
+                            </Button>
                           </div>
-
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="mt-2"
-                            onClick={() => {
-                              const firstOrgId = allOrgs?.orgs?.[0]?.id ?? 1;
-                              const newRoleEntry: RoleEntry = {
-                                roleName: "editor",
-                                orgId: firstOrgId,
-                              };
-                              field.onChange([
-                                ...((field.value as RoleEntry[]) ?? []),
-                                newRoleEntry,
-                              ]);
-                            }}
-                          >
-                            <Plus className="mr-2 h-4 w-4" />
-                            Add Role
-                          </Button>
                         </div>
-                      </div>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
                 <FormField
                   control={form.control}
                   name="expiresAt"
