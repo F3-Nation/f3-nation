@@ -195,7 +195,7 @@ export const formatEventTimeRange = (
 
   const baseRange = formattedEnd
     ? `${formattedStart ?? ''} – ${formattedEnd}`
-    : formattedStart ?? formattedEnd;
+    : (formattedStart ?? formattedEnd);
 
   return baseRange || undefined;
 };
