@@ -81,7 +81,7 @@ export interface SlackUserData {
  * Request context passed to handlers
  */
 export interface HandlerContext {
-  teamId: string;
+  teamId?: string;
   userId: string;
   regionSettings?: RegionSettings;
   slackUser?: SlackUserData;

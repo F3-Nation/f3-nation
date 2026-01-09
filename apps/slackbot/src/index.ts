@@ -8,6 +8,9 @@
 import { App, LogLevel } from "@slack/bolt";
 
 import { registerHelpFeature } from "./features/help";
+import { registerWelcomeFeature } from "./features/welcome";
+import { registerConfigFeature } from "./features/config";
+import { withRegionContext } from "./lib/middleware";
 import { logger } from "./lib/logger";
 
 // Environment configuration
@@ -24,8 +27,13 @@ const app = new App({
   logLevel: isLocalDevelopment ? LogLevel.DEBUG : LogLevel.INFO,
 });
 
+// Global middleware
+app.use(withRegionContext);
+
 // Register features
 registerHelpFeature(app);
+registerWelcomeFeature(app);
+registerConfigFeature(app);
 
 // Health check endpoint for HTTP mode
 app.event("app_home_opened", async ({ event, client }) => {

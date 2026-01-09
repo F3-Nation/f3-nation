@@ -588,7 +588,7 @@ importers:
         specifier: ^3.2.5
         version: 3.2.5
       tsx:
-        specifier: ^4.7.0
+        specifier: ^4.7.1
         version: 4.7.1
       typescript:
         specifier: ^5.3.3

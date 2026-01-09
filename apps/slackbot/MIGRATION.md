@@ -527,18 +527,18 @@ export const attendanceRouter = {
 
 ### Phase 0: Foundation (Week 1)
 
-- [ ] Create `apps/slackbot` directory structure
-- [ ] Set up `package.json` with dependencies
-- [ ] Configure TypeScript, ESLint, Prettier
-- [ ] Create basic Bolt app that responds to `/help`
-- [ ] Set up oRPC client connection
-- [ ] Implement logging infrastructure
+- [x] Create `apps/slackbot` directory structure
+- [x] Set up `package.json` with dependencies
+- [x] Configure TypeScript, ESLint, Prettier
+- [x] Create basic Bolt app that responds to `/help`
+- [x] Set up oRPC client connection
+- [x] Implement logging infrastructure
 
 ### Phase 1: Core Features (Weeks 2-3)
 
-- [ ] Migrate routing infrastructure
-- [ ] Implement `welcome` feature (team_join event)
-- [ ] Implement `help` feature (commands + app_mention)
+- [x] Migrate routing infrastructure
+- [] Implement `welcome` feature (team_join event)
+- [x] Implement `help` feature (commands + app_mention)
 - [ ] Implement basic `config` feature
 - [ ] Add required Slack API endpoints to `packages/api`
 
@@ -549,7 +549,7 @@ export const attendanceRouter = {
 - [ ] Implement event instance management
 - [ ] Implement preblast creation/editing
 - [ ] Implement backblast creation/editing
-- [ ] Add backblast/attendance API endpoints
+- [ ] Add preblast/backblast/attendance API endpoints
 
 ### Phase 3: Extended Features (Weeks 7-8)
 

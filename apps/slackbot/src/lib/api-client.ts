@@ -8,7 +8,10 @@
 import { logger } from "./logger";
 
 // API base URL - defaults to local development
-const API_BASE_URL = process.env.API_URL ?? "http://localhost:3000/api/v1";
+const API_BASE_URL = process.env.API_URL ?? "http://localhost:3000/v1";
+const API_KEY = process.env.SLACKBOT_API_KEY;
+
+logger.info(`API_BASE_URL initialized as: ${API_BASE_URL}`);
 
 /**
  * Simple fetch-based API client for oRPC endpoints
@@ -25,6 +28,7 @@ async function apiRequest<T>(
       ...options,
       headers: {
         "Content-Type": "application/json",
+        ...(API_KEY ? { "x-api-key": API_KEY } : {}),
         ...options.headers,
       },
     });
@@ -55,8 +59,30 @@ export const api = {
         teamId: string;
         workspaceName: string | null;
         botToken: string | null;
-        settings: Record<string, unknown> | null;
+        settings: Record<string, any> | null;
       } | null>(`/slack/space?teamId=${encodeURIComponent(teamId)}`),
+
+    updateSpaceSettings: (teamId: string, settings: any) =>
+      apiRequest<{ success: boolean }>(`/slack/space/settings`, {
+        method: "PATCH",
+        body: JSON.stringify({ teamId, settings }),
+      }),
+
+    getUserBySlackId: (slackId: string, teamId: string) =>
+      apiRequest<any | null>(
+        `/slack/user?slackId=${encodeURIComponent(slackId)}&teamId=${encodeURIComponent(teamId)}`,
+      ),
+
+    upsertUser: (input: any) =>
+      apiRequest<{ success: boolean; action: string }>(`/slack/user`, {
+        method: "PUT",
+        body: JSON.stringify(input),
+      }),
+
+    getRegion: (teamId: string) =>
+      apiRequest<{ org: any; space: any } | null>(
+        `/slack/region?teamId=${encodeURIComponent(teamId)}`,
+      ),
   },
 };
 

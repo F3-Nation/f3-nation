@@ -197,5 +197,16 @@ export function registerHelpFeature(app: App): void {
     }
   });
 
+  // Placeholder for unimplemented actions
+  app.action(ACTIONS.OPEN_CALENDAR_BUTTON, async ({ ack, say }: any) => {
+    await ack();
+    await say("The Calendar feature is coming soon in Phase 2! 📅");
+  });
+
+  app.action(ACTIONS.PREBLAST_NEW_BUTTON, async ({ ack, say }: any) => {
+    await ack();
+    await say("The Preblast feature is coming soon in Phase 2! 📝");
+  });
+
   logger.info("Help feature registered");
 }

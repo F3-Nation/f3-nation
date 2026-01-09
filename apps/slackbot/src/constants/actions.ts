@@ -14,6 +14,22 @@ export const ACTIONS = {
 
   // Help
   CONFIG_HELP_MENU: "help_menu_config",
+  CONFIG_HELP_MENU_CLOSE: "help-menu-close",
+
+  // Welcome settings actions
+  WELCOME_DM_ENABLE: "welcome-dm-enable",
+  WELCOME_DM_TEMPLATE: "welcome-dm-template",
+  WELCOME_CHANNEL_ENABLE: "welcome-channel-enable",
+  WELCOME_CHANNEL: "welcome-channel",
+  WELCOME_SAVE: "welcome-save",
+
+  // Config actions
+  CONFIG_CALLBACK_ID: "config-callback-id",
+  CONFIG_EDITING_LOCKED: "config-editing-locked",
+  CONFIG_DEFAULT_DESTINATION: "config-default-destination",
+  CONFIG_DESTINATION_CHANNEL: "config-destination-channel",
+  OPEN_WELCOME_CONFIG: "open-welcome-config",
+  OPEN_GENERAL_CONFIG: "open-general-config",
 
   // Calendar
   OPEN_CALENDAR_BUTTON: "open-calendar",

@@ -24,7 +24,7 @@ export const withSessionAndDb = base.use(async ({ context, next }) => {
   return next({ context: newContext });
 });
 
-export const publicProcedure = base;
+export const publicProcedure = withSessionAndDb;
 
 export const protectedProcedure = withSessionAndDb.use(({ context, next }) => {
   if (!context.session?.user) {
