@@ -424,7 +424,7 @@ async function fetchWorkoutsBatch(args: FetchBatchArgs): Promise<BatchResult> {
     const timeRange =
       row.startTime && row.endTime
         ? `${row.startTime} - ${row.endTime}`
-        : row.startTime ?? row.endTime ?? '';
+        : (row.startTime ?? row.endTime ?? '');
 
     assembled.push({
       id: row.id.toString(),

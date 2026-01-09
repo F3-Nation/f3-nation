@@ -18,18 +18,15 @@
 ## Steps to implement
 
 1. **Runner script** (added) `scripts/f3-region-pages-data-ingest.sh`:
-
    - Sets PATH for Homebrew, loads `.env.local` if present, cds to repo root.
    - Runs `pnpm db:prune:regions`, `pnpm db:prune:workouts`, `pnpm db:seed`.
    - Logs per-run output to timestamped files under `~/Library/Logs/f3-region-pages-data-ingest/`.
 
 2. **LaunchAgent plist template** `docs/launchd/com.f3.dataingest.plist.sample`:
-
    - Fast path: run `./scripts/install-f3-region-pages-data-ingest.sh` to copy the plist to `~/Library/LaunchAgents/com.f3.dataingest.plist`, rewrite paths for your user, and load it.
    - Manual path: copy to `~/Library/LaunchAgents/com.f3.dataingest.plist`, edit paths (ProgramArguments + WorkingDirectory + StandardOut/Error) if your username or repo path differs, adjust `StartCalendarInterval` Hour/Minute, and set `RunAtLoad` only for testing.
 
 3. **Load and test**
-
    - Load once: `launchctl load -w ~/Library/LaunchAgents/com.f3.dataingest.plist`.
    - Trigger manually to verify: `launchctl start com.f3.dataingest`.
    - Inspect logs in `~/Library/Logs/f3-region-pages-data-ingest/` for success.
