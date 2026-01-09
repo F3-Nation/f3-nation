@@ -230,7 +230,7 @@ const _deleteSeededData = async () => {
 export const seed = async (db?: AppDb) => {
   const _db = db ?? getDb();
 
-  // await insertUsers();
+  await insertUsers();
   // await _reseedFromScratch();
   // await _deleteSeededData()
   // await _reseedJustData();
@@ -239,7 +239,7 @@ export const seed = async (db?: AppDb) => {
   await _resetSequences();
 };
 
-const SEED_LOGS = false;
+const SEED_LOGS = true;
 
 export async function insertUsers() {
   const usersToInsert: InferInsertModel<typeof schema.users>[] = [
