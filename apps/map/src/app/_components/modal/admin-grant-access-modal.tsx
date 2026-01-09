@@ -160,8 +160,8 @@ export default function AdminGrantAccessModal({
     // Add "Create New User" option if email is valid and no exact match
     if (isEmailValid && !exactEmailMatch) {
       options.push({
-        value: `__create_new__${emailValue}`,
-        label: `Create New User: ${emailValue}`,
+        value: `__create_new__${emailValue ?? ""}`,
+        label: `Create New User: ${emailValue ?? ""}`,
         isCreateNew: true,
       });
     }
@@ -473,7 +473,7 @@ export default function AdminGrantAccessModal({
                                           ? nameParts.join(" ")
                                           : "Selected User";
                                       return selectedUser.f3Name
-                                        ? `${displayName} (${selectedUser.f3Name})`
+                                        ? `${displayName} (${String(selectedUser.f3Name)})`
                                         : displayName;
                                     })()}
                                   </p>

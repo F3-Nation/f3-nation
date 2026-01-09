@@ -848,7 +848,7 @@ export const applyUpdateRequest = async (
     .where(eq(schema.eventsXEventTypes.eventId, eventId));
 
   await ctx.db.insert(schema.eventsXEventTypes).values(
-    updateRequest.eventTypeIds?.map((id) => ({
+    updateRequest.eventTypeIds?.map((id: number) => ({
       eventId,
       eventTypeId: id,
     })) ?? [],

@@ -27,7 +27,7 @@ export default defineConfig({
     ],
     server: {
       deps: {
-        inline: ["vitest-canvas-mock"],
+        inline: ["vitest-canvas-mock", "jest-canvas-mock"],
       },
     },
   },

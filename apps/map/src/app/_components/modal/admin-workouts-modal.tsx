@@ -265,7 +265,7 @@ export default function AdminWorkoutsModal({
                   control={form.control}
                   name="regionId"
                   render={({ field }) => (
-                    <FormItem key={`region-${field.value}`}>
+                    <FormItem key={`region-${String(field.value ?? "new")}`}>
                       <FormLabel>Region</FormLabel>
                       <VirtualizedCombobox
                         value={field.value?.toString()}
@@ -300,7 +300,7 @@ export default function AdminWorkoutsModal({
                       (ao) => ao.parentId === form.watch("regionId"),
                     );
                     return (
-                      <FormItem key={`ao-${field.value}`}>
+                      <FormItem key={`ao-${String(field.value ?? "new")}`}>
                         <FormLabel>AO</FormLabel>
                         <Select
                           value={field.value?.toString()}
@@ -373,7 +373,9 @@ export default function AdminWorkoutsModal({
                       (location) => location.regionId === regionId,
                     );
                     return (
-                      <FormItem key={`location-${field.value}`}>
+                      <FormItem
+                        key={`location-${String(field.value ?? "new")}`}
+                      >
                         <FormLabel>Location</FormLabel>
                         <Select
                           value={field.value?.toString()}
@@ -466,7 +468,9 @@ export default function AdminWorkoutsModal({
                     <FormItem key={`eventTypeIds`}>
                       <FormLabel>Event Types</FormLabel>
                       <VirtualizedCombobox
-                        value={field.value?.map(String)}
+                        value={(field.value as number[] | undefined)?.map(
+                          String,
+                        )}
                         options={
                           eventTypes?.eventTypes.map((type) => ({
                             value: type.id.toString(),
