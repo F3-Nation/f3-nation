@@ -1,5 +1,7 @@
 # F3 Nation - PMPM Turbo Monorepo
 
+arbitrary change to trigger ci build
+
 This is a monorepo built with PNPM workspaces and Turbo for managing multiple applications and shared packages.
 
 ## Monorepo Fundamentals
