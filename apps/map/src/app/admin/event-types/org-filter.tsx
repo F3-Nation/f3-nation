@@ -51,7 +51,7 @@ export const OrgFilter = ({
           <Command>
             <CommandInput placeholder="Search statuses..." />
             <CommandEmpty>No statuses found.</CommandEmpty>
-            <CommandGroup>
+            <CommandGroup className="max-h-96 overflow-y-auto">
               {orgs?.orgs.map((org) => (
                 <CommandItem
                   key={org.id}

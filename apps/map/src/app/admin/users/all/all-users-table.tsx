@@ -26,6 +26,7 @@ import { MDTable, usePagination } from "@acme/ui/md-table";
 import { Popover, PopoverContent, PopoverTrigger } from "@acme/ui/popover";
 import { Cell, Header } from "@acme/ui/table";
 
+import { onlyUnique } from "@acme/shared/common/functions";
 import { orpc } from "~/orpc/react";
 import type { RouterOutputs } from "~/orpc/types";
 import { useDebounce } from "~/utils/hooks/use-debounce";
@@ -156,6 +157,7 @@ export const AllUsersTable = () => {
     "active",
   ]);
   const [selectedRoles, setSelectedRoles] = useState<UserRole[]>([
+    "user",
     "admin",
     "editor",
   ]);
@@ -334,6 +336,7 @@ const columns: TableOptions<
       <Cell {...cell}>
         {cell.row.original.roles
           .map((role: { orgName: string }) => role.orgName)
+          .filter(onlyUnique)
           .join(", ")}
       </Cell>
     ),

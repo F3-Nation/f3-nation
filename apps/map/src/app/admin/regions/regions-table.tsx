@@ -2,20 +2,10 @@
 
 import { DotsHorizontalIcon } from "@radix-ui/react-icons";
 import type { TableOptions } from "@tanstack/react-table";
-import { Check, Filter, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { IsActiveStatus } from "@acme/shared/app/enums";
-import { cn } from "@acme/ui";
-import { Badge } from "@acme/ui/badge";
+import type { IsActiveStatus } from "@acme/shared/app/enums";
 import { Button } from "@acme/ui/button";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-} from "@acme/ui/command";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,12 +13,13 @@ import {
   DropdownMenuTrigger,
 } from "@acme/ui/dropdown-menu";
 import { MDTable, usePagination } from "@acme/ui/md-table";
-import { Popover, PopoverContent, PopoverTrigger } from "@acme/ui/popover";
 import { Cell, Header } from "@acme/ui/table";
 
 import { orpc, useQuery } from "~/orpc/react";
 import type { RouterOutputs } from "~/orpc/types";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
+import { ResetFilter } from "../_components/reset-filter";
+import { StatusFilter } from "../_components/status-filter";
 import { AreaFilter } from "./area-filter";
 import { SectorFilter } from "./sector-filter";
 
@@ -41,19 +32,8 @@ export const RegionsTable = () => {
   const [selectedStatuses, setSelectedStatuses] = useState<IsActiveStatus[]>([
     "active",
   ]);
+  const [searchTerm, setSearchTerm] = useState("");
   const [onlyMine, setOnlyMine] = useState(true);
-
-  const { data: regionsData } = useQuery(
-    orpc.org.all.queryOptions({
-      input: {
-        orgTypes: ["region"],
-        pageIndex: pagination.pageIndex,
-        pageSize: pagination.pageSize,
-        statuses: selectedStatuses,
-        onlyMine: onlyMine || undefined,
-      },
-    }),
-  );
 
   const { data: sectorsData } = useQuery(
     orpc.org.all.queryOptions({
@@ -71,9 +51,42 @@ export const RegionsTable = () => {
     }),
   );
 
-  const regions = regionsData?.orgs;
   const sectors = sectorsData?.orgs;
   const areas = areasData?.orgs;
+
+  // Compute parentOrgIds for filtering regions
+  // If specific areas are selected, use those
+  // If only sectors are selected, use all areas belonging to those sectors
+  const parentOrgIds = useMemo(() => {
+    if (selectedAreas.length > 0) {
+      return selectedAreas.map((area) => area.id);
+    }
+    if (selectedSectors.length > 0 && areas) {
+      const selectedSectorIds = selectedSectors.map((s) => s.id);
+      return areas
+        .filter(
+          (area) => area.parentId && selectedSectorIds.includes(area.parentId),
+        )
+        .map((area) => area.id);
+    }
+    return [];
+  }, [selectedAreas, selectedSectors, areas]);
+
+  const { data: regionsData } = useQuery(
+    orpc.org.all.queryOptions({
+      input: {
+        orgTypes: ["region"],
+        pageIndex: pagination.pageIndex,
+        pageSize: pagination.pageSize,
+        statuses: selectedStatuses,
+        searchTerm: searchTerm || undefined,
+        onlyMine: onlyMine || undefined,
+        parentOrgIds: parentOrgIds.length > 0 ? parentOrgIds : undefined,
+      },
+    }),
+  );
+
+  const regions = regionsData?.orgs;
 
   // Filter selected areas when sectors change
   // Only depend on selectedSectors to avoid infinite loops
@@ -111,48 +124,47 @@ export const RegionsTable = () => {
     );
   }, [sectors]);
 
-  const filteredRegions = useMemo(() => {
-    return regions
-      ?.map((region) => {
-        const area = region.parentId ? idToAreaMap?.[region.parentId] : null;
-        const sector = area?.parentId ? idToSectorMap?.[area.parentId] : null;
-        return {
-          ...region,
-          sector: sector?.name,
-          area: area?.name,
-        };
-      })
-      .filter((region) => {
-        return (
-          (!selectedSectors.length ||
-            selectedSectors.some((s) => s.name === region.sector)) &&
-          (!selectedAreas.length ||
-            selectedAreas.some((a) => a.name === region.area))
-        );
+  const regionsWithNames = useMemo(() => {
+    return regions?.map((region) => {
+      const area = region.parentId ? idToAreaMap?.[region.parentId] : null;
+      const sector = area?.parentId ? idToSectorMap?.[area.parentId] : null;
+      return {
+        ...region,
+        sector: sector?.name,
+        area: area?.name,
+      };
+    });
+  }, [regions, idToAreaMap, idToSectorMap]);
+
+  const handleSectorSelect = useCallback(
+    (sector: Org) => {
+      setSelectedSectors((prev) => {
+        if (prev.includes(sector)) {
+          return prev.filter((s) => s !== sector);
+        }
+        return [...prev, sector];
       });
-  }, [regions, idToAreaMap, idToSectorMap, selectedSectors, selectedAreas]);
+      setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+    },
+    [setPagination],
+  );
 
-  const handleSectorSelect = useCallback((sector: Org) => {
-    setSelectedSectors((prev) => {
-      if (prev.includes(sector)) {
-        return prev.filter((s) => s !== sector);
-      }
-      return [...prev, sector];
-    });
-  }, []);
-
-  const handleAreaSelect = useCallback((area: Org) => {
-    setSelectedAreas((prev) => {
-      if (prev.includes(area)) {
-        return prev.filter((a) => a !== area);
-      }
-      return [...prev, area];
-    });
-  }, []);
+  const handleAreaSelect = useCallback(
+    (area: Org) => {
+      setSelectedAreas((prev) => {
+        if (prev.includes(area)) {
+          return prev.filter((a) => a !== area);
+        }
+        return [...prev, area];
+      });
+      setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+    },
+    [setPagination],
+  );
 
   return (
     <MDTable
-      data={filteredRegions}
+      data={regionsWithNames}
       cellClassName="p-1"
       paginationOptions={{ pageSize: 20, pageSizeOptions: [10, 20, 50, 100] }}
       columns={columns}
@@ -162,13 +174,18 @@ export const RegionsTable = () => {
       totalCount={regionsData?.total}
       pagination={pagination}
       setPagination={setPagination}
+      searchTerm={searchTerm}
+      setSearchTerm={setSearchTerm}
       filterComponent={
         <>
-          <FilterComponent
+          <StatusFilter
             selectedStatuses={selectedStatuses}
             setSelectedStatuses={setSelectedStatuses}
             onlyMine={onlyMine}
             setOnlyMine={setOnlyMine}
+            resetPage={() =>
+              setPagination((prev) => ({ ...prev, pageIndex: 0 }))
+            }
           />
           <SectorFilter
             onSectorSelect={handleSectorSelect}
@@ -178,6 +195,14 @@ export const RegionsTable = () => {
             selectedSectors={selectedSectors}
             onAreaSelect={handleAreaSelect}
             selectedAreas={selectedAreas}
+          />
+          <ResetFilter
+            onClick={() => {
+              setSelectedSectors([]);
+              setSelectedAreas([]);
+              setSelectedStatuses(["active"]);
+              setOnlyMine(true);
+            }}
           />
         </>
       }
@@ -285,119 +310,3 @@ const columns: TableOptions<
     },
   },
 ];
-
-const FilterComponent = ({
-  selectedStatuses,
-  setSelectedStatuses,
-  onlyMine,
-  setOnlyMine,
-}: {
-  selectedStatuses: IsActiveStatus[];
-  setSelectedStatuses: (statuses: IsActiveStatus[]) => void;
-  onlyMine: boolean;
-  setOnlyMine: (value: boolean) => void;
-}) => {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <div className="flex flex-row gap-2">
-      {/* Status badges */}
-      <div className="flex flex-wrap gap-1">
-        {selectedStatuses.includes("active") && (
-          <Badge
-            className={cn(
-              "flex items-center gap-1 rounded-full border-transparent bg-green-100 px-2 py-1 text-green-700 hover:bg-green-200",
-            )}
-            onClick={() => {
-              setSelectedStatuses(
-                selectedStatuses.filter((s) => s !== "active"),
-              );
-            }}
-          >
-            Active
-            <X className="h-3.5 w-3.5 cursor-pointer" />
-          </Badge>
-        )}
-        {selectedStatuses.includes("inactive") && (
-          <Badge
-            className={cn(
-              "flex items-center gap-1 rounded-full border-transparent bg-red-100 px-2 py-1 text-red-700 hover:bg-red-200",
-            )}
-            onClick={() => {
-              setSelectedStatuses(
-                selectedStatuses.filter((s) => s !== "inactive"),
-              );
-            }}
-          >
-            Inactive
-            <X className="h-3.5 w-3.5 cursor-pointer" />
-          </Badge>
-        )}
-        {onlyMine && (
-          <Badge
-            className="flex items-center gap-1 rounded-full border-transparent bg-blue-100 px-2 py-1 text-blue-700 hover:bg-blue-200"
-            onClick={() => {
-              setOnlyMine(false);
-            }}
-          >
-            Only Mine
-            <X className="h-3.5 w-3.5 cursor-pointer" />
-          </Badge>
-        )}
-      </div>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <button
-            aria-expanded={open}
-            className="flex size-8 items-center justify-center rounded-full bg-muted shadow-md hover:bg-background/80"
-          >
-            <Filter className="size-5 shrink-0 opacity-50" />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent className="w-full p-0">
-          <Command>
-            <CommandInput placeholder="Search statuses..." />
-            <CommandEmpty>No statuses found.</CommandEmpty>
-            <CommandGroup>
-              {IsActiveStatus.map((status) => (
-                <CommandItem
-                  key={status}
-                  value={status}
-                  onSelect={() => {
-                    const newStatuses = selectedStatuses.includes(status)
-                      ? selectedStatuses.filter((s) => s !== status)
-                      : [...selectedStatuses, status];
-                    setSelectedStatuses(newStatuses);
-                  }}
-                >
-                  <Check
-                    className={cn(
-                      "mr-2 h-4 w-4",
-                      selectedStatuses.includes(status)
-                        ? "opacity-100"
-                        : "opacity-0",
-                    )}
-                  />
-                  {status.charAt(0).toUpperCase() + status.slice(1)}
-                </CommandItem>
-              ))}
-              <CommandItem
-                onSelect={() => {
-                  setOnlyMine(!onlyMine);
-                }}
-              >
-                <Check
-                  className={cn(
-                    "mr-2 h-4 w-4",
-                    onlyMine ? "opacity-100" : "opacity-0",
-                  )}
-                />
-                Only Mine
-              </CommandItem>
-            </CommandGroup>
-          </Command>
-        </PopoverContent>
-      </Popover>
-    </div>
-  );
-};

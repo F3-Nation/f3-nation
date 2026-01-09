@@ -1,5 +1,3 @@
-import { useCallback } from "react";
-import Link from "next/link";
 import {
   ArrowRight,
   Eye,
@@ -17,6 +15,8 @@ import {
 } from "lucide-react";
 import { signIn } from "next-auth/react";
 import { useTheme } from "next-themes";
+import Link from "next/link";
+import { useCallback } from "react";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
 import { isDevelopment, isProd } from "@acme/shared/common/constants";
