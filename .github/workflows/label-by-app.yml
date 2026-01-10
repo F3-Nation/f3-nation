@@ -1,0 +1,56 @@
+name: Label issue by affected app
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  issues: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Apply app labels based on issue form
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const body = issue.body;
+
+            // Map checkbox labels -> GitHub labels
+            const appLabelMap = {
+              "Admin": "app:admin",
+              "API": "app:api",
+              "Auth": "app:auth",
+              "Codex": "app:codex",
+              "Database": "app:database",
+              "Map": "app:map",
+              "PAX Vault": "app:pax_vault",
+              "Region Pages": "app:region_pages",
+              "Slackbot": "app:slackbot"
+            };
+
+            const labelsToAdd = [];
+
+            for (const [checkbox, label] of Object.entries(appLabelMap)) {
+              // Issue forms render checked boxes as: "- [x] API"
+              const regex = new RegExp(`- \\[x\\] ${checkbox}`, "i");
+              if (regex.test(body)) {
+                labelsToAdd.push(label);
+              }
+            }
+
+            if (labelsToAdd.length === 0) {
+              console.log("No app labels to apply.");
+              return;
+            }
+
+            console.log("Adding labels:", labelsToAdd);
+
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              labels: labelsToAdd
+            });
