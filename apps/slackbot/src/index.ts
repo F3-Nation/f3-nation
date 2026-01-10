@@ -36,7 +36,8 @@ registerWelcomeFeature(app);
 registerConfigFeature(app);
 
 // Health check endpoint for HTTP mode
-app.event("app_home_opened", async ({ event, client }) => {
+// eslint-disable-next-line @typescript-eslint/require-await
+app.event("app_home_opened", async ({ event, client: _client }) => {
   logger.info(`App home opened by user ${event.user}`);
 });
 
@@ -57,6 +58,6 @@ async function start() {
   }
 }
 
-start();
+void start();
 
 export { app };

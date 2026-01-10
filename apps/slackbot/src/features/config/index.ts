@@ -1,25 +1,25 @@
-import type {
-  App,
-  BlockAction,
-  SlackActionMiddlewareArgs,
-  SlackCommandMiddlewareArgs,
-  SlackShortcutMiddlewareArgs,
-  SlackViewMiddlewareArgs,
-} from "@slack/bolt";
+import type { App, BlockAction } from "@slack/bolt";
 import { ACTIONS } from "../../constants/actions";
 import { buildWelcomeConfigModal } from "../welcome";
 import { api } from "../../lib/api-client";
 import { logger } from "../../lib/logger";
-import type { HandlerContext, RegionSettings } from "../../types";
+import type { RegionSettings } from "../../types";
+import type {
+  BlockList,
+  ExtendedContext,
+  TypedActionArgs,
+  TypedCommandArgs,
+  TypedViewArgs,
+} from "../../types/bolt-types";
 
 /**
  * Build the main configuration menu modal
  */
-export function buildConfigModal(context: HandlerContext) {
-  const { slackUser } = context;
-  const isAdmin = slackUser?.isAdmin || false;
+export function buildConfigModal(context: ExtendedContext) {
+  const slackUser = context.slackUser;
+  const isAdmin = slackUser?.isAdmin ?? false;
 
-  const blocks: any[] = [];
+  const blocks: BlockList = [];
 
   if (isAdmin) {
     blocks.push({
@@ -63,22 +63,29 @@ export function buildConfigModal(context: HandlerContext) {
  */
 export function registerConfigFeature(app: App) {
   // Slash command
-  app.command("/f3-nation-settings", async ({ ack, body, client, context }) => {
-    await ack();
-    const modal = buildConfigModal(context as HandlerContext);
-    await client.views.open({
-      trigger_id: body.trigger_id,
-      view: modal,
-    });
-  });
+  app.command(
+    "/f3-nation-settings",
+    async ({ ack, body, client, context }: TypedCommandArgs) => {
+      await ack();
+      const modal = buildConfigModal(context);
+      await client.views.open({
+        trigger_id: body.trigger_id,
+        view: modal,
+      });
+    },
+  );
 
   // Global shortcut
   app.shortcut(
     "settings_shortcut",
-    async ({ ack, shortcut, client, context }) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    async ({ ack, shortcut, client, context }: any) => {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
       await ack();
-      const modal = buildConfigModal(context as HandlerContext);
+      const modal = buildConfigModal(context as ExtendedContext);
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
       await client.views.open({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
         trigger_id: shortcut.trigger_id,
         view: modal,
       });
@@ -88,9 +95,9 @@ export function registerConfigFeature(app: App) {
   // Action: Open Main Config Modal (from Settings button)
   app.action(
     ACTIONS.SETTINGS_BUTTON,
-    async ({ ack, body, client, context }) => {
+    async ({ ack, body, client, context }: TypedActionArgs) => {
       await ack();
-      const modal = buildConfigModal(context as HandlerContext);
+      const modal = buildConfigModal(context);
       await client.views.open({
         trigger_id: (body as BlockAction).trigger_id,
         view: modal,
@@ -101,11 +108,9 @@ export function registerConfigFeature(app: App) {
   // Action: Open Welcome Config
   app.action(
     ACTIONS.OPEN_WELCOME_CONFIG,
-    async ({ ack, body, client, context }) => {
+    async ({ ack, body, client, context }: TypedActionArgs) => {
       await ack();
-      const modal = buildWelcomeConfigModal(
-        (context as HandlerContext).regionSettings,
-      );
+      const modal = buildWelcomeConfigModal(context.regionSettings);
       await client.views.push({
         trigger_id: (body as BlockAction).trigger_id,
         view: modal,
@@ -116,11 +121,9 @@ export function registerConfigFeature(app: App) {
   // Action: Open General Config
   app.action(
     ACTIONS.OPEN_GENERAL_CONFIG,
-    async ({ ack, body, client, context }) => {
+    async ({ ack, body, client, context }: TypedActionArgs) => {
       await ack();
-      const modal = buildGeneralConfigModal(
-        (context as HandlerContext).regionSettings,
-      );
+      const modal = buildGeneralConfigModal(context.regionSettings);
       await client.views.push({
         trigger_id: (body as BlockAction).trigger_id,
         view: modal,
@@ -129,27 +132,30 @@ export function registerConfigFeature(app: App) {
   );
 
   // Action handler for saving general settings
-  app.view(ACTIONS.CONFIG_CALLBACK_ID, async ({ ack, view, body, client }) => {
-    await ack();
-    // Implementation for saving general settings
-    const teamId = body.team?.id;
-    if (!teamId) return;
+  app.view(
+    ACTIONS.CONFIG_CALLBACK_ID,
+    async ({ ack, view, body }: TypedViewArgs) => {
+      await ack();
+      // Implementation for saving general settings
+      const teamId = body.team?.id;
+      if (!teamId) return;
 
-    const values = view.state.values;
-    const editingLocked =
-      values[ACTIONS.CONFIG_EDITING_LOCKED]?.[ACTIONS.CONFIG_EDITING_LOCKED]
-        ?.selected_option?.value === "yes";
+      const values = view.state.values;
+      const editingLocked =
+        values[ACTIONS.CONFIG_EDITING_LOCKED]?.[ACTIONS.CONFIG_EDITING_LOCKED]
+          ?.selected_option?.value === "yes";
 
-    try {
-      await api.slack.updateSpaceSettings(teamId, {
-        editing_locked: editingLocked,
-        // Add other fields as needed
-      });
-      logger.info(`Updated general settings for team ${teamId}`);
-    } catch (error) {
-      logger.error("Error saving general settings:", error);
-    }
-  });
+      try {
+        await api.slack.updateSpaceSettings(teamId, {
+          editing_locked: editingLocked,
+          // Add other fields as needed
+        });
+        logger.info(`Updated general settings for team ${teamId}`);
+      } catch (error) {
+        logger.error("Error saving general settings:", error);
+      }
+    },
+  );
 }
 
 /**
@@ -184,6 +190,6 @@ export function buildGeneralConfigModal(regionSettings?: RegionSettings) {
         },
       },
       // Add more settings here based on RegionSettings
-    ],
+    ] as BlockList,
   };
 }

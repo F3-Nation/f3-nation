@@ -1,19 +1,24 @@
 import type { AnyMiddlewareArgs, Middleware } from "@slack/bolt";
+import type { WebClient } from "@slack/web-api";
 import { api } from "./api-client";
 import { logger } from "./logger";
 import type { RegionSettings } from "../types";
+import { extractTeamId, extractUserId } from "../types/bolt-types";
+import type { ExtendedContext } from "../types/bolt-types";
 
 /**
  * Middleware to load region settings and user data for the current team
  */
-export const withRegionContext: Middleware<any> = async ({
+export const withRegionContext: Middleware<AnyMiddlewareArgs> = async ({
   context,
   body,
+  client,
   next,
 }) => {
-  const b = body;
-  const teamId = b.team_id || b.team?.id || b.event?.team || b.view?.team_id;
-  const userId = b.user_id || b.user?.id || b.event?.user || b.view?.user?.id;
+  const ctx = context as ExtendedContext;
+  const slackClient = client as unknown as WebClient;
+  const teamId = extractTeamId(body);
+  const userId = extractUserId(body);
 
   if (!teamId) {
     logger.debug("No teamId found in request body");
@@ -22,17 +27,63 @@ export const withRegionContext: Middleware<any> = async ({
   }
 
   try {
-    // Load region settings
-    const space = await api.slack.getSpace(teamId);
-    if (space) {
-      context.regionSettings = space.settings as unknown as RegionSettings;
+    // Load or create region settings
+    let space = await api.slack.getSpace(teamId);
+
+    if (!space) {
+      logger.info(`Space not found for team ${teamId}, creating...`);
+      let workspaceName: string | undefined;
+
+      try {
+        const teamInfo = await slackClient.team.info({ team: teamId });
+        workspaceName = teamInfo.team?.name;
+      } catch (error) {
+        logger.warn(
+          `Failed to fetch team info from Slack for ${teamId}:`,
+          error,
+        );
+      }
+
+      space = await api.slack.getOrCreateSpace({
+        teamId,
+        workspaceName,
+      });
     }
 
-    // Load user data if userId is available
+    if (space) {
+      ctx.regionSettings = space.settings as unknown as RegionSettings;
+    }
+
+    // Load or create user data if userId is available
     if (userId && typeof userId === "string") {
-      const user = await api.slack.getUserBySlackId(userId, teamId);
+      let user = await api.slack.getUserBySlackId(userId, teamId);
+
+      if (!user) {
+        logger.info(`User not found for ID ${userId}, creating...`);
+        try {
+          const userInfo = await slackClient.users.info({ user: userId });
+          if (userInfo.user) {
+            user = await api.slack.getOrCreateUser({
+              slackId: userId,
+              teamId,
+              userName: userInfo.user.real_name ?? userInfo.user.name ?? userId,
+              email: userInfo.user.profile?.email ?? undefined,
+              isAdmin: userInfo.user.is_admin ?? false,
+              isOwner: userInfo.user.is_owner ?? false,
+              isBot: userInfo.user.is_bot ?? false,
+              avatarUrl: userInfo.user.profile?.image_512 ?? undefined,
+            });
+          }
+        } catch (error) {
+          logger.warn(
+            `Failed to fetch user info from Slack for ${userId}:`,
+            error,
+          );
+        }
+      }
+
       if (user) {
-        context.slackUser = user;
+        ctx.slackUser = user;
       }
     }
   } catch (error) {

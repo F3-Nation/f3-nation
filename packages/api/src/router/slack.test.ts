@@ -1,4 +1,4 @@
-import { eq, schema } from "@acme/db";
+import { eq, or, schema } from "@acme/db";
 import { db } from "@acme/db/client";
 import { Client, Header } from "@acme/shared/common/enums";
 import { createRouterClient } from "@orpc/server";
@@ -6,8 +6,9 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { router } from "../index";
 import { uniqueId } from "../__tests__/test-utils";
 
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-explicit-any */
 vi.mock("@acme/env", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@acme/env")>();
+  const actual = (await importOriginal()) as any;
   return {
     ...actual,
     env: {
@@ -16,6 +17,7 @@ vi.mock("@acme/env", async (importOriginal) => {
     },
   };
 });
+/* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-explicit-any */
 
 describe("Slack Router", () => {
   const teamId = uniqueId();
@@ -24,12 +26,13 @@ describe("Slack Router", () => {
 
   const createTestClient = (apiKey?: string) => {
     return createRouterClient(router, {
-      context: async () => ({
-        reqHeaders: new Headers({
-          [Header.Client]: Client.ORPC,
-          ...(apiKey ? { "x-api-key": apiKey } : {}),
+      context: () =>
+        Promise.resolve({
+          reqHeaders: new Headers({
+            [Header.Client]: Client.ORPC,
+            ...(apiKey ? { "x-api-key": apiKey } : {}),
+          }),
         }),
-      }),
     });
   };
 
@@ -91,7 +94,33 @@ describe("Slack Router", () => {
     it("should return null for non-existent team", async () => {
       const client = createTestClient();
       const result = await client.slack.getSpace({ teamId: "non-existent" });
-      expect(result).toBeUndefined();
+      expect(result).toBeNull();
+    });
+  });
+
+  describe("getOrCreateSpace", () => {
+    it("should return existing space if it exists", async () => {
+      const client = createTestClient("test-admin-key");
+      const result = await client.slack.getOrCreateSpace({ teamId });
+      expect(result).not.toBeNull();
+      expect(result.id).toBe(slackSpaceId);
+    });
+
+    it("should create new space if it doesn't exist", async () => {
+      const newTeamId = uniqueId();
+      const client = createTestClient("test-admin-key");
+      const result = await client.slack.getOrCreateSpace({
+        teamId: newTeamId,
+        workspaceName: "New Space",
+      });
+      expect(result).not.toBeNull();
+      expect(result.teamId).toBe(newTeamId);
+      expect(result.workspaceName).toBe("New Space");
+
+      // Cleanup
+      await db
+        .delete(schema.slackSpaces)
+        .where(eq(schema.slackSpaces.id, result.id));
     });
   });
 
@@ -154,6 +183,59 @@ describe("Slack Router", () => {
       expect(result).not.toBeNull();
       expect(result?.slackId).toBe(slackId);
       expect(result?.userName).toBe("testuser");
+    });
+  });
+
+  describe("getOrCreateUser", () => {
+    const existingSlackId = `U${uniqueId()}`;
+    const newSlackId = `U${uniqueId()}`;
+
+    beforeAll(async () => {
+      await db.insert(schema.slackUsers).values({
+        slackId: existingSlackId,
+        userName: "existing",
+        email: "existing@example.com",
+        slackTeamId: teamId,
+        isAdmin: false,
+        isOwner: false,
+        isBot: false,
+      });
+    });
+
+    afterAll(async () => {
+      await db
+        .delete(schema.slackUsers)
+        .where(
+          or(
+            eq(schema.slackUsers.slackId, existingSlackId),
+            eq(schema.slackUsers.slackId, newSlackId),
+          ),
+        );
+    });
+
+    it("should return existing user if they exist", async () => {
+      const client = createTestClient("test-admin-key");
+      const result = await client.slack.getOrCreateUser({
+        slackId: existingSlackId,
+        teamId,
+        userName: "ignored",
+      });
+      expect(result).not.toBeNull();
+      expect(result.slackId).toBe(existingSlackId);
+      expect(result.userName).toBe("existing");
+    });
+
+    it("should create new user if they don't exist", async () => {
+      const client = createTestClient("test-admin-key");
+      const result = await client.slack.getOrCreateUser({
+        slackId: newSlackId,
+        teamId,
+        userName: "newuser",
+        email: "new@example.com",
+      });
+      expect(result).not.toBeNull();
+      expect(result.slackId).toBe(newSlackId);
+      expect(result.userName).toBe("newuser");
     });
   });
 

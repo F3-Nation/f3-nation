@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { and, eq, schema } from "@acme/db";
+import { eq, schema } from "@acme/db";
 import { SlackSettingsSchema, SlackUserUpsertSchema } from "@acme/validators";
 
 import { apiKeyProcedure, publicProcedure } from "../shared";
@@ -21,7 +21,7 @@ export const slackRouter = {
         .select()
         .from(schema.slackSpaces)
         .where(eq(schema.slackSpaces.teamId, input.teamId));
-      return space;
+      return space ?? null;
     }),
 
   updateSpaceSettings: apiKeyProcedure
@@ -49,7 +49,7 @@ export const slackRouter = {
       }
 
       const updatedSettings = {
-        ...(space.settings as any),
+        ...(space.settings as Record<string, unknown>),
         ...input.settings,
       };
 
@@ -138,6 +138,91 @@ export const slackRouter = {
       });
 
       return { success: true, action: "created" };
+    }),
+
+  getOrCreateSpace: apiKeyProcedure
+    .input(
+      z.object({
+        teamId: z.string(),
+        workspaceName: z.string().optional(),
+      }),
+    )
+    .route({
+      method: "POST",
+      path: "/get-or-create-space",
+      tags: ["slack"],
+      summary: "Get or create Slack space",
+      description:
+        "Retrieve slack space settings or create a new record if it doesn't exist",
+    })
+    .handler(async ({ context: ctx, input }) => {
+      const [space] = await ctx.db
+        .select()
+        .from(schema.slackSpaces)
+        .where(eq(schema.slackSpaces.teamId, input.teamId));
+
+      if (space) {
+        return space;
+      }
+
+      const [newSpace] = await ctx.db
+        .insert(schema.slackSpaces)
+        .values({
+          teamId: input.teamId,
+          workspaceName: input.workspaceName ?? null,
+          settings: {},
+        })
+        .returning();
+
+      return newSpace;
+    }),
+
+  getOrCreateUser: apiKeyProcedure
+    .input(
+      z.object({
+        slackId: z.string(),
+        teamId: z.string(),
+        userName: z.string(),
+        email: z.string().optional(),
+        isAdmin: z.boolean().optional(),
+        isOwner: z.boolean().optional(),
+        isBot: z.boolean().optional(),
+        avatarUrl: z.string().optional(),
+      }),
+    )
+    .route({
+      method: "POST",
+      path: "/get-or-create-user",
+      tags: ["slack"],
+      summary: "Get or create Slack user",
+      description:
+        "Retrieve a Slack user record or create a new one if it doesn't exist",
+    })
+    .handler(async ({ context: ctx, input }) => {
+      const [existing] = await ctx.db
+        .select()
+        .from(schema.slackUsers)
+        .where(eq(schema.slackUsers.slackId, input.slackId));
+
+      if (existing) {
+        return existing;
+      }
+
+      const [newUser] = await ctx.db
+        .insert(schema.slackUsers)
+        .values({
+          slackId: input.slackId,
+          userName: input.userName,
+          email: input.email ?? "",
+          slackTeamId: input.teamId,
+          isAdmin: input.isAdmin ?? false,
+          isOwner: input.isOwner ?? false,
+          isBot: input.isBot ?? false,
+          avatarUrl: input.avatarUrl ?? null,
+        })
+        .returning();
+
+      return newUser;
     }),
 
   getRegion: publicProcedure

@@ -1,22 +1,29 @@
-import type {
-  App,
-  BlockAction,
-  SlackActionMiddlewareArgs,
-  SlackEventMiddlewareArgs,
-} from "@slack/bolt";
+import type { App } from "@slack/bolt";
 import { ACTIONS } from "../../constants/actions";
 import { WELCOME_MESSAGE_TEMPLATES } from "../../constants/templates";
 import { api } from "../../lib/api-client";
 import { logger } from "../../lib/logger";
-import type { HandlerContext, RegionSettings } from "../../types";
+import type { RegionSettings } from "../../types";
+import { extractTeamId, extractUserId } from "../../types/bolt-types";
+import type { TypedEventArgs } from "../../types/bolt-types";
 
 /**
  * Handle team_join event
  */
-async function handleTeamJoin({ event, client, context }: any) {
+async function handleTeamJoin({
+  event: _event,
+  client,
+  context,
+  body,
+}: TypedEventArgs<"team_join">) {
   const { regionSettings } = context;
-  const userId = event.user.id;
-  const teamId = event.user.team || event.team;
+  const userId = extractUserId(body);
+  const teamId = extractTeamId(body);
+
+  if (!userId) {
+    logger.warn("Received team_join event without user ID");
+    return;
+  }
 
   if (!regionSettings) {
     logger.debug(
@@ -36,12 +43,19 @@ async function handleTeamJoin({ event, client, context }: any) {
       let text = "Welcome!";
 
       try {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         const parsed =
           typeof regionSettings.welcome_dm_template === "string"
             ? JSON.parse(regionSettings.welcome_dm_template)
             : regionSettings.welcome_dm_template;
 
-        if (typeof parsed === "object" && parsed.type === "rich_text") {
+        if (
+          typeof parsed === "object" &&
+          parsed !== null &&
+          "type" in parsed &&
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+          parsed.type === "rich_text"
+        ) {
           blocks = [parsed];
         } else if (Array.isArray(parsed)) {
           blocks = parsed;
@@ -69,7 +83,7 @@ async function handleTeamJoin({ event, client, context }: any) {
       if (template) {
         const message = template
           .replace(/{user}/g, userId)
-          .replace(/{region}/g, regionSettings.workspace_name || "the region");
+          .replace(/{region}/g, regionSettings.workspace_name ?? "the region");
 
         await client.chat.postMessage({
           channel: regionSettings.welcome_channel,
@@ -90,39 +104,42 @@ export function registerWelcomeFeature(app: App) {
   app.event("team_join", handleTeamJoin);
 
   // Action handler for saving settings
-  app.view(ACTIONS.WELCOME_SAVE, async ({ ack, view, body, client }) => {
-    await ack();
+  app.view(
+    ACTIONS.WELCOME_SAVE,
+    async ({ ack, view, body, client: _client }) => {
+      await ack();
 
-    const teamId = body.team?.id;
-    if (!teamId) return;
+      const teamId = body.team?.id;
+      if (!teamId) return;
 
-    const values = view.state.values;
-    const dmEnable =
-      values[ACTIONS.WELCOME_DM_ENABLE]?.[ACTIONS.WELCOME_DM_ENABLE]
-        ?.selected_option?.value === "enable";
-    const dmTemplate =
-      values[ACTIONS.WELCOME_DM_TEMPLATE]?.[ACTIONS.WELCOME_DM_TEMPLATE]
-        ?.rich_text_value;
-    const channelEnable =
-      values[ACTIONS.WELCOME_CHANNEL_ENABLE]?.[ACTIONS.WELCOME_CHANNEL_ENABLE]
-        ?.selected_option?.value === "enable";
-    const channel =
-      values[ACTIONS.WELCOME_CHANNEL]?.[ACTIONS.WELCOME_CHANNEL]
-        ?.selected_channel;
+      const values = view.state.values;
+      const dmEnable =
+        values[ACTIONS.WELCOME_DM_ENABLE]?.[ACTIONS.WELCOME_DM_ENABLE]
+          ?.selected_option?.value === "enable";
+      const dmTemplate =
+        values[ACTIONS.WELCOME_DM_TEMPLATE]?.[ACTIONS.WELCOME_DM_TEMPLATE]
+          ?.rich_text_value;
+      const channelEnable =
+        values[ACTIONS.WELCOME_CHANNEL_ENABLE]?.[ACTIONS.WELCOME_CHANNEL_ENABLE]
+          ?.selected_option?.value === "enable";
+      const channel =
+        values[ACTIONS.WELCOME_CHANNEL]?.[ACTIONS.WELCOME_CHANNEL]
+          ?.selected_channel;
 
-    try {
-      await api.slack.updateSpaceSettings(teamId, {
-        welcome_dm_enable: dmEnable,
-        welcome_dm_template: JSON.stringify(dmTemplate),
-        welcome_channel_enable: channelEnable,
-        welcome_channel: channel,
-      });
+      try {
+        await api.slack.updateSpaceSettings(teamId, {
+          welcome_dm_enable: dmEnable,
+          welcome_dm_template: JSON.stringify(dmTemplate),
+          welcome_channel_enable: channelEnable,
+          welcome_channel: channel ?? undefined,
+        });
 
-      logger.info(`Updated welcome settings for team ${teamId}`);
-    } catch (error) {
-      logger.error("Error saving welcome settings:", error);
-    }
-  });
+        logger.info(`Updated welcome settings for team ${teamId}`);
+      } catch (error) {
+        logger.error("Error saving welcome settings:", error);
+      }
+    },
+  );
 }
 
 /**
@@ -164,6 +181,7 @@ export function buildWelcomeConfigModal(regionSettings?: RegionSettings) {
         element: {
           type: "rich_text_input",
           action_id: ACTIONS.WELCOME_DM_TEMPLATE,
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           initial_value: regionSettings?.welcome_dm_template
             ? JSON.parse(regionSettings.welcome_dm_template)
             : undefined,
@@ -212,7 +230,7 @@ export function buildWelcomeConfigModal(regionSettings?: RegionSettings) {
         element: {
           type: "channels_select",
           action_id: ACTIONS.WELCOME_CHANNEL,
-          initial_channel: regionSettings?.welcome_channel || undefined,
+          initial_channel: regionSettings?.welcome_channel ?? undefined,
         },
       },
     ],

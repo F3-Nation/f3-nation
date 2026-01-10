@@ -1,10 +1,14 @@
-/**
- * oRPC API Client
- *
- * Creates a typed client for the F3 Nation API.
- * Used for all database operations instead of direct DB access.
- */
-
+import type {
+  RegionResponse,
+  SlackSpaceResponse,
+  SlackUserData,
+  SlackUserResponse,
+  SuccessActionResponse,
+  UpdateSpaceSettingsInput,
+  UpsertUserInput,
+  GetOrCreateSpaceInput,
+  GetOrCreateUserInput,
+} from "../types/api-types";
 import { logger } from "./logger";
 
 // API base URL - defaults to local development
@@ -39,7 +43,8 @@ async function apiRequest<T>(
       );
     }
 
-    return (await response.json()) as T;
+    const text = await response.text();
+    return (text ? JSON.parse(text) : null) as T;
   } catch (error) {
     logger.error(`API request to ${endpoint} failed`, error);
     throw error;
@@ -54,33 +59,41 @@ export const api = {
 
   slack: {
     getSpace: (teamId: string) =>
-      apiRequest<{
-        id: number;
-        teamId: string;
-        workspaceName: string | null;
-        botToken: string | null;
-        settings: Record<string, any> | null;
-      } | null>(`/slack/space?teamId=${encodeURIComponent(teamId)}`),
+      apiRequest<SlackSpaceResponse | null>(
+        `/slack/space?teamId=${encodeURIComponent(teamId)}`,
+      ),
 
-    updateSpaceSettings: (teamId: string, settings: any) =>
+    updateSpaceSettings: (teamId: string, settings: UpdateSpaceSettingsInput) =>
       apiRequest<{ success: boolean }>(`/slack/space/settings`, {
         method: "PATCH",
         body: JSON.stringify({ teamId, settings }),
       }),
 
     getUserBySlackId: (slackId: string, teamId: string) =>
-      apiRequest<any | null>(
+      apiRequest<SlackUserResponse | null>(
         `/slack/user?slackId=${encodeURIComponent(slackId)}&teamId=${encodeURIComponent(teamId)}`,
       ),
 
-    upsertUser: (input: any) =>
-      apiRequest<{ success: boolean; action: string }>(`/slack/user`, {
+    getOrCreateSpace: (input: GetOrCreateSpaceInput) =>
+      apiRequest<SlackSpaceResponse>(`/slack/get-or-create-space`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+
+    getOrCreateUser: (input: GetOrCreateUserInput) =>
+      apiRequest<SlackUserData>(`/slack/get-or-create-user`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+
+    upsertUser: (input: UpsertUserInput) =>
+      apiRequest<SuccessActionResponse>(`_action/slack/user`, {
         method: "PUT",
         body: JSON.stringify(input),
       }),
 
     getRegion: (teamId: string) =>
-      apiRequest<{ org: any; space: any } | null>(
+      apiRequest<RegionResponse | null>(
         `/slack/region?teamId=${encodeURIComponent(teamId)}`,
       ),
   },

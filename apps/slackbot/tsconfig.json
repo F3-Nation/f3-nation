@@ -2,7 +2,7 @@
   "extends": "../../tooling/typescript/base.json",
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": "./src",
+    "rootDir": ".",
     "module": "ESNext",
     "moduleResolution": "bundler",
     "target": "ES2022",
@@ -18,6 +18,6 @@
     "noEmit": false,
     "types": ["node"]
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "vitest.config.ts"],
   "exclude": ["node_modules", "dist", "**/*.test.ts"]
 }
