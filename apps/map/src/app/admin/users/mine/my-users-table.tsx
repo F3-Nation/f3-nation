@@ -168,7 +168,7 @@ export const MyUsersTable = () => {
   const adminOrgIds = useMemo(() => {
     if (!session?.roles) return [];
     return session.roles
-      .filter((role) => role.roleName === "admin")
+      .filter((role) => role.roleName === "admin" || role.roleName === "editor")
       .map((role) => role.orgId);
   }, [session]);
 

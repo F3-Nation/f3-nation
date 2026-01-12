@@ -13,8 +13,7 @@ const MyUsersPage = async () => {
           <div className="flex flex-col">
             <h1 className="text-2xl font-bold">My Users</h1>
             <p className="text-sm text-muted-foreground">
-              Users for organizations where you are an admin. Includes email and
-              phone fields for users in your organizations.
+              Users from organizations you manage. Includes email and phone contact details.
             </p>
           </div>
           <div className="flex flex-row items-center justify-start gap-2">
