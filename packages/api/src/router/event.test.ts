@@ -273,6 +273,77 @@ describe("Event Router", () => {
       const found = result.events.some((e) => e.id === created?.id);
       expect(found).toBe(true);
     });
+
+    it("should return isPrivate field for events", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      const location = await createTestLocation(region.id);
+      if (!location) return;
+
+      // Create a public event
+      const [publicEvent] = await db
+        .insert(schema.events)
+        .values({
+          name: `Public Event ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: location.id,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          isActive: true,
+          highlight: false,
+          startDate: "2026-01-01",
+          isPrivate: false,
+        })
+        .returning();
+
+      if (publicEvent) {
+        createdEventIds.push(publicEvent.id);
+      }
+
+      // Create a private event
+      const [privateEvent] = await db
+        .insert(schema.events)
+        .values({
+          name: `Private Event ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: location.id,
+          dayOfWeek: "tuesday",
+          startTime: "0600",
+          isActive: true,
+          highlight: false,
+          startDate: "2026-01-01",
+          isPrivate: true,
+        })
+        .returning();
+
+      if (privateEvent) {
+        createdEventIds.push(privateEvent.id);
+      }
+
+      const client = createTestClient();
+      const result = await client.event.all({
+        pageIndex: 0,
+        pageSize: 100,
+      });
+
+      // Find our events in the results
+      const foundPublic = result.events.find((e) => e.id === publicEvent?.id);
+      const foundPrivate = result.events.find((e) => e.id === privateEvent?.id);
+
+      // Both events should have isPrivate field
+      expect(foundPublic).toBeDefined();
+      expect(foundPublic?.isPrivate).toBe(false);
+
+      expect(foundPrivate).toBeDefined();
+      expect(foundPrivate?.isPrivate).toBe(true);
+    });
   });
 
   describe("byId", () => {
@@ -324,6 +395,48 @@ describe("Event Router", () => {
       });
 
       expect(result.event).toBeNull();
+    });
+
+    it("should return isPrivate field for an event", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      const location = await createTestLocation(region.id);
+      if (!location) return;
+
+      // Create a private event
+      const [privateEvent] = await db
+        .insert(schema.events)
+        .values({
+          name: `Private ById Test ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: location.id,
+          dayOfWeek: "wednesday",
+          startTime: "0545",
+          isActive: true,
+          highlight: false,
+          startDate: "2026-01-01",
+          isPrivate: true,
+        })
+        .returning();
+
+      if (!privateEvent) return;
+      createdEventIds.push(privateEvent.id);
+
+      const client = createTestClient();
+      const result = await client.event.byId({
+        id: privateEvent.id,
+      });
+
+      expect(result.event).not.toBeNull();
+      expect(result.event?.id).toBe(privateEvent.id);
+      expect(result.event?.isPrivate).toBe(true);
     });
   });
 
