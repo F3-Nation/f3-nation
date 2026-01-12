@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 
 import Layout from "../../admin-layout";
-import { GrantAccessButton } from "../[id]/grant-access-button";
+import { ManageAccessButton } from "../[id]/manage-access-button";
 import { MyUsersTable } from "./my-users-table";
 
 const MyUsersPage = async () => {
@@ -16,7 +16,7 @@ const MyUsersPage = async () => {
               Includes email and phone fields.
             </p>
           </div>
-          <GrantAccessButton />
+          <ManageAccessButton />
         </div>
         <Suspense fallback={<div>Loading...</div>}>
           <div className="flex w-full flex-col overflow-hidden">

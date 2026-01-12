@@ -9,8 +9,6 @@
 import type { Session } from "@acme/auth";
 import { eq, schema } from "@acme/db";
 import { db } from "@acme/db/client";
-import { Client, Header } from "@acme/shared/common/enums";
-import { createRouterClient } from "@orpc/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanup,
@@ -26,7 +24,6 @@ describe("User Router - Grant Access", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
-
 
   describe("PII access scenarios", () => {
     it("admin can see PII fields when requesting with includePii=true", async () => {
@@ -615,4 +612,3 @@ describe("User Router - Grant Access", () => {
     });
   });
 });
-

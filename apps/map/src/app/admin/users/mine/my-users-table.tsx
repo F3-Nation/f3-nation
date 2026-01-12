@@ -375,7 +375,7 @@ const columns: TableOptions<
             <DropdownMenuItem
               onClick={(e) => {
                 e.stopPropagation();
-                openModal(ModalType.ADMIN_GRANT_ACCESS, {
+                openModal(ModalType.ADMIN_MANAGE_ACCESS, {
                   userId: Number(row.original.id),
                 });
               }}

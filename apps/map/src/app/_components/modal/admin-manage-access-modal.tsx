@@ -49,10 +49,10 @@ import type { DataType, ModalType } from "~/utils/store/modal";
 import { closeModal } from "~/utils/store/modal";
 import { VirtualizedCombobox } from "../virtualized-combobox";
 
-export default function AdminGrantAccessModal({
+export default function AdminManageAccessModal({
   data,
 }: {
-  data: DataType[ModalType.ADMIN_GRANT_ACCESS];
+  data: DataType[ModalType.ADMIN_MANAGE_ACCESS];
 }) {
   const [emailPopoverOpen, setEmailPopoverOpen] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<number | null>(() => {

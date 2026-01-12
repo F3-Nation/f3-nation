@@ -6,11 +6,11 @@ import { cn } from "@acme/ui";
 
 import { ModalType, openModal } from "~/utils/store/modal";
 
-export const GrantAccessButton = () => {
+export const ManageAccessButton = () => {
   return (
     <button
       onClick={() => {
-        openModal(ModalType.ADMIN_GRANT_ACCESS, null);
+        openModal(ModalType.ADMIN_MANAGE_ACCESS, null);
       }}
       className={cn(
         "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
