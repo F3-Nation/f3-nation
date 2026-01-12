@@ -165,7 +165,7 @@ export const MyUsersTable = () => {
   });
 
   // Get admin org IDs from session
-  const adminOrgIds = useMemo(() => {
+  const adminAndEditorOrgIds = useMemo(() => {
     if (!session?.roles) return [];
     return session.roles
       .filter((role) => role.roleName === "admin" || role.roleName === "editor")
@@ -200,18 +200,19 @@ export const MyUsersTable = () => {
         searchTerm: debouncedSearchTerm,
         pageSize: pagination.pageSize,
         pageIndex: pagination.pageIndex,
-        orgIds: adminOrgIds,
+        orgIds: adminAndEditorOrgIds,
         includePii: true,
       },
-      enabled: adminOrgIds.length > 0,
+      enabled: adminAndEditorOrgIds.length > 0,
     }),
   );
 
-  if (adminOrgIds.length === 0) {
+  if (adminAndEditorOrgIds.length === 0) {
     return (
       <div className="flex items-center justify-center p-8">
         <p className="text-muted-foreground">
-          You need to be an admin for at least one organization to view users.
+          You need to be an admin or editor for at least one organization to
+          view users.
         </p>
       </div>
     );
