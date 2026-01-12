@@ -316,7 +316,7 @@ export default function AdminGrantAccessModal({
         className={cn(`max-w-[90%] rounded-lg lg:max-w-[600px]`)}
       >
         <DialogHeader>
-          <DialogTitle className="text-center">Grant Access 2</DialogTitle>
+          <DialogTitle className="text-center">Manage Access</DialogTitle>
         </DialogHeader>
 
         <Form {...form}>
@@ -631,80 +631,115 @@ export default function AdminGrantAccessModal({
                       </FormDescription>
                       <div className="space-y-2">
                         {((field.value as RoleEntry[]) || []).map(
-                          (roleEntry, index) => (
-                            <div
-                              key={index}
-                              className="flex items-center gap-2"
-                            >
-                              <Select
-                                onValueChange={(value) => {
-                                  const newRoles = [
-                                    ...(field.value as RoleEntry[]),
-                                  ];
-                                  newRoles[index] = {
-                                    orgId: roleEntry.orgId,
-                                    roleName: value as "editor" | "admin",
-                                  };
-                                  field.onChange(newRoles);
-                                }}
-                                value={roleEntry.roleName}
-                              >
-                                <FormControl>
-                                  <SelectTrigger className="w-[200px]">
-                                    <SelectValue placeholder="Select a role" />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  <SelectItem value="editor">Editor</SelectItem>
-                                  <SelectItem value="admin">Admin</SelectItem>
-                                </SelectContent>
-                              </Select>
+                          (roleEntry, index) => {
+                            // Check if admin has access to this org
+                            const adminOrgIds = new Set(
+                              orgs?.orgs.map((org) => org.id) ?? [],
+                            );
+                            const hasAccess = adminOrgIds.has(roleEntry.orgId);
+                            // Get org name from user's roles (API includes orgName)
+                            const userRole = userByIdData?.user?.roles?.find(
+                              (r) => r.orgId === roleEntry.orgId,
+                            );
+                            const orgName = userRole?.orgName;
 
-                              <VirtualizedCombobox
-                                value={roleEntry.orgId.toString()}
-                                options={
-                                  orgs?.orgs.map((org) => ({
-                                    value: org.id.toString(),
-                                    label: `${org.name} (${org.orgType})`,
-                                  })) ?? []
-                                }
-                                searchPlaceholder="Select an organization"
-                                disabled={isLoadingOrgs}
-                                onSelect={(value) => {
-                                  const orgId = safeParseInt(value as string);
-                                  if (orgId == undefined) {
-                                    toast.error("Invalid orgId");
-                                    return;
+                            if (!hasAccess) {
+                              // Render disabled/grayed out row for orgs the admin can't access
+                              return (
+                                <div
+                                  key={index}
+                                  className="flex items-center gap-2 opacity-50"
+                                >
+                                  <div className="flex h-9 w-[200px] items-center rounded-md border border-input bg-muted px-3 text-sm text-muted-foreground">
+                                    {roleEntry.roleName === "admin"
+                                      ? "Admin"
+                                      : "Editor"}
+                                  </div>
+                                  <div className="flex h-9 flex-1 items-center rounded-md border border-input bg-muted px-3 text-sm text-muted-foreground">
+                                    {orgName ?? `Org #${roleEntry.orgId}`}
+                                  </div>
+                                  <div className="h-8 w-8" />
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <div
+                                key={index}
+                                className="flex items-center gap-2"
+                              >
+                                <Select
+                                  onValueChange={(value) => {
+                                    const newRoles = [
+                                      ...(field.value as RoleEntry[]),
+                                    ];
+                                    newRoles[index] = {
+                                      orgId: roleEntry.orgId,
+                                      roleName: value as "editor" | "admin",
+                                    };
+                                    field.onChange(newRoles);
+                                  }}
+                                  value={roleEntry.roleName}
+                                >
+                                  <FormControl>
+                                    <SelectTrigger className="w-[200px]">
+                                      <SelectValue placeholder="Select a role" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="editor">
+                                      Editor
+                                    </SelectItem>
+                                    <SelectItem value="admin">Admin</SelectItem>
+                                  </SelectContent>
+                                </Select>
+
+                                <VirtualizedCombobox
+                                  value={roleEntry.orgId.toString()}
+                                  options={
+                                    orgs?.orgs.map((org) => ({
+                                      value: org.id.toString(),
+                                      label: `${org.name} (${org.orgType})`,
+                                    })) ?? []
                                   }
-                                  const newRoles = [
-                                    ...(field.value as RoleEntry[]),
-                                  ];
-                                  newRoles[index] = {
-                                    roleName:
-                                      newRoles[index]?.roleName ?? "editor",
-                                    orgId,
-                                  };
-                                  field.onChange(newRoles);
-                                }}
-                                isMulti={false}
-                              />
+                                  searchPlaceholder="Select an organization"
+                                  disabled={isLoadingOrgs}
+                                  onSelect={(value) => {
+                                    const orgId = safeParseInt(value as string);
+                                    if (orgId == undefined) {
+                                      toast.error("Invalid orgId");
+                                      return;
+                                    }
+                                    const newRoles = [
+                                      ...(field.value as RoleEntry[]),
+                                    ];
+                                    newRoles[index] = {
+                                      roleName:
+                                        newRoles[index]?.roleName ?? "editor",
+                                      orgId,
+                                    };
+                                    field.onChange(newRoles);
+                                  }}
+                                  isMulti={false}
+                                />
 
-                              <Button
-                                variant="ghost"
-                                type="button"
-                                size="sm"
-                                onClick={() => {
-                                  const newRoles = [
-                                    ...(field.value as RoleEntry[]),
-                                  ];
-                                  newRoles.splice(index, 1);
-                                  field.onChange(newRoles);
-                                }}
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          ),
+                                <Button
+                                  variant="ghost"
+                                  type="button"
+                                  size="sm"
+                                  onClick={() => {
+                                    const newRoles = [
+                                      ...(field.value as RoleEntry[]),
+                                    ];
+                                    newRoles.splice(index, 1);
+                                    field.onChange(newRoles);
+                                  }}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            );
+                          },
                         )}
 
                         <div className="flex items-center justify-between gap-2">
@@ -761,9 +796,9 @@ export default function AdminGrantAccessModal({
                     disabled={!canSubmit}
                   >
                     {isCreatingNew
-                      ? "Create & Grant Access"
+                      ? "Create & Manage Access"
                       : selectedUserId
-                        ? "Grant Access"
+                        ? "Manage Access"
                         : "Select or Create User"}
                   </Button>
                 </div>

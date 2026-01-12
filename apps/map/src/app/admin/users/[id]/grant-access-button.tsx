@@ -19,7 +19,7 @@ export const GrantAccessButton = () => {
       )}
     >
       <UserPlus className="mr-2 h-4 w-4" />
-      Grant Access
+      Manage Access
     </button>
   );
 };

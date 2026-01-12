@@ -154,10 +154,7 @@ export const MyUsersTable = () => {
   const [selectedStatuses, setSelectedStatuses] = useState<UserStatus[]>([
     "active",
   ]);
-  const [selectedRoles, setSelectedRoles] = useState<UserRole[]>([
-    "admin",
-    "editor",
-  ]);
+  const [selectedRoles, setSelectedRoles] = useState<UserRole[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
   const { pagination, setPagination } = usePagination({
@@ -232,7 +229,7 @@ export const MyUsersTable = () => {
             />
             <UserRoleFilter
               onRoleSelect={handleRoleSelect}
-              selectedRoles={selectedRoles}
+              selectedRoles={selectedRoles ?? []}
             />
           </>
         }
@@ -383,7 +380,7 @@ const columns: TableOptions<
                 });
               }}
             >
-              <div>Grant Access</div>
+              <div>Manage Access</div>
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={(e) => {

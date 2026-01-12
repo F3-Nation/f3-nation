@@ -391,7 +391,7 @@ export default function UserModal({
                         className="w-full"
                       >
                         <UserPlus className="mr-2 h-4 w-4" />
-                        Grant Access
+                        Manage Access
                       </Button>
                       <p className="text-xs text-muted-foreground text-center">
                         Progress here will be lost

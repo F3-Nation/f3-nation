@@ -1,5 +1,6 @@
 import { ORPCError, os } from "@orpc/server";
 import type { RequestHeadersPluginContext } from "@orpc/server/plugins";
+import { MemoryRatelimiter } from "@orpc/experimental-ratelimit/memory";
 
 import type { Session } from "@acme/auth";
 import { auth } from "@acme/auth";
@@ -16,7 +17,30 @@ export interface Context {
   db: AppDb;
 }
 
-const base = os.$context<BaseContext>();
+const isDev = process.env.NODE_ENV === "development";
+
+const limiter = new MemoryRatelimiter({
+  maxRequests: isDev ? 10000 : 200,
+  window: 60000, // 60 seconds
+});
+
+const base = os.$context<BaseContext>().use(async ({ context, next }) => {
+  const key =
+    context.reqHeaders?.get("x-forwarded-for") ??
+    context.reqHeaders?.get("x-real-ip") ??
+    "anonymous";
+
+  const result = await limiter.limit(key);
+
+  if (!result.success) {
+    const retryAfterMs = result.reset ? result.reset - Date.now() : 60000;
+    throw new ORPCError("TOO_MANY_REQUESTS", {
+      message: `Rate limit exceeded. Try again in ${Math.ceil(retryAfterMs / 1000)}s`,
+    });
+  }
+
+  return next({ context });
+});
 
 export const withSessionAndDb = base.use(async ({ context, next }) => {
   const session = await getSession({ context });
