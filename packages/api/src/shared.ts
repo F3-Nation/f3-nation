@@ -1,13 +1,13 @@
-import type { RequestHeadersPluginContext } from "@orpc/server/plugins";
 import { ORPCError, os } from "@orpc/server";
+import type { RequestHeadersPluginContext } from "@orpc/server/plugins";
 
 import type { Session } from "@acme/auth";
-import type { AppDb } from "@acme/db/client";
 import { auth } from "@acme/auth";
 import { and, eq, gt, isNull, or, schema, sql } from "@acme/db";
+import type { AppDb } from "@acme/db/client";
 import { db } from "@acme/db/client";
 import { env } from "@acme/env";
-import { Header } from "@acme/shared/common/enums";
+import { Client, Header } from "@acme/shared/common/enums";
 
 type BaseContext = RequestHeadersPluginContext;
 
@@ -89,8 +89,14 @@ export const apiKeyProcedure = withSessionAndDb.use(
 export const getSession = async ({ context }: { context: BaseContext }) => {
   let session: Session | null = null;
 
-  session = await auth();
-  if (session) return session;
+  // Skip auth() call for SSG requests to allow static generation
+  // The SSG client uses API key auth instead of session auth
+  const isSSGRequest =
+    context.reqHeaders?.get(Header.Client) === Client.ORPC_SSG;
+  if (!isSSGRequest) {
+    session = await auth();
+    if (session) return session;
+  }
 
   // If there is no session, check for Bearer token ("api key") and attempt to build a replica session
   const authHeader =
