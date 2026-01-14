@@ -142,7 +142,10 @@ export const eventTypeRouter = {
     }),
   byOrgId: protectedProcedure
     .input(
-      z.object({ orgId: z.coerce.number(), isActive: z.boolean().optional() }),
+      z.object({
+        orgId: z.coerce.number(),
+        isActive: z.coerce.boolean().optional(),
+      }),
     )
     .route({
       method: "GET",

@@ -140,6 +140,14 @@ export const ACTIONS = {
   LOCATION_EDIT_DELETE: "location-edit-delete",
   AO_EDIT_DELETE: "ao-edit-delete",
 
+  // Event Type Management
+  ADD_EVENT_TYPE_CALLBACK_ID: "add-event-type-id",
+  EDIT_DELETE_EVENT_TYPE_CALLBACK_ID: "edit-delete-event-type-id",
+  CALENDAR_ADD_EVENT_TYPE_NAME: "calendar-add-event-type-name",
+  CALENDAR_ADD_EVENT_TYPE_CATEGORY: "calendar-add-event-type-category",
+  CALENDAR_ADD_EVENT_TYPE_ACRONYM: "calendar-add-event-type-acronym",
+  EVENT_TYPE_EDIT_DELETE: "event-type-edit-delete",
+
   // Admin
   DB_ADMIN_CALLBACK_ID: "db-admin-id",
   DB_ADMIN_UPGRADE: "db-admin-upgrade",

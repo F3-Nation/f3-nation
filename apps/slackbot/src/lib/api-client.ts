@@ -196,6 +196,58 @@ export const api = {
         body: JSON.stringify({ orgType: input.orgType }),
       }),
   },
+
+  eventType: {
+    all: (params: {
+      orgIds?: number[];
+      statuses?: ("active" | "inactive")[];
+      ignoreNationEventTypes?: boolean;
+    }) => {
+      const searchParams = new URLSearchParams();
+      if (params.orgIds) {
+        params.orgIds.forEach((id) =>
+          searchParams.append("orgIds", id.toString()),
+        );
+      }
+      if (params.statuses) {
+        params.statuses.forEach((s) => searchParams.append("statuses", s));
+      }
+      if (params.ignoreNationEventTypes) {
+        searchParams.append("ignoreNationEventTypes", "true");
+      }
+      return apiRequest<{
+        eventTypes: EventTypeResponse[];
+        totalCount: number;
+      }>(`/event-type?${searchParams.toString()}`);
+    },
+
+    byOrgId: (input: { orgId: number; isActive?: boolean }) => {
+      const searchParams = new URLSearchParams();
+      if (input.isActive !== undefined) {
+        searchParams.append("isActive", input.isActive.toString());
+      }
+      const query = searchParams.toString();
+      return apiRequest<{ eventTypes: EventTypeResponse[] }>(
+        `/event-type/org/${input.orgId}${query ? `?${query}` : ""}`,
+      );
+    },
+
+    byId: (input: { id: number }) =>
+      apiRequest<{ eventType: EventTypeResponse | null }>(
+        `/event-type/id/${input.id}`,
+      ),
+
+    crupdate: (input: EventTypeInput) =>
+      apiRequest<{ eventType: EventTypeResponse | null }>(`/event-type`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+
+    delete: (id: number) =>
+      apiRequest<void>(`/event-type/id/${id}`, {
+        method: "DELETE",
+      }),
+  },
 };
 
 export type ApiClient = typeof api;
@@ -227,4 +279,27 @@ interface OrgInput {
   isActive?: boolean;
   logoUrl?: string | null;
   meta?: Record<string, string>;
+}
+
+/**
+ * Types for event-type API responses
+ */
+interface EventTypeResponse {
+  id: number;
+  name: string;
+  description: string | null;
+  eventCategory: string;
+  acronym: string | null;
+  specificOrgId: number | null;
+  isActive: boolean;
+}
+
+interface EventTypeInput {
+  id?: number;
+  name: string;
+  description?: string | null;
+  eventCategory: string;
+  acronym?: string | null;
+  specificOrgId?: number | null;
+  isActive?: boolean;
 }

@@ -7,6 +7,7 @@ import type {
 } from "../../types/bolt-types";
 import { manageLocations, registerLocationHandlers } from "./location";
 import { manageAOs, registerAOHandlers } from "./ao";
+import { manageEventTypes, registerEventTypeHandlers } from "./event-type";
 import { createNavContext, navigateToView } from "../../lib/view-navigation";
 
 /**
@@ -88,11 +89,32 @@ export function buildCalendarConfigModal(_context: ExtendedContext) {
           },
           action_id: ACTIONS.CALENDAR_MANAGE_EVENT_INSTANCES,
         },
-        {
-          type: "button",
-          text: { type: "plain_text", text: ":runner: Manage Event Types" },
-          action_id: ACTIONS.CALENDAR_MANAGE_EVENT_TYPES,
-        },
+      ],
+    },
+    {
+      type: "section",
+      text: {
+        type: "plain_text",
+        text: ":runner: Manage Event Types",
+      },
+      accessory: {
+        type: "overflow",
+        action_id: ACTIONS.CALENDAR_MANAGE_EVENT_TYPES,
+        options: [
+          {
+            text: { type: "plain_text", text: "Add Event Type" },
+            value: "add",
+          },
+          {
+            text: { type: "plain_text", text: "Edit or Delete Event Types" },
+            value: "edit",
+          },
+        ],
+      },
+    },
+    {
+      type: "actions",
+      elements: [
         {
           type: "button",
           text: { type: "plain_text", text: ":label: Manage Event Tags" },
@@ -145,11 +167,14 @@ export function registerCalendarFeature(app: App) {
   app.action(ACTIONS.CALENDAR_MANAGE_AOS, manageAOs);
   registerAOHandlers(app);
 
+  // Event Types
+  app.action(ACTIONS.CALENDAR_MANAGE_EVENT_TYPES, manageEventTypes);
+  registerEventTypeHandlers(app);
+
   // Placeholder handlers for other management options
   const managementActions = [
     ACTIONS.CALENDAR_MANAGE_SERIES,
     ACTIONS.CALENDAR_MANAGE_EVENT_INSTANCES,
-    ACTIONS.CALENDAR_MANAGE_EVENT_TYPES,
     ACTIONS.CALENDAR_MANAGE_EVENT_TAGS,
   ] as const;
 

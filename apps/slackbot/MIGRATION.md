@@ -576,7 +576,7 @@ export const attendanceRouter = {
   - [x] Implement location management
   - [ ] Implement event series management
   - [ ] Implement event instance management
-  - [ ] Implement event type management
+  - [x] Implement event type management
   - [ ] Implement event tag management
   - [ ] Implement general calendar settings
 - [ ] Implement preblast creation/editing

@@ -331,7 +331,7 @@ export async function buildLocationListForm(args: TypedActionArgs) {
       return {
         type: "modal",
         callback_id: ACTIONS.EDIT_DELETE_LOCATION_CALLBACK_ID,
-        title: { type: "plain_text", text: "Edit/Delete a Location" },
+        title: { type: "plain_text", text: "Manage Locations" },
         blocks:
           blocks.length > 0
             ? blocks
@@ -383,7 +383,7 @@ export async function handleLocationEditDelete(args: TypedActionArgs) {
           ],
         };
       },
-      { showLoading: true, loadingTitle: "Loading Location Details" },
+      { showLoading: true, loadingTitle: "Loading Location" },
     );
   } else if (value === "delete") {
     try {
