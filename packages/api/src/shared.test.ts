@@ -10,7 +10,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // Mock the MemoryRatelimiter before importing shared.ts
 const mockLimit = vi.fn();
 const maxRequests = 10;
-// const maxRequests = 200;
 
 vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   MemoryRatelimiter: vi.fn().mockImplementation(() => ({
@@ -161,5 +160,44 @@ describe("Rate Limiting Middleware", () => {
     await client.test();
 
     expect(mockLimit).toHaveBeenCalledWith("192.168.1.1");
+  });
+
+  it("should extract first IP from x-forwarded-for chain", async () => {
+    mockLimit.mockResolvedValue({
+      success: true,
+      limit: maxRequests,
+      remaining: 9,
+      reset: Date.now() + 60000,
+    });
+
+    // Simulate proxy chain: client -> proxy1 -> proxy2 -> server
+    const mockHeaders = new Headers({
+      "x-forwarded-for": "203.0.113.50, 70.41.3.18, 150.172.238.178",
+    });
+
+    const client = await createTestClientWithHeaders(mockHeaders);
+    await client.test();
+
+    // Should use the first IP (the actual client)
+    expect(mockLimit).toHaveBeenCalledWith("203.0.113.50");
+  });
+
+  it("should handle x-forwarded-for with spaces around IPs", async () => {
+    mockLimit.mockResolvedValue({
+      success: true,
+      limit: maxRequests,
+      remaining: 9,
+      reset: Date.now() + 60000,
+    });
+
+    const mockHeaders = new Headers({
+      "x-forwarded-for": "  192.168.1.100  , 10.0.0.1",
+    });
+
+    const client = await createTestClientWithHeaders(mockHeaders);
+    await client.test();
+
+    // Should trim whitespace from the first IP
+    expect(mockLimit).toHaveBeenCalledWith("192.168.1.100");
   });
 });
