@@ -572,8 +572,8 @@ export const attendanceRouter = {
 ### Phase 2: Calendar & Backblast (Weeks 4-6)
 
 - [ ] Implement calendar management
-  - [ ] Implement "AO" management (AOs are sub-regions)
-  - [ ] Implement location management
+  - [x] Implement "AO" management (AOs are sub-regions)
+  - [x] Implement location management
   - [ ] Implement event series management
   - [ ] Implement event instance management
   - [ ] Implement event type management

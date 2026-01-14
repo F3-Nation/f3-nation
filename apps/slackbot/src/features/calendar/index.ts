@@ -6,6 +6,7 @@ import type {
   TypedActionArgs,
 } from "../../types/bolt-types";
 import { manageLocations, registerLocationHandlers } from "./location";
+import { manageAOs, registerAOHandlers } from "./ao";
 import { createNavContext, navigateToView } from "../../lib/view-navigation";
 
 /**
@@ -48,13 +49,29 @@ export function buildCalendarConfigModal(_context: ExtendedContext) {
       },
     },
     {
+      type: "section",
+      text: {
+        type: "plain_text",
+        text: ":world_map: Manage AOs",
+      },
+      accessory: {
+        type: "overflow",
+        action_id: ACTIONS.CALENDAR_MANAGE_AOS,
+        options: [
+          {
+            text: { type: "plain_text", text: "Add AO" },
+            value: "add",
+          },
+          {
+            text: { type: "plain_text", text: "Edit or Deactivate AOs" },
+            value: "edit",
+          },
+        ],
+      },
+    },
+    {
       type: "actions",
       elements: [
-        {
-          type: "button",
-          text: { type: "plain_text", text: ":world_map: Manage AOs" },
-          action_id: ACTIONS.CALENDAR_MANAGE_AOS,
-        },
         {
           type: "button",
           text: {
@@ -124,9 +141,12 @@ export function registerCalendarFeature(app: App) {
   app.action(ACTIONS.CALENDAR_MANAGE_LOCATIONS, manageLocations);
   registerLocationHandlers(app);
 
+  // AOs
+  app.action(ACTIONS.CALENDAR_MANAGE_AOS, manageAOs);
+  registerAOHandlers(app);
+
   // Placeholder handlers for other management options
   const managementActions = [
-    ACTIONS.CALENDAR_MANAGE_AOS,
     ACTIONS.CALENDAR_MANAGE_SERIES,
     ACTIONS.CALENDAR_MANAGE_EVENT_INSTANCES,
     ACTIONS.CALENDAR_MANAGE_EVENT_TYPES,

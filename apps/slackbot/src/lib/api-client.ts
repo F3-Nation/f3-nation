@@ -143,6 +143,88 @@ export const api = {
         method: "DELETE",
       }),
   },
+
+  org: {
+    all: (params: {
+      orgTypes: ("ao" | "region" | "area" | "sector" | "nation")[];
+      parentOrgIds?: number[];
+      statuses?: ("active" | "inactive")[];
+      searchTerm?: string;
+      pageIndex?: number;
+      pageSize?: number;
+    }) => {
+      const searchParams = new URLSearchParams();
+      params.orgTypes.forEach((t) => searchParams.append("orgTypes", t));
+      if (params.parentOrgIds) {
+        params.parentOrgIds.forEach((id) =>
+          searchParams.append("parentOrgIds", id.toString()),
+        );
+      }
+      if (params.statuses) {
+        params.statuses.forEach((s) => searchParams.append("statuses", s));
+      }
+      if (params.searchTerm)
+        searchParams.append("searchTerm", params.searchTerm);
+      if (params.pageIndex !== undefined)
+        searchParams.append("pageIndex", params.pageIndex.toString());
+      if (params.pageSize !== undefined)
+        searchParams.append("pageSize", params.pageSize.toString());
+      return apiRequest<{
+        orgs: OrgResponse[];
+        total: number;
+      }>(`/org?${searchParams.toString()}`);
+    },
+
+    byId: (input: { id: number; orgType?: string }) => {
+      const searchParams = new URLSearchParams();
+      if (input.orgType) searchParams.append("orgType", input.orgType);
+      const query = searchParams.toString();
+      return apiRequest<{ org: OrgResponse | null }>(
+        `/org/id/${input.id}${query ? `?${query}` : ""}`,
+      );
+    },
+
+    crupdate: (input: OrgInput) =>
+      apiRequest<{ org: OrgResponse | null }>(`/org`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+
+    delete: (input: { id: number; orgType?: string }) =>
+      apiRequest<{ orgId: number }>(`/org/delete/${input.id}`, {
+        method: "DELETE",
+        body: JSON.stringify({ orgType: input.orgType }),
+      }),
+  },
 };
 
 export type ApiClient = typeof api;
+
+/**
+ * Types for org API responses
+ */
+interface OrgResponse {
+  id: number;
+  parentId: number | null;
+  name: string;
+  orgType: "ao" | "region" | "area" | "sector" | "nation";
+  defaultLocationId: number | null;
+  description: string | null;
+  isActive: boolean;
+  logoUrl: string | null;
+  website: string | null;
+  email: string | null;
+  meta: Record<string, string> | null;
+}
+
+interface OrgInput {
+  id?: number;
+  parentId?: number;
+  orgType: "ao" | "region" | "area" | "sector" | "nation";
+  name: string;
+  description?: string | null;
+  defaultLocationId?: number | null;
+  isActive?: boolean;
+  logoUrl?: string | null;
+  meta?: Record<string, string>;
+}
