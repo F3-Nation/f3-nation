@@ -80,3 +80,55 @@ export interface SuccessActionResponse {
   success: boolean;
   action: string;
 }
+
+/**
+ * Location Response type
+ */
+export interface LocationResponse {
+  id: number;
+  locationName: string;
+  regionId: number | null;
+  regionName: string | null;
+  description: string | null;
+  isActive: boolean;
+  latitude: number | null;
+  longitude: number | null;
+  email: string | null;
+  addressStreet: string | null;
+  addressStreet2: string | null;
+  addressCity: string | null;
+  addressState: string | null;
+  addressZip: string | null;
+  addressCountry: string | null;
+  meta: Record<string, unknown> | null;
+  created: string;
+}
+
+/**
+ * Location list response
+ */
+export interface LocationListResponse {
+  locations: LocationResponse[];
+  totalCount: number;
+}
+
+/**
+ * Location input for creation/update
+ */
+export interface LocationInput {
+  id?: number;
+  name: string;
+  orgId: number;
+  description?: string | null;
+  latitude: number;
+  longitude: number;
+  email?: string | null;
+  addressStreet?: string | null;
+  addressStreet2?: string | null;
+  addressCity?: string | null;
+  addressState?: string | null;
+  addressZip?: string | null;
+  addressCountry?: string | null;
+  isActive?: boolean;
+  meta?: Record<string, unknown> | null;
+}

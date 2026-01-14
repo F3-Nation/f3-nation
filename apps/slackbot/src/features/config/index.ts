@@ -1,6 +1,7 @@
 import type { App, BlockAction } from "@slack/bolt";
 import { ACTIONS } from "../../constants/actions";
 import { buildWelcomeConfigModal } from "../welcome";
+import { buildCalendarConfigModal } from "../calendar";
 import { api } from "../../lib/api-client";
 import { logger } from "../../lib/logger";
 import type { RegionSettings } from "../../types";
@@ -11,6 +12,8 @@ import type {
   TypedCommandArgs,
   TypedViewArgs,
 } from "../../types/bolt-types";
+import { createNavContext, navigateToView } from "../../lib/view-navigation";
+import { stringifyNavMetadata } from "../../types/bolt-types";
 
 /**
  * Build the main configuration menu modal
@@ -37,6 +40,11 @@ export function buildConfigModal(context: ExtendedContext) {
           type: "button",
           text: { type: "plain_text", text: ":gear: General Settings" },
           action_id: ACTIONS.OPEN_GENERAL_CONFIG,
+        },
+        {
+          type: "button",
+          text: { type: "plain_text", text: ":calendar: Calendar Settings" },
+          action_id: ACTIONS.OPEN_CALENDAR_CONFIG,
         },
       ],
     });
@@ -67,7 +75,9 @@ export function registerConfigFeature(app: App) {
     "/f3-nation-settings",
     async ({ ack, body, client, context }: TypedCommandArgs) => {
       await ack();
-      const modal = buildConfigModal(context);
+      const modal: any = buildConfigModal(context);
+      // Initialize with depth 1
+      modal.private_metadata = stringifyNavMetadata({ _navDepth: 1 });
       await client.views.open({
         trigger_id: body.trigger_id,
         view: modal,
@@ -76,60 +86,57 @@ export function registerConfigFeature(app: App) {
   );
 
   // Global shortcut
-  app.shortcut(
-    "settings_shortcut",
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    async ({ ack, shortcut, client, context }: any) => {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-      await ack();
-      const modal = buildConfigModal(context as ExtendedContext);
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-      await client.views.open({
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-        trigger_id: shortcut.trigger_id,
-        view: modal,
-      });
-    },
-  );
+  app.shortcut("settings_shortcut", async (args: any) => {
+    const { ack, shortcut, client, context } = args;
+    await ack();
+    const modal: any = buildConfigModal(context as ExtendedContext);
+    // Initialize with depth 1
+    modal.private_metadata = stringifyNavMetadata({ _navDepth: 1 });
+    await client.views.open({
+      trigger_id: shortcut.trigger_id,
+      view: modal,
+    });
+  });
 
   // Action: Open Main Config Modal (from Settings button)
-  app.action(
-    ACTIONS.SETTINGS_BUTTON,
-    async ({ ack, body, client, context }: TypedActionArgs) => {
-      await ack();
-      const modal = buildConfigModal(context);
-      await client.views.open({
-        trigger_id: (body as BlockAction).trigger_id,
-        view: modal,
-      });
-    },
-  );
+  app.action(ACTIONS.SETTINGS_BUTTON, async (args: TypedActionArgs) => {
+    const { ack, client, body, context } = args;
+    await ack();
+    const modal: any = buildConfigModal(context);
+    modal.private_metadata = stringifyNavMetadata({ _navDepth: 1 });
+    await client.views.open({
+      trigger_id: (body as BlockAction).trigger_id,
+      view: modal,
+    });
+  });
 
   // Action: Open Welcome Config
-  app.action(
-    ACTIONS.OPEN_WELCOME_CONFIG,
-    async ({ ack, body, client, context }: TypedActionArgs) => {
-      await ack();
-      const modal = buildWelcomeConfigModal(context.regionSettings);
-      await client.views.push({
-        trigger_id: (body as BlockAction).trigger_id,
-        view: modal,
-      });
-    },
-  );
+  app.action(ACTIONS.OPEN_WELCOME_CONFIG, async (args: TypedActionArgs) => {
+    const { ack, context } = args;
+    await ack();
+    const navCtx = createNavContext(args);
+    await navigateToView(navCtx, () =>
+      buildWelcomeConfigModal(context.regionSettings),
+    );
+  });
 
   // Action: Open General Config
-  app.action(
-    ACTIONS.OPEN_GENERAL_CONFIG,
-    async ({ ack, body, client, context }: TypedActionArgs) => {
-      await ack();
-      const modal = buildGeneralConfigModal(context.regionSettings);
-      await client.views.push({
-        trigger_id: (body as BlockAction).trigger_id,
-        view: modal,
-      });
-    },
-  );
+  app.action(ACTIONS.OPEN_GENERAL_CONFIG, async (args: TypedActionArgs) => {
+    const { ack, context } = args;
+    await ack();
+    const navCtx = createNavContext(args);
+    await navigateToView(navCtx, () =>
+      buildGeneralConfigModal(context.regionSettings),
+    );
+  });
+
+  // Action: Open Calendar Config
+  app.action(ACTIONS.OPEN_CALENDAR_CONFIG, async (args: TypedActionArgs) => {
+    const { ack, context } = args;
+    await ack();
+    const navCtx = createNavContext(args);
+    await navigateToView(navCtx, () => buildCalendarConfigModal(context));
+  });
 
   // Action handler for saving general settings
   app.view(

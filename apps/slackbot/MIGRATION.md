@@ -184,6 +184,33 @@ Based on analysis of existing apps (`apps/map`, `apps/api`):
 
 From `AGENTS.md`: Use structured logging. For production, integrate with GCP Cloud Logging similar to Python's `StructuredLogHandler`.
 
+### 2.5 Modal Navigation & Stack Management
+
+Slack has two critical limits that this bot addresses via a unified navigation system:
+
+- **3-View Push Limit**: Slack only allows 3 modals in a stack.
+- **3-Second Trigger ID Expiration**: `trigger_id` must be used within 3 seconds.
+
+#### The Pattern: "Immediate Load, Lazy Hydrate"
+
+Use `navigateToView()` from `src/lib/view-navigation.ts` for all modal transitions.
+
+- **Automatic Depth Tracking**: The utility tracks `_navDepth` in `private_metadata`. It uses `views.push` for depth < 2 and automatically switches to `views.update` for depth ≥ 2.
+- **Loading Screens**: For any view requiring async data fetching (oRPC), set `showLoading: true`. This immediately pushes/updates a loading modal to satisfy the 3-second `trigger_id` limit, then hydrates with real data once available.
+
+```typescript
+// Example: Navigation with async data
+const navCtx = createNavContext(args);
+await navigateToView(
+  navCtx,
+  async () => {
+    const data = await api.feature.getData();
+    return buildFeatureModal(data);
+  },
+  { showLoading: true, loadingTitle: "Loading..." },
+);
+```
+
 ---
 
 ## 3. File Mapping: Python → TypeScript
@@ -537,19 +564,25 @@ export const attendanceRouter = {
 ### Phase 1: Core Features (Weeks 2-3)
 
 - [x] Migrate routing infrastructure
-- [] Implement `welcome` feature (team_join event)
+- [x] Implement `welcome` feature (team_join event)
 - [x] Implement `help` feature (commands + app_mention)
-- [ ] Implement basic `config` feature
-- [ ] Add required Slack API endpoints to `packages/api`
+- [x] Implement basic `config` feature
+- [x] Add required Slack API endpoints to `packages/api`
 
 ### Phase 2: Calendar & Backblast (Weeks 4-6)
 
-- [ ] Implement calendar home view
-- [ ] Implement event series management
-- [ ] Implement event instance management
+- [ ] Implement calendar management
+  - [ ] Implement "AO" management (AOs are sub-regions)
+  - [ ] Implement location management
+  - [ ] Implement event series management
+  - [ ] Implement event instance management
+  - [ ] Implement event type management
+  - [ ] Implement event tag management
+  - [ ] Implement general calendar settings
 - [ ] Implement preblast creation/editing
 - [ ] Implement backblast creation/editing
 - [ ] Add preblast/backblast/attendance API endpoints
+- [ ] Implement calendar home view
 
 ### Phase 3: Extended Features (Weeks 7-8)
 
@@ -581,7 +614,7 @@ export const attendanceRouter = {
 | ------------------------------ | ---------- | ------ | --------------------------------------- |
 | OAuth token migration          | Medium     | High   | Export existing tokens, test thoroughly |
 | Database schema differences    | Low        | Medium | Drizzle schema matches F3-Data-Models   |
-| Complex modal state management | Medium     | Medium | Thorough testing of multi-step flows    |
+| Complex modal state management | Low        | Medium | Mitigated via `navigateToView` utility  |
 | Strava OAuth compatibility     | Medium     | Medium | Maintain same redirect URIs             |
 | Performance regression         | Low        | Medium | Benchmark critical paths                |
 | Feature parity gaps            | Medium     | High   | Comprehensive feature checklist         |
@@ -631,4 +664,4 @@ The existing `app_manifest.template.json` should be updated to point to the new 
 ---
 
 _Document created: 2025-12-25_
-_Last updated: 2025-12-25_
+_Last updated: 2026-01-11_

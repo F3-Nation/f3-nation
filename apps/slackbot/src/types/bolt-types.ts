@@ -106,3 +106,26 @@ export const BlockBuilder = {
     action_id: actionId,
   }),
 };
+
+/** Metadata stored in view.private_metadata for navigation tracking */
+export interface NavigationMetadata {
+  _navDepth: number;
+  _prevScreen?: string;
+  _isLoading?: boolean;
+  [key: string]: unknown; // Allow feature-specific data
+}
+
+/** Helper to parse navigation metadata */
+export function parseNavMetadata(raw?: string): NavigationMetadata {
+  if (!raw) return { _navDepth: 0 };
+  try {
+    return JSON.parse(raw) as NavigationMetadata;
+  } catch {
+    return { _navDepth: 0 };
+  }
+}
+
+/** Helper to stringify navigation metadata */
+export function stringifyNavMetadata(meta: NavigationMetadata): string {
+  return JSON.stringify(meta);
+}

@@ -67,6 +67,19 @@ export const checkHasRoleOnOrg = async ({
     }
   }
 
+  // Check for Global Admin (orgId: -1)
+  const isGlobalAdmin = session.roles?.some(
+    (r) => r.orgId === -1 && r.roleName === "admin",
+  );
+  if (isGlobalAdmin) {
+    return {
+      success: true,
+      orgId: -1,
+      roleName: "admin",
+      mode: "mtndev-override", // Reusing this mode to avoid changing return type definition
+    };
+  }
+
   const hasDirectAccessForThisOrg = session.roles?.some(
     (r) =>
       (r.roleName === "admin" || r.roleName === roleName) && r.orgId === orgId,

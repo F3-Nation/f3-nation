@@ -10,6 +10,7 @@ import { App, LogLevel } from "@slack/bolt";
 import { registerHelpFeature } from "./features/help";
 import { registerWelcomeFeature } from "./features/welcome";
 import { registerConfigFeature } from "./features/config";
+import { registerCalendarFeature } from "./features/calendar";
 import { withRegionContext } from "./lib/middleware";
 import { logger } from "./lib/logger";
 
@@ -34,6 +35,7 @@ app.use(withRegionContext);
 registerHelpFeature(app);
 registerWelcomeFeature(app);
 registerConfigFeature(app);
+registerCalendarFeature(app);
 
 // Health check endpoint for HTTP mode
 // eslint-disable-next-line @typescript-eslint/require-await

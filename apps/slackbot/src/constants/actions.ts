@@ -12,6 +12,10 @@ export const ACTIONS = {
   DEBUG_ID: "debug_id",
   DEBUG: "debug",
 
+  // Navigation
+  NAV_BACK: "nav-back",
+  NAV_LOADING: "nav-loading",
+
   // Help
   CONFIG_HELP_MENU: "help_menu_config",
   CONFIG_HELP_MENU_CLOSE: "help-menu-close",
@@ -30,6 +34,10 @@ export const ACTIONS = {
   CONFIG_DESTINATION_CHANNEL: "config-destination-channel",
   OPEN_WELCOME_CONFIG: "open-welcome-config",
   OPEN_GENERAL_CONFIG: "open-general-config",
+  OPEN_CALENDAR_CONFIG: "open-calendar-config",
+  CALENDAR_CONFIG_CALLBACK_ID: "calendar-config-id",
+  CALENDAR_CONFIG_GENERAL: "calendar-config-general",
+  CALENDAR_CONFIG_GENERAL_CALLBACK_ID: "calendar-config-general-id",
 
   // Calendar
   OPEN_CALENDAR_BUTTON: "open-calendar",
@@ -106,7 +114,20 @@ export const ACTIONS = {
   CALENDAR_MANAGE_AOS: "calendar-manage-aos",
   CALENDAR_MANAGE_SERIES: "calendar-manage-series",
   CALENDAR_MANAGE_EVENT_TYPES: "calendar-manage-event-types",
+  CALENDAR_MANAGE_EVENT_TAGS: "calendar-manage-event-tags",
+  CALENDAR_MANAGE_EVENT_INSTANCES: "calendar-manage-event-instances",
+  CALENDAR_ADD_LOCATION_NAME: "calendar-add-location-name",
+  CALENDAR_ADD_LOCATION_DESCRIPTION: "calendar-add-location-description",
+  CALENDAR_ADD_LOCATION_LAT: "calendar-add-location-lat",
+  CALENDAR_ADD_LOCATION_LON: "calendar-add-location-lon",
+  CALENDAR_ADD_LOCATION_STREET: "calendar-add-location-street",
+  CALENDAR_ADD_LOCATION_STREET2: "calendar-add-location-street2",
+  CALENDAR_ADD_LOCATION_CITY: "calendar-add-location-city",
+  CALENDAR_ADD_LOCATION_STATE: "calendar-add-location-state",
+  CALENDAR_ADD_LOCATION_ZIP: "calendar-add-location-zip",
+  CALENDAR_ADD_LOCATION_COUNTRY: "calendar-add-location-country",
   ADD_LOCATION_CALLBACK_ID: "add-location-id",
+  EDIT_DELETE_LOCATION_CALLBACK_ID: "edit-delete-location-id",
   ADD_AO_CALLBACK_ID: "add-ao-id",
   ADD_SERIES_CALLBACK_ID: "add-series-id",
   SERIES_EDIT_DELETE: "series-edit-delete",

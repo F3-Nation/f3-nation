@@ -8,6 +8,9 @@ import type {
   UpsertUserInput,
   GetOrCreateSpaceInput,
   GetOrCreateUserInput,
+  LocationListResponse,
+  LocationResponse,
+  LocationInput,
 } from "../types/api-types";
 import { logger } from "./logger";
 
@@ -32,7 +35,13 @@ async function apiRequest<T>(
       ...options,
       headers: {
         "Content-Type": "application/json",
-        ...(API_KEY ? { "x-api-key": API_KEY } : {}),
+        ...(API_KEY
+          ? {
+              "x-api-key": API_KEY,
+              Authorization: `Bearer ${API_KEY}`,
+              client: "slackbot",
+            }
+          : {}),
         ...options.headers,
       },
     });
@@ -96,6 +105,43 @@ export const api = {
       apiRequest<RegionResponse | null>(
         `/slack/region?teamId=${encodeURIComponent(teamId)}`,
       ),
+  },
+
+  location: {
+    all: (params: {
+      regionIds?: number[];
+      searchTerm?: string;
+      onlyMine?: boolean;
+    }) => {
+      const searchParams = new URLSearchParams();
+      if (params.searchTerm)
+        searchParams.append("searchTerm", params.searchTerm);
+      if (params.onlyMine) searchParams.append("onlyMine", "true");
+      if (params.regionIds) {
+        params.regionIds.forEach((id) =>
+          searchParams.append("regionIds", id.toString()),
+        );
+      }
+      return apiRequest<LocationListResponse>(
+        `/location?${searchParams.toString()}`,
+      );
+    },
+
+    crupdate: (input: LocationInput) =>
+      apiRequest<{ location: LocationResponse }>(`/location`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+
+    byId: (input: { id: number }) =>
+      apiRequest<{ location: LocationResponse | null }>(
+        `/location/id/${input.id}`,
+      ),
+
+    delete: (id: number) =>
+      apiRequest<{ locationId: number }>(`/location/delete/${id}`, {
+        method: "DELETE",
+      }),
   },
 };
 
