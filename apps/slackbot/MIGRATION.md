@@ -577,7 +577,7 @@ export const attendanceRouter = {
   - [ ] Implement event series management
   - [ ] Implement event instance management
   - [x] Implement event type management
-  - [ ] Implement event tag management
+  - [x] Implement event tag management
   - [ ] Implement general calendar settings
 - [ ] Implement preblast creation/editing
 - [ ] Implement backblast creation/editing

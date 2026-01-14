@@ -148,6 +148,13 @@ export const ACTIONS = {
   CALENDAR_ADD_EVENT_TYPE_ACRONYM: "calendar-add-event-type-acronym",
   EVENT_TYPE_EDIT_DELETE: "event-type-edit-delete",
 
+  // Event Tag Management
+  ADD_EVENT_TAG_CALLBACK_ID: "add-event-tag-id",
+  EDIT_DELETE_EVENT_TAG_CALLBACK_ID: "edit-delete-event-tag-id",
+  CALENDAR_ADD_EVENT_TAG_NAME: "calendar-add-event-tag-name",
+  CALENDAR_ADD_EVENT_TAG_COLOR: "calendar-add-event-tag-color",
+  EVENT_TAG_EDIT_DELETE: "event-tag-edit-delete",
+
   // Admin
   DB_ADMIN_CALLBACK_ID: "db-admin-id",
   DB_ADMIN_UPGRADE: "db-admin-upgrade",

@@ -8,6 +8,7 @@ import type {
 import { manageLocations, registerLocationHandlers } from "./location";
 import { manageAOs, registerAOHandlers } from "./ao";
 import { manageEventTypes, registerEventTypeHandlers } from "./event-type";
+import { manageEventTags, registerEventTagHandlers } from "./event-tag";
 import { createNavContext, navigateToView } from "../../lib/view-navigation";
 
 /**
@@ -113,14 +114,25 @@ export function buildCalendarConfigModal(_context: ExtendedContext) {
       },
     },
     {
-      type: "actions",
-      elements: [
-        {
-          type: "button",
-          text: { type: "plain_text", text: ":label: Manage Event Tags" },
-          action_id: ACTIONS.CALENDAR_MANAGE_EVENT_TAGS,
-        },
-      ],
+      type: "section",
+      text: {
+        type: "plain_text",
+        text: ":label: Manage Event Tags",
+      },
+      accessory: {
+        type: "overflow",
+        action_id: ACTIONS.CALENDAR_MANAGE_EVENT_TAGS,
+        options: [
+          {
+            text: { type: "plain_text", text: "Add Event Tag" },
+            value: "add",
+          },
+          {
+            text: { type: "plain_text", text: "Edit or Delete Event Tags" },
+            value: "edit",
+          },
+        ],
+      },
     },
   ];
 
@@ -171,11 +183,14 @@ export function registerCalendarFeature(app: App) {
   app.action(ACTIONS.CALENDAR_MANAGE_EVENT_TYPES, manageEventTypes);
   registerEventTypeHandlers(app);
 
+  // Event Tags
+  app.action(ACTIONS.CALENDAR_MANAGE_EVENT_TAGS, manageEventTags);
+  registerEventTagHandlers(app);
+
   // Placeholder handlers for other management options
   const managementActions = [
     ACTIONS.CALENDAR_MANAGE_SERIES,
     ACTIONS.CALENDAR_MANAGE_EVENT_INSTANCES,
-    ACTIONS.CALENDAR_MANAGE_EVENT_TAGS,
   ] as const;
 
   for (const actionId of managementActions) {

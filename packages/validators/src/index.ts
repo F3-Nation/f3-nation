@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import {
   events,
+  eventTags,
   eventTypes,
   locations,
   orgs,
@@ -51,6 +52,10 @@ export const LocationSelectSchema = createSelectSchema(locations);
 // EVENT TYPE SCHEMA
 export const EventTypeInsertSchema = createInsertSchema(eventTypes);
 export const EventTypeSelectSchema = createSelectSchema(eventTypes);
+
+// EVENT TAG SCHEMA
+export const EventTagInsertSchema = createInsertSchema(eventTags);
+export const EventTagSelectSchema = createSelectSchema(eventTags);
 
 // EVENT SCHEMA
 export const EventInsertSchema = createInsertSchema(events, {

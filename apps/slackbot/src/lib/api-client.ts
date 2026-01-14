@@ -248,6 +248,58 @@ export const api = {
         method: "DELETE",
       }),
   },
+
+  eventTag: {
+    all: (params: {
+      orgIds?: number[];
+      statuses?: ("active" | "inactive")[];
+      ignoreNationEventTags?: boolean;
+    }) => {
+      const searchParams = new URLSearchParams();
+      if (params.orgIds) {
+        params.orgIds.forEach((id) =>
+          searchParams.append("orgIds", id.toString()),
+        );
+      }
+      if (params.statuses) {
+        params.statuses.forEach((s) => searchParams.append("statuses", s));
+      }
+      if (params.ignoreNationEventTags) {
+        searchParams.append("ignoreNationEventTags", "true");
+      }
+      return apiRequest<{
+        eventTags: EventTagResponse[];
+        totalCount: number;
+      }>(`/event-tag?${searchParams.toString()}`);
+    },
+
+    byOrgId: (input: { orgId: number; isActive?: boolean }) => {
+      const searchParams = new URLSearchParams();
+      if (input.isActive !== undefined) {
+        searchParams.append("isActive", input.isActive.toString());
+      }
+      const query = searchParams.toString();
+      return apiRequest<{ eventTags: EventTagResponse[] }>(
+        `/event-tag/org/${input.orgId}${query ? `?${query}` : ""}`,
+      );
+    },
+
+    byId: (input: { id: number }) =>
+      apiRequest<{ eventTag: EventTagResponse | null }>(
+        `/event-tag/id/${input.id}`,
+      ),
+
+    crupdate: (input: EventTagInput) =>
+      apiRequest<{ eventTag: EventTagResponse | null }>(`/event-tag`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+
+    delete: (id: number) =>
+      apiRequest<void>(`/event-tag/id/${id}`, {
+        method: "DELETE",
+      }),
+  },
 };
 
 export type ApiClient = typeof api;
@@ -300,6 +352,27 @@ interface EventTypeInput {
   description?: string | null;
   eventCategory: string;
   acronym?: string | null;
+  specificOrgId?: number | null;
+  isActive?: boolean;
+}
+
+/**
+ * Types for event-tag API responses
+ */
+interface EventTagResponse {
+  id: number;
+  name: string;
+  description: string | null;
+  color: string | null;
+  specificOrgId: number | null;
+  isActive: boolean;
+}
+
+interface EventTagInput {
+  id?: number;
+  name: string;
+  description?: string | null;
+  color?: string | null;
   specificOrgId?: number | null;
   isActive?: boolean;
 }
