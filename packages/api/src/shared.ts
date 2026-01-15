@@ -1,3 +1,4 @@
+import { MemoryRatelimiter } from "@orpc/experimental-ratelimit/memory";
 import { ORPCError, os } from "@orpc/server";
 import type { RequestHeadersPluginContext } from "@orpc/server/plugins";
 
@@ -7,7 +8,7 @@ import { and, eq, gt, isNull, or, schema, sql } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 import { db } from "@acme/db/client";
 import { env } from "@acme/env";
-import { Header } from "@acme/shared/common/enums";
+import { Client, Header } from "@acme/shared/common/enums";
 
 type BaseContext = RequestHeadersPluginContext;
 
@@ -16,7 +17,52 @@ export interface Context {
   db: AppDb;
 }
 
-const base = os.$context<BaseContext>();
+const isDev = process.env.NODE_ENV === "development";
+
+// Rate limit configuration
+// WARNING: This is an in-memory rate limiter. In multi-instance deployments
+// (k8s, serverless, etc.), each instance maintains separate counters.
+// Effective limit = RATE_LIMIT_MAX_REQUESTS * number_of_instances.
+// For true distributed rate limiting, use Redis/Upstash instead.
+const RATE_LIMIT_WINDOW_MS = 60000; // 60 seconds
+const RATE_LIMIT_MAX_REQUESTS = isDev ? 10000 : 200;
+
+const limiter = new MemoryRatelimiter({
+  maxRequests: RATE_LIMIT_MAX_REQUESTS,
+  window: RATE_LIMIT_WINDOW_MS,
+});
+
+/**
+ * Extract client IP from request headers.
+ * Handles x-forwarded-for chains by taking the first (client) IP.
+ */
+const getClientIP = (headers: Headers | null): string => {
+  const forwarded = headers?.get("x-forwarded-for");
+  if (forwarded) {
+    // Take first IP in chain (closest to client)
+    // x-forwarded-for format: "client, proxy1, proxy2"
+    const firstIP = forwarded.split(",")[0]?.trim();
+    if (firstIP) return firstIP;
+  }
+  return headers?.get("x-real-ip") ?? "anonymous";
+};
+
+const base = os.$context<BaseContext>().use(async ({ context, next }) => {
+  const key = getClientIP(context.reqHeaders ?? null);
+
+  const result = await limiter.limit(key);
+
+  if (!result.success) {
+    const retryAfterMs = result.reset
+      ? result.reset - Date.now()
+      : RATE_LIMIT_WINDOW_MS;
+    throw new ORPCError("TOO_MANY_REQUESTS", {
+      message: `Rate limit exceeded. Try again in ${Math.ceil(retryAfterMs / 1000)}s`,
+    });
+  }
+
+  return next({ context });
+});
 
 export const withSessionAndDb = base.use(async ({ context, next }) => {
   const session = await getSession({ context });
@@ -89,8 +135,14 @@ export const apiKeyProcedure = withSessionAndDb.use(
 export const getSession = async ({ context }: { context: BaseContext }) => {
   let session: Session | null = null;
 
-  session = await auth();
-  if (session) return session;
+  // Skip auth() call for SSG requests to allow static generation
+  // The SSG client uses API key auth instead of session auth
+  const isSSGRequest =
+    context.reqHeaders?.get(Header.Client) === Client.ORPC_SSG;
+  if (!isSSGRequest) {
+    session = await auth();
+    if (session) return session;
+  }
 
   // If there is no session, check for Bearer token ("api key") and attempt to build a replica session
   const authHeader =

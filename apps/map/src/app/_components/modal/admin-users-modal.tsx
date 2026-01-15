@@ -384,14 +384,14 @@ export default function UserModal({
                         type="button"
                         variant="outline"
                         onClick={() => {
-                          openModal(ModalType.ADMIN_GRANT_ACCESS, {
+                          openModal(ModalType.ADMIN_MANAGE_ACCESS, {
                             userId: Number(user.id),
                           });
                         }}
                         className="w-full"
                       >
                         <UserPlus className="mr-2 h-4 w-4" />
-                        Grant Access
+                        Manage Access
                       </Button>
                       <p className="text-xs text-muted-foreground text-center">
                         Progress here will be lost

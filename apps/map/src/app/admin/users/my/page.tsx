@@ -2,7 +2,7 @@ import { Suspense } from "react";
 
 import Layout from "../../admin-layout";
 import { AddUserButton } from "../[id]/add-user-button";
-import { GrantAccessButton } from "../[id]/grant-access-button";
+import { ManageAccessButton } from "../[id]/manage-access-button";
 import { MyUsersTable } from "../mine/my-users-table";
 
 const MyUsersPage = async () => {
@@ -19,7 +19,7 @@ const MyUsersPage = async () => {
           </div>
           <div className="flex flex-row items-center justify-start gap-2">
             <AddUserButton />
-            <GrantAccessButton />
+            <ManageAccessButton />
           </div>
         </div>
         <Suspense fallback={<div>Loading...</div>}>

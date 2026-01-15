@@ -14,7 +14,7 @@ export enum ModalType {
   INFO = "INFO",
   SETTINGS = "SETTINGS",
   ADMIN_USERS = "ADMIN_USERS",
-  ADMIN_GRANT_ACCESS = "ADMIN_GRANT_ACCESS",
+  ADMIN_MANAGE_ACCESS = "ADMIN_MANAGE_ACCESS",
   ADMIN_REQUESTS = "ADMIN_REQUESTS",
   ADMIN_EVENTS = "ADMIN_EVENTS",
   ADMIN_LOCATIONS = "ADMIN_LOCATIONS",
@@ -161,7 +161,7 @@ export interface DataType {
   [ModalType.ADMIN_USERS]: {
     id?: number | null;
   };
-  [ModalType.ADMIN_GRANT_ACCESS]: {
+  [ModalType.ADMIN_MANAGE_ACCESS]: {
     userId?: number;
   } | null;
   [ModalType.ADMIN_REQUESTS]: {

@@ -174,6 +174,26 @@ const columns: TableOptions<
     },
   },
   {
+    accessorKey: "isPrivate",
+    meta: { name: "Visibility" },
+    header: Header,
+    cell: ({ row }) => {
+      return (
+        <div className="flex items-center justify-start">
+          <span
+            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${
+              row.original.isPrivate
+                ? "border-amber-200 bg-amber-100 text-amber-700"
+                : "border-blue-200 bg-blue-100 text-blue-700"
+            }`}
+          >
+            {row.original.isPrivate ? "Private" : "Public"}
+          </span>
+        </div>
+      );
+    },
+  },
+  {
     accessorKey: "created",
     accessorFn: (row) => new Date(row.created).toLocaleDateString(),
     meta: { name: "Created At" },
