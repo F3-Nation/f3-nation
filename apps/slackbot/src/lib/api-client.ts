@@ -445,7 +445,10 @@ interface SeriesResponse {
   recurrenceInterval: number | null;
   indexWithinInterval: number | null;
   meta: Record<string, unknown> | null;
+  isPrivate: boolean;
+  aos?: { aoId: number; aoName: string }[];
   eventTypes?: { eventTypeId: number; eventTypeName: string }[];
+  eventTags?: { eventTagId: number; eventTagName: string }[];
 }
 
 interface SeriesInput {
@@ -467,5 +470,6 @@ interface SeriesInput {
   indexWithinInterval?: number | null;
   meta?: Record<string, unknown> | null;
   eventTypeIds?: number[];
+  eventTagIds?: number[];
   isPrivate?: boolean;
 }

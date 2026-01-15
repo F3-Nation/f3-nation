@@ -81,6 +81,7 @@ export const EventInsertSchema = createInsertSchema(events, {
       .number()
       .array()
       .min(1, { message: "Event type is required" }),
+    eventTagIds: z.number().array().optional(),
   })
   .omit({
     orgId: true,

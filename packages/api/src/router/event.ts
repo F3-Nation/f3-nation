@@ -274,6 +274,7 @@ export const eventRouter = {
           highlight: schema.events.highlight,
           created: schema.events.created,
           meta: schema.events.meta,
+          isPrivate: schema.events.isPrivate,
           aos: sql<{ aoId: number; aoName: string }[]>`COALESCE(
             json_agg(
               DISTINCT jsonb_build_object(
@@ -306,9 +307,20 @@ export const eventRouter = {
                 'eventTypeId', ${schema.eventTypes.id},
                 'eventTypeName', ${schema.eventTypes.name}
               )
+            ),
+            '[]'
+          )`,
+          eventTags: sql<
+            { eventTagId: number; eventTagName: string }[]
+          >`COALESCE(
+            json_agg(
+              DISTINCT jsonb_build_object(
+                'eventTagId', ${schema.eventTags.id},
+                'eventTagName', ${schema.eventTags.name}
+              )
             )
             FILTER (
-              WHERE ${schema.eventTypes.id} IS NOT NULL
+              WHERE ${schema.eventTags.id} IS NOT NULL
             ),
             '[]'
           )`,
@@ -340,6 +352,14 @@ export const eventRouter = {
         .leftJoin(
           schema.eventTypes,
           eq(schema.eventTypes.id, schema.eventsXEventTypes.eventTypeId),
+        )
+        .leftJoin(
+          schema.eventTagsXEvents,
+          eq(schema.eventTagsXEvents.eventId, schema.events.id),
+        )
+        .leftJoin(
+          schema.eventTags,
+          eq(schema.eventTags.id, schema.eventTagsXEvents.eventTagId),
         )
         .where(eq(schema.events.id, input.id))
         .groupBy(schema.events.id, aoOrg.id, regionOrg.id);
@@ -381,7 +401,7 @@ export const eventRouter = {
         });
       }
 
-      const { eventTypeIds, meta, ...eventData } = input;
+      const { eventTypeIds, eventTagIds, meta, ...eventData } = input;
       const eventToUpdate: typeof schema.events.$inferInsert = {
         ...eventData,
         orgId: input.aoId,
@@ -421,6 +441,22 @@ export const eventRouter = {
             eventTypeId,
           })),
         );
+      }
+
+      // Handle event tag in join table
+      if (eventTagIds !== undefined) {
+        await ctx.db
+          .delete(schema.eventTagsXEvents)
+          .where(eq(schema.eventTagsXEvents.eventId, result.id));
+
+        if (eventTagIds.length > 0) {
+          await ctx.db.insert(schema.eventTagsXEvents).values(
+            eventTagIds.map((eventTagId) => ({
+              eventId: result.id,
+              eventTagId,
+            })),
+          );
+        }
       }
 
       return { event: result ?? null };

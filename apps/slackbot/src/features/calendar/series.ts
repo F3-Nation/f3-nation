@@ -55,6 +55,10 @@ interface SeriesResponse {
   recurrenceInterval: number | null;
   indexWithinInterval: number | null;
   meta: Record<string, unknown> | null;
+  isPrivate: boolean;
+  aos?: { aoId: number; aoName: string }[];
+  eventTypes?: { eventTypeId: number; eventTypeName: string }[];
+  eventTags?: { eventTagId: number; eventTagName: string }[];
 }
 
 interface AOResponse {
@@ -65,7 +69,7 @@ interface AOResponse {
 
 interface LocationResponse {
   id: number;
-  name: string;
+  locationName: string;
   addressCity: string | null;
 }
 
@@ -104,6 +108,54 @@ export async function manageSeries(args: TypedActionArgs) {
 }
 
 /**
+ * Handle AO selection - updates the form with the AO's default location
+ */
+export async function handleAOSelection(args: TypedActionArgs) {
+  const { ack, body, client } = args;
+  await ack();
+
+  const action = (body as BlockAction).actions?.[0];
+  if (!action || action.type !== "static_select") return;
+
+  const selectedAoId = parseInt(action.selected_option?.value ?? "0");
+  if (!selectedAoId) return;
+
+  // Get the AO to find its default location
+  const { org: ao } = await api.org.byId({ id: selectedAoId });
+  const defaultLocationId = ao?.defaultLocationId;
+
+  // Get form options to rebuild the form
+  const { aos, locations, eventTypes, eventTags } = await fetchFormOptions(
+    args.context.teamId!,
+  );
+
+  // Parse existing metadata if any
+  const viewMeta = (body as BlockAction).view?.private_metadata;
+
+  // Build updated form with the default location pre-selected
+  const updatedForm = buildSeriesAddForm({
+    aos,
+    locations,
+    eventTypes,
+    eventTags,
+    selectedAoId,
+    selectedLocationId: defaultLocationId ?? undefined,
+  });
+
+  // Preserve the existing private_metadata
+  updatedForm.private_metadata = viewMeta;
+
+  // Update the existing modal
+  const viewId = (body as BlockAction).view?.id;
+  if (viewId) {
+    await client.views.update({
+      view_id: viewId,
+      view: updatedForm,
+    });
+  }
+}
+
+/**
  * Fetch form options (AOs, locations, event types, event tags)
  */
 async function fetchFormOptions(teamId: string) {
@@ -135,31 +187,51 @@ export function buildSeriesAddForm(options: {
   eventTypes: EventTypeResponse[];
   eventTags: { id: number; name: string }[];
   editSeries?: SeriesResponse;
+  selectedAoId?: number;
+  selectedLocationId?: number;
 }): ModalView {
-  const { aos, locations, eventTypes, eventTags, editSeries } = options;
+  const {
+    aos,
+    locations,
+    eventTypes,
+    eventTags,
+    editSeries,
+    selectedAoId,
+    selectedLocationId,
+  } = options;
 
-  const aoOptions: PlainTextOption[] = aos.map((ao) => ({
-    text: { type: "plain_text", text: ao.name },
-    value: ao.id.toString(),
-  }));
+  const aoOptions: PlainTextOption[] = aos
+    .filter((ao) => ao.name != null)
+    .map((ao) => ({
+      text: { type: "plain_text", text: ao.name },
+      value: ao.id.toString(),
+    }));
 
-  const locationOptions: PlainTextOption[] = locations.map((loc) => ({
-    text: {
-      type: "plain_text",
-      text: loc.addressCity ? `${loc.name} (${loc.addressCity})` : loc.name,
-    },
-    value: loc.id.toString(),
-  }));
+  const locationOptions: PlainTextOption[] = locations
+    .filter((loc) => loc.locationName != null)
+    .map((loc) => ({
+      text: {
+        type: "plain_text",
+        text: loc.addressCity
+          ? `${loc.locationName} (${loc.addressCity})`
+          : loc.locationName,
+      },
+      value: loc.id.toString(),
+    }));
 
-  const eventTypeOptions: PlainTextOption[] = eventTypes.map((et) => ({
-    text: { type: "plain_text", text: et.name },
-    value: et.id.toString(),
-  }));
+  const eventTypeOptions: PlainTextOption[] = eventTypes
+    .filter((et) => et.name != null)
+    .map((et) => ({
+      text: { type: "plain_text", text: et.name },
+      value: et.id.toString(),
+    }));
 
-  const eventTagOptions: PlainTextOption[] = eventTags.map((tag) => ({
-    text: { type: "plain_text", text: tag.name },
-    value: tag.id.toString(),
-  }));
+  const eventTagOptions: PlainTextOption[] = eventTags
+    .filter((tag) => tag.name != null)
+    .map((tag) => ({
+      text: { type: "plain_text", text: tag.name },
+      value: tag.id.toString(),
+    }));
 
   const frequencyOptions: PlainTextOption[] = FREQUENCY_OPTIONS.map((f) => ({
     text: { type: "plain_text", text: f.name },
@@ -175,21 +247,33 @@ export function buildSeriesAddForm(options: {
 
   // AO select
   if (aoOptions.length > 0) {
+    // Get the AO ID from: 1) explicit selection, 2) edit series, or 3) none
+    const aoIdToSelect = selectedAoId ?? editSeries?.aos?.[0]?.aoId;
     blocks.push({
       type: "input",
       block_id: ACTIONS.CALENDAR_ADD_SERIES_AO,
       label: { type: "plain_text", text: "AO" },
+      dispatch_action: true,
       element: {
         type: "static_select",
         action_id: ACTIONS.CALENDAR_ADD_SERIES_AO,
         placeholder: { type: "plain_text", text: "Select an AO" },
         options: aoOptions,
+        ...(aoIdToSelect
+          ? {
+              initial_option: aoOptions.find(
+                (o) => o.value === aoIdToSelect.toString(),
+              ),
+            }
+          : {}),
       },
     });
   }
 
   // Location select
   if (locationOptions.length > 0) {
+    // Get the location ID from: 1) explicit selection (from AO default), 2) edit series, or 3) none
+    const locationIdToSelect = selectedLocationId ?? editSeries?.locationId;
     blocks.push({
       type: "input",
       block_id: ACTIONS.CALENDAR_ADD_SERIES_LOCATION,
@@ -199,10 +283,10 @@ export function buildSeriesAddForm(options: {
         action_id: ACTIONS.CALENDAR_ADD_SERIES_LOCATION,
         placeholder: { type: "plain_text", text: "Select a location" },
         options: locationOptions,
-        ...(editSeries?.locationId
+        ...(locationIdToSelect
           ? {
               initial_option: locationOptions.find(
-                (o) => o.value === editSeries.locationId?.toString(),
+                (o) => o.value === locationIdToSelect.toString(),
               ),
             }
           : {}),
@@ -212,6 +296,8 @@ export function buildSeriesAddForm(options: {
 
   // Event Type select
   if (eventTypeOptions.length > 0) {
+    // Get the event type ID from the series for editing
+    const editEventTypeId = editSeries?.eventTypes?.[0]?.eventTypeId;
     blocks.push({
       type: "input",
       block_id: ACTIONS.CALENDAR_ADD_SERIES_TYPE,
@@ -221,12 +307,21 @@ export function buildSeriesAddForm(options: {
         action_id: ACTIONS.CALENDAR_ADD_SERIES_TYPE,
         placeholder: { type: "plain_text", text: "Select an event type" },
         options: eventTypeOptions,
+        ...(editEventTypeId
+          ? {
+              initial_option: eventTypeOptions.find(
+                (o) => o.value === editEventTypeId.toString(),
+              ),
+            }
+          : {}),
       },
     });
   }
 
   // Event Tag select (optional)
   if (eventTagOptions.length > 0) {
+    // Get the event tag ID from the series for editing
+    const editEventTagId = editSeries?.eventTags?.[0]?.eventTagId;
     blocks.push({
       type: "input",
       block_id: ACTIONS.CALENDAR_ADD_SERIES_TAG,
@@ -237,6 +332,13 @@ export function buildSeriesAddForm(options: {
         action_id: ACTIONS.CALENDAR_ADD_SERIES_TAG,
         placeholder: { type: "plain_text", text: "Select an event tag" },
         options: eventTagOptions,
+        ...(editEventTagId
+          ? {
+              initial_option: eventTagOptions.find(
+                (o) => o.value === editEventTagId.toString(),
+              ),
+            }
+          : {}),
       },
     });
   }
@@ -436,6 +538,10 @@ export function buildSeriesAddForm(options: {
   ];
 
   const initialOptions: typeof optionsList = [];
+  if (editSeries?.isPrivate) {
+    const opt = optionsList[0];
+    if (opt) initialOptions.push(opt);
+  }
   if (editSeries?.meta?.do_not_send_auto_preblasts) {
     const opt = optionsList[1];
     if (opt) initialOptions.push(opt);
@@ -512,7 +618,7 @@ export async function handleSeriesAdd({ ack, view, context }: TypedViewArgs) {
     values[ACTIONS.CALENDAR_ADD_SERIES_AO]?.[ACTIONS.CALENDAR_ADD_SERIES_AO]
       ?.selected_option?.value ?? "0",
   );
-  const locationId = parseInt(
+  const selectedLocationId = parseInt(
     values[ACTIONS.CALENDAR_ADD_SERIES_LOCATION]?.[
       ACTIONS.CALENDAR_ADD_SERIES_LOCATION
     ]?.selected_option?.value ?? "0",
@@ -521,13 +627,47 @@ export async function handleSeriesAdd({ ack, view, context }: TypedViewArgs) {
     values[ACTIONS.CALENDAR_ADD_SERIES_TYPE]?.[ACTIONS.CALENDAR_ADD_SERIES_TYPE]
       ?.selected_option?.value ?? "0",
   );
-  const name =
+  const eventTagId = parseInt(
+    values[ACTIONS.CALENDAR_ADD_SERIES_TAG]?.[ACTIONS.CALENDAR_ADD_SERIES_TAG]
+      ?.selected_option?.value ?? "0",
+  );
+  const userProvidedName =
     values[ACTIONS.CALENDAR_ADD_SERIES_NAME]?.[ACTIONS.CALENDAR_ADD_SERIES_NAME]
       ?.value ?? undefined;
   const description =
     values[ACTIONS.CALENDAR_ADD_SERIES_DESCRIPTION]?.[
       ACTIONS.CALENDAR_ADD_SERIES_DESCRIPTION
     ]?.value ?? undefined;
+
+  // Fetch AO and event type info for generating default name and getting default location
+  let aoName = "Workout";
+  let aoDefaultLocationId: number | null = null;
+  let eventTypeName = "Beatdown";
+
+  if (aoId) {
+    const { org: ao } = await api.org.byId({ id: aoId });
+    if (ao) {
+      aoName = ao.name;
+      aoDefaultLocationId = ao.defaultLocationId;
+    }
+  }
+
+  if (eventTypeId) {
+    const { eventType } = await api.eventType.byId({ id: eventTypeId });
+    if (eventType) {
+      eventTypeName = eventType.name;
+    }
+  }
+
+  // Use provided location, or fall back to AO's default location
+  const locationId = selectedLocationId || aoDefaultLocationId;
+  if (!locationId) {
+    logger.error("No location selected and AO has no default location");
+    return;
+  }
+
+  // Generate default name if not provided: "AO Name - Event Type"
+  const name = userProvidedName ?? `${aoName} - ${eventTypeName}`;
 
   const startTime =
     values[ACTIONS.CALENDAR_ADD_SERIES_START_TIME]?.[
@@ -584,10 +724,11 @@ export async function handleSeriesAdd({ ack, view, context }: TypedViewArgs) {
     // Create a series for each selected day of week
     for (const dow of daysOfWeek) {
       const input = {
-        aoId: aoId || undefined,
+        aoId: aoId ?? undefined,
         regionId: region.org.id,
-        locationId: locationId || undefined,
+        locationId,
         eventTypeIds: eventTypeId ? [eventTypeId] : [],
+        eventTagIds: eventTagId ? [eventTagId] : [],
         name,
         description,
         startDate: startDate ?? undefined,
@@ -611,17 +752,36 @@ export async function handleSeriesAdd({ ack, view, context }: TypedViewArgs) {
       }
     }
   } else {
-    // Editing existing series
+    // Editing existing series - need to fetch existing data to preserve required fields
+    const seriesId = metadata.series_id as number;
+    const { event: existingSeries } = await api.series.byId({ id: seriesId });
+    if (!existingSeries) {
+      logger.error(`Could not find series ${seriesId} to edit`);
+      return;
+    }
+
+    // Merge editable fields with existing required fields
     const input = {
-      id: metadata.series_id as number,
-      aoId: aoId || undefined,
+      id: seriesId,
+      aoId: aoId ?? undefined,
       regionId: region.org.id,
-      locationId: locationId || undefined,
+      locationId,
       eventTypeIds: eventTypeId ? [eventTypeId] : [],
+      eventTagIds: eventTagId ? [eventTagId] : [],
       name,
       description,
-      startTime: startTime ? formatTimeForApi(startTime) : undefined,
-      endTime: endTime ? formatTimeForApi(endTime) : undefined,
+      // Required fields from existing series
+      startDate: existingSeries.startDate,
+      dayOfWeek: existingSeries.dayOfWeek,
+      recurrencePattern: existingSeries.recurrencePattern,
+      recurrenceInterval: existingSeries.recurrenceInterval,
+      indexWithinInterval: existingSeries.indexWithinInterval,
+      // Editable time fields
+      startTime: startTime
+        ? formatTimeForApi(startTime)
+        : existingSeries.startTime,
+      endTime: endTime ? formatTimeForApi(endTime) : existingSeries.endTime,
+      isActive: existingSeries.isActive,
       isPrivate,
       highlight,
       meta: Object.keys(meta).length > 0 ? meta : undefined,
@@ -796,6 +956,9 @@ export async function handleSeriesEditDelete(args: TypedActionArgs) {
 export function registerSeriesHandlers(app: App) {
   // View submission for add/edit
   app.view(ACTIONS.ADD_SERIES_CALLBACK_ID, handleSeriesAdd);
+
+  // AO selection - updates form with default location
+  app.action(ACTIONS.CALENDAR_ADD_SERIES_AO, handleAOSelection);
 
   // Regex for the dynamic action ID (edit/delete selection)
   app.action(
