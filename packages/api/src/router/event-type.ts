@@ -259,7 +259,7 @@ export const eventTypeRouter = {
       return { eventType: result ?? null };
     }),
   delete: editorProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.coerce.number() }))
     .route({
       method: "DELETE",
       path: "/id/{id}",

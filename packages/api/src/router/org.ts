@@ -364,7 +364,9 @@ export const orgRouter = {
       };
     }),
   delete: adminProcedure
-    .input(z.object({ id: z.number(), orgType: z.enum(OrgType).optional() }))
+    .input(
+      z.object({ id: z.coerce.number(), orgType: z.enum(OrgType).optional() }),
+    )
     .route({
       method: "DELETE",
       path: "/delete/{id}",

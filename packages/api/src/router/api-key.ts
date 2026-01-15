@@ -23,7 +23,7 @@ const createApiKeySchema = z.object({
 });
 
 const revokeApiKeySchema = z.object({
-  id: z.number(),
+  id: z.coerce.number(),
   revoke: z.coerce.boolean().optional(),
 });
 
@@ -261,7 +261,7 @@ export const apiKeyRouter = {
       return { apiKey: apiKey ?? null };
     }),
   purge: adminProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.coerce.number() }))
     .route({
       method: "DELETE",
       path: "/{id}/purge",

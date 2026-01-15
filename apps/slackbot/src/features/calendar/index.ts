@@ -9,6 +9,7 @@ import { manageLocations, registerLocationHandlers } from "./location";
 import { manageAOs, registerAOHandlers } from "./ao";
 import { manageEventTypes, registerEventTypeHandlers } from "./event-type";
 import { manageEventTags, registerEventTagHandlers } from "./event-tag";
+import { manageSeries, registerSeriesHandlers } from "./series";
 import { createNavContext, navigateToView } from "../../lib/view-navigation";
 
 /**
@@ -72,16 +73,29 @@ export function buildCalendarConfigModal(_context: ExtendedContext) {
       },
     },
     {
+      type: "section",
+      text: {
+        type: "plain_text",
+        text: ":spiral_calendar_pad: Manage Series",
+      },
+      accessory: {
+        type: "overflow",
+        action_id: ACTIONS.CALENDAR_MANAGE_SERIES,
+        options: [
+          {
+            text: { type: "plain_text", text: "Add Series" },
+            value: "add",
+          },
+          {
+            text: { type: "plain_text", text: "Edit or Delete Series" },
+            value: "edit",
+          },
+        ],
+      },
+    },
+    {
       type: "actions",
       elements: [
-        {
-          type: "button",
-          text: {
-            type: "plain_text",
-            text: ":spiral_calendar_pad: Manage Series",
-          },
-          action_id: ACTIONS.CALENDAR_MANAGE_SERIES,
-        },
         {
           type: "button",
           text: {
@@ -187,11 +201,12 @@ export function registerCalendarFeature(app: App) {
   app.action(ACTIONS.CALENDAR_MANAGE_EVENT_TAGS, manageEventTags);
   registerEventTagHandlers(app);
 
+  // Series
+  app.action(ACTIONS.CALENDAR_MANAGE_SERIES, manageSeries);
+  registerSeriesHandlers(app);
+
   // Placeholder handlers for other management options
-  const managementActions = [
-    ACTIONS.CALENDAR_MANAGE_SERIES,
-    ACTIONS.CALENDAR_MANAGE_EVENT_INSTANCES,
-  ] as const;
+  const managementActions = [ACTIONS.CALENDAR_MANAGE_EVENT_INSTANCES] as const;
 
   for (const actionId of managementActions) {
     app.action(actionId, async (args: TypedActionArgs) => {

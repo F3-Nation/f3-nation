@@ -155,6 +155,24 @@ export const ACTIONS = {
   CALENDAR_ADD_EVENT_TAG_COLOR: "calendar-add-event-tag-color",
   EVENT_TAG_EDIT_DELETE: "event-tag-edit-delete",
 
+  // Series Management
+  EDIT_DELETE_SERIES_CALLBACK_ID: "edit-delete-series-id",
+  CALENDAR_ADD_SERIES_NAME: "calendar-add-series-name",
+  CALENDAR_ADD_SERIES_DESCRIPTION: "calendar-add-series-description",
+  CALENDAR_ADD_SERIES_LOCATION: "calendar-add-series-location",
+  CALENDAR_ADD_SERIES_TYPE: "calendar-add-series-type",
+  CALENDAR_ADD_SERIES_TAG: "calendar-add-series-tag",
+  CALENDAR_ADD_SERIES_START_DATE: "calendar-add-series-start-date",
+  CALENDAR_ADD_SERIES_END_DATE: "calendar-add-series-end-date",
+  CALENDAR_ADD_SERIES_START_TIME: "calendar-add-series-start-time",
+  CALENDAR_ADD_SERIES_END_TIME: "calendar-add-series-end-time",
+  CALENDAR_ADD_SERIES_DOW: "calendar-add-series-dow",
+  CALENDAR_ADD_SERIES_FREQUENCY: "calendar-add-series-frequency",
+  CALENDAR_ADD_SERIES_INTERVAL: "calendar-add-series-interval",
+  CALENDAR_ADD_SERIES_INDEX: "calendar-add-series-index",
+  CALENDAR_ADD_SERIES_OPTIONS: "calendar-add-series-options",
+  CALENDAR_MANAGE_SERIES_AO: "calendar-manage-series-ao",
+
   // Admin
   DB_ADMIN_CALLBACK_ID: "db-admin-id",
   DB_ADMIN_UPGRADE: "db-admin-upgrade",

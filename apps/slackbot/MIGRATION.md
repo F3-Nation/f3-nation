@@ -574,7 +574,7 @@ export const attendanceRouter = {
 - [ ] Implement calendar management
   - [x] Implement "AO" management (AOs are sub-regions)
   - [x] Implement location management
-  - [ ] Implement event series management
+  - [x] Implement event series management
   - [ ] Implement event instance management
   - [x] Implement event type management
   - [x] Implement event tag management

@@ -453,7 +453,7 @@ export const userRouter = {
     }),
 
   delete: adminProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.coerce.number() }))
     .route({
       method: "DELETE",
       path: "/delete/{id}",

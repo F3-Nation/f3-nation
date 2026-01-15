@@ -300,6 +300,55 @@ export const api = {
         method: "DELETE",
       }),
   },
+
+  /**
+   * Series API methods (using event endpoints)
+   * Series are events with recurrence patterns
+   */
+  series: {
+    all: (params: {
+      regionIds?: number[];
+      aoIds?: number[];
+      statuses?: ("active" | "inactive")[];
+      onlyMine?: boolean;
+    }) => {
+      const searchParams = new URLSearchParams();
+      if (params.regionIds) {
+        params.regionIds.forEach((id) =>
+          searchParams.append("regionIds", id.toString()),
+        );
+      }
+      if (params.aoIds) {
+        params.aoIds.forEach((id) =>
+          searchParams.append("aoIds", id.toString()),
+        );
+      }
+      if (params.statuses) {
+        params.statuses.forEach((s) => searchParams.append("statuses", s));
+      }
+      if (params.onlyMine) {
+        searchParams.append("onlyMine", "true");
+      }
+      return apiRequest<{
+        events: SeriesResponse[];
+        totalCount: number;
+      }>(`/event?${searchParams.toString()}`);
+    },
+
+    byId: (input: { id: number }) =>
+      apiRequest<{ event: SeriesResponse | null }>(`/event/id/${input.id}`),
+
+    crupdate: (input: SeriesInput) =>
+      apiRequest<{ event: SeriesResponse | null }>(`/event`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+
+    delete: (id: number) =>
+      apiRequest<{ eventId: number }>(`/event/delete/${id}`, {
+        method: "DELETE",
+      }),
+  },
 };
 
 export type ApiClient = typeof api;
@@ -375,4 +424,48 @@ interface EventTagInput {
   color?: string | null;
   specificOrgId?: number | null;
   isActive?: boolean;
+}
+
+/**
+ * Types for series (event) API responses
+ */
+interface SeriesResponse {
+  id: number;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+  locationId: number | null;
+  startDate: string;
+  dayOfWeek: string | null;
+  startTime: string | null;
+  endTime: string | null;
+  email: string | null;
+  highlight: boolean;
+  recurrencePattern: string | null;
+  recurrenceInterval: number | null;
+  indexWithinInterval: number | null;
+  meta: Record<string, unknown> | null;
+  eventTypes?: { eventTypeId: number; eventTypeName: string }[];
+}
+
+interface SeriesInput {
+  id?: number;
+  name?: string;
+  description?: string | null;
+  isActive?: boolean;
+  locationId?: number | null;
+  aoId?: number;
+  regionId?: number;
+  startDate?: string;
+  endDate?: string | null;
+  dayOfWeek?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+  highlight?: boolean;
+  recurrencePattern?: string | null;
+  recurrenceInterval?: number | null;
+  indexWithinInterval?: number | null;
+  meta?: Record<string, unknown> | null;
+  eventTypeIds?: number[];
+  isPrivate?: boolean;
 }

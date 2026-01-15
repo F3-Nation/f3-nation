@@ -241,7 +241,7 @@ export const eventTagRouter = {
       return { eventTag: result ?? null };
     }),
   delete: editorProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.coerce.number() }))
     .route({
       method: "DELETE",
       path: "/id/{id}",
