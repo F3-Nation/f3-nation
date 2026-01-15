@@ -1,9 +1,13 @@
 import { and, eq, schema } from "@acme/db";
-import type { UserRole } from "@acme/shared/app/enums";
 import { isValidEmail } from "@acme/shared/app/functions";
 import { CrupdateUserSchema } from "@acme/validators";
 import { ORPCError } from "@orpc/server";
 import { z } from "zod";
+
+interface RoleInput {
+  orgId: number;
+  roleName: "user" | "editor" | "admin";
+}
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
@@ -216,7 +220,8 @@ export const userRouter = {
         "Create a new user or update an existing one, including role assignments. PII fields (email, phone) are only updated if the requester has admin access to the user's organizations.",
     })
     .handler(async ({ context: ctx, input }) => {
-      const { roles, ...rest } = input;
+      const { roles: rawRoles, ...rest } = input;
+      const roles = rawRoles as RoleInput[];
 
       // Check if this is an update (has id) and if requester has PII access
       let hasPiiAccess = false;
@@ -330,7 +335,7 @@ export const userRouter = {
       } catch (error) {
         if (isDuplicateEmailError(error)) {
           throw new ORPCError("BAD_REQUEST", {
-            message: `A user with the email address "${_email}" already exists. Please use a different email address.`,
+            message: `A user with the email address "${_email ?? ""}" already exists. Please use a different email address.`,
           });
         }
         // Re-throw other errors
@@ -348,7 +353,7 @@ export const userRouter = {
           }
           return acc;
         },
-        {} as Record<UserRole, number>,
+        {} as Record<string, number>,
       );
 
       const existingRoles = await ctx.db
@@ -423,11 +428,17 @@ export const userRouter = {
 
       if (newRolesToInsert.length > 0) {
         await ctx.db.insert(schema.rolesXUsersXOrg).values(
-          newRolesToInsert.map((role) => ({
-            userId: user.id,
-            roleId: roleNameToId[role.roleName],
-            orgId: role.orgId,
-          })),
+          newRolesToInsert.map((role) => {
+            const roleId = roleNameToId[role.roleName];
+            if (roleId === undefined) {
+              throw new Error(`Role ${role.roleName} not found`);
+            }
+            return {
+              userId: user.id,
+              roleId,
+              orgId: role.orgId,
+            };
+          }),
         );
       }
 

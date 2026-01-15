@@ -11,12 +11,23 @@
  * The auth system is mocked using vi.mock to control session behavior.
  */
 
+import { vi } from "vitest";
+
+// Use vi.hoisted to ensure mockLimit is available when vi.mock runs (mocks are hoisted)
+const mockLimit = vi.hoisted(() => vi.fn());
+
+vi.mock("@orpc/experimental-ratelimit/memory", () => ({
+  MemoryRatelimiter: vi.fn().mockImplementation(() => ({
+    limit: mockLimit,
+  })),
+}));
+
 import type { Session } from "@acme/auth";
 import { and, eq, schema } from "@acme/db";
 import { db } from "@acme/db/client";
 import { Client, Header } from "@acme/shared/common/enums";
 import { createRouterClient } from "@orpc/server";
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { mockAuthWithSession } from "../__tests__/test-utils";
 import { router } from "../index";
 
@@ -29,6 +40,13 @@ describe("User Router", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset rate limiter to allow requests
+    mockLimit.mockResolvedValue({
+      success: true,
+      limit: 10,
+      remaining: 9,
+      reset: Date.now() + 60000,
+    });
   });
 
   const createTestClient = () => {

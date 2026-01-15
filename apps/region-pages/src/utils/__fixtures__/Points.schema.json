@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "properties": {
+    "range": { "type": "string" },
+    "majorDimension": { "type": "string" },
+    "values": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": { "type": "string" }
+      }
+    }
+  },
+  "required": ["range", "majorDimension", "values"]
+}

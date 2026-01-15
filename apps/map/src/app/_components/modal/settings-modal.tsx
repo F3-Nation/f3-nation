@@ -12,7 +12,6 @@ import {
   RefreshCcw,
   Shield,
   Sun,
-  Trash2,
 } from "lucide-react";
 import { signIn } from "next-auth/react";
 import { useTheme } from "next-themes";
@@ -62,33 +61,6 @@ export default function SettingsModal() {
       fileName: "Link to current map location",
     });
   }, [center, zoom]);
-
-  const handleClearCookies = useCallback(() => {
-    if (
-      window.confirm(
-        "Are you sure you want to clear all cookies? This will sign you out and reset your preferences.",
-      )
-    ) {
-      // Get all cookies
-      const cookies = document.cookie.split(";");
-
-      // Delete each cookie by setting it to expire in the past
-      cookies.forEach((cookie) => {
-        const eqPos = cookie.indexOf("=");
-        const name =
-          eqPos > -1 ? cookie.substring(0, eqPos).trim() : cookie.trim();
-        // Delete cookie for current domain
-        document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
-        // Also try to delete for parent domain
-        const domain = window.location.hostname.split(".").slice(-2).join(".");
-        document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=.${domain}`;
-      });
-
-      toast.success("Cookies cleared");
-      // Reload the page to apply changes
-      window.location.reload();
-    }
-  }, []);
 
   return (
     <Dialog open={true} onOpenChange={closeModal}>
@@ -393,15 +365,6 @@ export default function SettingsModal() {
             </button>
           </div>
           <VersionInfo className="text-center text-xs text-foreground/60" />
-          <button
-            className={cn(
-              "flex w-full flex-row items-center justify-center gap-2 text-xs text-foreground/50 hover:text-foreground/70",
-            )}
-            onClick={handleClearCookies}
-          >
-            <Trash2 className="size-3" />
-            <span>Clear cookies</span>
-          </button>
         </div>
       </DialogContent>
     </Dialog>

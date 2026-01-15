@@ -24,6 +24,7 @@
     "@acme/shared": "workspace:^0.1.0",
     "@acme/validators": "workspace:^0.1.0",
     "@orpc/client": "^1.8.8",
+    "@orpc/experimental-ratelimit": "^1.13.2",
     "@orpc/server": "^1.8.8",
     "google-auth-library": "^10.3.0",
     "handlebars": "^4.7.8",
