@@ -100,7 +100,7 @@ export const checkHasRoleOnOrg = async ({
   const level4Org = aliasedTable(schema.orgs, "level_4_org"); // Area
   const level5Org = aliasedTable(schema.orgs, "level_5_org"); // Nation
 
-  const allParentOrgIds = await db
+  const allParentOrgIds = (await db
     .select({
       level1Id: level1Org.id,
       level2Id: level2Org.id,
@@ -113,7 +113,13 @@ export const checkHasRoleOnOrg = async ({
     .leftJoin(level3Org, eq(level2Org.parentId, level3Org.id))
     .leftJoin(level4Org, eq(level3Org.parentId, level4Org.id))
     .leftJoin(level5Org, eq(level4Org.parentId, level5Org.id))
-    .where(eq(level1Org.id, orgId));
+    .where(eq(level1Org.id, orgId))) as {
+    level1Id: number;
+    level2Id: number | null;
+    level3Id: number | null;
+    level4Id: number | null;
+    level5Id: number | null;
+  }[];
 
   const allAncestorOrgIds = allParentOrgIds.flatMap((o) => [
     o.level1Id,

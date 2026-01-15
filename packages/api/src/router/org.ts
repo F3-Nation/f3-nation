@@ -5,12 +5,12 @@ import { z } from "zod";
 import {
   aliasedTable,
   and,
-  countDistinct,
   eq,
   ilike,
   inArray,
   or,
   schema,
+  sql,
 } from "@acme/db";
 import { IsActiveStatus, OrgType } from "@acme/shared/app/enums";
 import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
@@ -140,11 +140,11 @@ export const orgRouter = {
         "id",
       );
 
-      const [orgCount] = await ctx.db
-        .select({ count: countDistinct(org.id) })
+      const [orgCount] = await (ctx.db
+        .select({ count: sql<number>`count(distinct ${org.id})` })
         .from(org)
         .leftJoin(parentOrg, eq(org.parentId, parentOrg.id))
-        .where(where);
+        .where(where) as Promise<{ count: number }[]>);
 
       const select = {
         id: org.id,
