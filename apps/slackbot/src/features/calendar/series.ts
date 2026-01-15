@@ -535,19 +535,34 @@ export function buildSeriesAddForm(options: {
         text: "For convergences, 2nd F events, etc.",
       },
     },
+    {
+      text: {
+        type: "plain_text" as const,
+        text: "Exclude stats from PAX Vault",
+      },
+      value: "exclude_from_pax_vault",
+      description: {
+        type: "plain_text" as const,
+        text: "Can still be queried from BigQuery",
+      },
+    },
   ];
 
   const initialOptions: typeof optionsList = [];
   if (editSeries?.isPrivate) {
-    const opt = optionsList[0];
+    const opt = optionsList.find((o) => o.value === "private");
     if (opt) initialOptions.push(opt);
   }
   if (editSeries?.meta?.do_not_send_auto_preblasts) {
-    const opt = optionsList[1];
+    const opt = optionsList.find((o) => o.value === "no_auto_preblasts");
     if (opt) initialOptions.push(opt);
   }
   if (editSeries?.highlight) {
-    const opt = optionsList[2];
+    const opt = optionsList.find((o) => o.value === "highlight");
+    if (opt) initialOptions.push(opt);
+  }
+  if (editSeries?.meta?.exclude_from_pax_vault) {
+    const opt = optionsList.find((o) => o.value === "exclude_from_pax_vault");
     if (opt) initialOptions.push(opt);
   }
 
@@ -686,10 +701,16 @@ export async function handleSeriesAdd({ ack, view, context }: TypedViewArgs) {
   const isPrivate = selectedOptions.includes("private");
   const noAutoPreblasts = selectedOptions.includes("no_auto_preblasts");
   const highlight = selectedOptions.includes("highlight");
+  const excludeFromPaxVault = selectedOptions.includes(
+    "exclude_from_pax_vault",
+  );
 
   const meta: Record<string, unknown> = {};
   if (noAutoPreblasts) {
     meta.do_not_send_auto_preblasts = true;
+  }
+  if (excludeFromPaxVault) {
+    meta.exclude_from_pax_vault = true;
   }
 
   // For new series, get recurrence fields
