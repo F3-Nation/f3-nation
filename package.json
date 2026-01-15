@@ -1,6 +1,6 @@
 {
   "name": "f3-nation",
-  "version": "3.2.0",
+  "version": "3.3.0",
   "private": true,
   "engines": {
     "node": ">=20.19.0"
@@ -24,7 +24,7 @@
     "format:fix": "turbo format --continue -- --write --cache --cache-location node_modules/.cache/.prettiercache",
     "lint": "turbo run lint //#lint:ws --continue -- --cache --cache-location node_modules/.cache/.eslintcache",
     "lint:fix": "turbo lint --continue -- --fix --cache --cache-location node_modules/.cache/.eslintcache",
-    "lint:ws": "pnpm dlx sherif@1.1.0",
+    "lint:ws": "pnpm dlx sherif@1.1.0 --ignore-package f3-region-pages",
     "reset-test-db": "turbo run reset-test-db",
     "typecheck": "turbo typecheck",
     "test": "turbo test",

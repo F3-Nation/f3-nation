@@ -13,6 +13,9 @@ env:
   # Database (for test jobs - matches PostgreSQL service)
   DATABASE_URL: postgres://postgres:postgres@localhost:5432/f3_test
   TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/f3_test
+  # Database URLs for f3-region-pages
+  POSTGRES_URL: postgres://postgres:postgres@localhost:5432/f3_test
+  F3_DATA_WAREHOUSE_URL: postgres://postgres:postgres@localhost:5432/f3_test
   # Auth (mock)
   AUTH_SECRET: ci-auth-secret-placeholder-32chars
   # Email (mocks)

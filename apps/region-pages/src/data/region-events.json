@@ -1,0 +1,56 @@
+[
+  {
+    "regionSlug": "muletown",
+    "regionName": "F3 Muletown",
+    "events": [
+      {
+        "id": "175482b5481d",
+        "slugSuffix": "four-years-strong",
+        "legacySlugs": ["four-years-strong"],
+        "title": "F3 Muletown 4th Anniversary Convergence",
+        "headline": "Celebrate four years of impact in Columbia, TN.",
+        "date": "2025-11-22",
+        "startTime": "06:00",
+        "endTime": "07:00",
+        "type": "Bootcamp",
+        "location": {
+          "name": "Riverwalk Park Basketball Court",
+          "address": "102 Riverside Dr, Columbia, TN 38401, United States",
+          "url": "https://www.google.com/maps?q=35.6179879,-87.0305082",
+          "notes": "Look for the basketball courts near the river. Plenty of parking on site."
+        },
+        "summary": "Same Saturday beatdown, extra celebration—join founding Nantan 2Buck for a 60-minute bootcamp with breakfast served afterward.",
+        "highlights": [
+          "Bootcamp-style convergence led by founding Nantan 2Buck.",
+          "Perfect invite opportunity for FNGs and guys you haven't seen in a while.",
+          "Hot breakfast and coffeeteria immediately after the beatdown."
+        ],
+        "schedule": [
+          {
+            "label": "Anniversary Beatdown with 2Buck",
+            "time": "06:00"
+          },
+          {
+            "label": "COT & Anniversary Remarks",
+            "time": "07:00"
+          },
+          {
+            "label": "Coffeeteria & Hot Breakfast",
+            "time": "07:15"
+          }
+        ],
+        "contacts": [
+          {
+            "name": "2Buck",
+            "role": "Founding Nantan & Event Q",
+            "slack": "@2Buck"
+          }
+        ],
+        "cta": {
+          "label": "RSVP in Slack",
+          "url": "https://join.slack.com/t/f3muletown/shared_invite/zt-3h2yz6376-WRaCBdah41v6s6sRMUs_Ng"
+        }
+      }
+    ]
+  }
+]

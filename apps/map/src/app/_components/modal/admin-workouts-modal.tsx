@@ -135,6 +135,7 @@ export default function AdminWorkoutsModal({
         mapSeed: event?.meta?.mapSeed ?? false,
       },
       description: event?.description ?? "",
+      isPrivate: event?.isPrivate ?? false,
     });
   }, [form, event]);
 
@@ -142,7 +143,15 @@ export default function AdminWorkoutsModal({
     orpc.event.crupdate.mutationOptions({
       onSuccess: async () => {
         await invalidateQueries({
-          predicate: (query) => query.queryKey[0] === "event",
+          predicate: (query) => {
+            const key = query.queryKey;
+            return (
+              Array.isArray(key) &&
+              key.length > 0 &&
+              (key[0] === "event" ||
+                (Array.isArray(key[0]) && key[0][0] === "event"))
+            );
+          },
         });
         closeModal();
         toast.success("Successfully updated event");
@@ -265,7 +274,7 @@ export default function AdminWorkoutsModal({
                   control={form.control}
                   name="regionId"
                   render={({ field }) => (
-                    <FormItem key={`region-${field.value}`}>
+                    <FormItem key={`region-${String(field.value ?? "new")}`}>
                       <FormLabel>Region</FormLabel>
                       <VirtualizedCombobox
                         value={field.value?.toString()}
@@ -300,7 +309,7 @@ export default function AdminWorkoutsModal({
                       (ao) => ao.parentId === form.watch("regionId"),
                     );
                     return (
-                      <FormItem key={`ao-${field.value}`}>
+                      <FormItem key={`ao-${String(field.value ?? "new")}`}>
                         <FormLabel>AO</FormLabel>
                         <Select
                           value={field.value?.toString()}
@@ -373,7 +382,9 @@ export default function AdminWorkoutsModal({
                       (location) => location.regionId === regionId,
                     );
                     return (
-                      <FormItem key={`location-${field.value}`}>
+                      <FormItem
+                        key={`location-${String(field.value ?? "new")}`}
+                      >
                         <FormLabel>Location</FormLabel>
                         <Select
                           value={field.value?.toString()}
@@ -466,7 +477,9 @@ export default function AdminWorkoutsModal({
                     <FormItem key={`eventTypeIds`}>
                       <FormLabel>Event Types</FormLabel>
                       <VirtualizedCombobox
-                        value={field.value?.map(String)}
+                        value={(field.value as number[] | undefined)?.map(
+                          String,
+                        )}
                         options={
                           eventTypes?.eventTypes.map((type) => ({
                             value: type.id.toString(),
@@ -520,6 +533,35 @@ export default function AdminWorkoutsModal({
                           value={field.value ?? ""}
                         />
                       </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="mb-4 w-1/2 px-2">
+                <FormField
+                  control={form.control}
+                  name="isPrivate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Visibility</FormLabel>
+                      <Select
+                        onValueChange={(value) =>
+                          value &&
+                          field.onChange(value === "true" ? true : false)
+                        }
+                        value={field.value === true ? "true" : "false"}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select visibility" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="false">Public</SelectItem>
+                          <SelectItem value="true">Private</SelectItem>
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}

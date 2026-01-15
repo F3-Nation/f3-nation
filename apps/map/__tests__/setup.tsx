@@ -4,6 +4,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render } from "@testing-library/react";
 import { vi } from "vitest";
 
+// Must be set before vitest-canvas-mock is imported
+// because jest-canvas-mock accesses the jest global during initialization
+globalThis.jest = vi as unknown as typeof jest;
+
 import "@testing-library/jest-dom";
 import "vitest-canvas-mock";
 

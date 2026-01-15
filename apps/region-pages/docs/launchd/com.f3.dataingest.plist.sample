@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.f3.dataingest</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/patrick/src/F3-Nation/f3-region-pages/scripts/f3-region-pages-data-ingest.sh</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/patrick/src/F3-Nation/f3-region-pages</string>
+
+  <!-- Set a daily time (local). Adjust Hour/Minute to preference. -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>10</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+
+  <!-- launchd logs; per-run logs are written by the script itself. -->
+  <key>StandardOutPath</key>
+  <string>/Users/patrick/Library/Logs/f3-region-pages-data-ingest/launchd.out</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/patrick/Library/Logs/f3-region-pages-data-ingest/launchd.err</string>
+
+  <!-- Set true if you want it to fire immediately after load. -->
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>

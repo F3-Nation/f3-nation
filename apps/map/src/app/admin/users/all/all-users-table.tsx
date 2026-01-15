@@ -156,11 +156,7 @@ export const AllUsersTable = () => {
   const [selectedStatuses, setSelectedStatuses] = useState<UserStatus[]>([
     "active",
   ]);
-  const [selectedRoles, setSelectedRoles] = useState<UserRole[]>([
-    "user",
-    "admin",
-    "editor",
-  ]);
+  const [selectedRoles, setSelectedRoles] = useState<UserRole[]>([]);
   const [selectedOrgs, setSelectedOrgs] = useState<Org[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
@@ -229,7 +225,7 @@ export const AllUsersTable = () => {
             />
             <UserRoleFilter
               onRoleSelect={handleRoleSelect}
-              selectedRoles={selectedRoles}
+              selectedRoles={selectedRoles ?? []}
             />
           </>
         }
@@ -364,12 +360,12 @@ const columns: TableOptions<
             <DropdownMenuItem
               onClick={(e) => {
                 e.stopPropagation();
-                openModal(ModalType.ADMIN_GRANT_ACCESS, {
+                openModal(ModalType.ADMIN_MANAGE_ACCESS, {
                   userId: Number(row.original.id),
                 });
               }}
             >
-              <div>Grant Access</div>
+              <div>Manage Access</div>
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={(e) => {
