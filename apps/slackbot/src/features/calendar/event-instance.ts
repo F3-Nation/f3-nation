@@ -1,4 +1,4 @@
-import type { BlockAction } from "@slack/bolt";
+import type { App, BlockAction } from "@slack/bolt";
 import type { PlainTextOption } from "@slack/types";
 import dayjs from "dayjs";
 
@@ -103,6 +103,7 @@ export async function buildAddEventInstanceForm(
           type: "input",
           block_id: ACTIONS.CALENDAR_ADD_EVENT_INSTANCE_AO,
           label: { type: "plain_text", text: "AO" },
+          dispatch_action: true,
           element: {
             type: "static_select",
             action_id: ACTIONS.CALENDAR_ADD_EVENT_INSTANCE_AO,
@@ -160,7 +161,7 @@ export async function buildAddEventInstanceForm(
         {
           type: "input",
           block_id: ACTIONS.CALENDAR_ADD_EVENT_INSTANCE_TAG,
-          label: { type: "plain_text", text: "Event Tag (optional)" },
+          label: { type: "plain_text", text: "Event Tag" },
           optional: true,
           element: {
             type: "static_select",
@@ -204,8 +205,12 @@ export async function buildAddEventInstanceForm(
         {
           type: "input",
           block_id: ACTIONS.CALENDAR_ADD_EVENT_INSTANCE_END_TIME,
-          label: { type: "plain_text", text: "End Time (optional)" },
+          label: { type: "plain_text", text: "End Time" },
           optional: true,
+          hint: {
+            type: "plain_text",
+            text: "Defaults to 1 hour after start time",
+          },
           element: {
             type: "timepicker",
             action_id: ACTIONS.CALENDAR_ADD_EVENT_INSTANCE_END_TIME,
@@ -217,8 +222,12 @@ export async function buildAddEventInstanceForm(
         {
           type: "input",
           block_id: ACTIONS.CALENDAR_ADD_EVENT_INSTANCE_NAME,
-          label: { type: "plain_text", text: "Event Name (optional)" },
+          label: { type: "plain_text", text: "Event Name" },
           optional: true,
+          hint: {
+            type: "plain_text",
+            text: "Defaults to AO name + Event Type",
+          },
           element: {
             type: "plain_text_input",
             action_id: ACTIONS.CALENDAR_ADD_EVENT_INSTANCE_NAME,
@@ -228,7 +237,7 @@ export async function buildAddEventInstanceForm(
         {
           type: "input",
           block_id: ACTIONS.CALENDAR_ADD_EVENT_INSTANCE_DESCRIPTION,
-          label: { type: "plain_text", text: "Description (optional)" },
+          label: { type: "plain_text", text: "Description" },
           optional: true,
           element: {
             type: "plain_text_input",
@@ -243,18 +252,43 @@ export async function buildAddEventInstanceForm(
         {
           text: { type: "plain_text" as const, text: "Make event private" },
           value: "private",
+          description: {
+            type: "plain_text" as const,
+            text: "Hides from Maps and PAX Vault",
+          },
         },
         {
-          text: { type: "plain_text" as const, text: "Exclude from PAX Vault" },
+          text: {
+            type: "plain_text" as const,
+            text: "Exclude stats from PAX Vault",
+          },
           value: "exclude_from_pax_vault",
+          description: {
+            type: "plain_text" as const,
+            text: "Can still be queried from BigQuery",
+          },
         },
         {
-          text: { type: "plain_text" as const, text: "No auto-preblasts" },
+          text: {
+            type: "plain_text" as const,
+            text: "Do not send auto-preblasts",
+          },
           value: "no_auto_preblasts",
+          description: {
+            type: "plain_text" as const,
+            text: "Opts out of automated preblasts",
+          },
         },
         {
-          text: { type: "plain_text" as const, text: "Highlight" },
+          text: {
+            type: "plain_text" as const,
+            text: "Highlight on Special List",
+          },
           value: "highlight",
+          description: {
+            type: "plain_text" as const,
+            text: "For convergences, 2nd F events, etc.",
+          },
         },
       ];
 
@@ -299,6 +333,251 @@ export async function buildAddEventInstanceForm(
     },
     { showLoading: true },
   );
+}
+
+/**
+ * Handle AO selection - updates the form with the AO's default location
+ */
+export async function handleEventInstanceAOSelection(args: TypedActionArgs) {
+  const { ack, body, client, context } = args;
+  await ack();
+
+  const action = (body as BlockAction).actions?.[0];
+  if (!action || action.type !== "static_select") return;
+
+  const selectedAoId = parseInt(action.selected_option?.value ?? "0");
+  if (!selectedAoId) return;
+
+  // Get the AO to find its default location
+  const { org: ao } = await api.org.byId({ id: selectedAoId });
+  const defaultLocationId = ao?.defaultLocationId;
+
+  // Get form options
+  const region = await api.slack.getRegion(context.teamId!);
+  if (!region) return;
+
+  const [orgResult, locationResult, eventTypeResult, eventTagResult] =
+    await Promise.all([
+      api.org.all({ orgTypes: ["ao"], parentOrgIds: [region.org.id] }),
+      api.location.all({ regionIds: [region.org.id] }),
+      api.eventType.all({ orgIds: [region.org.id], statuses: ["active"] }),
+      api.eventTag.all({ orgIds: [region.org.id], statuses: ["active"] }),
+    ]);
+
+  const aos = orgResult.orgs;
+  const locations = locationResult.locations;
+  const eventTypes = eventTypeResult.eventTypes;
+  const eventTags = eventTagResult.eventTags;
+
+  const aoOptions: PlainTextOption[] = aos.map((ao) => ({
+    text: { type: "plain_text", text: ao.name },
+    value: ao.id.toString(),
+  }));
+
+  const locationOptions: PlainTextOption[] = locations.map((loc) => ({
+    text: { type: "plain_text", text: loc.locationName },
+    value: loc.id.toString(),
+  }));
+
+  const eventTypeOptions: PlainTextOption[] = eventTypes.map((et) => ({
+    text: { type: "plain_text", text: et.name },
+    value: et.id.toString(),
+  }));
+
+  const eventTagOptions: PlainTextOption[] = eventTags.map((tag) => ({
+    text: { type: "plain_text", text: tag.name },
+    value: tag.id.toString(),
+  }));
+
+  // Build updated form blocks with the default location pre-selected
+  const blocks: BlockList = [
+    {
+      type: "input",
+      block_id: ACTIONS.CALENDAR_ADD_EVENT_INSTANCE_AO,
+      label: { type: "plain_text", text: "AO" },
+      dispatch_action: true,
+      element: {
+        type: "static_select",
+        action_id: ACTIONS.CALENDAR_ADD_EVENT_INSTANCE_AO,
+        placeholder: { type: "plain_text", text: "Select an AO" },
+        options: aoOptions,
+        initial_option: aoOptions.find(
+          (o) => o.value === selectedAoId.toString(),
+        ),
+      },
+    },
+    {
+      type: "input",
+      block_id: ACTIONS.CALENDAR_ADD_EVENT_INSTANCE_LOCATION,
+      label: { type: "plain_text", text: "Location" },
+      optional: true,
+      element: {
+        type: "static_select",
+        action_id: ACTIONS.CALENDAR_ADD_EVENT_INSTANCE_LOCATION,
+        placeholder: { type: "plain_text", text: "Select location" },
+        options: locationOptions,
+        ...(defaultLocationId
+          ? {
+              initial_option: locationOptions.find(
+                (o) => o.value === defaultLocationId.toString(),
+              ),
+            }
+          : {}),
+      },
+    },
+    {
+      type: "input",
+      block_id: ACTIONS.CALENDAR_ADD_EVENT_INSTANCE_TYPE,
+      label: { type: "plain_text", text: "Event Type" },
+      element: {
+        type: "static_select",
+        action_id: ACTIONS.CALENDAR_ADD_EVENT_INSTANCE_TYPE,
+        placeholder: { type: "plain_text", text: "Select type" },
+        options: eventTypeOptions,
+      },
+    },
+    {
+      type: "input",
+      block_id: ACTIONS.CALENDAR_ADD_EVENT_INSTANCE_TAG,
+      label: { type: "plain_text", text: "Event Tag" },
+      optional: true,
+      element: {
+        type: "static_select",
+        action_id: ACTIONS.CALENDAR_ADD_EVENT_INSTANCE_TAG,
+        placeholder: { type: "plain_text", text: "Select tag" },
+        options: eventTagOptions,
+      },
+    },
+    {
+      type: "input",
+      block_id: ACTIONS.CALENDAR_ADD_EVENT_INSTANCE_START_DATE,
+      label: { type: "plain_text", text: "Date" },
+      element: {
+        type: "datepicker",
+        action_id: ACTIONS.CALENDAR_ADD_EVENT_INSTANCE_START_DATE,
+        initial_date: dayjs().format("YYYY-MM-DD"),
+      },
+    },
+    {
+      type: "input",
+      block_id: ACTIONS.CALENDAR_ADD_EVENT_INSTANCE_START_TIME,
+      label: { type: "plain_text", text: "Start Time" },
+      element: {
+        type: "timepicker",
+        action_id: ACTIONS.CALENDAR_ADD_EVENT_INSTANCE_START_TIME,
+        initial_time: "05:30",
+      },
+    },
+    {
+      type: "input",
+      block_id: ACTIONS.CALENDAR_ADD_EVENT_INSTANCE_END_TIME,
+      label: { type: "plain_text", text: "End Time" },
+      optional: true,
+      hint: {
+        type: "plain_text",
+        text: "Defaults to 1 hour after start time",
+      },
+      element: {
+        type: "timepicker",
+        action_id: ACTIONS.CALENDAR_ADD_EVENT_INSTANCE_END_TIME,
+      },
+    },
+    {
+      type: "input",
+      block_id: ACTIONS.CALENDAR_ADD_EVENT_INSTANCE_NAME,
+      label: { type: "plain_text", text: "Event Name" },
+      optional: true,
+      hint: {
+        type: "plain_text",
+        text: "Defaults to AO name + Event Type",
+      },
+      element: {
+        type: "plain_text_input",
+        action_id: ACTIONS.CALENDAR_ADD_EVENT_INSTANCE_NAME,
+      },
+    },
+    {
+      type: "input",
+      block_id: ACTIONS.CALENDAR_ADD_EVENT_INSTANCE_DESCRIPTION,
+      label: { type: "plain_text", text: "Description" },
+      optional: true,
+      element: {
+        type: "plain_text_input",
+        action_id: ACTIONS.CALENDAR_ADD_EVENT_INSTANCE_DESCRIPTION,
+        multiline: true,
+      },
+    },
+  ];
+
+  const optionsList = [
+    {
+      text: { type: "plain_text" as const, text: "Make event private" },
+      value: "private",
+      description: {
+        type: "plain_text" as const,
+        text: "Hides from Maps and PAX Vault",
+      },
+    },
+    {
+      text: {
+        type: "plain_text" as const,
+        text: "Exclude stats from PAX Vault",
+      },
+      value: "exclude_from_pax_vault",
+      description: {
+        type: "plain_text" as const,
+        text: "Can still be queried from BigQuery",
+      },
+    },
+    {
+      text: { type: "plain_text" as const, text: "Do not send auto-preblasts" },
+      value: "no_auto_preblasts",
+      description: {
+        type: "plain_text" as const,
+        text: "Opts out of automated preblasts",
+      },
+    },
+    {
+      text: { type: "plain_text" as const, text: "Highlight on Special List" },
+      value: "highlight",
+      description: {
+        type: "plain_text" as const,
+        text: "For convergences, 2nd F events, etc.",
+      },
+    },
+  ];
+
+  blocks.push({
+    type: "input",
+    block_id: ACTIONS.CALENDAR_ADD_EVENT_INSTANCE_OPTIONS,
+    label: { type: "plain_text", text: "Options" },
+    optional: true,
+    element: {
+      type: "checkboxes",
+      action_id: ACTIONS.CALENDAR_ADD_EVENT_INSTANCE_OPTIONS,
+      options: optionsList,
+    },
+  });
+
+  // Parse existing metadata
+  const viewMeta = (body as BlockAction).view?.private_metadata;
+
+  // Update the existing modal
+  const viewId = (body as BlockAction).view?.id;
+  if (viewId) {
+    await client.views.update({
+      view_id: viewId,
+      view: {
+        type: "modal",
+        callback_id: ACTIONS.ADD_EVENT_INSTANCE_CALLBACK_ID,
+        title: { type: "plain_text", text: "Add Event" },
+        blocks,
+        submit: { type: "plain_text", text: "Save" },
+        close: { type: "plain_text", text: "Cancel" },
+        private_metadata: viewMeta,
+      },
+    });
+  }
 }
 
 /**
@@ -543,4 +822,57 @@ export async function handleEventInstanceEditDelete(args: TypedActionArgs) {
       logger.error("Failed to delete event instance", error);
     }
   }
+}
+
+/**
+ * Handle filter changes for event instance list
+ */
+async function handleEventInstanceFilter(args: TypedActionArgs) {
+  const { ack, body } = args;
+  await ack();
+
+  const action = (body as BlockAction).actions?.[0];
+  if (!action) return;
+
+  const navCtx = createNavContext(args);
+  const filters = (navCtx.metadata.filters as Record<string, string>) ?? {};
+
+  // Update filters based on action
+  if (action.type === "static_select" && action.selected_option) {
+    filters[action.action_id] = action.selected_option.value;
+  } else if (action.type === "datepicker" && action.selected_date) {
+    filters[action.action_id] = action.selected_date;
+  }
+
+  navCtx.metadata.filters = filters;
+  await buildListEventInstanceForm(navCtx);
+}
+
+/**
+ * Register Event Instance handlers
+ */
+export function registerEventInstanceHandlers(app: App) {
+  app.view(ACTIONS.ADD_EVENT_INSTANCE_CALLBACK_ID, handleEventInstanceAdd);
+
+  // Handle AO selection to update default location
+  app.action(
+    ACTIONS.CALENDAR_ADD_EVENT_INSTANCE_AO,
+    handleEventInstanceAOSelection,
+  );
+
+  // Handle filter changes
+  app.action(
+    ACTIONS.CALENDAR_MANAGE_EVENT_INSTANCE_AO,
+    handleEventInstanceFilter,
+  );
+  app.action(
+    ACTIONS.CALENDAR_MANAGE_EVENT_INSTANCE_DATE,
+    handleEventInstanceFilter,
+  );
+
+  // Regex for the dynamic edit/delete action ID
+  app.action(
+    new RegExp(`^${ACTIONS.EVENT_INSTANCE_EDIT_DELETE}_\\d+$`),
+    handleEventInstanceEditDelete,
+  );
 }

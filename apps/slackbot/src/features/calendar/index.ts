@@ -10,6 +10,10 @@ import { manageAOs, registerAOHandlers } from "./ao";
 import { manageEventTypes, registerEventTypeHandlers } from "./event-type";
 import { manageEventTags, registerEventTagHandlers } from "./event-tag";
 import { manageSeries, registerSeriesHandlers } from "./series";
+import {
+  manageEventInstances,
+  registerEventInstanceHandlers,
+} from "./event-instance";
 import { createNavContext, navigateToView } from "../../lib/view-navigation";
 
 /**
@@ -94,17 +98,28 @@ export function buildCalendarConfigModal(_context: ExtendedContext) {
       },
     },
     {
-      type: "actions",
-      elements: [
-        {
-          type: "button",
-          text: {
-            type: "plain_text",
-            text: ":date: Manage Event Instances",
+      type: "section",
+      text: {
+        type: "plain_text",
+        text: ":date: Manage Event Instances",
+      },
+      accessory: {
+        type: "overflow",
+        action_id: ACTIONS.CALENDAR_MANAGE_EVENT_INSTANCES,
+        options: [
+          {
+            text: { type: "plain_text", text: "Add Event Instance" },
+            value: "add",
           },
-          action_id: ACTIONS.CALENDAR_MANAGE_EVENT_INSTANCES,
-        },
-      ],
+          {
+            text: {
+              type: "plain_text",
+              text: "Edit or Delete Event Instances",
+            },
+            value: "edit",
+          },
+        ],
+      },
     },
     {
       type: "section",
@@ -205,29 +220,7 @@ export function registerCalendarFeature(app: App) {
   app.action(ACTIONS.CALENDAR_MANAGE_SERIES, manageSeries);
   registerSeriesHandlers(app);
 
-  // Placeholder handlers for other management options
-  const managementActions = [ACTIONS.CALENDAR_MANAGE_EVENT_INSTANCES] as const;
-
-  for (const actionId of managementActions) {
-    app.action(actionId, async (args: TypedActionArgs) => {
-      const { ack } = args;
-      await ack();
-      const navCtx = createNavContext(args);
-
-      await navigateToView(navCtx, () => ({
-        type: "modal",
-        title: { type: "plain_text", text: "Management" },
-        close: { type: "plain_text", text: "Back" },
-        blocks: [
-          {
-            type: "section",
-            text: {
-              type: "mrkdwn",
-              text: `Management for ${actionId} will be implemented in subsequent phases.`,
-            },
-          },
-        ],
-      }));
-    });
-  }
+  // Event Instances
+  app.action(ACTIONS.CALENDAR_MANAGE_EVENT_INSTANCES, manageEventInstances);
+  registerEventInstanceHandlers(app);
 }

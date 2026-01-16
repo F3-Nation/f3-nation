@@ -4,6 +4,7 @@ import { API_PREFIX_V1 } from "@acme/shared/app/constants";
 
 import { apiKeyRouter } from "./router/api-key";
 import { eventRouter } from "./router/event";
+import { eventInstanceRouter } from "./router/event-instance";
 import { eventTagRouter } from "./router/event-tag";
 import { eventTypeRouter } from "./router/event-type";
 import { locationRouter } from "./router/location";
@@ -17,6 +18,7 @@ import { userRouter } from "./router/user";
 export const router = os.prefix(API_PREFIX_V1).router({
   apiKey: os.prefix("/api-key").router(apiKeyRouter),
   event: os.prefix("/event").router(eventRouter),
+  eventInstance: os.prefix("/event-instance").router(eventInstanceRouter),
   eventTag: os.prefix("/event-tag").router(eventTagRouter),
   eventType: os.prefix("/event-type").router(eventTypeRouter),
   ping: os.router(pingRouter),
