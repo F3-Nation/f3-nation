@@ -115,6 +115,25 @@ export interface NavigationMetadata {
   [key: string]: unknown; // Allow feature-specific data
 }
 
+/** Interface for a single state value in view.state.values */
+export interface SlackStateValue {
+  type?: string;
+  selected_option?: {
+    value: string;
+    text: { type: string; text: string };
+  } | null;
+  selected_options?:
+    | { value: string; text: { type: string; text: string } }[]
+    | null;
+  selected_channel?: string | null;
+  selected_date?: string | null;
+  selected_time?: string | null;
+  value?: string | null;
+}
+
+/** Interface for view.state.values */
+export type SlackStateValues = Record<string, Record<string, SlackStateValue>>;
+
 /** Helper to parse navigation metadata */
 export function parseNavMetadata(raw?: string): NavigationMetadata {
   if (!raw) return { _navDepth: 0 };

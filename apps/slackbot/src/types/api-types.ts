@@ -132,3 +132,53 @@ export interface LocationInput {
   isActive?: boolean;
   meta?: Record<string, unknown> | null;
 }
+
+/**
+ * Event Instance Response type
+ */
+export interface EventInstanceResponse {
+  id: number;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+  locationId: number | null;
+  orgId: number;
+  startDate: string;
+  endDate: string | null;
+  startTime: string | null;
+  endTime: string | null;
+  highlight: boolean;
+  meta: Record<string, unknown> | null;
+  isPrivate: boolean;
+  eventTypes?: { eventTypeId: number; eventTypeName: string }[];
+  eventTags?: { eventTagId: number; eventTagName: string }[];
+}
+
+/**
+ * Event Instance list response
+ */
+export interface EventInstanceListResponse {
+  eventInstances: EventInstanceResponse[];
+  totalCount: number;
+}
+
+/**
+ * Event Instance input for creation/update
+ */
+export interface EventInstanceInput {
+  id?: number;
+  name?: string;
+  description?: string | null;
+  isActive?: boolean;
+  locationId?: number | null;
+  orgId?: number;
+  startDate?: string;
+  endDate?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+  highlight?: boolean;
+  meta?: Record<string, unknown> | null;
+  isPrivate?: boolean;
+  eventTypeId?: number;
+  eventTagId?: number;
+}

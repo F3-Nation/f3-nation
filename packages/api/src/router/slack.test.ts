@@ -103,7 +103,7 @@ describe("Slack Router", () => {
       const client = createTestClient("test-admin-key");
       const result = await client.slack.getOrCreateSpace({ teamId });
       expect(result).not.toBeNull();
-      expect(result.id).toBe(slackSpaceId);
+      expect(result!.id).toBe(slackSpaceId);
     });
 
     it("should create new space if it doesn't exist", async () => {
@@ -114,13 +114,13 @@ describe("Slack Router", () => {
         workspaceName: "New Space",
       });
       expect(result).not.toBeNull();
-      expect(result.teamId).toBe(newTeamId);
-      expect(result.workspaceName).toBe("New Space");
+      expect(result!.teamId).toBe(newTeamId);
+      expect(result!.workspaceName).toBe("New Space");
 
       // Cleanup
       await db
         .delete(schema.slackSpaces)
-        .where(eq(schema.slackSpaces.id, result.id));
+        .where(eq(schema.slackSpaces.id, result!.id));
     });
   });
 
@@ -221,8 +221,8 @@ describe("Slack Router", () => {
         userName: "ignored",
       });
       expect(result).not.toBeNull();
-      expect(result.slackId).toBe(existingSlackId);
-      expect(result.userName).toBe("existing");
+      expect(result!.slackId).toBe(existingSlackId);
+      expect(result!.userName).toBe("existing");
     });
 
     it("should create new user if they don't exist", async () => {
@@ -234,8 +234,8 @@ describe("Slack Router", () => {
         email: "new@example.com",
       });
       expect(result).not.toBeNull();
-      expect(result.slackId).toBe(newSlackId);
-      expect(result.userName).toBe("newuser");
+      expect(result!.slackId).toBe(newSlackId);
+      expect(result!.userName).toBe("newuser");
     });
   });
 

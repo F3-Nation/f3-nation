@@ -11,6 +11,9 @@ import type {
   LocationListResponse,
   LocationResponse,
   LocationInput,
+  EventInstanceResponse,
+  EventInstanceListResponse,
+  EventInstanceInput,
 } from "../types/api-types";
 import { logger } from "./logger";
 
@@ -346,6 +349,53 @@ export const api = {
 
     delete: (id: number) =>
       apiRequest<{ eventId: number }>(`/event/delete/${id}`, {
+        method: "DELETE",
+      }),
+  },
+
+  eventInstance: {
+    all: (params: {
+      regionOrgId?: number;
+      aoOrgId?: number;
+      startDate?: string;
+      statuses?: ("active" | "inactive")[];
+      searchTerm?: string;
+      pageIndex?: number;
+      pageSize?: number;
+    }) => {
+      const searchParams = new URLSearchParams();
+      if (params.regionOrgId)
+        searchParams.append("regionOrgId", params.regionOrgId.toString());
+      if (params.aoOrgId)
+        searchParams.append("aoOrgId", params.aoOrgId.toString());
+      if (params.startDate) searchParams.append("startDate", params.startDate);
+      if (params.searchTerm)
+        searchParams.append("searchTerm", params.searchTerm);
+      if (params.statuses) {
+        params.statuses.forEach((s) => searchParams.append("statuses", s));
+      }
+      if (params.pageIndex !== undefined)
+        searchParams.append("pageIndex", params.pageIndex.toString());
+      if (params.pageSize !== undefined)
+        searchParams.append("pageSize", params.pageSize.toString());
+      return apiRequest<EventInstanceListResponse>(
+        `/event-instance?${searchParams.toString()}`,
+      );
+    },
+
+    byId: (input: { id: number }) =>
+      apiRequest<EventInstanceResponse | null>(
+        `/event-instance/id/${input.id}`,
+      ),
+
+    crupdate: (input: EventInstanceInput) =>
+      apiRequest<EventInstanceResponse>(`/event-instance`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+
+    delete: (input: { id: number }) =>
+      apiRequest<{ success: boolean }>(`/event-instance/id/${input.id}`, {
         method: "DELETE",
       }),
   },

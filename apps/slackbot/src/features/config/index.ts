@@ -8,10 +8,12 @@ import type { RegionSettings } from "../../types";
 import type {
   BlockList,
   ExtendedContext,
+  SlackStateValues,
   TypedActionArgs,
   TypedCommandArgs,
   TypedViewArgs,
 } from "../../types/bolt-types";
+import type { ModalView } from "@slack/types";
 import { createNavContext, navigateToView } from "../../lib/view-navigation";
 import { stringifyNavMetadata } from "../../types/bolt-types";
 
@@ -63,7 +65,7 @@ export function buildConfigModal(context: ExtendedContext) {
     callback_id: ACTIONS.CONFIG_CALLBACK_ID,
     title: { type: "plain_text" as const, text: "F3 Nation Settings" },
     blocks,
-  };
+  } as ModalView;
 }
 
 /**
@@ -75,7 +77,7 @@ export function registerConfigFeature(app: App) {
     "/f3-nation-settings",
     async ({ ack, body, client, context }: TypedCommandArgs) => {
       await ack();
-      const modal: any = buildConfigModal(context);
+      const modal = buildConfigModal(context);
       // Initialize with depth 1
       modal.private_metadata = stringifyNavMetadata({ _navDepth: 1 });
       await client.views.open({
@@ -86,10 +88,10 @@ export function registerConfigFeature(app: App) {
   );
 
   // Global shortcut
-  app.shortcut("settings_shortcut", async (args: any) => {
+  app.shortcut("settings_shortcut", async (args) => {
     const { ack, shortcut, client, context } = args;
     await ack();
-    const modal: any = buildConfigModal(context as ExtendedContext);
+    const modal = buildConfigModal(context as ExtendedContext);
     // Initialize with depth 1
     modal.private_metadata = stringifyNavMetadata({ _navDepth: 1 });
     await client.views.open({
@@ -102,7 +104,7 @@ export function registerConfigFeature(app: App) {
   app.action(ACTIONS.SETTINGS_BUTTON, async (args: TypedActionArgs) => {
     const { ack, client, body, context } = args;
     await ack();
-    const modal: any = buildConfigModal(context);
+    const modal = buildConfigModal(context);
     modal.private_metadata = stringifyNavMetadata({ _navDepth: 1 });
     await client.views.open({
       trigger_id: (body as BlockAction).trigger_id,
@@ -147,7 +149,7 @@ export function registerConfigFeature(app: App) {
       const teamId = body.team?.id;
       if (!teamId) return;
 
-      const values = view.state.values;
+      const values = view.state.values as unknown as SlackStateValues;
       const editingLocked =
         values[ACTIONS.CONFIG_EDITING_LOCKED]?.[ACTIONS.CONFIG_EDITING_LOCKED]
           ?.selected_option?.value === "yes";
@@ -198,5 +200,5 @@ export function buildGeneralConfigModal(regionSettings?: RegionSettings) {
       },
       // Add more settings here based on RegionSettings
     ] as BlockList,
-  };
+  } as ModalView;
 }

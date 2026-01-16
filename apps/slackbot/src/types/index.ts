@@ -41,6 +41,13 @@ export interface RegionSettings {
   preblast_reminder_days?: number;
   backblast_reminder_days?: number;
   automated_preblast_time?: string;
+  send_q_lineups?: boolean;
+  send_q_lineups_method?: string | null;
+  send_q_lineups_channel?: string | null;
+  q_image_posting_enabled?: boolean;
+  q_image_posting_channel?: string | null;
+  send_q_lineups_day?: number | null;
+  send_q_lineups_hour_cst?: number | null;
 
   // Weaselbot settings
   weaselbot_enable_features?: string[];

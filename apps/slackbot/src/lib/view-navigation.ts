@@ -1,3 +1,4 @@
+import type { AnyMiddlewareArgs } from "@slack/bolt";
 import type { ModalView } from "@slack/types";
 import type { WebClient } from "@slack/web-api";
 import { ACTIONS } from "../constants/actions";
@@ -10,6 +11,7 @@ export interface NavigationContext {
   currentViewId?: string;
   teamId: string;
   _currentDepth: number;
+  metadata: NavigationMetadata;
 }
 
 export interface NavigateOptions {
@@ -25,20 +27,31 @@ export interface NavigateOptions {
  * Creates a navigation context from a Bolt action/view payload
  */
 export function createNavContext(args: {
-  client: any;
-  body: any;
+  client: WebClient;
+  body: AnyMiddlewareArgs["body"];
   context: { teamId?: string };
 }): NavigationContext {
   const { client, body, context } = args;
-  const view = body?.view;
+
+  // View payloads have view on the body, action payloads might have it too (e.g. block_actions)
+  // Use unknown + type check to avoiding 'any'
+  const bodyWithView = body as {
+    view?: { id: string; private_metadata?: string };
+  };
+  const view = bodyWithView.view;
+
+  const bodyWithTrigger = body as { trigger_id?: string };
+  const triggerId = bodyWithTrigger.trigger_id;
+
   const metadata = parseNavMetadata(view?.private_metadata);
 
   return {
-    client: client as WebClient,
-    triggerId: body?.trigger_id ?? "",
+    client,
+    triggerId: triggerId ?? "",
     currentViewId: view?.id,
     teamId: context.teamId ?? "",
     _currentDepth: metadata._navDepth,
+    metadata,
   };
 }
 

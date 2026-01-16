@@ -181,6 +181,29 @@ export const ACTIONS = {
   // Q Lineup
   LINEUP_SIGNUP_BUTTON: "lineup-signup-button",
   HOME_ASSIGN_Q_CALLBACK_ID: "home-assign-q-id",
+
+  // Event Instance Management
+  CALENDAR_ADD_EVENT_INSTANCE_AO: "calendar_add_event_instance_ao",
+  CALENDAR_ADD_EVENT_INSTANCE_LOCATION: "calendar_add_event_instance_location",
+  CALENDAR_ADD_EVENT_INSTANCE_TYPE: "calendar_add_event_instance_type",
+  CALENDAR_ADD_EVENT_INSTANCE_TAG: "calendar_add_event_instance_tag",
+  CALENDAR_ADD_EVENT_INSTANCE_START_DATE:
+    "calendar_add_event_instance_start_date",
+  CALENDAR_ADD_EVENT_INSTANCE_START_TIME:
+    "calendar_add_event_instance_start_time",
+  CALENDAR_ADD_EVENT_INSTANCE_END_TIME: "calendar_add_event_instance_end_time",
+  CALENDAR_ADD_EVENT_INSTANCE_NAME: "calendar_add_event_instance_name",
+  CALENDAR_ADD_EVENT_INSTANCE_DESCRIPTION:
+    "calendar_add_event_instance_description",
+  CALENDAR_ADD_EVENT_INSTANCE_OPTIONS: "calendar_add_event_instance_options",
+  ADD_EVENT_INSTANCE_CALLBACK_ID: "add-event-instance-id",
+  EDIT_DELETE_EVENT_INSTANCE_CALLBACK_ID: "edit-delete-event-instance-id",
+  CALENDAR_MANAGE_EVENT_INSTANCE_AO: "calendar-manage-event-instance-ao",
+  CALENDAR_MANAGE_EVENT_INSTANCE_DATE: "calendar-manage-event-instance-date",
+  EVENT_INSTANCE_EDIT_DELETE: "event-instance-edit-delete",
+
+  // Calendar Settings
+  CALENDAR_CONFIG_Q_LINEUP: "calendar-config-q-lineup",
 } as const;
 
 export type ActionId = (typeof ACTIONS)[keyof typeof ACTIONS];
