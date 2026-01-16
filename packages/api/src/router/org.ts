@@ -372,7 +372,8 @@ export const orgRouter = {
       path: "/delete/{id}",
       tags: ["org"],
       summary: "Delete organization",
-      description: "Soft delete an organization by marking it as inactive",
+      description:
+        "Soft delete an organization by marking it as inactive. For AO orgs, this also soft-deletes associated series and future event instances.",
     })
     .handler(async ({ context: ctx, input }) => {
       const roleCheckResult = await checkHasRoleOnOrg({
@@ -386,6 +387,14 @@ export const orgRouter = {
           message: "You are not authorized to delete this org",
         });
       }
+
+      // Get the org type before deleting to determine if cascading is needed
+      const [org] = await ctx.db
+        .select({ orgType: schema.orgs.orgType })
+        .from(schema.orgs)
+        .where(eq(schema.orgs.id, input.id));
+
+      // Soft delete the org itself
       await ctx.db
         .update(schema.orgs)
         .set({ isActive: false })
@@ -396,6 +405,16 @@ export const orgRouter = {
             eq(schema.orgs.isActive, true),
           ),
         );
+
+      // If this is an AO, cascade soft-delete to series and event instances
+      if (org?.orgType === "ao") {
+        const { softDeleteSeriesForOrg, softDeleteFutureInstancesForOrg } =
+          await import("../lib/cascade-service");
+
+        await softDeleteSeriesForOrg(ctx.db, input.id);
+        await softDeleteFutureInstancesForOrg(ctx.db, input.id);
+      }
+
       return { orgId: input.id };
     }),
   revalidate: adminProcedure

@@ -373,7 +373,8 @@ export const eventRouter = {
       path: "/",
       tags: ["event"],
       summary: "Create or update event",
-      description: "Create a new event or update an existing one",
+      description:
+        "Create a new event or update an existing one. For series (events with recurrence patterns), this also creates or updates associated event instances.",
     })
     .handler(async ({ context: ctx, input }) => {
       const [existingEvent] = input.id
@@ -459,6 +460,74 @@ export const eventRouter = {
         }
       }
 
+      // Handle cascade operations for series (events with recurrence patterns)
+      if (result.recurrencePattern) {
+        const {
+          isStructuralChange,
+          createEventInstancesForSeries,
+          updateFutureInstances,
+          recreateFutureInstances,
+        } = await import("../lib/cascade-service");
+
+        // Build series data for cascade operations
+        const seriesData = {
+          id: result.id,
+          orgId: result.orgId,
+          locationId: result.locationId,
+          name: result.name,
+          description: result.description,
+          startDate: result.startDate,
+          endDate: result.endDate,
+          startTime: result.startTime,
+          endTime: result.endTime,
+          dayOfWeek: result.dayOfWeek,
+          recurrencePattern: result.recurrencePattern,
+          recurrenceInterval: result.recurrenceInterval,
+          indexWithinInterval: result.indexWithinInterval,
+          isActive: result.isActive,
+          isPrivate: result.isPrivate,
+          highlight: result.highlight,
+          meta: result.meta as Record<string, unknown> | null,
+          eventTypeId: eventTypeIds?.[0],
+          eventTagId: eventTagIds?.[0],
+        };
+
+        if (!existingEvent) {
+          // New series: create event instances
+          await createEventInstancesForSeries(ctx.db, seriesData);
+        } else if (existingEvent.recurrencePattern) {
+          // Existing series: check for structural changes
+          const existingSeriesData = {
+            dayOfWeek: existingEvent.dayOfWeek,
+            recurrencePattern: existingEvent.recurrencePattern,
+            recurrenceInterval: existingEvent.recurrenceInterval,
+            indexWithinInterval: existingEvent.indexWithinInterval,
+            startDate: existingEvent.startDate,
+            endDate: existingEvent.endDate,
+          };
+
+          const updatedSeriesData = {
+            dayOfWeek: result.dayOfWeek,
+            recurrencePattern: result.recurrencePattern,
+            recurrenceInterval: result.recurrenceInterval,
+            indexWithinInterval: result.indexWithinInterval,
+            startDate: result.startDate,
+            endDate: result.endDate,
+          };
+
+          if (isStructuralChange(existingSeriesData, updatedSeriesData)) {
+            // Structural change: delete and recreate future instances
+            await recreateFutureInstances(ctx.db, seriesData);
+          } else {
+            // Non-structural change: update future instances in place
+            await updateFutureInstances(ctx.db, seriesData);
+          }
+        } else {
+          // Converting a non-series event to a series: create instances
+          await createEventInstancesForSeries(ctx.db, seriesData);
+        }
+      }
+
       return { event: result ?? null };
     }),
   eventIdToRegionNameLookup: protectedProcedure
@@ -514,7 +583,8 @@ export const eventRouter = {
       path: "/delete/{id}",
       tags: ["event"],
       summary: "Delete event",
-      description: "Soft delete an event by marking it as inactive",
+      description:
+        "Soft delete an event (series) by marking it as inactive. For series, this also soft-deletes future event instances.",
     })
     .handler(async ({ context: ctx, input }) => {
       const [event] = await ctx.db
@@ -538,12 +608,22 @@ export const eventRouter = {
           message: "You are not authorized to delete this Event",
         });
       }
+
+      // Soft delete the event (series) itself
       await ctx.db
         .update(schema.events)
         .set({ isActive: false })
         .where(
           and(eq(schema.events.id, input.id), eq(schema.events.isActive, true)),
         );
+
+      // If this is a series (has recurrence pattern), cascade soft-delete to future instances
+      if (event.recurrencePattern) {
+        const { softDeleteFutureInstancesForSeries } = await import(
+          "../lib/cascade-service"
+        );
+        await softDeleteFutureInstancesForSeries(ctx.db, input.id);
+      }
 
       return { eventId: input.id };
     }),
