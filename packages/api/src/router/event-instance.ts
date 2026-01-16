@@ -23,7 +23,8 @@ import { withPagination } from "../with-pagination";
 
 /**
  * Event Instance Router
- * Event instances are non-recurring events (events without recurrence patterns)
+ * Event instances are individual event occurrences stored in the event_instances table.
+ * They may or may not be linked to a series (recurring event) via seriesId.
  */
 export const eventInstanceRouter = {
   all: protectedProcedure
@@ -40,6 +41,8 @@ export const eventInstanceRouter = {
           regionOrgId: z.coerce.number().optional(),
           aoOrgId: z.coerce.number().optional(),
           startDate: z.string().optional(),
+          seriesId: z.coerce.number().optional(),
+          onlyStandalone: z.coerce.boolean().optional(), // Only instances without a series
         })
         .optional(),
     )
@@ -49,7 +52,7 @@ export const eventInstanceRouter = {
       tags: ["event-instance"],
       summary: "List all event instances",
       description:
-        "Get a paginated list of single event instances (non-recurring events)",
+        "Get a paginated list of event instances (individual occurrences)",
     })
     .handler(async ({ context: ctx, input }) => {
       const regionOrg = aliasedTable(schema.orgs, "region_org");
@@ -59,52 +62,64 @@ export const eventInstanceRouter = {
       const usePagination =
         input?.pageIndex !== undefined && input?.pageSize !== undefined;
 
-      // Event instances are events without recurrence patterns (single events)
       const where = and(
-        // Only get non-recurring events (instances)
-        isNull(schema.events.recurrencePattern),
         // Active status filter
         input?.statuses?.includes("inactive")
           ? undefined
-          : eq(schema.events.isActive, true),
+          : eq(schema.eventInstances.isActive, true),
         // Search filter
         input?.searchTerm
           ? or(
-              ilike(schema.events.name, `%${input.searchTerm}%`),
-              ilike(schema.events.description, `%${input.searchTerm}%`),
+              ilike(schema.eventInstances.name, `%${input.searchTerm}%`),
+              ilike(schema.eventInstances.description, `%${input.searchTerm}%`),
             )
           : undefined,
-        // Region filter
+        // Region filter (through AO's parent)
         input?.regionOrgId ? eq(regionOrg.id, input.regionOrgId) : undefined,
         // AO filter
         input?.aoOrgId ? eq(aoOrg.id, input.aoOrgId) : undefined,
         // Start date filter
         input?.startDate
-          ? gte(schema.events.startDate, input.startDate)
+          ? gte(schema.eventInstances.startDate, input.startDate)
+          : undefined,
+        // Series filter
+        input?.seriesId
+          ? eq(schema.eventInstances.seriesId, input.seriesId)
+          : undefined,
+        // Standalone instances only (no series link)
+        input?.onlyStandalone
+          ? isNull(schema.eventInstances.seriesId)
           : undefined,
       );
 
       const select = {
-        id: schema.events.id,
-        name: schema.events.name,
-        description: schema.events.description,
-        isActive: schema.events.isActive,
-        locationId: schema.events.locationId,
-        orgId: schema.events.orgId,
-        startDate: schema.events.startDate,
-        startTime: schema.events.startTime,
-        endTime: schema.events.endTime,
-        highlight: schema.events.highlight,
-        meta: schema.events.meta,
-        isPrivate: schema.events.isPrivate,
+        id: schema.eventInstances.id,
+        name: schema.eventInstances.name,
+        description: schema.eventInstances.description,
+        isActive: schema.eventInstances.isActive,
+        locationId: schema.eventInstances.locationId,
+        orgId: schema.eventInstances.orgId,
+        seriesId: schema.eventInstances.seriesId,
+        startDate: schema.eventInstances.startDate,
+        endDate: schema.eventInstances.endDate,
+        startTime: schema.eventInstances.startTime,
+        endTime: schema.eventInstances.endTime,
+        highlight: schema.eventInstances.highlight,
+        meta: schema.eventInstances.meta,
+        isPrivate: schema.eventInstances.isPrivate,
+        paxCount: schema.eventInstances.paxCount,
+        fngCount: schema.eventInstances.fngCount,
       };
 
       const [instanceCount] = await ctx.db
         .select({ count: count() })
-        .from(schema.events)
+        .from(schema.eventInstances)
         .leftJoin(
           aoOrg,
-          and(eq(aoOrg.orgType, "ao"), eq(aoOrg.id, schema.events.orgId)),
+          and(
+            eq(aoOrg.orgType, "ao"),
+            eq(aoOrg.id, schema.eventInstances.orgId),
+          ),
         )
         .leftJoin(
           regionOrg,
@@ -119,22 +134,28 @@ export const eventInstanceRouter = {
         const direction = sorting.desc ? desc : asc;
         switch (sorting.id) {
           case "startDate":
-            return direction(schema.events.startDate);
+            return direction(schema.eventInstances.startDate);
           case "startTime":
-            return direction(schema.events.startTime);
+            return direction(schema.eventInstances.startTime);
           case "name":
-            return direction(schema.events.name);
+            return direction(schema.eventInstances.name);
           default:
-            return direction(schema.events.startDate);
+            return direction(schema.eventInstances.startDate);
         }
-      }) ?? [asc(schema.events.startDate), asc(schema.events.startTime)];
+      }) ?? [
+        asc(schema.eventInstances.startDate),
+        asc(schema.eventInstances.startTime),
+      ];
 
       const query = ctx.db
         .select(select)
-        .from(schema.events)
+        .from(schema.eventInstances)
         .leftJoin(
           aoOrg,
-          and(eq(aoOrg.orgType, "ao"), eq(aoOrg.id, schema.events.orgId)),
+          and(
+            eq(aoOrg.orgType, "ao"),
+            eq(aoOrg.id, schema.eventInstances.orgId),
+          ),
         )
         .leftJoin(
           regionOrg,
@@ -170,19 +191,24 @@ export const eventInstanceRouter = {
 
       const [instance] = await ctx.db
         .select({
-          id: schema.events.id,
-          name: schema.events.name,
-          description: schema.events.description,
-          isActive: schema.events.isActive,
-          locationId: schema.events.locationId,
-          orgId: schema.events.orgId,
-          startDate: schema.events.startDate,
-          endDate: schema.events.endDate,
-          startTime: schema.events.startTime,
-          endTime: schema.events.endTime,
-          highlight: schema.events.highlight,
-          meta: schema.events.meta,
-          isPrivate: schema.events.isPrivate,
+          id: schema.eventInstances.id,
+          name: schema.eventInstances.name,
+          description: schema.eventInstances.description,
+          isActive: schema.eventInstances.isActive,
+          locationId: schema.eventInstances.locationId,
+          orgId: schema.eventInstances.orgId,
+          seriesId: schema.eventInstances.seriesId,
+          startDate: schema.eventInstances.startDate,
+          endDate: schema.eventInstances.endDate,
+          startTime: schema.eventInstances.startTime,
+          endTime: schema.eventInstances.endTime,
+          highlight: schema.eventInstances.highlight,
+          meta: schema.eventInstances.meta,
+          isPrivate: schema.eventInstances.isPrivate,
+          paxCount: schema.eventInstances.paxCount,
+          fngCount: schema.eventInstances.fngCount,
+          preblast: schema.eventInstances.preblast,
+          backblast: schema.eventInstances.backblast,
           eventTypes: sql<
             { eventTypeId: number; eventTypeName: string }[]
           >`COALESCE(
@@ -212,29 +238,41 @@ export const eventInstanceRouter = {
             '[]'
           )`,
         })
-        .from(schema.events)
+        .from(schema.eventInstances)
         .leftJoin(
           aoOrg,
-          and(eq(aoOrg.orgType, "ao"), eq(aoOrg.id, schema.events.orgId)),
+          and(
+            eq(aoOrg.orgType, "ao"),
+            eq(aoOrg.id, schema.eventInstances.orgId),
+          ),
         )
         .leftJoin(
-          schema.eventsXEventTypes,
-          eq(schema.eventsXEventTypes.eventId, schema.events.id),
+          schema.eventInstancesXEventTypes,
+          eq(
+            schema.eventInstancesXEventTypes.eventInstanceId,
+            schema.eventInstances.id,
+          ),
         )
         .leftJoin(
           schema.eventTypes,
-          eq(schema.eventTypes.id, schema.eventsXEventTypes.eventTypeId),
+          eq(
+            schema.eventTypes.id,
+            schema.eventInstancesXEventTypes.eventTypeId,
+          ),
         )
         .leftJoin(
-          schema.eventTagsXEvents,
-          eq(schema.eventTagsXEvents.eventId, schema.events.id),
+          schema.eventTagsXEventInstances,
+          eq(
+            schema.eventTagsXEventInstances.eventInstanceId,
+            schema.eventInstances.id,
+          ),
         )
         .leftJoin(
           schema.eventTags,
-          eq(schema.eventTags.id, schema.eventTagsXEvents.eventTagId),
+          eq(schema.eventTags.id, schema.eventTagsXEventInstances.eventTagId),
         )
-        .where(eq(schema.events.id, input.id))
-        .groupBy(schema.events.id, aoOrg.id);
+        .where(eq(schema.eventInstances.id, input.id))
+        .groupBy(schema.eventInstances.id, aoOrg.id);
 
       return instance ?? null;
     }),
@@ -248,6 +286,7 @@ export const eventInstanceRouter = {
         isActive: z.boolean().optional().default(true),
         locationId: z.coerce.number().nullish(),
         orgId: z.coerce.number(),
+        seriesId: z.coerce.number().nullish(), // Link to series if this is a series instance
         startDate: z.string(),
         endDate: z.string().nullish(),
         startTime: z.string().nullish(),
@@ -264,7 +303,7 @@ export const eventInstanceRouter = {
       path: "/",
       tags: ["event-instance"],
       summary: "Create or update event instance",
-      description: "Create a new single event or update an existing one",
+      description: "Create a new event instance or update an existing one",
     })
     .handler(async ({ context: ctx, input }) => {
       // Check permissions
@@ -305,19 +344,15 @@ export const eventInstanceRouter = {
 
       const { eventTypeId, eventTagId, name: _inputName, ...eventData } = input;
 
-      // Create the event (without recurrence pattern = single instance)
+      // Create or update the event instance
       const [result] = await ctx.db
-        .insert(schema.events)
+        .insert(schema.eventInstances)
         .values({
           ...eventData,
           name,
-          recurrencePattern: null, // No recurrence for instances
-          recurrenceInterval: null,
-          indexWithinInterval: null,
-          dayOfWeek: null,
         })
         .onConflictDoUpdate({
-          target: [schema.events.id],
+          target: [schema.eventInstances.id],
           set: { ...eventData, name },
         })
         .returning();
@@ -331,11 +366,13 @@ export const eventInstanceRouter = {
       // Handle event type in join table
       if (eventTypeId) {
         await ctx.db
-          .delete(schema.eventsXEventTypes)
-          .where(eq(schema.eventsXEventTypes.eventId, result.id));
+          .delete(schema.eventInstancesXEventTypes)
+          .where(
+            eq(schema.eventInstancesXEventTypes.eventInstanceId, result.id),
+          );
 
-        await ctx.db.insert(schema.eventsXEventTypes).values({
-          eventId: result.id,
+        await ctx.db.insert(schema.eventInstancesXEventTypes).values({
+          eventInstanceId: result.id,
           eventTypeId,
         });
       }
@@ -343,11 +380,13 @@ export const eventInstanceRouter = {
       // Handle event tag in join table
       if (eventTagId) {
         await ctx.db
-          .delete(schema.eventTagsXEvents)
-          .where(eq(schema.eventTagsXEvents.eventId, result.id));
+          .delete(schema.eventTagsXEventInstances)
+          .where(
+            eq(schema.eventTagsXEventInstances.eventInstanceId, result.id),
+          );
 
-        await ctx.db.insert(schema.eventTagsXEvents).values({
-          eventId: result.id,
+        await ctx.db.insert(schema.eventTagsXEventInstances).values({
+          eventInstanceId: result.id,
           eventTagId,
         });
       }
@@ -362,22 +401,22 @@ export const eventInstanceRouter = {
       path: "/id/{id}",
       tags: ["event-instance"],
       summary: "Delete event instance",
-      description: "Delete a single event instance",
+      description: "Delete an event instance (hard delete)",
     })
     .handler(async ({ context: ctx, input }) => {
-      const [event] = await ctx.db
+      const [instance] = await ctx.db
         .select()
-        .from(schema.events)
-        .where(eq(schema.events.id, input.id));
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.id, input.id));
 
-      if (!event) {
+      if (!instance) {
         throw new ORPCError("NOT_FOUND", {
           message: "Event instance not found",
         });
       }
 
       const roleCheckResult = await checkHasRoleOnOrg({
-        orgId: event.orgId,
+        orgId: instance.orgId,
         session: ctx.session,
         db: ctx.db,
         roleName: "admin",
@@ -389,7 +428,9 @@ export const eventInstanceRouter = {
       }
 
       // Hard delete for event instances
-      await ctx.db.delete(schema.events).where(eq(schema.events.id, input.id));
+      await ctx.db
+        .delete(schema.eventInstances)
+        .where(eq(schema.eventInstances.id, input.id));
 
       return { success: true };
     }),
