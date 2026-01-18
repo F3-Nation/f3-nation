@@ -205,6 +205,17 @@ export class MailService {
       throw new Error("Text is not supported, just use html");
     }
 
+    // Disable SendGrid click/open tracking - makes links look suspicious
+    // See: https://github.com/F3-Nation/f3-nation/issues/45
+    const sendGridHeaders = {
+      "X-SMTPAPI": JSON.stringify({
+        filters: {
+          clicktrack: { settings: { enable: 0 } },
+          opentrack: { settings: { enable: 0 } },
+        },
+      }),
+    };
+
     const batches = messages.reduce((acc, message, i) => {
       const batchIndex = Math.floor(i / batchSize);
       acc[batchIndex] = acc[batchIndex] ?? [];
@@ -219,7 +230,7 @@ export class MailService {
         batch.map((msg) =>
           this.getTransporter().then((t) =>
             t
-              ?.sendMail(msg)
+              ?.sendMail({ ...msg, headers: sendGridHeaders })
               .then((info) => {
                 sentInfo.push(info);
                 console.log("\x1b[32m", "Message sent successfully!");
