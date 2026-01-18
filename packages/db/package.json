@@ -35,7 +35,8 @@
     "drizzle-orm": "^0.39.3",
     "esbuild-register": "^3.5.0",
     "pg": "^8.11.3",
-    "postgres": "^3.4.3"
+    "postgres": "^3.4.3",
+    "tsx": "^4.7.1"
   },
   "devDependencies": {
     "@acme/eslint-config": "workspace:*",
@@ -45,7 +46,6 @@
     "drizzle-kit": "^0.30.2",
     "eslint": "^8.56.0",
     "prettier": "^3.2.5",
-    "tsx": "^4.7.1",
     "typescript": "^5.3.3"
   },
   "eslintConfig": {
