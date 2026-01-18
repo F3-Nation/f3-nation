@@ -23,6 +23,7 @@ import {
   openModal,
 } from "~/utils/store/modal";
 import textLink from "~/utils/text-link";
+import { ContactLinks } from "../contact-links";
 import { ImageWithFallback } from "../image-with-fallback";
 import { EventChip } from "../map/event-chip";
 import { WorkoutDetailsSkeleton } from "../modal/workout-details-skeleton";
@@ -86,6 +87,31 @@ export const WorkoutDetailsContent = ({
     toast.success("Link copied to clipboard");
   }, [event?.id, location?.id]);
 
+  const aoContact = useMemo(
+    () =>
+      location
+        ? {
+            website: location.parentWebsite,
+            email: location.parentEmail,
+            twitter: location.parentTwitter,
+            facebook: location.parentFacebook,
+            instagram: location.parentInstagram,
+          }
+        : null,
+    [location],
+  );
+
+  const hasAoContact = useMemo(
+    () =>
+      aoContact &&
+      (aoContact.website ??
+        aoContact.email ??
+        aoContact.twitter ??
+        aoContact.facebook ??
+        aoContact.instagram),
+    [aoContact],
+  );
+
   const workoutFields = useMemo(
     () =>
       event && location
@@ -120,19 +146,39 @@ export const WorkoutDetailsContent = ({
               ) : null,
             ].filter(isTruthy),
             When: event ? getWhenFromWorkout(event) : "",
-            Website: location.parentWebsite ? (
-              <Link
-                href={location.parentWebsite}
-                target="_blank"
-                className="underline"
-              >
-                {location.parentWebsite}
-              </Link>
-            ) : null,
+            Contact:
+              hasAoContact && aoContact ? (
+                <ContactLinks contact={aoContact} iconSize="sm" />
+              ) : null,
             Notes: event?.description ? textLink(event.description) : null,
           }
         : {},
-    [event, location],
+    [event, location, aoContact, hasAoContact],
+  );
+
+  const regionContact = useMemo(
+    () =>
+      location
+        ? {
+            website: location.regionWebsite,
+            email: location.regionEmail,
+            twitter: location.regionTwitter,
+            facebook: location.regionFacebook,
+            instagram: location.regionInstagram,
+          }
+        : null,
+    [location],
+  );
+
+  const hasRegionContact = useMemo(
+    () =>
+      regionContact &&
+      (regionContact.website ??
+        regionContact.email ??
+        regionContact.twitter ??
+        regionContact.facebook ??
+        regionContact.instagram),
+    [regionContact],
   );
 
   const regionFields = useMemo(
@@ -140,15 +186,10 @@ export const WorkoutDetailsContent = ({
       location
         ? {
             Name: location.regionName ? `F3 ${location.regionName}` : null,
-            Website: location.regionWebsite ? (
-              <Link
-                href={location.regionWebsite}
-                target="_blank"
-                className="underline"
-              >
-                {location.regionWebsite}
-              </Link>
-            ) : null,
+            Contact:
+              hasRegionContact && regionContact ? (
+                <ContactLinks contact={regionContact} iconSize="sm" />
+              ) : null,
             Logo: location.regionLogo ? (
               <ImageWithFallback
                 key={location.regionLogo}
@@ -163,7 +204,7 @@ export const WorkoutDetailsContent = ({
             ) : null,
           }
         : {},
-    [location],
+    [location, regionContact, hasRegionContact],
   );
 
   if (!location || !event || isLoading) {
@@ -437,9 +478,7 @@ export const WorkoutDetailsContent = ({
                       submittedBy: session?.user?.email ?? "",
                     })
                     .then((result) => {
-                      void invalidateQueries({
-                        predicate: (query) => query.queryKey[0] === "location",
-                      });
+                      void invalidateQueries("location");
                       void invalidateQueries({
                         queryKey: orpc.request.canDeleteEvent.queryKey({
                           input: { eventId: event.id },

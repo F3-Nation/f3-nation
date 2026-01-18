@@ -142,17 +142,7 @@ export default function AdminWorkoutsModal({
   const crupdateEvent = useMutation(
     orpc.event.crupdate.mutationOptions({
       onSuccess: async () => {
-        await invalidateQueries({
-          predicate: (query) => {
-            const key = query.queryKey;
-            return (
-              Array.isArray(key) &&
-              key.length > 0 &&
-              (key[0] === "event" ||
-                (Array.isArray(key[0]) && key[0][0] === "event"))
-            );
-          },
-        });
+        await invalidateQueries("event");
         closeModal();
         toast.success("Successfully updated event");
         router.refresh();

@@ -65,9 +65,7 @@ export default function UserMutate({
   const crupdateUser = useMutation(
     orpc.user.crupdate.mutationOptions({
       onSuccess: async () => {
-        await invalidateQueries({
-          predicate: (query) => query.queryKey[0] === "user",
-        });
+        await invalidateQueries("user");
         router.push("/admin/users");
         toast.success("Successfully upserted user");
       },

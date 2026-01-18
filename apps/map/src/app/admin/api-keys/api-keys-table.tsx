@@ -66,9 +66,7 @@ export const ApiKeysTable = () => {
   const revokeKey = useMutation(
     orpc.apiKey.revoke.mutationOptions({
       onSuccess: async (_result, variables) => {
-        await invalidateQueries({
-          predicate: (query) => query.queryKey[0] === "apiKey",
-        });
+        await invalidateQueries("apiKey");
         toast.success(
           variables?.revoke === false
             ? "API key reactivated"
@@ -84,9 +82,7 @@ export const ApiKeysTable = () => {
   const purgeKey = useMutation(
     orpc.apiKey.purge.mutationOptions({
       onSuccess: async () => {
-        await invalidateQueries({
-          predicate: (query) => query.queryKey[0] === "apiKey",
-        });
+        await invalidateQueries("apiKey");
         toast.success("API key deleted");
       },
       onError: () => {

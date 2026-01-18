@@ -91,9 +91,7 @@ export default function AdminEventTypesModal({
   const crupdateEventType = useMutation(
     orpc.eventType.crupdate.mutationOptions({
       onSuccess: async () => {
-        await invalidateQueries({
-          predicate: (query) => query.queryKey[0] === "eventType",
-        });
+        await invalidateQueries("eventType");
         closeModal();
         toast.success("Successfully updated event type");
         router.refresh();

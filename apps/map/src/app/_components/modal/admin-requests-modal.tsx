@@ -74,12 +74,9 @@ export default function AdminRequestsModal({
           eventStartTime: convertHH_mmToHHmm(values.eventStartTime ?? ""),
           eventEndTime: convertHH_mmToHHmm(values.eventEndTime ?? ""),
         });
-        void invalidateQueries({
-          predicate: (query) =>
-            query.queryKey[0] === "request" ||
-            query.queryKey[0] === "event" ||
-            query.queryKey[0] === "location",
-        });
+        void invalidateQueries("request");
+        void invalidateQueries("event");
+        void invalidateQueries("location");
         router.refresh();
         toast.success("Approved update");
         closeModal();
@@ -116,9 +113,7 @@ export default function AdminRequestsModal({
         id: formId,
       })
       .then(() => {
-        void invalidateQueries({
-          predicate: (query) => query.queryKey[0] === "request",
-        });
+        void invalidateQueries("request");
         router.refresh();
         setStatus("idle");
         toast.error("Rejected update");

@@ -12,14 +12,18 @@
     "lint": "eslint .",
     "lint:fix": "pnpm lint --fix",
     "format": "prettier --check . --ignore-path .gitignore --ignore-path .prettierignore",
+    "notify-outstanding-requests": "pnpm with-env tsx ./src/notify-outstanding-requests.ts",
     "script": "pnpm with-env tsx ./src/script.ts",
     "typecheck": "tsc --noEmit",
     "with-env": "dotenv -e ../../.env --"
   },
   "devDependencies": {
+    "@acme/api": "workspace:*",
+    "@acme/db": "workspace:*",
     "@acme/env": "workspace:*",
     "@acme/eslint-config": "workspace:*",
     "@acme/prettier-config": "workspace:*",
+    "@acme/shared": "workspace:*",
     "@acme/tsconfig": "workspace:*",
     "eslint": "^8.56.0",
     "prettier": "^3.2.5",

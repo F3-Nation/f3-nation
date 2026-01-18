@@ -1,14 +1,14 @@
 "use client";
 
 import type { InferRouterInputs, InferRouterOutputs } from "@orpc/server";
+import { createTanstackQueryUtils } from "@orpc/tanstack-query";
 import type {
   InferDataFromTag,
   QueryClient,
   QueryKey,
 } from "@tanstack/react-query";
-import React, { Suspense, useEffect, useState } from "react";
-import { createTanstackQueryUtils } from "@orpc/tanstack-query";
 import { QueryClientProvider } from "@tanstack/react-query";
+import React, { Suspense, useEffect, useState } from "react";
 
 import type { router } from "@acme/api";
 import { isDevelopmentNodeEnv } from "@acme/shared/common/constants";
@@ -64,10 +64,37 @@ export const orpc = createTanstackQueryUtils(client);
 export { ORPCError } from "@orpc/client";
 export { useMutation, useQuery } from "@tanstack/react-query";
 
+/**
+ * Invalidate queries by key name or with custom options.
+ * When passed a string, handles both flat (["event", ...]) and nested ([["event", "all"], ...]) query key formats.
+ *
+ * @example
+ * // Simple key - handles nested keys automatically
+ * await invalidateQueries("event");
+ *
+ * // Passing query options directly
+ * void invalidateQueries(orpc.request.all.queryOptions());
+ *
+ * // Custom predicate when needed
+ * await invalidateQueries({ predicate: (query) => query.queryKey[0] === "location" });
+ */
 export function invalidateQueries(
-  ...args: Parameters<QueryClient["invalidateQueries"]>
+  keyOrOptions?: string | Parameters<QueryClient["invalidateQueries"]>[0],
 ) {
-  return getQueryClient().invalidateQueries(...args);
+  if (typeof keyOrOptions === "string") {
+    return getQueryClient().invalidateQueries({
+      predicate: (query) => {
+        const queryKey = query.queryKey;
+        return (
+          Array.isArray(queryKey) &&
+          queryKey.length > 0 &&
+          (queryKey[0] === keyOrOptions ||
+            (Array.isArray(queryKey[0]) && queryKey[0][0] === keyOrOptions))
+        );
+      },
+    });
+  }
+  return getQueryClient().invalidateQueries(keyOrOptions);
 }
 
 export function getQueryData<

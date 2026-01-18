@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
 import { cn } from "@acme/ui";
@@ -14,9 +14,9 @@ import {
 } from "@acme/ui/dialog";
 import { toast } from "@acme/ui/toast";
 
+import { ORPCError, invalidateQueries, orpc } from "~/orpc/react";
 import type { DataType, ModalType } from "~/utils/store/modal";
-import { invalidateQueries, orpc, ORPCError } from "~/orpc/react";
-import { closeModal, DeleteType } from "~/utils/store/modal";
+import { DeleteType, closeModal } from "~/utils/store/modal";
 
 export default function AdminDeleteModal({
   data,
@@ -61,58 +61,48 @@ export default function AdminDeleteModal({
 
   const handleDelete = async (id: number) => {
     setIsPending(true);
-    await mutation({ id })
-      .then(() => {
-        closeModal();
-        toast.success(`Successfully deleted ${data.type.toLowerCase()}`);
+    try {
+      await mutation({ id });
+      toast.success(`Successfully deleted ${data.type.toLowerCase()}`);
 
-        switch (data.type) {
-          case DeleteType.NATION:
-          case DeleteType.SECTOR:
-          case DeleteType.AREA:
-          case DeleteType.REGION:
-          case DeleteType.AO:
-            void invalidateQueries({
-              predicate: (query) => query.queryKey[0] === "org",
-            });
-            break;
-          case DeleteType.EVENT:
-            void invalidateQueries({
-              predicate: (query) => query.queryKey[0] === "event",
-            });
-            break;
-          case DeleteType.EVENT_TYPE:
-            void invalidateQueries({
-              predicate: (query) => query.queryKey[0] === "eventType",
-            });
-            break;
-          case DeleteType.USER:
-            void invalidateQueries({
-              predicate: (query) => query.queryKey[0] === "user",
-            });
-            break;
-          case DeleteType.LOCATION:
-            void invalidateQueries({
-              predicate: (query) => query.queryKey[0] === "location",
-            });
-            break;
-          default:
-            // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-            throw new Error(`Invalid delete type: ${data.type}`);
-        }
-        router.refresh();
-      })
-      .catch((err) => {
-        console.error("delete-modal err", err);
-        if (err instanceof ORPCError) {
-          toast.error(err.message);
-        } else {
-          toast.error(`Failed to delete ${data.type}`);
-        }
-      })
-      .finally(() => {
-        setIsPending(false);
-      });
+      // Invalidate queries and wait for completion so the table refreshes
+      switch (data.type) {
+        case DeleteType.NATION:
+        case DeleteType.SECTOR:
+        case DeleteType.AREA:
+        case DeleteType.REGION:
+        case DeleteType.AO:
+          await invalidateQueries("org");
+          break;
+        case DeleteType.EVENT:
+          await invalidateQueries("event");
+          break;
+        case DeleteType.EVENT_TYPE:
+          await invalidateQueries("eventType");
+          break;
+        case DeleteType.USER:
+          await invalidateQueries("user");
+          break;
+        case DeleteType.LOCATION:
+          await invalidateQueries("location");
+          break;
+        default:
+          // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
+          throw new Error(`Invalid delete type: ${data.type}`);
+      }
+
+      router.refresh();
+      closeModal();
+    } catch (err) {
+      console.error("delete-modal err", err);
+      if (err instanceof ORPCError) {
+        toast.error(err.message);
+      } else {
+        toast.error(`Failed to delete ${data.type}`);
+      }
+    } finally {
+      setIsPending(false);
+    }
   };
 
   return (

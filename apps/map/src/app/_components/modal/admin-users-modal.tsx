@@ -100,9 +100,7 @@ export default function UserModal({
   const crupdateUser = useMutation(
     orpc.user.crupdate.mutationOptions({
       onSuccess: async (data) => {
-        await invalidateQueries({
-          predicate: (query) => query.queryKey[0] === "user",
-        });
+        await invalidateQueries("user");
         const { roles } = data;
         if (session?.id === data.id && data.roles?.length > 0) {
           await update({ ...session, roles });

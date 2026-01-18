@@ -91,20 +91,7 @@ export default function AdminApiKeysModal() {
         });
 
         // Force refetch of the API keys list
-        // Query key structure: [["apiKey", "list"], {"type": "query"}]
-        await invalidateQueries({
-          predicate: (query) => {
-            const key = query.queryKey;
-            return (
-              Array.isArray(key) &&
-              key.length > 0 &&
-              Array.isArray(key[0]) &&
-              key[0].length >= 2 &&
-              key[0][0] === "apiKey" &&
-              key[0][1] === "list"
-            );
-          },
-        });
+        await invalidateQueries("apiKey");
       },
       onError: () => {
         toast.error("Unable to create API key");

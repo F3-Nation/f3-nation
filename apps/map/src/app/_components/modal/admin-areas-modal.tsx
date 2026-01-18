@@ -110,9 +110,7 @@ export default function AdminAreasModal({
   const crupdateArea = useMutation(
     orpc.org.crupdate.mutationOptions({
       onSuccess: async () => {
-        await invalidateQueries({
-          predicate: (query) => query.queryKey[0] === "org",
-        });
+        await invalidateQueries("org");
         closeModal();
         toast.success("Successfully updated area");
         router.refresh();
