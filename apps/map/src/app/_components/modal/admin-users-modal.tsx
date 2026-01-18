@@ -100,9 +100,7 @@ export default function UserModal({
   const crupdateUser = useMutation(
     orpc.user.crupdate.mutationOptions({
       onSuccess: async (data) => {
-        await invalidateQueries({
-          predicate: (query) => query.queryKey[0] === "user",
-        });
+        await invalidateQueries("user");
         const { roles } = data;
         if (session?.id === data.id && data.roles?.length > 0) {
           await update({ ...session, roles });
@@ -384,14 +382,14 @@ export default function UserModal({
                         type="button"
                         variant="outline"
                         onClick={() => {
-                          openModal(ModalType.ADMIN_GRANT_ACCESS, {
+                          openModal(ModalType.ADMIN_MANAGE_ACCESS, {
                             userId: Number(user.id),
                           });
                         }}
                         className="w-full"
                       >
                         <UserPlus className="mr-2 h-4 w-4" />
-                        Grant Access
+                        Manage Access
                       </Button>
                       <p className="text-xs text-muted-foreground text-center">
                         Progress here will be lost

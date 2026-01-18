@@ -130,6 +130,7 @@ export const eventRouter = {
         name: schema.events.name,
         description: schema.events.description,
         isActive: schema.events.isActive,
+        isPrivate: schema.events.isPrivate,
         parent: parentOrg.name,
         locationId: schema.events.locationId,
         startDate: schema.events.startDate,
@@ -168,6 +169,20 @@ export const eventRouter = {
           ), 
           '[]'
         )`,
+        eventTypes: sql<
+          { eventTypeId: number; eventTypeName: string }[]
+        >`COALESCE(
+            json_agg(
+              DISTINCT jsonb_build_object(
+                'eventTypeId', ${schema.eventTypes.id},
+                'eventTypeName', ${schema.eventTypes.name}
+              )
+            )
+            FILTER (
+              WHERE ${schema.eventTypes.id} IS NOT NULL
+            ),
+            '[]'
+          )`,
       };
 
       const [eventCount] = await ctx.db
@@ -221,6 +236,14 @@ export const eventRouter = {
               eq(regionOrg.id, parentOrg.parentId),
             ),
           ),
+        )
+        .leftJoin(
+          schema.eventsXEventTypes,
+          eq(schema.eventsXEventTypes.eventId, schema.events.id),
+        )
+        .leftJoin(
+          schema.eventTypes,
+          eq(schema.eventTypes.id, schema.eventsXEventTypes.eventTypeId),
         )
         .groupBy(
           schema.events.id,
@@ -437,7 +460,7 @@ export const eventRouter = {
           .where(eq(schema.eventsXEventTypes.eventId, result.id));
 
         await ctx.db.insert(schema.eventsXEventTypes).values(
-          eventTypeIds.map((eventTypeId) => ({
+          eventTypeIds.map((eventTypeId: number) => ({
             eventId: result.id,
             eventTypeId,
           })),

@@ -118,6 +118,16 @@ export const sendVerificationRequest: NodemailerConfig["sendVerificationRequest"
       subject: `Sign in to ${host}`,
       text: text({ url, mobileUrl, host }),
       html: html({ url, mobileUrl, host, theme }),
+      // Disable SendGrid click tracking - it makes links look suspicious (url9440.f3nation.com)
+      // See: https://github.com/F3-Nation/f3-nation/issues/45
+      headers: {
+        "X-SMTPAPI": JSON.stringify({
+          filters: {
+            clicktrack: { settings: { enable: 0 } },
+            opentrack: { settings: { enable: 0 } },
+          },
+        }),
+      },
     });
     const failed = result.rejected.concat(result.pending).filter(Boolean);
     if (failed.length) {

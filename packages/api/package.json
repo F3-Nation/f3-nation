@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./mail": "./src/mail.ts",
+    "./services/map-request-notification": "./src/services/map-request-notification.ts"
   },
   "license": "MIT",
   "scripts": {
@@ -12,8 +14,8 @@
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
     "lint": "eslint .",
     "test": "pnpm with-env vitest --run",
-    "test:watch": "pnpm with-env vitest -w",
     "test:org-hierarchy": "pnpm with-env tsx src/scripts/test-org-hierarchy.ts",
+    "test:watch": "pnpm with-env vitest -w",
     "typecheck": "tsc --noEmit",
     "with-env": "dotenv -e ../../.env --"
   },
@@ -24,6 +26,7 @@
     "@acme/shared": "workspace:^0.1.0",
     "@acme/validators": "workspace:^0.1.0",
     "@orpc/client": "^1.8.8",
+    "@orpc/experimental-ratelimit": "^1.13.2",
     "@orpc/server": "^1.8.8",
     "google-auth-library": "^10.3.0",
     "handlebars": "^4.7.8",

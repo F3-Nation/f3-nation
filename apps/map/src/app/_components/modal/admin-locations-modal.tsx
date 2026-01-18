@@ -110,9 +110,7 @@ export default function AdminLocationsModal({
   const crupdateLocation = useMutation(
     orpc.location.crupdate.mutationOptions({
       onSuccess: async () => {
-        await invalidateQueries({
-          predicate: (query) => query.queryKey[0] === "location",
-        });
+        await invalidateQueries("location");
         closeModal();
         toast.success("Successfully updated location");
         router.refresh();
@@ -231,7 +229,9 @@ export default function AdminLocationsModal({
                       control={form.control}
                       name="regionId"
                       render={({ field }) => (
-                        <FormItem key={`region-${field.value}`}>
+                        <FormItem
+                          key={`region-${String(field.value ?? "new")}`}
+                        >
                           <FormLabel>Region</FormLabel>
                           <VirtualizedCombobox
                             value={field.value?.toString()}
@@ -419,7 +419,9 @@ export default function AdminLocationsModal({
                       name="addressCountry"
                       render={({ field }) => {
                         return (
-                          <FormItem key={`country-${field.value}`}>
+                          <FormItem
+                            key={`country-${String(field.value ?? "new")}`}
+                          >
                             <FormLabel>Country</FormLabel>
                             <VirtualizedCombobox
                               value={field.value?.toString()}

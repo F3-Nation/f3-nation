@@ -14,8 +14,8 @@ import AdminAreasModal from "./admin-areas-modal";
 import AdminDeleteModal from "./admin-delete-modal";
 import AdminDeleteRequestModal from "./admin-delete-request-modal";
 import AdminEventTypesModal from "./admin-event-types-modal";
-import AdminGrantAccessModal from "./admin-grant-access-modal";
 import AdminLocationsModal from "./admin-locations-modal";
+import AdminManageAccessModal from "./admin-manage-access-modal";
 import AdminNationsModal from "./admin-nations-modal";
 import AdminRegionsModal from "./admin-regions-modal";
 import AdminRequestsModal from "./admin-requests-modal";
@@ -65,10 +65,10 @@ export const ModalSwitcher = () => {
       return <SettingsModal />;
     case ModalType.ADMIN_USERS:
       return <AdminUsersModal data={data as DataType[ModalType.ADMIN_USERS]} />;
-    case ModalType.ADMIN_GRANT_ACCESS:
+    case ModalType.ADMIN_MANAGE_ACCESS:
       return (
-        <AdminGrantAccessModal
-          data={data as DataType[ModalType.ADMIN_GRANT_ACCESS]}
+        <AdminManageAccessModal
+          data={data as DataType[ModalType.ADMIN_MANAGE_ACCESS]}
         />
       );
     case ModalType.ADMIN_REQUESTS:

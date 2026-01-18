@@ -154,10 +154,7 @@ export const MyUsersTable = () => {
   const [selectedStatuses, setSelectedStatuses] = useState<UserStatus[]>([
     "active",
   ]);
-  const [selectedRoles, setSelectedRoles] = useState<UserRole[]>([
-    "admin",
-    "editor",
-  ]);
+  const [selectedRoles, setSelectedRoles] = useState<UserRole[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
   const { pagination, setPagination } = usePagination({
@@ -165,10 +162,10 @@ export const MyUsersTable = () => {
   });
 
   // Get admin org IDs from session
-  const adminOrgIds = useMemo(() => {
+  const adminAndEditorOrgIds = useMemo(() => {
     if (!session?.roles) return [];
     return session.roles
-      .filter((role) => role.roleName === "admin")
+      .filter((role) => role.roleName === "admin" || role.roleName === "editor")
       .map((role) => role.orgId);
   }, [session]);
 
@@ -200,18 +197,19 @@ export const MyUsersTable = () => {
         searchTerm: debouncedSearchTerm,
         pageSize: pagination.pageSize,
         pageIndex: pagination.pageIndex,
-        orgIds: adminOrgIds,
+        orgIds: adminAndEditorOrgIds,
         includePii: true,
       },
-      enabled: adminOrgIds.length > 0,
+      enabled: adminAndEditorOrgIds.length > 0,
     }),
   );
 
-  if (adminOrgIds.length === 0) {
+  if (adminAndEditorOrgIds.length === 0) {
     return (
       <div className="flex items-center justify-center p-8">
         <p className="text-muted-foreground">
-          You need to be an admin for at least one organization to view users.
+          You need to be an admin or editor for at least one organization to
+          view users.
         </p>
       </div>
     );
@@ -231,7 +229,7 @@ export const MyUsersTable = () => {
             />
             <UserRoleFilter
               onRoleSelect={handleRoleSelect}
-              selectedRoles={selectedRoles}
+              selectedRoles={selectedRoles ?? []}
             />
           </>
         }
@@ -377,12 +375,12 @@ const columns: TableOptions<
             <DropdownMenuItem
               onClick={(e) => {
                 e.stopPropagation();
-                openModal(ModalType.ADMIN_GRANT_ACCESS, {
+                openModal(ModalType.ADMIN_MANAGE_ACCESS, {
                   userId: Number(row.original.id),
                 });
               }}
             >
-              <div>Grant Access</div>
+              <div>Manage Access</div>
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={(e) => {

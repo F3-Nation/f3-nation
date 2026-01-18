@@ -118,9 +118,7 @@ export default function AdminRegionsModal({
   const crupdateRegion = useMutation(
     orpc.org.crupdate.mutationOptions({
       onSuccess: async () => {
-        await invalidateQueries({
-          predicate: (query) => query.queryKey[0] === "org",
-        });
+        await invalidateQueries("org");
         closeModal();
         toast.success("Successfully updated region");
         router.refresh();
@@ -228,7 +226,7 @@ export default function AdminRegionsModal({
                   control={form.control}
                   name="parentId"
                   render={({ field }) => (
-                    <FormItem key={`area-${field.value}`}>
+                    <FormItem key={`area-${String(field.value ?? "new")}`}>
                       <FormLabel>Area</FormLabel>
                       <Select
                         value={field.value?.toString()}

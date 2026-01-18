@@ -72,6 +72,7 @@ export const mapLocationRouter = os.router({
           and(
             eq(schema.events.locationId, schema.locations.id),
             eq(schema.events.isActive, true),
+            eq(schema.events.isPrivate, false),
           ),
         )
         .leftJoin(aoOrg, eq(schema.events.orgId, aoOrg.id))
@@ -199,10 +200,18 @@ export const mapLocationRouter = os.router({
             parentLogo: parentOrg.logoUrl,
             parentName: parentOrg.name,
             parentWebsite: parentOrg.website,
+            parentEmail: parentOrg.email,
+            parentTwitter: parentOrg.twitter,
+            parentFacebook: parentOrg.facebook,
+            parentInstagram: parentOrg.instagram,
             regionId: regionOrg.id,
             regionName: regionOrg.name,
             regionLogo: regionOrg.logoUrl,
             regionWebsite: regionOrg.website,
+            regionEmail: regionOrg.email,
+            regionTwitter: regionOrg.twitter,
+            regionFacebook: regionOrg.facebook,
+            regionInstagram: regionOrg.instagram,
             regionType: regionOrg.orgType,
           },
           event: {
@@ -236,6 +245,7 @@ export const mapLocationRouter = os.router({
           and(
             eq(schema.locations.id, schema.events.locationId),
             eq(schema.events.isActive, true),
+            eq(schema.events.isPrivate, false),
           ),
         )
         .leftJoin(parentOrg, eq(schema.events.orgId, parentOrg.id))

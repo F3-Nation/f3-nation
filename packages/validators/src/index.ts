@@ -59,17 +59,18 @@ export const EventTagSelectSchema = createSelectSchema(eventTags);
 
 // EVENT SCHEMA
 export const EventInsertSchema = createInsertSchema(events, {
-  name: (s) => s.min(1, { message: "Name is required" }),
-  locationId: (s) =>
+  name: (s: z.ZodString) => s.min(1, { message: "Name is required" }),
+  locationId: (s: z.ZodNumber) =>
     s
       .min(1, { message: "Please select an location" })
       .refine((value) => value !== -1, { message: "Invalid selection" }),
-  email: (s) => s.email({ message: "Invalid email format" }).or(z.literal("")),
-  startTime: (s) =>
+  email: (s: z.ZodString) =>
+    s.email({ message: "Invalid email format" }).or(z.literal("")),
+  startTime: (s: z.ZodString) =>
     s.regex(/^\d{4}$/, {
       message: "Start time must be in 24hr format (HHmm)",
     }),
-  endTime: (s) =>
+  endTime: (s: z.ZodString) =>
     s.regex(/^\d{4}$/, {
       message: "End time must be in 24hr format (HHmm)",
     }),
@@ -97,59 +98,65 @@ export type EventInsertType = z.infer<typeof CreateEventSchema>;
 
 // NATION SCHEMA
 export const NationInsertSchema = createInsertSchema(orgs, {
-  name: (s) => s.min(1, { message: "Name is required" }),
-  email: (s) => s.email({ message: "Invalid email format" }).or(z.literal("")),
+  name: (s: z.ZodString) => s.min(1, { message: "Name is required" }),
+  email: (s: z.ZodString) =>
+    s.email({ message: "Invalid email format" }).or(z.literal("")),
   parentId: z.null({ message: "Must not have a parent" }).optional(),
 }).omit({ orgType: true });
 export const NationSelectSchema = createSelectSchema(orgs);
 
 // SECTOR SCHEMA
 export const SectorInsertSchema = createInsertSchema(orgs, {
-  name: (s) => s.min(1, { message: "Name is required" }),
+  name: (s: z.ZodString) => s.min(1, { message: "Name is required" }),
   parentId: z
     .number({ message: "Must have a parent" })
     .nonnegative({ message: "Invalid selection" }),
-  email: (s) => s.email({ message: "Invalid email format" }).or(z.literal("")),
+  email: (s: z.ZodString) =>
+    s.email({ message: "Invalid email format" }).or(z.literal("")),
 }).omit({ orgType: true });
 export const SectorSelectSchema = createSelectSchema(orgs);
 
 // AREA SCHEMA
 export const AreaInsertSchema = createInsertSchema(orgs, {
-  name: (s) => s.min(1, { message: "Name is required" }),
+  name: (s: z.ZodString) => s.min(1, { message: "Name is required" }),
   parentId: z
     .number({ message: "Must have a parent" })
     .nonnegative({ message: "Invalid selection" }),
-  email: (s) => s.email({ message: "Invalid email format" }).or(z.literal("")),
+  email: (s: z.ZodString) =>
+    s.email({ message: "Invalid email format" }).or(z.literal("")),
 }).omit({ orgType: true });
 export const AreaSelectSchema = createSelectSchema(orgs);
 
 // REGION SCHEMA
 export const RegionInsertSchema = createInsertSchema(orgs, {
-  name: (s) => s.min(1, { message: "Name is required" }),
+  name: (s: z.ZodString) => s.min(1, { message: "Name is required" }),
   parentId: z
     .number({ message: "Must have a parent" })
     .nonnegative({ message: "Invalid selection" }),
-  email: (s) => s.email({ message: "Invalid email format" }).or(z.literal("")),
+  email: (s: z.ZodString) =>
+    s.email({ message: "Invalid email format" }).or(z.literal("")),
 }).omit({ orgType: true });
 export const RegionSelectSchema = createSelectSchema(orgs);
 
 // AO SCHEMA
 export const AOInsertSchema = createInsertSchema(orgs, {
-  name: (s) => s.min(1, { message: "Name is required" }),
+  name: (s: z.ZodString) => s.min(1, { message: "Name is required" }),
   parentId: z
     .number({ message: "Must have a parent" })
     .nonnegative({ message: "Invalid selection" }),
-  email: (s) => s.email({ message: "Invalid email format" }).or(z.literal("")),
+  email: (s: z.ZodString) =>
+    s.email({ message: "Invalid email format" }).or(z.literal("")),
 }).omit({ orgType: true });
 export const AOSelectSchema = createSelectSchema(orgs);
 
 // ORG SCHEMA
 export const OrgInsertSchema = createInsertSchema(orgs, {
-  name: (s) => s.min(1, { message: "Name is required" }),
+  name: (s: z.ZodString) => s.min(1, { message: "Name is required" }),
   parentId: z
     .number({ message: "Must have a parent" })
     .nonnegative({ message: "Invalid selection" }),
-  email: (s) => s.email({ message: "Invalid email format" }).or(z.literal("")),
+  email: (s: z.ZodString) =>
+    s.email({ message: "Invalid email format" }).or(z.literal("")),
 });
 export const OrgSelectSchema = createSelectSchema(orgs);
 
@@ -162,15 +169,16 @@ export const DeleteRequestSchema = z.object({
 
 // REQUEST UPDATE SCHEMA
 export const RequestInsertSchema = createInsertSchema(updateRequests, {
-  eventTypeIds: (s) =>
+  eventTypeIds: (s: z.ZodArray<z.ZodNumber>) =>
     s.min(1, { message: "Please select at least one event type" }),
-  eventName: (s) => s.min(1, { message: "Workout name is required" }),
+  eventName: (s: z.ZodString) =>
+    s.min(1, { message: "Workout name is required" }),
   // We don't want to require an event description
   // eventDescription: (s) => s.min(1, { message: "Description is required" }),
   eventDayOfWeek: z.enum(DayOfWeek, {
     message: "Day of the week is required",
   }),
-  aoName: (s) => s.min(1, { message: "AO name is required" }),
+  aoName: (s: z.ZodString) => s.min(1, { message: "AO name is required" }),
   // Location fields are optional
   // locationAddress: (s) => s.min(1, { message: "Location address is required" }),
   // locationCity: (s) => s.min(1, { message: "Location city is required" }),
@@ -178,15 +186,16 @@ export const RequestInsertSchema = createInsertSchema(updateRequests, {
   // locationZip: (s) => s.min(1, { message: "Location zip is required" }),
   // locationCountry: (s) => s.min(1, { message: "Location country is required" }),
   regionId: z.number({ invalid_type_error: "Region is required" }),
-  eventStartTime: (s) =>
+  eventStartTime: (s: z.ZodString) =>
     s.regex(/^\d{4}$/, {
       message: "Start time must be in 24hr format (HHmm)",
     }),
-  eventEndTime: (s) =>
+  eventEndTime: (s: z.ZodString) =>
     s.regex(/^\d{4}$/, {
       message: "End time must be in 24hr format (HHmm)",
     }),
-  submittedBy: (s) => s.email({ message: "Invalid email address" }),
+  submittedBy: (s: z.ZodString) =>
+    s.email({ message: "Invalid email address" }),
 }).extend({
   id: z.string(),
   eventMeta: z.record(z.string(), z.unknown()).optional(),

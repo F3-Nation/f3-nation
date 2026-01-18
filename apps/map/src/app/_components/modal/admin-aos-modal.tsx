@@ -177,7 +177,7 @@ export default function AdminAOsModal({
                   control={form.control}
                   name="parentId"
                   render={({ field }) => (
-                    <FormItem key={`region-${field.value}`}>
+                    <FormItem key={`region-${String(field.value ?? "new")}`}>
                       <FormLabel>Region</FormLabel>
                       <VirtualizedCombobox
                         value={field.value?.toString()}
