@@ -1,5 +1,3 @@
-import { fileURLToPath } from "url";
-
 import dayjs from "dayjs";
 import customParseFormat from "dayjs/plugin/customParseFormat";
 
@@ -496,10 +494,7 @@ const withTriggerManagement = async (db: AppDb, fn: () => Promise<void>) => {
 `);
 };
 
-// ESM equivalent of `if (require.main === module)`
-const isMainModule = process.argv[1] === fileURLToPath(import.meta.url);
-
-if (isMainModule) {
+if (require.main === module) {
   void withTriggerManagement(db, seed)
     .then(() => SEED_LOGS && console.log("Seed done"))
     .catch((e) => {

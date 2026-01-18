@@ -1,5 +1,3 @@
-import { fileURLToPath } from "url";
-
 import { sql } from "drizzle-orm/sql";
 
 import { isTest } from "@acme/shared/common/constants";
@@ -72,10 +70,7 @@ export const reset = async () => {
   return;
 };
 
-// ESM equivalent of `if (require.main === module)`
-const isMainModule = process.argv[1] === fileURLToPath(import.meta.url);
-
-if (isMainModule) {
+if (require.main === module) {
   void reset()
     .then(() => console.log("Reset done"))
     .catch((e) => {
