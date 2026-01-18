@@ -437,9 +437,7 @@ export const WorkoutDetailsContent = ({
                       submittedBy: session?.user?.email ?? "",
                     })
                     .then((result) => {
-                      void invalidateQueries({
-                        predicate: (query) => query.queryKey[0] === "location",
-                      });
+                      void invalidateQueries("location");
                       void invalidateQueries({
                         queryKey: orpc.request.canDeleteEvent.queryKey({
                           input: { eventId: event.id },

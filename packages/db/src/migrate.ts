@@ -1,3 +1,5 @@
+import { fileURLToPath } from "url";
+
 import { migrate as migrator } from "drizzle-orm/postgres-js/migrator";
 
 import { env } from "@acme/env";
@@ -39,7 +41,10 @@ const migrate = async () => {
   }
 };
 
-if (require.main === module) {
+// ESM equivalent of `if (require.main === module)`
+const isMainModule = process.argv[1] === fileURLToPath(import.meta.url);
+
+if (isMainModule) {
   void migrate()
     .then(() => console.log("Migration done"))
     .catch((e) => {

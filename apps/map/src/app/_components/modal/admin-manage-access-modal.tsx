@@ -173,17 +173,7 @@ export default function AdminManageAccessModal({
     orpc.user.crupdate.mutationOptions({
       onSuccess: async () => {
         // Invalidate all user-related queries to refresh tables
-        await invalidateQueries({
-          predicate: (query) => {
-            const key = query.queryKey;
-            return (
-              Array.isArray(key) &&
-              key.length > 0 &&
-              (key[0] === "user" ||
-                (Array.isArray(key[0]) && key[0][0] === "user"))
-            );
-          },
-        });
+        await invalidateQueries("user");
         closeModal();
         toast.success("Successfully granted access");
       },

@@ -110,9 +110,7 @@ export default function AdminLocationsModal({
   const crupdateLocation = useMutation(
     orpc.location.crupdate.mutationOptions({
       onSuccess: async () => {
-        await invalidateQueries({
-          predicate: (query) => query.queryKey[0] === "location",
-        });
+        await invalidateQueries("location");
         closeModal();
         toast.success("Successfully updated location");
         router.refresh();

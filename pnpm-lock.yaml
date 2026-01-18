@@ -800,6 +800,9 @@ importers:
       prettier:
         specifier: ^3.2.5
         version: 3.2.5
+      tsx:
+        specifier: ^4.7.1
+        version: 4.7.1
       typescript:
         specifier: ^5.3.3
         version: 5.3.3
@@ -1137,6 +1140,12 @@ importers:
 
   tooling/scripts:
     devDependencies:
+      '@acme/api':
+        specifier: workspace:*
+        version: link:../../packages/api
+      '@acme/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@acme/env':
         specifier: workspace:*
         version: link:../../packages/env
@@ -1146,6 +1155,9 @@ importers:
       '@acme/prettier-config':
         specifier: workspace:*
         version: link:../prettier
+      '@acme/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@acme/tsconfig':
         specifier: workspace:*
         version: link:../typescript
