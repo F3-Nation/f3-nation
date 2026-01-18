@@ -21,10 +21,10 @@ const getTemplateDirectory = (): string => {
   // Get the directory of this file (packages/api/src/)
   const currentFile = fileURLToPath(import.meta.url);
   const currentDir = path.dirname(currentFile);
-  
+
   // Resolve to workspace root (go up from packages/api/src/ to workspace root)
   const workspaceRoot = path.resolve(currentDir, "../../..");
-  
+
   // Templates are in apps/map/src/templates/
   return path.join(workspaceRoot, "apps/map/src/templates");
 };

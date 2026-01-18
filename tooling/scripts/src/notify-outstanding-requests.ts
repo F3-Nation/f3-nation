@@ -18,12 +18,20 @@ const DRY_RUN = process.argv.includes("--dry-run");
 const CUTOFF_DATE = "2026-01-03"; // Requests created after this date
 
 // Parse --email flag (e.g., --email=test@example.com)
-const emailArgIndex = process.argv.findIndex((arg) => arg.startsWith("--email="));
-const OVERRIDE_EMAIL = emailArgIndex !== -1 ? process.argv[emailArgIndex]?.split("=")[1] : undefined;
+const emailArgIndex = process.argv.findIndex((arg) =>
+  arg.startsWith("--email="),
+);
+const OVERRIDE_EMAIL =
+  emailArgIndex !== -1 ? process.argv[emailArgIndex]?.split("=")[1] : undefined;
 
 // Parse --limit flag (e.g., --limit=1)
-const limitArgIndex = process.argv.findIndex((arg) => arg.startsWith("--limit="));
-const EMAIL_LIMIT = limitArgIndex !== -1 ? parseInt(process.argv[limitArgIndex]?.split("=")[1] ?? "0", 10) : undefined;
+const limitArgIndex = process.argv.findIndex((arg) =>
+  arg.startsWith("--limit="),
+);
+const EMAIL_LIMIT =
+  limitArgIndex !== -1
+    ? parseInt(process.argv[limitArgIndex]?.split("=")[1] ?? "0", 10)
+    : undefined;
 
 interface RequestWithRegion {
   id: string;
@@ -50,10 +58,16 @@ async function main() {
   const { env } = await import("@acme/env");
   const { requestTypeToTitle } = await import("@acme/shared/app/functions");
   const { mail, Templates } = await import("@acme/api/mail");
-  const { getUsersWithRoles } = await import("@acme/api/services/map-request-notification");
+  const { getUsersWithRoles } = await import(
+    "@acme/api/services/map-request-notification"
+  );
 
   console.log("🔍 Finding outstanding requests created after", CUTOFF_DATE);
-  console.log(DRY_RUN ? "📋 DRY RUN MODE - No emails will be sent" : "📧 LIVE MODE - Emails will be sent");
+  console.log(
+    DRY_RUN
+      ? "📋 DRY RUN MODE - No emails will be sent"
+      : "📧 LIVE MODE - Emails will be sent",
+  );
   if (OVERRIDE_EMAIL) {
     console.log(`📬 All emails will be sent to: ${OVERRIDE_EMAIL}`);
   }
@@ -78,8 +92,8 @@ async function main() {
     .where(
       and(
         eq(schema.updateRequests.status, "pending"),
-        gte(schema.updateRequests.created, CUTOFF_DATE)
-      )
+        gte(schema.updateRequests.created, CUTOFF_DATE),
+      ),
     )
     .orderBy(schema.updateRequests.created);
 
@@ -136,7 +150,9 @@ async function main() {
       }
     }
 
-    console.log(`   👥 Admins/Editors: ${recipients.map((r) => r.email).join(", ")}`);
+    console.log(
+      `   👥 Admins/Editors: ${recipients.map((r) => r.email).join(", ")}`,
+    );
   }
 
   console.log("\n" + "─".repeat(80));
@@ -144,7 +160,7 @@ async function main() {
 
   const baseUrl = env.NEXT_PUBLIC_API_URL?.endsWith("/")
     ? env.NEXT_PUBLIC_API_URL.slice(0, -1)
-    : (env.NEXT_PUBLIC_API_URL ?? "");
+    : env.NEXT_PUBLIC_API_URL ?? "";
   const requestsUrl = `${baseUrl}/admin/requests`;
 
   // Display and optionally send emails
@@ -152,14 +168,18 @@ async function main() {
   let emailsFailed = 0;
 
   for (const [email, recipient] of adminEmailMap) {
-    const uniqueRegions = [...new Set(recipient.requests.map((r) => r.regionName))];
+    const uniqueRegions = [
+      ...new Set(recipient.requests.map((r) => r.regionName)),
+    ];
     console.log(`📧 ${email} (${recipient.roleName} at ${recipient.orgName})`);
     console.log(`   Regions: ${uniqueRegions.join(", ")}`);
     console.log(`   Outstanding requests: ${recipient.requests.length}`);
-    
+
     for (const request of recipient.requests) {
       const title = requestTypeToTitle(request.requestType);
-      console.log(`     - [${title}] ${request.eventName} (submitted by ${request.submittedBy}, ${request.created})`);
+      console.log(
+        `     - [${title}] ${request.eventName} (submitted by ${request.submittedBy}, ${request.created})`,
+      );
     }
 
     if (!DRY_RUN) {
@@ -186,11 +206,14 @@ async function main() {
           emailsSent++;
         } catch (error) {
           emailsFailed++;
-          console.error(`   ❌ Failed to send email for request ${request.id}:`, error);
+          console.error(
+            `   ❌ Failed to send email for request ${request.id}:`,
+            error,
+          );
         }
       }
     }
-    
+
     // Break out of outer loop if limit reached
     if (EMAIL_LIMIT && emailsSent >= EMAIL_LIMIT) {
       break;
@@ -202,9 +225,11 @@ async function main() {
   console.log("\n📊 Summary:");
   console.log(`   Total outstanding requests: ${pendingRequests.length}`);
   console.log(`   Unique admins to notify: ${adminEmailMap.size}`);
-  
+
   if (DRY_RUN) {
-    console.log(`   Emails that would be sent: ${[...adminEmailMap.values()].reduce((sum, r) => sum + r.requests.length, 0)}`);
+    console.log(
+      `   Emails that would be sent: ${[...adminEmailMap.values()].reduce((sum, r) => sum + r.requests.length, 0)}`,
+    );
     console.log("\n💡 Run without --dry-run to actually send emails");
   } else {
     console.log(`   Emails sent: ${emailsSent}`);
