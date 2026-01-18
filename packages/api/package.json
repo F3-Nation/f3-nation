@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./mail": "./src/mail.ts",
+    "./services/map-request-notification": "./src/services/map-request-notification.ts"
   },
   "license": "MIT",
   "scripts": {
@@ -12,8 +14,8 @@
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
     "lint": "eslint .",
     "test": "pnpm with-env vitest --run",
-    "test:watch": "pnpm with-env vitest -w",
     "test:org-hierarchy": "pnpm with-env tsx src/scripts/test-org-hierarchy.ts",
+    "test:watch": "pnpm with-env vitest -w",
     "typecheck": "tsc --noEmit",
     "with-env": "dotenv -e ../../.env --"
   },

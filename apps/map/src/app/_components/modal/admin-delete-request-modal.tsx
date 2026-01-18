@@ -42,9 +42,7 @@ export default function AdminDeleteRequestModal({
       await orpc.request.rejectSubmission.call({
         id: requestData.id,
       });
-      void invalidateQueries({
-        predicate: (query) => query.queryKey[0] === "request",
-      });
+      void invalidateQueries("request");
       router.refresh();
       toast.error("Rejected delete request");
       closeModal();

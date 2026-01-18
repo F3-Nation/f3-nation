@@ -169,6 +169,20 @@ export const eventRouter = {
           ), 
           '[]'
         )`,
+        eventTypes: sql<
+          { eventTypeId: number; eventTypeName: string }[]
+        >`COALESCE(
+            json_agg(
+              DISTINCT jsonb_build_object(
+                'eventTypeId', ${schema.eventTypes.id},
+                'eventTypeName', ${schema.eventTypes.name}
+              )
+            )
+            FILTER (
+              WHERE ${schema.eventTypes.id} IS NOT NULL
+            ),
+            '[]'
+          )`,
       };
 
       const [eventCount] = await ctx.db
@@ -222,6 +236,14 @@ export const eventRouter = {
               eq(regionOrg.id, parentOrg.parentId),
             ),
           ),
+        )
+        .leftJoin(
+          schema.eventsXEventTypes,
+          eq(schema.eventsXEventTypes.eventId, schema.events.id),
+        )
+        .leftJoin(
+          schema.eventTypes,
+          eq(schema.eventTypes.id, schema.eventsXEventTypes.eventTypeId),
         )
         .groupBy(
           schema.events.id,

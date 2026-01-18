@@ -8,6 +8,7 @@ import { and, eq, gt, isNull, or, schema, sql } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 import { db } from "@acme/db/client";
 import { env } from "@acme/env";
+import { isDevelopmentNodeEnv } from "@acme/shared/common/constants";
 import { Client, Header } from "@acme/shared/common/enums";
 
 type BaseContext = RequestHeadersPluginContext;
@@ -17,7 +18,23 @@ export interface Context {
   db: AppDb;
 }
 
-const isDev = process.env.NODE_ENV === "development";
+/**
+ * Returns a mock session for development mode.
+ * This allows the app to work without an API key when running locally.
+ * The mock session has admin access to all endpoints.
+ */
+const getDevMockSession = (): Session => ({
+  id: 0,
+  email: "dev@localhost",
+  roles: [],
+  user: {
+    id: "0",
+    email: "dev@localhost",
+    name: "Dev User",
+    roles: [],
+  },
+  expires: new Date(Date.now() + 1000 * 60 * 60 * 24 * 365).toISOString(),
+});
 
 // Rate limit configuration
 // WARNING: This is an in-memory rate limiter. In multi-instance deployments
@@ -25,7 +42,7 @@ const isDev = process.env.NODE_ENV === "development";
 // Effective limit = RATE_LIMIT_MAX_REQUESTS * number_of_instances.
 // For true distributed rate limiting, use Redis/Upstash instead.
 const RATE_LIMIT_WINDOW_MS = 60000; // 60 seconds
-const RATE_LIMIT_MAX_REQUESTS = isDev ? 10000 : 200;
+const RATE_LIMIT_MAX_REQUESTS = isDevelopmentNodeEnv ? 10000 : 200;
 
 const limiter = new MemoryRatelimiter({
   maxRequests: RATE_LIMIT_MAX_REQUESTS,
@@ -156,8 +173,12 @@ export const getSession = async ({ context }: { context: BaseContext }) => {
     apiKey = authHeader.slice(7).trim();
   }
 
-  // No session or API key provided - return with no session
-  if (!apiKey) return null;
+  // No session or API key provided
+  if (!apiKey) {
+    // In dev mode, return a mock session so endpoints work without an API key
+    if (isDevelopmentNodeEnv) return getDevMockSession();
+    return null;
+  }
 
   // API key provided but no client header
   if (apiKey && !appClient) {

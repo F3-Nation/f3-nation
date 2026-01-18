@@ -1,16 +1,34 @@
 import { promises as fs } from "fs";
-import path from "path";
-import type Mail from "nodemailer/lib/mailer";
-import type SMTPTransport from "nodemailer/lib/smtp-transport";
-import type { z } from "zod";
 import handlebars from "handlebars";
 import nodemailer, { createTestAccount } from "nodemailer";
+import type Mail from "nodemailer/lib/mailer";
+import type SMTPTransport from "nodemailer/lib/smtp-transport";
+import path from "path";
+import { fileURLToPath } from "url";
+import type { z } from "zod";
 
 import { env } from "@acme/env";
 
 import type { feedbackSchema } from "./router/map/index";
 
 const isLocalDevelopment = process.env.NODE_ENV !== "production";
+
+/**
+ * Resolves the template directory path relative to the workspace root.
+ * Templates are located in apps/map/src/templates/
+ */
+const getTemplateDirectory = (): string => {
+  // Get the directory of this file (packages/api/src/)
+  const currentFile = fileURLToPath(import.meta.url);
+  const currentDir = path.dirname(currentFile);
+
+  // Resolve to workspace root (go up from packages/api/src/ to workspace root)
+  const workspaceRoot = path.resolve(currentDir, "../../..");
+
+  // Templates are in apps/map/src/templates/
+  return path.join(workspaceRoot, "apps/map/src/templates");
+};
+
 export enum Templates {
   feedbackForm = "feedback-form",
   mapChangeRequest = "map-change-request",
@@ -67,18 +85,29 @@ export class MailService {
    * Prepare a template to store in the class so that it doesn't get opened over and over again when sending mail
    */
   public async prepTemplate<T extends Templates>(name: T) {
-    // This only works when we run it from apps/nextjs. If script runs then it fails
-    // In that case it needs to be ../../apps/nextjs/src/templates
-    const templateDirectory = path.join(process.cwd(), "src/templates");
+    const templateDirectory = getTemplateDirectory();
     let fileContent = this.fileContentDict[name];
     if (fileContent) {
       console.log("fileContent already exists");
     } else {
       console.log("fileContent doesn't exist. Creating");
-      fileContent = await fs.readFile(templateDirectory + `/${name}.hbs`, {
-        encoding: "utf8",
-      });
-      this.fileContentDict[name] = fileContent;
+      const templatePath = path.join(templateDirectory, `${name}.hbs`);
+      try {
+        fileContent = await fs.readFile(templatePath, {
+          encoding: "utf8",
+        });
+        this.fileContentDict[name] = fileContent;
+      } catch (error) {
+        console.error("Failed to read template file", {
+          templatePath,
+          templateDirectory,
+          name,
+          error,
+        });
+        throw new Error(
+          `Failed to read template file: ${templatePath}. Error: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
   }
 
@@ -86,17 +115,30 @@ export class MailService {
     name: T,
     params: TemplateType[T],
   ): Promise<string> {
-    const templateDirectory = path.join(process.cwd(), "src/templates");
+    const templateDirectory = getTemplateDirectory();
 
     let fileContent = this.fileContentDict[name];
     if (fileContent) {
       console.log("fileContent already exists");
     } else {
       console.log("fileContent doesn't exist. Creating");
-      fileContent = await fs.readFile(templateDirectory + `/${name}.hbs`, {
-        encoding: "utf8",
-      });
-      this.fileContentDict[name] = fileContent;
+      const templatePath = path.join(templateDirectory, `${name}.hbs`);
+      try {
+        fileContent = await fs.readFile(templatePath, {
+          encoding: "utf8",
+        });
+        this.fileContentDict[name] = fileContent;
+      } catch (error) {
+        console.error("Failed to read template file", {
+          templatePath,
+          templateDirectory,
+          name,
+          error,
+        });
+        throw new Error(
+          `Failed to read template file: ${templatePath}. Error: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
     const template = handlebars.compile(fileContent);
     const templateResult = template(params);

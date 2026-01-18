@@ -5,6 +5,7 @@ import { z } from "zod";
 import { and, desc, eq, gt, inArray, isNull, or, schema, sql } from "@acme/db";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
+import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { adminProcedure } from "../shared";
 
 const createApiKeySchema = z.object({
@@ -47,6 +48,9 @@ export const apiKeyRouter = {
       description: "List all API keys",
     })
     .handler(async ({ context: ctx }) => {
+      // Check if user is a nation admin (for email visibility)
+      const { isNationAdmin } = await getEditableOrgIdsForUser(ctx);
+
       const keyQuery = await ctx.db
         .select({
           id: schema.apiKeys.id,
@@ -124,7 +128,8 @@ export const apiKeyRouter = {
             created: key.created,
             updated: key.updated,
             ownerName: key.ownerName,
-            ownerEmail: key.ownerEmail,
+            // Only include email if user is a nation admin
+            ownerEmail: isNationAdmin ? key.ownerEmail : null,
             keySignature: key.key.slice(-4),
             roles: roles.map((r) => ({
               orgId: r.orgId,
