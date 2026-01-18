@@ -9,7 +9,6 @@
     "./schema/relations": "./drizzle/relations.ts"
   },
   "license": "MIT",
-  "type": "module",
   "scripts": {
     "clean": "rm -rf .turbo node_modules",
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
@@ -18,15 +17,15 @@
     "pull": "pnpm with-env drizzle-kit pull",
     "generate": "pnpm with-env drizzle-kit generate",
     "generate:empty": "pnpm with-env drizzle-kit generate --custom",
-    "migrate": "pnpm with-env tsx src/migrate.ts",
+    "migrate": "pnpm with-env node -r esbuild-register src/migrate.ts",
     "reset": "pnpm with-env tsx ./src/reset.ts",
-    "reset-test-db": "SKIP_ENV_VALIDATION=1 NODE_ENV=test pnpm with-env tsx src/utils/run-reset-test-db.ts",
-    "seed": "pnpm with-env tsx src/seed.ts",
+    "seed": "pnpm with-env node -r esbuild-register src/seed.ts",
     "studio": "pnpm with-env drizzle-kit studio",
     "drop": "pnpm with-env drizzle-kit drop",
+    "reset-test-db": "SKIP_ENV_VALIDATION=1 NODE_ENV=test pnpm with-env node -r esbuild-register src/utils/run-reset-test-db.ts",
     "typecheck": "tsc --noEmit",
-    "update-db": "pnpm with-env tsx src/update-db.ts",
-    "with-env": "dotenv -e ../../.env --"
+    "with-env": "dotenv -e ../../.env --",
+    "update-db": "pnpm with-env node -r esbuild-register src/update-db.ts"
   },
   "dependencies": {
     "@acme/env": "workspace:*",
@@ -35,8 +34,7 @@
     "drizzle-orm": "^0.39.3",
     "esbuild-register": "^3.5.0",
     "pg": "^8.11.3",
-    "postgres": "^3.4.3",
-    "tsx": "^4.7.1"
+    "postgres": "^3.4.3"
   },
   "devDependencies": {
     "@acme/eslint-config": "workspace:*",
