@@ -9,6 +9,7 @@
     "./schema/relations": "./drizzle/relations.ts"
   },
   "license": "MIT",
+  "type": "module",
   "scripts": {
     "clean": "rm -rf .turbo node_modules",
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
