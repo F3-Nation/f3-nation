@@ -109,9 +109,7 @@ export default function AdminSectorsModal({
   const crupdateSector = useMutation(
     orpc.org.crupdate.mutationOptions({
       onSuccess: async () => {
-        await invalidateQueries({
-          predicate: (query) => query.queryKey[0] === "org",
-        });
+        await invalidateQueries("org");
         closeModal();
         toast.success("Successfully updated sector");
         router.refresh();

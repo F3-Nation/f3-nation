@@ -1137,6 +1137,12 @@ importers:
 
   tooling/scripts:
     devDependencies:
+      '@acme/api':
+        specifier: workspace:*
+        version: link:../../packages/api
+      '@acme/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@acme/env':
         specifier: workspace:*
         version: link:../../packages/env
@@ -1146,6 +1152,9 @@ importers:
       '@acme/prettier-config':
         specifier: workspace:*
         version: link:../prettier
+      '@acme/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@acme/tsconfig':
         specifier: workspace:*
         version: link:../typescript

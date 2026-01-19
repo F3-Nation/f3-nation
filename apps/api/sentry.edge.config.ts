@@ -3,6 +3,7 @@
 // Note that this config is unrelated to the Vercel Edge Runtime and is also required when running locally.
 // https://docs.sentry.io/platforms/javascript/guides/nextjs/
 import * as Sentry from "@sentry/nextjs";
+import { captureConsoleIntegration } from "@sentry/nextjs";
 
 import { env } from "~/env";
 
@@ -23,5 +24,9 @@ if (env.NODE_ENV === "production") {
         : channel === "staging"
           ? "staging"
           : "development",
+
+    // Capture console.error calls and send them to Sentry
+    // This ensures caught errors that are logged still get reported
+    integrations: [captureConsoleIntegration({ levels: ["error"] })],
   });
 }

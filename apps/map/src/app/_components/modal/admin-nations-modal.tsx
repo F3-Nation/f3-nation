@@ -98,9 +98,7 @@ export default function AdminNationsModal({
   const crupdateNation = useMutation(
     orpc.org.crupdate.mutationOptions({
       onSuccess: async () => {
-        await invalidateQueries({
-          predicate: (query) => query.queryKey[0] === "org",
-        });
+        await invalidateQueries("org");
         closeModal();
         toast.success("Successfully updated nation");
         router.refresh();

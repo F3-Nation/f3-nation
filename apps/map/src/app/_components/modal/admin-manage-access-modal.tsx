@@ -144,15 +144,38 @@ export default function AdminManageAccessModal({
     const options: {
       value: string;
       label: string;
+      sublabel?: string;
       id?: number;
       isCreateNew?: boolean;
     }[] = [];
 
     // Add exact email match if found
     if (exactEmailMatch?.email) {
+      // Build display: prioritize F3 name since that's how people know each other
+      const nameParts = [
+        exactEmailMatch.firstName,
+        exactEmailMatch.lastName,
+      ].filter(Boolean);
+      const fullName = nameParts.length > 0 ? nameParts.join(" ") : null;
+
+      let label: string;
+      if (exactEmailMatch.f3Name) {
+        // F3 name exists - show it prominently
+        label = fullName
+          ? `${exactEmailMatch.f3Name} (${fullName})`
+          : exactEmailMatch.f3Name;
+      } else if (fullName) {
+        // No F3 name, show full name
+        label = fullName;
+      } else {
+        // No name info, just show email
+        label = exactEmailMatch.email;
+      }
+
       options.push({
         value: exactEmailMatch.email,
-        label: `${exactEmailMatch.email}${exactEmailMatch.firstName ?? exactEmailMatch.lastName ? ` (${[exactEmailMatch.firstName, exactEmailMatch.lastName].filter(Boolean).join(" ")})` : ""}`,
+        label,
+        sublabel: exactEmailMatch.email,
         id: exactEmailMatch.id,
       });
     }
@@ -173,17 +196,7 @@ export default function AdminManageAccessModal({
     orpc.user.crupdate.mutationOptions({
       onSuccess: async () => {
         // Invalidate all user-related queries to refresh tables
-        await invalidateQueries({
-          predicate: (query) => {
-            const key = query.queryKey;
-            return (
-              Array.isArray(key) &&
-              key.length > 0 &&
-              (key[0] === "user" ||
-                (Array.isArray(key[0]) && key[0][0] === "user"))
-            );
-          },
-        });
+        await invalidateQueries("user");
         closeModal();
         toast.success("Successfully granted access");
       },
@@ -330,6 +343,16 @@ export default function AdminManageAccessModal({
                   );
                   return;
                 }
+                // Validate that all roles have a valid org selected (orgId > 0)
+                const invalidRoles = data.roles?.filter(
+                  (role) => !role.orgId || role.orgId < 0,
+                );
+                if (invalidRoles && invalidRoles.length > 0) {
+                  toast.error(
+                    "Please select an organization for all roles before saving",
+                  );
+                  return;
+                }
                 // When updating an existing user (has id), email is not required
                 // The API will handle PII restrictions and won't update email if not provided
                 // For new users, email is required by the schema
@@ -441,8 +464,16 @@ export default function AdminManageAccessModal({
                                             // Prevent input blur when clicking
                                             e.preventDefault();
                                           }}
+                                          className="flex flex-col items-start"
                                         >
-                                          {option.label}
+                                          <span className="font-medium">
+                                            {option.label}
+                                          </span>
+                                          {option.sublabel && (
+                                            <span className="text-sm text-muted-foreground">
+                                              {option.sublabel}
+                                            </span>
+                                          )}
                                         </CommandItem>
                                       ))}
                                     </CommandGroup>
@@ -758,10 +789,11 @@ export default function AdminManageAccessModal({
                             size="sm"
                             className="mt-2"
                             onClick={() => {
-                              const firstOrgId = orgs?.orgs?.[0]?.id ?? 1;
+                              // Use -1 as placeholder to indicate "no org selected"
+                              // This prevents accidental saves with wrong org (issue #63)
                               const newRoleEntry: RoleEntry = {
                                 roleName: "editor",
-                                orgId: firstOrgId,
+                                orgId: -1,
                               };
                               field.onChange([
                                 ...((field.value as RoleEntry[]) ?? []),
