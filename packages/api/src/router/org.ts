@@ -61,6 +61,13 @@ export const orgRouter = {
         statuses: arrayOrSingle(z.enum(IsActiveStatus)).optional(),
         parentOrgIds: arrayOrSingle(z.coerce.number()).optional(),
         onlyMine: z.coerce.boolean().optional(),
+        countOnly: z
+          .coerce
+          .boolean()
+          .optional()
+          .describe(
+            "When true, only the total count is returned and the `orgs` array is omitted.",
+          ),
       }),
     )
     .route({
@@ -146,6 +153,10 @@ export const orgRouter = {
         .leftJoin(parentOrg, eq(org.parentId, parentOrg.id))
         .where(where);
 
+      if (input?.countOnly) {
+        return { total: orgCount?.count ?? 0 };
+      }
+      
       const select = {
         id: org.id,
         parentId: org.parentId,

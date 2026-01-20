@@ -6,6 +6,7 @@ import {
   and,
   asc,
   count,
+  countDistinct,
   desc,
   eq,
   ilike,
@@ -14,7 +15,7 @@ import {
   schema,
   sql,
 } from "@acme/db";
-import { IsActiveStatus } from "@acme/shared/app/enums";
+import { EventCategory, IsActiveStatus } from "@acme/shared/app/enums";
 import { arrayOrSingle, getFullAddress } from "@acme/shared/app/functions";
 import { EventInsertSchema } from "@acme/validators";
 
@@ -33,12 +34,25 @@ export const eventRouter = {
           pageSize: z.coerce.number().optional(),
           searchTerm: z.string().optional(),
           statuses: arrayOrSingle(z.enum(["active", "inactive"])).optional(),
+          eventTypeNames: arrayOrSingle(z.string())
+            .optional()
+            .describe(
+              "Filter events by event type name(s). Matches events with ANY of the given type names.",
+            ),
+          eventCategories: arrayOrSingle(z.enum(EventCategory))
+            .optional()
+            .describe(
+              "Filter events by event category(ies). Matches events with ANY of the given categories.",
+            ),
           sorting: z
             .array(z.object({ id: z.string(), desc: z.coerce.boolean() }))
             .optional(),
           regionIds: arrayOrSingle(z.coerce.number()).optional(),
           aoIds: arrayOrSingle(z.coerce.number()).optional(),
           onlyMine: z.coerce.boolean().optional(),
+          countOnly: z.coerce.boolean().optional().describe(
+            "When true, only the total count is returned and the events array is omitted.",
+          ),
         })
         .optional(),
     )
@@ -93,6 +107,12 @@ export const eventRouter = {
               ilike(schema.events.name, `%${input?.searchTerm}%`),
               ilike(schema.events.description, `%${input?.searchTerm}%`),
             )
+          : undefined,
+        input?.eventTypeNames?.length
+          ? inArray(schema.eventTypes.name, input.eventTypeNames)
+          : undefined,
+        input?.eventCategories?.length
+          ? inArray(schema.eventTypes.eventCategory, input.eventCategories)
           : undefined,
         input?.regionIds?.length
           ? inArray(regionOrg.id, input.regionIds)
@@ -170,12 +190,13 @@ export const eventRouter = {
           '[]'
         )`,
         eventTypes: sql<
-          { eventTypeId: number; eventTypeName: string }[]
+          { eventTypeId: number; eventTypeName: string; eventCategory: string }[]
         >`COALESCE(
             json_agg(
               DISTINCT jsonb_build_object(
                 'eventTypeId', ${schema.eventTypes.id},
-                'eventTypeName', ${schema.eventTypes.name}
+                'eventTypeName', ${schema.eventTypes.name},
+                'eventCategory', ${schema.eventTypes.eventCategory}
               )
             )
             FILTER (
@@ -186,7 +207,7 @@ export const eventRouter = {
       };
 
       const [eventCount] = await ctx.db
-        .select({ count: count() })
+        .select({ count: countDistinct(schema.events.id) })
         .from(schema.events)
         .innerJoin(
           schema.locations,
@@ -210,7 +231,19 @@ export const eventRouter = {
             ),
           ),
         )
+        .leftJoin(
+          schema.eventsXEventTypes,
+          eq(schema.eventsXEventTypes.eventId, schema.events.id),
+        )
+        .leftJoin(
+          schema.eventTypes,
+          eq(schema.eventTypes.id, schema.eventsXEventTypes.eventTypeId),
+        )
         .where(where);
+
+      if (input?.countOnly) {
+        return { totalCount: eventCount?.count ?? 0 };
+      }
 
       const query = ctx.db
         .select(select)
