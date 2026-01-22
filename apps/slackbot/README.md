@@ -20,21 +20,29 @@ A TypeScript Slack bot built with [@slack/bolt](https://slack.dev/bolt-js/) for 
 
 ### Setup
 
-1. Copy environment file:
+1. **Initialize and install your local Slack app**: I recommend you use your own private Slack workspace for this. Open [Slack's app console](https://api.slack.com/apps), click Create New App->from manifest, then paste in the contents from `app_manifest.json`. After you install to your workspace, gather the Signing Secret from the Basic Information tab and the Bot User OAuth Token from the OAuth & Permissions tab. You'll also need to generate an App Level Token from the Basic Information tab.
+
+2. **Copy environment file**:
 
    ```bash
    cp .env.example .env
    ```
 
-2. Configure your `.env` with Slack credentials from your [Slack App](https://api.slack.com/apps)
+3. **Configure your `.env` with Slack credentials from above**.
 
-3. Install dependencies:
+4. **Install dependencies**:
 
    ```bash
    pnpm install
    ```
 
-4. Start development server:
+5. **Start the API server**:
+
+   ```bash
+   PORT=3001 pnpm -F f3-nation-api dev
+   ```
+
+6. **Start development server**:
    ```bash
    pnpm dev
    ```
