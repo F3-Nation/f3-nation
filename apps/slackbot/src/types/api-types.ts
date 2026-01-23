@@ -22,6 +22,43 @@ export interface UpsertUserInput {
 }
 
 /**
+ * Response from checkUserRole endpoint
+ */
+export interface CheckUserRoleResponse {
+  hasRole: boolean;
+  reason:
+    | "no-f3-user-linked"
+    | "no-region-linked"
+    | "role-not-found"
+    | "direct-permission"
+    | "ancestor-admin"
+    | "no-permission";
+  userId: number | null;
+  orgId: number | null;
+  roleName?: string;
+}
+
+/**
+ * Single role entry from getUserRoles
+ */
+export interface UserRoleEntry {
+  orgId: number;
+  orgName: string | null;
+  roleName: string | null;
+}
+
+/**
+ * Response from getUserRoles endpoint
+ */
+export interface GetUserRolesResponse {
+  roles: UserRoleEntry[];
+  userId: number | null;
+  regionOrgId: number | null;
+  isAdmin?: boolean;
+  isEditor?: boolean;
+}
+
+/**
  * Input for getOrCreateSpace endpoint
  */
 export interface GetOrCreateSpaceInput {

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { eq, schema } from "@acme/db";
+import { and, eq, schema } from "@acme/db";
 import { SlackSettingsSchema, SlackUserUpsertSchema } from "@acme/validators";
 
 import { apiKeyProcedure, publicProcedure } from "../shared";
@@ -252,5 +252,284 @@ export const slackRouter = {
         .where(eq(schema.slackSpaces.teamId, input.teamId));
 
       return result;
+    }),
+
+  /**
+   * Check if a Slack user has a specific role on the region org associated with their Slack workspace.
+   * This checks the F3 role system (rolesXUsersXOrg), not Slack's admin/owner flags.
+   */
+  checkUserRole: apiKeyProcedure
+    .input(
+      z.object({
+        slackId: z.string(),
+        teamId: z.string(),
+        roleName: z
+          .enum(["user", "editor", "admin"])
+          .optional()
+          .default("admin"),
+      }),
+    )
+    .route({
+      method: "GET",
+      path: "/check-role",
+      tags: ["slack"],
+      summary: "Check user role on region",
+      description:
+        "Check if a Slack user has a specific F3 role on the region org associated with their workspace",
+    })
+    .handler(async ({ context: ctx, input }) => {
+      // First, find the slack user and their linked F3 user
+      const [slackUser] = await ctx.db
+        .select()
+        .from(schema.slackUsers)
+        .where(eq(schema.slackUsers.slackId, input.slackId));
+
+      if (!slackUser?.userId) {
+        return {
+          hasRole: false,
+          reason: "no-f3-user-linked",
+          userId: null,
+          orgId: null,
+        };
+      }
+
+      // Find the region org associated with this Slack workspace
+      const [regionResult] = await ctx.db
+        .select({
+          orgId: schema.orgs.id,
+          orgName: schema.orgs.name,
+        })
+        .from(schema.slackSpaces)
+        .innerJoin(
+          schema.orgsXSlackSpaces,
+          eq(schema.orgsXSlackSpaces.slackSpaceId, schema.slackSpaces.id),
+        )
+        .innerJoin(
+          schema.orgs,
+          eq(schema.orgs.id, schema.orgsXSlackSpaces.orgId),
+        )
+        .where(eq(schema.slackSpaces.teamId, input.teamId));
+
+      if (!regionResult) {
+        return {
+          hasRole: false,
+          reason: "no-region-linked",
+          userId: slackUser.userId,
+          orgId: null,
+        };
+      }
+
+      // Get the role ID for the requested role
+      const [role] = await ctx.db
+        .select()
+        .from(schema.roles)
+        .where(eq(schema.roles.name, input.roleName));
+
+      if (!role) {
+        return {
+          hasRole: false,
+          reason: "role-not-found",
+          userId: slackUser.userId,
+          orgId: regionResult.orgId,
+        };
+      }
+
+      // Check if the user has the role on this org
+      const [userRole] = await ctx.db
+        .select()
+        .from(schema.rolesXUsersXOrg)
+        .where(
+          and(
+            eq(schema.rolesXUsersXOrg.userId, slackUser.userId),
+            eq(schema.rolesXUsersXOrg.orgId, regionResult.orgId),
+            eq(schema.rolesXUsersXOrg.roleId, role.id),
+          ),
+        );
+
+      if (userRole) {
+        return {
+          hasRole: true,
+          reason: "direct-permission",
+          userId: slackUser.userId,
+          orgId: regionResult.orgId,
+          roleName: input.roleName,
+        };
+      }
+
+      // Check if user has admin role on any ancestor org (region -> sector -> area -> nation)
+      // This allows nation/area/sector admins to manage regions
+      const [orgHierarchy] = await ctx.db
+        .select({
+          parentId: schema.orgs.parentId,
+        })
+        .from(schema.orgs)
+        .where(eq(schema.orgs.id, regionResult.orgId));
+
+      const ancestorIds: number[] = [];
+      let currentParentId = orgHierarchy?.parentId;
+
+      // Walk up the org hierarchy
+      while (currentParentId) {
+        ancestorIds.push(currentParentId);
+        const [parent] = await ctx.db
+          .select({ parentId: schema.orgs.parentId })
+          .from(schema.orgs)
+          .where(eq(schema.orgs.id, currentParentId));
+        currentParentId = parent?.parentId;
+      }
+
+      if (ancestorIds.length > 0) {
+        // Check if user has admin role on any ancestor org
+        const [adminRole] = await ctx.db
+          .select()
+          .from(schema.roles)
+          .where(eq(schema.roles.name, "admin"));
+
+        if (adminRole) {
+          for (const ancestorId of ancestorIds) {
+            const [ancestorRole] = await ctx.db
+              .select()
+              .from(schema.rolesXUsersXOrg)
+              .where(
+                and(
+                  eq(schema.rolesXUsersXOrg.userId, slackUser.userId),
+                  eq(schema.rolesXUsersXOrg.orgId, ancestorId),
+                  eq(schema.rolesXUsersXOrg.roleId, adminRole.id),
+                ),
+              );
+
+            if (ancestorRole) {
+              return {
+                hasRole: true,
+                reason: "ancestor-admin",
+                userId: slackUser.userId,
+                orgId: ancestorId,
+                roleName: "admin",
+              };
+            }
+          }
+        }
+      }
+
+      return {
+        hasRole: false,
+        reason: "no-permission",
+        userId: slackUser.userId,
+        orgId: regionResult.orgId,
+      };
+    }),
+
+  /**
+   * Get all F3 roles for a Slack user on the region org.
+   * Returns role names the user has on the region and any ancestor orgs.
+   */
+  getUserRoles: apiKeyProcedure
+    .input(
+      z.object({
+        slackId: z.string(),
+        teamId: z.string(),
+      }),
+    )
+    .route({
+      method: "GET",
+      path: "/user-roles",
+      tags: ["slack"],
+      summary: "Get user roles on region",
+      description:
+        "Get all F3 roles a Slack user has on the region org and its ancestors",
+    })
+    .handler(async ({ context: ctx, input }) => {
+      // First, find the slack user and their linked F3 user
+      const [slackUser] = await ctx.db
+        .select()
+        .from(schema.slackUsers)
+        .where(eq(schema.slackUsers.slackId, input.slackId));
+
+      if (!slackUser?.userId) {
+        return {
+          roles: [],
+          userId: null,
+          regionOrgId: null,
+        };
+      }
+
+      // Find the region org associated with this Slack workspace
+      const [regionResult] = await ctx.db
+        .select({
+          orgId: schema.orgs.id,
+          orgName: schema.orgs.name,
+        })
+        .from(schema.slackSpaces)
+        .innerJoin(
+          schema.orgsXSlackSpaces,
+          eq(schema.orgsXSlackSpaces.slackSpaceId, schema.slackSpaces.id),
+        )
+        .innerJoin(
+          schema.orgs,
+          eq(schema.orgs.id, schema.orgsXSlackSpaces.orgId),
+        )
+        .where(eq(schema.slackSpaces.teamId, input.teamId));
+
+      if (!regionResult) {
+        return {
+          roles: [],
+          userId: slackUser.userId,
+          regionOrgId: null,
+        };
+      }
+
+      // Get org hierarchy (region + ancestors)
+      const orgIds: number[] = [regionResult.orgId];
+      let currentParentId = (
+        await ctx.db
+          .select({ parentId: schema.orgs.parentId })
+          .from(schema.orgs)
+          .where(eq(schema.orgs.id, regionResult.orgId))
+      )[0]?.parentId;
+
+      while (currentParentId) {
+        orgIds.push(currentParentId);
+        const [parent] = await ctx.db
+          .select({ parentId: schema.orgs.parentId })
+          .from(schema.orgs)
+          .where(eq(schema.orgs.id, currentParentId));
+        currentParentId = parent?.parentId;
+      }
+
+      // Get all roles for this user on these orgs
+      const userRoles = await ctx.db
+        .select({
+          orgId: schema.rolesXUsersXOrg.orgId,
+          orgName: schema.orgs.name,
+          roleName: schema.roles.name,
+        })
+        .from(schema.rolesXUsersXOrg)
+        .innerJoin(
+          schema.roles,
+          eq(schema.roles.id, schema.rolesXUsersXOrg.roleId),
+        )
+        .innerJoin(
+          schema.orgs,
+          eq(schema.orgs.id, schema.rolesXUsersXOrg.orgId),
+        )
+        .where(eq(schema.rolesXUsersXOrg.userId, slackUser.userId));
+
+      // Filter to only roles on the region or its ancestors
+      const relevantRoles = userRoles.filter((r) => orgIds.includes(r.orgId));
+
+      // Determine effective admin status:
+      // User is admin if they have admin role on region or any ancestor
+      const isAdmin = relevantRoles.some((r) => r.roleName === "admin");
+      const isEditor = relevantRoles.some(
+        (r) => r.roleName === "editor" || r.roleName === "admin",
+      );
+
+      return {
+        roles: relevantRoles,
+        userId: slackUser.userId,
+        regionOrgId: regionResult.orgId,
+        isAdmin,
+        isEditor,
+      };
     }),
 };

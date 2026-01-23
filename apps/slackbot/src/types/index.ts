@@ -72,6 +72,8 @@ export interface CustomField {
 
 /**
  * Slack user data from the API
+ * Note: isAdmin and isEditor are computed from the F3 role system,
+ * NOT from Slack's workspace admin/owner flags.
  */
 export interface SlackUserData {
   id: number;
@@ -80,7 +82,15 @@ export interface SlackUserData {
   email: string;
   userId?: number;
   avatarUrl?: string;
+  /**
+   * Whether the user is an admin for the F3 region org (or any ancestor org).
+   * This is checked against the F3 rolesXUsersXOrg table, not Slack permissions.
+   */
   isAdmin: boolean;
+  /**
+   * Whether the user has editor (or admin) role for the F3 region org.
+   */
+  isEditor: boolean;
   isBot: boolean;
 }
 

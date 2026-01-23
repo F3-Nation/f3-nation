@@ -14,6 +14,8 @@ import type {
   EventInstanceResponse,
   EventInstanceListResponse,
   EventInstanceInput,
+  CheckUserRoleResponse,
+  GetUserRolesResponse,
 } from "../types/api-types";
 import { logger } from "./logger";
 
@@ -107,6 +109,28 @@ export const api = {
     getRegion: (teamId: string) =>
       apiRequest<RegionResponse | null>(
         `/slack/region?teamId=${encodeURIComponent(teamId)}`,
+      ),
+
+    /**
+     * Check if a Slack user has a specific F3 role on the region org.
+     * Uses the F3 role system, not Slack's admin/owner flags.
+     */
+    checkUserRole: (
+      slackId: string,
+      teamId: string,
+      roleName: "user" | "editor" | "admin" = "admin",
+    ) =>
+      apiRequest<CheckUserRoleResponse>(
+        `/slack/check-role?slackId=${encodeURIComponent(slackId)}&teamId=${encodeURIComponent(teamId)}&roleName=${encodeURIComponent(roleName)}`,
+      ),
+
+    /**
+     * Get all F3 roles for a Slack user on the region org and its ancestors.
+     * Returns role information and computed isAdmin/isEditor flags.
+     */
+    getUserRoles: (slackId: string, teamId: string) =>
+      apiRequest<GetUserRolesResponse>(
+        `/slack/user-roles?slackId=${encodeURIComponent(slackId)}&teamId=${encodeURIComponent(teamId)}`,
       ),
   },
 

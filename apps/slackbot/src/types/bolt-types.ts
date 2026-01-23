@@ -22,6 +22,11 @@ import type { RegionSettings, SlackUserData } from "./index";
 export interface ExtendedContext extends Context {
   regionSettings?: RegionSettings;
   slackUser?: SlackUserData;
+  /**
+   * The F3 region org ID associated with this Slack workspace.
+   * Retrieved from the orgsXSlackSpaces join table.
+   */
+  regionOrgId?: number | null;
 }
 
 /**
