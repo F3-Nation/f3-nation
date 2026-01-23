@@ -14,19 +14,39 @@ import type {
   SectionBlock,
 } from "@slack/web-api";
 
-import type { RegionSettings, SlackUserData } from "./index";
+import type {
+  RegionSettings,
+  OrgSettings,
+  OrgType,
+  SlackUserData,
+} from "./index";
 
 /**
- * Extended context with region and user data
+ * Extended context with org and user data
  */
 export interface ExtendedContext extends Context {
+  /**
+   * @deprecated Use orgSettings instead
+   */
   regionSettings?: RegionSettings;
+  /**
+   * Settings for the org associated with this Slack workspace.
+   */
+  orgSettings?: OrgSettings;
   slackUser?: SlackUserData;
   /**
-   * The F3 region org ID associated with this Slack workspace.
+   * The F3 org ID associated with this Slack workspace.
    * Retrieved from the orgsXSlackSpaces join table.
    */
+  orgId?: number | null;
+  /**
+   * @deprecated Use orgId instead
+   */
   regionOrgId?: number | null;
+  /**
+   * The type of org associated with this Slack workspace (e.g., "region", "area").
+   */
+  orgType?: OrgType | null;
 }
 
 /**

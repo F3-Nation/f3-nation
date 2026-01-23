@@ -1,4 +1,9 @@
-import type { RegionSettings, SlackUserData } from "./index";
+import type {
+  OrgSettings,
+  OrgType,
+  RegionSettings,
+  SlackUserData,
+} from "./index";
 
 export type { SlackUserData };
 
@@ -81,6 +86,39 @@ export interface GetOrCreateUserInput {
 }
 
 /**
+ * Input for getOrCreateLinkedUser endpoint.
+ * Note: email is required to ensure F3 user can be created/linked.
+ */
+export interface GetOrCreateLinkedUserInput {
+  slackId: string;
+  teamId: string;
+  userName: string;
+  email: string;
+  isAdmin?: boolean;
+  isOwner?: boolean;
+  isBot?: boolean;
+  avatarUrl?: string;
+}
+
+/**
+ * Response from getOrCreateLinkedUser endpoint.
+ * Always includes a userId linking to an F3 user.
+ */
+export interface LinkedSlackUserResponse {
+  id: number;
+  slackId: string;
+  userName: string;
+  email: string;
+  /** Guaranteed to be present - the linked F3 user ID */
+  userId: number;
+  slackTeamId: string;
+  avatarUrl: string | null;
+  isAdmin: boolean;
+  isOwner: boolean;
+  isBot: boolean;
+}
+
+/**
  * Response from getSpace endpoint
  */
 export interface SlackSpaceResponse {
@@ -88,10 +126,24 @@ export interface SlackSpaceResponse {
   teamId: string;
   workspaceName: string | null;
   botToken: string | null;
-  settings: RegionSettings | null;
+  settings: OrgSettings | null;
 }
 
 /**
+ * Response from getOrg endpoint
+ */
+export interface OrgResponse {
+  org: {
+    id: number;
+    name: string;
+    orgType: OrgType;
+    parentId: number | null;
+  };
+  space: SlackSpaceResponse;
+}
+
+/**
+ * @deprecated Use OrgResponse instead
  * Response from getRegion endpoint
  */
 export interface RegionResponse {

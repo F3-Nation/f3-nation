@@ -225,19 +225,127 @@ export const slackRouter = {
       return newUser;
     }),
 
-  getRegion: publicProcedure
+  /**
+   * Get or create a Slack user with a guaranteed linked F3 user.
+   * If the Slack user doesn't exist, creates it.
+   * If the F3 user doesn't exist for the email, creates it.
+   * Always returns a Slack user with a valid userId linking to an F3 user.
+   */
+  getOrCreateLinkedUser: apiKeyProcedure
+    .input(
+      z.object({
+        slackId: z.string(),
+        teamId: z.string(),
+        userName: z.string(),
+        email: z.string().email(),
+        isAdmin: z.boolean().optional(),
+        isOwner: z.boolean().optional(),
+        isBot: z.boolean().optional(),
+        avatarUrl: z.string().optional(),
+      }),
+    )
+    .route({
+      method: "POST",
+      path: "/get-or-create-linked-user",
+      tags: ["slack"],
+      summary: "Get or create Slack user with linked F3 user",
+      description:
+        "Retrieve or create a Slack user record with a guaranteed linked F3 user. If no F3 user exists for the email, one will be created.",
+    })
+    .handler(async ({ context: ctx, input }) => {
+      // Step 1: Find or create the Slack user
+      let [slackUser] = await ctx.db
+        .select()
+        .from(schema.slackUsers)
+        .where(eq(schema.slackUsers.slackId, input.slackId));
+
+      if (!slackUser) {
+        // Create the Slack user (without userId for now)
+        [slackUser] = await ctx.db
+          .insert(schema.slackUsers)
+          .values({
+            slackId: input.slackId,
+            userName: input.userName,
+            email: input.email,
+            slackTeamId: input.teamId,
+            isAdmin: input.isAdmin ?? false,
+            isOwner: input.isOwner ?? false,
+            isBot: input.isBot ?? false,
+            avatarUrl: input.avatarUrl ?? null,
+          })
+          .returning();
+      }
+
+      // Step 2: Ensure F3 user exists and is linked
+      if (!slackUser!.userId) {
+        // Try to find an existing F3 user by email
+        let [f3User] = await ctx.db
+          .select()
+          .from(schema.users)
+          .where(eq(schema.users.email, input.email));
+
+        if (!f3User) {
+          // Create a new F3 user
+          // Parse the userName to extract first/last name if possible
+          const nameParts = input.userName.trim().split(/\s+/);
+          const firstName = nameParts[0] ?? input.userName;
+          const lastName =
+            nameParts.length > 1 ? nameParts.slice(1).join(" ") : null;
+
+          [f3User] = await ctx.db
+            .insert(schema.users)
+            .values({
+              email: input.email,
+              firstName,
+              lastName,
+              avatarUrl: input.avatarUrl ?? null,
+              // emailVerified is null - user hasn't verified their email
+              // status defaults to 'active'
+            })
+            .returning();
+        }
+
+        // Link the Slack user to the F3 user
+        await ctx.db
+          .update(schema.slackUsers)
+          .set({ userId: f3User!.id })
+          .where(eq(schema.slackUsers.id, slackUser!.id));
+
+        // Update our local reference
+        slackUser = { ...slackUser!, userId: f3User!.id };
+      }
+
+      // Return the Slack user with guaranteed userId
+      return {
+        ...slackUser!,
+        // Explicitly include userId to satisfy the type
+        userId: slackUser!.userId!,
+      };
+    }),
+
+  /**
+   * Get the org associated with a Slack workspace.
+   * The org can be any type (region, area, etc.) depending on how the workspace was configured.
+   */
+  getOrg: publicProcedure
     .input(z.object({ teamId: z.string() }))
     .route({
       method: "GET",
-      path: "/region",
+      path: "/org",
       tags: ["slack"],
-      summary: "Get region for Slack space",
-      description: "Retrieve the region associated with a Slack workspace",
+      summary: "Get org for Slack space",
+      description:
+        "Retrieve the org associated with a Slack workspace. Returns the org ID, name, type, and space details.",
     })
     .handler(async ({ context: ctx, input }) => {
       const [result] = await ctx.db
         .select({
-          org: schema.orgs,
+          org: {
+            id: schema.orgs.id,
+            name: schema.orgs.name,
+            orgType: schema.orgs.orgType,
+            parentId: schema.orgs.parentId,
+          },
           space: schema.slackSpaces,
         })
         .from(schema.slackSpaces)
@@ -251,7 +359,44 @@ export const slackRouter = {
         )
         .where(eq(schema.slackSpaces.teamId, input.teamId));
 
-      return result;
+      return result ?? null;
+    }),
+
+  /**
+   * @deprecated Use getOrg instead
+   */
+  getRegion: publicProcedure
+    .input(z.object({ teamId: z.string() }))
+    .route({
+      method: "GET",
+      path: "/region",
+      tags: ["slack"],
+      summary: "Get region for Slack space (deprecated)",
+      description:
+        "Deprecated: Use /slack/org instead. Retrieve the org associated with a Slack workspace.",
+    })
+    .handler(async ({ context: ctx, input }) => {
+      const [result] = await ctx.db
+        .select({
+          org: {
+            id: schema.orgs.id,
+            name: schema.orgs.name,
+            orgType: schema.orgs.orgType,
+          },
+          space: schema.slackSpaces,
+        })
+        .from(schema.slackSpaces)
+        .innerJoin(
+          schema.orgsXSlackSpaces,
+          eq(schema.orgsXSlackSpaces.slackSpaceId, schema.slackSpaces.id),
+        )
+        .innerJoin(
+          schema.orgs,
+          eq(schema.orgs.id, schema.orgsXSlackSpaces.orgId),
+        )
+        .where(eq(schema.slackSpaces.teamId, input.teamId));
+
+      return result ?? null;
     }),
 
   /**

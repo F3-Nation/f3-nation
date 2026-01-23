@@ -2,19 +2,27 @@ import type { AnyMiddlewareArgs, Middleware } from "@slack/bolt";
 import type { WebClient } from "@slack/web-api";
 import { api } from "./api-client";
 import { logger } from "./logger";
-import type { RegionSettings, SlackUserData } from "../types";
-import type { GetUserRolesResponse, UserRoleEntry } from "../types/api-types";
+import type { OrgSettings, SlackUserData } from "../types";
 import { extractTeamId, extractUserId } from "../types/bolt-types";
 import type { ExtendedContext } from "../types/bolt-types";
 
+// The api-client methods are properly typed, but ESLint's @typescript-eslint/no-unsafe-*
+// rules don't always infer nested object method types correctly. The types are verified
+// in api-client.ts with explicit return type annotations.
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
+
 /**
- * Middleware to load region settings and user data for the current team.
+ * Middleware to load org settings and user data for the current team.
  *
- * For user admin/editor status, this middleware checks the F3 role system
- * (rolesXUsersXOrg table) rather than Slack's workspace admin/owner flags.
- * This ensures consistent permissions across the F3 ecosystem.
+ * This middleware:
+ * 1. Loads or creates the Slack space settings for the team
+ * 2. Fetches the F3 org (region, area, etc.) associated with the Slack workspace
+ * 3. Loads or creates the Slack user with a guaranteed linked F3 user
+ * 4. Computes F3 role-based admin/editor permissions (not Slack's workspace admin)
+ *
+ * Results are cached to minimize API calls on repeated requests.
  */
-export const withRegionContext: Middleware<AnyMiddlewareArgs> = async ({
+export const withOrgContext: Middleware<AnyMiddlewareArgs> = async ({
   context,
   body,
   client,
@@ -32,7 +40,7 @@ export const withRegionContext: Middleware<AnyMiddlewareArgs> = async ({
   }
 
   try {
-    // Load or create region settings
+    // Load or create space settings (cached)
     let space = await api.slack.getSpace(teamId);
 
     if (!space) {
@@ -56,95 +64,100 @@ export const withRegionContext: Middleware<AnyMiddlewareArgs> = async ({
     }
 
     if (space) {
-      ctx.regionSettings = space.settings as unknown as RegionSettings;
+      const settings = space.settings as unknown as OrgSettings;
+      ctx.orgSettings = settings;
 
-      // Fetch the region org ID associated with this Slack workspace
+      // Fetch the org associated with this Slack workspace (cached)
       try {
-        const region = await api.slack.getRegion(teamId);
-        if (region?.org) {
-          ctx.regionOrgId = region.org.id;
+        const orgResult = await api.slack.getOrg(teamId);
+        if (orgResult?.org) {
+          ctx.orgId = orgResult.org.id;
+          ctx.orgType = orgResult.org.orgType;
         }
       } catch (error) {
-        logger.warn(`Failed to fetch region org for team ${teamId}:`, error);
+        logger.warn(`Failed to fetch org for team ${teamId}:`, error);
       }
     }
 
     // Load or create user data if userId is available
     if (userId && typeof userId === "string") {
-      let slackUser = await api.slack.getUserBySlackId(userId, teamId);
+      try {
+        // First, get user info from Slack to ensure we have the email
+        const userInfo = await slackClient.users.info({ user: userId });
 
-      if (!slackUser) {
-        logger.info(`User not found for ID ${userId}, creating...`);
-        try {
-          const userInfo = await slackClient.users.info({ user: userId });
-          if (userInfo.user) {
-            // Note: We still pass Slack's isAdmin/isOwner to getOrCreateUser for
-            // the database record, but we'll compute the actual F3 role-based
-            // admin status separately below.
-            slackUser = await api.slack.getOrCreateUser({
-              slackId: userId,
-              teamId,
-              userName: userInfo.user.real_name ?? userInfo.user.name ?? userId,
-              email: userInfo.user.profile?.email ?? undefined,
-              isAdmin: userInfo.user.is_admin ?? false,
-              isOwner: userInfo.user.is_owner ?? false,
-              isBot: userInfo.user.is_bot ?? false,
-              avatarUrl: userInfo.user.profile?.image_512 ?? undefined,
-            });
-          }
-        } catch (error) {
-          logger.warn(
-            `Failed to fetch user info from Slack for ${userId}:`,
-            error,
-          );
-        }
-      }
+        if (userInfo.user) {
+          const email = userInfo.user.profile?.email;
 
-      if (slackUser) {
-        // Fetch F3 role-based admin/editor status from the role system
-        // This replaces the Slack-based isAdmin/isOwner with F3's rolesXUsersXOrg
-        let isAdmin = false;
-        let isEditor = false;
-
-        try {
-          /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
-          const userRoles: GetUserRolesResponse = await api.slack.getUserRoles(
-            userId,
-            teamId,
-          );
-          isAdmin = userRoles.isAdmin ?? false;
-          isEditor = userRoles.isEditor ?? false;
-
-          if (userRoles.roles.length > 0) {
-            logger.debug(
-              `User ${userId} has F3 roles: ${userRoles.roles.map((r: UserRoleEntry) => `${r.roleName}@${r.orgName}`).join(", ")}`,
+          if (!email) {
+            // Cannot create linked user without email - log and continue without user context
+            logger.warn(
+              `Slack user ${userId} has no email address - cannot link to F3 user`,
             );
+            await next();
+            return;
           }
-          /* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
-        } catch (error) {
-          logger.warn(`Failed to fetch F3 roles for user ${userId}:`, error);
-          // Fall back to no admin/editor permissions on error
+
+          // Get or create linked user (cached)
+          // This ensures both SlackUser and F3 User exist and are linked
+          const linkedUser = await api.slack.getOrCreateLinkedUser({
+            slackId: userId,
+            teamId,
+            userName: userInfo.user.real_name ?? userInfo.user.name ?? userId,
+            email,
+            isAdmin: userInfo.user.is_admin ?? false,
+            isOwner: userInfo.user.is_owner ?? false,
+            isBot: userInfo.user.is_bot ?? false,
+            avatarUrl: userInfo.user.profile?.image_512 ?? undefined,
+          });
+
+          // Fetch F3 role-based admin/editor status (cached)
+          // This checks the rolesXUsersXOrg table, not Slack's admin/owner flags
+          let isAdmin = false;
+          let isEditor = false;
+
+          try {
+            const userRoles = await api.slack.getUserRoles(userId, teamId);
+            isAdmin = userRoles.isAdmin ?? false;
+            isEditor = userRoles.isEditor ?? false;
+
+            if (userRoles.roles.length > 0) {
+              logger.debug(
+                `User ${userId} has F3 roles: ${userRoles.roles.map((r) => `${r.roleName}@${r.orgName}`).join(", ")}`,
+              );
+            }
+          } catch (error) {
+            logger.warn(`Failed to fetch F3 roles for user ${userId}:`, error);
+            // Fall back to no admin/editor permissions on error
+          }
+
+          // Build the SlackUserData with F3 role-based permissions
+          const userData: SlackUserData = {
+            id: linkedUser.id,
+            slackId: linkedUser.slackId,
+            userName: linkedUser.userName,
+            email: linkedUser.email,
+            userId: linkedUser.userId, // Guaranteed to be present
+            avatarUrl: linkedUser.avatarUrl ?? undefined,
+            isAdmin, // F3 role-based, not Slack's is_admin
+            isEditor, // F3 role-based
+            isBot: linkedUser.isBot,
+          };
+
+          ctx.slackUser = userData;
         }
-
-        // Build the SlackUserData with F3 role-based permissions
-        const userData: SlackUserData = {
-          id: slackUser.id,
-          slackId: slackUser.slackId,
-          userName: slackUser.userName,
-          email: slackUser.email ?? "",
-          userId: slackUser.userId ?? undefined,
-          avatarUrl: slackUser.avatarUrl ?? undefined,
-          isAdmin, // F3 role-based, not Slack's is_admin
-          isEditor, // F3 role-based
-          isBot: slackUser.isBot ?? false,
-        };
-
-        ctx.slackUser = userData;
+      } catch (error) {
+        logger.warn(`Failed to fetch/create user info for ${userId}:`, error);
       }
     }
   } catch (error) {
-    logger.error(`Error loading region context for team ${teamId}:`, error);
+    logger.error(`Error loading org context for team ${teamId}:`, error);
   }
 
   await next();
 };
+
+/**
+ * @deprecated Use withOrgContext instead
+ * Middleware to load region settings and user data for the current team.
+ */
+export const withRegionContext = withOrgContext;

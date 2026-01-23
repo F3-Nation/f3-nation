@@ -1,4 +1,5 @@
 import type {
+  OrgResponse as ApiOrgResponse,
   RegionResponse,
   SlackSpaceResponse,
   SlackUserData,
@@ -8,6 +9,8 @@ import type {
   UpsertUserInput,
   GetOrCreateSpaceInput,
   GetOrCreateUserInput,
+  GetOrCreateLinkedUserInput,
+  LinkedSlackUserResponse,
   LocationListResponse,
   LocationResponse,
   LocationInput,
@@ -22,6 +25,76 @@ import { logger } from "./logger";
 // API base URL - defaults to local development
 const API_BASE_URL = process.env.API_URL ?? "http://localhost:3000/v1";
 const API_KEY = process.env.SLACKBOT_API_KEY;
+
+// Cache TTL configuration (in milliseconds)
+const CACHE_TTL = {
+  space: 5 * 60 * 1000, // 5 minutes for space settings
+  org: 5 * 60 * 1000, // 5 minutes for org info
+  user: 2 * 60 * 1000, // 2 minutes for user data
+  roles: 2 * 60 * 1000, // 2 minutes for role data
+} as const;
+
+/**
+ * Simple in-memory cache with TTL support.
+ * Can be replaced with Redis or another cache backend later.
+ */
+interface CacheEntry<T> {
+  value: T;
+  expiresAt: number;
+}
+
+class SimpleCache {
+  private cache = new Map<string, CacheEntry<unknown>>();
+
+  get<T>(key: string): T | null {
+    const entry = this.cache.get(key) as CacheEntry<T> | undefined;
+    if (!entry) return null;
+
+    if (Date.now() > entry.expiresAt) {
+      this.cache.delete(key);
+      return null;
+    }
+
+    return entry.value;
+  }
+
+  set<T>(key: string, value: T, ttlMs: number): void {
+    this.cache.set(key, {
+      value,
+      expiresAt: Date.now() + ttlMs,
+    });
+  }
+
+  delete(key: string): void {
+    this.cache.delete(key);
+  }
+
+  /**
+   * Delete all entries matching a prefix (e.g., invalidate all user caches for a team)
+   */
+  deleteByPrefix(prefix: string): void {
+    for (const key of this.cache.keys()) {
+      if (key.startsWith(prefix)) {
+        this.cache.delete(key);
+      }
+    }
+  }
+
+  /**
+   * Clear all cache entries
+   */
+  clear(): void {
+    this.cache.clear();
+  }
+}
+
+// Singleton cache instance
+const cache = new SimpleCache();
+
+/**
+ * Export cache for use in tests or manual invalidation
+ */
+export { cache };
 
 logger.info(`API_BASE_URL initialized as: ${API_BASE_URL}`);
 
@@ -72,47 +145,143 @@ export const api = {
   ping: () => apiRequest<{ message: string }>("/ping"),
 
   slack: {
-    getSpace: (teamId: string) =>
-      apiRequest<SlackSpaceResponse | null>(
+    /**
+     * Get Slack space settings for a team.
+     * Results are cached for 5 minutes.
+     */
+    getSpace: async (teamId: string): Promise<SlackSpaceResponse | null> => {
+      const cacheKey = `space:${teamId}`;
+      const cached = cache.get<SlackSpaceResponse | null>(cacheKey);
+      if (cached !== null) {
+        logger.debug(`Cache hit for space: ${teamId}`);
+        return cached;
+      }
+
+      const result = await apiRequest<SlackSpaceResponse | null>(
         `/slack/space?teamId=${encodeURIComponent(teamId)}`,
-      ),
+      );
+      cache.set(cacheKey, result, CACHE_TTL.space);
+      return result;
+    },
 
-    updateSpaceSettings: (teamId: string, settings: UpdateSpaceSettingsInput) =>
-      apiRequest<{ success: boolean }>(`/slack/space/settings`, {
-        method: "PATCH",
-        body: JSON.stringify({ teamId, settings }),
-      }),
+    updateSpaceSettings: async (
+      teamId: string,
+      settings: UpdateSpaceSettingsInput,
+    ) => {
+      const result = await apiRequest<{ success: boolean }>(
+        `/slack/space/settings`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ teamId, settings }),
+        },
+      );
+      // Invalidate cache after update
+      cache.delete(`space:${teamId}`);
+      return result;
+    },
 
+    /**
+     * Get user by Slack ID (not cached - use getOrCreateLinkedUser for middleware)
+     */
     getUserBySlackId: (slackId: string, teamId: string) =>
       apiRequest<SlackUserResponse | null>(
         `/slack/user?slackId=${encodeURIComponent(slackId)}&teamId=${encodeURIComponent(teamId)}`,
       ),
 
-    getOrCreateSpace: (input: GetOrCreateSpaceInput) =>
-      apiRequest<SlackSpaceResponse>(`/slack/get-or-create-space`, {
-        method: "POST",
-        body: JSON.stringify(input),
-      }),
+    getOrCreateSpace: async (
+      input: GetOrCreateSpaceInput,
+    ): Promise<SlackSpaceResponse> => {
+      const result = await apiRequest<SlackSpaceResponse>(
+        `/slack/get-or-create-space`,
+        {
+          method: "POST",
+          body: JSON.stringify(input),
+        },
+      );
+      // Cache the newly created/fetched space
+      cache.set(`space:${input.teamId}`, result, CACHE_TTL.space);
+      return result;
+    },
 
+    /**
+     * @deprecated Use getOrCreateLinkedUser instead to ensure F3 user is linked
+     */
     getOrCreateUser: (input: GetOrCreateUserInput) =>
       apiRequest<SlackUserData>(`/slack/get-or-create-user`, {
         method: "POST",
         body: JSON.stringify(input),
       }),
 
-    upsertUser: (input: UpsertUserInput) =>
-      apiRequest<SuccessActionResponse>(`_action/slack/user`, {
-        method: "PUT",
-        body: JSON.stringify(input),
-      }),
+    /**
+     * Get or create a Slack user with a guaranteed linked F3 user.
+     * This is the preferred method for middleware - ensures every Slack user
+     * has a corresponding F3 user ID.
+     * Results are cached for 2 minutes.
+     */
+    getOrCreateLinkedUser: async (
+      input: GetOrCreateLinkedUserInput,
+    ): Promise<LinkedSlackUserResponse> => {
+      const cacheKey = `user:${input.teamId}:${input.slackId}`;
+      const cached = cache.get<LinkedSlackUserResponse>(cacheKey);
+      if (cached !== null) {
+        logger.debug(`Cache hit for user: ${input.slackId}`);
+        return cached;
+      }
 
+      const result = await apiRequest<LinkedSlackUserResponse>(
+        `/slack/get-or-create-linked-user`,
+        {
+          method: "POST",
+          body: JSON.stringify(input),
+        },
+      );
+      cache.set(cacheKey, result, CACHE_TTL.user);
+      return result;
+    },
+
+    upsertUser: async (input: UpsertUserInput) => {
+      const result = await apiRequest<SuccessActionResponse>(
+        `_action/slack/user`,
+        {
+          method: "PUT",
+          body: JSON.stringify(input),
+        },
+      );
+      // Invalidate user cache after upsert
+      cache.deleteByPrefix(`user:${input.teamId}:${input.slackId}`);
+      cache.deleteByPrefix(`roles:${input.teamId}:${input.slackId}`);
+      return result;
+    },
+
+    /**
+     * Get the org associated with a Slack workspace.
+     * Results are cached for 5 minutes.
+     */
+    getOrg: async (teamId: string): Promise<ApiOrgResponse | null> => {
+      const cacheKey = `org:${teamId}`;
+      const cached = cache.get<ApiOrgResponse | null>(cacheKey);
+      if (cached !== null) {
+        logger.debug(`Cache hit for org: ${teamId}`);
+        return cached;
+      }
+
+      const result = await apiRequest<ApiOrgResponse | null>(
+        `/slack/org?teamId=${encodeURIComponent(teamId)}`,
+      );
+      cache.set(cacheKey, result, CACHE_TTL.org);
+      return result;
+    },
+
+    /**
+     * @deprecated Use getOrg instead
+     */
     getRegion: (teamId: string) =>
       apiRequest<RegionResponse | null>(
         `/slack/region?teamId=${encodeURIComponent(teamId)}`,
       ),
 
     /**
-     * Check if a Slack user has a specific F3 role on the region org.
+     * Check if a Slack user has a specific F3 role on the org.
      * Uses the F3 role system, not Slack's admin/owner flags.
      */
     checkUserRole: (
@@ -125,13 +294,49 @@ export const api = {
       ),
 
     /**
-     * Get all F3 roles for a Slack user on the region org and its ancestors.
+     * Get all F3 roles for a Slack user on the org and its ancestors.
      * Returns role information and computed isAdmin/isEditor flags.
+     * Results are cached for 2 minutes.
      */
-    getUserRoles: (slackId: string, teamId: string) =>
-      apiRequest<GetUserRolesResponse>(
+    getUserRoles: async (
+      slackId: string,
+      teamId: string,
+    ): Promise<GetUserRolesResponse> => {
+      const cacheKey = `roles:${teamId}:${slackId}`;
+      const cached = cache.get<GetUserRolesResponse>(cacheKey);
+      if (cached !== null) {
+        logger.debug(`Cache hit for roles: ${slackId}`);
+        return cached;
+      }
+
+      const result = await apiRequest<GetUserRolesResponse>(
         `/slack/user-roles?slackId=${encodeURIComponent(slackId)}&teamId=${encodeURIComponent(teamId)}`,
-      ),
+      );
+      cache.set(cacheKey, result, CACHE_TTL.roles);
+      return result;
+    },
+
+    /**
+     * Invalidate all caches for a specific team.
+     * Useful when settings or roles change.
+     */
+    invalidateTeamCache: (teamId: string) => {
+      cache.delete(`space:${teamId}`);
+      cache.delete(`org:${teamId}`);
+      cache.deleteByPrefix(`user:${teamId}:`);
+      cache.deleteByPrefix(`roles:${teamId}:`);
+      logger.debug(`Invalidated all caches for team: ${teamId}`);
+    },
+
+    /**
+     * Invalidate user-specific caches.
+     * Useful when a user's roles or profile changes.
+     */
+    invalidateUserCache: (teamId: string, slackId: string) => {
+      cache.delete(`user:${teamId}:${slackId}`);
+      cache.delete(`roles:${teamId}:${slackId}`);
+      logger.debug(`Invalidated caches for user: ${slackId}`);
+    },
   },
 
   location: {

@@ -3,10 +3,18 @@
  */
 
 /**
- * Region settings stored in SlackSpace.settings JSON column
- * Mirrors the Python SlackSettings dataclass
+ * Org types in the F3 hierarchy (from lowest to highest)
+ * AO -> Region -> Area -> Sector -> Nation
  */
-export interface RegionSettings {
+export type OrgType = "ao" | "region" | "area" | "sector" | "nation";
+
+/**
+ * Org settings stored in SlackSpace.settings JSON column
+ * Mirrors the Python SlackSettings dataclass.
+ * Note: While historically called "RegionSettings", a SlackSpace can be
+ * associated with any org type (commonly Region or Area).
+ */
+export interface OrgSettings {
   team_id: string;
   workspace_name?: string;
 
@@ -80,19 +88,29 @@ export interface SlackUserData {
   slackId: string;
   userName: string;
   email: string;
-  userId?: number;
+  /**
+   * The F3 user ID linked to this Slack user.
+   * This is always populated - if no existing F3 user exists for the email,
+   * one will be created when the Slack user is first seen.
+   */
+  userId: number;
   avatarUrl?: string;
   /**
-   * Whether the user is an admin for the F3 region org (or any ancestor org).
+   * Whether the user is an admin for the F3 org (or any ancestor org).
    * This is checked against the F3 rolesXUsersXOrg table, not Slack permissions.
    */
   isAdmin: boolean;
   /**
-   * Whether the user has editor (or admin) role for the F3 region org.
+   * Whether the user has editor (or admin) role for the F3 org.
    */
   isEditor: boolean;
   isBot: boolean;
 }
+
+/**
+ * @deprecated Use OrgSettings instead. This alias is kept for backward compatibility.
+ */
+export type RegionSettings = OrgSettings;
 
 /**
  * Request context passed to handlers
@@ -100,6 +118,6 @@ export interface SlackUserData {
 export interface HandlerContext {
   teamId?: string;
   userId: string;
-  regionSettings?: RegionSettings;
+  orgSettings?: OrgSettings;
   slackUser?: SlackUserData;
 }
