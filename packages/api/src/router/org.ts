@@ -22,6 +22,7 @@ import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
 import { moveAOLocsToNewRegion } from "../lib/move-ao-locs-to-new-region";
+import { emitWebhookEvent } from "../lib/webhook-events";
 import { adminProcedure, editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
@@ -249,6 +250,11 @@ export const orgRouter = {
           })
           .returning();
 
+        // Notify webhooks about the org creation
+        if (result) {
+          emitWebhookEvent({ type: "org.created", orgId: result.id });
+        }
+
         return { org: result ?? null };
       }
 
@@ -299,6 +305,12 @@ export const orgRouter = {
           set: orgToCrupdate,
         })
         .returning();
+
+      // Notify webhooks about the org update
+      if (result) {
+        emitWebhookEvent({ type: "org.updated", orgId: result.id });
+      }
+
       return { org: result ?? null };
     }),
   mine: protectedProcedure
@@ -394,6 +406,10 @@ export const orgRouter = {
             eq(schema.orgs.isActive, true),
           ),
         );
+
+      // Notify webhooks about the org deletion
+      emitWebhookEvent({ type: "org.deleted", orgId: input.id });
+
       return { orgId: input.id };
     }),
   revalidate: adminProcedure

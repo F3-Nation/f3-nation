@@ -21,6 +21,7 @@ import { EventInsertSchema } from "@acme/validators";
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
+import { emitWebhookEvent } from "../lib/webhook-events";
 import { editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
@@ -447,6 +448,12 @@ export const eventRouter = {
         );
       }
 
+      // Notify webhooks about the event change
+      emitWebhookEvent({
+        type: input.id ? "event.updated" : "event.created",
+        eventId: result.id,
+      });
+
       return { event: result ?? null };
     }),
   eventIdToRegionNameLookup: protectedProcedure
@@ -532,6 +539,9 @@ export const eventRouter = {
         .where(
           and(eq(schema.events.id, input.id), eq(schema.events.isActive, true)),
         );
+
+      // Notify webhooks about the event deletion
+      emitWebhookEvent({ type: "event.deleted", eventId: input.id });
 
       return { eventId: input.id };
     }),

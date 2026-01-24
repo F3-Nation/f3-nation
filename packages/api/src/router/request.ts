@@ -26,6 +26,7 @@ import { DeleteRequestSchema, RequestInsertSchema } from "@acme/validators";
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
+import { emitWebhookEvent } from "../lib/webhook-events";
 import { notifyMapChangeRequest } from "../services/map-request-notification";
 import type { Context } from "../shared";
 import { editorProcedure, protectedProcedure } from "../shared";
@@ -344,6 +345,16 @@ export const requestRouter = {
           ...input,
           reviewedBy: ctx.session?.user?.email,
         });
+
+        // Notify webhooks about the auto-approved delete
+        if (result.status === "approved") {
+          emitWebhookEvent({
+            type: "map.deleted",
+            eventId: input.eventId,
+            orgId: input.regionId,
+          });
+        }
+
         return { status: result.status, deleteRequest: result.deleteRequest };
       }
 
@@ -459,6 +470,20 @@ export const requestRouter = {
           ...input,
           reviewedBy: ctx.session?.user?.email,
         });
+
+        // Notify webhooks about the auto-approved update
+        if (result.status === "approved") {
+          emitWebhookEvent({
+            type: input.eventId ? "map.updated" : "map.created",
+            eventId: result.updateRequest?.eventId ?? undefined,
+            locationId: result.updateRequest?.locationId ?? undefined,
+            orgId:
+              result.updateRequest?.aoId ??
+              result.updateRequest?.regionId ??
+              undefined,
+          });
+        }
+
         return { status: result.status, updateRequest: result.updateRequest };
       }
 
@@ -520,6 +545,16 @@ export const requestRouter = {
         ...input,
         reviewedBy: ctx.session?.user?.email,
       });
+
+      // Notify webhooks about the admin-approved delete
+      if (result.status === "approved") {
+        emitWebhookEvent({
+          type: "map.deleted",
+          eventId: input.eventId,
+          orgId: input.regionId,
+        });
+      }
+
       return { status: result.status, deleteRequest: result.deleteRequest };
     }),
   validateSubmissionByAdmin: editorProcedure
@@ -561,6 +596,17 @@ export const requestRouter = {
           eventDayOfWeek: input.eventDayOfWeek ?? undefined,
           eventMeta: input.eventMeta ?? undefined,
         });
+
+        // Notify webhooks about the admin-approved delete
+        if (result.status === "approved") {
+          emitWebhookEvent({
+            type: "map.deleted",
+            eventId: input.eventId ?? undefined,
+            locationId: input.locationId ?? undefined,
+            orgId: input.regionId,
+          });
+        }
+
         return {
           status: result.status,
           deleteRequest: result.deleteRequest,
@@ -571,6 +617,20 @@ export const requestRouter = {
           regionId: input.regionId,
           reviewedBy: "email",
         });
+
+        // Notify webhooks about the admin-approved update
+        if (result.status === "approved") {
+          emitWebhookEvent({
+            type: input.eventId ? "map.updated" : "map.created",
+            eventId: result.updateRequest?.eventId ?? undefined,
+            locationId: result.updateRequest?.locationId ?? undefined,
+            orgId:
+              result.updateRequest?.aoId ??
+              result.updateRequest?.regionId ??
+              undefined,
+          });
+        }
+
         return {
           status: result.status,
           updateRequest: result.updateRequest,
