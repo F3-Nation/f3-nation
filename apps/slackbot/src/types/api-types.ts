@@ -1,8 +1,4 @@
-import type {
-  OrgSettings,
-  OrgType,
-  SlackUserData,
-} from "./index";
+import type { OrgSettings, OrgType, SlackUserData } from "./index";
 
 export type { SlackUserData };
 

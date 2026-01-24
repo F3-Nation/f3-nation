@@ -14,11 +14,7 @@ import type {
   SectionBlock,
 } from "@slack/web-api";
 
-import type {
-  OrgSettings,
-  OrgType,
-  SlackUserData,
-} from "./index";
+import type { OrgSettings, OrgType, SlackUserData } from "./index";
 
 /**
  * Extended context with org and user data
