@@ -337,6 +337,45 @@ export const api = {
       cache.delete(`roles:${teamId}:${slackId}`);
       logger.debug(`Invalidated caches for user: ${slackId}`);
     },
+
+    /**
+     * Connect a Slack workspace to an F3 org.
+     * Either links to an existing org (by orgId) or creates a new one (by newOrgName).
+     */
+    connectSpaceToOrg: async (input: {
+      teamId: string;
+      orgId?: number;
+      newOrgName?: string;
+      orgType?: "ao" | "region" | "area" | "sector" | "nation";
+    }): Promise<{ success: boolean; orgId: number }> => {
+      const result = await apiRequest<{ success: boolean; orgId: number }>(
+        `/slack/connect-space-to-org`,
+        {
+          method: "POST",
+          body: JSON.stringify(input),
+        },
+      );
+      // Invalidate org cache after connecting
+      cache.delete(`org:${input.teamId}`);
+      return result;
+    },
+
+    /**
+     * Assign a role to a user for a specific org.
+     */
+    assignUserRole: async (input: {
+      userId: number;
+      orgId: number;
+      roleName: "user" | "editor" | "admin";
+    }): Promise<{ success: boolean; alreadyHadRole: boolean }> => {
+      return apiRequest<{ success: boolean; alreadyHadRole: boolean }>(
+        `/slack/assign-user-role`,
+        {
+          method: "POST",
+          body: JSON.stringify(input),
+        },
+      );
+    },
   },
 
   location: {

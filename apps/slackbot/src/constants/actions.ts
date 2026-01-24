@@ -204,6 +204,11 @@ export const ACTIONS = {
 
   // Calendar Settings
   CALENDAR_CONFIG_Q_LINEUP: "calendar-config-q-lineup",
+
+  // Region Setup (Local Development)
+  REGION_SETUP_CALLBACK_ID: "region-setup-id",
+  REGION_SETUP_SEARCH: "region-setup-search",
+  REGION_SETUP_NEW_NAME: "region-setup-new-name",
 } as const;
 
 export type ActionId = (typeof ACTIONS)[keyof typeof ACTIONS];

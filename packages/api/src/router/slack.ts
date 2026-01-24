@@ -677,4 +677,147 @@ export const slackRouter = {
         isEditor,
       };
     }),
+
+  /**
+   * Connect a Slack workspace to an F3 org (region, area, etc.)
+   * Creates or finds the org and links it to the Slack space via orgsXSlackSpaces.
+   */
+  connectSpaceToOrg: apiKeyProcedure
+    .input(
+      z.object({
+        teamId: z.string(),
+        orgId: z.number().optional(),
+        newOrgName: z.string().optional(),
+        orgType: z
+          .enum(["ao", "region", "area", "sector", "nation"])
+          .optional()
+          .default("region"),
+      }),
+    )
+    .route({
+      method: "POST",
+      path: "/connect-space-to-org",
+      tags: ["slack"],
+      summary: "Connect Slack space to an F3 org",
+      description:
+        "Link a Slack workspace to an existing org or create a new one and link it",
+    })
+    .handler(async ({ context: ctx, input }) => {
+      // Find the slack space
+      const [space] = await ctx.db
+        .select()
+        .from(schema.slackSpaces)
+        .where(eq(schema.slackSpaces.teamId, input.teamId));
+
+      if (!space) {
+        throw new Error("Slack space not found");
+      }
+
+      // Check if already connected
+      const [existingLink] = await ctx.db
+        .select()
+        .from(schema.orgsXSlackSpaces)
+        .where(eq(schema.orgsXSlackSpaces.slackSpaceId, space.id));
+
+      if (existingLink) {
+        throw new Error("Slack space is already connected to an org");
+      }
+
+      let orgId: number;
+
+      if (input.orgId) {
+        // Use existing org
+        const [org] = await ctx.db
+          .select()
+          .from(schema.orgs)
+          .where(eq(schema.orgs.id, input.orgId));
+
+        if (!org) {
+          throw new Error("Org not found");
+        }
+        orgId = org.id;
+      } else if (input.newOrgName) {
+        // Create new org
+        const [newOrg] = await ctx.db
+          .insert(schema.orgs)
+          .values({
+            name: input.newOrgName,
+            orgType: input.orgType,
+            isActive: true,
+          })
+          .returning();
+
+        if (!newOrg) {
+          throw new Error("Failed to create org");
+        }
+        orgId = newOrg.id;
+      } else {
+        throw new Error("Either orgId or newOrgName must be provided");
+      }
+
+      // Create the link
+      await ctx.db.insert(schema.orgsXSlackSpaces).values({
+        orgId,
+        slackSpaceId: space.id,
+      });
+
+      return { success: true, orgId };
+    }),
+
+  /**
+   * Assign a role to a user for a specific org.
+   * Used to grant admin/editor permissions on an org.
+   */
+  assignUserRole: apiKeyProcedure
+    .input(
+      z.object({
+        userId: z.number(),
+        orgId: z.number(),
+        roleName: z.enum(["user", "editor", "admin"]),
+      }),
+    )
+    .route({
+      method: "POST",
+      path: "/assign-user-role",
+      tags: ["slack"],
+      summary: "Assign role to user on org",
+      description: "Grant a user a specific role on an F3 org",
+    })
+    .handler(async ({ context: ctx, input }) => {
+      // Get the role ID
+      const [role] = await ctx.db
+        .select()
+        .from(schema.roles)
+        .where(eq(schema.roles.name, input.roleName));
+
+      if (!role) {
+        throw new Error(`Role '${input.roleName}' not found`);
+      }
+
+      // Check if user already has this role on this org
+      const [existingRole] = await ctx.db
+        .select()
+        .from(schema.rolesXUsersXOrg)
+        .where(
+          and(
+            eq(schema.rolesXUsersXOrg.userId, input.userId),
+            eq(schema.rolesXUsersXOrg.orgId, input.orgId),
+            eq(schema.rolesXUsersXOrg.roleId, role.id),
+          ),
+        );
+
+      if (existingRole) {
+        // Already has the role, just return success
+        return { success: true, alreadyHadRole: true };
+      }
+
+      // Insert the role assignment
+      await ctx.db.insert(schema.rolesXUsersXOrg).values({
+        userId: input.userId,
+        orgId: input.orgId,
+        roleId: role.id,
+      });
+
+      return { success: true, alreadyHadRole: false };
+    }),
 };
