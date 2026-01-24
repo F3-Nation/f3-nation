@@ -9,7 +9,6 @@ import type { ExtendedContext } from "../types/bolt-types";
 // The api-client methods are properly typed, but ESLint's @typescript-eslint/no-unsafe-*
 // rules don't always infer nested object method types correctly. The types are verified
 // in api-client.ts with explicit return type annotations.
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
 
 /**
  * Middleware to load org settings and user data for the current team.

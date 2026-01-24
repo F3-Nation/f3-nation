@@ -8,7 +8,7 @@ import type {
   TypedViewArgs,
 } from "../../types/bolt-types";
 import { logger } from "../../lib/logger";
-import type { RegionSettings } from "../../types";
+import type { OrgSettings } from "../../types";
 import type { SlackSpaceResponse } from "../../types/api-types";
 
 export const CALENDAR_CONFIG_POST_CALENDAR_IMAGE =
@@ -34,7 +34,7 @@ export async function buildCalendarGeneralConfigForm(
       const space: SlackSpaceResponse | null = await api.slack.getSpace(
         navCtx.teamId,
       );
-      const settings: Partial<RegionSettings> = space?.settings ?? {};
+      const settings: Partial<OrgSettings> = space?.settings ?? {};
 
       const qLineupTime = settings.send_q_lineups_hour_cst
         ? `${settings.send_q_lineups_hour_cst.toString().padStart(2, "0")}:00`
@@ -220,7 +220,7 @@ export async function handleCalendarConfigGeneral(args: TypedViewArgs) {
     ? parseInt(qLineupTime.split(":")[0] ?? "17")
     : 17;
 
-  const settings: Partial<RegionSettings> = {
+  const settings: Partial<OrgSettings> = {
     send_q_lineups:
       getVal(ACTIONS.CALENDAR_CONFIG_Q_LINEUP, ACTIONS.CALENDAR_CONFIG_Q_LINEUP)
         ?.selected_option?.value === "yes",

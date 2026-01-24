@@ -3,7 +3,7 @@ import { ACTIONS } from "../../constants/actions";
 import { WELCOME_MESSAGE_TEMPLATES } from "../../constants/templates";
 import { api } from "../../lib/api-client";
 import { logger } from "../../lib/logger";
-import type { RegionSettings } from "../../types";
+import type { OrgSettings } from "../../types";
 import { extractTeamId, extractUserId } from "../../types/bolt-types";
 import type { TypedEventArgs } from "../../types/bolt-types";
 
@@ -16,7 +16,7 @@ async function handleTeamJoin({
   context,
   body,
 }: TypedEventArgs<"team_join">) {
-  const { regionSettings } = context;
+  const { orgSettings } = context;
   const userId = extractUserId(body);
   const teamId = extractTeamId(body);
 
@@ -25,19 +25,16 @@ async function handleTeamJoin({
     return;
   }
 
-  if (!regionSettings) {
+  if (!orgSettings) {
     logger.debug(
-      `No region settings found for team ${teamId}, skipping welcome message`,
+      `No org settings found for team ${teamId}, skipping welcome message`,
     );
     return;
   }
 
   try {
     // 1. Welcome DM
-    if (
-      regionSettings.welcome_dm_enable &&
-      regionSettings.welcome_dm_template
-    ) {
+    if (orgSettings.welcome_dm_enable && orgSettings.welcome_dm_template) {
       // template could be a string or blocks
       let blocks = undefined;
       let text = "Welcome!";
@@ -45,9 +42,9 @@ async function handleTeamJoin({
       try {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         const parsed =
-          typeof regionSettings.welcome_dm_template === "string"
-            ? JSON.parse(regionSettings.welcome_dm_template)
-            : regionSettings.welcome_dm_template;
+          typeof orgSettings.welcome_dm_template === "string"
+            ? JSON.parse(orgSettings.welcome_dm_template)
+            : orgSettings.welcome_dm_template;
 
         if (
           typeof parsed === "object" &&
@@ -60,10 +57,10 @@ async function handleTeamJoin({
         } else if (Array.isArray(parsed)) {
           blocks = parsed;
         } else {
-          text = regionSettings.welcome_dm_template;
+          text = orgSettings.welcome_dm_template;
         }
       } catch (e) {
-        text = regionSettings.welcome_dm_template;
+        text = orgSettings.welcome_dm_template;
       }
 
       await client.chat.postMessage({
@@ -74,19 +71,16 @@ async function handleTeamJoin({
     }
 
     // 2. Welcome Channel Post
-    if (
-      regionSettings.welcome_channel_enable &&
-      regionSettings.welcome_channel
-    ) {
+    if (orgSettings.welcome_channel_enable && orgSettings.welcome_channel) {
       const templates = WELCOME_MESSAGE_TEMPLATES;
       const template = templates[Math.floor(Math.random() * templates.length)];
       if (template) {
         const message = template
           .replace(/{user}/g, userId)
-          .replace(/{region}/g, regionSettings.workspace_name ?? "the region");
+          .replace(/{region}/g, orgSettings.workspace_name ?? "the region");
 
         await client.chat.postMessage({
-          channel: regionSettings.welcome_channel,
+          channel: orgSettings.welcome_channel,
           text: message,
         });
       }
@@ -145,7 +139,7 @@ export function registerWelcomeFeature(app: App) {
 /**
  * Build Welcome Config Modal
  */
-export function buildWelcomeConfigModal(regionSettings?: RegionSettings) {
+export function buildWelcomeConfigModal(orgSettings?: OrgSettings) {
   return {
     type: "modal" as const,
     callback_id: ACTIONS.WELCOME_SAVE,
@@ -163,9 +157,9 @@ export function buildWelcomeConfigModal(regionSettings?: RegionSettings) {
           initial_option: {
             text: {
               type: "plain_text",
-              text: regionSettings?.welcome_dm_enable ? "Enable" : "Disable",
+              text: orgSettings?.welcome_dm_enable ? "Enable" : "Disable",
             },
-            value: regionSettings?.welcome_dm_enable ? "enable" : "disable",
+            value: orgSettings?.welcome_dm_enable ? "enable" : "disable",
           },
           options: [
             { text: { type: "plain_text", text: "Enable" }, value: "enable" },
@@ -182,8 +176,8 @@ export function buildWelcomeConfigModal(regionSettings?: RegionSettings) {
           type: "rich_text_input",
           action_id: ACTIONS.WELCOME_DM_TEMPLATE,
           // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-          initial_value: regionSettings?.welcome_dm_template
-            ? JSON.parse(regionSettings.welcome_dm_template)
+          initial_value: orgSettings?.welcome_dm_template
+            ? JSON.parse(orgSettings.welcome_dm_template)
             : undefined,
         },
       },
@@ -209,13 +203,9 @@ export function buildWelcomeConfigModal(regionSettings?: RegionSettings) {
           initial_option: {
             text: {
               type: "plain_text",
-              text: regionSettings?.welcome_channel_enable
-                ? "Enable"
-                : "Disable",
+              text: orgSettings?.welcome_channel_enable ? "Enable" : "Disable",
             },
-            value: regionSettings?.welcome_channel_enable
-              ? "enable"
-              : "disable",
+            value: orgSettings?.welcome_channel_enable ? "enable" : "disable",
           },
           options: [
             { text: { type: "plain_text", text: "Enable" }, value: "enable" },
@@ -230,7 +220,7 @@ export function buildWelcomeConfigModal(regionSettings?: RegionSettings) {
         element: {
           type: "channels_select",
           action_id: ACTIONS.WELCOME_CHANNEL,
-          initial_channel: regionSettings?.welcome_channel ?? undefined,
+          initial_channel: orgSettings?.welcome_channel ?? undefined,
         },
       },
     ],

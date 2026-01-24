@@ -355,7 +355,8 @@ export const api = {
           body: JSON.stringify(input),
         },
       );
-      // Invalidate org cache after connecting
+      // Invalidate both space and org caches after connecting
+      cache.delete(`space:${input.teamId}`);
       cache.delete(`org:${input.teamId}`);
       return result;
     },

@@ -15,7 +15,6 @@ import type {
 } from "@slack/web-api";
 
 import type {
-  RegionSettings,
   OrgSettings,
   OrgType,
   SlackUserData,
@@ -25,10 +24,6 @@ import type {
  * Extended context with org and user data
  */
 export interface ExtendedContext extends Context {
-  /**
-   * @deprecated Use orgSettings instead
-   */
-  regionSettings?: RegionSettings;
   /**
    * Settings for the org associated with this Slack workspace.
    */

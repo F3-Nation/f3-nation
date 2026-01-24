@@ -4,7 +4,7 @@ import { buildWelcomeConfigModal } from "../welcome";
 import { buildCalendarConfigModal } from "../calendar";
 import { api } from "../../lib/api-client";
 import { logger } from "../../lib/logger";
-import type { RegionSettings } from "../../types";
+import type { OrgSettings } from "../../types";
 import type {
   BlockList,
   ExtendedContext,
@@ -202,7 +202,7 @@ export function registerConfigFeature(app: App) {
     await ack();
     const navCtx = createNavContext(args);
     await navigateToView(navCtx, () =>
-      buildWelcomeConfigModal(context.regionSettings),
+      buildWelcomeConfigModal(context.orgSettings),
     );
   });
 
@@ -212,7 +212,7 @@ export function registerConfigFeature(app: App) {
     await ack();
     const navCtx = createNavContext(args);
     await navigateToView(navCtx, () =>
-      buildGeneralConfigModal(context.regionSettings),
+      buildGeneralConfigModal(context.orgSettings),
     );
   });
 
@@ -409,7 +409,7 @@ export function registerConfigFeature(app: App) {
 /**
  * Build the General Settings modal
  */
-export function buildGeneralConfigModal(regionSettings?: RegionSettings) {
+export function buildGeneralConfigModal(orgSettings?: OrgSettings) {
   return {
     type: "modal" as const,
     callback_id: ACTIONS.CONFIG_CALLBACK_ID, // Reusing callback ID or use a specific one
@@ -427,9 +427,9 @@ export function buildGeneralConfigModal(regionSettings?: RegionSettings) {
           initial_option: {
             text: {
               type: "plain_text",
-              text: regionSettings?.editing_locked ? "Yes" : "No",
+              text: orgSettings?.editing_locked ? "Yes" : "No",
             },
-            value: regionSettings?.editing_locked ? "yes" : "no",
+            value: orgSettings?.editing_locked ? "yes" : "no",
           },
           options: [
             { text: { type: "plain_text", text: "Yes" }, value: "yes" },
@@ -437,7 +437,7 @@ export function buildGeneralConfigModal(regionSettings?: RegionSettings) {
           ],
         },
       },
-      // Add more settings here based on RegionSettings
+      // Add more settings here based on OrgSettings
     ] as BlockList,
   } as ModalView;
 }

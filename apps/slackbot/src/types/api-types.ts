@@ -1,7 +1,6 @@
 import type {
   OrgSettings,
   OrgType,
-  RegionSettings,
   SlackUserData,
 } from "./index";
 
@@ -10,7 +9,7 @@ export type { SlackUserData };
 /**
  * Input for updating Slack space settings
  */
-export type UpdateSpaceSettingsInput = Partial<RegionSettings>;
+export type UpdateSpaceSettingsInput = Partial<OrgSettings>;
 
 /**
  * Input for upserting a Slack user

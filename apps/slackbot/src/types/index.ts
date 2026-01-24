@@ -108,11 +108,6 @@ export interface SlackUserData {
 }
 
 /**
- * @deprecated Use OrgSettings instead. This alias is kept for backward compatibility.
- */
-export type RegionSettings = OrgSettings;
-
-/**
  * Request context passed to handlers
  */
 export interface HandlerContext {
