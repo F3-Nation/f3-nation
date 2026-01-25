@@ -5,59 +5,36 @@ import type Mail from "nodemailer/lib/mailer";
 import type SMTPTransport from "nodemailer/lib/smtp-transport";
 import path from "path";
 import { fileURLToPath } from "url";
-import type { z } from "zod";
 
 import { env } from "@acme/env";
 
-import type { feedbackSchema } from "./router/map/index";
+import type { TemplateType } from "./templates";
+import { DefaultSubject, Templates } from "./templates";
 
 const isLocalDevelopment = process.env.NODE_ENV !== "production";
+
+/**
+ * Default recipients for each template
+ */
+export const DefaultTo: { [key in Templates]?: string | string[] } = {
+  [Templates.feedbackForm]: env.EMAIL_ADMIN_DESTINATIONS.split(","),
+};
 
 /**
  * Resolves the template directory path relative to the workspace root.
  * Templates are located in apps/map/src/templates/
  */
 const getTemplateDirectory = (): string => {
-  // Get the directory of this file (packages/api/src/)
+  // Get the directory of this file (packages/mail/src/)
   const currentFile = fileURLToPath(import.meta.url);
   const currentDir = path.dirname(currentFile);
 
-  // Resolve to workspace root (go up from packages/api/src/ to workspace root)
+  // Resolve to workspace root (go up from packages/mail/src/ to workspace root)
   const workspaceRoot = path.resolve(currentDir, "../../..");
 
   // Templates are in apps/map/src/templates/
   return path.join(workspaceRoot, "apps/map/src/templates");
 };
-
-export enum Templates {
-  feedbackForm = "feedback-form",
-  mapChangeRequest = "map-change-request",
-}
-
-export const DefaultSubject: { [key in Templates]?: string } = {
-  [Templates.feedbackForm]: "Feedback Form",
-  [Templates.mapChangeRequest]: "F3 Map Change Request",
-};
-
-export const DefaultTo: { [key in Templates]?: string | string[] } = {
-  [Templates.feedbackForm]: env.EMAIL_ADMIN_DESTINATIONS.split(","),
-};
-
-export enum UnsubGroup {}
-
-export interface TemplateType {
-  [Templates.feedbackForm]: z.infer<typeof feedbackSchema>;
-  [Templates.mapChangeRequest]: {
-    regionName: string;
-    workoutName: string;
-    requestType: string;
-    submittedBy: string;
-    requestsUrl: string;
-    noAdminsNotice?: boolean;
-    recipientRole?: string;
-    recipientOrg?: string;
-  };
-}
 
 type TemplateMessage<T extends Templates> = TemplateType[T] & {
   to?: string | string[];
@@ -155,7 +132,7 @@ export class MailService {
     }
 
     if (!DefaultSubject[template] && !paramsArray.every((p) => p.subject)) {
-      throw new Error("Missing to and no default to set");
+      throw new Error("Missing subject and no default subject set");
     }
 
     // When sending template emails, we can't have too many files open at the same time

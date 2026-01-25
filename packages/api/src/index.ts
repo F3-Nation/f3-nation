@@ -6,6 +6,7 @@ import { apiKeyRouter } from "./router/api-key";
 import { eventRouter } from "./router/event";
 import { eventTypeRouter } from "./router/event-type";
 import { locationRouter } from "./router/location";
+import { mailRouter } from "./router/mail";
 import { mapRouter } from "./router/map/index";
 import { orgRouter } from "./router/org";
 import { pingRouter } from "./router/ping";
@@ -20,6 +21,7 @@ export const router = os.prefix(API_PREFIX_V1).router({
   apiKey: os.prefix("/api-key").router(apiKeyRouter),
   event: os.prefix("/event").router(eventRouter),
   eventType: os.prefix("/event-type").router(eventTypeRouter),
+  mail: os.prefix("/mail").router(mailRouter),
   ping: os.router(pingRouter),
   location: os.prefix("/location").router(locationRouter),
   map: os.prefix("/map").router(mapRouter),
