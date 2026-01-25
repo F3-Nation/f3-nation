@@ -140,48 +140,41 @@ export const mailRouter = {
       summary: "Preview an email template",
       description: "Returns the rendered HTML for a template without sending",
     })
-    .handler(async ({ input }) => {
+    .handler(({ input }) => {
       const { template, data } = input;
 
-      try {
-        let html: string;
+      let html: string;
 
-        if (template === Templates.feedbackForm) {
-          html = await mail.getTemplate(Templates.feedbackForm, {
-            type: String(data.type ?? "Test Type"),
-            email: String(data.email ?? "test@example.com"),
-            subject: String(data.subject ?? "Test Subject"),
-            description: String(data.description ?? "Test Description"),
-          });
-        } else if (template === Templates.mapChangeRequest) {
-          const baseUrl = env.NEXT_PUBLIC_MAP_URL?.endsWith("/")
-            ? env.NEXT_PUBLIC_MAP_URL.slice(0, -1)
-            : env.NEXT_PUBLIC_MAP_URL ?? "";
+      if (template === Templates.feedbackForm) {
+        html = mail.getTemplate(Templates.feedbackForm, {
+          type: String(data.type ?? "Test Type"),
+          email: String(data.email ?? "test@example.com"),
+          subject: String(data.subject ?? "Test Subject"),
+          description: String(data.description ?? "Test Description"),
+        });
+      } else if (template === Templates.mapChangeRequest) {
+        const baseUrl = env.NEXT_PUBLIC_MAP_URL?.endsWith("/")
+          ? env.NEXT_PUBLIC_MAP_URL.slice(0, -1)
+          : env.NEXT_PUBLIC_MAP_URL ?? "";
 
-          html = await mail.getTemplate(Templates.mapChangeRequest, {
-            regionName: String(data.regionName ?? "Test Region"),
-            workoutName: String(data.workoutName ?? "Test Workout"),
-            requestType: String(data.requestType ?? "Update"),
-            submittedBy: String(data.submittedBy ?? "Test User"),
-            requestsUrl: String(
-              data.requestsUrl ?? `${baseUrl}/admin/requests`,
-            ),
-            noAdminsNotice: Boolean(data.noAdminsNotice),
-            recipientRole: data.recipientRole
-              ? String(data.recipientRole)
-              : undefined,
-            recipientOrg: data.recipientOrg
-              ? String(data.recipientOrg)
-              : undefined,
-          });
-        } else {
-          throw new Error("Unknown template");
-        }
-
-        return { html };
-      } catch (error) {
-        console.error("Failed to preview template", { error, template });
-        throw error;
+        html = mail.getTemplate(Templates.mapChangeRequest, {
+          regionName: String(data.regionName ?? "Test Region"),
+          workoutName: String(data.workoutName ?? "Test Workout"),
+          requestType: String(data.requestType ?? "Update"),
+          submittedBy: String(data.submittedBy ?? "Test User"),
+          requestsUrl: String(data.requestsUrl ?? `${baseUrl}/admin/requests`),
+          noAdminsNotice: Boolean(data.noAdminsNotice),
+          recipientRole: data.recipientRole
+            ? String(data.recipientRole)
+            : undefined,
+          recipientOrg: data.recipientOrg
+            ? String(data.recipientOrg)
+            : undefined,
+        });
+      } else {
+        throw new Error("Unknown template");
       }
+
+      return { html };
     }),
 };
