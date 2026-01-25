@@ -6,6 +6,7 @@ import {
   CirclePile,
   Globe,
   KeyRound,
+  Mail,
   MapPin,
   PersonStanding,
   Shield,
@@ -18,23 +19,27 @@ import {
 import { routes } from "@acme/shared/app/constants";
 import { cn } from "@acme/ui";
 
+import { useAuth } from "~/utils/hooks/use-auth";
+
 interface AdminNavLinksProps {
   className?: string;
   linkClassName?: string;
   sectionClassName?: string;
 }
 
-type Link =
+type NavLink =
   | {
       href: string;
       icon: React.ElementType;
       label: string;
       type: "link";
+      nationAdminOnly?: boolean;
     }
   | {
       icon?: React.ElementType;
       label: string;
       type: "section";
+      nationAdminOnly?: boolean;
     };
 
 export const AdminNavLinks = ({
@@ -43,8 +48,9 @@ export const AdminNavLinks = ({
   sectionClassName,
 }: AdminNavLinksProps) => {
   const pathname = usePathname();
+  const { isNationAdmin } = useAuth();
 
-  const links: Link[] = [
+  const links: NavLink[] = [
     {
       label: "Admin",
       type: "section",
@@ -135,11 +141,28 @@ export const AdminNavLinks = ({
       label: "API Keys",
       type: "link",
     },
+    {
+      label: "Nation Admin",
+      type: "section",
+      nationAdminOnly: true,
+    },
+    {
+      href: routes.admin.emailTest.__path,
+      icon: Mail,
+      label: "Email Test",
+      type: "link",
+      nationAdminOnly: true,
+    },
   ];
+
+  // Filter out nation admin only links if user is not a nation admin
+  const visibleLinks = links.filter(
+    (link) => !link.nationAdminOnly || isNationAdmin,
+  );
 
   return (
     <div className={className}>
-      {links.map((link) => {
+      {visibleLinks.map((link) => {
         if (link.type === "section") {
           return (
             <div

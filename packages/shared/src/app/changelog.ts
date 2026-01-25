@@ -10,22 +10,30 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
-    version: "3.5.0",
+    version: "3.5.1",
     date: "2026-01-24",
-    title: "Webhook Notifications",
+    title: "Changelog, Webhooks & Email Testing",
     sections: [
+      {
+        title: "New Features",
+        items: [
+          "Added changelog page - click the version number to view release history",
+          "Added email template testing page for nation admins at /admin/email-test",
+        ],
+      },
       {
         title: "Backend",
         items: [
           "Added webhook notification system for map data changes",
           "External systems can now be notified when events, locations, or orgs are created, updated, or deleted",
+          "Created new @acme/mail package for email functionality",
         ],
       },
     ],
   },
   {
     version: "3.4.0",
-    date: "2026-01-23",
+    date: "2026-01-17",
     title: "Contact Info on Workouts",
     sections: [
       {
