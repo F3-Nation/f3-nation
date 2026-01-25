@@ -364,7 +364,9 @@ export default function SettingsModal() {
               <span className="text-xs">Help</span>
             </button>
           </div>
-          <VersionInfo className="text-center text-xs text-foreground/60" />
+          <div className="flex justify-center">
+            <VersionInfo className="text-xs text-foreground/60" />
+          </div>
         </div>
       </DialogContent>
     </Dialog>
