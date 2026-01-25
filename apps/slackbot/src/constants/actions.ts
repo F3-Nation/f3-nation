@@ -230,6 +230,11 @@ export const ACTIONS = {
   EVENT_PREBLAST_FILL_BUTTON: "event-preblast-fill-button",
   EVENT_PREBLAST_NEW_BUTTON: "event-preblast-new-button",
   NEW_PREBLAST_BUTTON: "new-preblast-button",
+
+  // Backblast Selection
+  BACKBLAST_SELECT_CALLBACK_ID: "backblast-select-id",
+  BACKBLAST_FILL_BUTTON: "backblast-fill-button",
+  BACKBLAST_NOQ_SELECT: "backblast-noq-select",
 } as const;
 
 export type ActionId = (typeof ACTIONS)[keyof typeof ACTIONS];

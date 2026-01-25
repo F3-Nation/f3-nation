@@ -49,6 +49,10 @@
     "/^cd /home/evan/ml/f3-nation && pnpm -F f3-nation-slackbot typecheck 2>&1$/": {
       "approve": true,
       "matchCommandLine": true
+    },
+    "/^cd /home/evan/ml/f3-nation/apps/slackbot && pnpm tsc --noEmit 2>&1 \\| head -80$/": {
+      "approve": true,
+      "matchCommandLine": true
     }
   }
 }

@@ -582,8 +582,8 @@ export const attendanceRouter = {
 - [x] More settings
   - [x] Implement backblast settings (editing locked, destination, template, reminders, Strava)
   - [x] Implement preblast settings (destination, template, automated preblast options)
-- [ ] Implement preblast selection menu
-- [ ] Implement backblast selection menu
+- [x] Implement preblast selection menu
+- [x] Implement backblast selection menu
 - [ ] Implement preblast creation/editing
 - [ ] Implement backblast creation/editing
 - [ ] Add preblast/backblast/attendance API endpoints

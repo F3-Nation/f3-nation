@@ -20,6 +20,8 @@ import type {
   CheckUserRoleResponse,
   GetUserRolesResponse,
   UpcomingQsResponse,
+  PastQsResponse,
+  EventsWithoutQResponse,
 } from "../types/api-types";
 import { logger } from "./logger";
 
@@ -687,6 +689,51 @@ export const api = {
       }
       return apiRequest<UpcomingQsResponse>(
         `/event-instance/upcoming-qs?${searchParams.toString()}`,
+      );
+    },
+
+    /**
+     * Get past events where the user is Q or Co-Q.
+     * Used for backblast selection menu.
+     */
+    getPastQs: (params: {
+      userId: number;
+      regionOrgId: number;
+      /** Only return events without a posted backblast. Defaults to true. */
+      notPostedOnly?: boolean;
+    }) => {
+      const searchParams = new URLSearchParams();
+      searchParams.append("userId", params.userId.toString());
+      searchParams.append("regionOrgId", params.regionOrgId.toString());
+      if (params.notPostedOnly !== undefined) {
+        searchParams.append("notPostedOnly", params.notPostedOnly.toString());
+      }
+      return apiRequest<PastQsResponse>(
+        `/event-instance/past-qs?${searchParams.toString()}`,
+      );
+    },
+
+    /**
+     * Get past events without any Q or Co-Q assigned.
+     * Used for backblast selection menu "unclaimed events" section.
+     */
+    getEventsWithoutQ: (params: {
+      regionOrgId: number;
+      /** Only return events without a posted backblast. Defaults to true. */
+      notPostedOnly?: boolean;
+      /** Maximum number of events to return. Defaults to 20. */
+      limit?: number;
+    }) => {
+      const searchParams = new URLSearchParams();
+      searchParams.append("regionOrgId", params.regionOrgId.toString());
+      if (params.notPostedOnly !== undefined) {
+        searchParams.append("notPostedOnly", params.notPostedOnly.toString());
+      }
+      if (params.limit !== undefined) {
+        searchParams.append("limit", params.limit.toString());
+      }
+      return apiRequest<EventsWithoutQResponse>(
+        `/event-instance/without-q?${searchParams.toString()}`,
       );
     },
   },

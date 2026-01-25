@@ -7,6 +7,7 @@
 
 import { App, LogLevel } from "@slack/bolt";
 
+import { registerBackblastFeature } from "./features/backblast";
 import { registerHelpFeature } from "./features/help";
 import { registerWelcomeFeature } from "./features/welcome";
 import { registerConfigFeature } from "./features/config";
@@ -38,6 +39,7 @@ registerWelcomeFeature(app);
 registerConfigFeature(app);
 registerCalendarFeature(app);
 registerPreblastFeature(app);
+registerBackblastFeature(app);
 
 // Health check endpoint for HTTP mode
 // eslint-disable-next-line @typescript-eslint/require-await

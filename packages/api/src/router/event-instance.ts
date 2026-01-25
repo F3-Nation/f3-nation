@@ -525,4 +525,184 @@ export const eventInstanceRouter = {
 
       return { eventInstances: instances };
     }),
+
+  /**
+   * Get past events where the user is Q or Co-Q
+   * Used for backblast selection menu
+   */
+  getPastQs: protectedProcedure
+    .input(
+      z.object({
+        userId: z.coerce.number(),
+        regionOrgId: z.coerce.number(),
+        /** Only return events without a posted backblast (backblast_ts IS NULL) */
+        notPostedOnly: z.boolean().optional().default(true),
+      }),
+    )
+    .route({
+      method: "GET",
+      path: "/past-qs",
+      tags: ["event-instance"],
+      summary: "Get past events where user is Q/Co-Q",
+      description:
+        "Get past events where the user has Q or Co-Q attendance for backblast creation",
+    })
+    .handler(async ({ context: ctx, input }) => {
+      const aoOrg = aliasedTable(schema.orgs, "ao_org");
+
+      // Attendance type IDs: 2 = Q, 3 = Co-Q
+      const qAttendanceTypeIds = [2, 3];
+
+      // Get today's date in YYYY-MM-DD format
+      const today = new Date().toISOString().split("T")[0]!;
+
+      // Build where conditions
+      const whereConditions = [
+        // Event is active
+        eq(schema.eventInstances.isActive, true),
+        // Start date is today or earlier (past events)
+        sql`${schema.eventInstances.startDate} <= ${today}`,
+        // User has planned attendance
+        eq(schema.attendance.userId, input.userId),
+        eq(schema.attendance.isPlanned, true),
+        // Attendance is Q or Co-Q type
+        inArray(
+          schema.attendanceXAttendanceTypes.attendanceTypeId,
+          qAttendanceTypeIds,
+        ),
+        // Event is in the region or a child org of the region
+        or(
+          eq(schema.eventInstances.orgId, input.regionOrgId),
+          eq(aoOrg.parentId, input.regionOrgId),
+        ),
+      ];
+
+      // Add backblast_ts IS NULL filter if notPostedOnly is true
+      if (input.notPostedOnly) {
+        whereConditions.push(isNull(schema.eventInstances.backblastTs));
+      }
+
+      const instances = await ctx.db
+        .selectDistinct({
+          id: schema.eventInstances.id,
+          name: schema.eventInstances.name,
+          startDate: schema.eventInstances.startDate,
+          startTime: schema.eventInstances.startTime,
+          orgId: schema.eventInstances.orgId,
+          orgName: aoOrg.name,
+          locationId: schema.eventInstances.locationId,
+          seriesId: schema.eventInstances.seriesId,
+          backblastTs: schema.eventInstances.backblastTs,
+        })
+        .from(schema.eventInstances)
+        .leftJoin(aoOrg, eq(aoOrg.id, schema.eventInstances.orgId))
+        .innerJoin(
+          schema.attendance,
+          eq(schema.attendance.eventInstanceId, schema.eventInstances.id),
+        )
+        .innerJoin(
+          schema.attendanceXAttendanceTypes,
+          eq(
+            schema.attendanceXAttendanceTypes.attendanceId,
+            schema.attendance.id,
+          ),
+        )
+        .where(and(...whereConditions))
+        .orderBy(
+          desc(schema.eventInstances.startDate),
+          desc(schema.eventInstances.startTime),
+        );
+
+      return { eventInstances: instances };
+    }),
+
+  /**
+   * Get past events without any Q or Co-Q assigned
+   * Used for backblast selection menu "unclaimed events" section
+   */
+  getEventsWithoutQ: protectedProcedure
+    .input(
+      z.object({
+        regionOrgId: z.coerce.number(),
+        /** Only return events without a posted backblast (backblast_ts IS NULL) */
+        notPostedOnly: z.boolean().optional().default(true),
+        /** Maximum number of events to return */
+        limit: z.coerce.number().optional().default(20),
+      }),
+    )
+    .route({
+      method: "GET",
+      path: "/without-q",
+      tags: ["event-instance"],
+      summary: "Get past events without Q assigned",
+      description:
+        "Get past events that have no Q or Co-Q attendance assigned",
+    })
+    .handler(async ({ context: ctx, input }) => {
+      const aoOrg = aliasedTable(schema.orgs, "ao_org");
+
+      // Get today's date in YYYY-MM-DD format
+      const today = new Date().toISOString().split("T")[0]!;
+
+      // Subquery to find event instances that DO have Q or Co-Q attendance
+      const eventsWithQ = ctx.db
+        .selectDistinct({ eventInstanceId: schema.attendance.eventInstanceId })
+        .from(schema.attendance)
+        .innerJoin(
+          schema.attendanceXAttendanceTypes,
+          eq(
+            schema.attendanceXAttendanceTypes.attendanceId,
+            schema.attendance.id,
+          ),
+        )
+        .where(
+          and(
+            eq(schema.attendance.isPlanned, true),
+            inArray(schema.attendanceXAttendanceTypes.attendanceTypeId, [2, 3]),
+          ),
+        );
+
+      // Build where conditions
+      const whereConditions = [
+        // Event is active
+        eq(schema.eventInstances.isActive, true),
+        // Start date is today or earlier (past events)
+        sql`${schema.eventInstances.startDate} <= ${today}`,
+        // Event is in the region or a child org of the region
+        or(
+          eq(schema.eventInstances.orgId, input.regionOrgId),
+          eq(aoOrg.parentId, input.regionOrgId),
+        ),
+        // Exclude events that have Q or Co-Q
+        sql`${schema.eventInstances.id} NOT IN (${eventsWithQ})`,
+      ];
+
+      // Add backblast_ts IS NULL filter if notPostedOnly is true
+      if (input.notPostedOnly) {
+        whereConditions.push(isNull(schema.eventInstances.backblastTs));
+      }
+
+      const instances = await ctx.db
+        .selectDistinct({
+          id: schema.eventInstances.id,
+          name: schema.eventInstances.name,
+          startDate: schema.eventInstances.startDate,
+          startTime: schema.eventInstances.startTime,
+          orgId: schema.eventInstances.orgId,
+          orgName: aoOrg.name,
+          locationId: schema.eventInstances.locationId,
+          seriesId: schema.eventInstances.seriesId,
+          backblastTs: schema.eventInstances.backblastTs,
+        })
+        .from(schema.eventInstances)
+        .leftJoin(aoOrg, eq(aoOrg.id, schema.eventInstances.orgId))
+        .where(and(...whereConditions))
+        .orderBy(
+          desc(schema.eventInstances.startDate),
+          desc(schema.eventInstances.startTime),
+        )
+        .limit(input.limit);
+
+      return { eventInstances: instances };
+    }),
 };

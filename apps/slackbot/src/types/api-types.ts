@@ -306,3 +306,47 @@ export interface UpcomingQEvent {
 export interface UpcomingQsResponse {
   eventInstances: UpcomingQEvent[];
 }
+
+/**
+ * Past Q event for backblast selection
+ */
+export interface PastQEvent {
+  id: number;
+  name: string;
+  startDate: string;
+  startTime: string | null;
+  orgId: number;
+  orgName: string | null;
+  locationId: number | null;
+  seriesId: number | null;
+  backblastTs: number | null;
+}
+
+/**
+ * Response from getPastQs endpoint
+ */
+export interface PastQsResponse {
+  eventInstances: PastQEvent[];
+}
+
+/**
+ * Event without Q for backblast selection (unclaimed events)
+ */
+export interface EventWithoutQ {
+  id: number;
+  name: string;
+  startDate: string;
+  startTime: string | null;
+  orgId: number;
+  orgName: string | null;
+  locationId: number | null;
+  seriesId: number | null;
+  backblastTs: number | null;
+}
+
+/**
+ * Response from getEventsWithoutQ endpoint
+ */
+export interface EventsWithoutQResponse {
+  eventInstances: EventWithoutQ[];
+}
