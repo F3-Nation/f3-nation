@@ -1,7 +1,7 @@
 import { os } from "@orpc/server";
 import { z } from "zod";
 
-import { MailService, Templates } from "../../mail";
+import { MailService, Templates } from "@acme/mail";
 import { protectedProcedure } from "../../shared";
 import { mapLocationRouter } from "./location";
 

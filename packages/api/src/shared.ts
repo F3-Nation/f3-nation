@@ -8,6 +8,7 @@ import { and, eq, gt, isNull, or, schema, sql } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 import { db } from "@acme/db/client";
 import { env } from "@acme/env";
+import { F3_NATION_ORG_ID } from "@acme/shared/app/constants";
 import { isDevelopmentNodeEnv } from "@acme/shared/common/constants";
 import { Client, Header } from "@acme/shared/common/enums";
 
@@ -113,6 +114,24 @@ export const adminProcedure = withSessionAndDb.use(({ context, next }) => {
   }
   return next({ context });
 });
+
+export const nationAdminProcedure = withSessionAndDb.use(
+  ({ context, next }) => {
+    // Must be admin on orgId 1 (the F3 Nation org) - checking both ID and name for security
+    const isNationAdmin = context.session?.roles?.some(
+      (r) =>
+        r.roleName === "admin" &&
+        r.orgId === F3_NATION_ORG_ID &&
+        r.orgName.toLowerCase().includes("f3 nation"),
+    );
+    if (!isNationAdmin) {
+      throw new ORPCError("UNAUTHORIZED", {
+        message: "This action requires F3 Nation admin privileges",
+      });
+    }
+    return next({ context });
+  },
+);
 
 export const apiKeyProcedure = withSessionAndDb.use(
   async ({ context, next }) => {

@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export const F3_NATION_ORG_ID = 1;
+
 export enum SnapPoint {
   "pt-0.95" = 0.95,
   // "pt-0.5" = 0.5,
@@ -200,6 +202,10 @@ export const routes = {
     workouts: {
       __path: "/admin/workouts",
       __auth: "editor",
+    },
+    emailTest: {
+      __path: "/admin/email-test",
+      __auth: "admin",
     },
     noAccess: {
       __path: "/no-access",
