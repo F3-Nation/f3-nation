@@ -13,7 +13,9 @@ export const SignIn = (params: SignInComponentProps) => {
         </h2>
       </div>
       <AuthContent callbackUrl={params.callbackUrl} withWrapper={true} />
-      <VersionInfo className="my-4 w-full text-center" />
+      <div className="my-4 flex w-full justify-center">
+        <VersionInfo />
+      </div>
     </div>
   );
 };
