@@ -10,23 +10,34 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
-    version: "3.5.1",
-    date: "2026-01-24",
-    title: "Changelog, Webhooks & Email Testing",
+    version: "3.5.3",
+    date: "2026-01-25",
+    title: "API Enhancements, Webhooks & Admin Tools",
     sections: [
       {
         title: "New Features",
         items: [
           "Added changelog page - click the version number to view release history",
           "Added email template testing page for nation admins at /admin/email-test",
+          "New dedicated count endpoints for events and organizations",
+          "Enhanced filtering: filter events by event type name and category",
+        ],
+      },
+      {
+        title: "API Improvements",
+        items: [
+          "Added webhook notification system for map data changes",
+          "External systems can now be notified when events, locations, or orgs are created, updated, or deleted",
+          "Improved query parameter handling for array inputs in API endpoints",
+          "Type-safe email templates with compile-time validation",
         ],
       },
       {
         title: "Backend",
         items: [
-          "Added webhook notification system for map data changes",
-          "External systems can now be notified when events, locations, or orgs are created, updated, or deleted",
-          "Created new @acme/mail package for email functionality",
+          "Created new @acme/mail package for consolidated email functionality",
+          "Refactored event and org routers for better code organization (DRY)",
+          "Converted email templates from Handlebars to type-safe TypeScript functions",
         ],
       },
     ],

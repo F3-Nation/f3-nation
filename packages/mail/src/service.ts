@@ -1,15 +1,11 @@
-import { promises as fs } from "fs";
-import handlebars from "handlebars";
 import nodemailer, { createTestAccount } from "nodemailer";
 import type Mail from "nodemailer/lib/mailer";
 import type SMTPTransport from "nodemailer/lib/smtp-transport";
-import path from "path";
-import { fileURLToPath } from "url";
 
 import { env } from "@acme/env";
 
 import type { TemplateType } from "./templates";
-import { DefaultSubject, Templates } from "./templates";
+import { DefaultSubject, renderTemplate, Templates } from "./templates";
 
 const isLocalDevelopment = process.env.NODE_ENV !== "production";
 
@@ -18,22 +14,6 @@ const isLocalDevelopment = process.env.NODE_ENV !== "production";
  */
 export const DefaultTo: { [key in Templates]?: string | string[] } = {
   [Templates.feedbackForm]: env.EMAIL_ADMIN_DESTINATIONS.split(","),
-};
-
-/**
- * Resolves the template directory path relative to the workspace root.
- * Templates are located in apps/map/src/templates/
- */
-const getTemplateDirectory = (): string => {
-  // Get the directory of this file (packages/mail/src/)
-  const currentFile = fileURLToPath(import.meta.url);
-  const currentDir = path.dirname(currentFile);
-
-  // Resolve to workspace root (go up from packages/mail/src/ to workspace root)
-  const workspaceRoot = path.resolve(currentDir, "../../..");
-
-  // Templates are in apps/map/src/templates/
-  return path.join(workspaceRoot, "apps/map/src/templates");
 };
 
 type TemplateMessage<T extends Templates> = TemplateType[T] & {
@@ -47,79 +27,33 @@ type TemplateMessageParams<T extends Templates> =
   | TemplateMessage<T>;
 
 export class MailService {
-  // For handling some single emails
   private transporter: nodemailer.Transporter<SMTPTransport.SentMessageInfo> | null =
     null;
   templates = Templates;
   adminDestinations: string[] = env.EMAIL_ADMIN_DESTINATIONS.split(",");
-  fileContentDict: Record<string, string> = {};
 
   constructor() {
     //
   }
 
   /**
-   * Prepare a template to store in the class so that it doesn't get opened over and over again when sending mail
+   * Render a template with the given parameters (type-safe)
    */
-  public async prepTemplate<T extends Templates>(name: T) {
-    const templateDirectory = getTemplateDirectory();
-    let fileContent = this.fileContentDict[name];
-    if (fileContent) {
-      console.log("fileContent already exists");
-    } else {
-      console.log("fileContent doesn't exist. Creating");
-      const templatePath = path.join(templateDirectory, `${name}.hbs`);
-      try {
-        fileContent = await fs.readFile(templatePath, {
-          encoding: "utf8",
-        });
-        this.fileContentDict[name] = fileContent;
-      } catch (error) {
-        console.error("Failed to read template file", {
-          templatePath,
-          templateDirectory,
-          name,
-          error,
-        });
-        throw new Error(
-          `Failed to read template file: ${templatePath}. Error: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    }
-  }
-
-  public async getTemplate<T extends Templates>(
+  public getTemplate<T extends Templates>(
     name: T,
     params: TemplateType[T],
-  ): Promise<string> {
-    const templateDirectory = getTemplateDirectory();
+  ): string {
+    return renderTemplate(name, params);
+  }
 
-    let fileContent = this.fileContentDict[name];
-    if (fileContent) {
-      console.log("fileContent already exists");
-    } else {
-      console.log("fileContent doesn't exist. Creating");
-      const templatePath = path.join(templateDirectory, `${name}.hbs`);
-      try {
-        fileContent = await fs.readFile(templatePath, {
-          encoding: "utf8",
-        });
-        this.fileContentDict[name] = fileContent;
-      } catch (error) {
-        console.error("Failed to read template file", {
-          templatePath,
-          templateDirectory,
-          name,
-          error,
-        });
-        throw new Error(
-          `Failed to read template file: ${templatePath}. Error: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    }
-    const template = handlebars.compile(fileContent);
-    const templateResult = template(params);
-    return templateResult;
+  /**
+   * Preview a template (for testing/admin purposes)
+   */
+  public previewTemplate<T extends Templates>(
+    name: T,
+    params: TemplateType[T],
+  ): string {
+    return this.getTemplate(name, params);
   }
 
   async sendTemplateMessages<T extends Templates>(
@@ -135,25 +69,19 @@ export class MailService {
       throw new Error("Missing subject and no default subject set");
     }
 
-    // When sending template emails, we can't have too many files open at the same time
-    // So we batch them in groups of 100 (the template file)
-    // https://github.com/vercel/next.js/issues/52646 related
-    await this.prepTemplate(template); // Prep template to ensure it is only opened once
     const batchSize = 100;
     const sent: (Error | SMTPTransport.SentMessageInfo)[] = [];
 
     // Create batches
     for (let i = 0; i < paramsArray.length; i += batchSize) {
       const batchParams = paramsArray.slice(i, i + batchSize);
-      const batchMessages = await Promise.all(
-        batchParams.map(async (item) => ({
-          ...item,
-          from: item.from ? item.from : env.EMAIL_FROM,
-          to: item.to ? item.to : DefaultTo[template],
-          subject: item.subject ? item.subject : DefaultSubject[template],
-          html: await this.getTemplate(template, item),
-        })),
-      );
+      const batchMessages = batchParams.map((item) => ({
+        ...item,
+        from: item.from ?? env.EMAIL_FROM,
+        to: item.to ?? DefaultTo[template],
+        subject: item.subject ?? DefaultSubject[template],
+        html: this.getTemplate(template, item),
+      }));
       const sentBatch = await this.sendViaTransporter(batchMessages);
       sent.push(...sentBatch);
     }
