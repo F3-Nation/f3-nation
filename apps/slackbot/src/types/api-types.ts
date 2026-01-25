@@ -4,8 +4,26 @@ export type { SlackUserData };
 
 /**
  * Input for updating Slack space settings
+ * Uses the field names from the API's SlackSettingsSchema validator
  */
-export type UpdateSpaceSettingsInput = Partial<OrgSettings>;
+export interface UpdateSpaceSettingsInput {
+  welcome_dm_enable?: boolean;
+  welcome_dm_template?: string;
+  welcome_channel_enable?: boolean;
+  welcome_channel?: string;
+  editing_locked?: boolean;
+  default_backblast_destination?: string;
+  backblast_destination_channel?: string;
+  default_preblast_destination?: string;
+  preblast_destination_channel?: string;
+  backblast_moleskin_template?: string;
+  preblast_moleskin_template?: string;
+  strava_enabled?: boolean;
+  preblast_reminder_days?: number;
+  backblast_reminder_days?: number;
+  automated_preblast_option?: string;
+  automated_preblast_hour_cst?: number;
+}
 
 /**
  * Input for upserting a Slack user

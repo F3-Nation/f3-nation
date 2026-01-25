@@ -4,6 +4,7 @@ import type {
   BlockList,
   ExtendedContext,
   TypedActionArgs,
+  TypedViewArgs,
 } from "../../types/bolt-types";
 import { manageLocations, registerLocationHandlers } from "./location";
 import { manageAOs, registerAOHandlers } from "./ao";
@@ -14,7 +15,11 @@ import {
   manageEventInstances,
   registerEventInstanceHandlers,
 } from "./event-instance";
-import { createNavContext, navigateToView } from "../../lib/view-navigation";
+import {
+  buildCalendarGeneralConfigForm,
+  handleCalendarConfigGeneral,
+} from "./settings";
+import { createNavContext } from "../../lib/view-navigation";
 
 /**
  * Build the calendar configuration menu modal
@@ -183,22 +188,16 @@ export function registerCalendarFeature(app: App) {
     const { ack } = args;
     await ack();
     const navCtx = createNavContext(args);
-
-    await navigateToView(navCtx, () => ({
-      type: "modal",
-      title: { type: "plain_text", text: "General Calendar Settings" },
-      close: { type: "plain_text", text: "Back" },
-      blocks: [
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: "General calendar settings will be implemented in Phase 2h.",
-          },
-        },
-      ],
-    }));
+    await buildCalendarGeneralConfigForm(navCtx);
   });
+
+  // View: Calendar General Config submission
+  app.view(
+    ACTIONS.CALENDAR_CONFIG_GENERAL_CALLBACK_ID,
+    async (args: TypedViewArgs) => {
+      await handleCalendarConfigGeneral(args);
+    },
+  );
 
   // Locations
   app.action(ACTIONS.CALENDAR_MANAGE_LOCATIONS, manageLocations);

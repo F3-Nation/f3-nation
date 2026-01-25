@@ -29,15 +29,30 @@ export const ACTIONS = {
 
   // Config actions
   CONFIG_CALLBACK_ID: "config-callback-id",
-  CONFIG_EDITING_LOCKED: "config-editing-locked",
-  CONFIG_DEFAULT_DESTINATION: "config-default-destination",
-  CONFIG_DESTINATION_CHANNEL: "config-destination-channel",
   OPEN_WELCOME_CONFIG: "open-welcome-config",
-  OPEN_GENERAL_CONFIG: "open-general-config",
   OPEN_CALENDAR_CONFIG: "open-calendar-config",
   CALENDAR_CONFIG_CALLBACK_ID: "calendar-config-id",
   CALENDAR_CONFIG_GENERAL: "calendar-config-general",
   CALENDAR_CONFIG_GENERAL_CALLBACK_ID: "calendar-config-general-id",
+
+  // Backblast Settings
+  OPEN_BACKBLAST_CONFIG: "open-backblast-config",
+  BACKBLAST_CONFIG_CALLBACK_ID: "backblast-config-callback-id",
+  CONFIG_EDITING_LOCKED: "config-editing-locked",
+  CONFIG_BACKBLAST_DESTINATION: "config-backblast-destination",
+  CONFIG_BACKBLAST_DESTINATION_CHANNEL: "config-backblast-destination-channel",
+  CONFIG_BACKBLAST_MOLESKINE_TEMPLATE: "config-backblast-moleskine-template",
+  CONFIG_BACKBLAST_REMINDER_DAYS: "config-backblast-reminder-days",
+  CONFIG_ENABLE_STRAVA: "config-enable-strava",
+
+  // Preblast Settings
+  OPEN_PREBLAST_CONFIG: "open-preblast-config",
+  PREBLAST_CONFIG_CALLBACK_ID: "preblast-config-callback-id",
+  CONFIG_PREBLAST_DESTINATION: "config-preblast-destination",
+  CONFIG_PREBLAST_DESTINATION_CHANNEL: "config-preblast-destination-channel",
+  CONFIG_PREBLAST_MOLESKINE_TEMPLATE: "config-preblast-moleskine-template",
+  CONFIG_AUTOMATED_PREBLAST: "config-automated-preblast",
+  CONFIG_AUTOMATED_PREBLAST_TIME: "config-automated-preblast-time",
 
   // Calendar
   OPEN_CALENDAR_BUTTON: "open-calendar",

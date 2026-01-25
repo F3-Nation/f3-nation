@@ -145,6 +145,8 @@ export interface SlackStateValue {
   selected_date?: string | null;
   selected_time?: string | null;
   value?: string | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  rich_text_value?: any;
 }
 
 /** Interface for view.state.values */

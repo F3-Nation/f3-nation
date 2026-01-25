@@ -50,3 +50,23 @@ export const DEFAULT_PREBLAST_MOLESKINE_TEMPLATE = {
 
 export const ERROR_FORM_MESSAGE_TEMPLATE =
   ":warning: Sorry, the following error occurred:\n\n```{error}```";
+
+/**
+ * Destination options for backblast/preblast posting
+ */
+export const CONFIG_DESTINATION_OPTIONS = {
+  AO_CHANNEL: { name: "The AO Channel", value: "ao_channel" },
+  SPECIFIED_CHANNEL: { name: "Specified Channel", value: "specified_channel" },
+} as const;
+
+/**
+ * Automated preblast options
+ */
+export const AUTOMATED_PREBLAST_OPTIONS = {
+  SEND_FOR_QS: { name: "Send for Qs", value: "send_for_qs" },
+  SEND_EVEN_NO_Q: {
+    name: "Send even if no Q",
+    value: "send_even_if_no_q",
+  },
+  DISABLE: { name: "Disable", value: "disable" },
+} as const;

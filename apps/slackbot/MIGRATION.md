@@ -571,14 +571,19 @@ export const attendanceRouter = {
 
 ### Phase 2: Calendar & Backblast (Weeks 4-6)
 
-- [ ] Implement calendar management
+- [x] Implement calendar management
   - [x] Implement "AO" management (AOs are sub-regions)
   - [x] Implement location management
   - [x] Implement event series management
-  - [ ] Implement event instance management
+  - [x] Implement event instance management
   - [x] Implement event type management
   - [x] Implement event tag management
-  - [ ] Implement general calendar settings
+  - [x] Implement general calendar settings
+- [x] More settings
+  - [x] Implement backblast settings (editing locked, destination, template, reminders, Strava)
+  - [x] Implement preblast settings (destination, template, automated preblast options)
+- [ ] Implement preblast selection menu
+- [ ] Implement backblast selection menu
 - [ ] Implement preblast creation/editing
 - [ ] Implement backblast creation/editing
 - [ ] Add preblast/backblast/attendance API endpoints
@@ -589,7 +594,6 @@ export const attendanceRouter = {
 - [ ] Implement Strava integration
 - [ ] Implement user profile management
 - [ ] Implement region configuration
-- [ ] Implement location/AO management
 
 ### Phase 4: Admin & Polish (Weeks 9-10)
 

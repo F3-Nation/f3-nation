@@ -2,9 +2,16 @@ import type { App, BlockAction } from "@slack/bolt";
 import { ACTIONS } from "../../constants/actions";
 import { buildWelcomeConfigModal } from "../welcome";
 import { buildCalendarConfigModal } from "../calendar";
+import {
+  buildBackblastConfigModal,
+  registerBackblastSettingsHandlers,
+} from "./backblast-settings";
+import {
+  buildPreblastConfigModal,
+  registerPreblastSettingsHandlers,
+} from "./preblast-settings";
 import { api } from "../../lib/api-client";
 import { logger } from "../../lib/logger";
-import type { OrgSettings } from "../../types";
 import type {
   BlockList,
   ExtendedContext,
@@ -124,13 +131,23 @@ export function buildConfigModal(context: ExtendedContext) {
         },
         {
           type: "button",
-          text: { type: "plain_text", text: ":gear: General Settings" },
-          action_id: ACTIONS.OPEN_GENERAL_CONFIG,
+          text: { type: "plain_text", text: ":calendar: Calendar Settings" },
+          action_id: ACTIONS.OPEN_CALENDAR_CONFIG,
+        },
+      ],
+    });
+    blocks.push({
+      type: "actions",
+      elements: [
+        {
+          type: "button",
+          text: { type: "plain_text", text: ":memo: Backblast Settings" },
+          action_id: ACTIONS.OPEN_BACKBLAST_CONFIG,
         },
         {
           type: "button",
-          text: { type: "plain_text", text: ":calendar: Calendar Settings" },
-          action_id: ACTIONS.OPEN_CALENDAR_CONFIG,
+          text: { type: "plain_text", text: ":loudspeaker: Preblast Settings" },
+          action_id: ACTIONS.OPEN_PREBLAST_CONFIG,
         },
       ],
     });
@@ -206,16 +223,6 @@ export function registerConfigFeature(app: App) {
     );
   });
 
-  // Action: Open General Config
-  app.action(ACTIONS.OPEN_GENERAL_CONFIG, async (args: TypedActionArgs) => {
-    const { ack, context } = args;
-    await ack();
-    const navCtx = createNavContext(args);
-    await navigateToView(navCtx, () =>
-      buildGeneralConfigModal(context.orgSettings),
-    );
-  });
-
   // Action: Open Calendar Config
   app.action(ACTIONS.OPEN_CALENDAR_CONFIG, async (args: TypedActionArgs) => {
     const { ack, context } = args;
@@ -224,31 +231,29 @@ export function registerConfigFeature(app: App) {
     await navigateToView(navCtx, () => buildCalendarConfigModal(context));
   });
 
-  // Action handler for saving general settings
-  app.view(
-    ACTIONS.CONFIG_CALLBACK_ID,
-    async ({ ack, view, body }: TypedViewArgs) => {
-      await ack();
-      // Implementation for saving general settings
-      const teamId = body.team?.id;
-      if (!teamId) return;
+  // Action: Open Backblast Config
+  app.action(ACTIONS.OPEN_BACKBLAST_CONFIG, async (args: TypedActionArgs) => {
+    const { ack, context } = args;
+    await ack();
+    const navCtx = createNavContext(args);
+    await navigateToView(navCtx, () =>
+      buildBackblastConfigModal(context.orgSettings),
+    );
+  });
 
-      const values = view.state.values as unknown as SlackStateValues;
-      const editingLocked =
-        values[ACTIONS.CONFIG_EDITING_LOCKED]?.[ACTIONS.CONFIG_EDITING_LOCKED]
-          ?.selected_option?.value === "yes";
+  // Action: Open Preblast Config
+  app.action(ACTIONS.OPEN_PREBLAST_CONFIG, async (args: TypedActionArgs) => {
+    const { ack, context } = args;
+    await ack();
+    const navCtx = createNavContext(args);
+    await navigateToView(navCtx, () =>
+      buildPreblastConfigModal(context.orgSettings),
+    );
+  });
 
-      try {
-        await api.slack.updateSpaceSettings(teamId, {
-          editing_locked: editingLocked,
-          // Add other fields as needed
-        });
-        logger.info(`Updated general settings for team ${teamId}`);
-      } catch (error) {
-        logger.error("Error saving general settings:", error);
-      }
-    },
-  );
+  // Register backblast and preblast settings handlers
+  registerBackblastSettingsHandlers(app);
+  registerPreblastSettingsHandlers(app);
 
   // Options handler for region search external_select
   app.options(
@@ -404,40 +409,4 @@ export function registerConfigFeature(app: App) {
       }
     },
   );
-}
-
-/**
- * Build the General Settings modal
- */
-export function buildGeneralConfigModal(orgSettings?: OrgSettings) {
-  return {
-    type: "modal" as const,
-    callback_id: ACTIONS.CONFIG_CALLBACK_ID, // Reusing callback ID or use a specific one
-    title: { type: "plain_text" as const, text: "General Settings" },
-    submit: { type: "plain_text" as const, text: "Save" },
-    close: { type: "plain_text" as const, text: "Back" },
-    blocks: [
-      {
-        type: "input",
-        block_id: ACTIONS.CONFIG_EDITING_LOCKED,
-        label: { type: "plain_text", text: "Lock editing of backblasts?" },
-        element: {
-          type: "radio_buttons",
-          action_id: ACTIONS.CONFIG_EDITING_LOCKED,
-          initial_option: {
-            text: {
-              type: "plain_text",
-              text: orgSettings?.editing_locked ? "Yes" : "No",
-            },
-            value: orgSettings?.editing_locked ? "yes" : "no",
-          },
-          options: [
-            { text: { type: "plain_text", text: "Yes" }, value: "yes" },
-            { text: { type: "plain_text", text: "No" }, value: "no" },
-          ],
-        },
-      },
-      // Add more settings here based on OrgSettings
-    ] as BlockList,
-  } as ModalView;
 }

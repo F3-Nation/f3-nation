@@ -25,16 +25,20 @@ export interface OrgSettings {
   welcome_channel?: string;
 
   // Backblast settings
-  default_destination?: string;
-  destination_channel?: string;
-  backblast_moleskine_template?: object;
+  default_backblast_destination?: string;
+  backblast_destination_channel?: string;
+  backblast_moleskin_template?: string;
   editing_locked?: boolean;
-  enable_strava?: boolean;
+  strava_enabled?: boolean;
+  backblast_reminder_days?: number;
 
   // Preblast settings
   default_preblast_destination?: string;
   preblast_destination_channel?: string;
-  preblast_moleskine_template?: object;
+  preblast_moleskin_template?: string;
+  preblast_reminder_days?: number;
+  automated_preblast_option?: string;
+  automated_preblast_hour_cst?: number;
 
   // Email settings
   email_enable?: boolean;
@@ -46,8 +50,6 @@ export interface OrgSettings {
   postie_enable?: boolean;
 
   // Calendar settings
-  preblast_reminder_days?: number;
-  backblast_reminder_days?: number;
   automated_preblast_time?: string;
   send_q_lineups?: boolean;
   send_q_lineups_method?: string | null;
