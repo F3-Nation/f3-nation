@@ -284,3 +284,25 @@ export interface EventInstanceInput {
   eventTypeId?: number;
   eventTagId?: number;
 }
+
+/**
+ * Upcoming Q event for preblast selection
+ */
+export interface UpcomingQEvent {
+  id: number;
+  name: string;
+  startDate: string;
+  startTime: string | null;
+  orgId: number;
+  orgName: string | null;
+  locationId: number | null;
+  seriesId: number | null;
+  preblastTs: number | null;
+}
+
+/**
+ * Response from getUpcomingQs endpoint
+ */
+export interface UpcomingQsResponse {
+  eventInstances: UpcomingQEvent[];
+}

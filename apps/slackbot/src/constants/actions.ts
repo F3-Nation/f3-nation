@@ -224,6 +224,12 @@ export const ACTIONS = {
   REGION_SETUP_CALLBACK_ID: "region-setup-id",
   REGION_SETUP_SEARCH: "region-setup-search",
   REGION_SETUP_NEW_NAME: "region-setup-new-name",
+
+  // Preblast Selection
+  EVENT_PREBLAST_SELECT_CALLBACK_ID: "event-preblast-select-id",
+  EVENT_PREBLAST_FILL_BUTTON: "event-preblast-fill-button",
+  EVENT_PREBLAST_NEW_BUTTON: "event-preblast-new-button",
+  NEW_PREBLAST_BUTTON: "new-preblast-button",
 } as const;
 
 export type ActionId = (typeof ACTIONS)[keyof typeof ACTIONS];

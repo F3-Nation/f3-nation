@@ -19,6 +19,7 @@ import type {
   EventInstanceInput,
   CheckUserRoleResponse,
   GetUserRolesResponse,
+  UpcomingQsResponse,
 } from "../types/api-types";
 import { logger } from "./logger";
 
@@ -667,6 +668,27 @@ export const api = {
       apiRequest<{ success: boolean }>(`/event-instance/id/${input.id}`, {
         method: "DELETE",
       }),
+
+    /**
+     * Get upcoming events where the user is Q or Co-Q.
+     * Used for preblast selection menu.
+     */
+    getUpcomingQs: (params: {
+      userId: number;
+      regionOrgId: number;
+      /** Only return events without a posted preblast. Defaults to true. */
+      notPostedOnly?: boolean;
+    }) => {
+      const searchParams = new URLSearchParams();
+      searchParams.append("userId", params.userId.toString());
+      searchParams.append("regionOrgId", params.regionOrgId.toString());
+      if (params.notPostedOnly !== undefined) {
+        searchParams.append("notPostedOnly", params.notPostedOnly.toString());
+      }
+      return apiRequest<UpcomingQsResponse>(
+        `/event-instance/upcoming-qs?${searchParams.toString()}`,
+      );
+    },
   },
 };
 

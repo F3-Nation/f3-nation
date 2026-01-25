@@ -58,6 +58,9 @@ export function createNavContext(args: {
 /**
  * Pushes a new modal if stack allows, otherwise updates current view.
  * Handles loading states to prevent trigger_id expiration.
+ *
+ * When no currentViewId exists (e.g., from a command/shortcut), uses views.open.
+ * When a modal is already open, uses views.push or views.update based on depth.
  */
 export async function navigateToView(
   ctx: NavigationContext,
@@ -71,7 +74,10 @@ export async function navigateToView(
   } = options;
 
   const currentDepth = ctx._currentDepth;
+  // Use update when at depth limit OR when forcing update
   const shouldUpdate = forceUpdate || currentDepth >= 2;
+  // Use open (not push) when there's no existing modal
+  const isInitialOpen = !ctx.currentViewId;
 
   let targetViewId = ctx.currentViewId;
 
@@ -83,11 +89,20 @@ export async function navigateToView(
     const loadingView = buildLoadingModal(loadingTitle, loadingMetadata);
 
     if (shouldUpdate && ctx.currentViewId) {
+      // Update existing modal
       await ctx.client.views.update({
         view_id: ctx.currentViewId,
         view: loadingView,
       });
+    } else if (isInitialOpen) {
+      // Open fresh modal (from command/shortcut)
+      const result = await ctx.client.views.open({
+        trigger_id: ctx.triggerId,
+        view: loadingView,
+      });
+      targetViewId = result.view?.id;
     } else {
+      // Push onto existing modal stack
       const result = await ctx.client.views.push({
         trigger_id: ctx.triggerId,
         view: loadingView,
@@ -110,14 +125,23 @@ export async function navigateToView(
     ...nextMetadata,
   });
 
-  // Update or push the final content
+  // Update, push, or open the final content
   if (targetViewId) {
+    // We already have a view ID (either from loading or existing modal)
     await ctx.client.views.update({
       view_id: targetViewId,
       view: finalView,
     });
     return targetViewId;
+  } else if (isInitialOpen) {
+    // No loading was shown, open fresh modal
+    const result = await ctx.client.views.open({
+      trigger_id: ctx.triggerId,
+      view: finalView,
+    });
+    return result.view?.id ?? "";
   } else {
+    // Push onto existing stack
     const result = await ctx.client.views.push({
       trigger_id: ctx.triggerId,
       view: finalView,

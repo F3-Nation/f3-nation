@@ -10,6 +10,7 @@ import {
   eq,
   gte,
   ilike,
+  inArray,
   isNull,
   or,
   schema,
@@ -433,5 +434,95 @@ export const eventInstanceRouter = {
         .where(eq(schema.eventInstances.id, input.id));
 
       return { success: true };
+    }),
+
+  /**
+   * Get upcoming events where the user is Q or Co-Q
+   * Used for preblast selection menu
+   */
+  getUpcomingQs: protectedProcedure
+    .input(
+      z.object({
+        userId: z.coerce.number(),
+        regionOrgId: z.coerce.number(),
+        /** Only return events without a posted preblast (preblast_ts IS NULL) */
+        notPostedOnly: z.boolean().optional().default(true),
+      }),
+    )
+    .route({
+      method: "GET",
+      path: "/upcoming-qs",
+      tags: ["event-instance"],
+      summary: "Get upcoming events where user is Q/Co-Q",
+      description:
+        "Get events where the user has Q or Co-Q attendance for preblast creation",
+    })
+    .handler(async ({ context: ctx, input }) => {
+      const aoOrg = aliasedTable(schema.orgs, "ao_org");
+
+      // Attendance type IDs: 2 = Q, 3 = Co-Q
+      const qAttendanceTypeIds = [2, 3];
+
+      // Get today's date in YYYY-MM-DD format
+      const today = new Date().toISOString().split("T")[0]!;
+
+      // Build where conditions
+      const whereConditions = [
+        // Event is active
+        eq(schema.eventInstances.isActive, true),
+        // Start date is today or later
+        gte(schema.eventInstances.startDate, today),
+        // User has planned attendance
+        eq(schema.attendance.userId, input.userId),
+        eq(schema.attendance.isPlanned, true),
+        // Attendance is Q or Co-Q type
+        inArray(
+          schema.attendanceXAttendanceTypes.attendanceTypeId,
+          qAttendanceTypeIds,
+        ),
+        // Event is in the region or a child org of the region
+        or(
+          eq(schema.eventInstances.orgId, input.regionOrgId),
+          eq(aoOrg.parentId, input.regionOrgId),
+        ),
+      ];
+
+      // Add preblast_ts IS NULL filter if notPostedOnly is true
+      if (input.notPostedOnly) {
+        whereConditions.push(isNull(schema.eventInstances.preblastTs));
+      }
+
+      const instances = await ctx.db
+        .selectDistinct({
+          id: schema.eventInstances.id,
+          name: schema.eventInstances.name,
+          startDate: schema.eventInstances.startDate,
+          startTime: schema.eventInstances.startTime,
+          orgId: schema.eventInstances.orgId,
+          orgName: aoOrg.name,
+          locationId: schema.eventInstances.locationId,
+          seriesId: schema.eventInstances.seriesId,
+          preblastTs: schema.eventInstances.preblastTs,
+        })
+        .from(schema.eventInstances)
+        .leftJoin(aoOrg, eq(aoOrg.id, schema.eventInstances.orgId))
+        .innerJoin(
+          schema.attendance,
+          eq(schema.attendance.eventInstanceId, schema.eventInstances.id),
+        )
+        .innerJoin(
+          schema.attendanceXAttendanceTypes,
+          eq(
+            schema.attendanceXAttendanceTypes.attendanceId,
+            schema.attendance.id,
+          ),
+        )
+        .where(and(...whereConditions))
+        .orderBy(
+          asc(schema.eventInstances.startDate),
+          asc(schema.eventInstances.startTime),
+        );
+
+      return { eventInstances: instances };
     }),
 };
