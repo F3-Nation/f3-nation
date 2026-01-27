@@ -350,3 +350,92 @@ export interface EventWithoutQ {
 export interface EventsWithoutQResponse {
   eventInstances: EventWithoutQ[];
 }
+
+/**
+ * Slack user link for attendance records
+ */
+export interface SlackUserLink {
+  userId: number | null;
+  slackId: string;
+  slackTeamId: string;
+}
+
+/**
+ * Attendance type entry
+ */
+export interface AttendanceTypeEntry {
+  id: number;
+  type: string;
+}
+
+/**
+ * User info for attendance record
+ */
+export interface AttendanceUser {
+  id: number;
+  f3Name: string | null;
+  email: string | null;
+}
+
+/**
+ * Single attendance record with user and type information
+ */
+export interface AttendanceRecord {
+  id: number;
+  userId: number;
+  eventInstanceId: number;
+  isPlanned: boolean;
+  meta: Record<string, unknown> | null;
+  created: string;
+  user: AttendanceUser | null;
+  attendanceTypes: AttendanceTypeEntry[];
+  slackUsers: SlackUserLink[];
+}
+
+/**
+ * Response from getForEventInstance endpoint
+ */
+export interface AttendanceResponse {
+  attendance: AttendanceRecord[];
+}
+
+/**
+ * Input for creating planned attendance
+ */
+export interface CreateAttendanceInput {
+  eventInstanceId: number;
+  userId: number;
+  attendanceTypeIds: number[];
+}
+
+/**
+ * Input for taking/removing Q
+ */
+export interface QActionInput {
+  eventInstanceId: number;
+  userId: number;
+}
+
+/**
+ * Response from attendance mutation endpoints
+ */
+export interface AttendanceMutationResponse {
+  success: boolean;
+  attendanceId?: number;
+  deletedCount?: number;
+}
+
+/**
+ * Extended event instance response for preblast with additional fields
+ */
+export interface PreblastEventInstanceResponse extends EventInstanceResponse {
+  preblast?: string | null;
+  preblastRich?: Record<string, unknown> | null;
+  preblastTs?: number | null;
+  location?: LocationResponse | null;
+  org?: {
+    id: number;
+    name: string;
+    meta?: Record<string, unknown> | null;
+  };
+}

@@ -5,6 +5,8 @@
  * - /preblast command
  * - preblast_shortcut global shortcut
  * - "New Preblast" button actions
+ * - Preblast edit form
+ * - Preblast action buttons (Take Q, HC, etc.)
  *
  * Entry points all route to the preblast selection form,
  * which shows the user's upcoming Q assignments.
@@ -23,8 +25,14 @@ import type {
   NavigationMetadata,
   TypedActionArgs,
   TypedCommandArgs,
+  TypedViewArgs,
 } from "../../types/bolt-types";
 import { buildPreblastSelectModal } from "./select-form";
+import { buildPreblastEditModal } from "./edit-form";
+import {
+  handlePreblastFormSubmit,
+  handlePreblastAction,
+} from "./edit-form-handlers";
 
 /**
  * Open the preblast selection form.
@@ -77,7 +85,7 @@ async function openPreblastSelectForm(
  * Routes to the preblast edit form for the selected event.
  */
 async function handlePreblastSelect(args: TypedActionArgs): Promise<void> {
-  const { ack, action } = args;
+  const { ack, action, client, context, body } = args;
   await ack();
 
   // Extract the action_id to determine what was selected
@@ -101,18 +109,59 @@ async function handlePreblastSelect(args: TypedActionArgs): Promise<void> {
     eventInstanceId = parseInt(actionWithId.selected_option?.value ?? "0", 10);
   }
 
-  if (eventInstanceId) {
+  // Check for events without Q dropdown
+  if (actionId === ACTIONS.EVENT_PREBLAST_NOQ_SELECT) {
+    eventInstanceId = parseInt(actionWithId.selected_option?.value ?? "0", 10);
+  }
+
+  if (eventInstanceId && eventInstanceId > 0) {
     logger.info("Preblast selected", { eventInstanceId });
-    // TODO: Route to preblast edit form
-    // For now, just log - will implement in next phase
-    logger.info("Would open preblast form for event", { eventInstanceId });
+
+    const extContext = context as ExtendedContext;
+    const currentUserId = extContext.slackUser?.userId ?? null;
+    const teamId = extContext.teamId ?? "";
+    const regionOrgId = extContext.orgId ?? 0;
+
+    const navCtx = createNavContext({
+      client,
+      body,
+      context,
+    });
+
+    await navigateToView(
+      navCtx,
+      async (navMetadata: NavigationMetadata): Promise<ModalView> => {
+        const modal = await buildPreblastEditModal(
+          eventInstanceId!,
+          currentUserId,
+          teamId,
+          navMetadata,
+          extContext.orgSettings ?? null,
+          regionOrgId,
+        );
+        return (
+          modal ?? {
+            type: "modal",
+            title: { type: "plain_text", text: "Error" },
+            blocks: [
+              {
+                type: "section",
+                text: { type: "mrkdwn", text: "Failed to load preblast form." },
+              },
+            ],
+          }
+        );
+      },
+      { showLoading: true, loadingTitle: "Loading Preblast..." },
+    );
+    return;
   }
 
   // Handle "New Unscheduled Event" button
   if (actionId === ACTIONS.EVENT_PREBLAST_NEW_BUTTON) {
     logger.info("New unscheduled event preblast requested");
     // TODO: Route to unscheduled event preblast form
-    // For now, just log - will implement in next phase
+    // For now, just log - will implement in later phase
   }
 
   // Handle "Open Calendar" button - this is handled by calendar feature
@@ -210,6 +259,9 @@ export function registerPreblastFeature(app: App): void {
     handlePreblastSelect,
   );
 
+  // Handle events without Q dropdown selection
+  app.action(ACTIONS.EVENT_PREBLAST_NOQ_SELECT, handlePreblastSelect);
+
   // Handle "New Unscheduled Event" button
   app.action(
     ACTIONS.EVENT_PREBLAST_NEW_BUTTON,
@@ -219,7 +271,28 @@ export function registerPreblastFeature(app: App): void {
       // TODO: Implement unscheduled event preblast form
     },
   );
+
+  // View submissions - preblast form
+  app.view(ACTIONS.EVENT_PREBLAST_CALLBACK_ID, async (args: TypedViewArgs) => {
+    await handlePreblastFormSubmit(args);
+  });
+
+  app.view(
+    ACTIONS.EVENT_PREBLAST_POST_CALLBACK_ID,
+    async (args: TypedViewArgs) => {
+      await handlePreblastFormSubmit(args);
+    },
+  );
+
+  // Action handlers - preblast buttons (Take Q, Remove Q, HC, Un-HC, Edit)
+  app.action(ACTIONS.EVENT_PREBLAST_TAKE_Q, handlePreblastAction);
+  app.action(ACTIONS.EVENT_PREBLAST_REMOVE_Q, handlePreblastAction);
+  app.action(ACTIONS.EVENT_PREBLAST_HC, handlePreblastAction);
+  app.action(ACTIONS.EVENT_PREBLAST_UN_HC, handlePreblastAction);
+  app.action(ACTIONS.EVENT_PREBLAST_EDIT, handlePreblastAction);
 }
 
 export { buildPreblastSelectModal } from "./select-form";
+export { buildPreblastEditModal } from "./edit-form";
 export type { PreblastSelectMetadata } from "./types";
+export type { PreblastEditMetadata, PreblastInfo } from "./edit-form-types";

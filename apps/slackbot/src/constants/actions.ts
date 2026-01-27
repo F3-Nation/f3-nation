@@ -230,6 +230,17 @@ export const ACTIONS = {
   EVENT_PREBLAST_FILL_BUTTON: "event-preblast-fill-button",
   EVENT_PREBLAST_NEW_BUTTON: "event-preblast-new-button",
   NEW_PREBLAST_BUTTON: "new-preblast-button",
+  EVENT_PREBLAST_NOQ_SELECT: "event-preblast-noq-select",
+
+  // Preblast Form Fields
+  EVENT_PREBLAST_TITLE: "event-preblast-title",
+  EVENT_PREBLAST_LOCATION: "event-preblast-location",
+  EVENT_PREBLAST_START_TIME: "event-preblast-start-time",
+  EVENT_PREBLAST_COQS: "event-preblast-coqs",
+  EVENT_PREBLAST_TAG: "event-preblast-tag",
+  EVENT_PREBLAST_MOLESKINE_EDIT: "event-preblast-moleskine-edit",
+  EVENT_PREBLAST_SEND_OPTIONS: "event-preblast-send-options",
+  EVENT_PREBLAST_UPDATE_MODE: "event-preblast-update-mode",
 
   // Backblast Selection
   BACKBLAST_SELECT_CALLBACK_ID: "backblast-select-id",

@@ -635,8 +635,7 @@ export const eventInstanceRouter = {
       path: "/without-q",
       tags: ["event-instance"],
       summary: "Get past events without Q assigned",
-      description:
-        "Get past events that have no Q or Co-Q attendance assigned",
+      description: "Get past events that have no Q or Co-Q attendance assigned",
     })
     .handler(async ({ context: ctx, input }) => {
       const aoOrg = aliasedTable(schema.orgs, "ao_org");

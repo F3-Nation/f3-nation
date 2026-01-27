@@ -53,6 +53,14 @@
     "/^cd /home/evan/ml/f3-nation/apps/slackbot && pnpm tsc --noEmit 2>&1 \\| head -80$/": {
       "approve": true,
       "matchCommandLine": true
+    },
+    "/^cd /home/evan/ml/f3-nation/apps/slackbot && pnpm tsc --noEmit 2>&1 \\| head -100$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^cd /home/evan/ml/f3-nation/apps/slackbot && pnpm tsc --noEmit 2>&1 \\| head -50$/": {
+      "approve": true,
+      "matchCommandLine": true
     }
   }
 }

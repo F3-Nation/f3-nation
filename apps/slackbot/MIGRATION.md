@@ -588,6 +588,9 @@ export const attendanceRouter = {
 - [ ] Implement backblast creation/editing
 - [ ] Add preblast/backblast/attendance API endpoints
 - [ ] Implement calendar home view
+  - [ ] Implement dynamic filters and event block creation
+  - [ ] Implement event block actions:
+    - [ ] Implement Take Q and Edit Preblast actions
 
 ### Phase 3: Extended Features (Weeks 7-8)
 

@@ -110,21 +110,18 @@ async function handleBackblastSelect(args: TypedActionArgs): Promise<void> {
 
   // Check if this is the static_select dropdown for past Qs
   if (actionId === ACTIONS.BACKBLAST_FILL_SELECT) {
-    eventInstanceId = parseInt(
-      actionWithId.selected_option?.value ?? "0",
-      10,
-    );
+    eventInstanceId = parseInt(actionWithId.selected_option?.value ?? "0", 10);
   }
 
   // Check if this is the static_select dropdown for events without Q
   if (actionId === ACTIONS.BACKBLAST_NOQ_SELECT) {
-    eventInstanceId = parseInt(
-      actionWithId.selected_option?.value ?? "0",
-      10,
+    eventInstanceId = parseInt(actionWithId.selected_option?.value ?? "0", 10);
+    logger.info(
+      "Backblast selected for event without Q (user will be assigned as Q)",
+      {
+        eventInstanceId,
+      },
     );
-    logger.info("Backblast selected for event without Q (user will be assigned as Q)", {
-      eventInstanceId,
-    });
     // TODO: Assign user as Q for this event when opening the form
   }
 

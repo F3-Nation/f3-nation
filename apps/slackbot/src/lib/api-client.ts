@@ -22,6 +22,10 @@ import type {
   UpcomingQsResponse,
   PastQsResponse,
   EventsWithoutQResponse,
+  AttendanceResponse,
+  CreateAttendanceInput,
+  QActionInput,
+  AttendanceMutationResponse,
 } from "../types/api-types";
 import { logger } from "./logger";
 
@@ -736,6 +740,86 @@ export const api = {
         `/event-instance/without-q?${searchParams.toString()}`,
       );
     },
+  },
+
+  /**
+   * Attendance API methods
+   * Manages attendance records for event instances (HC/Q/Co-Q)
+   */
+  attendance: {
+    /**
+     * Get all attendance records for an event instance.
+     * Includes user info, attendance types, and Slack user links.
+     */
+    getForEventInstance: (params: {
+      eventInstanceId: number;
+      isPlanned?: boolean;
+    }) => {
+      const searchParams = new URLSearchParams();
+      if (params.isPlanned !== undefined) {
+        searchParams.append("isPlanned", params.isPlanned.toString());
+      }
+      const query = searchParams.toString();
+      return apiRequest<AttendanceResponse>(
+        `/attendance/event-instance/${params.eventInstanceId}${query ? `?${query}` : ""}`,
+      );
+    },
+
+    /**
+     * Create planned attendance for a user on an event instance.
+     * Used for HC sign-ups from preblast.
+     */
+    createPlanned: (input: CreateAttendanceInput) =>
+      apiRequest<AttendanceMutationResponse>(`/attendance`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+
+    /**
+     * Remove planned attendance for a user on an event instance.
+     */
+    removePlanned: (params: { eventInstanceId: number; userId: number }) =>
+      apiRequest<AttendanceMutationResponse>(
+        `/attendance/event-instance/${params.eventInstanceId}/user/${params.userId}`,
+        { method: "DELETE" },
+      ),
+
+    /**
+     * Take Q for an event.
+     * Adds user as Q (primary workout leader).
+     */
+    takeQ: (input: QActionInput) =>
+      apiRequest<AttendanceMutationResponse>(`/attendance/take-q`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+
+    /**
+     * Remove Q status for user on an event.
+     * Keeps the attendance record but removes Q/Co-Q types.
+     */
+    removeQ: (input: QActionInput) =>
+      apiRequest<AttendanceMutationResponse>(`/attendance/remove-q`, {
+        method: "DELETE",
+        body: JSON.stringify(input),
+      }),
+
+    /**
+     * Update attendance types for an existing attendance record.
+     */
+    updateAttendanceTypes: (params: {
+      attendanceId: number;
+      attendanceTypeIds: number[];
+    }) =>
+      apiRequest<AttendanceMutationResponse>(
+        `/attendance/${params.attendanceId}/types`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            attendanceTypeIds: params.attendanceTypeIds,
+          }),
+        },
+      ),
   },
 };
 
