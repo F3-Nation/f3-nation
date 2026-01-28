@@ -80,8 +80,10 @@ export const eventTypeRouter = {
         name: schema.eventTypes.name,
         description: schema.eventTypes.description,
         eventCategory: schema.eventTypes.eventCategory,
+        acronym: schema.eventTypes.acronym,
         specificOrgId: schema.eventTypes.specificOrgId,
         specificOrgName: schema.orgs.name,
+        isActive: schema.eventTypes.isActive,
         count: count(schema.eventsXEventTypes.eventTypeId),
       };
 
