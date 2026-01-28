@@ -47,7 +47,15 @@ export const LocationInsertSchema = createInsertSchema(locations);
 export const LocationSelectSchema = createSelectSchema(locations);
 
 // EVENT TYPE SCHEMA
-export const EventTypeInsertSchema = createInsertSchema(eventTypes);
+export const EventTypeInsertSchema = createInsertSchema(eventTypes, {
+  name: (s: z.ZodString) => s.min(1, { message: "Required" }),
+  specificOrgId: () =>
+    z
+      .number({
+        required_error: "Required",
+        invalid_type_error: "Required",
+      })
+});
 export const EventTypeSelectSchema = createSelectSchema(eventTypes);
 
 // EVENT SCHEMA

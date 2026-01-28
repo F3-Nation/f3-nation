@@ -432,7 +432,7 @@ export const eventTypes = pgTable(
     updated: timestamp({ mode: "string" })
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
-    specificOrgId: integer("specific_org_id"),
+    specificOrgId: integer("specific_org_id").notNull(),
     eventCategory: eventCategory("event_category").notNull(),
     isActive: boolean("is_active").default(true).notNull(),
   },

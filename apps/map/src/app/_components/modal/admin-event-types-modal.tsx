@@ -64,7 +64,7 @@ export default function AdminEventTypesModal({
   );
   const eventType = eventTypeResponse?.eventType;
   const { data: regions } = useQuery(
-    orpc.org.all.queryOptions({ input: { orgTypes: ["region"] } }),
+    orpc.org.mine.queryOptions({ input: { orgTypes: ["region"] } }),
   );
   const sortedRegions = useMemo(() => {
     return regions?.orgs.sort((a, b) => {
@@ -83,24 +83,27 @@ export default function AdminEventTypesModal({
       id: eventType?.id,
       name: eventType?.name ?? "",
       description: eventType?.description ?? "",
-      specificOrgId: eventType?.specificOrgId ?? null,
+      specificOrgId: eventType?.specificOrgId ?? undefined,
       eventCategory: eventType?.eventCategory ?? undefined,
     });
   }, [form, eventType]);
+
+  const isEditing = !!eventType?.id;
+  const actionText = isEditing ? "update" : "add";
 
   const crupdateEventType = useMutation(
     orpc.eventType.crupdate.mutationOptions({
       onSuccess: async () => {
         await invalidateQueries("eventType");
         closeModal();
-        toast.success("Successfully updated event type");
+        toast.success(`Successfully ${actionText}ed event type`);
         router.refresh();
       },
       onError: (err) => {
         toast.error(
           err instanceof ORPCError && err?.code === "UNAUTHORIZED"
-            ? "You must be logged in to update events"
-            : "Failed to update event",
+            ? `You must be an admin to that org to ${actionText} an event type`
+            : `Failed to ${actionText} event type`,
         );
       },
     }),
@@ -121,7 +124,7 @@ export default function AdminEventTypesModal({
         ...data,
       });
     } catch (error) {
-      toast.error("Failed to update event");
+      // Error is already handled by mutation's onError callback
       console.error(error);
     } finally {
       setIsSubmitting(false);
@@ -255,7 +258,7 @@ export default function AdminEventTypesModal({
                   onClick={() => {
                     void form.handleSubmit(onSubmit, (errors) => {
                       console.log(errors);
-                      toast.error("Failed to update event type");
+                      toast.error(`Failed to ${actionText} event type`);
                     })();
                   }}
                 >
