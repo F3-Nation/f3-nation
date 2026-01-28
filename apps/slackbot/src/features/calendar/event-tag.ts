@@ -68,7 +68,7 @@ export async function manageEventTags(args: TypedActionArgs) {
 async function fetchEventTagsForRegion(
   teamId: string,
 ): Promise<EventTagResponse[]> {
-  const region = await api.slack.getRegion(teamId);
+  const region = await api.slack.getOrg(teamId);
   if (!region) return [];
 
   const { eventTags } = await api.eventTag.all({
@@ -85,7 +85,7 @@ async function fetchEventTagsForRegion(
 async function fetchRegionSpecificEventTags(
   teamId: string,
 ): Promise<EventTagResponse[]> {
-  const region = await api.slack.getRegion(teamId);
+  const region = await api.slack.getOrg(teamId);
   if (!region) return [];
 
   const { eventTags } = await api.eventTag.byOrgId({
@@ -215,7 +215,7 @@ export async function handleEventTagAdd({ ack, view, context }: TypedViewArgs) {
     ]?.selected_option?.value;
 
   // Get the region for specificOrgId
-  const region = await api.slack.getRegion(context.teamId!);
+  const region = await api.slack.getOrg(context.teamId!);
   if (!region) {
     logger.error(
       `Could not find region for team ${context.teamId ?? "unknown"}`,

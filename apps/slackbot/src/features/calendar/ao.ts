@@ -54,7 +54,7 @@ export async function manageAOs(args: TypedActionArgs) {
 async function fetchLocationsForRegion(
   teamId: string,
 ): Promise<LocationResponse[]> {
-  const region = await api.slack.getRegion(teamId);
+  const region = await api.slack.getOrg(teamId);
   if (!region) return [];
 
   const { locations } = await api.location.all({
@@ -219,7 +219,7 @@ export async function handleAOAdd({ ack, view, context }: TypedViewArgs) {
     : null;
 
   // Get the region for parent organization
-  const region = await api.slack.getRegion(context.teamId!);
+  const region = await api.slack.getOrg(context.teamId!);
   if (!region) {
     logger.error(
       `Could not find region for team ${context.teamId ?? "unknown"}`,
@@ -261,7 +261,7 @@ export async function buildAOListForm(args: TypedActionArgs) {
   await navigateToView(
     navCtx,
     async () => {
-      const region = await api.slack.getRegion(args.context.teamId!);
+      const region = await api.slack.getOrg(args.context.teamId!);
       if (!region) {
         return {
           type: "modal",

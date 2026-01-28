@@ -244,7 +244,7 @@ export async function handleLocationAdd({ ack, view, context }: TypedViewArgs) {
     ]?.value;
 
   // We need the orgId from region settings
-  const region = await api.slack.getRegion(context.teamId!);
+  const region = await api.slack.getOrg(context.teamId!);
   if (!region) {
     logger.error(
       `Could not find region for team ${context.teamId ?? "unknown"}`,
@@ -284,7 +284,7 @@ export async function buildLocationListForm(args: TypedActionArgs) {
   await navigateToView(
     navCtx,
     async () => {
-      const region = await api.slack.getRegion(args.context.teamId!);
+      const region = await api.slack.getOrg(args.context.teamId!);
       if (!region) {
         return {
           type: "modal",

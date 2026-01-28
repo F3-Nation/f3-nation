@@ -54,7 +54,7 @@ export async function buildAddEventInstanceForm(
   await navigateToView(
     navCtx,
     async () => {
-      const region = await api.slack.getRegion(navCtx.teamId);
+      const region = await api.slack.getOrg(navCtx.teamId);
       if (!region) throw new Error("Region not found");
 
       const [
@@ -353,7 +353,7 @@ export async function handleEventInstanceAOSelection(args: TypedActionArgs) {
   const defaultLocationId = ao?.defaultLocationId;
 
   // Get form options
-  const region = await api.slack.getRegion(context.teamId!);
+  const region = await api.slack.getOrg(context.teamId!);
   if (!region) return;
 
   const [orgResult, locationResult, eventTypeResult, eventTagResult] =
@@ -587,7 +587,7 @@ export async function buildListEventInstanceForm(navCtx: NavigationContext) {
   await navigateToView(
     navCtx,
     async () => {
-      const region = await api.slack.getRegion(navCtx.teamId);
+      const region = await api.slack.getOrg(navCtx.teamId);
       if (!region) throw new Error("Region not found");
 
       const filters = (navCtx.metadata.filters as Record<string, string>) ?? {};

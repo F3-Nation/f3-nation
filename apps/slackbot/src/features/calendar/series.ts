@@ -159,7 +159,7 @@ export async function handleAOSelection(args: TypedActionArgs) {
  * Fetch form options (AOs, locations, event types, event tags)
  */
 async function fetchFormOptions(teamId: string) {
-  const region = await api.slack.getRegion(teamId);
+  const region = await api.slack.getOrg(teamId);
   if (!region) return { aos: [], locations: [], eventTypes: [], eventTags: [] };
 
   const [orgResult, locationResult, eventTypeResult, eventTagResult] =
@@ -622,7 +622,7 @@ export async function handleSeriesAdd({ ack, view, context }: TypedViewArgs) {
     : {};
 
   // Get the region
-  const region = await api.slack.getRegion(context.teamId!);
+  const region = await api.slack.getOrg(context.teamId!);
   if (!region) {
     logger.error(`Could not find region for team ${context.teamId}`);
     return;
@@ -825,7 +825,7 @@ export async function buildSeriesListForm(args: TypedActionArgs) {
   await navigateToView(
     navCtx,
     async () => {
-      const region = await api.slack.getRegion(args.context.teamId!);
+      const region = await api.slack.getOrg(args.context.teamId!);
       if (!region) {
         return {
           type: "modal",
