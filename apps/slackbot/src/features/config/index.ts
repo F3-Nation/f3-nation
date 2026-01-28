@@ -224,11 +224,14 @@ export function registerConfigFeature(app: App) {
   });
 
   // Action: Open Calendar Config
+  // Uses forceUpdate to update the current modal rather than pushing a new one
   app.action(ACTIONS.OPEN_CALENDAR_CONFIG, async (args: TypedActionArgs) => {
     const { ack, context } = args;
     await ack();
     const navCtx = createNavContext(args);
-    await navigateToView(navCtx, () => buildCalendarConfigModal(context));
+    await navigateToView(navCtx, () => buildCalendarConfigModal(context), {
+      forceUpdate: true,
+    });
   });
 
   // Action: Open Backblast Config

@@ -79,7 +79,8 @@ export async function navigateToView(
   // Use open (not push) when there's no existing modal
   const isInitialOpen = !ctx.currentViewId;
 
-  let targetViewId = ctx.currentViewId;
+  // Track if we showed a loading screen that we need to update
+  let loadingViewId: string | undefined;
 
   if (showLoading) {
     const loadingMetadata: NavigationMetadata = {
@@ -94,20 +95,21 @@ export async function navigateToView(
         view_id: ctx.currentViewId,
         view: loadingView,
       });
+      loadingViewId = ctx.currentViewId;
     } else if (isInitialOpen) {
       // Open fresh modal (from command/shortcut)
       const result = await ctx.client.views.open({
         trigger_id: ctx.triggerId,
         view: loadingView,
       });
-      targetViewId = result.view?.id;
+      loadingViewId = result.view?.id;
     } else {
       // Push onto existing modal stack
       const result = await ctx.client.views.push({
         trigger_id: ctx.triggerId,
         view: loadingView,
       });
-      targetViewId = result.view?.id;
+      loadingViewId = result.view?.id;
     }
   }
 
@@ -126,13 +128,20 @@ export async function navigateToView(
   });
 
   // Update, push, or open the final content
-  if (targetViewId) {
-    // We already have a view ID (either from loading or existing modal)
+  if (loadingViewId) {
+    // We showed a loading screen, update it with the final content
     await ctx.client.views.update({
-      view_id: targetViewId,
+      view_id: loadingViewId,
       view: finalView,
     });
-    return targetViewId;
+    return loadingViewId;
+  } else if (shouldUpdate && ctx.currentViewId) {
+    // Force update the current modal (no loading was shown)
+    await ctx.client.views.update({
+      view_id: ctx.currentViewId,
+      view: finalView,
+    });
+    return ctx.currentViewId;
   } else if (isInitialOpen) {
     // No loading was shown, open fresh modal
     const result = await ctx.client.views.open({

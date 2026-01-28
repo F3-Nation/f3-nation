@@ -174,7 +174,7 @@ export function buildCalendarConfigModal(_context: ExtendedContext) {
     type: "modal" as const,
     callback_id: ACTIONS.CALENDAR_CONFIG_CALLBACK_ID,
     title: { type: "plain_text" as const, text: "Calendar Settings" },
-    close: { type: "plain_text" as const, text: "Back" },
+    close: { type: "plain_text" as const, text: "Close" },
     blocks,
   };
 }
