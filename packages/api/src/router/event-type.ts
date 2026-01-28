@@ -142,7 +142,10 @@ export const eventTypeRouter = {
     }),
   byOrgId: protectedProcedure
     .input(
-      z.object({ orgId: z.coerce.number(), isActive: z.boolean().optional() }),
+      z.object({
+        orgId: z.coerce.number(),
+        isActive: z.coerce.boolean().optional(),
+      }),
     )
     .route({
       method: "GET",
@@ -256,7 +259,7 @@ export const eventTypeRouter = {
       return { eventType: result ?? null };
     }),
   delete: editorProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.coerce.number() }))
     .route({
       method: "DELETE",
       path: "/id/{id}",

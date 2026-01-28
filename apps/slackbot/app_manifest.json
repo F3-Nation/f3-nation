@@ -1,0 +1,149 @@
+{
+  "display_information": {
+    "name": "f3-nation-local",
+    "description": "The official F3 Slack app to manage your region's scheduling, signups, attendance tracking, and more!",
+    "background_color": "#000000"
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "f3-Nation-Local",
+      "always_online": true
+    },
+    "shortcuts": [
+      {
+        "name": "Create a backblast",
+        "type": "global",
+        "callback_id": "backblast_shortcut",
+        "description": "Opens a form to create a backblast for a recent event"
+      },
+      {
+        "name": "Create a preblast",
+        "type": "global",
+        "callback_id": "preblast_shortcut",
+        "description": "Opens a form to create a preblast for an upcoming event"
+      },
+      {
+        "name": "Open F3 Nation Settings",
+        "type": "global",
+        "callback_id": "settings_shortcut",
+        "description": "Opens F3 user and region settings (if you're an admin)"
+      },
+      {
+        "name": "Open F3 Calendar",
+        "type": "global",
+        "callback_id": "calendar_shortcut",
+        "description": "Opens your F3 region's calendar"
+      },
+      {
+        "name": "Tag an Achievement",
+        "type": "global",
+        "callback_id": "tag_achievement_shortcut",
+        "description": "Tag an achievement manually for someone"
+      }
+    ],
+    "slash_commands": [
+      {
+        "command": "/preblast",
+        "description": "Launch preblast form",
+        "should_escape": false
+      },
+      {
+        "command": "/f3-nation-settings",
+        "description": "Managers your region's settings for F3 Nation, including your schedule",
+        "should_escape": false
+      },
+      {
+        "command": "/backblast",
+        "description": "Launch backblast form",
+        "should_escape": false
+      },
+      {
+        "command": "/tag-achievement",
+        "description": "Lauches a form for manually tagging achievements",
+        "should_escape": false
+      },
+      {
+        "command": "/f3-calendar",
+        "description": "Opens the event calendar",
+        "should_escape": false
+      },
+      {
+        "command": "/help",
+        "description": "Opens a help menu",
+        "should_escape": false
+      }
+    ]
+  },
+  "oauth_config": {
+    "redirect_urls": ["https://localhost:3000/slack/install"],
+    "scopes": {
+      "user": ["files:write"],
+      "bot": [
+        "app_mentions:read",
+        "canvases:read",
+        "canvases:write",
+        "channels:history",
+        "channels:join",
+        "channels:read",
+        "chat:write",
+        "chat:write.customize",
+        "chat:write.public",
+        "commands",
+        "files:read",
+        "files:write",
+        "im:history",
+        "im:read",
+        "im:write",
+        "incoming-webhook",
+        "reactions:read",
+        "reactions:write",
+        "team:read",
+        "users.profile:read",
+        "users:read",
+        "users:read.email",
+        "channels:manage",
+        "channels:write.invites",
+        "channels:write.topic",
+        "emoji:read",
+        "groups:history",
+        "groups:read",
+        "groups:write",
+        "groups:write.topic",
+        "groups:write.invites",
+        "im:write.topic",
+        "metadata.message:read",
+        "links.embed:write",
+        "links:read",
+        "links:write",
+        "mpim:history",
+        "mpim:read",
+        "mpim:write",
+        "reminders:read",
+        "pins:read",
+        "pins:write",
+        "remote_files:read",
+        "reminders:write",
+        "remote_files:share",
+        "mpim:write.topic",
+        "remote_files:write",
+        "usergroups:read",
+        "usergroups:write",
+        "users:write"
+      ]
+    }
+  },
+  "settings": {
+    "event_subscriptions": {
+      "request_url": "https://localhost:3000/slack/events",
+      "bot_events": ["app_mention", "team_join"]
+    },
+    "interactivity": {
+      "is_enabled": true,
+      "request_url": "https://localhost:3000/slack/events",
+      "message_menu_options_url": "https://localhost:3000/slack/events"
+    },
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": true,
+    "token_rotation_enabled": false
+  }
+}

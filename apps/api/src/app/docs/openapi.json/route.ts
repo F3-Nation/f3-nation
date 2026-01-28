@@ -76,6 +76,10 @@ export async function GET(request: Request) {
         ],
       },
       {
+        name: "slack",
+        tags: ["slack"],
+      },
+      {
         name: "map",
         tags: ["feedback", "map.location"],
       },
@@ -98,6 +102,7 @@ export async function GET(request: Request) {
       { name: "ping", description: "Health check endpoints" },
       { name: "request", description: "Data change request workflow" },
       { name: "user", description: "User account management" },
+      { name: "slack", description: "Slack integration and management" },
     ],
 
     components: {

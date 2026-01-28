@@ -1,0 +1,49 @@
+{
+  "name": "f3-nation-slackbot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm with-env tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "pnpm with-env node dist/index.js",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
+    "test": "pnpm with-env vitest --run",
+    "test:watch": "pnpm with-env vitest -w",
+    "with-env": "dotenv -e ../../.env -e .env --"
+  },
+  "dependencies": {
+    "@acme/api": "workspace:^0.1.0",
+    "@acme/db": "workspace:^0.1.0",
+    "@acme/env": "workspace:^0.1.0",
+    "@acme/shared": "workspace:^0.1.0",
+    "@acme/validators": "workspace:^0.1.0",
+    "@orpc/client": "^1.8.8",
+    "@slack/bolt": "^4.6.0",
+    "@slack/types": "^2.19.0",
+    "@slack/web-api": "^7.13.0",
+    "dayjs": "^1.11.10",
+    "dotenv-cli": "^7.3.0",
+    "zod": "^3.25.8"
+  },
+  "devDependencies": {
+    "@acme/eslint-config": "workspace:^0.2.0",
+    "@acme/prettier-config": "workspace:^0.1.0",
+    "@acme/tsconfig": "workspace:*",
+    "@types/node": "^20.11.13",
+    "eslint": "^8.56.0",
+    "prettier": "^3.2.5",
+    "tsx": "^4.7.1",
+    "typescript": "^5.3.3",
+    "vitest": "^1.5.0"
+  },
+  "eslintConfig": {
+    "root": true,
+    "extends": [
+      "@acme/eslint-config/base"
+    ]
+  },
+  "prettier": "@acme/prettier-config"
+}

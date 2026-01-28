@@ -64,5 +64,8 @@ test-results/
 # sentry
 .env.sentry-build-plugin 
 
+# pnpm store
+.pnpm-store/
+
 pr.md
 .eslintcache

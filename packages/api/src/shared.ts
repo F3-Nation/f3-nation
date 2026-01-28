@@ -88,7 +88,7 @@ export const withSessionAndDb = base.use(async ({ context, next }) => {
   return next({ context: newContext });
 });
 
-export const publicProcedure = base;
+export const publicProcedure = withSessionAndDb;
 
 export const protectedProcedure = withSessionAndDb.use(({ context, next }) => {
   if (!context.session?.user) {
@@ -204,6 +204,31 @@ export const getSession = async ({ context }: { context: BaseContext }) => {
     throw new ORPCError("UNAUTHORIZED", {
       message: "You must provide a client header when using an API key",
     });
+  }
+
+  // Handle super admin key
+  if (env.SUPER_ADMIN_API_KEY && apiKey === env.SUPER_ADMIN_API_KEY) {
+    const roles = [{ orgId: -1, orgName: "Global", roleName: "admin" }];
+    return {
+      id: -1,
+      email: "admin@f3nation.com",
+      roles,
+      user: {
+        id: "-1",
+        email: "admin@f3nation.com",
+        name: "Super Admin",
+        roles,
+      },
+      apiKey: {
+        id: -1,
+        key: "SUPER",
+        ownerId: -1,
+        revokedAt: null,
+        expiresAt: null,
+        orgIds: [-1],
+      },
+      expires: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString(),
+    } as unknown as Session;
   }
 
   // Get the api key info and associated owner and orgs

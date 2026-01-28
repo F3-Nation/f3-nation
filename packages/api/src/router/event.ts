@@ -466,9 +466,20 @@ export const eventRouter = {
                 'eventTypeId', ${schema.eventTypes.id},
                 'eventTypeName', ${schema.eventTypes.name}
               )
+            ),
+            '[]'
+          )`,
+          eventTags: sql<
+            { eventTagId: number; eventTagName: string }[]
+          >`COALESCE(
+            json_agg(
+              DISTINCT jsonb_build_object(
+                'eventTagId', ${schema.eventTags.id},
+                'eventTagName', ${schema.eventTags.name}
+              )
             )
             FILTER (
-              WHERE ${schema.eventTypes.id} IS NOT NULL
+              WHERE ${schema.eventTags.id} IS NOT NULL
             ),
             '[]'
           )`,
@@ -501,6 +512,14 @@ export const eventRouter = {
           schema.eventTypes,
           eq(schema.eventTypes.id, schema.eventsXEventTypes.eventTypeId),
         )
+        .leftJoin(
+          schema.eventTagsXEvents,
+          eq(schema.eventTagsXEvents.eventId, schema.events.id),
+        )
+        .leftJoin(
+          schema.eventTags,
+          eq(schema.eventTags.id, schema.eventTagsXEvents.eventTagId),
+        )
         .where(eq(schema.events.id, input.id))
         .groupBy(schema.events.id, aoOrg.id, regionOrg.id);
 
@@ -513,7 +532,8 @@ export const eventRouter = {
       path: "/",
       tags: ["event"],
       summary: "Create or update event",
-      description: "Create a new event or update an existing one",
+      description:
+        "Create a new event or update an existing one. For series (events with recurrence patterns), this also creates or updates associated event instances.",
     })
     .handler(async ({ context: ctx, input }) => {
       const [existingEvent] = input.id
@@ -541,7 +561,7 @@ export const eventRouter = {
         });
       }
 
-      const { eventTypeIds, meta, ...eventData } = input;
+      const { eventTypeIds, eventTagIds, meta, ...eventData } = input;
       const eventToUpdate: typeof schema.events.$inferInsert = {
         ...eventData,
         orgId: input.aoId,
@@ -588,6 +608,90 @@ export const eventRouter = {
         type: input.id ? "event.updated" : "event.created",
         eventId: result.id,
       });
+
+      // Handle event tag in join table
+      if (eventTagIds !== undefined) {
+        await ctx.db
+          .delete(schema.eventTagsXEvents)
+          .where(eq(schema.eventTagsXEvents.eventId, result.id));
+
+        if (eventTagIds.length > 0) {
+          await ctx.db.insert(schema.eventTagsXEvents).values(
+            eventTagIds.map((eventTagId) => ({
+              eventId: result.id,
+              eventTagId,
+            })),
+          );
+        }
+      }
+
+      // Handle cascade operations for series (events with recurrence patterns)
+      if (result.recurrencePattern) {
+        const {
+          isStructuralChange,
+          createEventInstancesForSeries,
+          updateFutureInstances,
+          recreateFutureInstances,
+        } = await import("../lib/cascade-service");
+
+        // Build series data for cascade operations
+        const seriesData = {
+          id: result.id,
+          orgId: result.orgId,
+          locationId: result.locationId,
+          name: result.name,
+          description: result.description,
+          startDate: result.startDate,
+          endDate: result.endDate,
+          startTime: result.startTime,
+          endTime: result.endTime,
+          dayOfWeek: result.dayOfWeek,
+          recurrencePattern: result.recurrencePattern,
+          recurrenceInterval: result.recurrenceInterval,
+          indexWithinInterval: result.indexWithinInterval,
+          isActive: result.isActive,
+          isPrivate: result.isPrivate,
+          highlight: result.highlight,
+          meta: result.meta as Record<string, unknown> | null,
+          eventTypeId: eventTypeIds?.[0],
+          eventTagId: eventTagIds?.[0],
+        };
+
+        if (!existingEvent) {
+          // New series: create event instances
+          await createEventInstancesForSeries(ctx.db, seriesData);
+        } else if (existingEvent.recurrencePattern) {
+          // Existing series: check for structural changes
+          const existingSeriesData = {
+            dayOfWeek: existingEvent.dayOfWeek,
+            recurrencePattern: existingEvent.recurrencePattern,
+            recurrenceInterval: existingEvent.recurrenceInterval,
+            indexWithinInterval: existingEvent.indexWithinInterval,
+            startDate: existingEvent.startDate,
+            endDate: existingEvent.endDate,
+          };
+
+          const updatedSeriesData = {
+            dayOfWeek: result.dayOfWeek,
+            recurrencePattern: result.recurrencePattern,
+            recurrenceInterval: result.recurrenceInterval,
+            indexWithinInterval: result.indexWithinInterval,
+            startDate: result.startDate,
+            endDate: result.endDate,
+          };
+
+          if (isStructuralChange(existingSeriesData, updatedSeriesData)) {
+            // Structural change: delete and recreate future instances
+            await recreateFutureInstances(ctx.db, seriesData);
+          } else {
+            // Non-structural change: update future instances in place
+            await updateFutureInstances(ctx.db, seriesData);
+          }
+        } else {
+          // Converting a non-series event to a series: create instances
+          await createEventInstancesForSeries(ctx.db, seriesData);
+        }
+      }
 
       return { event: result ?? null };
     }),
@@ -636,13 +740,14 @@ export const eventRouter = {
       return { lookup };
     }),
   delete: editorProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.coerce.number() }))
     .route({
       method: "DELETE",
       path: "/delete/{id}",
       tags: ["event"],
       summary: "Delete event",
-      description: "Soft delete an event by marking it as inactive",
+      description:
+        "Soft delete an event (series) by marking it as inactive. For series, this also soft-deletes future event instances.",
     })
     .handler(async ({ context: ctx, input }) => {
       const [event] = await ctx.db
@@ -666,6 +771,8 @@ export const eventRouter = {
           message: "You are not authorized to delete this Event",
         });
       }
+
+      // Soft delete the event (series) itself
       await ctx.db
         .update(schema.events)
         .set({ isActive: false })
@@ -675,6 +782,14 @@ export const eventRouter = {
 
       // Notify webhooks about the event deletion
       emitWebhookEvent({ type: "event.deleted", eventId: input.id });
+
+      // If this is a series (has recurrence pattern), cascade soft-delete to future instances
+      if (event.recurrencePattern) {
+        const { softDeleteFutureInstancesForSeries } = await import(
+          "../lib/cascade-service"
+        );
+        await softDeleteFutureInstancesForSeries(ctx.db, input.id);
+      }
 
       return { eventId: input.id };
     }),
