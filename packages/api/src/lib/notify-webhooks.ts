@@ -1,6 +1,18 @@
+import https from "https";
+
 import axios from "axios";
 
 import { env } from "@acme/env";
+import { isProductionNodeEnv } from "@acme/shared/common/constants";
+
+// In development, allow self-signed certificates for local .test domains
+const axiosInstance = axios.create({
+  ...(!isProductionNodeEnv && {
+    httpsAgent: new https.Agent({
+      rejectUnauthorized: false,
+    }),
+  }),
+});
 
 // You guys both wanted webhooks to let you know when the map data is updated, right? I now have that functional, but will need your hardcoded webhook urls. Can you share those with me? In the future I’ll allow them to be dynamic but for now was hoping to doing something light. It will just send a post or get (whichever you want) whenever the data changes. I will likely send a payload like this:
 // {
@@ -24,7 +36,7 @@ export interface WebhookPayload {
 
 const webhooks: Webhook[] = [
   {
-    url: `${env.NEXT_PUBLIC_API_URL}/api/orpc/ping`,
+    url: `${env.NEXT_PUBLIC_API_URL}/v1/ping`,
     method: "GET",
   },
 ];
@@ -49,13 +61,9 @@ export const notifyWebhooks = async (mapData: WebhookPayload) => {
   };
   for (const webhook of webhooks) {
     if (webhook.method === "POST") {
-      await axios.post(webhook.url, data, {
-        method: webhook.method,
-      });
+      await axiosInstance.post(webhook.url, data);
     } else if (webhook.method === "GET") {
-      await axios.get(webhook.url, {
-        method: webhook.method,
-      });
+      await axiosInstance.get(webhook.url);
     }
   }
 };

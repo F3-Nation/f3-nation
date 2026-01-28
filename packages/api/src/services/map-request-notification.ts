@@ -6,7 +6,7 @@ import { schema } from "@acme/db";
 import { env } from "@acme/env";
 import { requestTypeToTitle } from "@acme/shared/app/functions";
 
-import { mail, Templates } from "../mail";
+import { mail, Templates } from "@acme/mail";
 
 /**
  * Interface for the notification parameters

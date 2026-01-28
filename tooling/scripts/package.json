@@ -22,6 +22,7 @@
     "@acme/db": "workspace:*",
     "@acme/env": "workspace:*",
     "@acme/eslint-config": "workspace:*",
+    "@acme/mail": "workspace:*",
     "@acme/prettier-config": "workspace:*",
     "@acme/shared": "workspace:*",
     "@acme/tsconfig": "workspace:*",

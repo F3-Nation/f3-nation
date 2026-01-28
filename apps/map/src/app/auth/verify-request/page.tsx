@@ -37,7 +37,9 @@ export default function VerifyRequestPage() {
           </a>
         </div>
       </AuthWrapper>
-      <VersionInfo className="my-4 w-full text-center" />
+      <div className="my-4 flex w-full justify-center">
+        <VersionInfo />
+      </div>
     </div>
   );
 }

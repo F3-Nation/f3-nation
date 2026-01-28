@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-import type { DayOfWeek, RequestType } from "./enums";
 import { MAX_PLACES_AUTOCOMPLETE_RADIUS } from "./constants";
+import type { DayOfWeek, RequestType } from "./enums";
 
 export function zoomToRadius(zoom: number): number {
   // Clamp zoom between 4 and 20

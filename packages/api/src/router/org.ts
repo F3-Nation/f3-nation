@@ -1,4 +1,5 @@
 import { ORPCError } from "@orpc/server";
+import type { SQL } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -12,6 +13,7 @@ import {
   schema,
   sql,
 } from "@acme/db";
+import type { AppDb } from "@acme/db/client";
 import { IsActiveStatus, OrgType } from "@acme/shared/app/enums";
 import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
 import type { OrgMeta } from "@acme/shared/app/types";
@@ -22,6 +24,8 @@ import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
 import { moveAOLocsToNewRegion } from "../lib/move-ao-locs-to-new-region";
+import { emitWebhookEvent } from "../lib/webhook-events";
+import type { Context } from "../shared";
 import { adminProcedure, editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
@@ -46,23 +50,123 @@ interface Org {
   parentOrgType: "ao" | "region" | "area" | "sector" | "nation";
 }
 
+// Shared filter schema for orgs (used by both `all` and `count` endpoints)
+const orgFilterSchema = z.object({
+  orgTypes: arrayOrSingle(z.enum(OrgType))
+    .refine((val) => val.length >= 1, {
+      message: "At least one orgType is required",
+    })
+    .default(["region"]),
+  searchTerm: z.string().optional(),
+  statuses: arrayOrSingle(z.enum(IsActiveStatus)).optional(),
+  parentOrgIds: arrayOrSingle(z.coerce.number()).optional(),
+  onlyMine: z.coerce.boolean().optional(),
+});
+
+type OrgFilterInput = z.infer<typeof orgFilterSchema>;
+
+// Extended schema with pagination and sorting for the `all` endpoint
+const orgAllInputSchema = orgFilterSchema.extend({
+  pageIndex: z.coerce.number().optional(),
+  pageSize: z.coerce.number().optional(),
+  sorting: parseSorting(),
+});
+
+// Aliased tables used across org queries
+const org = aliasedTable(schema.orgs, "org");
+const parentOrg = aliasedTable(schema.orgs, "parent_org");
+
+/**
+ * Resolves editable org IDs for "onlyMine" filter
+ * Returns null if user has no access
+ */
+async function resolveEditableOrgIds(params: {
+  ctx: Context;
+  onlyMine?: boolean;
+}): Promise<{ editableOrgIds: number[]; isNationAdmin: boolean } | null> {
+  const { ctx, onlyMine } = params;
+
+  if (!onlyMine) {
+    return { editableOrgIds: [], isNationAdmin: false };
+  }
+
+  const result = await getEditableOrgIdsForUser(ctx);
+  const { editableOrgs, isNationAdmin } = result;
+
+  if (!isNationAdmin && editableOrgs.length > 0) {
+    const editableOrgIdsList = editableOrgs.map((o) => o.id);
+    const editableOrgIds = await getDescendantOrgIds(
+      ctx.db,
+      editableOrgIdsList,
+    );
+    return { editableOrgIds, isNationAdmin };
+  }
+
+  // If user has no editable orgs and is not a nation admin, return null
+  if (editableOrgs.length === 0 && !isNationAdmin) {
+    return null;
+  }
+
+  return { editableOrgIds: [], isNationAdmin };
+}
+
+/**
+ * Builds the WHERE clause for org queries based on filter input
+ */
+function buildOrgWhereClause(params: {
+  input: OrgFilterInput;
+  editableOrgIds: number[];
+  isNationAdmin: boolean;
+}): SQL | undefined {
+  const { input, editableOrgIds, isNationAdmin } = params;
+
+  return and(
+    inArray(org.orgType, input.orgTypes),
+    !input.statuses
+      ? eq(org.isActive, true)
+      : !input.statuses.length ||
+          input.statuses.length === IsActiveStatus.length
+        ? undefined
+        : input.statuses.includes("active")
+          ? eq(org.isActive, true)
+          : eq(org.isActive, false),
+    input.searchTerm
+      ? or(
+          ilike(org.name, `%${input.searchTerm}%`),
+          ilike(org.description, `%${input.searchTerm}%`),
+        )
+      : undefined,
+    input.parentOrgIds?.length
+      ? inArray(org.parentId, input.parentOrgIds)
+      : undefined,
+    // Filter by editable org IDs if onlyMine is true and not a nation admin
+    input.onlyMine && !isNationAdmin && editableOrgIds.length > 0
+      ? inArray(org.id, editableOrgIds)
+      : undefined,
+  );
+}
+
+/**
+ * Gets the count of orgs matching the given WHERE clause
+ */
+async function getOrgCount(params: {
+  db: AppDb;
+  where: SQL | undefined;
+}): Promise<number> {
+  const { db, where } = params;
+
+  const [result] = await db
+    .select({ count: countDistinct(org.id) })
+    .from(org)
+    .leftJoin(parentOrg, eq(org.parentId, parentOrg.id))
+    .where(where);
+
+  return result?.count ?? 0;
+}
+
 export const orgRouter = {
   all: protectedProcedure
-    .input(
-      z.object({
-        orgTypes: arrayOrSingle(z.enum(OrgType)).refine(
-          (val) => val.length >= 1,
-          { message: "At least one orgType is required" },
-        ),
-        pageIndex: z.coerce.number().optional(),
-        pageSize: z.coerce.number().optional(),
-        searchTerm: z.string().optional(),
-        sorting: parseSorting(),
-        statuses: arrayOrSingle(z.enum(IsActiveStatus)).optional(),
-        parentOrgIds: arrayOrSingle(z.coerce.number()).optional(),
-        onlyMine: z.coerce.boolean().optional(),
-      }),
-    )
+    .input(orgAllInputSchema)
     .route({
       method: "GET",
       path: "/",
@@ -72,64 +176,32 @@ export const orgRouter = {
         "Get a paginated list of organizations (regions, AOs, etc.) with optional filtering and sorting",
     })
     .handler(async ({ context: ctx, input }) => {
-      const org = aliasedTable(schema.orgs, "org");
-      const parentOrg = aliasedTable(schema.orgs, "parent_org");
-      const pageSize = input?.pageSize ?? 10;
-      const pageIndex = (input?.pageIndex ?? 0) * pageSize;
+      const pageSize = input.pageSize ?? 10;
+      const pageIndex = (input.pageIndex ?? 0) * pageSize;
       const usePagination =
-        input?.pageIndex !== undefined && input?.pageSize !== undefined;
+        input.pageIndex !== undefined && input.pageSize !== undefined;
 
-      // Determine if filter by editable org IDs is needed
-      let editableOrgIds: number[] = [];
-      let isNationAdmin = false;
+      // Resolve editable org IDs for "onlyMine" filter
+      const editableResult = await resolveEditableOrgIds({
+        ctx,
+        onlyMine: input.onlyMine,
+      });
 
-      if (input?.onlyMine) {
-        const result = await getEditableOrgIdsForUser(ctx);
-        const editableOrgs = result.editableOrgs;
-        isNationAdmin = result.isNationAdmin;
-
-        if (!isNationAdmin && editableOrgs.length > 0) {
-          // Get all descendant org IDs (including AOs) for the editable orgs
-          const editableOrgIdsList = editableOrgs.map((org) => org.id);
-          editableOrgIds = await getDescendantOrgIds(
-            ctx.db,
-            editableOrgIdsList,
-          );
-        }
-
-        // If user has no editable orgs and is not a nation admin, return empty
-        if (editableOrgIds.length === 0 && !isNationAdmin) {
-          return { orgs: [], total: 0 };
-        }
+      // If user has no access, return empty result
+      if (editableResult === null) {
+        return { orgs: [], total: 0 };
       }
 
-      const where = and(
-        inArray(org.orgType, input.orgTypes),
-        !input.statuses
-          ? eq(org.isActive, true)
-          : !input.statuses.length ||
-              input.statuses.length === IsActiveStatus.length
-            ? undefined
-            : input.statuses.includes("active")
-              ? eq(org.isActive, true)
-              : eq(org.isActive, false),
-        input?.searchTerm
-          ? or(
-              ilike(org.name, `%${input?.searchTerm}%`),
-              ilike(org.description, `%${input?.searchTerm}%`),
-            )
-          : undefined,
-        input?.parentOrgIds?.length
-          ? inArray(org.parentId, input.parentOrgIds)
-          : undefined,
-        // Filter by editable org IDs if onlyMine is true and not a nation admin
-        input?.onlyMine && !isNationAdmin && editableOrgIds.length > 0
-          ? inArray(org.id, editableOrgIds)
-          : undefined,
-      );
+      const { editableOrgIds, isNationAdmin } = editableResult;
+
+      const where = buildOrgWhereClause({
+        input,
+        editableOrgIds,
+        isNationAdmin,
+      });
 
       const sortedColumns = getSortingColumns(
-        input?.sorting,
+        input.sorting,
         {
           id: org.id,
           name: org.name,
@@ -140,11 +212,7 @@ export const orgRouter = {
         "id",
       );
 
-      const [orgCount] = await (ctx.db
-        .select({ count: sql<number>`count(distinct ${org.id})` })
-        .from(org)
-        .leftJoin(parentOrg, eq(org.parentId, parentOrg.id))
-        .where(where) as Promise<{ count: number }[]>);
+      const total = await getOrgCount({ db: ctx.db, where });
 
       const select = {
         id: org.id,
@@ -167,6 +235,7 @@ export const orgRouter = {
         parentOrgType: parentOrg.orgType,
         aoCount: org.aoCount,
       };
+
       const query = ctx.db
         .select(select)
         .from(org)
@@ -183,7 +252,42 @@ export const orgRouter = {
         : await query.orderBy(...sortedColumns);
 
       // Something is broken with org to org types
-      return { orgs: orgs_untyped as Org[], total: orgCount?.count ?? 0 };
+      return { orgs: orgs_untyped as Org[], total };
+    }),
+
+  count: protectedProcedure
+    .input(orgFilterSchema)
+    .route({
+      method: "GET",
+      path: "/count",
+      tags: ["org"],
+      summary: "Count organizations",
+      description:
+        "Get the count of organizations matching the specified filters",
+    })
+    .handler(async ({ context: ctx, input }) => {
+      // Resolve editable org IDs for "onlyMine" filter
+      const editableResult = await resolveEditableOrgIds({
+        ctx,
+        onlyMine: input.onlyMine,
+      });
+
+      // If user has no access, return 0
+      if (editableResult === null) {
+        return { count: 0 };
+      }
+
+      const { editableOrgIds, isNationAdmin } = editableResult;
+
+      const where = buildOrgWhereClause({
+        input,
+        editableOrgIds,
+        isNationAdmin,
+      });
+
+      const count = await getOrgCount({ db: ctx.db, where });
+
+      return { count };
     }),
 
   byId: protectedProcedure
@@ -249,6 +353,11 @@ export const orgRouter = {
           })
           .returning();
 
+        // Notify webhooks about the org creation
+        if (result) {
+          emitWebhookEvent({ type: "org.created", orgId: result.id });
+        }
+
         return { org: result ?? null };
       }
 
@@ -299,6 +408,12 @@ export const orgRouter = {
           set: orgToCrupdate,
         })
         .returning();
+
+      // Notify webhooks about the org update
+      if (result) {
+        emitWebhookEvent({ type: "org.updated", orgId: result.id });
+      }
+
       return { org: result ?? null };
     }),
   mine: protectedProcedure
@@ -405,6 +520,9 @@ export const orgRouter = {
             eq(schema.orgs.isActive, true),
           ),
         );
+
+      // Notify webhooks about the org deletion
+      emitWebhookEvent({ type: "org.deleted", orgId: input.id });
 
       // If this is an AO, cascade soft-delete to series and event instances
       if (org?.orgType === "ao") {

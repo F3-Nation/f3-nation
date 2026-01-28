@@ -23,6 +23,7 @@ import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
+import { emitWebhookEvent } from "../lib/webhook-events";
 import { adminProcedure, editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
@@ -245,6 +246,15 @@ export const locationRouter = {
           set: locationToCrupdate,
         })
         .returning();
+
+      // Notify webhooks about the location change
+      if (result) {
+        emitWebhookEvent({
+          type: input.id ? "location.updated" : "location.created",
+          locationId: result.id,
+        });
+      }
+
       return { location: result ?? null };
     }),
   delete: adminProcedure
@@ -288,6 +298,9 @@ export const locationRouter = {
             eq(schema.locations.isActive, true),
           ),
         );
+
+      // Notify webhooks about the location deletion
+      emitWebhookEvent({ type: "location.deleted", locationId: input.id });
 
       return { locationId: input.id };
     }),

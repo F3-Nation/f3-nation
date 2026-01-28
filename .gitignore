@@ -68,3 +68,4 @@ test-results/
 .pnpm-store/
 
 pr.md
+.eslintcache

@@ -57,7 +57,7 @@ async function main() {
   const { db } = await import("@acme/db/client");
   const { env } = await import("@acme/env");
   const { requestTypeToTitle } = await import("@acme/shared/app/functions");
-  const { mail, Templates } = await import("@acme/api/mail");
+  const { mail, Templates } = await import("@acme/mail");
   const { getUsersWithRoles } = await import(
     "@acme/api/services/map-request-notification"
   );

@@ -5,7 +5,6 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./mail": "./src/mail.ts",
     "./services/map-request-notification": "./src/services/map-request-notification.ts"
   },
   "license": "MIT",
@@ -23,15 +22,14 @@
     "@acme/auth": "workspace:^0.1.0",
     "@acme/db": "workspace:^0.1.0",
     "@acme/env": "workspace:^0.1.0",
+    "@acme/mail": "workspace:*",
     "@acme/shared": "workspace:^0.1.0",
     "@acme/validators": "workspace:^0.1.0",
     "@orpc/client": "^1.8.8",
     "@orpc/experimental-ratelimit": "^1.13.2",
     "@orpc/server": "^1.8.8",
     "google-auth-library": "^10.3.0",
-    "handlebars": "^4.7.8",
     "lodash": "^4.17.21",
-    "nodemailer": "^6.10.0",
     "superjson": "2.2.1",
     "zod": "^3.25.8"
   },
@@ -39,7 +37,6 @@
     "@acme/eslint-config": "workspace:^0.2.0",
     "@acme/prettier-config": "workspace:^0.1.0",
     "@acme/tsconfig": "workspace:^0.1.0",
-    "@types/nodemailer": "^6.4.17",
     "eslint": "^8.56.0",
     "prettier": "^3.2.5",
     "typescript": "^5.3.3"
