@@ -254,6 +254,11 @@ export interface EventInstanceResponse {
   isPrivate: boolean;
   eventTypes?: { eventTypeId: number; eventTypeName: string }[];
   eventTags?: { eventTagId: number; eventTagName: string }[];
+  org?: {
+    id: number;
+    name: string;
+    meta: Record<string, unknown> | null;
+  } | null;
 }
 
 /**
@@ -433,9 +438,4 @@ export interface PreblastEventInstanceResponse extends EventInstanceResponse {
   preblastRich?: Record<string, unknown> | null;
   preblastTs?: number | null;
   location?: LocationResponse | null;
-  org?: {
-    id: number;
-    name: string;
-    meta?: Record<string, unknown> | null;
-  };
 }

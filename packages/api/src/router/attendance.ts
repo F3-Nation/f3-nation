@@ -29,7 +29,7 @@ export const attendanceRouter = {
     .input(
       z.object({
         eventInstanceId: z.coerce.number(),
-        isPlanned: z.boolean().optional().default(true),
+        isPlanned: z.coerce.boolean().optional().default(true),
       }),
     )
     .route({

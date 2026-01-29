@@ -210,6 +210,19 @@ export const eventInstanceRouter = {
           fngCount: schema.eventInstances.fngCount,
           preblast: schema.eventInstances.preblast,
           backblast: schema.eventInstances.backblast,
+          org: sql<{
+            id: number;
+            name: string;
+            meta: Record<string, unknown> | null;
+          } | null>`
+            CASE WHEN ${aoOrg.id} IS NOT NULL THEN
+              jsonb_build_object(
+                'id', ${aoOrg.id},
+                'name', ${aoOrg.name},
+                'meta', ${aoOrg.meta}
+              )
+            ELSE NULL END
+          `,
           eventTypes: sql<
             { eventTypeId: number; eventTypeName: string }[]
           >`COALESCE(
@@ -273,7 +286,12 @@ export const eventInstanceRouter = {
           eq(schema.eventTags.id, schema.eventTagsXEventInstances.eventTagId),
         )
         .where(eq(schema.eventInstances.id, input.id))
-        .groupBy(schema.eventInstances.id, aoOrg.id);
+        .groupBy(
+          schema.eventInstances.id,
+          aoOrg.id,
+          aoOrg.name,
+          sql`${aoOrg.meta}::text`,
+        );
 
       return instance ?? null;
     }),
@@ -446,7 +464,11 @@ export const eventInstanceRouter = {
         userId: z.coerce.number(),
         regionOrgId: z.coerce.number(),
         /** Only return events without a posted preblast (preblast_ts IS NULL) */
-        notPostedOnly: z.boolean().optional().default(true),
+        notPostedOnly: z
+          .enum(["true", "false"])
+          .transform((v) => v === "true")
+          .optional()
+          .default("true"),
       }),
     )
     .route({
@@ -536,7 +558,11 @@ export const eventInstanceRouter = {
         userId: z.coerce.number(),
         regionOrgId: z.coerce.number(),
         /** Only return events without a posted backblast (backblast_ts IS NULL) */
-        notPostedOnly: z.boolean().optional().default(true),
+        notPostedOnly: z
+          .enum(["true", "false"])
+          .transform((v) => v === "true")
+          .optional()
+          .default("true"),
       }),
     )
     .route({
@@ -625,7 +651,11 @@ export const eventInstanceRouter = {
       z.object({
         regionOrgId: z.coerce.number(),
         /** Only return events without a posted backblast (backblast_ts IS NULL) */
-        notPostedOnly: z.boolean().optional().default(true),
+        notPostedOnly: z
+          .enum(["true", "false"])
+          .transform((v) => v === "true")
+          .optional()
+          .default("true"),
         /** Maximum number of events to return */
         limit: z.coerce.number().optional().default(20),
       }),
