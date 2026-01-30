@@ -584,13 +584,16 @@ export const attendanceRouter = {
   - [x] Implement preblast settings (destination, template, automated preblast options)
 - [x] Implement preblast selection menu
 - [x] Implement backblast selection menu
-- [ ] Implement preblast creation/editing
+- [x] Implement preblast creation/editing
 - [ ] Implement backblast creation/editing
 - [ ] Add preblast/backblast/attendance API endpoints
 - [ ] Implement calendar home view
   - [ ] Implement dynamic filters and event block creation
   - [ ] Implement event block actions:
     - [ ] Implement Take Q and Edit Preblast actions
+    - [ ] Implement HC (hard commit) and un-HC actions
+    - [ ] Implement Edit Backblast actions
+    - [ ] Implement admin actions (assign Q, edit preblast or backblast for others)
 
 ### Phase 3: Extended Features (Weeks 7-8)
 

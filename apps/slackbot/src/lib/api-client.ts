@@ -26,6 +26,8 @@ import type {
   CreateAttendanceInput,
   QActionInput,
   AttendanceMutationResponse,
+  CalendarHomeScheduleInput,
+  CalendarHomeScheduleResponse,
 } from "../types/api-types";
 import { logger } from "./logger";
 
@@ -37,8 +39,8 @@ const API_KEY = process.env.SLACKBOT_API_KEY;
 const CACHE_TTL = {
   space: 5 * 60 * 1000, // 5 minutes for space settings
   org: 5 * 60 * 1000, // 5 minutes for org info
-  user: 2 * 60 * 1000, // 2 minutes for user data
-  roles: 2 * 60 * 1000, // 2 minutes for role data
+  user: 10 * 60 * 1000, // 10 minutes for user data (synced via background job)
+  roles: 5 * 60 * 1000, // 5 minutes for role data
 } as const;
 
 /**
@@ -188,12 +190,28 @@ export const api = {
     },
 
     /**
-     * Get user by Slack ID (not cached - use getOrCreateLinkedUser for middleware)
+     * Get user by Slack ID.
+     * Results are cached for 10 minutes. Returns null if user doesn't exist.
+     * Use this for lightweight existence checks before calling Slack API.
      */
-    getUserBySlackId: (slackId: string, teamId: string) =>
-      apiRequest<SlackUserResponse | null>(
+    getUserBySlackId: async (
+      slackId: string,
+      teamId: string,
+    ): Promise<SlackUserResponse | null> => {
+      const cacheKey = `user:${teamId}:${slackId}`;
+      const cached = cache.get<SlackUserResponse | null>(cacheKey);
+      if (cached !== null) {
+        logger.debug(`Cache hit for user lookup: ${slackId}`);
+        return cached;
+      }
+
+      const result = await apiRequest<SlackUserResponse | null>(
         `/slack/user?slackId=${encodeURIComponent(slackId)}&teamId=${encodeURIComponent(teamId)}`,
-      ),
+      );
+      // Cache both found and not-found results to avoid repeated lookups
+      cache.set(cacheKey, result, CACHE_TTL.user);
+      return result;
+    },
 
     getOrCreateSpace: async (
       input: GetOrCreateSpaceInput,
@@ -740,6 +758,41 @@ export const api = {
         `/event-instance/without-q?${searchParams.toString()}`,
       );
     },
+
+    /**
+     * Get calendar home schedule view.
+     * Optimized query with Q info and user attendance status.
+     */
+    getCalendarHomeSchedule: (params: CalendarHomeScheduleInput) => {
+      const searchParams = new URLSearchParams();
+      searchParams.append("userId", params.userId.toString());
+      searchParams.append("regionOrgId", params.regionOrgId.toString());
+      if (params.aoOrgIds?.length) {
+        params.aoOrgIds.forEach((id) =>
+          searchParams.append("aoOrgIds", id.toString()),
+        );
+      }
+      if (params.startDate) {
+        searchParams.append("startDate", params.startDate);
+      }
+      if (params.eventTypeIds?.length) {
+        params.eventTypeIds.forEach((id) =>
+          searchParams.append("eventTypeIds", id.toString()),
+        );
+      }
+      if (params.openQOnly !== undefined) {
+        searchParams.append("openQOnly", params.openQOnly.toString());
+      }
+      if (params.onlyUserEvents !== undefined) {
+        searchParams.append("onlyUserEvents", params.onlyUserEvents.toString());
+      }
+      if (params.limit !== undefined) {
+        searchParams.append("limit", params.limit.toString());
+      }
+      return apiRequest<CalendarHomeScheduleResponse>(
+        `/event-instance/calendar-home-schedule?${searchParams.toString()}`,
+      );
+    },
   },
 
   /**
@@ -801,6 +854,20 @@ export const api = {
     removeQ: (input: QActionInput) =>
       apiRequest<AttendanceMutationResponse>(`/attendance/remove-q`, {
         method: "DELETE",
+        body: JSON.stringify(input),
+      }),
+
+    /**
+     * Assign Q and Co-Qs for an event instance.
+     * Replaces existing Q/Co-Q assignments with the provided users.
+     */
+    assignQAndCoQs: (input: {
+      eventInstanceId: number;
+      qUserId?: number;
+      coQUserIds?: number[];
+    }) =>
+      apiRequest<AttendanceMutationResponse>(`/attendance/assign-q`, {
+        method: "PUT",
         body: JSON.stringify(input),
       }),
 

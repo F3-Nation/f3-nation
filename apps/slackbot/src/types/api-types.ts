@@ -439,3 +439,55 @@ export interface PreblastEventInstanceResponse extends EventInstanceResponse {
   preblastTs?: number | null;
   location?: LocationResponse | null;
 }
+
+/**
+ * Event type info for calendar display
+ */
+export interface CalendarEventType {
+  id: number;
+  name: string;
+}
+
+/**
+ * Calendar home event from the API
+ * Includes attendance aggregation and user status
+ */
+export interface CalendarHomeEvent {
+  id: number;
+  name: string;
+  startDate: string;
+  startTime: string | null;
+  orgId: number;
+  orgName: string | null;
+  seriesId: number | null;
+  seriesName: string | null;
+  hasPreblast: boolean;
+  eventTypes: CalendarEventType[];
+  /** Comma-separated Q names, null if no Q assigned */
+  plannedQs: string | null;
+  /** Whether the current user has any planned attendance */
+  userAttending: boolean;
+  /** Whether the current user is Q or Co-Q */
+  userIsQ: boolean;
+}
+
+/**
+ * Response from calendarHomeSchedule API endpoint
+ */
+export interface CalendarHomeScheduleResponse {
+  events: CalendarHomeEvent[];
+}
+
+/**
+ * Input for calendar home schedule endpoint
+ */
+export interface CalendarHomeScheduleInput {
+  userId: number;
+  regionOrgId: number;
+  aoOrgIds?: number[];
+  startDate?: string;
+  eventTypeIds?: number[];
+  openQOnly?: boolean;
+  onlyUserEvents?: boolean;
+  limit?: number;
+}

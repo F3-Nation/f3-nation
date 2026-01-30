@@ -292,12 +292,19 @@ export const slackRouter = {
           const lastName =
             nameParts.length > 1 ? nameParts.slice(1).join(" ") : null;
 
+          // For bots or single-word names, use userName as f3Name
+          const f3Name =
+            (input.isBot ?? false) || nameParts.length === 1
+              ? input.userName
+              : null;
+
           [f3User] = await ctx.db
             .insert(schema.users)
             .values({
               email: input.email,
               firstName,
               lastName,
+              f3Name,
               avatarUrl: input.avatarUrl ?? null,
               // emailVerified is null - user hasn't verified their email
               // status defaults to 'active'

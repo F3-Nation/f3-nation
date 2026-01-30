@@ -11,7 +11,9 @@ import {
   gte,
   ilike,
   inArray,
+  isNotNull,
   isNull,
+  lte,
   or,
   schema,
   sql,
@@ -733,5 +735,305 @@ export const eventInstanceRouter = {
         .limit(input.limit);
 
       return { eventInstances: instances };
+    }),
+
+  /**
+   * Get calendar home schedule view
+   * Optimized query using CTE pattern to limit attendance table scans.
+   * Returns events with aggregated Q names and user attendance status.
+   */
+  calendarHomeSchedule: protectedProcedure
+    .input(
+      z.object({
+        userId: z.coerce.number(),
+        regionOrgId: z.coerce.number(),
+        aoOrgIds: arrayOrSingle(z.coerce.number()).optional(),
+        startDate: z.string().optional(),
+        eventTypeIds: arrayOrSingle(z.coerce.number()).optional(),
+        // Use transform instead of coerce for booleans to handle "false" string correctly
+        openQOnly: z
+          .union([z.boolean(), z.string()])
+          .transform((val) => val === true || val === "true")
+          .optional()
+          .default(false),
+        onlyUserEvents: z
+          .union([z.boolean(), z.string()])
+          .transform((val) => val === true || val === "true")
+          .optional()
+          .default(false),
+        limit: z.coerce.number().optional().default(45),
+      }),
+    )
+    .route({
+      method: "GET",
+      path: "/calendar-home-schedule",
+      tags: ["event-instance"],
+      summary: "Get calendar home schedule",
+      description:
+        "Get events for calendar home view with Q info and user attendance status",
+    })
+    .handler(async ({ context: ctx, input }) => {
+      const aoOrg = aliasedTable(schema.orgs, "ao_org");
+      const seriesEvent = aliasedTable(schema.events, "series_event");
+
+      // Get today's date if no start date provided
+      const startDate =
+        input.startDate ?? new Date().toISOString().split("T")[0]!;
+
+      // Build org filter based on whether specific AOs are selected
+      // If specific AO IDs provided, filter by those exact orgs
+      // Otherwise, filter by events where the org's parent is the region (i.e., all AOs under region)
+      const orgFilter = input.aoOrgIds?.length
+        ? inArray(schema.eventInstances.orgId, input.aoOrgIds)
+        : eq(aoOrg.parentId, input.regionOrgId);
+
+      // Build base filters for event instances
+      const baseFilters = [
+        eq(schema.eventInstances.isActive, true),
+        gte(schema.eventInstances.startDate, startDate),
+        orgFilter,
+      ];
+
+      // Add event type filter if provided
+      if (input.eventTypeIds?.length) {
+        baseFilters.push(
+          inArray(schema.eventInstancesXEventTypes.eventTypeId, input.eventTypeIds),
+        );
+      }
+
+      // Attendance type IDs: 2 = Q, 3 = Co-Q
+      const qAttendanceTypeIds = [2, 3];
+
+      // Use optimized CTE pattern when not filtering by attendance data
+      const useOptimization = !input.openQOnly && !input.onlyUserEvents;
+
+      if (useOptimization) {
+        // OPTIMIZED PATH: Use CTE to limit first, then join attendance
+        // Step 1: Get candidate event IDs (include ORDER BY columns in select for DISTINCT)
+        const candidateQuery = ctx.db
+          .selectDistinct({
+            eventId: schema.eventInstances.id,
+            startDate: schema.eventInstances.startDate,
+            startTime: schema.eventInstances.startTime,
+          })
+          .from(schema.eventInstances)
+          .leftJoin(aoOrg, eq(aoOrg.id, schema.eventInstances.orgId))
+          .leftJoin(
+            schema.eventInstancesXEventTypes,
+            eq(
+              schema.eventInstancesXEventTypes.eventInstanceId,
+              schema.eventInstances.id,
+            ),
+          )
+          .leftJoin(
+            schema.eventTypes,
+            eq(
+              schema.eventTypes.id,
+              schema.eventInstancesXEventTypes.eventTypeId,
+            ),
+          )
+          .where(and(...baseFilters))
+          .orderBy(
+            asc(schema.eventInstances.startDate),
+            asc(schema.eventInstances.startTime),
+            asc(schema.eventInstances.id),
+          )
+          .limit(input.limit);
+
+        // Execute candidate query first
+        const candidateIds = await candidateQuery;
+        const eventIds = candidateIds.map((c) => c.eventId);
+
+        if (eventIds.length === 0) {
+          return { events: [] };
+        }
+
+        // Step 2: Main query with attendance aggregation for only these IDs
+        const events = await ctx.db
+          .select({
+            id: schema.eventInstances.id,
+            name: schema.eventInstances.name,
+            startDate: schema.eventInstances.startDate,
+            startTime: schema.eventInstances.startTime,
+            orgId: schema.eventInstances.orgId,
+            orgName: aoOrg.name,
+            seriesId: schema.eventInstances.seriesId,
+            seriesName: seriesEvent.name,
+            hasPreblast: sql<boolean>`${schema.eventInstances.preblastRich} IS NOT NULL`,
+            eventTypes: sql<{ id: number; name: string }[]>`COALESCE(
+              json_agg(
+                DISTINCT jsonb_build_object(
+                  'id', ${schema.eventTypes.id},
+                  'name', ${schema.eventTypes.name}
+                )
+              )
+              FILTER (
+                WHERE ${schema.eventTypes.id} IS NOT NULL
+              ),
+              '[]'
+            )`,
+            plannedQs: sql<string | null>`(
+              SELECT string_agg(u.f3_name, ', ')
+              FROM attendance a
+              JOIN users u ON u.id = a.user_id
+              JOIN attendance_x_attendance_types axat ON axat.attendance_id = a.id
+              WHERE a.event_instance_id = ${schema.eventInstances.id}
+                AND a.is_planned = true
+                AND axat.attendance_type_id IN (2, 3)
+            )`,
+            userAttending: sql<boolean>`EXISTS(
+              SELECT 1 FROM attendance a
+              WHERE a.event_instance_id = ${schema.eventInstances.id}
+                AND a.user_id = ${input.userId}
+                AND a.is_planned = true
+            )`,
+            userIsQ: sql<boolean>`EXISTS(
+              SELECT 1 FROM attendance a
+              JOIN attendance_x_attendance_types axat ON axat.attendance_id = a.id
+              WHERE a.event_instance_id = ${schema.eventInstances.id}
+                AND a.user_id = ${input.userId}
+                AND a.is_planned = true
+                AND axat.attendance_type_id IN (2, 3)
+            )`,
+          })
+          .from(schema.eventInstances)
+          .leftJoin(aoOrg, eq(aoOrg.id, schema.eventInstances.orgId))
+          .leftJoin(
+            seriesEvent,
+            eq(seriesEvent.id, schema.eventInstances.seriesId),
+          )
+          .leftJoin(
+            schema.eventInstancesXEventTypes,
+            eq(
+              schema.eventInstancesXEventTypes.eventInstanceId,
+              schema.eventInstances.id,
+            ),
+          )
+          .leftJoin(
+            schema.eventTypes,
+            eq(
+              schema.eventTypes.id,
+              schema.eventInstancesXEventTypes.eventTypeId,
+            ),
+          )
+          .where(inArray(schema.eventInstances.id, eventIds))
+          .groupBy(
+            schema.eventInstances.id,
+            schema.eventInstances.name,
+            schema.eventInstances.startDate,
+            schema.eventInstances.startTime,
+            schema.eventInstances.orgId,
+            schema.eventInstances.seriesId,
+            aoOrg.name,
+            seriesEvent.name,
+          )
+          .orderBy(
+            asc(schema.eventInstances.startDate),
+            asc(schema.eventInstances.startTime),
+            asc(schema.eventInstances.id),
+          );
+
+        return { events };
+      } else {
+        // NON-OPTIMIZED PATH: For openQOnly or onlyUserEvents filters
+        // Must calculate attendance before applying limit
+        const events = await ctx.db
+          .select({
+            id: schema.eventInstances.id,
+            name: schema.eventInstances.name,
+            startDate: schema.eventInstances.startDate,
+            startTime: schema.eventInstances.startTime,
+            orgId: schema.eventInstances.orgId,
+            orgName: aoOrg.name,
+            seriesId: schema.eventInstances.seriesId,
+            seriesName: seriesEvent.name,
+            hasPreblast: sql<boolean>`${schema.eventInstances.preblastRich} IS NOT NULL`,
+            eventTypes: sql<{ id: number; name: string }[]>`COALESCE(
+              json_agg(
+                DISTINCT jsonb_build_object(
+                  'id', ${schema.eventTypes.id},
+                  'name', ${schema.eventTypes.name}
+                )
+              )
+              FILTER (
+                WHERE ${schema.eventTypes.id} IS NOT NULL
+              ),
+              '[]'
+            )`,
+            plannedQs: sql<string | null>`(
+              SELECT string_agg(u.f3_name, ', ')
+              FROM attendance a
+              JOIN users u ON u.id = a.user_id
+              JOIN attendance_x_attendance_types axat ON axat.attendance_id = a.id
+              WHERE a.event_instance_id = ${schema.eventInstances.id}
+                AND a.is_planned = true
+                AND axat.attendance_type_id IN (2, 3)
+            )`,
+            userAttending: sql<boolean>`EXISTS(
+              SELECT 1 FROM attendance a
+              WHERE a.event_instance_id = ${schema.eventInstances.id}
+                AND a.user_id = ${input.userId}
+                AND a.is_planned = true
+            )`,
+            userIsQ: sql<boolean>`EXISTS(
+              SELECT 1 FROM attendance a
+              JOIN attendance_x_attendance_types axat ON axat.attendance_id = a.id
+              WHERE a.event_instance_id = ${schema.eventInstances.id}
+                AND a.user_id = ${input.userId}
+                AND a.is_planned = true
+                AND axat.attendance_type_id IN (2, 3)
+            )`,
+          })
+          .from(schema.eventInstances)
+          .leftJoin(aoOrg, eq(aoOrg.id, schema.eventInstances.orgId))
+          .leftJoin(
+            seriesEvent,
+            eq(seriesEvent.id, schema.eventInstances.seriesId),
+          )
+          .leftJoin(
+            schema.eventInstancesXEventTypes,
+            eq(
+              schema.eventInstancesXEventTypes.eventInstanceId,
+              schema.eventInstances.id,
+            ),
+          )
+          .leftJoin(
+            schema.eventTypes,
+            eq(
+              schema.eventTypes.id,
+              schema.eventInstancesXEventTypes.eventTypeId,
+            ),
+          )
+          .where(and(...baseFilters))
+          .groupBy(
+            schema.eventInstances.id,
+            schema.eventInstances.name,
+            schema.eventInstances.startDate,
+            schema.eventInstances.startTime,
+            schema.eventInstances.orgId,
+            schema.eventInstances.seriesId,
+            aoOrg.name,
+            seriesEvent.name,
+          )
+          .orderBy(
+            asc(schema.eventInstances.startDate),
+            asc(schema.eventInstances.startTime),
+            asc(schema.eventInstances.id),
+          );
+
+        // Apply post-query filters
+        let filteredEvents = events;
+
+        if (input.openQOnly) {
+          filteredEvents = filteredEvents.filter((e) => !e.plannedQs);
+        }
+
+        if (input.onlyUserEvents) {
+          filteredEvents = filteredEvents.filter((e) => e.userAttending);
+        }
+
+        // Apply limit after filtering
+        return { events: filteredEvents.slice(0, input.limit) };
+      }
     }),
 };
