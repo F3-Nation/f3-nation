@@ -17,21 +17,22 @@ import type {
   NavigationMetadata,
   TypedActionArgs,
 } from "../../types/bolt-types";
-import type { CalendarHomeMetadata, CalendarHomeEventAction } from "./home-types";
+import type {
+  CalendarHomeMetadata,
+  CalendarHomeEventAction,
+} from "./home-types";
 import type { CalendarHomeBuildOptions } from "./home";
-import {
-  buildCalendarHomeModal,
-  extractFiltersFromValues,
-} from "./home";
+import { buildCalendarHomeModal, extractFiltersFromValues } from "./home";
 import { buildPreblastEditModal } from "../preblast/edit-form";
 import { buildAssignQModal } from "./assign-q";
 
 /**
  * Parse the private metadata from the modal view
  */
-function parseCalendarMetadata(
-  privateMetadata: string | undefined,
-): { navMetadata: NavigationMetadata; calendarHome: CalendarHomeMetadata } {
+function parseCalendarMetadata(privateMetadata: string | undefined): {
+  navMetadata: NavigationMetadata;
+  calendarHome: CalendarHomeMetadata;
+} {
   if (!privateMetadata) {
     return {
       navMetadata: { _navDepth: 0 },
@@ -78,7 +79,12 @@ export async function handleFilterChange(args: TypedActionArgs): Promise<void> {
   }
 
   // Get view from body - block_actions have view property
-  const bodyWithView = body as { view?: { private_metadata?: string; state?: { values?: Record<string, Record<string, unknown>> } } };
+  const bodyWithView = body as {
+    view?: {
+      private_metadata?: string;
+      state?: { values?: Record<string, Record<string, unknown>> };
+    };
+  };
   const view = bodyWithView.view;
 
   // Parse existing metadata
@@ -131,10 +137,15 @@ export async function handleEventAction(args: TypedActionArgs): Promise<void> {
   }
 
   // Extract event ID from action_id (format: "calendar-home-event_123")
-  const actionWithId = action as { action_id?: string; selected_option?: { value: string } };
+  const actionWithId = action as {
+    action_id?: string;
+    selected_option?: { value: string };
+  };
   const actionId = actionWithId.action_id ?? "";
   const eventInstanceId = parseInt(actionId.split("_")[1] ?? "0", 10);
-  const selectedAction = actionWithId.selected_option?.value as CalendarHomeEventAction | undefined;
+  const selectedAction = actionWithId.selected_option?.value as
+    | CalendarHomeEventAction
+    | undefined;
 
   if (!eventInstanceId || !selectedAction) {
     logger.warn("Invalid event action", { actionId, selectedAction });
@@ -148,7 +159,7 @@ export async function handleEventAction(args: TypedActionArgs): Promise<void> {
   });
 
   const navCtx = createNavContext({ client, body, context });
-  
+
   // Get view from body
   const bodyWithView = body as { view?: { private_metadata?: string } };
   const { calendarHome } = parseCalendarMetadata(
@@ -157,7 +168,13 @@ export async function handleEventAction(args: TypedActionArgs): Promise<void> {
 
   switch (selectedAction) {
     case "Take Q":
-      await handleTakeQ(eventInstanceId, userId, navCtx, extContext, calendarHome);
+      await handleTakeQ(
+        eventInstanceId,
+        userId,
+        navCtx,
+        extContext,
+        calendarHome,
+      );
       break;
 
     case "Edit Preblast":
@@ -177,7 +194,13 @@ export async function handleEventAction(args: TypedActionArgs): Promise<void> {
       break;
 
     case "Un-HC":
-      await handleUnHC(eventInstanceId, userId, navCtx, extContext, calendarHome);
+      await handleUnHC(
+        eventInstanceId,
+        userId,
+        navCtx,
+        extContext,
+        calendarHome,
+      );
       break;
 
     case "Assign Q":
@@ -291,10 +314,7 @@ async function handleAssignQ(
     await navigateToView(
       navCtx,
       async (navMetadata: NavigationMetadata): Promise<ModalView> => {
-        return buildAssignQModal(
-          { eventInstanceId, teamId },
-          navMetadata,
-        );
+        return buildAssignQModal({ eventInstanceId, teamId }, navMetadata);
       },
       { showLoading: true, loadingTitle: "Loading..." },
     );

@@ -44,7 +44,11 @@ function formatDateHeader(dateStr: string): string {
 function buildEventLabel(event: CalendarHomeEvent): string {
   // Build base label: either series name or AO + event types
   let label: string;
-  if (event.seriesName && event.orgName && !event.seriesName.includes(event.orgName)) {
+  if (
+    event.seriesName &&
+    event.orgName &&
+    !event.seriesName.includes(event.orgName)
+  ) {
     label = `${event.seriesName} @ ${event.orgName}`;
   } else if (event.orgName) {
     const eventTypeNames = event.eventTypes.map((t) => t.name).join(" / ");
@@ -214,7 +218,9 @@ function buildFilterBlocks(
       initial_options:
         currentFilters.eventTypeIds && eventTypeOptions.length > 0
           ? eventTypeOptions.filter((o) =>
-              currentFilters.eventTypeIds!.includes(parseInt(o.value ?? "0", 10)),
+              currentFilters.eventTypeIds!.includes(
+                parseInt(o.value ?? "0", 10),
+              ),
             )
           : undefined,
     },
@@ -275,7 +281,9 @@ function buildFilterBlocks(
       action_id: ACTIONS.CALENDAR_HOME_Q_FILTER,
       options: checkboxOptions,
       initial_options:
-        selectedCheckboxOptions.length > 0 ? selectedCheckboxOptions : undefined,
+        selectedCheckboxOptions.length > 0
+          ? selectedCheckboxOptions
+          : undefined,
     },
   });
 
@@ -377,10 +385,12 @@ export async function buildCalendarHomeModal(
   }));
 
   // Build event type options
-  const eventTypeOptions: PlainTextOption[] = eventTypesResult.eventTypes.map((et) => ({
-    text: { type: "plain_text" as const, text: et.name },
-    value: et.id.toString(),
-  }));
+  const eventTypeOptions: PlainTextOption[] = eventTypesResult.eventTypes.map(
+    (et) => ({
+      text: { type: "plain_text" as const, text: et.name },
+      value: et.id.toString(),
+    }),
+  );
 
   // Build blocks
   const blocks: ModalView["blocks"] = [
@@ -438,7 +448,9 @@ export function extractFiltersFromValues(
     | { selected_options?: { value: string }[] }
     | undefined;
   if (aoFilter?.selected_options?.length) {
-    filters.aoOrgIds = aoFilter.selected_options.map((o) => parseInt(o.value, 10));
+    filters.aoOrgIds = aoFilter.selected_options.map((o) =>
+      parseInt(o.value, 10),
+    );
   }
 
   // Event type filter
@@ -452,9 +464,9 @@ export function extractFiltersFromValues(
   }
 
   // Date filter
-  const dateFilter = values.date_filter_block?.[ACTIONS.CALENDAR_HOME_DATE_FILTER] as
-    | { selected_date?: string }
-    | undefined;
+  const dateFilter = values.date_filter_block?.[
+    ACTIONS.CALENDAR_HOME_DATE_FILTER
+  ] as { selected_date?: string } | undefined;
   if (dateFilter?.selected_date) {
     filters.startDate = dateFilter.selected_date;
   }
@@ -465,7 +477,9 @@ export function extractFiltersFromValues(
   ] as { selected_options?: { value: string }[] } | undefined;
   if (optionsFilter?.selected_options) {
     const selectedValues = optionsFilter.selected_options.map((o) => o.value);
-    filters.openQOnly = selectedValues.includes(ACTIONS.CALENDAR_HOME_FILTER_OPEN_Q);
+    filters.openQOnly = selectedValues.includes(
+      ACTIONS.CALENDAR_HOME_FILTER_OPEN_Q,
+    );
     filters.onlyUserEvents = selectedValues.includes(
       ACTIONS.CALENDAR_HOME_FILTER_MY_EVENTS,
     );

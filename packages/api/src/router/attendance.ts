@@ -529,20 +529,18 @@ export const attendanceRouter = {
 
       // Remove all existing Q/Co-Q type assignments
       if (existingQCoQAssignments.length > 0) {
-        await ctx.db
-          .delete(schema.attendanceXAttendanceTypes)
-          .where(
-            and(
-              inArray(
-                schema.attendanceXAttendanceTypes.attendanceId,
-                existingQCoQAssignments.map((a) => a.attendanceId),
-              ),
-              inArray(schema.attendanceXAttendanceTypes.attendanceTypeId, [
-                ATTENDANCE_TYPE_IDS.Q,
-                ATTENDANCE_TYPE_IDS.COQ,
-              ]),
+        await ctx.db.delete(schema.attendanceXAttendanceTypes).where(
+          and(
+            inArray(
+              schema.attendanceXAttendanceTypes.attendanceId,
+              existingQCoQAssignments.map((a) => a.attendanceId),
             ),
-          );
+            inArray(schema.attendanceXAttendanceTypes.attendanceTypeId, [
+              ATTENDANCE_TYPE_IDS.Q,
+              ATTENDANCE_TYPE_IDS.COQ,
+            ]),
+          ),
+        );
       }
 
       // Helper to ensure user has attendance record and add type
@@ -574,12 +572,13 @@ export const attendanceRouter = {
 
           if (newAttendance) {
             // Add PAX and the specific type
-            await ctx.db
-              .insert(schema.attendanceXAttendanceTypes)
-              .values([
-                { attendanceId: newAttendance.id, attendanceTypeId: ATTENDANCE_TYPE_IDS.PAX },
-                { attendanceId: newAttendance.id, attendanceTypeId: typeId },
-              ]);
+            await ctx.db.insert(schema.attendanceXAttendanceTypes).values([
+              {
+                attendanceId: newAttendance.id,
+                attendanceTypeId: ATTENDANCE_TYPE_IDS.PAX,
+              },
+              { attendanceId: newAttendance.id, attendanceTypeId: typeId },
+            ]);
           }
         }
       };

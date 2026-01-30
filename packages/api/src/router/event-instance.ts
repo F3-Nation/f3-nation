@@ -797,7 +797,10 @@ export const eventInstanceRouter = {
       // Add event type filter if provided
       if (input.eventTypeIds?.length) {
         baseFilters.push(
-          inArray(schema.eventInstancesXEventTypes.eventTypeId, input.eventTypeIds),
+          inArray(
+            schema.eventInstancesXEventTypes.eventTypeId,
+            input.eventTypeIds,
+          ),
         );
       }
 

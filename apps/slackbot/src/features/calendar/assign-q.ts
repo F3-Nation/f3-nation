@@ -203,9 +203,10 @@ export function extractAssignQValues(
 /**
  * Parse Assign Q metadata from private_metadata
  */
-export function parseAssignQMetadata(
-  privateMetadata: string | undefined,
-): { navMetadata: NavigationMetadata; assignQ?: AssignQMetadata } {
+export function parseAssignQMetadata(privateMetadata: string | undefined): {
+  navMetadata: NavigationMetadata;
+  assignQ?: AssignQMetadata;
+} {
   if (!privateMetadata) {
     return { navMetadata: { _navDepth: 0 } };
   }
