@@ -210,14 +210,14 @@ function buildActionButtons(
   }
 
   // Edit button for Q users
-  if (preblastInfo.userIsQ) {
-    buttons.push({
-      type: "button",
-      text: { type: "plain_text", text: ":pencil: Edit Preblast", emoji: true },
-      action_id: ACTIONS.EVENT_PREBLAST_EDIT,
-      value: "Edit Preblast",
-    });
-  }
+  // if (preblastInfo.userIsQ) {
+  //   buttons.push({
+  //     type: "button",
+  //     text: { type: "plain_text", text: ":pencil: Edit Preblast", emoji: true },
+  //     action_id: ACTIONS.EVENT_PREBLAST_EDIT,
+  //     value: "Edit Preblast",
+  //   });
+  // }
 
   if (buttons.length === 0) {
     return [];
