@@ -221,15 +221,16 @@ async function sendPreblast(
       icon_url: iconUrl,
     });
 
-    // Update event instance with new timestamp
+    // Update event instance with new timestamp and channel
     if (result.ts) {
       await api.eventInstance.crupdate({
         id: eventInstanceId,
         orgId: event.orgId,
         startDate: event.startDate,
+        preblastTs: parseFloat(result.ts),
         meta: {
-          ...(event.meta! ?? {}),
-          preblast_ts: parseFloat(result.ts),
+          ...(event.meta ?? {}),
+          slack_channel_id: preblastChannel,
         },
       });
     }
@@ -338,10 +339,19 @@ function buildChannelPreblastBlocks(
           ]),
       {
         type: "button" as const,
-        text: { type: "plain_text" as const, text: "HC", emoji: true },
+        text: { type: "plain_text" as const, text: "HC / Un-HC", emoji: true },
         action_id: ACTIONS.EVENT_PREBLAST_HC,
         value: String(eventInstanceId),
-        style: "primary" as const,
+      },
+      {
+        type: "button" as const,
+        text: {
+          type: "plain_text" as const,
+          text: ":pencil2: Edit Preblast",
+          emoji: true,
+        },
+        action_id: ACTIONS.EVENT_PREBLAST_EDIT,
+        value: String(eventInstanceId),
       },
       {
         type: "button" as const,
@@ -392,6 +402,13 @@ export async function handlePreblastFormSubmit(
   // Extract form values
   const formValues = extractFormValues(body);
 
+  logger.info("Preblast form values extracted", {
+    title: formValues.title,
+    locationId: formValues.locationId,
+    startTime: formValues.startTime,
+    eventInstanceId,
+  });
+
   // Determine if we should send the preblast
   const existingPreblastTs =
     metadata.preblastTs && metadata.preblastTs !== "null";
@@ -423,11 +440,8 @@ export async function handlePreblastFormSubmit(
       startTime: normalizeTimeForStorage(formValues.startTime),
       orgId: currentEvent.orgId,
       startDate: currentEvent.startDate,
-      meta: {
-        ...(currentEvent.meta! ?? {}),
-        preblast_rich: formValues.moleskine,
-        preblast: preblastPlainText,
-      },
+      preblastRich: formValues.moleskine,
+      preblast: preblastPlainText,
     });
 
     // Update event tag
@@ -573,7 +587,7 @@ export async function handlePreblastAction(
         break;
 
       case ACTIONS.EVENT_PREBLAST_EDIT:
-        // Will be handled by modal refresh below
+        // Will be handled by modal open/refresh below
         break;
 
       default:
@@ -586,6 +600,32 @@ export async function handlePreblastAction(
       eventInstanceId,
       error,
     });
+    return;
+  }
+
+  // Handle Edit Preblast action - open modal if not already in a view context
+  if (actionId === ACTIONS.EVENT_PREBLAST_EDIT && !bodyWithView.view) {
+    // Opening from a channel message, need to open a new modal
+    const modal = await buildPreblastEditModal(
+      eventInstanceId,
+      currentUserId,
+      teamId,
+      { navDepth: 0 },
+      extContext.orgSettings ?? null,
+      extContext.orgId ?? 0,
+      "Edit Preblast",
+    );
+
+    if (modal) {
+      try {
+        await (args as TypedActionArgs).client.views.open({
+          trigger_id: body.trigger_id!,
+          view: modal,
+        });
+      } catch (error) {
+        logger.error("Failed to open preblast edit modal", { error });
+      }
+    }
     return;
   }
 

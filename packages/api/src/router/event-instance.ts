@@ -211,7 +211,11 @@ export const eventInstanceRouter = {
           paxCount: schema.eventInstances.paxCount,
           fngCount: schema.eventInstances.fngCount,
           preblast: schema.eventInstances.preblast,
+          preblastRich: schema.eventInstances.preblastRich,
+          preblastTs: schema.eventInstances.preblastTs,
           backblast: schema.eventInstances.backblast,
+          backblastRich: schema.eventInstances.backblastRich,
+          backblastTs: schema.eventInstances.backblastTs,
           org: sql<{
             id: number;
             name: string;
@@ -253,6 +257,21 @@ export const eventInstanceRouter = {
             ),
             '[]'
           )`,
+          location: sql<{
+            id: number;
+            locationName: string | null;
+            latitude: number | null;
+            longitude: number | null;
+          } | null>`
+            CASE WHEN ${schema.locations.id} IS NOT NULL THEN
+              jsonb_build_object(
+                'id', ${schema.locations.id},
+                'locationName', ${schema.locations.name},
+                'latitude', ${schema.locations.latitude},
+                'longitude', ${schema.locations.longitude}
+              )
+            ELSE NULL END
+          `,
         })
         .from(schema.eventInstances)
         .leftJoin(
@@ -261,6 +280,10 @@ export const eventInstanceRouter = {
             eq(aoOrg.orgType, "ao"),
             eq(aoOrg.id, schema.eventInstances.orgId),
           ),
+        )
+        .leftJoin(
+          schema.locations,
+          eq(schema.locations.id, schema.eventInstances.locationId),
         )
         .leftJoin(
           schema.eventInstancesXEventTypes,
@@ -293,6 +316,10 @@ export const eventInstanceRouter = {
           aoOrg.id,
           aoOrg.name,
           sql`${aoOrg.meta}::text`,
+          schema.locations.id,
+          schema.locations.name,
+          schema.locations.latitude,
+          schema.locations.longitude,
         );
 
       return instance ?? null;
@@ -317,6 +344,9 @@ export const eventInstanceRouter = {
         isPrivate: z.boolean().optional().default(false),
         eventTypeId: z.coerce.number().optional(),
         eventTagId: z.coerce.number().optional(),
+        preblast: z.string().nullish(),
+        preblastRich: z.record(z.unknown()).nullish(),
+        preblastTs: z.number().nullish(),
       }),
     )
     .route({
@@ -340,30 +370,53 @@ export const eventInstanceRouter = {
         });
       }
 
-      // Generate a default name if not provided
+      // Generate a default name if not provided or empty
       let name = input.name;
-      if (!name) {
-        // Get AO name
-        const [ao] = await ctx.db
-          .select({ name: schema.orgs.name })
-          .from(schema.orgs)
-          .where(eq(schema.orgs.id, input.orgId));
-        const aoName = ao?.name ?? "Workout";
-
-        // Get event type name if provided
-        let eventTypeName = "Event";
-        if (input.eventTypeId) {
-          const [eventType] = await ctx.db
-            .select({ name: schema.eventTypes.name })
-            .from(schema.eventTypes)
-            .where(eq(schema.eventTypes.id, input.eventTypeId));
-          eventTypeName = eventType?.name ?? "Event";
+      if (!name || name.trim() === "") {
+        // If updating an existing record, preserve the existing name
+        if (input.id) {
+          const [existing] = await ctx.db
+            .select({ name: schema.eventInstances.name })
+            .from(schema.eventInstances)
+            .where(eq(schema.eventInstances.id, input.id));
+          if (existing?.name) {
+            name = existing.name;
+          }
         }
 
-        name = `${aoName} - ${eventTypeName}`;
+        // If still no name (new record or existing had no name), generate default
+        if (!name || name.trim() === "") {
+          // Get AO name
+          const [ao] = await ctx.db
+            .select({ name: schema.orgs.name })
+            .from(schema.orgs)
+            .where(eq(schema.orgs.id, input.orgId));
+          const aoName = ao?.name ?? "Workout";
+
+          // Get event type name if provided
+          let eventTypeName = "Event";
+          if (input.eventTypeId) {
+            const [eventType] = await ctx.db
+              .select({ name: schema.eventTypes.name })
+              .from(schema.eventTypes)
+              .where(eq(schema.eventTypes.id, input.eventTypeId));
+            eventTypeName = eventType?.name ?? "Event";
+          }
+
+          name = `${aoName} - ${eventTypeName}`;
+        }
       }
 
       const { eventTypeId, eventTagId, name: _inputName, ...eventData } = input;
+
+      console.log(
+        "crupdate eventInstance - name:",
+        name,
+        "input.name:",
+        input.name,
+        "eventData:",
+        JSON.stringify(eventData),
+      );
 
       // Create or update the event instance
       const [result] = await ctx.db
@@ -377,6 +430,8 @@ export const eventInstanceRouter = {
           set: { ...eventData, name },
         })
         .returning();
+
+      console.log("crupdate eventInstance - result name:", result?.name);
 
       if (!result) {
         throw new ORPCError("INTERNAL_SERVER_ERROR", {
