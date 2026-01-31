@@ -217,16 +217,16 @@ export const eventTypeRouter = {
         });
       }
 
-      const orgIdForPermissionCheck = existingEventType?.specificOrgId
-        ? // If this is editting a specific org's event type, then they need those permissinos
-          existingEventType.specificOrgId
+      // Determine which org to check permissions against
+      // If setting specificOrgId to null (nation-wide), always require nation permission
+      const isSettingToNationWide = !input.specificOrgId;
+      const orgIdForPermissionCheck = isSettingToNationWide
+        ? nationOrg.id
         : existingEventType
-          ? // If this is a new event type for the nation, then they need to be an editor for the nation org
-            nationOrg.id
-          : // If this is a new event type in a specific org then they need to be an editor of that org
-            input.specificOrgId ??
-            // Otherwise they need to be an editor of the nation
-            nationOrg.id;
+          ? // Updating existing: need permission on the existing org (or nation if already nation-wide)
+            existingEventType.specificOrgId ?? nationOrg.id
+          : // Creating new: need permission on the target org (fallback to nation for type safety)
+            input.specificOrgId ?? nationOrg.id;
 
       const roleCheckResult = await checkHasRoleOnOrg({
         orgId: orgIdForPermissionCheck,
@@ -236,9 +236,8 @@ export const eventTypeRouter = {
       });
 
       if (!roleCheckResult.success) {
-        // Provide a more helpful error message when trying to create a nation-wide event type without permission
-        const isCreatingNationWideEventType = !input.id && !input.specificOrgId;
-        const message = isCreatingNationWideEventType
+        // Provide a more helpful error message when trying to create/update to nation-wide without permission
+        const message = isSettingToNationWide
           ? "You must select a Specific Org. Only nation admins can create event types for all of F3 Nation."
           : `You are not authorized to ${input.id ? "update" : "add"} this Event Type`;
 
