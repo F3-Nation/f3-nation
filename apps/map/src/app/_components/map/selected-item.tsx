@@ -19,8 +19,8 @@ import { EventChip } from "./event-chip";
 
 export const SelectedItem = (props: {
   device: "mobile" | "desktop";
-  selectedLocation: F3Marker["location"];
-  selectedEvent: F3Marker["location"]["events"][number];
+  selectedLocation: NonNullable<F3Marker["location"]>;
+  selectedEvent: NonNullable<F3Marker["location"]>["events"][number];
   hideCloseButton?: boolean;
 }) => {
   RERENDER_LOGS && console.log("SelectedItem rerender");

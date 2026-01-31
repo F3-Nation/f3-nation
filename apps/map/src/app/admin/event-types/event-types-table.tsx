@@ -24,7 +24,7 @@ import { EventTypeIsActiveFilter } from "./event-type-is-active-filter";
 import { OrgFilter } from "./org-filter";
 import { ResetFilter } from "../_components/reset-filter";
 
-type Org = RouterOutputs["org"]["all"]["orgs"][number];
+type Org = RouterOutputs["org"]["accessible"]["orgs"][number];
 
 export const EventTypesTable = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -38,24 +38,35 @@ export const EventTypesTable = () => {
     pageSize: 20,
   });
 
-  const { data: eventTypes } = useQuery(
-    orpc.eventType.all.queryOptions({
+  // Get user's accessible orgs (all orgs if nation admin, otherwise assigned orgs)
+  const { data: accessibleOrgs } = useQuery(orpc.org.accessible.queryOptions());
+
+  // Use selectedOrgs if manually selected, otherwise use user's accessible orgIds
+  const orgIdsToUse =
+    selectedOrgs.length > 0
+      ? selectedOrgs.map((org) => org.id)
+      : accessibleOrgs?.orgs.map((org) => org.id) ?? [];
+
+  const { data: eventTypes } = useQuery({
+    ...orpc.eventType.all.queryOptions({
       input: {
-        orgIds: selectedOrgs.map((org) => org.id),
+        orgIds: orgIdsToUse,
         statuses: selectedStatuses,
         searchTerm: debouncedSearchTerm,
         pageSize: pagination.pageSize,
         pageIndex: pagination.pageIndex,
-        ignoreNationEventTypes: true,
+        ignoreNationEventTypes: false,
         sorting: sorting,
       },
     }),
-  );
+    // Wait for accessibleOrgs to load before running query
+    enabled: accessibleOrgs !== undefined,
+  });
 
   const handleOrgSelect = (org: Org) => {
     setSelectedOrgs((prev) => {
-      if (prev.includes(org)) {
-        return prev.filter((s) => s !== org);
+      if (prev.some((s) => s.id === org.id)) {
+        return prev.filter((s) => s.id !== org.id);
       } else {
         return [...prev, org];
       }

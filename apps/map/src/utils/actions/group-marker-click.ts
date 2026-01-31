@@ -18,15 +18,15 @@ export const groupMarkerClick = async ({
   const isAlreadySelected =
     selectedItemStore.get("locationId") === locationId &&
     selectedItemStore.get("eventId") === eventId;
-  const location = await orpc.map.location.locationWorkout.call({
+  const result = await orpc.map.location.locationWorkout.call({
     locationId,
   });
-  if (!location) return;
+  if (!result?.location) return;
 
   const modifiedLocation = mapStore.get("modifiedLocationMarkers")[locationId];
 
-  const lat = modifiedLocation?.lat ?? location.location.lat;
-  const lon = modifiedLocation?.lng ?? location.location.lon;
+  const lat = modifiedLocation?.lat ?? result.location.lat;
+  const lon = modifiedLocation?.lng ?? result.location.lon;
   if (lat === null || lon === null) return;
 
   setSelectedItem({

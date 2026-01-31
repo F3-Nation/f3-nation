@@ -15,7 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@acme/ui/popover";
 import type { RouterOutputs } from "~/orpc/types";
 import { orpc, useQuery } from "~/orpc/react";
 
-type Org = RouterOutputs["org"]["all"]["orgs"][number];
+type Org = RouterOutputs["org"]["accessible"]["orgs"][number];
 
 export const OrgFilter = ({
   onOrgSelect,
@@ -24,11 +24,13 @@ export const OrgFilter = ({
   onOrgSelect: (org: Org) => void;
   selectedOrgs: Org[];
 }) => {
-  const { data: orgs } = useQuery(
-    orpc.org.all.queryOptions({
+  const { data: accessibleOrgs } = useQuery(
+    orpc.org.accessible.queryOptions({
       input: { orgTypes: ["area", "sector", "region", "nation"] },
     }),
   );
+
+  const orgs = accessibleOrgs?.orgs;
   const [open, setOpen] = useState(false);
 
   return (
@@ -52,7 +54,7 @@ export const OrgFilter = ({
             <CommandInput placeholder="Search statuses..." />
             <CommandEmpty>No statuses found.</CommandEmpty>
             <CommandGroup className="max-h-96 overflow-y-auto">
-              {orgs?.orgs.map((org) => (
+              {orgs?.map((org) => (
                 <CommandItem
                   key={org.id}
                   value={org.name}
@@ -63,7 +65,9 @@ export const OrgFilter = ({
                   <Check
                     className={cn(
                       "mr-2 h-4 w-4",
-                      selectedOrgs.includes(org) ? "opacity-100" : "opacity-0",
+                      selectedOrgs.some((selected) => selected.id === org.id)
+                        ? "opacity-100"
+                        : "opacity-0",
                     )}
                   />
                   {org.name}
