@@ -236,9 +236,13 @@ export const eventTypeRouter = {
       });
 
       if (!roleCheckResult.success) {
-        throw new ORPCError("UNAUTHORIZED", {
-          message: "You are not authorized to update this Event Type",
-        });
+        // Provide a more helpful error message when trying to create a nation-wide event type without permission
+        const isCreatingNationWideEventType = !input.id && !input.specificOrgId;
+        const message = isCreatingNationWideEventType
+          ? "You must select a Specific Org. Only nation admins can create event types for all of F3 Nation."
+          : `You are not authorized to ${input.id ? "update" : "add"} this Event Type`;
+
+        throw new ORPCError("UNAUTHORIZED", { message });
       }
       const eventTypeData: InferInsertModel<typeof schema.eventTypes> = {
         ...input,
