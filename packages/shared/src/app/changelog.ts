@@ -10,6 +10,19 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: "3.6.3",
+    date: "2026-01-31",
+    title: "Developer Tooling",
+    sections: [
+      {
+        title: "Development",
+        items: [
+          "Added f3-git-workflow skill for consistent branching and merging",
+        ],
+      },
+    ],
+  },
+  {
     version: "3.6.2",
     date: "2026-01-31",
     title: "Admin UX & Access Improvements",
