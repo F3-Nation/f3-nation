@@ -1,4 +1,5 @@
 import { and, eq, schema } from "@acme/db";
+import { ERRORS } from "@acme/shared/app/errors";
 import { isValidEmail } from "@acme/shared/app/functions";
 import { CrupdateUserSchema } from "@acme/validators";
 import { ORPCError } from "@orpc/server";
@@ -381,8 +382,7 @@ export const userRouter = {
         });
         if (!success) {
           throw new ORPCError("UNAUTHORIZED", {
-            message:
-              "You must be an admin on this organization to grant roles to users",
+            message: ERRORS.MUST_BE_ADMIN_TO_GRANT_ROLES,
           });
         }
       }
@@ -406,8 +406,7 @@ export const userRouter = {
         });
         if (!success) {
           throw new ORPCError("UNAUTHORIZED", {
-            message:
-              "You must be an admin on this organization to remove roles from users",
+            message: ERRORS.MUST_BE_ADMIN_TO_REMOVE_ROLES,
           });
         }
 

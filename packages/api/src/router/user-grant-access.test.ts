@@ -9,6 +9,7 @@
 import type { Session } from "@acme/auth";
 import { eq, schema } from "@acme/db";
 import { db } from "@acme/db/client";
+import { ERRORS } from "@acme/shared/app/errors";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanup,
@@ -603,7 +604,7 @@ describe("User Router - Grant Access", () => {
           id: user.id,
           roles: [{ orgId: regionB.id, roleName: "editor" }],
         }),
-      ).rejects.toThrow("You do not have permission to give this role");
+      ).rejects.toThrow(ERRORS.MUST_BE_ADMIN_TO_GRANT_ROLES);
 
       // Cleanup
       await cleanup.user(user.id);
