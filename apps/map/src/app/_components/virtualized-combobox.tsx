@@ -39,6 +39,7 @@ interface VirtualizedCommandProps<T> {
   selectedOptions: string[];
   onSelectOption?: (option: string) => void;
   onClear?: () => void;
+  hideClearButton?: boolean;
 }
 
 const VirtualizedCommand = <T,>({
@@ -48,6 +49,7 @@ const VirtualizedCommand = <T,>({
   selectedOptions,
   onSelectOption,
   onClear,
+  hideClearButton,
 }: VirtualizedCommandProps<T>) => {
   const [filteredOptions, setFilteredOptions] = useState<Option<T>[]>(options);
   const parentRef = useRef(null);
@@ -156,11 +158,13 @@ const VirtualizedCommand = <T,>({
         </div>
       </CommandGroup>
       <CommandSeparator />
-      <div className="flex justify-end px-4 py-2">
-        <Button type="button" onClick={onClear} variant="ghost">
-          Clear
-        </Button>
-      </div>
+      {hideClearButton ? null : (
+        <div className="flex justify-end px-4 py-2">
+          <Button type="button" onClick={onClear} variant="ghost">
+            Clear
+          </Button>
+        </div>
+      )}
     </Command>
   );
 };
@@ -176,9 +180,11 @@ interface VirtualizedComboboxProps<T> {
   isMulti?: boolean;
   className?: string;
   popoverContentAlign?: "start" | "center" | "end";
+  hideClearButton?: boolean;
 }
 
 export function VirtualizedCombobox<T>({
+  hideClearButton,
   value,
   options,
   label,
@@ -292,6 +298,7 @@ export function VirtualizedCombobox<T>({
           placeholder={searchPlaceholder ?? "Search"}
           selectedOptions={selectedOptions}
           onSelectOption={handleSelect}
+          hideClearButton={hideClearButton}
           onClear={() => {
             console.log("onClear");
             setSelectedOptions([]);

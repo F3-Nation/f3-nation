@@ -1,7 +1,7 @@
 import type { JWT } from "next-auth";
+import { getToken } from "next-auth/jwt";
 import type { NextFetchEvent, NextMiddleware, NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { getToken } from "next-auth/jwt";
 
 import { env } from "@acme/env";
 import { ADMIN_PATHS, routes } from "@acme/shared/app/constants";
@@ -41,7 +41,10 @@ const withAdmin: MiddlewareFactory = (next: NextMiddleware) => {
 
     if (!isAdmin) {
       return NextResponse.redirect(
-        new URL(`${routes.auth.signIn.__path}?reason=not-admin`, request.url),
+        new URL(
+          `${routes.admin.noAccess.__path}?reason=not-admin`,
+          request.url,
+        ),
       );
     }
 

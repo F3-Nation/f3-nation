@@ -25,11 +25,12 @@ export interface SparseF3Marker {
   }[];
 }
 
-export type LocationMarkerEventWithLatLon =
-  F3Marker["location"]["events"][number] & {
-    lat: number;
-    lon: number;
-  };
+export type LocationMarkerEventWithLatLon = NonNullable<
+  F3Marker["location"]
+>["events"][number] & {
+  lat: number;
+  lon: number;
+};
 
 // export type F3MapSearchResultItem =
 //   RouterOutputs["location"]["getAllLocationMarkers"][number]["events"][number] & {

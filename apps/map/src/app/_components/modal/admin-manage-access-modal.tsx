@@ -60,14 +60,25 @@ export default function AdminManageAccessModal({
   });
   const [isCreatingNew, setIsCreatingNew] = useState(false);
 
-  const { data: orgs, isLoading: isLoadingOrgs } = useQuery(
-    orpc.org.all.queryOptions({
+  // Get orgs where user has admin role (required to manage access)
+  const { data: accessibleOrgsData, isLoading: isLoadingOrgs } = useQuery(
+    orpc.org.accessible.queryOptions({
       input: {
         orgTypes: ["region", "area", "sector", "nation"],
-        onlyMine: true,
       },
     }),
   );
+
+  // Filter to only orgs where user is admin (or all orgs if nation admin - roles will be empty)
+  const orgs = useMemo(() => {
+    if (!accessibleOrgsData?.orgs) return { orgs: [] };
+    const adminOrgs = accessibleOrgsData.orgs.filter(
+      (org) =>
+        // Nation admins get empty roles array but can manage all orgs
+        org.roles.length === 0 || org.roles.includes("admin"),
+    );
+    return { orgs: adminOrgs };
+  }, [accessibleOrgsData]);
 
   const form = useForm({
     schema: CrupdateUserSchema,
@@ -667,7 +678,10 @@ export default function AdminManageAccessModal({
                             const adminOrgIds = new Set(
                               orgs?.orgs.map((org) => org.id) ?? [],
                             );
-                            const hasAccess = adminOrgIds.has(roleEntry.orgId);
+                            const isNewRole = roleEntry.orgId === -1;
+                            const hasAccess =
+                              isNewRole || adminOrgIds.has(roleEntry.orgId);
+
                             // Get org name from user's roles (API includes orgName)
                             const userRole = userByIdData?.user?.roles?.find(
                               (r) => r.orgId === roleEntry.orgId,

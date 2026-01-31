@@ -1,4 +1,4 @@
-import { ORPCError, os } from "@orpc/server";
+import { os } from "@orpc/server";
 import omit from "lodash/omit";
 import { z } from "zod";
 
@@ -290,10 +290,13 @@ export const mapLocationRouter = os.router({
       const location = results[0]?.location;
       const events = results.map((r) => r.event);
 
+      // Return a message instead of throwing so the client can show a friendly
+      // "deleted/unavailable" panel without crashing into an error state.
       if (location?.lat == null || location?.lon == null) {
-        throw new ORPCError("NOT_FOUND", {
-          message: `Lat lng not found for location id: ${input.locationId}`,
-        });
+        return {
+          location: null,
+          message: `Lat/lng not found for location id: ${input.locationId}`,
+        };
       }
 
       const locationWithEvents = {

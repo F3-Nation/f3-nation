@@ -25,9 +25,10 @@ export const WorkoutDetailsModal = ({
       enabled: locationId >= 0,
     }),
   );
+  const location = results?.location;
   const modalEventId =
-    results?.location.events.find((e) => e.id === selectedEventId)?.id ??
-    results?.location.events[0]?.id ??
+    location?.events.find((e) => e.id === selectedEventId)?.id ??
+    location?.events[0]?.id ??
     null;
   const width = useWindowWidth();
   const isLarge = width > Number(BreakPoints.LG);

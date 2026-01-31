@@ -1,4 +1,5 @@
 import { and, eq, schema } from "@acme/db";
+import { ERRORS } from "@acme/shared/app/errors";
 import { isValidEmail } from "@acme/shared/app/functions";
 import { CrupdateUserSchema } from "@acme/validators";
 import { ORPCError } from "@orpc/server";
@@ -381,11 +382,8 @@ export const userRouter = {
         });
         if (!success) {
           throw new ORPCError("UNAUTHORIZED", {
-            message:
-              "You do not have permission to give this role to this user",
+            message: ERRORS.MUST_BE_ADMIN_TO_GRANT_ROLES,
           });
-        } else {
-          console.log("User has role", success);
         }
       }
 
@@ -408,11 +406,8 @@ export const userRouter = {
         });
         if (!success) {
           throw new ORPCError("UNAUTHORIZED", {
-            message:
-              "You do not have permission to remove this role from this user",
+            message: ERRORS.MUST_BE_ADMIN_TO_REMOVE_ROLES,
           });
-        } else {
-          console.log("User has role", success);
         }
 
         await ctx.db

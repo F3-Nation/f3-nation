@@ -10,6 +10,52 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: "3.6.3",
+    date: "2026-01-31",
+    title: "Developer Tooling",
+    sections: [
+      {
+        title: "Development",
+        items: [
+          "Added f3-git-workflow skill for consistent branching and merging",
+        ],
+      },
+    ],
+  },
+  {
+    version: "3.6.2",
+    date: "2026-01-31",
+    title: "Admin UX & Access Improvements",
+    sections: [
+      {
+        title: "Admin Portal",
+        items: [
+          "Manage Access modal now only shows organizations where you are an admin",
+          "Improved permission denied page - shows clear message and troubleshooting guide",
+          "Event types now filter by your accessible orgs",
+          "Better error messages when creating event types or managing roles without required permissions",
+          "Events without locations now appear in admin event lists",
+        ],
+      },
+      {
+        title: "Map Improvements",
+        items: [
+          "Fixed AM/PM filter toggle - toggling one no longer affects the other",
+          "Added DeletedWorkoutWarning for handling unavailable events gracefully",
+          "Optimized map.event endpoints for faster filtering queries",
+        ],
+      },
+      {
+        title: "Backend",
+        items: [
+          "New org.accessible endpoint for getting user's accessible organizations",
+          "Shared error constants for consistent error messaging",
+          "Type safety improvements for nullable location handling",
+        ],
+      },
+    ],
+  },
+  {
     version: "3.5.3",
     date: "2026-01-25",
     title: "API Enhancements, Webhooks & Admin Tools",

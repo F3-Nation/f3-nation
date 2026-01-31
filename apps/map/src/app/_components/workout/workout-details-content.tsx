@@ -27,6 +27,7 @@ import { ContactLinks } from "../contact-links";
 import { ImageWithFallback } from "../image-with-fallback";
 import { EventChip } from "../map/event-chip";
 import { WorkoutDetailsSkeleton } from "../modal/workout-details-skeleton";
+import { DeletedWorkoutWarning } from "./deleted-workout-warning";
 
 export interface WorkoutDetailsContentProps {
   locationId: number;
@@ -50,7 +51,7 @@ export const WorkoutDetailsContent = ({
 
   const selectedEventId = useMemo(() => {
     if (providedEventId) return providedEventId;
-    return results?.location.events?.[0]?.id ?? null;
+    return results?.location?.events?.[0]?.id ?? null;
   }, [providedEventId, results]);
 
   const { data: canDeleteEventResponse } = useQuery(
@@ -66,10 +67,10 @@ export const WorkoutDetailsContent = ({
   const event = useMemo(
     () =>
       // Dont provide a fallback. This is indicative of worse problems
-      results?.location.events.find((event) => event.id === selectedEventId),
+      results?.location?.events?.find((event) => event.id === selectedEventId),
     [selectedEventId, results],
   );
-  const location = useMemo(() => results?.location, [results]);
+  const location = useMemo(() => results?.location ?? null, [results]);
 
   // Update the search params when the panel is open
   useUpdateEventSearchParams(location?.id ?? null, selectedEventId);
@@ -207,8 +208,18 @@ export const WorkoutDetailsContent = ({
     [location, regionContact, hasRegionContact],
   );
 
-  if (!location || !event || isLoading) {
+  if (isLoading) {
     return <WorkoutDetailsSkeleton />;
+  }
+  if (!location) {
+    return (
+      <DeletedWorkoutWarning
+        text={results?.message ?? "Location not found or unavailable."}
+      />
+    );
+  }
+  if (!event) {
+    return <DeletedWorkoutWarning text="Event is unavailable." />;
   }
 
   return (
@@ -264,35 +275,34 @@ export const WorkoutDetailsContent = ({
       ) : null}
 
       <div>
-        {(results?.location.events.length ?? 0) > 1 ? (
+        {(location?.events.length ?? 0) > 1 ? (
           <span className="text-sm">
-            There are {results?.location.events.length} workouts at this
-            location
+            There are {location?.events.length} workouts at this location
           </span>
         ) : (
           <div className="h-1" />
         )}
         <div className="flex flex-row flex-wrap gap-1">
-          {results?.location.events.map((event) => (
+          {location?.events.map((event) => (
             <EventChip
               key={event.id}
               selected={selectedEventId === event.id}
               event={{
                 id: event.id,
                 name: event.name,
-                locationId: results.location.id,
+                locationId: location?.id ?? 0,
                 dayOfWeek: event.dayOfWeek,
                 startTime: event.startTime,
                 endTime: event.endTime,
                 eventTypes: event.eventTypes,
               }}
               location={{
-                lat: results.location.lat,
-                lon: results.location.lon,
-                id: results.location.id,
+                lat: location?.lat ?? null,
+                lon: location?.lon ?? null,
+                id: location?.id ?? 0,
               }}
               size={chipSize}
-              hideName={results.location.events.length === 1}
+              hideName={(location?.events.length ?? 0) === 1}
             />
           ))}
           {mode === "edit" ? (
@@ -463,16 +473,16 @@ export const WorkoutDetailsContent = ({
                   if (location.regionId == null) {
                     return;
                   }
-                  if (!results?.location.regionId || !selectedEventId) return;
+                  if (!location.regionId || !selectedEventId) return;
 
-                  const event = results.location.events.find(
+                  const event = location.events.find(
                     (e) => e.id === selectedEventId,
                   );
                   if (!event) return;
 
                   void orpc.request.submitDeleteRequest
                     .call({
-                      regionId: results.location.regionId,
+                      regionId: location.regionId,
                       eventId: event.id,
                       eventName: event.name,
                       submittedBy: session?.user?.email ?? "",

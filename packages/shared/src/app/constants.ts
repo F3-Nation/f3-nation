@@ -208,7 +208,7 @@ export const routes = {
       __auth: "admin",
     },
     noAccess: {
-      __path: "/no-access",
+      __path: "/admin/no-access",
       __auth: "none",
     },
   },
