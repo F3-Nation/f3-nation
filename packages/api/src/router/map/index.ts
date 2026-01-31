@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { MailService, Templates } from "@acme/mail";
 import { protectedProcedure } from "../../shared";
+import { mapEventRouter } from "./event";
 import { mapLocationRouter } from "./location";
 
 export const feedbackSchema = z.object({
@@ -13,6 +14,7 @@ export const feedbackSchema = z.object({
 });
 
 export const mapRouter = os.router({
+  event: os.prefix("/event").router(mapEventRouter),
   location: os.prefix("/location").router(mapLocationRouter),
 
   submitFeedback: protectedProcedure
