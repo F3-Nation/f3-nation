@@ -382,10 +382,8 @@ export const userRouter = {
         if (!success) {
           throw new ORPCError("UNAUTHORIZED", {
             message:
-              "You do not have permission to give this role to this user",
+              "You must be an admin on this organization to grant roles to users",
           });
-        } else {
-          console.log("User has role", success);
         }
       }
 
@@ -409,10 +407,8 @@ export const userRouter = {
         if (!success) {
           throw new ORPCError("UNAUTHORIZED", {
             message:
-              "You do not have permission to remove this role from this user",
+              "You must be an admin on this organization to remove roles from users",
           });
-        } else {
-          console.log("User has role", success);
         }
 
         await ctx.db
