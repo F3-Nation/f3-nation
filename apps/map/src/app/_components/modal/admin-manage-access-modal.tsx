@@ -667,7 +667,10 @@ export default function AdminManageAccessModal({
                             const adminOrgIds = new Set(
                               orgs?.orgs.map((org) => org.id) ?? [],
                             );
-                            const hasAccess = adminOrgIds.has(roleEntry.orgId);
+                            const isNewRole = roleEntry.orgId === -1;
+                            const hasAccess =
+                              isNewRole || adminOrgIds.has(roleEntry.orgId);
+
                             // Get org name from user's roles (API includes orgName)
                             const userRole = userByIdData?.user?.roles?.find(
                               (r) => r.orgId === roleEntry.orgId,

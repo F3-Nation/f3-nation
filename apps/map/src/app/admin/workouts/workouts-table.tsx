@@ -1,9 +1,9 @@
 "use client";
 
-import type { SortingState, TableOptions } from "@tanstack/react-table";
-import { useState } from "react";
-import { Check, Filter, X } from "lucide-react";
 import { DotsHorizontalIcon } from "@radix-ui/react-icons";
+import type { SortingState, TableOptions } from "@tanstack/react-table";
+import { Check, Filter, X } from "lucide-react";
+import { useState } from "react";
 
 import { IsActiveStatus } from "@acme/shared/app/enums";
 import { dayOfWeekToShortDayOfWeek } from "@acme/shared/app/functions";
@@ -27,8 +27,8 @@ import { MDTable, usePagination } from "@acme/ui/md-table";
 import { Popover, PopoverContent, PopoverTrigger } from "@acme/ui/popover";
 import { Cell, Header } from "@acme/ui/table";
 
-import type { RouterOutputs } from "~/orpc/types";
 import { orpc, useQuery } from "~/orpc/react";
+import type { RouterOutputs } from "~/orpc/types";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
 import { AOSFilter } from "../_components/ao-filter";
 import { RegionFilter } from "../_components/region-filter";
@@ -108,9 +108,9 @@ export const WorkoutsTable = () => {
   );
 };
 
-const columns: TableOptions<
-  RouterOutputs["event"]["all"]["events"][number]
->["columns"] = [
+type WorkoutEvent = RouterOutputs["event"]["all"]["events"][number];
+
+const columns: TableOptions<WorkoutEvent>["columns"] = [
   {
     accessorKey: "name",
     meta: { name: "Event Name" },
@@ -123,9 +123,11 @@ const columns: TableOptions<
     header: Header,
     cell: (cell) => (
       <Cell {...cell}>
-        {cell.row.original.regions
-          .map((region) => region.regionName)
-          .join(", ")}
+        {Array.isArray(cell.row.original.regions)
+          ? cell.row.original.regions
+              .map((region: { regionName: string }) => region.regionName)
+              .join(", ")
+          : ""}
       </Cell>
     ),
   },
@@ -136,7 +138,9 @@ const columns: TableOptions<
     cell: (cell) => (
       <Cell {...cell}>
         {/* {cell.row.original.parents.map((ao) => ao.aoName).join(", ")} */}
-        {cell.row.original.parent}
+        {typeof cell.row.original.parent === "string"
+          ? cell.row.original.parent
+          : ""}
       </Cell>
     ),
   },
