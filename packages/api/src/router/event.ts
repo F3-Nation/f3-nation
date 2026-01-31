@@ -146,37 +146,40 @@ function buildEventWhereClause(params: {
 function buildEventBaseQuery(params: { db: AppDb; where: SQL | undefined }) {
   const { db, where } = params;
 
-  return db
-    .select({ count: countDistinct(schema.events.id) })
-    .from(schema.events)
-    .innerJoin(
-      schema.locations,
-      eq(schema.locations.id, schema.events.locationId),
-    )
-    .leftJoin(
-      parentOrg,
-      and(eq(parentOrg.orgType, "ao"), eq(parentOrg.id, schema.events.orgId)),
-    )
-    .leftJoin(
-      regionOrg,
-      and(
-        eq(regionOrg.orgType, "region"),
-        or(
-          eq(regionOrg.id, schema.locations.orgId),
-          eq(regionOrg.id, schema.events.orgId),
-          eq(regionOrg.id, parentOrg.parentId),
+  return (
+    db
+      .select({ count: countDistinct(schema.events.id) })
+      .from(schema.events)
+      // Must be a LEFT JOIN so events without a location still appear in admin lists.
+      .leftJoin(
+        schema.locations,
+        eq(schema.locations.id, schema.events.locationId),
+      )
+      .leftJoin(
+        parentOrg,
+        and(eq(parentOrg.orgType, "ao"), eq(parentOrg.id, schema.events.orgId)),
+      )
+      .leftJoin(
+        regionOrg,
+        and(
+          eq(regionOrg.orgType, "region"),
+          or(
+            eq(regionOrg.id, schema.locations.orgId),
+            eq(regionOrg.id, schema.events.orgId),
+            eq(regionOrg.id, parentOrg.parentId),
+          ),
         ),
-      ),
-    )
-    .leftJoin(
-      schema.eventsXEventTypes,
-      eq(schema.eventsXEventTypes.eventId, schema.events.id),
-    )
-    .leftJoin(
-      schema.eventTypes,
-      eq(schema.eventTypes.id, schema.eventsXEventTypes.eventTypeId),
-    )
-    .where(where);
+      )
+      .leftJoin(
+        schema.eventsXEventTypes,
+        eq(schema.eventsXEventTypes.eventId, schema.events.id),
+      )
+      .leftJoin(
+        schema.eventTypes,
+        eq(schema.eventTypes.id, schema.eventsXEventTypes.eventTypeId),
+      )
+      .where(where)
+  );
 }
 
 /**
@@ -318,7 +321,8 @@ export const eventRouter = {
       const query = ctx.db
         .select(select)
         .from(schema.events)
-        .innerJoin(
+        // Must be a LEFT JOIN so events without a location still appear in admin lists.
+        .leftJoin(
           schema.locations,
           eq(schema.locations.id, schema.events.locationId),
         )
