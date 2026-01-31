@@ -10,7 +10,7 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
-    version: "3.6.1",
+    version: "3.6.2",
     date: "2026-01-31",
     title: "Admin UX & Access Improvements",
     sections: [
@@ -36,6 +36,7 @@ export const changelog: ChangelogEntry[] = [
         title: "Backend",
         items: [
           "New org.accessible endpoint for getting user's accessible organizations",
+          "Shared error constants for consistent error messaging",
           "Type safety improvements for nullable location handling",
         ],
       },
