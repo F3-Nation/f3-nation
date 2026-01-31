@@ -10,16 +10,17 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
-    version: "3.6.0",
+    version: "3.6.1",
     date: "2026-01-31",
-    title: "Admin UX & Event Type Improvements",
+    title: "Admin UX & Access Improvements",
     sections: [
       {
         title: "Admin Portal",
         items: [
+          "Manage Access modal now only shows organizations where you are an admin",
           "Improved permission denied page - shows clear message and troubleshooting guide",
           "Event types now filter by your accessible orgs",
-          "Better error messages when creating event types without required permissions",
+          "Better error messages when creating event types or managing roles without required permissions",
           "Events without locations now appear in admin event lists",
         ],
       },
