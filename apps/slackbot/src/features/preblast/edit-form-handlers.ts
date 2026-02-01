@@ -610,7 +610,7 @@ export async function handlePreblastAction(
       eventInstanceId,
       currentUserId,
       teamId,
-      { navDepth: 0 },
+      { _navDepth: 0 },
       extContext.orgSettings ?? null,
       extContext.orgId ?? 0,
       "Edit Preblast",
@@ -618,10 +618,14 @@ export async function handlePreblastAction(
 
     if (modal) {
       try {
-        await (args as TypedActionArgs).client.views.open({
-          trigger_id: body.trigger_id!,
-          view: modal,
-        });
+        const bodyWithTrigger = body as { trigger_id?: string };
+        const triggerId = bodyWithTrigger.trigger_id;
+        if (triggerId) {
+          await (args as TypedActionArgs).client.views.open({
+            trigger_id: triggerId,
+            view: modal,
+          });
+        }
       } catch (error) {
         logger.error("Failed to open preblast edit modal", { error });
       }

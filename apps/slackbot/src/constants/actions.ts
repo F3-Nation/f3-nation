@@ -254,6 +254,26 @@ export const ACTIONS = {
   BACKBLAST_SELECT_CALLBACK_ID: "backblast-select-id",
   BACKBLAST_FILL_BUTTON: "backblast-fill-button",
   BACKBLAST_NOQ_SELECT: "backblast-noq-select",
+
+  // Backblast Form Fields
+  BACKBLAST_TITLE: "backblast-title",
+  BACKBLAST_Q: "backblast-q",
+  BACKBLAST_COQ: "backblast-coq",
+  BACKBLAST_PAX: "backblast-pax",
+  BACKBLAST_DR_PAX: "backblast-dr-pax",
+  BACKBLAST_NONSLACK_PAX: "backblast-nonslack-pax",
+  BACKBLAST_FNGS: "backblast-fngs",
+  BACKBLAST_COUNT: "backblast-count",
+  BACKBLAST_MOLESKINE: "backblast-moleskine",
+  BACKBLAST_FILE: "backblast-file",
+  BACKBLAST_OPTIONS: "backblast-options",
+  BACKBLAST_EMAIL_SEND: "backblast-email-send",
+  BACKBLAST_SEND_OPTIONS: "backblast-send-options",
+  BACKBLAST_INFO: "backblast-info",
+  // Unscheduled backblast fields
+  BACKBLAST_DATE: "backblast-date",
+  BACKBLAST_AO: "backblast-ao",
+  BACKBLAST_EVENT_TYPE: "backblast-event-type",
 } as const;
 
 export type ActionId = (typeof ACTIONS)[keyof typeof ACTIONS];

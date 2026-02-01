@@ -887,6 +887,26 @@ export const api = {
           }),
         },
       ),
+
+    /**
+     * Create actual (non-planned) attendance for backblast submissions.
+     * Used when recording who actually attended a workout.
+     */
+    createActual: (input: CreateAttendanceInput) =>
+      apiRequest<AttendanceMutationResponse>(`/attendance/actual`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+
+    /**
+     * Delete all actual (non-planned) attendance for an event instance.
+     * Used before re-submitting or editing a backblast.
+     */
+    deleteActualForEvent: (params: { eventInstanceId: number }) =>
+      apiRequest<AttendanceMutationResponse>(
+        `/attendance/event-instance/${params.eventInstanceId}/actual`,
+        { method: "DELETE" },
+      ),
   },
 };
 

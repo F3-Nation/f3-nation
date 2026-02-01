@@ -61,6 +61,22 @@
     "/^cd /home/evan/ml/f3-nation/apps/slackbot && pnpm tsc --noEmit 2>&1 \\| head -50$/": {
       "approve": true,
       "matchCommandLine": true
+    },
+    "/^cd /home/evan/ml/f3-nation/apps/slackbot && pnpm exec eslint src/features/backblast/edit-form-handlers\\.ts 2>&1$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^cd /home/evan/ml/f3-nation/apps/slackbot && pnpm exec tsc --noEmit 2>&1 \\| head -30$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^cd /home/evan/ml/f3-nation/apps/slackbot && pnpm exec tsc --noEmit 2>&1 \\| head -15$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^cd /home/evan/ml/f3-nation/apps/slackbot && pnpm exec eslint src/features/backblast/\\*\\.ts 2>&1$/": {
+      "approve": true,
+      "matchCommandLine": true
     }
   }
 }

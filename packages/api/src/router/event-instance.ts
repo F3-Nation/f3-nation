@@ -347,6 +347,12 @@ export const eventInstanceRouter = {
         preblast: z.string().nullish(),
         preblastRich: z.record(z.unknown()).nullish(),
         preblastTs: z.number().nullish(),
+        // Backblast fields
+        backblast: z.string().nullish(),
+        backblastRich: z.array(z.record(z.unknown())).nullish(),
+        backblastTs: z.number().nullish(),
+        paxCount: z.number().nullish(),
+        fngCount: z.number().nullish(),
       }),
     )
     .route({

@@ -29,7 +29,17 @@ export const attendanceRouter = {
     .input(
       z.object({
         eventInstanceId: z.coerce.number(),
-        isPlanned: z.coerce.boolean().optional().default(true),
+        // Use transform to properly handle string "false" from query params
+        // z.coerce.boolean() treats any non-empty string as true
+        isPlanned: z
+          .union([z.boolean(), z.string()])
+          .optional()
+          .default(true)
+          .transform((val) => {
+            if (typeof val === "boolean") return val;
+            if (val === "false" || val === "0") return false;
+            return true;
+          }),
       }),
     )
     .route({
@@ -210,6 +220,151 @@ export const attendanceRouter = {
       }
 
       return { success: true, attendanceId };
+    }),
+
+  /**
+   * Create actual (non-planned) attendance for backblast submissions.
+   * This creates attendance records with isPlanned=false.
+   */
+  createActual: protectedProcedure
+    .input(
+      z.object({
+        eventInstanceId: z.coerce.number(),
+        userId: z.coerce.number(),
+        attendanceTypeIds: z.array(z.coerce.number()),
+      }),
+    )
+    .route({
+      method: "POST",
+      path: "/actual",
+      tags: ["attendance"],
+      summary: "Create actual attendance",
+      description:
+        "Create a new actual attendance record (for backblast submissions)",
+    })
+    .handler(async ({ context: ctx, input }) => {
+      // Verify event instance exists
+      const [eventInstance] = await ctx.db
+        .select({ id: schema.eventInstances.id })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.id, input.eventInstanceId));
+
+      if (!eventInstance) {
+        throw new ORPCError("NOT_FOUND", {
+          message: "Event instance not found",
+        });
+      }
+
+      // Check if user already has actual attendance for this event
+      const existingAttendance = await ctx.db
+        .select({ id: schema.attendance.id })
+        .from(schema.attendance)
+        .where(
+          and(
+            eq(schema.attendance.eventInstanceId, input.eventInstanceId),
+            eq(schema.attendance.userId, input.userId),
+            eq(schema.attendance.isPlanned, false),
+          ),
+        );
+
+      let attendanceId: number;
+
+      if (existingAttendance.length > 0) {
+        // Update existing attendance - clear old types and add new ones
+        attendanceId = existingAttendance[0]!.id;
+
+        // Delete existing attendance type links
+        await ctx.db
+          .delete(schema.attendanceXAttendanceTypes)
+          .where(
+            eq(schema.attendanceXAttendanceTypes.attendanceId, attendanceId),
+          );
+      } else {
+        // Create new attendance record with isPlanned=false
+        const [newAttendance] = await ctx.db
+          .insert(schema.attendance)
+          .values({
+            eventInstanceId: input.eventInstanceId,
+            userId: input.userId,
+            isPlanned: false,
+          })
+          .returning({ id: schema.attendance.id });
+
+        if (!newAttendance) {
+          throw new ORPCError("INTERNAL_SERVER_ERROR", {
+            message: "Failed to create attendance record",
+          });
+        }
+
+        attendanceId = newAttendance.id;
+      }
+
+      // Create attendance type links
+      if (input.attendanceTypeIds.length > 0) {
+        await ctx.db.insert(schema.attendanceXAttendanceTypes).values(
+          input.attendanceTypeIds.map((typeId) => ({
+            attendanceId,
+            attendanceTypeId: typeId,
+          })),
+        );
+      }
+
+      return { success: true, attendanceId };
+    }),
+
+  /**
+   * Delete all actual (non-planned) attendance for an event instance.
+   * Used before re-submitting a backblast.
+   */
+  deleteActualForEvent: protectedProcedure
+    .input(
+      z.object({
+        eventInstanceId: z.coerce.number(),
+      }),
+    )
+    .route({
+      method: "DELETE",
+      path: "/event-instance/{eventInstanceId}/actual",
+      tags: ["attendance"],
+      summary: "Delete actual attendance for event",
+      description:
+        "Delete all actual attendance records for an event (for backblast re-submission)",
+    })
+    .handler(async ({ context: ctx, input }) => {
+      // Get all actual attendance IDs for this event
+      const actualAttendance = await ctx.db
+        .select({ id: schema.attendance.id })
+        .from(schema.attendance)
+        .where(
+          and(
+            eq(schema.attendance.eventInstanceId, input.eventInstanceId),
+            eq(schema.attendance.isPlanned, false),
+          ),
+        );
+
+      if (actualAttendance.length === 0) {
+        return { success: true, deletedCount: 0 };
+      }
+
+      const attendanceIds = actualAttendance.map((a) => a.id);
+
+      // Delete attendance type links first
+      await ctx.db
+        .delete(schema.attendanceXAttendanceTypes)
+        .where(
+          inArray(schema.attendanceXAttendanceTypes.attendanceId, attendanceIds),
+        );
+
+      // Delete attendance records
+      const deleted = await ctx.db
+        .delete(schema.attendance)
+        .where(inArray(schema.attendance.id, attendanceIds))
+        .returning({ id: schema.attendance.id });
+
+      return {
+        success: true,
+        deletedCount: deleted.length,
+      };
     }),
 
   /**

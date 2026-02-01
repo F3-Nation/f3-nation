@@ -76,11 +76,16 @@ export const slackRouter = {
       description: "Retrieve a user record using their Slack ID and team ID",
     })
     .handler(async ({ context: ctx, input }) => {
-      // Find the slack user first
+      // Find the slack user for this specific team
       const [slackUser] = await ctx.db
         .select()
         .from(schema.slackUsers)
-        .where(eq(schema.slackUsers.slackId, input.slackId));
+        .where(
+          and(
+            eq(schema.slackUsers.slackId, input.slackId),
+            eq(schema.slackUsers.slackTeamId, input.teamId),
+          ),
+        );
 
       if (!slackUser) return null;
 
@@ -253,14 +258,19 @@ export const slackRouter = {
         "Retrieve or create a Slack user record with a guaranteed linked F3 user. If no F3 user exists for the email, one will be created.",
     })
     .handler(async ({ context: ctx, input }) => {
-      // Step 1: Find or create the Slack user
+      // Step 1: Find or create the Slack user for this specific team
       let [slackUser] = await ctx.db
         .select()
         .from(schema.slackUsers)
-        .where(eq(schema.slackUsers.slackId, input.slackId));
+        .where(
+          and(
+            eq(schema.slackUsers.slackId, input.slackId),
+            eq(schema.slackUsers.slackTeamId, input.teamId),
+          ),
+        );
 
       if (!slackUser) {
-        // Create the Slack user (without userId for now)
+        // Create the Slack user for this team (without userId for now)
         [slackUser] = await ctx.db
           .insert(schema.slackUsers)
           .values({

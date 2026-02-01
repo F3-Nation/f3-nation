@@ -23,8 +23,17 @@ import type {
   NavigationMetadata,
   TypedActionArgs,
   TypedCommandArgs,
+  TypedViewArgs,
 } from "../../types/bolt-types";
 import { buildBackblastSelectModal } from "./select-form";
+import {
+  buildBackblastInfo,
+  buildBackblastEditModal,
+} from "./edit-form";
+import {
+  handleBackblastFormSubmit,
+  handleBackblastEditButton,
+} from "./edit-form-handlers";
 
 /**
  * Open the backblast selection form.
@@ -122,14 +131,61 @@ async function handleBackblastSelect(args: TypedActionArgs): Promise<void> {
         eventInstanceId,
       },
     );
-    // TODO: Assign user as Q for this event when opening the form
   }
 
   if (eventInstanceId) {
     logger.info("Backblast selected", { eventInstanceId });
-    // TODO: Route to backblast edit form
-    // For now, just log - will implement in next phase
-    logger.info("Would open backblast form for event", { eventInstanceId });
+
+    // Capture the eventInstanceId for use in callback (TypeScript narrowing)
+    const selectedEventId = eventInstanceId;
+
+    // Route to backblast edit form
+    const extContext = args.context as ExtendedContext;
+    const currentUserId = extContext.slackUser?.userId;
+    const teamId = extContext.teamId ?? "";
+    const regionOrgId = extContext.orgId ?? 0;
+    const orgSettings = extContext.orgSettings ?? null;
+    const slackUserId = (args.body as { user?: { id: string } }).user?.id ?? "";
+
+    // For events without Q, assign the user as Q first
+    if (actionId === ACTIONS.BACKBLAST_NOQ_SELECT && currentUserId) {
+      try {
+        await api.attendance.takeQ({
+          eventInstanceId: selectedEventId,
+          userId: currentUserId,
+        });
+        logger.info("Assigned user as Q for event", {
+          eventInstanceId: selectedEventId,
+          userId: currentUserId,
+        });
+      } catch (error) {
+        logger.error("Failed to assign Q", { eventInstanceId: selectedEventId, error });
+      }
+    }
+
+    // Navigate to the backblast edit form
+    const navCtx = createNavContext(args);
+
+    await navigateToView(
+      navCtx,
+      async (metadata: NavigationMetadata): Promise<ModalView> => {
+        const backblastInfo = await buildBackblastInfo(
+          selectedEventId,
+          currentUserId ?? null,
+          teamId,
+        );
+
+        return buildBackblastEditModal(
+          backblastInfo,
+          metadata,
+          orgSettings,
+          regionOrgId,
+          false, // isEdit
+          slackUserId,
+        );
+      },
+      { showLoading: true, loadingTitle: "Loading Backblast..." },
+    );
   }
 }
 
@@ -215,10 +271,99 @@ export function registerBackblastFeature(app: App): void {
     async (args: TypedActionArgs) => {
       await args.ack();
       logger.info("New unscheduled event backblast requested");
-      // TODO: Implement unscheduled event backblast form
+
+      const extContext = args.context as ExtendedContext;
+      const regionOrgId = extContext.orgId ?? 0;
+      const orgSettings = extContext.orgSettings ?? null;
+      const slackUserId = (args.body as { user?: { id: string } }).user?.id ?? "";
+
+      // Navigate to the backblast edit form with no event (unscheduled)
+      const navCtx = createNavContext(args);
+
+      await navigateToView(
+        navCtx,
+        async (metadata: NavigationMetadata): Promise<ModalView> => {
+          return buildBackblastEditModal(
+            null, // No backblast info for unscheduled
+            metadata,
+            orgSettings,
+            regionOrgId,
+            false, // isEdit
+            slackUserId,
+          );
+        },
+        { showLoading: true, loadingTitle: "Loading Backblast..." },
+      );
     },
+  );
+
+  // Handle backblast from preblast message button
+  app.action(
+    ACTIONS.MSG_EVENT_BACKBLAST_BUTTON,
+    async (args: TypedActionArgs) => {
+      await args.ack();
+
+      const actionWithValue = args.action as { value?: string };
+      const eventInstanceId = actionWithValue.value
+        ? parseInt(actionWithValue.value, 10)
+        : undefined;
+
+      if (!eventInstanceId) {
+        logger.error("No event instance ID for backblast from preblast");
+        return;
+      }
+
+      logger.info("Backblast from preblast button clicked", { eventInstanceId });
+
+      const extContext = args.context as ExtendedContext;
+      const currentUserId = extContext.slackUser?.userId;
+      const teamId = extContext.teamId ?? "";
+      const regionOrgId = extContext.orgId ?? 0;
+      const orgSettings = extContext.orgSettings ?? null;
+      const slackUserId = (args.body as { user?: { id: string } }).user?.id ?? "";
+
+      const navCtx = createNavContext(args);
+
+      await navigateToView(
+        navCtx,
+        async (metadata: NavigationMetadata): Promise<ModalView> => {
+          const backblastInfo = await buildBackblastInfo(
+            eventInstanceId,
+            currentUserId ?? null,
+            teamId,
+          );
+
+          return buildBackblastEditModal(
+            backblastInfo,
+            metadata,
+            orgSettings,
+            regionOrgId,
+            false, // isEdit
+            slackUserId,
+          );
+        },
+        { showLoading: true, loadingTitle: "Loading Backblast..." },
+      );
+    },
+  );
+
+  // Handle backblast edit button click
+  app.action(ACTIONS.BACKBLAST_EDIT_BUTTON, handleBackblastEditButton);
+
+  // Handle backblast form submissions
+  app.view(ACTIONS.BACKBLAST_CALLBACK_ID, (args: TypedViewArgs) =>
+    handleBackblastFormSubmit(args),
+  );
+  app.view(ACTIONS.BACKBLAST_EDIT_CALLBACK_ID, (args: TypedViewArgs) =>
+    handleBackblastFormSubmit(args),
   );
 }
 
 export { buildBackblastSelectModal } from "./select-form";
+export { buildBackblastEditModal, buildBackblastInfo } from "./edit-form";
 export type { BackblastSelectMetadata } from "./types";
+export type {
+  BackblastEditMetadata,
+  BackblastInfo,
+  BackblastFormValues,
+} from "./edit-form-types";

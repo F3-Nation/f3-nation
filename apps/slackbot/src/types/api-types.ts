@@ -259,6 +259,16 @@ export interface EventInstanceResponse {
     name: string;
     meta: Record<string, unknown> | null;
   } | null;
+  // Backblast fields
+  backblast?: string | null;
+  backblastRich?: Record<string, unknown>[] | null;
+  backblastTs?: number | null;
+  paxCount?: number | null;
+  fngCount?: number | null;
+  // Preblast fields
+  preblast?: string | null;
+  preblastRich?: Record<string, unknown> | null;
+  preblastTs?: number | null;
 }
 
 /**
@@ -288,6 +298,16 @@ export interface EventInstanceInput {
   isPrivate?: boolean;
   eventTypeId?: number;
   eventTagId?: number;
+  // Preblast fields
+  preblast?: string | null;
+  preblastRich?: Record<string, unknown> | null;
+  preblastTs?: number | null;
+  // Backblast fields
+  backblast?: string | null;
+  backblastRich?: Record<string, unknown>[] | null;
+  backblastTs?: number | null;
+  paxCount?: number | null;
+  fngCount?: number | null;
 }
 
 /**

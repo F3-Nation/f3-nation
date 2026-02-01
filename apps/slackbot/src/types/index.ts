@@ -42,6 +42,7 @@ export interface OrgSettings {
 
   // Email settings
   email_enable?: boolean;
+  email_option_show?: boolean;
   email_server?: string;
   email_port?: number;
   email_from?: string;
