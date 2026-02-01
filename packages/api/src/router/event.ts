@@ -30,8 +30,17 @@ import { withPagination } from "../with-pagination";
 
 // Shared filter schema for events (used by both `all` and `count` endpoints)
 const eventFilterSchema = z.object({
-  searchTerm: z.string().optional(),
-  statuses: arrayOrSingle(z.enum(["active", "inactive"])).optional(),
+  searchTerm: z
+    .string()
+    .optional()
+    .describe(
+      "Search events by name or description. Case-insensitive partial matching.",
+    ),
+  statuses: arrayOrSingle(z.enum(["active", "inactive"]))
+    .optional()
+    .describe(
+      "Filter events by status. Matches events with ANY of the given statuses.",
+    ),
   eventTypeNames: arrayOrSingle(z.string())
     .optional()
     .describe(
@@ -42,9 +51,22 @@ const eventFilterSchema = z.object({
     .describe(
       "Filter events by event category(ies). Matches events with ANY of the given categories.",
     ),
-  regionIds: arrayOrSingle(z.coerce.number()).optional(),
-  aoIds: arrayOrSingle(z.coerce.number()).optional(),
-  onlyMine: z.coerce.boolean().optional(),
+  regionIds: arrayOrSingle(z.coerce.number())
+    .optional()
+    .describe(
+      "Filter events by region ID(s). Returns events in ANY of the specified regions.",
+    ),
+  aoIds: arrayOrSingle(z.coerce.number())
+    .optional()
+    .describe(
+      "Filter events by area organization (AO) ID(s). Returns events in ANY of the specified AOs.",
+    ),
+  onlyMine: z.coerce
+    .boolean()
+    .optional()
+    .describe(
+      "If true, only return events in organizations where the requester has editor or admin role.",
+    ),
 });
 
 type EventFilterInput = z.infer<typeof eventFilterSchema>;
@@ -52,11 +74,20 @@ type EventFilterInput = z.infer<typeof eventFilterSchema>;
 // Extended schema with pagination and sorting for the `all` endpoint
 const eventAllInputSchema = eventFilterSchema
   .extend({
-    pageIndex: z.coerce.number().optional(),
-    pageSize: z.coerce.number().optional(),
+    pageIndex: z.coerce
+      .number()
+      .optional()
+      .describe("Zero-based page index for pagination. Defaults to 0."),
+    pageSize: z.coerce
+      .number()
+      .optional()
+      .describe("Number of events per page. Defaults to 10."),
     sorting: z
       .array(z.object({ id: z.string(), desc: z.coerce.boolean() }))
-      .optional(),
+      .optional()
+      .describe(
+        "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: regions, parent, status, dayOfWeek, created.",
+      ),
   })
   .optional();
 
@@ -205,7 +236,98 @@ export const eventRouter = {
       tags: ["event"],
       summary: "List all events",
       description:
-        "Get a paginated list of workout events with optional filtering and sorting",
+        "Get a paginated list of workout events with optional filtering by event type, category, region, and other criteria. Supports searching, sorting, and pagination.",
+      examples: [
+        {
+          value: {
+            events: [
+              {
+                id: 1,
+                name: "Friday F3",
+                description: "Weekly bootcamp workout",
+                isActive: true,
+                isPrivate: false,
+                parent: "Milwaukee",
+                locationId: 42,
+                startDate: "2024-01-15",
+                dayOfWeek: "Friday",
+                startTime: "06:00 AM",
+                endTime: "07:00 AM",
+                email: "info@f3nation.com",
+                created: "2024-01-10T08:30:00Z",
+                locationName: "Lakefront",
+                locationAddress: "100 Lake Shore Dr",
+                locationAddress2: null,
+                locationCity: "Milwaukee",
+                locationState: "WI",
+                locationZip: "53202",
+                location: "100 Lake Shore Dr, Milwaukee, WI 53202",
+                parents: [
+                  {
+                    parentId: 5,
+                    parentName: "Milwaukee",
+                  },
+                ],
+                regions: [
+                  {
+                    regionId: 1,
+                    regionName: "Wisconsin",
+                  },
+                ],
+                eventTypes: [
+                  {
+                    eventTypeId: 2,
+                    eventTypeName: "Bootcamp",
+                    eventCategory: "Cardio",
+                  },
+                ],
+              },
+              {
+                id: 2,
+                name: "Monday Murph",
+                description: "Memorial Day Hero WOD",
+                isActive: true,
+                isPrivate: false,
+                parent: "Madison",
+                locationId: 43,
+                startDate: "2024-01-08",
+                dayOfWeek: "Monday",
+                startTime: "05:30 AM",
+                endTime: "06:45 AM",
+                email: "madison@f3nation.com",
+                created: "2024-01-05T12:00:00Z",
+                locationName: "Central Park",
+                locationAddress: "202 State St",
+                locationAddress2: null,
+                locationCity: "Madison",
+                locationState: "WI",
+                locationZip: "53703",
+                location: "202 State St, Madison, WI 53703",
+                parents: [
+                  {
+                    parentId: 6,
+                    parentName: "Madison",
+                  },
+                ],
+                regions: [
+                  {
+                    regionId: 1,
+                    regionName: "Wisconsin",
+                  },
+                ],
+                eventTypes: [
+                  {
+                    eventTypeId: 3,
+                    eventTypeName: "Hero",
+                    eventCategory: "Strength",
+                  },
+                ],
+              },
+            ],
+            totalCount: 847,
+          },
+        },
+      ],
     })
     .handler(async ({ context: ctx, input }) => {
       const limit = input?.pageSize ?? 10;
@@ -383,7 +505,8 @@ export const eventRouter = {
       path: "/count",
       tags: ["event"],
       summary: "Count events",
-      description: "Get the count of events matching the given filters",
+      description:
+        "Get the total count of events matching the given filters. Useful for determining pagination requirements.",
     })
     .handler(async ({ context: ctx, input }) => {
       // Resolve editable org IDs for "onlyMine" filter
@@ -410,13 +533,18 @@ export const eventRouter = {
       return { count };
     }),
   byId: protectedProcedure
-    .input(z.object({ id: z.coerce.number() }))
+    .input(
+      z.object({
+        id: z.coerce.number().describe("The unique identifier of the event"),
+      }),
+    )
     .route({
       method: "GET",
       path: "/id/{id}",
       tags: ["event"],
       summary: "Get event by ID",
-      description: "Retrieve detailed information about a specific event",
+      description:
+        "Retrieve detailed information about a specific event including location, schedule, and associated organizations",
     })
     .handler(async ({ context: ctx, input }) => {
       const regionOrg = aliasedTable(schema.orgs, "region_org");
@@ -517,7 +645,8 @@ export const eventRouter = {
       path: "/",
       tags: ["event"],
       summary: "Create or update event",
-      description: "Create a new event or update an existing one",
+      description:
+        "Create a new event or update an existing one. Requires editor role for the event's organization. Events are associated with locations and can have multiple event types.",
     })
     .handler(async ({ context: ctx, input }) => {
       const [existingEvent] = input.id
@@ -640,13 +769,18 @@ export const eventRouter = {
       return { lookup };
     }),
   delete: editorProcedure
-    .input(z.object({ id: z.number() }))
+    .input(
+      z.object({
+        id: z.number().describe("The unique identifier of the event to delete"),
+      }),
+    )
     .route({
       method: "DELETE",
       path: "/delete/{id}",
       tags: ["event"],
       summary: "Delete event",
-      description: "Soft delete an event by marking it as inactive",
+      description:
+        "Soft delete an event by marking it as inactive. The event will no longer appear on the map but the data is preserved.",
     })
     .handler(async ({ context: ctx, input }) => {
       const [event] = await ctx.db

@@ -109,14 +109,45 @@ export const isDuplicateEmailError = (error: unknown): boolean => {
 
 // Base input schema object (before optional)
 export const userListInputSchema = z.object({
-  roles: arrayOrSingle(z.enum(UserRole)).optional(),
-  searchTerm: z.string().optional(),
-  pageIndex: z.coerce.number().optional(),
-  pageSize: z.coerce.number().optional(),
-  sorting: parseSorting(),
-  statuses: arrayOrSingle(z.enum(UserStatus)).optional(),
-  orgIds: arrayOrSingle(z.coerce.number()).optional(),
-  includePii: z.coerce.boolean().optional().default(false),
+  roles: arrayOrSingle(z.enum(UserRole))
+    .optional()
+    .describe(
+      "Filter users by role(s). Matches users with ANY of the given roles (admin, editor, user).",
+    ),
+  searchTerm: z
+    .string()
+    .optional()
+    .describe(
+      "Search users by name, email, phone, or emergency contact information. Case-insensitive partial matching.",
+    ),
+  pageIndex: z.coerce
+    .number()
+    .optional()
+    .describe("Zero-based page index for pagination. Defaults to 0."),
+  pageSize: z.coerce
+    .number()
+    .optional()
+    .describe("Number of users per page. Defaults to 10."),
+  sorting: parseSorting().describe(
+    "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: id, f3Name, email, roles, status, created.",
+  ),
+  statuses: arrayOrSingle(z.enum(UserStatus))
+    .optional()
+    .describe(
+      "Filter users by status(es). Matches users with ANY of the given statuses (active, inactive).",
+    ),
+  orgIds: arrayOrSingle(z.coerce.number())
+    .optional()
+    .describe(
+      "Filter users by organization ID(s). Returns users with roles in ANY of the specified organizations.",
+    ),
+  includePii: z.coerce
+    .boolean()
+    .optional()
+    .default(false)
+    .describe(
+      "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is an F3 Nation admin.",
+    ),
 });
 
 // Shared query logic for list queries

@@ -17,7 +17,8 @@ export const mailRouter = {
       path: "/templates",
       tags: ["mail"],
       summary: "Get available email templates",
-      description: "Returns a list of available email templates for testing",
+      description:
+        "Returns a list of available email templates with their required and optional fields. Useful for testing and preview endpoints. Requires F3 Nation admin role.",
     })
     .handler(() => {
       return {
@@ -58,10 +59,14 @@ export const mailRouter = {
   sendTest: nationAdminProcedure
     .input(
       z.object({
-        template: z.nativeEnum(Templates),
-        to: z.string().email(),
+        template: z.nativeEnum(Templates).describe("The template ID to send"),
+        to: z.string().email().describe("Recipient email address"),
         // Template-specific data
-        data: z.record(z.unknown()),
+        data: z
+          .record(z.unknown())
+          .describe(
+            "Template-specific data object. See /mail/templates endpoint for required/optional fields.",
+          ),
       }),
     )
     .route({
@@ -70,7 +75,7 @@ export const mailRouter = {
       tags: ["mail"],
       summary: "Send a test email",
       description:
-        "Send a test email using a specific template (nation admin only)",
+        "Send a test email using a specific template (nation admin only). Useful for testing email configurations before sending to users.",
     })
     .handler(async ({ input }) => {
       const { template, to, data } = input;
@@ -88,7 +93,7 @@ export const mailRouter = {
         } else if (template === Templates.mapChangeRequest) {
           const baseUrl = env.NEXT_PUBLIC_MAP_URL?.endsWith("/")
             ? env.NEXT_PUBLIC_MAP_URL.slice(0, -1)
-            : env.NEXT_PUBLIC_MAP_URL ?? "";
+            : (env.NEXT_PUBLIC_MAP_URL ?? "");
 
           await mail.sendTemplateMessages(Templates.mapChangeRequest, {
             to,
@@ -129,8 +134,14 @@ export const mailRouter = {
   preview: nationAdminProcedure
     .input(
       z.object({
-        template: z.nativeEnum(Templates),
-        data: z.record(z.unknown()),
+        template: z
+          .nativeEnum(Templates)
+          .describe("The template ID to preview"),
+        data: z
+          .record(z.unknown())
+          .describe(
+            "Template-specific data object. See /mail/templates endpoint for required/optional fields.",
+          ),
       }),
     )
     .route({
@@ -138,7 +149,8 @@ export const mailRouter = {
       path: "/preview",
       tags: ["mail"],
       summary: "Preview an email template",
-      description: "Returns the rendered HTML for a template without sending",
+      description:
+        "Returns the rendered HTML for a template without sending it. Useful for verifying template output before use.",
     })
     .handler(({ input }) => {
       const { template, data } = input;
@@ -155,7 +167,7 @@ export const mailRouter = {
       } else if (template === Templates.mapChangeRequest) {
         const baseUrl = env.NEXT_PUBLIC_MAP_URL?.endsWith("/")
           ? env.NEXT_PUBLIC_MAP_URL.slice(0, -1)
-          : env.NEXT_PUBLIC_MAP_URL ?? "";
+          : (env.NEXT_PUBLIC_MAP_URL ?? "");
 
         html = mail.getTemplate(Templates.mapChangeRequest, {
           regionName: String(data.regionName ?? "Test Region"),
