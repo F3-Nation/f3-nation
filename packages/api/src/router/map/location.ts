@@ -27,7 +27,7 @@ export const mapLocationRouter = os.router({
       tags: ["map.location"],
       summary: "Get map data",
       description:
-        "Retrieve all locations and events for displaying on the map in a low-bandwidth format",
+        "Retrieve all locations and events for displaying on the map. Returns data in a low-bandwidth array format optimized for client-side rendering. Includes only active, non-private events.",
     })
     .handler(async ({ context: ctx }) => {
       const aoOrg = aliasedTable(schema.orgs, "ao_org");
@@ -162,14 +162,20 @@ export const mapLocationRouter = os.router({
       return lowBandwidthLocationEvents;
     }),
   locationWorkout: protectedProcedure
-    .input(z.object({ locationId: z.coerce.number() }))
+    .input(
+      z.object({
+        locationId: z.coerce
+          .number()
+          .describe("The unique identifier of the location"),
+      }),
+    )
     .route({
       method: "GET",
       path: "/location-workout",
       tags: ["map.location"],
       summary: "Get location workout data",
       description:
-        "Retrieve detailed workout information for a specific location",
+        "Retrieve detailed workout information for a specific location, including all events, associated organizations, and metadata",
     })
     .handler(async ({ context: ctx, input }) => {
       const parentOrg = aliasedTable(schema.orgs, "parent_org");
@@ -319,7 +325,8 @@ export const mapLocationRouter = os.router({
       path: "/regions",
       tags: ["map.location"],
       summary: "Get all regions",
-      description: "Retrieve a list of all F3 regions",
+      description:
+        "Retrieve a list of all active F3 regions with their basic information (id, name, logo, website)",
     })
     .handler(async ({ context: ctx }) => {
       const regions = await ctx.db
@@ -342,7 +349,7 @@ export const mapLocationRouter = os.router({
       tags: ["map.location"],
       summary: "Get regions with coordinates",
       description:
-        "Retrieve all regions that have associated location coordinates",
+        "Retrieve all active regions that have associated location coordinates. Useful for displaying region centers on a map.",
     })
     .handler(async ({ context: ctx }) => {
       const ao = aliasedTable(schema.orgs, "ao");

@@ -32,13 +32,39 @@ export const locationRouter = {
     .input(
       z
         .object({
-          searchTerm: z.string().optional(),
-          pageIndex: z.coerce.number().optional(),
-          pageSize: z.coerce.number().optional(),
-          sorting: parseSorting(),
-          statuses: arrayOrSingle(z.enum(IsActiveStatus)).optional(),
-          regionIds: arrayOrSingle(z.coerce.number()).optional(),
-          onlyMine: z.coerce.boolean().optional(),
+          searchTerm: z
+            .string()
+            .optional()
+            .describe(
+              "Search locations by name or description. Case-insensitive partial matching.",
+            ),
+          pageIndex: z.coerce
+            .number()
+            .optional()
+            .describe("Zero-based page index for pagination. Defaults to 0."),
+          pageSize: z.coerce
+            .number()
+            .optional()
+            .describe("Number of locations per page. Defaults to 10."),
+          sorting: parseSorting().describe(
+            "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: id, locationName, regionName, isActive, latitude, longitude, addressStreet, addressCity, addressState, addressZip, created.",
+          ),
+          statuses: arrayOrSingle(z.enum(IsActiveStatus))
+            .optional()
+            .describe(
+              "Filter locations by status. Matches locations with ANY of the given statuses (active, inactive).",
+            ),
+          regionIds: arrayOrSingle(z.coerce.number())
+            .optional()
+            .describe(
+              "Filter locations by region ID(s). Returns locations in ANY of the specified regions.",
+            ),
+          onlyMine: z.coerce
+            .boolean()
+            .optional()
+            .describe(
+              "If true, only return locations in organizations where the requester has editor or admin role.",
+            ),
         })
         .optional(),
     )
@@ -162,13 +188,18 @@ export const locationRouter = {
     }),
 
   byId: protectedProcedure
-    .input(z.object({ id: z.coerce.number() }))
+    .input(
+      z.object({
+        id: z.coerce.number().describe("The unique identifier of the location"),
+      }),
+    )
     .route({
       method: "GET",
       path: "/id/{id}",
       tags: ["location"],
       summary: "Get location by ID",
-      description: "Retrieve detailed information about a specific location",
+      description:
+        "Retrieve detailed information about a specific location including its address, coordinates, and metadata",
     })
     .handler(async ({ context: ctx, input }) => {
       const regionOrg = aliasedTable(schema.orgs, "region_org");
@@ -206,7 +237,8 @@ export const locationRouter = {
       path: "/",
       tags: ["location"],
       summary: "Create or update location",
-      description: "Create a new location or update an existing one",
+      description:
+        "Create a new location or update an existing one. Requires editor role for the location's organization. If id is provided, updates the existing location; otherwise creates a new one.",
     })
     .handler(async ({ context: ctx, input }) => {
       const [existingLocation] = input.id
@@ -258,13 +290,20 @@ export const locationRouter = {
       return { location: result ?? null };
     }),
   delete: adminProcedure
-    .input(z.object({ id: z.number() }))
+    .input(
+      z.object({
+        id: z
+          .number()
+          .describe("The unique identifier of the location to delete"),
+      }),
+    )
     .route({
       method: "DELETE",
       path: "/delete/{id}",
       tags: ["location"],
       summary: "Delete location",
-      description: "Soft delete a location by marking it as inactive",
+      description:
+        "Soft delete a location by marking it as inactive. Requires admin role for the location's organization.",
     })
     .handler(async ({ context: ctx, input }) => {
       const [location] = await ctx.db
@@ -308,12 +347,31 @@ export const locationRouter = {
   inBoundingBox: protectedProcedure
     .input(
       z.object({
-        minLat: z.coerce.number(),
-        maxLat: z.coerce.number(),
-        minLng: z.coerce.number(),
-        maxLng: z.coerce.number(),
-        since: z.string().datetime().optional(),
-        isActive: z.coerce.boolean().optional(),
+        minLat: z.coerce
+          .number()
+          .describe("Minimum latitude of the bounding box"),
+        maxLat: z.coerce
+          .number()
+          .describe("Maximum latitude of the bounding box"),
+        minLng: z.coerce
+          .number()
+          .describe("Minimum longitude of the bounding box"),
+        maxLng: z.coerce
+          .number()
+          .describe("Maximum longitude of the bounding box"),
+        since: z
+          .string()
+          .datetime()
+          .optional()
+          .describe(
+            "ISO 8601 datetime. Only return locations created after this time.",
+          ),
+        isActive: z.coerce
+          .boolean()
+          .optional()
+          .describe(
+            "Filter locations by status. If not specified, returns all statuses.",
+          ),
       }),
     )
     .route({
@@ -322,7 +380,7 @@ export const locationRouter = {
       tags: ["location"],
       summary: "Get locations in bounding box",
       description:
-        "Retrieve locations within a geographic bounding box, optionally filtered by creation date",
+        "Retrieve locations within a geographic bounding box, optionally filtered by creation date and status. Useful for map viewport queries.",
     })
     .handler(async ({ context: ctx, input }) => {
       const regionOrg = aliasedTable(schema.orgs, "region_org");

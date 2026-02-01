@@ -37,12 +37,34 @@ export const requestRouter = {
     .input(
       z
         .object({
-          pageIndex: z.coerce.number().optional(),
-          pageSize: z.coerce.number().optional(),
-          sorting: parseSorting(),
-          searchTerm: z.string().optional(),
-          onlyMine: z.coerce.boolean().optional(),
-          statuses: arrayOrSingle(z.enum(UpdateRequestStatus)).optional(),
+          pageIndex: z.coerce
+            .number()
+            .optional()
+            .describe("Zero-based page index for pagination. Defaults to 0."),
+          pageSize: z.coerce
+            .number()
+            .optional()
+            .describe("Number of requests per page. Defaults to 10."),
+          sorting: parseSorting().describe(
+            "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: id, status, requestType, regionName, aoName, workoutName, dayOfWeek, startTime, endTime, description, locationAddress, submittedBy, created.",
+          ),
+          searchTerm: z
+            .string()
+            .optional()
+            .describe(
+              "Search requests by submitter name, event name, description, location info, or AO name.",
+            ),
+          onlyMine: z.coerce
+            .boolean()
+            .optional()
+            .describe(
+              "If true, only return requests from regions where the requester has editor or admin role.",
+            ),
+          statuses: arrayOrSingle(z.enum(UpdateRequestStatus))
+            .optional()
+            .describe(
+              "Filter requests by status. Matches requests with ANY of the given statuses (pending, approved, rejected, reverted).",
+            ),
         })
         .optional(),
     )
@@ -210,14 +232,18 @@ export const requestRouter = {
       return { requests, totalCount: totalCount?.count ?? 0 };
     }),
   byId: editorProcedure
-    .input(z.object({ id: z.string() }))
+    .input(
+      z.object({
+        id: z.string().describe("The unique identifier of the request"),
+      }),
+    )
     .route({
       method: "GET",
       path: "/id/{id}",
       tags: ["request"],
       summary: "Get request by ID",
       description:
-        "Retrieve detailed information about a specific map change request",
+        "Retrieve detailed information about a specific map change request including the proposed changes and current status",
     })
     .handler(async ({ context: ctx, input }) => {
       const [request] = await ctx.db

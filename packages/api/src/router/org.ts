@@ -56,20 +56,49 @@ const orgFilterSchema = z.object({
     .refine((val) => val.length >= 1, {
       message: "At least one orgType is required",
     })
-    .default(["region"]),
-  searchTerm: z.string().optional(),
-  statuses: arrayOrSingle(z.enum(IsActiveStatus)).optional(),
-  parentOrgIds: arrayOrSingle(z.coerce.number()).optional(),
-  onlyMine: z.coerce.boolean().optional(),
+    .default(["region"])
+    .describe(
+      "Filter organizations by type. Returns orgs matching ANY of the given types (region, area, ao, sector, nation). Defaults to [region].",
+    ),
+  searchTerm: z
+    .string()
+    .optional()
+    .describe(
+      "Search organizations by name or description. Case-insensitive partial matching.",
+    ),
+  statuses: arrayOrSingle(z.enum(IsActiveStatus))
+    .optional()
+    .describe(
+      "Filter organizations by status. Matches orgs with ANY of the given statuses (active, inactive).",
+    ),
+  parentOrgIds: arrayOrSingle(z.coerce.number())
+    .optional()
+    .describe(
+      "Filter organizations by parent ID(s). Returns orgs with ANY of the specified parents.",
+    ),
+  onlyMine: z.coerce
+    .boolean()
+    .optional()
+    .describe(
+      "If true, only return organizations where the requester has editor or admin role.",
+    ),
 });
 
 type OrgFilterInput = z.infer<typeof orgFilterSchema>;
 
 // Extended schema with pagination and sorting for the `all` endpoint
 const orgAllInputSchema = orgFilterSchema.extend({
-  pageIndex: z.coerce.number().optional(),
-  pageSize: z.coerce.number().optional(),
-  sorting: parseSorting(),
+  pageIndex: z.coerce
+    .number()
+    .optional()
+    .describe("Zero-based page index for pagination. Defaults to 0."),
+  pageSize: z.coerce
+    .number()
+    .optional()
+    .describe("Number of organizations per page. Defaults to 10."),
+  sorting: parseSorting().describe(
+    "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: id, name, orgType, isActive, created.",
+  ),
 });
 
 // Aliased tables used across org queries
@@ -173,7 +202,7 @@ export const orgRouter = {
       tags: ["org"],
       summary: "List all organizations",
       description:
-        "Get a paginated list of organizations (regions, AOs, etc.) with optional filtering and sorting",
+        "Get a paginated list of organizations (regions, areas, AOs, etc.) filtered by type, status, and other criteria. Supports searching, sorting, and pagination. Organizations are organized hierarchically.",
     })
     .handler(async ({ context: ctx, input }) => {
       const pageSize = input.pageSize ?? 10;
@@ -263,7 +292,7 @@ export const orgRouter = {
       tags: ["org"],
       summary: "Count organizations",
       description:
-        "Get the count of organizations matching the specified filters",
+        "Get the total count of organizations matching the specified filters. Useful for determining pagination requirements.",
     })
     .handler(async ({ context: ctx, input }) => {
       // Resolve editable org IDs for "onlyMine" filter
@@ -292,7 +321,15 @@ export const orgRouter = {
 
   byId: protectedProcedure
     .input(
-      z.object({ id: z.coerce.number(), orgType: z.enum(OrgType).optional() }),
+      z.object({
+        id: z.coerce
+          .number()
+          .describe("The unique identifier of the organization"),
+        orgType: z
+          .enum(OrgType)
+          .optional()
+          .describe("Hint for the organization type to optimize queries"),
+      }),
     )
     .route({
       method: "GET",
@@ -300,7 +337,7 @@ export const orgRouter = {
       tags: ["org"],
       summary: "Get organization by ID",
       description:
-        "Retrieve detailed information about a specific organization",
+        "Retrieve detailed information about a specific organization including its structure, metadata, and parent/child relationships",
     })
     .handler(async ({ context: ctx, input }) => {
       const [org] = await ctx.db
@@ -322,7 +359,8 @@ export const orgRouter = {
       path: "/",
       tags: ["org"],
       summary: "Create or update organization",
-      description: "Create a new organization or update an existing one",
+      description:
+        "Create a new organization or update an existing one. Requires editor role for the organization or its parent. Organizations follow a hierarchical structure (nation → region → area → ao).",
     })
     .handler(async ({ context: ctx, input }) => {
       const orgIdToCheck = input.id ?? input.parentId;

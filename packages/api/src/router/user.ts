@@ -126,8 +126,14 @@ export const userRouter = {
   byId: editorProcedure
     .input(
       z.object({
-        id: z.coerce.number(),
-        includePii: z.coerce.boolean().optional().default(false),
+        id: z.coerce.number().describe("The unique identifier of the user"),
+        includePii: z.coerce
+          .boolean()
+          .optional()
+          .default(false)
+          .describe(
+            "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is admin for a user's organization.",
+          ),
       }),
     )
     .route({
@@ -136,7 +142,7 @@ export const userRouter = {
       tags: ["user"],
       summary: "Get user by ID",
       description:
-        "Retrieve detailed information about a specific user including their roles. PII fields (email, phone) are only included if the requested user belongs to an organization where the requester is an admin.",
+        "Retrieve detailed information about a specific user including their roles, status, and organization assignments. PII fields (email, phone) are only included if the requester has admin role for any of the user's organizations.",
     })
     .handler(async ({ context: ctx, input }) => {
       let includePii = false;
@@ -173,8 +179,17 @@ export const userRouter = {
   byEmail: editorProcedure
     .input(
       z.object({
-        email: z.string().email(),
-        includePii: z.coerce.boolean().optional().default(false),
+        email: z
+          .string()
+          .email()
+          .describe("The email address of the user to retrieve"),
+        includePii: z.coerce
+          .boolean()
+          .optional()
+          .default(false)
+          .describe(
+            "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is admin for a user's organization.",
+          ),
       }),
     )
     .route({
@@ -183,7 +198,7 @@ export const userRouter = {
       tags: ["user"],
       summary: "Get user by email",
       description:
-        "Retrieve a user by their email address. PII fields (email, phone) are only included if the requested user belongs to an organization where the requester is an admin.",
+        "Retrieve a user's detailed information and role assignments by email address. PII fields are only included if requester is admin for one of the user's organizations.",
     })
     .handler(async ({ context: ctx, input }) => {
       let includePii = false;
@@ -217,7 +232,7 @@ export const userRouter = {
       tags: ["user"],
       summary: "Create or update user",
       description:
-        "Create a new user or update an existing one, including role assignments. PII fields (email, phone) are only updated if the requester has admin access to the user's organizations.",
+        "Create a new user or update an existing one, including role assignments for organizations. Requires admin role for organizations where roles are being assigned. PII fields (email, phone, emergency contacts) can only be set if requester has admin access.",
     })
     .handler(async ({ context: ctx, input }) => {
       const { roles: rawRoles, ...rest } = input;
@@ -464,14 +479,18 @@ export const userRouter = {
     }),
 
   delete: adminProcedure
-    .input(z.object({ id: z.number() }))
+    .input(
+      z.object({
+        id: z.number().describe("The unique identifier of the user to delete"),
+      }),
+    )
     .route({
       method: "DELETE",
       path: "/delete/{id}",
       tags: ["user"],
       summary: "Delete user",
       description:
-        "Permanently delete a user and all their role assignments (requires nation admin)",
+        "Permanently delete a user and all their role assignments. Requires F3 Nation admin role and cannot be undone.",
     })
     .handler(async ({ context: ctx, input }) => {
       const [f3nationOrg] = await ctx.db

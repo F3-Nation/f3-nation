@@ -56,7 +56,72 @@ export async function GET(request: Request) {
     info: {
       title: "F3 Nation API",
       version: "1.0.0",
-      description: "OpenAPI specification generated from oRPC router.",
+      description: `# Authentication
+
+All API endpoints require authentication via a Bearer token passed in the Authorization header.
+
+## Required Headers
+
+Every request must include the following headers:
+
+### 1. Authorization Header (Required)
+\`\`\`
+Authorization: Bearer YOUR_API_KEY
+\`\`\`
+
+The Bearer token is an API key that represents programmatic access to the F3 Nation API. This key must be a valid, non-revoked API key that has not expired.
+
+### 2. Client Header (Required)
+\`\`\`
+Client: your-app-identifier
+\`\`\`
+
+The \`Client\` header must be present and contain a string that identifies your application or service. This helps us track API usage and troubleshoot issues. Examples: \`https://f3milwaukee.com/locations\`, \`gloom-scheduler\`, \`Tackles Postman\`, etc.
+
+## Getting Started
+
+### Step 1: Generate an API Key
+Navigate to **https://map.f3nation.com/admin/api-keys** if you are an admin on a specific region or the F3 Nation organization. You can:
+- Create new API keys
+- Set expiration dates for security
+- View and revoke keys
+
+### Step 2: Configure Your Client
+Use the generated API key and a descriptive client identifier in your application:
+
+\`\`\`bash
+curl -X GET "https://api.f3nation.com/v1/ping" \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -H "Client: my-app"
+\`\`\`
+
+### Step 3: Make API Calls
+Include both headers in every request to the F3 Nation API.
+
+## Role-Based Access
+
+API keys inherit the roles and permissions of their owner. Access levels include:
+
+- **Editor**: Can view and modify data within assigned organizations
+- **Admin**: Same permissions as Editor, plus the ability to add/remove other Admins and Editors
+
+As of February 1, 2026, regional admins can only create read-only API keys. If you want an API Key edit access to your region, you will need to contact an F3 Nation admin. Right now, regional edit access is highly restrcited. This is because the API is still new and there are almost certainly gaps in security - meaning that a region has the potential to mess up data for other regions.
+
+## Best Practices
+
+1. **Keep Keys Secure**: Never commit API keys to version control. Use environment variables instead.
+    a. Read-Only keys are an exception. We realize many regions use systems that require storing the key in a config file or in plain text on the front-end. Read-Only keys are much less risky to expose.
+2. **Use Expiration Dates**: Set expiration dates on keys to limit exposure window in case of compromise.
+
+## Error Handling
+
+- **401 Unauthorized**: Missing, invalid, revoked, or expired API key
+- **403 Forbidden**: Valid API key but insufficient permissions for the requested resource
+- **429 Too Many Requests**: Rate limit exceeded (200 requests per 60 seconds)`,
+      contact: {
+        name: "F3 Nation",
+        url: "https://f3nation.com",
+      },
     },
     servers: [{ url: `${baseUrl}` }],
     security: [{ bearerAuth: [] }],
@@ -130,7 +195,7 @@ export async function GET(request: Request) {
       default: Client.SCALAR_API,
     },
     description:
-      "Client identifier for API requests. Required for all endpoints.",
+      "Client identifier for API requests. A string that identifies your application or service (e.g., 'https://f3milewaukee.com/location', 'gloom-scheduler', 'Tackles Postaman'). Required for all endpoints.",
   };
 
   // Ensure components.parameters exists
@@ -168,7 +233,6 @@ export async function GET(request: Request) {
         }
       }
     }
-  }
 
   return new Response(JSON.stringify(spec), {
     headers: { "Content-Type": "application/json" },
