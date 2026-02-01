@@ -26,10 +26,7 @@ import type {
   TypedViewArgs,
 } from "../../types/bolt-types";
 import { buildBackblastSelectModal } from "./select-form";
-import {
-  buildBackblastInfo,
-  buildBackblastEditModal,
-} from "./edit-form";
+import { buildBackblastInfo, buildBackblastEditModal } from "./edit-form";
 import {
   handleBackblastFormSubmit,
   handleBackblastEditButton,
@@ -159,7 +156,10 @@ async function handleBackblastSelect(args: TypedActionArgs): Promise<void> {
           userId: currentUserId,
         });
       } catch (error) {
-        logger.error("Failed to assign Q", { eventInstanceId: selectedEventId, error });
+        logger.error("Failed to assign Q", {
+          eventInstanceId: selectedEventId,
+          error,
+        });
       }
     }
 
@@ -275,7 +275,8 @@ export function registerBackblastFeature(app: App): void {
       const extContext = args.context as ExtendedContext;
       const regionOrgId = extContext.orgId ?? 0;
       const orgSettings = extContext.orgSettings ?? null;
-      const slackUserId = (args.body as { user?: { id: string } }).user?.id ?? "";
+      const slackUserId =
+        (args.body as { user?: { id: string } }).user?.id ?? "";
 
       // Navigate to the backblast edit form with no event (unscheduled)
       const navCtx = createNavContext(args);
@@ -313,14 +314,17 @@ export function registerBackblastFeature(app: App): void {
         return;
       }
 
-      logger.info("Backblast from preblast button clicked", { eventInstanceId });
+      logger.info("Backblast from preblast button clicked", {
+        eventInstanceId,
+      });
 
       const extContext = args.context as ExtendedContext;
       const currentUserId = extContext.slackUser?.userId;
       const teamId = extContext.teamId ?? "";
       const regionOrgId = extContext.orgId ?? 0;
       const orgSettings = extContext.orgSettings ?? null;
-      const slackUserId = (args.body as { user?: { id: string } }).user?.id ?? "";
+      const slackUserId =
+        (args.body as { user?: { id: string } }).user?.id ?? "";
 
       const navCtx = createNavContext(args);
 

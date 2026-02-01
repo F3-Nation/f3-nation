@@ -16,10 +16,7 @@ import { logger } from "../../lib/logger";
 import { stringifyNavMetadata } from "../../types/bolt-types";
 import type { NavigationMetadata } from "../../types/bolt-types";
 import type { OrgSettings, CustomField } from "../../types";
-import type {
-  BackblastEditMetadata,
-  BackblastInfo,
-} from "./edit-form-types";
+import type { BackblastEditMetadata, BackblastInfo } from "./edit-form-types";
 
 /** Default backblast template when none is configured */
 const DEFAULT_BACKBLAST_TEMPLATE = {
@@ -192,10 +189,15 @@ async function buildUnscheduledEventBlocks(
   initialEventTypeId?: number,
 ): Promise<View["blocks"]> {
   // Fetch AOs for the region
-  let aoOptions: { text: { type: "plain_text"; text: string }; value: string }[] =
-    [];
+  let aoOptions: {
+    text: { type: "plain_text"; text: string };
+    value: string;
+  }[] = [];
   try {
-    const { orgs } = await api.org.all({ orgTypes: ["ao"], parentOrgIds: [regionOrgId] });
+    const { orgs } = await api.org.all({
+      orgTypes: ["ao"],
+      parentOrgIds: [regionOrgId],
+    });
     aoOptions = orgs.map((ao) => ({
       text: { type: "plain_text" as const, text: ao.name },
       value: String(ao.id),
@@ -311,7 +313,10 @@ function buildCustomFieldBlocks(
             : {}),
         },
       });
-    } else if ((field.type === "select" || field.type === "multi_select") && field.options) {
+    } else if (
+      (field.type === "select" || field.type === "multi_select") &&
+      field.options
+    ) {
       const options = field.options.map((opt) => ({
         text: { type: "plain_text" as const, text: opt },
         value: opt,
@@ -326,7 +331,10 @@ function buildCustomFieldBlocks(
           element: {
             type: "static_select",
             action_id: actionId,
-            placeholder: { type: "plain_text", text: `Select ${field.name}...` },
+            placeholder: {
+              type: "plain_text",
+              text: `Select ${field.name}...`,
+            },
             options: options.length > 0 ? options : undefined,
             ...(typeof initialValue === "string" &&
             options.find((o) => o.value === initialValue)
@@ -346,7 +354,10 @@ function buildCustomFieldBlocks(
           element: {
             type: "multi_static_select",
             action_id: actionId,
-            placeholder: { type: "plain_text", text: `Select ${field.name}...` },
+            placeholder: {
+              type: "plain_text",
+              text: `Select ${field.name}...`,
+            },
             options: options.length > 0 ? options : undefined,
             ...(Array.isArray(initialValue) && initialValue.length > 0
               ? {
@@ -544,7 +555,10 @@ export async function buildBackblastEditModal(
     element: {
       type: "plain_text_input",
       action_id: ACTIONS.BACKBLAST_COUNT,
-      placeholder: { type: "plain_text", text: "Total PAX count including FNGs" },
+      placeholder: {
+        type: "plain_text",
+        text: "Total PAX count including FNGs",
+      },
     },
   });
 
@@ -557,7 +571,11 @@ export async function buildBackblastEditModal(
       initialMoleskine = savedMoleskin as Record<string, unknown>;
     }
   }
-  if (!initialMoleskine && event?.backblastRich && event.backblastRich.length > 0) {
+  if (
+    !initialMoleskine &&
+    event?.backblastRich &&
+    event.backblastRich.length > 0
+  ) {
     // Find the rich_text block in the backblast_rich array
     const richTextBlock = event.backblastRich.find(
       (b) => b.type === "rich_text",
@@ -626,7 +644,19 @@ export async function buildBackblastEditModal(
           value: "exclude_from_pax_vault",
         },
       ],
-      ...(optionsValue ? { initial_options: [{ text: { type: "plain_text", text: "Exclude stats from PAX Vault" }, value: "exclude_from_pax_vault" }] } : {}),
+      ...(optionsValue
+        ? {
+            initial_options: [
+              {
+                text: {
+                  type: "plain_text",
+                  text: "Exclude stats from PAX Vault",
+                },
+                value: "exclude_from_pax_vault",
+              },
+            ],
+          }
+        : {}),
     },
   });
 
@@ -640,7 +670,10 @@ export async function buildBackblastEditModal(
     blocks.push({
       type: "input",
       block_id: ACTIONS.BACKBLAST_EMAIL_SEND,
-      label: { type: "plain_text", text: "Email Backblast (to Wordpress, etc)" },
+      label: {
+        type: "plain_text",
+        text: "Email Backblast (to Wordpress, etc)",
+      },
       element: {
         type: "radio_buttons",
         action_id: ACTIONS.BACKBLAST_EMAIL_SEND,
@@ -685,7 +718,10 @@ export async function buildBackblastEditModal(
               text: { type: "plain_text", text: "Save and send later" },
               value: "Save and send later",
             }
-          : { text: { type: "plain_text", text: "Send now" }, value: "Send now" },
+          : {
+              text: { type: "plain_text", text: "Send now" },
+              value: "Send now",
+            },
       },
     });
   }

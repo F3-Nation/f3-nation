@@ -14,9 +14,10 @@ import type { BackblastFormValues } from "./edit-form-types";
  * Format PAX list for display in the message.
  * Combines Q, Co-Qs, regular PAX, non-Slack PAX, and FNGs.
  */
-function formatPaxListDisplay(
-  formValues: BackblastFormValues,
-): { paxFormatted: string; fngFormatted: string } {
+function formatPaxListDisplay(formValues: BackblastFormValues): {
+  paxFormatted: string;
+  fngFormatted: string;
+} {
   const paxParts: string[] = [];
 
   // Add Slack PAX (Q, CoQs, and PAX combined)
@@ -124,7 +125,11 @@ export function buildBackblastMessage(
   }[] = [
     {
       type: "button",
-      text: { type: "plain_text", text: ":pencil: Edit this backblast", emoji: true },
+      text: {
+        type: "plain_text",
+        text: ":pencil: Edit this backblast",
+        emoji: true,
+      },
       action_id: ACTIONS.BACKBLAST_EDIT_BUTTON,
       value: JSON.stringify({
         event_instance_id: eventInstanceId,
@@ -136,7 +141,11 @@ export function buildBackblastMessage(
     },
     {
       type: "button",
-      text: { type: "plain_text", text: ":heavy_plus_sign: New backblast", emoji: true },
+      text: {
+        type: "plain_text",
+        text: ":heavy_plus_sign: New backblast",
+        emoji: true,
+      },
       action_id: ACTIONS.BACKBLAST_NEW_BUTTON,
       value: "new",
     },
@@ -218,9 +227,10 @@ export function buildBackblastPlainText(
 
   const paxFormatted = paxNames.join(", ");
   const fngFormatted = formValues.fngs.trim() || "None";
-  const coQsFormatted = formValues.coQs.length > 0
-    ? formValues.coQs.map((id) => `@${id}`).join(", ")
-    : "";
+  const coQsFormatted =
+    formValues.coQs.length > 0
+      ? formValues.coQs.map((id) => `@${id}`).join(", ")
+      : "";
   const coQsLine = coQsFormatted ? ` / Co-Q: ${coQsFormatted}` : "";
 
   return `Backblast! ${formValues.title}
@@ -253,7 +263,11 @@ export function buildNewBackblastPromptBlocks(
       elements: [
         {
           type: "button",
-          text: { type: "plain_text", text: "Create New Backblast", emoji: true },
+          text: {
+            type: "plain_text",
+            text: "Create New Backblast",
+            emoji: true,
+          },
           action_id: ACTIONS.BACKBLAST_NEW_BUTTON,
           value: "new",
           style: "primary",

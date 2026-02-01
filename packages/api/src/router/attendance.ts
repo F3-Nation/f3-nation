@@ -352,7 +352,10 @@ export const attendanceRouter = {
       await ctx.db
         .delete(schema.attendanceXAttendanceTypes)
         .where(
-          inArray(schema.attendanceXAttendanceTypes.attendanceId, attendanceIds),
+          inArray(
+            schema.attendanceXAttendanceTypes.attendanceId,
+            attendanceIds,
+          ),
         );
 
       // Delete attendance records

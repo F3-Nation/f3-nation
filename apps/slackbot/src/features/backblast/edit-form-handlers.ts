@@ -10,7 +10,11 @@ import type { WebClient } from "@slack/web-api";
 import { ACTIONS } from "../../constants/actions";
 import { ATTENDANCE_TYPES } from "../../constants/attendance-types";
 import { api } from "../../lib/api-client";
-import { parseRichBlock, replaceUserChannelIds, safeGet } from "../../lib/helpers";
+import {
+  parseRichBlock,
+  replaceUserChannelIds,
+  safeGet,
+} from "../../lib/helpers";
 import { logger } from "../../lib/logger";
 import type { OrgSettings } from "../../types";
 import type {
@@ -140,12 +144,13 @@ function extractFormValues(body: TypedViewArgs["body"]): BackblastFormValues {
     files: [], // Will be populated after storage upload
     slackFileIds,
     // Unscheduled event fields
-    date: safeGet<string>(
-      values,
-      ACTIONS.BACKBLAST_DATE,
-      ACTIONS.BACKBLAST_DATE,
-      "selected_date",
-    ) ?? undefined,
+    date:
+      safeGet<string>(
+        values,
+        ACTIONS.BACKBLAST_DATE,
+        ACTIONS.BACKBLAST_DATE,
+        "selected_date",
+      ) ?? undefined,
     aoId: (() => {
       const aoStr = safeGet<string>(
         values,
@@ -266,10 +271,11 @@ async function getOrCreateUserIds(
         slackUserInfo.user.profile?.real_name ??
         slackUserInfo.user.name ??
         slackId; // Fall back to Slack ID if no name available
-      
+
       // For bot users or users without email, generate a placeholder email
       // The API requires a valid email format
-      const email = slackUserInfo.user.profile?.email ?? 
+      const email =
+        slackUserInfo.user.profile?.email ??
         `${slackId}@slack.placeholder.f3nation.com`;
 
       // Create linked user
@@ -314,11 +320,7 @@ async function sendBackblast(
   existingTs?: string | null,
 ): Promise<SendBackblastResult> {
   // Get backblast info for channel determination
-  const backblastInfo = await buildBackblastInfo(
-    eventInstanceId,
-    null,
-    teamId,
-  );
+  const backblastInfo = await buildBackblastInfo(eventInstanceId, null, teamId);
 
   // Determine channel
   let backblastChannel: string | null = null;
@@ -332,7 +334,8 @@ async function sendBackblast(
     try {
       const { org } = await api.org.byId({ id: eventOrg.id });
       if (org?.meta && typeof org.meta === "object") {
-        const channelId = (org.meta as Record<string, unknown>).slack_channel_id;
+        const channelId = (org.meta as Record<string, unknown>)
+          .slack_channel_id;
         if (typeof channelId === "string") {
           backblastChannel = channelId;
         }
@@ -420,7 +423,10 @@ async function sendBackblast(
 
     return { success: true, messageTs: result.ts, channel: backblastChannel };
   } catch (error) {
-    logger.error("Failed to send backblast message", { eventInstanceId, error });
+    logger.error("Failed to send backblast message", {
+      eventInstanceId,
+      error,
+    });
     return { success: false, error: String(error) };
   }
 }
@@ -453,7 +459,8 @@ export async function handleBackblastFormSubmit(
     await ack({
       response_action: "errors",
       errors: {
-        [ACTIONS.BACKBLAST_TITLE]: "Region not configured. Please contact an admin.",
+        [ACTIONS.BACKBLAST_TITLE]:
+          "Region not configured. Please contact an admin.",
       },
     });
     return;
@@ -555,21 +562,24 @@ export async function handleBackblastFormSubmit(
 
   // Determine if we should send or save for later
   const shouldSend = formValues.sendOption === "Send now" || isEdit;
-  const excludeFromPaxVault = formValues.options.includes("exclude_from_pax_vault");
+  const excludeFromPaxVault = formValues.options.includes(
+    "exclude_from_pax_vault",
+  );
 
   // Build message blocks and plain text
-  const { blocks: messageBlocks, plainText: messagePlainText } = buildBackblastMessage(
-    formValues,
-    eventOrgName,
-    eventDate,
-    eventTypeId,
-    paxCount,
-    fngCount,
-    moleskinePlainText,
-    eventInstanceId ?? 0,
-    excludeFromPaxVault,
-    orgSettings?.strava_enabled ?? false,
-  );
+  const { blocks: messageBlocks, plainText: messagePlainText } =
+    buildBackblastMessage(
+      formValues,
+      eventOrgName,
+      eventDate,
+      eventTypeId,
+      paxCount,
+      fngCount,
+      moleskinePlainText,
+      eventInstanceId ?? 0,
+      excludeFromPaxVault,
+      orgSettings?.strava_enabled ?? false,
+    );
 
   try {
     // For unscheduled events, create the event instance first
@@ -621,7 +631,9 @@ export async function handleBackblastFormSubmit(
           attendanceTypeIds: [ATTENDANCE_TYPES.PAX, ATTENDANCE_TYPES.Q],
         });
       } catch (error) {
-        logger.error(`Failed to create Q attendance for user ${qUserId}`, { error });
+        logger.error(`Failed to create Q attendance for user ${qUserId}`, {
+          error,
+        });
       }
     }
 
@@ -635,7 +647,10 @@ export async function handleBackblastFormSubmit(
             attendanceTypeIds: [ATTENDANCE_TYPES.PAX, ATTENDANCE_TYPES.COQ],
           });
         } catch (error) {
-          logger.error(`Failed to create Co-Q attendance for user ${coQUserId}`, { error });
+          logger.error(
+            `Failed to create Co-Q attendance for user ${coQUserId}`,
+            { error },
+          );
         }
       }
     }
@@ -651,7 +666,9 @@ export async function handleBackblastFormSubmit(
             attendanceTypeIds: [ATTENDANCE_TYPES.PAX],
           });
         } catch (error) {
-          logger.error(`Failed to create PAX attendance for user ${userId}`, { error });
+          logger.error(`Failed to create PAX attendance for user ${userId}`, {
+            error,
+          });
         }
       }
     }
@@ -724,7 +741,9 @@ export async function handleBackblastFormSubmit(
       backblast: moleskinePlainText,
       backblastRich: messageBlocks as unknown as Record<string, unknown>[],
       // Convert message timestamp to number if available
-      backblastTs: sendResult.messageTs ? parseFloat(sendResult.messageTs) : null,
+      backblastTs: sendResult.messageTs
+        ? parseFloat(sendResult.messageTs)
+        : null,
     });
 
     // TODO: Send email if enabled and requested
@@ -746,7 +765,8 @@ export async function handleBackblastFormSubmit(
     await ack({
       response_action: "errors",
       errors: {
-        [ACTIONS.BACKBLAST_TITLE]: "Failed to save backblast. Please try again.",
+        [ACTIONS.BACKBLAST_TITLE]:
+          "Failed to save backblast. Please try again.",
       },
     });
     return;
@@ -786,7 +806,7 @@ export async function handleBackblastEditButton(
 
   // Try to get from message metadata first
   const bodyWithMessage = body as {
-    message?: { 
+    message?: {
       metadata?: { event_payload?: BackblastMessageMetadata };
       ts?: string;
     };
@@ -800,7 +820,9 @@ export async function handleBackblastEditButton(
   // Fall back to button value (JSON encoded)
   if (!backblastData && actionWithValue.value) {
     try {
-      backblastData = JSON.parse(actionWithValue.value) as BackblastMessageMetadata;
+      backblastData = JSON.parse(
+        actionWithValue.value,
+      ) as BackblastMessageMetadata;
     } catch {
       logger.warn("Failed to parse backblast edit button value");
     }
@@ -827,7 +849,8 @@ export async function handleBackblastEditButton(
     // Send ephemeral message explaining why they can't edit
     try {
       await client.chat.postEphemeral({
-        channel: (body as { channel?: { id: string } }).channel?.id ?? slackUserId,
+        channel:
+          (body as { channel?: { id: string } }).channel?.id ?? slackUserId,
         user: slackUserId,
         text: "You don't have permission to edit this backblast. Only the Q, Co-Qs, original poster, or region admins can edit.",
       });
@@ -846,7 +869,9 @@ export async function handleBackblastEditButton(
   );
 
   if (!backblastInfo) {
-    logger.error("Failed to build backblast info for edit", { eventInstanceId });
+    logger.error("Failed to build backblast info for edit", {
+      eventInstanceId,
+    });
     return;
   }
 
