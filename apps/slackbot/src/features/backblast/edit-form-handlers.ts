@@ -45,8 +45,8 @@ function extractFormValues(body: TypedViewArgs["body"]): BackblastFormValues {
   // Extract PAX count, parsing as number or null
   const countStr = safeGet<string>(
     values,
-    ACTIONS.BACKBLAST_COUNT,
-    ACTIONS.BACKBLAST_COUNT,
+    String(ACTIONS.BACKBLAST_COUNT),
+    String(ACTIONS.BACKBLAST_COUNT),
     "value",
   );
   const count = countStr ? parseInt(countStr, 10) : null;
@@ -55,8 +55,8 @@ function extractFormValues(body: TypedViewArgs["body"]): BackblastFormValues {
   const fileObjects =
     safeGet<{ id: string; url_private: string }[]>(
       values,
-      ACTIONS.BACKBLAST_FILE,
-      ACTIONS.BACKBLAST_FILE,
+      String(ACTIONS.BACKBLAST_FILE),
+      String(ACTIONS.BACKBLAST_FILE),
       "files",
     ) ?? [];
   const slackFileIds = fileObjects.map((f) => f.id);
@@ -66,8 +66,8 @@ function extractFormValues(body: TypedViewArgs["body"]): BackblastFormValues {
   const selectedOptions =
     safeGet<{ value: string }[]>(
       values,
-      ACTIONS.BACKBLAST_OPTIONS,
-      ACTIONS.BACKBLAST_OPTIONS,
+      String(ACTIONS.BACKBLAST_OPTIONS),
+      String(ACTIONS.BACKBLAST_OPTIONS),
       "selected_options",
     ) ?? [];
   const options = selectedOptions.map((o) => o.value);
@@ -76,68 +76,68 @@ function extractFormValues(body: TypedViewArgs["body"]): BackblastFormValues {
     title:
       safeGet<string>(
         values,
-        ACTIONS.BACKBLAST_TITLE,
-        ACTIONS.BACKBLAST_TITLE,
+        String(ACTIONS.BACKBLAST_TITLE),
+        String(ACTIONS.BACKBLAST_TITLE),
         "value",
       ) ?? "",
     q:
       safeGet<string>(
         values,
-        ACTIONS.BACKBLAST_Q,
-        ACTIONS.BACKBLAST_Q,
+        String(ACTIONS.BACKBLAST_Q),
+        String(ACTIONS.BACKBLAST_Q),
         "selected_user",
       ) ?? "",
     coQs:
       safeGet<string[]>(
         values,
-        ACTIONS.BACKBLAST_COQ,
-        ACTIONS.BACKBLAST_COQ,
+        String(ACTIONS.BACKBLAST_COQ),
+        String(ACTIONS.BACKBLAST_COQ),
         "selected_users",
       ) ?? [],
     pax:
       safeGet<string[]>(
         values,
-        ACTIONS.BACKBLAST_PAX,
-        ACTIONS.BACKBLAST_PAX,
+        String(ACTIONS.BACKBLAST_PAX),
+        String(ACTIONS.BACKBLAST_PAX),
         "selected_users",
       ) ?? [],
     downrangePax: [], // TODO: Implement when external select is added
     nonSlackPax:
       safeGet<string>(
         values,
-        ACTIONS.BACKBLAST_NONSLACK_PAX,
-        ACTIONS.BACKBLAST_NONSLACK_PAX,
+        String(ACTIONS.BACKBLAST_NONSLACK_PAX),
+        String(ACTIONS.BACKBLAST_NONSLACK_PAX),
         "value",
       ) ?? "",
     fngs:
       safeGet<string>(
         values,
-        ACTIONS.BACKBLAST_FNGS,
-        ACTIONS.BACKBLAST_FNGS,
+        String(ACTIONS.BACKBLAST_FNGS),
+        String(ACTIONS.BACKBLAST_FNGS),
         "value",
       ) ?? "",
     count: isNaN(count ?? NaN) ? null : count,
     moleskine:
       safeGet<Record<string, unknown>>(
         values,
-        ACTIONS.BACKBLAST_MOLESKINE,
-        ACTIONS.BACKBLAST_MOLESKINE,
+        String(ACTIONS.BACKBLAST_MOLESKINE),
+        String(ACTIONS.BACKBLAST_MOLESKINE),
         "rich_text_value",
       ) ?? {},
     options,
     emailSend:
       (safeGet<string>(
         values,
-        ACTIONS.BACKBLAST_EMAIL_SEND,
-        ACTIONS.BACKBLAST_EMAIL_SEND,
+        String(ACTIONS.BACKBLAST_EMAIL_SEND),
+        String(ACTIONS.BACKBLAST_EMAIL_SEND),
         "selected_option",
         "value",
       ) as "yes" | "no") ?? "no",
     sendOption:
       (safeGet<string>(
         values,
-        ACTIONS.BACKBLAST_SEND_OPTIONS,
-        ACTIONS.BACKBLAST_SEND_OPTIONS,
+        String(ACTIONS.BACKBLAST_SEND_OPTIONS),
+        String(ACTIONS.BACKBLAST_SEND_OPTIONS),
         "selected_option",
         "value",
       ) as BackblastFormValues["sendOption"]) ?? "Send now",
@@ -147,15 +147,15 @@ function extractFormValues(body: TypedViewArgs["body"]): BackblastFormValues {
     date:
       safeGet<string>(
         values,
-        ACTIONS.BACKBLAST_DATE,
-        ACTIONS.BACKBLAST_DATE,
+        String(ACTIONS.BACKBLAST_DATE),
+        String(ACTIONS.BACKBLAST_DATE),
         "selected_date",
       ) ?? undefined,
     aoId: (() => {
       const aoStr = safeGet<string>(
         values,
-        ACTIONS.BACKBLAST_AO,
-        ACTIONS.BACKBLAST_AO,
+        String(ACTIONS.BACKBLAST_AO),
+        String(ACTIONS.BACKBLAST_AO),
         "selected_option",
         "value",
       );
@@ -164,8 +164,8 @@ function extractFormValues(body: TypedViewArgs["body"]): BackblastFormValues {
     eventTypeId: (() => {
       const etStr = safeGet<string>(
         values,
-        ACTIONS.BACKBLAST_EVENT_TYPE,
-        ACTIONS.BACKBLAST_EVENT_TYPE,
+        String(ACTIONS.BACKBLAST_EVENT_TYPE),
+        String(ACTIONS.BACKBLAST_EVENT_TYPE),
         "selected_option",
         "value",
       );

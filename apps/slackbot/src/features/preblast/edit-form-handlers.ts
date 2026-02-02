@@ -621,7 +621,7 @@ export async function handlePreblastAction(
         const bodyWithTrigger = body as { trigger_id?: string };
         const triggerId = bodyWithTrigger.trigger_id;
         if (triggerId) {
-          await (args as TypedActionArgs).client.views.open({
+          await args.client.views.open({
             trigger_id: triggerId,
             view: modal,
           });
