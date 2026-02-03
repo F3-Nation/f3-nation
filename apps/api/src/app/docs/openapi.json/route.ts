@@ -233,6 +233,7 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
         }
       }
     }
+  }
 
   return new Response(JSON.stringify(spec), {
     headers: { "Content-Type": "application/json" },
