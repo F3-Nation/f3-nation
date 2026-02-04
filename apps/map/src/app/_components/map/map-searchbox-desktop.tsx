@@ -162,10 +162,10 @@ export function MapSearchBox({
                     },
                     mapStore.get("zoom"),
                     (results) => {
-                    setIsLoading(false);
+                      setIsLoading(false);
                       // Only update if the input hasn't changed
                       if (searchStore.get("text") === value) {
-                    searchStore.setState({ placesResults: results });
+                        searchStore.setState({ placesResults: results });
                       }
                     },
                   );

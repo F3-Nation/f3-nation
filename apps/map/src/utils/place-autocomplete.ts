@@ -28,17 +28,17 @@ const requestTimestamps: number[] = [];
 function checkRateLimit(): boolean {
   const now = Date.now();
   const oneMinuteAgo = now - 60 * 1000;
-  
+
   // Remove old timestamps
   while (requestTimestamps.length > 0 && requestTimestamps[0]! < oneMinuteAgo) {
     requestTimestamps.shift();
   }
-  
+
   if (requestTimestamps.length >= RATE_LIMIT) {
     console.warn("[Places Autocomplete] Rate limit exceeded. Please wait.");
     return false;
   }
-  
+
   requestTimestamps.push(now);
   return true;
 }
@@ -118,7 +118,7 @@ export async function placesAutocomplete({
 /**
  * Debounced version of placesAutocomplete
  * Use this in components to reduce API calls
- * 
+ *
  * Properly debounces by canceling previous timer when called again
  * Returns a cleanup function to cancel pending requests
  */

@@ -149,12 +149,17 @@ export function MapSearchBoxMobile({
                   };
                   const zoom = mapStore.get("zoom");
                   // Use debounced autocomplete to reduce API calls
-                  debouncedPlacesAutocomplete(value, center, zoom, (results) => {
-                    // Only update if the input hasn't changed
-                    if (searchStore.get("text") === value) {
-                    searchStore.setState({ placesResults: results });
-                    }
-                  });
+                  debouncedPlacesAutocomplete(
+                    value,
+                    center,
+                    zoom,
+                    (results) => {
+                      // Only update if the input hasn't changed
+                      if (searchStore.get("text") === value) {
+                        searchStore.setState({ placesResults: results });
+                      }
+                    },
+                  );
                 }
               }}
             />
