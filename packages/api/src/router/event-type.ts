@@ -31,13 +31,39 @@ export const eventTypeRouter = {
     .input(
       z
         .object({
-          orgIds: arrayOrSingle(z.coerce.number()).optional(),
-          statuses: arrayOrSingle(z.enum(IsActiveStatus)).optional(),
-          pageIndex: z.coerce.number().optional(),
-          pageSize: z.coerce.number().optional(),
-          searchTerm: z.string().optional(),
-          sorting: parseSorting(),
-          ignoreNationEventTypes: z.coerce.boolean().optional(),
+          orgIds: arrayOrSingle(z.coerce.number())
+            .optional()
+            .describe(
+              "Filter event types by organization ID(s). Returns types in ANY of the specified orgs. Defaults to nation-wide types.",
+            ),
+          statuses: arrayOrSingle(z.enum(IsActiveStatus))
+            .optional()
+            .describe(
+              "Filter event types by status. Matches event types with ANY of the given statuses (active, inactive).",
+            ),
+          pageIndex: z.coerce
+            .number()
+            .optional()
+            .describe("Zero-based page index for pagination. Defaults to 0."),
+          pageSize: z.coerce
+            .number()
+            .optional()
+            .describe("Number of event types per page. Defaults to 10."),
+          searchTerm: z
+            .string()
+            .optional()
+            .describe(
+              "Search event types by name or description. Case-insensitive partial matching.",
+            ),
+          sorting: parseSorting().describe(
+            "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: name, description, eventCategory, specificOrgName, count, created.",
+          ),
+          ignoreNationEventTypes: z.coerce
+            .boolean()
+            .optional()
+            .describe(
+              "If true, only return event types specific to the requested orgs. If false (default), include nation-wide types.",
+            ),
         })
         .optional(),
     )
@@ -142,7 +168,17 @@ export const eventTypeRouter = {
     }),
   byOrgId: protectedProcedure
     .input(
-      z.object({ orgId: z.coerce.number(), isActive: z.boolean().optional() }),
+      z.object({
+        orgId: z.coerce
+          .number()
+          .describe("The organization ID to fetch event types for"),
+        isActive: z
+          .boolean()
+          .optional()
+          .describe(
+            "Filter event types by status. If not specified, defaults to active only.",
+          ),
+      }),
     )
     .route({
       method: "GET",
@@ -167,13 +203,20 @@ export const eventTypeRouter = {
       return { eventTypes: eventTypes ?? null };
     }),
   byId: protectedProcedure
-    .input(z.object({ id: z.coerce.number() }))
+    .input(
+      z.object({
+        id: z.coerce
+          .number()
+          .describe("The unique identifier of the event type"),
+      }),
+    )
     .route({
       method: "GET",
       path: "/id/{id}",
       tags: ["event-type"],
       summary: "Get event type by ID",
-      description: "Retrieve detailed information about a specific event type",
+      description:
+        "Retrieve detailed information about a specific event type including its category and usage count",
     })
     .handler(async ({ context: ctx, input }) => {
       const [result] = await ctx.db
@@ -196,7 +239,8 @@ export const eventTypeRouter = {
       path: "/",
       tags: ["event-type"],
       summary: "Create or update event type",
-      description: "Create a new event type or update an existing one",
+      description:
+        "Create a new event type or update an existing one. Can be created at nation level (for all orgs) or scoped to a specific organization. Requires appropriate permissions.",
     })
     .handler(async ({ context: ctx, input }) => {
       const [existingEventType] = input.id
@@ -259,13 +303,20 @@ export const eventTypeRouter = {
       return { eventType: result ?? null };
     }),
   delete: editorProcedure
-    .input(z.object({ id: z.number() }))
+    .input(
+      z.object({
+        id: z
+          .number()
+          .describe("The unique identifier of the event type to delete"),
+      }),
+    )
     .route({
       method: "DELETE",
       path: "/id/{id}",
       tags: ["event-type"],
       summary: "Delete event type",
-      description: "Soft delete an event type by marking it as inactive",
+      description:
+        "Soft delete an event type by marking it as inactive. Also removes all associations with events.",
     })
     .handler(async ({ context: ctx, input }) => {
       const [existingEventType] = await ctx.db

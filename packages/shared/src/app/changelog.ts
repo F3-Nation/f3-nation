@@ -10,6 +10,19 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: "3.6.4",
+    date: "2026-02-04",
+    title: "API Documentation",
+    sections: [
+      {
+        title: "API",
+        items: [
+          "Added endpoint and parameter descriptions to API documentation",
+        ],
+      },
+    ],
+  },
+  {
     version: "3.6.3",
     date: "2026-01-31",
     title: "Developer Tooling",
