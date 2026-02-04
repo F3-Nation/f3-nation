@@ -115,6 +115,19 @@ export const ACTIONS = {
   CONFIG_REPORTING: "reporting",
   CONFIG_USER_SETTINGS: "user_settings",
 
+  // SLT/Position Management
+  SLT_LEVEL_SELECT: "slt-level-select",
+  SLT_SELECT: "slt-select",
+  CONFIG_SLT_CALLBACK_ID: "config-slt-id",
+  CONFIG_NEW_POSITION: "new_position",
+  CONFIG_NEW_POSITION_NAME: "new_position_name",
+  CONFIG_NEW_POSITION_DESCRIPTION: "new_position_description",
+  NEW_POSITION_CALLBACK_ID: "new-position-id",
+  CONFIG_EDIT_POSITIONS: "edit_positions",
+  POSITION_EDIT_DELETE: "position-edit-delete",
+  EDIT_DELETE_POSITION_CALLBACK_ID: "edit-delete-position-id",
+  EDIT_POSITION_CALLBACK_ID: "edit-position-id",
+
   // Welcome
   WELCOME_MESSAGE_CONFIG_CALLBACK_ID: "welcome-message-config-id",
 

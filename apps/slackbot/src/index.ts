@@ -13,6 +13,7 @@ import { registerWelcomeFeature } from "./features/welcome";
 import { registerConfigFeature } from "./features/config";
 import { registerCalendarFeature } from "./features/calendar";
 import { registerPreblastFeature } from "./features/preblast";
+import { registerPositionsFeature } from "./features/positions";
 import { withRegionContext } from "./lib/middleware";
 import { logger } from "./lib/logger";
 
@@ -40,6 +41,7 @@ registerConfigFeature(app);
 registerCalendarFeature(app);
 registerPreblastFeature(app);
 registerBackblastFeature(app);
+registerPositionsFeature(app);
 
 // Health check endpoint for HTTP mode
 // eslint-disable-next-line @typescript-eslint/require-await

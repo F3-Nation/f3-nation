@@ -28,6 +28,10 @@ import type {
   AttendanceMutationResponse,
   CalendarHomeScheduleInput,
   CalendarHomeScheduleResponse,
+  PositionResponse,
+  PositionWithAssignments,
+  PositionInput,
+  UpdatePositionAssignmentsInput,
 } from "../types/api-types";
 import { logger } from "./logger";
 
@@ -596,6 +600,87 @@ export const api = {
       apiRequest<void>(`/event-tag/id/${id}`, {
         method: "DELETE",
       }),
+  },
+
+  position: {
+    /**
+     * Get all positions available for an org (includes global positions)
+     */
+    all: (params: {
+      orgId?: number;
+      orgType?: "ao" | "region" | "area" | "sector" | "nation";
+      ignoreGlobalPositions?: boolean;
+      isActive?: boolean;
+    }) => {
+      const searchParams = new URLSearchParams();
+      if (params.orgId) searchParams.append("orgId", params.orgId.toString());
+      if (params.orgType) searchParams.append("orgType", params.orgType);
+      if (params.ignoreGlobalPositions) {
+        searchParams.append("ignoreGlobalPositions", "true");
+      }
+      if (params.isActive !== undefined) {
+        searchParams.append("isActive", params.isActive.toString());
+      }
+      return apiRequest<{ positions: PositionResponse[] }>(
+        `/position?${searchParams.toString()}`,
+      );
+    },
+
+    /**
+     * Get positions specific to an org (excludes global positions)
+     */
+    byOrgId: (input: { orgId: number; isActive?: boolean }) => {
+      const searchParams = new URLSearchParams();
+      if (input.isActive !== undefined) {
+        searchParams.append("isActive", input.isActive.toString());
+      }
+      const query = searchParams.toString();
+      return apiRequest<{ positions: PositionResponse[] }>(
+        `/position/org/${input.orgId}${query ? `?${query}` : ""}`,
+      );
+    },
+
+    byId: (input: { id: number }) =>
+      apiRequest<{ position: PositionResponse | null }>(
+        `/position/id/${input.id}`,
+      ),
+
+    /**
+     * Get positions with their assigned user IDs for an org
+     */
+    getAssignments: (params: { orgId: number; regionOrgId?: number }) => {
+      const searchParams = new URLSearchParams();
+      if (params.regionOrgId) {
+        searchParams.append("regionOrgId", params.regionOrgId.toString());
+      }
+      const query = searchParams.toString();
+      return apiRequest<{ positions: PositionWithAssignments[] }>(
+        `/position/assignments/${params.orgId}${query ? `?${query}` : ""}`,
+      );
+    },
+
+    crupdate: (input: PositionInput) =>
+      apiRequest<{ position: PositionResponse | null }>(`/position`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+
+    delete: (id: number) =>
+      apiRequest<{ positionId: number }>(`/position/id/${id}`, {
+        method: "DELETE",
+      }),
+
+    /**
+     * Update position assignments for an org
+     */
+    updateAssignments: (input: UpdatePositionAssignmentsInput) =>
+      apiRequest<{ success: boolean; assignmentCount: number }>(
+        `/position/assignments`,
+        {
+          method: "PUT",
+          body: JSON.stringify(input),
+        },
+      ),
   },
 
   /**

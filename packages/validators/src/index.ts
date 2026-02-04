@@ -300,3 +300,39 @@ export const SlackUserUpsertSchema = z.object({
   isOwner: z.boolean().default(false),
   isBot: z.boolean().default(false),
 });
+
+// POSITION SCHEMA
+import { positions, positionsXOrgsXUsers } from "@acme/db/schema/schema";
+
+export const PositionSelectSchema = createSelectSchema(positions);
+export const PositionInsertSchema = createInsertSchema(positions);
+
+export type PositionSelectType = z.infer<typeof PositionSelectSchema>;
+export type PositionInsertType = z.infer<typeof PositionInsertSchema>;
+
+export const PositionAssignmentSelectSchema =
+  createSelectSchema(positionsXOrgsXUsers);
+export const PositionAssignmentInsertSchema =
+  createInsertSchema(positionsXOrgsXUsers);
+
+export type PositionAssignmentSelectType = z.infer<
+  typeof PositionAssignmentSelectSchema
+>;
+export type PositionAssignmentInsertType = z.infer<
+  typeof PositionAssignmentInsertSchema
+>;
+
+/**
+ * Schema for bulk updating position assignments for an org
+ */
+export const UpdatePositionAssignmentsSchema = z.object({
+  /** The org (AO or region) the assignments are for */
+  orgId: z.number(),
+  /** Array of position assignments: which users hold which positions */
+  assignments: z.array(
+    z.object({
+      positionId: z.number(),
+      userIds: z.array(z.number()),
+    }),
+  ),
+});

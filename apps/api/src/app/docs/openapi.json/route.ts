@@ -66,11 +66,16 @@ export async function GET(request: Request) {
         name: "api",
         tags: [
           "api-key",
+          "attendance",
           "event",
+          "event-instance",
+          "event-tag",
           "event-type",
           "location",
+          "mail",
           "org",
           "ping",
+          "position",
           "request",
           "user",
         ],
@@ -81,7 +86,7 @@ export async function GET(request: Request) {
       },
       {
         name: "map",
-        tags: ["feedback", "map.location"],
+        tags: ["feedback", "map", "map.location"],
       },
     ],
     tags: [
@@ -89,20 +94,37 @@ export async function GET(request: Request) {
         name: "api-key",
         description: "API key management for programmatic access",
       },
+      {
+        name: "attendance",
+        description: "Workout attendance tracking and management",
+      },
       { name: "event", description: "Workout event management" },
+      {
+        name: "event-instance",
+        description: "Individual event instance management",
+      },
+      { name: "event-tag", description: "Event tagging and categorization" },
       { name: "event-type", description: "Event type/category management" },
+      { name: "feedback", description: "User feedback submission" },
       {
         name: "location",
         description: "Physical location management for workouts",
       },
+      { name: "mail", description: "Email sending and management" },
+      { name: "map", description: "Map-related utilities and revalidation" },
+      { name: "map.location", description: "Map location data and search" },
       {
         name: "org",
         description: "Organization management (regions, AOs, etc.)",
       },
       { name: "ping", description: "Health check endpoints" },
+      {
+        name: "position",
+        description: "Leadership position management within organizations",
+      },
       { name: "request", description: "Data change request workflow" },
-      { name: "user", description: "User account management" },
       { name: "slack", description: "Slack integration and management" },
+      { name: "user", description: "User account management" },
     ],
 
     components: {

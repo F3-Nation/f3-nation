@@ -511,3 +511,49 @@ export interface CalendarHomeScheduleInput {
   onlyUserEvents?: boolean;
   limit?: number;
 }
+
+// POSITION TYPES
+
+/**
+ * Position response from API
+ */
+export interface PositionResponse {
+  id: number;
+  name: string;
+  description: string | null;
+  orgId: number | null;
+  orgType: OrgType | null;
+  isActive: boolean;
+  created: string;
+  updated: string;
+}
+
+/**
+ * Position with assigned user IDs
+ */
+export interface PositionWithAssignments extends PositionResponse {
+  userIds: number[];
+}
+
+/**
+ * Input for creating/updating a position
+ */
+export interface PositionInput {
+  id?: number;
+  name: string;
+  description?: string | null;
+  orgId?: number | null;
+  orgType?: OrgType | null;
+  isActive?: boolean;
+}
+
+/**
+ * Input for updating position assignments
+ */
+export interface UpdatePositionAssignmentsInput {
+  orgId: number;
+  assignments: {
+    positionId: number;
+    userIds: number[];
+  }[];
+}

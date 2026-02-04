@@ -235,6 +235,7 @@ await navigateToView(
 | `features/help.py`                    | `src/features/help/index.ts`              | P0 - Foundation   |
 | `features/welcome.py`                 | `src/features/welcome/index.ts`           | P0 - Foundation   |
 | `features/config.py`                  | `src/features/config/index.ts`            | P1 - Core         |
+| `features/positions.py`               | `src/features/positions/index.ts`         | P1 - Core         |
 | `features/backblast.py`               | `src/features/backblast/index.ts`         | P1 - Core         |
 | `features/preblast.py`                | `src/features/preblast/index.ts`          | P1 - Core         |
 | `features/calendar/home.py`           | `src/features/calendar/home.ts`           | P1 - Core         |
@@ -568,6 +569,7 @@ export const attendanceRouter = {
 - [x] Implement `help` feature (commands + app_mention)
 - [x] Implement basic `config` feature
 - [x] Add required Slack API endpoints to `packages/api`
+- [ ] Implement `positions` feature (aka SLT)
 
 ### Phase 2: Calendar & Backblast (Weeks 4-6)
 
