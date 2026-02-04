@@ -21,7 +21,7 @@ import { orpc, useQuery } from "~/orpc/react";
 import { useOnKeyPress } from "~/utils/hooks/use-on-key-press";
 import { useKeyPress } from "~/utils/key-press/hook";
 import { onClickPlaceRowMap } from "~/utils/on-click-place-row-map";
-import { placesAutocomplete } from "~/utils/place-autocomplete";
+import { debouncedPlacesAutocomplete } from "~/utils/place-autocomplete";
 import { mapStore } from "~/utils/store/map";
 import { searchStore } from "~/utils/store/search";
 import {
@@ -145,23 +145,32 @@ export function MapSearchBox({
               )}
               onChange={(e) => {
                 shouldRedirectOnResult.current = true;
-                searchStore.setState({ text: e.target.value });
+                const value = e.target.value;
+                searchStore.setState({ text: value });
 
-                if (!e.target.value) {
+                if (!value) {
                   searchStore.setState({ placesResults: [] });
-                } else if (e.target.value.length > 2) {
+                  setIsLoading(false);
+                } else if (value.length > 2) {
                   setIsLoading(true);
-                  void placesAutocomplete({
-                    input: e.target.value,
-                    center: mapStore.get("center") ?? {
+                  // Use debounced autocomplete to reduce API calls
+                  debouncedPlacesAutocomplete(
+                    value,
+                    mapStore.get("center") ?? {
                       lat: DEFAULT_CENTER[0] ?? 37.7937,
                       lng: DEFAULT_CENTER[1] ?? -122.3965,
                     },
-                    zoom: mapStore.get("zoom"),
-                  }).then((results) => {
+                    mapStore.get("zoom"),
+                    (results) => {
                     setIsLoading(false);
+                      // Only update if the input hasn't changed
+                      if (searchStore.get("text") === value) {
                     searchStore.setState({ placesResults: results });
-                  });
+                      }
+                    },
+                  );
+                } else {
+                  setIsLoading(false);
                 }
               }}
               onSubmit={() => onSubmit()}
