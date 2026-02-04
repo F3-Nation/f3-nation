@@ -1,16 +1,7 @@
 import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 
-import {
-  and,
-  asc,
-  eq,
-  inArray,
-  isNull,
-  or,
-  schema,
-  sql,
-} from "@acme/db";
+import { and, asc, eq, inArray, isNull, or, schema, sql } from "@acme/db";
 import {
   PositionInsertSchema,
   UpdatePositionAssignmentsSchema,
@@ -80,7 +71,9 @@ export const positionRouter = {
         .where(where)
         .orderBy(
           // Global positions first, then alphabetically
-          asc(sql`CASE WHEN ${schema.positions.orgId} IS NULL THEN 0 ELSE 1 END`),
+          asc(
+            sql`CASE WHEN ${schema.positions.orgId} IS NULL THEN 0 ELSE 1 END`,
+          ),
           asc(schema.positions.name),
         );
 
@@ -102,7 +95,8 @@ export const positionRouter = {
       path: "/org/{orgId}",
       tags: ["position"],
       summary: "Get positions by organization",
-      description: "Retrieve positions specific to an organization (excludes global)",
+      description:
+        "Retrieve positions specific to an organization (excludes global)",
     })
     .handler(async ({ context: ctx, input }) => {
       const positions = await ctx.db
@@ -197,7 +191,9 @@ export const positionRouter = {
           ),
         )
         .orderBy(
-          asc(sql`CASE WHEN ${schema.positions.orgId} IS NULL THEN 0 ELSE 1 END`),
+          asc(
+            sql`CASE WHEN ${schema.positions.orgId} IS NULL THEN 0 ELSE 1 END`,
+          ),
           asc(schema.positions.name),
         );
 
@@ -382,7 +378,8 @@ export const positionRouter = {
 
       if (!roleCheckResult.success) {
         throw new ORPCError("UNAUTHORIZED", {
-          message: "You are not authorized to manage position assignments for this org",
+          message:
+            "You are not authorized to manage position assignments for this org",
         });
       }
 
@@ -420,9 +417,7 @@ export const positionRouter = {
 
       // Insert new assignments
       if (newAssignments.length > 0) {
-        await ctx.db
-          .insert(schema.positionsXOrgsXUsers)
-          .values(newAssignments);
+        await ctx.db.insert(schema.positionsXOrgsXUsers).values(newAssignments);
       }
 
       return { success: true, assignmentCount: newAssignments.length };

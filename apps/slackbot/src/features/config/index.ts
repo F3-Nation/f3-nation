@@ -156,7 +156,10 @@ export function buildConfigModal(context: ExtendedContext) {
       elements: [
         {
           type: "button",
-          text: { type: "plain_text", text: ":busts_in_silhouette: SLT Settings" },
+          text: {
+            type: "plain_text",
+            text: ":busts_in_silhouette: SLT Settings",
+          },
           action_id: ACTIONS.CONFIG_SLT,
         },
       ],

@@ -167,11 +167,10 @@ export async function handleOpenSltConfig(args: TypedActionArgs) {
   await ack();
 
   const navCtx = createNavContext(args);
-  await navigateToView(
-    navCtx,
-    () => buildSltConfigForm(context),
-    { showLoading: true, loadingTitle: "Loading SLT Settings" },
-  );
+  await navigateToView(navCtx, () => buildSltConfigForm(context), {
+    showLoading: true,
+    loadingTitle: "Loading SLT Settings",
+  });
 }
 
 /**
@@ -315,7 +314,10 @@ export function buildNewPositionForm(
       element: {
         type: "plain_text_input",
         action_id: ACTIONS.CONFIG_NEW_POSITION_NAME,
-        placeholder: { type: "plain_text", text: "Enter the new position name..." },
+        placeholder: {
+          type: "plain_text",
+          text: "Enter the new position name...",
+        },
       },
     },
     {
@@ -522,11 +524,10 @@ export async function handleEditPositionsClick(args: TypedActionArgs) {
   await ack();
 
   const navCtx = createNavContext(args);
-  await navigateToView(
-    navCtx,
-    () => buildPositionListForm(context),
-    { showLoading: true, loadingTitle: "Loading Positions" },
-  );
+  await navigateToView(navCtx, () => buildPositionListForm(context), {
+    showLoading: true,
+    loadingTitle: "Loading Positions",
+  });
 }
 
 /**
