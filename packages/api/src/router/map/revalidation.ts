@@ -13,6 +13,7 @@ export const apiRouter = {
           locationId: z.number().optional(),
           orgId: z.number().optional(),
           action: z.enum(["map.updated", "map.created", "map.deleted"]),
+          source: z.string().optional(),
         })
         .optional(),
     )
