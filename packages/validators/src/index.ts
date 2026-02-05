@@ -44,7 +44,10 @@ export const EmailAuthSchema = UserInsertSchema.pick({
 
 // LOCATION SCHEMA
 export const LocationInsertSchema = createInsertSchema(locations, {
-  name: (s: z.ZodString) => s.min(1, { message: "Name is required" }),
+  name: (s: z.ZodString) =>
+    s.min(1, { message: "Name is required" }).regex(/\S/, {
+      message: "Name is required",
+    }),
 });
 export const LocationSelectSchema = createSelectSchema(locations);
 

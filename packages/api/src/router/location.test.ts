@@ -325,10 +325,22 @@ describe("Location Router", () => {
 
       const client = createTestClient();
 
+      // Test empty string
       await expect(
         client.location.crupdate({
           // @ts-expect-error - empty string is needed for the test
           name: "",
+          orgId: region.id,
+          latitude: 35.0,
+          longitude: -80.0,
+          isActive: true,
+        }),
+      ).rejects.toThrow();
+
+      // Test whitespace-only string
+      await expect(
+        client.location.crupdate({
+          name: "   ",
           orgId: region.id,
           latitude: 35.0,
           longitude: -80.0,
