@@ -1,7 +1,9 @@
-import { Facebook, Globe, Instagram, Mail, Phone, Twitter } from "lucide-react";
+import { Facebook, Globe, Instagram, Mail, Twitter } from "lucide-react";
 import Link from "next/link";
 
 import { cn } from "@acme/ui";
+
+import { PhoneActionPopover } from "./phone-action-popover";
 
 export interface ContactInfo {
   website?: string | null;
@@ -93,11 +95,6 @@ export const ContactLinks = ({
       label: "Email",
     },
     {
-      url: phone ? `tel:${phone}` : null,
-      icon: Phone,
-      label: "Phone",
-    },
-    {
       url: normalizeTwitterUrl(twitter),
       icon: Twitter,
       label: "X (Twitter)",
@@ -120,11 +117,7 @@ export const ContactLinks = ({
         <Link
           key={label}
           href={url!}
-          target={
-            url!.startsWith("mailto:") || url!.startsWith("tel:")
-              ? undefined
-              : "_blank"
-          }
+          target={url!.startsWith("mailto:") ? undefined : "_blank"}
           rel="noopener noreferrer"
           className={buttonClass}
           title={label}
@@ -133,6 +126,13 @@ export const ContactLinks = ({
           <Icon className={iconClass} />
         </Link>
       ))}
+      {phone && (
+        <PhoneActionPopover
+          phoneNumber={phone}
+          iconSize={iconSize}
+          className={buttonClass}
+        />
+      )}
     </div>
   );
 };
