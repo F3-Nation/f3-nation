@@ -183,6 +183,33 @@ describe("Org Router", () => {
       }
     });
 
+    it("should create org with phone number", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const client = createTestClient();
+      const orgName = `Test Region ${uniqueId()}`;
+      const phoneNumber = "+1-555-0123";
+
+      const result = await client.org.crupdate({
+        name: orgName,
+        orgType: "region",
+        parentId: f3Nation.id,
+        isActive: true,
+        email: "test@example.com",
+        phone: phoneNumber,
+      });
+
+      expect(result).toHaveProperty("org");
+      expect(result.org).not.toBeNull();
+      expect(result.org?.phone).toBe(phoneNumber);
+
+      if (result.org) {
+        createdOrgIds.push(result.org.id);
+      }
+    });
+
     it("should require parentId or id", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
