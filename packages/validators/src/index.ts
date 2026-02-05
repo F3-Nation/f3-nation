@@ -43,7 +43,9 @@ export const EmailAuthSchema = UserInsertSchema.pick({
 });
 
 // LOCATION SCHEMA
-export const LocationInsertSchema = createInsertSchema(locations);
+export const LocationInsertSchema = createInsertSchema(locations, {
+  name: (s: z.ZodString) => s.min(1, { message: "Name is required" }),
+});
 export const LocationSelectSchema = createSelectSchema(locations);
 
 // EVENT TYPE SCHEMA

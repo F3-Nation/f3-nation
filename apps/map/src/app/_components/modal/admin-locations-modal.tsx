@@ -214,7 +214,7 @@ export default function AdminLocationsModal({
                           </TooltipProvider>
                           <FormControl>
                             <Input
-                              placeholder="Name"
+                              placeholder="Commonly known as (e.g., Freedom Park)"
                               {...field}
                               value={field.value ?? ""}
                             />

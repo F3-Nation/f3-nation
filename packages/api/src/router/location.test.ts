@@ -309,6 +309,34 @@ describe("Location Router", () => {
       ).rejects.toThrow();
     });
 
+    it("should require name", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      // Give the session editor permission on this region
+      const editorSession = createEditorSession({
+        orgId: region.id,
+        orgName: region.name,
+      });
+      await mockAuthWithSession(editorSession);
+
+      const client = createTestClient();
+
+      await expect(
+        client.location.crupdate({
+          // @ts-expect-error - empty string is needed for the test
+          name: "",
+          orgId: region.id,
+          latitude: 35.0,
+          longitude: -80.0,
+          isActive: true,
+        }),
+      ).rejects.toThrow();
+    });
+
     it("should update an existing location", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
