@@ -457,6 +457,7 @@ export const orgs = pgTable(
     logoUrl: varchar("logo_url"),
     website: varchar(),
     email: varchar(),
+    phone: varchar(),
     twitter: varchar(),
     facebook: varchar(),
     instagram: varchar(),

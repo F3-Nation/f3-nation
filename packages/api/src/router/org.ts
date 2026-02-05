@@ -42,6 +42,7 @@ interface Org {
   logoUrl: string | null;
   website: string | null;
   email: string | null;
+  phone: string | null;
   twitter: string | null;
   facebook: string | null;
   instagram: string | null;
@@ -264,6 +265,7 @@ export const orgRouter = {
         logoUrl: org.logoUrl,
         website: org.website,
         email: org.email,
+        phone: org.phone,
         twitter: org.twitter,
         facebook: org.facebook,
         instagram: org.instagram,
