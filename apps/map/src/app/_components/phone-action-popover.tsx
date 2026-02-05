@@ -5,11 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { cn } from "@acme/ui";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@acme/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@acme/ui/popover";
 import { toast } from "@acme/ui/toast";
 
 interface PhoneActionPopoverProps {
@@ -48,6 +44,11 @@ export const PhoneActionPopover = ({
 
   const handleCopy = async () => {
     try {
+      // Check if clipboard API is available
+      if (!navigator.clipboard) {
+        toast.error("Clipboard not available in this browser");
+        return;
+      }
       await navigator.clipboard.writeText(phoneNumber);
       toast.success("Phone number copied to clipboard");
       setOpen(false);
@@ -90,6 +91,7 @@ export const PhoneActionPopover = ({
             <span>Text</span>
           </Link>
           <button
+            type="button"
             onClick={handleCopy}
             className="flex items-center gap-3 rounded-md px-3 py-2 text-sm hover:bg-muted transition-colors text-left"
           >
