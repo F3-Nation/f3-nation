@@ -61,6 +61,7 @@ export const eventDefaults = {
 
 export const locationDefaults = {
   locationId: null,
+  locationName: "",
   locationAddress: "",
   locationAddress2: "",
   locationCity: "",
@@ -107,6 +108,7 @@ export const eventAndLocationToUpdateRequest = ({
     eventTypeIds: event?.eventTypes.map((type) => type.id) ?? [],
     eventDescription: event?.description ?? null,
     locationId: location.id,
+    locationName: location.locationName,
     locationAddress: location.locationAddress,
     locationAddress2: location.locationAddress2,
     locationCity: location.locationCity,
@@ -145,6 +147,7 @@ export interface DataType {
     dayOfWeek: DayOfWeek | null;
     eventTypeIds: number[];
     eventDescription: string | null;
+    locationName: string | null;
     locationAddress: string | null;
     locationAddress2: string | null;
     locationCity: string | null;

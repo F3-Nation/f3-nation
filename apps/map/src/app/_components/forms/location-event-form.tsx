@@ -295,6 +295,18 @@ export const LocationEventForm = ({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <div className="text-sm font-medium text-muted-foreground">
+            Location Name *
+          </div>
+          <Input
+            {...form.register("locationName")}
+            placeholder="Commonly known as (e.g., Freedom Park)"
+          />
+          <p className="text-xs text-destructive">
+            {form.formState.errors.locationName?.message}
+          </p>
+        </div>
+        <div className="space-y-2">
+          <div className="text-sm font-medium text-muted-foreground">
             Location Description
           </div>
           <Textarea

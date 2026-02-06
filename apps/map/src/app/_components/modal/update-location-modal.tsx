@@ -166,6 +166,7 @@ export const UpdateLocationModal = ({
     }
 
     form.setValue("locationId", data.locationId ?? null);
+    form.setValue("locationName", data.locationName ?? "");
     form.setValue("locationAddress", data.locationAddress ?? "");
     form.setValue("locationAddress2", data.locationAddress2 ?? "");
     form.setValue("locationCity", data.locationCity ?? "");
