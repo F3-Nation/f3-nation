@@ -295,7 +295,7 @@ export const LocationEventForm = ({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <div className="text-sm font-medium text-muted-foreground">
-            Location Name *
+            Location Name
           </div>
           <Input
             {...form.register("locationName")}
