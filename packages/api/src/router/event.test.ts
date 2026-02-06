@@ -547,6 +547,85 @@ describe("Event Router", () => {
         expect(hasThirdF).toBe(true);
       });
     });
+
+    it("should return endDate field for events", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      const location = await createTestLocation(region.id);
+      if (!location) return;
+
+      // Create an event with endDate
+      const [eventWithEndDate] = await db
+        .insert(schema.events)
+        .values({
+          name: `Event With EndDate ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: location.id,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          isActive: true,
+          highlight: false,
+          startDate: "2026-01-01",
+          endDate: "2026-12-31",
+          isPrivate: false,
+        })
+        .returning();
+
+      if (eventWithEndDate) {
+        createdEventIds.push(eventWithEndDate.id);
+      }
+
+      // Create an event without endDate (null)
+      const [eventWithoutEndDate] = await db
+        .insert(schema.events)
+        .values({
+          name: `Event Without EndDate ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: location.id,
+          dayOfWeek: "tuesday",
+          startTime: "0600",
+          isActive: true,
+          highlight: false,
+          startDate: "2026-01-01",
+          endDate: null,
+          isPrivate: false,
+        })
+        .returning();
+
+      if (eventWithoutEndDate) {
+        createdEventIds.push(eventWithoutEndDate.id);
+      }
+
+      const client = createTestClient();
+      const result = await client.map.event.all({
+        pageIndex: 0,
+        pageSize: 100,
+      });
+
+      // Find our events in the results
+      const foundWithEndDate = result.events?.find(
+        (e) => e.id === eventWithEndDate?.id,
+      );
+      const foundWithoutEndDate = result.events?.find(
+        (e) => e.id === eventWithoutEndDate?.id,
+      );
+
+      // Both events should have the endDate property
+      expect(foundWithEndDate).toBeDefined();
+      expect(foundWithEndDate).toHaveProperty("endDate");
+      expect(foundWithEndDate?.endDate).toBe("2026-12-31");
+
+      expect(foundWithoutEndDate).toBeDefined();
+      expect(foundWithoutEndDate).toHaveProperty("endDate");
+      expect(foundWithoutEndDate?.endDate).toBeNull();
+    });
   });
 
   describe("count", () => {
@@ -792,6 +871,94 @@ describe("Event Router", () => {
       expect(result.event).not.toBeNull();
       expect(result.event?.id).toBe(privateEvent.id);
       expect(result.event?.isPrivate).toBe(true);
+    });
+
+    it("should return endDate field for an event", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      const location = await createTestLocation(region.id);
+      if (!location) return;
+
+      // Create an event with endDate
+      const [eventWithEndDate] = await db
+        .insert(schema.events)
+        .values({
+          name: `Event With EndDate ById ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: location.id,
+          dayOfWeek: "thursday",
+          startTime: "0700",
+          isActive: true,
+          highlight: false,
+          startDate: "2026-02-01",
+          endDate: "2026-11-30",
+          isPrivate: false,
+        })
+        .returning();
+
+      if (!eventWithEndDate) return;
+      createdEventIds.push(eventWithEndDate.id);
+
+      const client = createTestClient();
+      const result = await client.event.byId({
+        id: eventWithEndDate.id,
+      });
+
+      expect(result.event).not.toBeNull();
+      expect(result.event?.id).toBe(eventWithEndDate.id);
+      expect(result.event).toHaveProperty("endDate");
+      expect(result.event?.endDate).toBe("2026-11-30");
+    });
+
+    it("should return null endDate when event has no endDate", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      const location = await createTestLocation(region.id);
+      if (!location) return;
+
+      // Create an event without endDate
+      const [eventWithoutEndDate] = await db
+        .insert(schema.events)
+        .values({
+          name: `Event Without EndDate ById ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: location.id,
+          dayOfWeek: "friday",
+          startTime: "0600",
+          isActive: true,
+          highlight: false,
+          startDate: "2026-03-01",
+          endDate: null,
+          isPrivate: false,
+        })
+        .returning();
+
+      if (!eventWithoutEndDate) return;
+      createdEventIds.push(eventWithoutEndDate.id);
+
+      const client = createTestClient();
+      const result = await client.event.byId({
+        id: eventWithoutEndDate.id,
+      });
+
+      expect(result.event).not.toBeNull();
+      expect(result.event?.id).toBe(eventWithoutEndDate.id);
+      expect(result.event).toHaveProperty("endDate");
+      expect(result.event?.endDate).toBeNull();
     });
   });
 
