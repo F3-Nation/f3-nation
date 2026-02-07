@@ -118,8 +118,25 @@ export const notifyMapDataChange = (event: WebhookEvent): void => {
   console.log("notifyMapDataChange", { event, payload });
 
   // Revalidate the statically generated map page so Next.js serves fresh data
-  // on the next request. revalidatePath is synchronous and safe to call here.
-  revalidatePath("/");
+  // on the next request. Only works in Next.js request context (not in tests).
+  try {
+    revalidatePath("/");
+  } catch (error: unknown) {
+    // revalidatePath requires Next.js static generation context, which isn't
+    // available in test environments. Silently skip revalidation in tests.
+    if (
+      error instanceof Error &&
+      error.message.includes("static generation store missing")
+    ) {
+      // Expected in test environment, no need to log
+    } else {
+      // Unexpected error, log it but don't throw
+      console.error("notifyMapDataChange revalidation failed", {
+        event,
+        error,
+      });
+    }
+  }
 
   // Fire and forget - don't await to not block response
   notifyWebhooks(payload).catch((error: unknown) => {
