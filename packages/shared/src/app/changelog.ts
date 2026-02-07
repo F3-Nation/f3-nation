@@ -10,6 +10,35 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: "3.6.5",
+    date: "2026-02-06",
+    title: "Map Cache & Deleted Workout Fixes",
+    sections: [
+      {
+        title: "Bug Fixes",
+        items: [
+          "Fixed crash when clicking on deleted workouts - deleted AOs/workouts no longer appear on the map",
+          "Map now automatically updates when workouts or locations are created, updated, or deleted",
+          "Fixed eventsAndLocations query to exclude inactive locations and locations with no active events",
+        ],
+      },
+      {
+        title: "Performance",
+        items: [
+          "Optimized map data query - switched from LEFT JOIN to INNER JOIN to reduce dataset size",
+          "Map now only loads locations with active events, reducing initial data transfer and client-side processing",
+        ],
+      },
+      {
+        title: "Backend",
+        items: [
+          "Renamed emitWebhookEvent to notifyMapDataChange to better reflect its dual responsibility of webhook notifications and cache invalidation",
+          "Added automatic Next.js cache revalidation when map data changes",
+        ],
+      },
+    ],
+  },
+  {
     version: "3.6.4",
     date: "2026-02-04",
     title: "API Documentation",
