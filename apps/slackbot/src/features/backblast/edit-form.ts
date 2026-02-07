@@ -179,6 +179,84 @@ export function getBackblastChannel(
 }
 
 /**
+ * Build backblast display blocks (read-only view).
+ * Shows event details, Q/PAX info, and backblast content.
+ */
+function buildBackblastDisplayBlocks(
+  backblastInfo: BackblastInfo,
+): View["blocks"] {
+  const event = backblastInfo.eventRecord;
+
+  // Build event types string
+  const eventTypesStr =
+    event.eventTypes?.map((t) => t.eventTypeName).join(" / ") ?? "Workout";
+
+  // Build PAX count display
+  const paxCount = event.paxCount ?? backblastInfo.paxSlackIds.length;
+
+  // Build event details markdown
+  let eventDetails = `*Backblast: ${event.name}*`;
+  eventDetails += `\n*AO:* ${event.org?.name ?? "Unknown"}`;
+  eventDetails += `\n*Date:* ${event.startDate}`;
+  eventDetails += `\n*Event Type:* ${eventTypesStr}`;
+  eventDetails += `\n*Q:* ${backblastInfo.qDisplay}`;
+  if (backblastInfo.coQDisplay) {
+    eventDetails += `\n*Co-Qs:* ${backblastInfo.coQDisplay}`;
+  }
+  eventDetails += `\n*PAX Count:* ${paxCount}`;
+  eventDetails += `\n*PAX:* ${backblastInfo.paxDisplay}`;
+
+  // Check for FNGs in meta
+  const fngs =
+    typeof event.meta?.fngs === "string" ? event.meta.fngs : undefined;
+  if (fngs) {
+    eventDetails += `\n*FNGs:* ${fngs}`;
+  }
+
+  const blocks: View["blocks"] = [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: eventDetails,
+      },
+    },
+  ];
+
+  // Add backblast content if available
+  if (event.backblastRich && event.backblastRich.length > 0) {
+    // Find the rich_text block
+    const richTextBlock = event.backblastRich.find(
+      (b) => b.type === "rich_text",
+    );
+    if (richTextBlock) {
+      blocks.push({
+        type: "rich_text",
+        elements: (richTextBlock as { elements?: unknown[] }).elements ?? [],
+      } as View["blocks"][number]);
+    }
+  } else if (
+    event.meta &&
+    typeof event.meta === "object" &&
+    event.meta.saved_moleskin
+  ) {
+    // Fall back to saved_moleskin in meta
+    const savedMoleskin = event.meta.saved_moleskin as Record<string, unknown>;
+    if (savedMoleskin.elements) {
+      blocks.push({
+        type: "rich_text",
+        elements: savedMoleskin.elements as unknown[],
+      } as View["blocks"][number]);
+    }
+  }
+
+  // Note: No action buttons in read-only view
+  // Users can use the calendar home overflow menu to take actions
+
+  return blocks;
+}
+
+/**
  * Build unscheduled event form blocks (date, AO, event type selects).
  * These are shown only for backblasts not linked to a calendar event.
  */
@@ -382,7 +460,7 @@ function buildCustomFieldBlocks(
  * @param navMetadata - Navigation metadata for view stack
  * @param spaceSettings - Region-specific settings
  * @param regionOrgId - Region org ID for API calls
- * @param isEdit - Whether this is an edit of an existing backblast
+ * @param isEdit - Whether this is an edit (true) or view-only (false)
  * @param currentUserSlackId - Current user's Slack ID
  * @param existingMessageTs - Optional existing message timestamp (for editing posted backblasts)
  */
@@ -406,6 +484,27 @@ export async function buildBackblastEditModal(
     isUnscheduled,
     originalPoster: currentUserSlackId,
   };
+
+  // If view-only mode and we have backblast info, show read-only display
+  if (!isEdit && backblastInfo) {
+    const displayBlocks = buildBackblastDisplayBlocks(backblastInfo);
+    return {
+      type: "modal",
+      callback_id: ACTIONS.BACKBLAST_VIEW_CALLBACK_ID,
+      private_metadata: stringifyNavMetadata(metadata),
+      title: {
+        type: "plain_text",
+        text: "View Backblast",
+        emoji: true,
+      },
+      close: {
+        type: "plain_text",
+        text: "Close",
+        emoji: true,
+      },
+      blocks: displayBlocks,
+    };
+  }
 
   const blocks: View["blocks"] = [];
 

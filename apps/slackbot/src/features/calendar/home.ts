@@ -92,14 +92,8 @@ function getEventActions(
 ): CalendarHomeEventAction[] {
   const actions: CalendarHomeEventAction[] = [];
 
-  // Preblast actions
-  if (!userIsAdmin) {
-    if (event.userIsQ) {
-      actions.push("Edit Preblast");
-    } else {
-      actions.push("View Preblast");
-    }
-  }
+  // Determine if user can edit (admin or Q of the event)
+  const canEdit = userIsAdmin || event.userIsQ;
 
   // Q action
   if (!event.plannedQs) {
@@ -108,16 +102,32 @@ function getEventActions(
 
   // HC actions
   if (event.userAttending) {
-    actions.push("Un-HC");
+    if (event.userIsQ) {
+      actions.push("Take Myself Off Q");
+    } else {
+      actions.push("Un-HC");
+    }
   } else {
     actions.push("HC");
   }
 
-  // Admin actions
+  // Admin-only action
   if (userIsAdmin) {
     actions.push("Assign Q");
+  }
+
+  // Preblast actions - Edit if admin or Q, otherwise View
+  if (canEdit) {
     actions.push("Edit Preblast");
+  } else {
+    actions.push("View Preblast");
+  }
+
+  // Backblast actions - Edit if admin or Q, otherwise View
+  if (canEdit) {
     actions.push("Edit Backblast");
+  } else {
+    actions.push("View Backblast");
   }
 
   return actions;

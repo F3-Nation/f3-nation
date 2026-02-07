@@ -134,11 +134,6 @@ export function buildConfigModal(context: ExtendedContext) {
           text: { type: "plain_text", text: ":calendar: Calendar Settings" },
           action_id: ACTIONS.OPEN_CALENDAR_CONFIG,
         },
-      ],
-    });
-    blocks.push({
-      type: "actions",
-      elements: [
         {
           type: "button",
           text: { type: "plain_text", text: ":memo: Backblast Settings" },
@@ -149,11 +144,6 @@ export function buildConfigModal(context: ExtendedContext) {
           text: { type: "plain_text", text: ":loudspeaker: Preblast Settings" },
           action_id: ACTIONS.OPEN_PREBLAST_CONFIG,
         },
-      ],
-    });
-    blocks.push({
-      type: "actions",
-      elements: [
         {
           type: "button",
           text: {

@@ -569,7 +569,7 @@ export const attendanceRouter = {
 - [x] Implement `help` feature (commands + app_mention)
 - [x] Implement basic `config` feature
 - [x] Add required Slack API endpoints to `packages/api`
-- [ ] Implement `positions` feature (aka SLT)
+- [x] Implement `positions` feature (aka SLT)
 
 ### Phase 2: Calendar & Backblast (Weeks 4-6)
 
@@ -587,12 +587,13 @@ export const attendanceRouter = {
 - [x] Implement preblast selection menu
 - [x] Implement backblast selection menu
 - [x] Implement preblast creation/editing
-- [ ] Implement backblast creation/editing
+- [x] Implement backblast creation/editing
 - [ ] Implement calendar home view
   - [x] Implement dynamic filters and event block creation
   - [ ] Implement event block actions:
     - [x] Implement Take Q and Edit Preblast actions
-    - [ ] Implement HC (hard commit) and un-HC actions
+    - [x] Implement HC (hard commit) and un-HC actions
+    - [ ] Implement Edit Preblast actions
     - [ ] Implement Edit Backblast actions
     - [x] Implement admin actions (assign Q, edit preblast or backblast for others)
 

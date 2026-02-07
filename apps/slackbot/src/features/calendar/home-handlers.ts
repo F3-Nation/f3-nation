@@ -25,6 +25,10 @@ import type { CalendarHomeBuildOptions } from "./home";
 import { buildCalendarHomeModal, extractFiltersFromValues } from "./home";
 import { buildPreblastEditModal } from "../preblast/edit-form";
 import { buildAssignQModal } from "./assign-q";
+import {
+  buildBackblastInfo,
+  buildBackblastEditModal,
+} from "../backblast/edit-form";
 
 /**
  * Parse the private metadata from the modal view
@@ -185,7 +189,7 @@ export async function handleEventAction(args: TypedActionArgs): Promise<void> {
         teamId ?? "",
         navCtx,
         extContext,
-        selectedAction === "Edit Preblast",
+        selectedAction,
       );
       break;
 
@@ -208,7 +212,29 @@ export async function handleEventAction(args: TypedActionArgs): Promise<void> {
       break;
 
     case "Edit Backblast":
-      logger.info("Edit Backblast action - not yet implemented");
+    case "View Backblast":
+      await handleOpenBackblast(
+        eventInstanceId,
+        navCtx,
+        extContext,
+        selectedAction,
+      );
+      break;
+
+    case "Take Myself Off Q":
+      try {
+        await api.attendance.removeQ({
+          eventInstanceId,
+          userId,
+        });
+      } catch (error) {
+        logger.error("Failed to take myself off Q", {
+          error,
+          eventInstanceId,
+          userId,
+        });
+      }
+      await refreshCalendarHome(navCtx, extContext, calendarHome);
       break;
 
     default:
@@ -332,7 +358,7 @@ async function handleOpenPreblast(
   teamId: string,
   navCtx: ReturnType<typeof createNavContext>,
   extContext: ExtendedContext,
-  _canEdit: boolean,
+  actionValue: "Edit Preblast" | "View Preblast",
 ): Promise<void> {
   try {
     await navigateToView(
@@ -345,6 +371,7 @@ async function handleOpenPreblast(
           navMetadata,
           extContext.orgSettings ?? null,
           extContext.orgId ?? 0,
+          actionValue,
         );
         return (
           modal ?? {
@@ -363,6 +390,62 @@ async function handleOpenPreblast(
     );
   } catch (error) {
     logger.error("Failed to open preblast", { error, eventInstanceId });
+  }
+}
+
+/**
+ * Handle "Edit Backblast" or "View Backblast" action
+ */
+async function handleOpenBackblast(
+  eventInstanceId: number,
+  navCtx: ReturnType<typeof createNavContext>,
+  extContext: ExtendedContext,
+  actionValue: "Edit Backblast" | "View Backblast",
+): Promise<void> {
+  const teamId = extContext.teamId;
+  const currentUserId = extContext.slackUser?.userId;
+  const slackUserId = extContext.slackUser?.slackId;
+  const regionOrgId = extContext.orgId;
+
+  if (!teamId || !slackUserId || !regionOrgId) {
+    logger.error("Missing context for backblast", {
+      teamId,
+      slackUserId,
+      regionOrgId,
+    });
+    return;
+  }
+
+  try {
+    await navigateToView(
+      navCtx,
+      async (navMetadata: NavigationMetadata): Promise<ModalView> => {
+        // Build backblast info
+        const backblastInfo = await buildBackblastInfo(
+          eventInstanceId,
+          currentUserId ?? null,
+          teamId,
+        );
+
+        // Determine if we should show edit form
+        // For "Edit Backblast" action, always show edit form
+        // For "View Backblast" action, show read-only view
+        const isEdit = actionValue === "Edit Backblast";
+
+        const modal = await buildBackblastEditModal(
+          backblastInfo,
+          navMetadata,
+          extContext.orgSettings ?? null,
+          regionOrgId,
+          isEdit,
+          slackUserId,
+        );
+        return modal;
+      },
+      { showLoading: true, loadingTitle: "Loading Backblast..." },
+    );
+  } catch (error) {
+    logger.error("Failed to open backblast", { error, eventInstanceId });
   }
 }
 

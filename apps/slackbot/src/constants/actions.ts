@@ -75,6 +75,7 @@ export const ACTIONS = {
   // Backblast
   BACKBLAST_CALLBACK_ID: "backblast-id",
   BACKBLAST_EDIT_CALLBACK_ID: "backblast-edit-id",
+  BACKBLAST_VIEW_CALLBACK_ID: "backblast-view-id",
   BACKBLAST_NEW_BUTTON: "new-backblast",
   BACKBLAST_EDIT_BUTTON: "edit-backblast",
   BACKBLAST_STRAVA_BUTTON: "strava-button",

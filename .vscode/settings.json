@@ -77,6 +77,14 @@
     "/^cd /home/evan/ml/f3-nation/apps/slackbot && pnpm exec eslint src/features/backblast/\\*\\.ts 2>&1$/": {
       "approve": true,
       "matchCommandLine": true
+    },
+    "/^cd /home/evan/ml/f3-nation && pnpm -C apps/slackbot typecheck 2>&1 \\| head -80$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^cd /home/evan/ml/f3-nation && pnpm -C apps/slackbot lint 2>&1 \\| tail -20$/": {
+      "approve": true,
+      "matchCommandLine": true
     }
   }
 }

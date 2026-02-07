@@ -79,4 +79,6 @@ export type CalendarHomeEventAction =
   | "HC"
   | "Un-HC"
   | "Assign Q"
-  | "Edit Backblast";
+  | "Edit Backblast"
+  | "View Backblast"
+  | "Take Myself Off Q";
