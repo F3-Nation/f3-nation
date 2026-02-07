@@ -1,7 +1,7 @@
 /**
- * Tests for Webhook Event emissions
+ * Tests for Map Data Change Notifications
  *
- * These tests verify that emitWebhookEvent is called correctly
+ * These tests verify that notifyMapDataChange is called correctly
  * for all mutation handlers that modify map data.
  */
 
@@ -54,37 +54,40 @@ describe("Webhook Events", () => {
     mockNotifyWebhooks.mockResolvedValue(undefined);
   });
 
-  afterAll(async () => {
-    // Clean up in reverse order, respecting FK constraints
-    for (const eventId of createdEventIds.reverse()) {
-      try {
-        await cleanup.event(eventId);
-      } catch {
-        // Ignore errors during cleanup
+  afterAll(
+    async () => {
+      // Clean up in reverse order, respecting FK constraints
+      for (const eventId of createdEventIds.reverse()) {
+        try {
+          await cleanup.event(eventId);
+        } catch {
+          // Ignore errors during cleanup
+        }
       }
-    }
-    for (const eventTypeId of createdEventTypeIds.reverse()) {
-      try {
-        await cleanup.eventType(eventTypeId);
-      } catch {
-        // Ignore errors during cleanup
+      for (const eventTypeId of createdEventTypeIds.reverse()) {
+        try {
+          await cleanup.eventType(eventTypeId);
+        } catch {
+          // Ignore errors during cleanup
+        }
       }
-    }
-    for (const locationId of createdLocationIds.reverse()) {
-      try {
-        await cleanup.location(locationId);
-      } catch {
-        // Ignore errors during cleanup
+      for (const locationId of createdLocationIds.reverse()) {
+        try {
+          await cleanup.location(locationId);
+        } catch {
+          // Ignore errors during cleanup
+        }
       }
-    }
-    for (const orgId of createdOrgIds.reverse()) {
-      try {
-        await cleanup.org(orgId);
-      } catch {
-        // Ignore errors during cleanup
+      for (const orgId of createdOrgIds.reverse()) {
+        try {
+          await cleanup.org(orgId);
+        } catch {
+          // Ignore errors during cleanup
+        }
       }
-    }
-  });
+    },
+    30000, // 30 second timeout for cleanup
+  );
 
   // Helper to create test region
   const createTestRegion = async () => {
