@@ -26,7 +26,7 @@ import { DeleteRequestSchema, RequestInsertSchema } from "@acme/validators";
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
-import { emitWebhookEvent } from "../lib/webhook-events";
+import { notifyMapDataChange } from "../lib/webhook-events";
 import { notifyMapChangeRequest } from "../services/map-request-notification";
 import type { Context } from "../shared";
 import { editorProcedure, protectedProcedure } from "../shared";
@@ -372,9 +372,9 @@ export const requestRouter = {
           reviewedBy: ctx.session?.user?.email,
         });
 
-        // Notify webhooks about the auto-approved delete
+        // Notify webhooks and invalidate cache about the auto-approved delete
         if (result.status === "approved") {
-          emitWebhookEvent({
+          notifyMapDataChange({
             type: "map.deleted",
             eventId: input.eventId,
             orgId: input.regionId,
@@ -497,9 +497,9 @@ export const requestRouter = {
           reviewedBy: ctx.session?.user?.email,
         });
 
-        // Notify webhooks about the auto-approved update
+        // Notify webhooks and invalidate cache about the auto-approved update
         if (result.status === "approved") {
-          emitWebhookEvent({
+          notifyMapDataChange({
             type: input.eventId ? "map.updated" : "map.created",
             eventId: result.updateRequest?.eventId ?? undefined,
             locationId: result.updateRequest?.locationId ?? undefined,
@@ -572,9 +572,9 @@ export const requestRouter = {
         reviewedBy: ctx.session?.user?.email,
       });
 
-      // Notify webhooks about the admin-approved delete
+      // Notify webhooks and invalidate cache about the admin-approved delete
       if (result.status === "approved") {
-        emitWebhookEvent({
+        notifyMapDataChange({
           type: "map.deleted",
           eventId: input.eventId,
           orgId: input.regionId,
@@ -623,9 +623,9 @@ export const requestRouter = {
           eventMeta: input.eventMeta ?? undefined,
         });
 
-        // Notify webhooks about the admin-approved delete
+        // Notify webhooks and invalidate cache about the admin-approved delete
         if (result.status === "approved") {
-          emitWebhookEvent({
+          notifyMapDataChange({
             type: "map.deleted",
             eventId: input.eventId ?? undefined,
             locationId: input.locationId ?? undefined,
@@ -644,9 +644,9 @@ export const requestRouter = {
           reviewedBy: "email",
         });
 
-        // Notify webhooks about the admin-approved update
+        // Notify webhooks and invalidate cache about the admin-approved update
         if (result.status === "approved") {
-          emitWebhookEvent({
+          notifyMapDataChange({
             type: input.eventId ? "map.updated" : "map.created",
             eventId: result.updateRequest?.eventId ?? undefined,
             locationId: result.updateRequest?.locationId ?? undefined,

@@ -8,7 +8,7 @@ import { isTruthy } from "@acme/shared/common/functions";
 
 import { orpc, useQuery } from "~/orpc/react";
 import { useIsMobileWidth } from "~/utils/hooks/use-is-mobile-width";
-import { placesAutocomplete } from "~/utils/place-autocomplete";
+import { debouncedPlacesAutocomplete } from "~/utils/place-autocomplete";
 import { mapStore } from "~/utils/store/map";
 import { searchStore } from "~/utils/store/search";
 import type {
@@ -143,27 +143,32 @@ export const TextSearchResultsProvider = ({
 
     setF3LocationResults(_f3Results);
 
-    void placesAutocomplete({
-      input: text,
-      center: mapStore.get("center") ?? { lat: 37.7937, lng: -122.3965 },
-      zoom: mapStore.get("zoom"),
-    }).then((results) => {
-      setGeoResults(
-        results.map((result) => ({
-          type: "geo",
-          header: result?.placePrediction?.structuredFormat?.mainText?.text,
-          description:
-            result?.placePrediction?.structuredFormat?.secondaryText?.text,
-          destination: {
-            id: result?.placePrediction?.placeId,
-            lat: null,
-            lng: null,
-            item: null,
-            placeId: result?.placePrediction?.placeId,
-          },
-        })) ?? [],
-      );
-    });
+    // Use debounced autocomplete to reduce API calls
+    const cleanup = debouncedPlacesAutocomplete(
+      text,
+      mapStore.get("center") ?? { lat: 37.7937, lng: -122.3965 },
+      mapStore.get("zoom"),
+      (results) => {
+        setGeoResults(
+          results.map((result) => ({
+            type: "geo",
+            header: result?.placePrediction?.structuredFormat?.mainText?.text,
+            description:
+              result?.placePrediction?.structuredFormat?.secondaryText?.text,
+            destination: {
+              id: result?.placePrediction?.placeId,
+              lat: null,
+              lng: null,
+              item: null,
+              placeId: result?.placePrediction?.placeId,
+            },
+          })) ?? [],
+        );
+      },
+    );
+
+    // Cleanup on unmount or when text changes
+    return cleanup;
   }, [
     filteredLocationMarkers,
     regions,

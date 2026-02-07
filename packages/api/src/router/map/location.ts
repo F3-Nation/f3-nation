@@ -67,7 +67,9 @@ export const mapLocationRouter = os.router({
           },
         })
         .from(schema.locations)
-        .leftJoin(
+        // INNER JOIN ensures only locations with at least one active,
+        // non-private event are returned (no orphaned pins on the map).
+        .innerJoin(
           schema.events,
           and(
             eq(schema.events.locationId, schema.locations.id),
@@ -84,6 +86,7 @@ export const mapLocationRouter = os.router({
           schema.eventTypes,
           eq(schema.eventTypes.id, schema.eventsXEventTypes.eventTypeId),
         )
+        .where(eq(schema.locations.isActive, true))
         .groupBy(
           schema.locations.id,
           aoOrg.name,
