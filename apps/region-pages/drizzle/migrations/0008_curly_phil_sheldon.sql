@@ -1,1 +1,0 @@
-ALTER TABLE "workouts" ADD COLUMN "types" text[];
