@@ -1,7 +1,7 @@
 /**
- * Tests for Webhook Event emissions
+ * Tests for Map Data Change Notifications
  *
- * These tests verify that emitWebhookEvent is called correctly
+ * These tests verify that notifyMapDataChange is called correctly
  * for all mutation handlers that modify map data.
  */
 
