@@ -317,14 +317,23 @@ export default function SettingsModal() {
                   "flex w-full flex-row items-center justify-center gap-1 rounded-md bg-card p-2 text-foreground shadow-sm hover:bg-accent",
                 )}
                 onClick={() => {
-                  void orpc.org.revalidate
-                    .call()
-                    .then(() => {
+                  void fetch("/api/revalidate", { method: "POST" })
+                    .then(async (response) => {
+                      if (!response.ok) {
+                        const error = await response.json().catch(() => ({
+                          error: "Unknown error",
+                        }));
+                        throw new Error(error.error ?? "Failed to revalidate");
+                      }
                       toast.success("Nation revalidated");
                     })
                     .catch((error: unknown) => {
                       console.log("RevalidateNation", { error });
-                      toast.error("Failed to revalidate Nation");
+                      toast.error(
+                        error instanceof Error
+                          ? error.message
+                          : "Failed to revalidate Nation",
+                      );
                     });
                 }}
               >
