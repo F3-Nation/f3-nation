@@ -791,39 +791,37 @@ export async function buildBackblastEditModal(
     });
   }
 
-  // Send timing option (only for create, not edit)
-  // Also, if event is in the future, default to "Save and send later"
-  if (!isEdit) {
-    const today = getCurrentDateCST();
-    const eventDate = event?.startDate ?? today;
-    const isFutureEvent = eventDate > today;
+  // Send timing option
+  // If event is in the future, default to "Save and send later"
+  const today = getCurrentDateCST();
+  const eventDate = event?.startDate ?? today;
+  const isFutureEvent = eventDate > today;
 
-    blocks.push({
-      type: "input",
-      block_id: ACTIONS.BACKBLAST_SEND_OPTIONS,
-      label: { type: "plain_text", text: "When to post backblast?" },
-      element: {
-        type: "radio_buttons",
-        action_id: ACTIONS.BACKBLAST_SEND_OPTIONS,
-        options: [
-          { text: { type: "plain_text", text: "Send now" }, value: "Send now" },
-          {
+  blocks.push({
+    type: "input",
+    block_id: ACTIONS.BACKBLAST_SEND_OPTIONS,
+    label: { type: "plain_text", text: "When to post backblast?" },
+    element: {
+      type: "radio_buttons",
+      action_id: ACTIONS.BACKBLAST_SEND_OPTIONS,
+      options: [
+        { text: { type: "plain_text", text: "Send now" }, value: "Send now" },
+        {
+          text: { type: "plain_text", text: "Save and send later" },
+          value: "Save and send later",
+        },
+      ],
+      initial_option: isFutureEvent
+        ? {
             text: { type: "plain_text", text: "Save and send later" },
             value: "Save and send later",
+          }
+        : {
+            text: { type: "plain_text", text: "Send now" },
+            value: "Send now",
           },
-        ],
-        initial_option: isFutureEvent
-          ? {
-              text: { type: "plain_text", text: "Save and send later" },
-              value: "Save and send later",
-            }
-          : {
-              text: { type: "plain_text", text: "Send now" },
-              value: "Send now",
-            },
-      },
-    });
-  }
+    },
+  });
 
   return {
     type: "modal",

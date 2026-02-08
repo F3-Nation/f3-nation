@@ -561,7 +561,7 @@ export async function handleBackblastFormSubmit(
   }
 
   // Determine if we should send or save for later
-  const shouldSend = formValues.sendOption === "Send now" || isEdit;
+  const shouldSend = formValues.sendOption === "Send now";
   const excludeFromPaxVault = formValues.options.includes(
     "exclude_from_pax_vault",
   );

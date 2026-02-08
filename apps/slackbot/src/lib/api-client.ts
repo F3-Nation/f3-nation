@@ -409,6 +409,41 @@ export const api = {
         },
       );
     },
+
+    /**
+     * Get admin users for an org, returning their Slack IDs.
+     * Only returns admins that have linked Slack accounts in the given team.
+     */
+    getOrgAdmins: async (
+      orgId: number,
+      teamId: string,
+    ): Promise<{ admins: { userId: number; slackId: string }[] }> => {
+      return apiRequest<{ admins: { userId: number; slackId: string }[] }>(
+        `/slack/org-admins?orgId=${orgId}&teamId=${encodeURIComponent(teamId)}`,
+      );
+    },
+
+    /**
+     * Replace the full admin list for an org.
+     * Deletes existing admin role assignments (scoped to slack-linked users)
+     * and inserts new ones.
+     */
+    setOrgAdmins: async (input: {
+      orgId: number;
+      userIds: number[];
+      teamId: string;
+    }): Promise<{ success: boolean }> => {
+      const result = await apiRequest<{ success: boolean }>(
+        `/slack/set-org-admins`,
+        {
+          method: "POST",
+          body: JSON.stringify(input),
+        },
+      );
+      // Invalidate role caches for the team
+      cache.deleteByPrefix(`roles:${input.teamId}:`);
+      return result;
+    },
   },
 
   location: {
@@ -1042,6 +1077,9 @@ interface OrgResponse {
   logoUrl: string | null;
   website: string | null;
   email: string | null;
+  twitter: string | null;
+  facebook: string | null;
+  instagram: string | null;
   meta: Record<string, string> | null;
 }
 
@@ -1054,6 +1092,11 @@ interface OrgInput {
   defaultLocationId?: number | null;
   isActive?: boolean;
   logoUrl?: string | null;
+  website?: string | null;
+  email?: string | null;
+  twitter?: string | null;
+  facebook?: string | null;
+  instagram?: string | null;
   meta?: Record<string, string>;
 }
 

@@ -156,9 +156,15 @@ export const OrgInsertSchema = createInsertSchema(orgs, {
   name: (s: z.ZodString) => s.min(1, { message: "Name is required" }),
   parentId: z
     .number({ message: "Must have a parent" })
-    .nonnegative({ message: "Invalid selection" }),
+    .nonnegative({ message: "Invalid selection" })
+    .nullable(),
+  description: (s: z.ZodString) => s.nullable(),
   email: (s: z.ZodString) =>
-    s.email({ message: "Invalid email format" }).or(z.literal("")),
+    s.email({ message: "Invalid email format" }).or(z.literal("")).nullable(),
+  website: (s: z.ZodString) => s.nullable(),
+  twitter: (s: z.ZodString) => s.nullable(),
+  facebook: (s: z.ZodString) => s.nullable(),
+  instagram: (s: z.ZodString) => s.nullable(),
 });
 export const OrgSelectSchema = createSelectSchema(orgs);
 

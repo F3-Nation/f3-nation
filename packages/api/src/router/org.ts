@@ -572,7 +572,24 @@ export const orgRouter = {
     }),
 
   crupdate: editorProcedure
-    .input(OrgInsertSchema.partial({ id: true, parentId: true }))
+    .input(
+      OrgInsertSchema.partial({
+        id: true,
+        parentId: true,
+        isActive: true,
+        description: true,
+        website: true,
+        email: true,
+        twitter: true,
+        facebook: true,
+        instagram: true,
+        logoUrl: true,
+        meta: true,
+        defaultLocationId: true,
+        lastAnnualReview: true,
+        aoCount: true,
+      }),
+    )
     .route({
       method: "POST",
       path: "/",
@@ -606,6 +623,7 @@ export const orgRouter = {
           .insert(schema.orgs)
           .values({
             ...input,
+            isActive: input.isActive ?? true,
             meta: input.meta as Record<string, string>,
           })
           .returning();
@@ -654,6 +672,7 @@ export const orgRouter = {
 
       const orgToCrupdate: typeof schema.orgs.$inferInsert = {
         ...input,
+        isActive: input.isActive ?? existingOrg.isActive,
         meta: input.meta as Record<string, string>,
       };
 

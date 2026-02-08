@@ -152,6 +152,14 @@ export function buildConfigModal(context: ExtendedContext) {
           },
           action_id: ACTIONS.CONFIG_SLT,
         },
+        {
+          type: "button",
+          text: {
+            type: "plain_text",
+            text: ":earth_americas: Region Info",
+          },
+          action_id: ACTIONS.REGION_INFO_BUTTON,
+        },
       ],
     });
   } else {

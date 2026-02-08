@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { and, eq, schema } from "@acme/db";
+import { and, eq, inArray, isNotNull, schema } from "@acme/db";
 import { SlackSettingsSchema, SlackUserUpsertSchema } from "@acme/validators";
 
 import { apiKeyProcedure, publicProcedure } from "../shared";
@@ -836,5 +836,149 @@ export const slackRouter = {
       });
 
       return { success: true, alreadyHadRole: false };
+    }),
+
+  /**
+   * Get admin users for an org that have linked Slack accounts.
+   * Returns userId + slackId pairs for populating the admin multi-user select.
+   */
+  getOrgAdmins: apiKeyProcedure
+    .input(
+      z.object({
+        orgId: z.coerce.number(),
+        teamId: z.string(),
+      }),
+    )
+    .route({
+      method: "GET",
+      path: "/org-admins",
+      tags: ["slack"],
+      summary: "Get org admin users with Slack IDs",
+      description:
+        "Get admin users for an org that have linked Slack accounts in the given team",
+    })
+    .handler(async ({ context: ctx, input }) => {
+      // Get the admin role ID
+      const [adminRole] = await ctx.db
+        .select()
+        .from(schema.roles)
+        .where(eq(schema.roles.name, "admin"));
+
+      if (!adminRole) {
+        return { admins: [] };
+      }
+
+      // Join rolesXUsersXOrg -> slackUsers to get admin users with Slack IDs
+      const admins = await ctx.db
+        .select({
+          userId: schema.rolesXUsersXOrg.userId,
+          slackId: schema.slackUsers.slackId,
+        })
+        .from(schema.rolesXUsersXOrg)
+        .innerJoin(
+          schema.slackUsers,
+          and(
+            eq(schema.slackUsers.userId, schema.rolesXUsersXOrg.userId),
+            eq(schema.slackUsers.slackTeamId, input.teamId),
+          ),
+        )
+        .where(
+          and(
+            eq(schema.rolesXUsersXOrg.orgId, input.orgId),
+            eq(schema.rolesXUsersXOrg.roleId, adminRole.id),
+            isNotNull(schema.slackUsers.slackId),
+          ),
+        );
+
+      return { admins };
+    }),
+
+  /**
+   * Replace the full admin list for an org.
+   * Only removes admin roles for users that have Slack accounts in the given team,
+   * preserving admins added through other channels (e.g., Maps UI).
+   */
+  setOrgAdmins: apiKeyProcedure
+    .input(
+      z.object({
+        orgId: z.number(),
+        userIds: z.array(z.number()),
+        teamId: z.string(),
+      }),
+    )
+    .route({
+      method: "POST",
+      path: "/set-org-admins",
+      tags: ["slack"],
+      summary: "Replace org admin list",
+      description:
+        "Replace admin role assignments for an org, scoped to slack-linked users",
+    })
+    .handler(async ({ context: ctx, input }) => {
+      // Get the admin role ID
+      const [adminRole] = await ctx.db
+        .select()
+        .from(schema.roles)
+        .where(eq(schema.roles.name, "admin"));
+
+      if (!adminRole) {
+        throw new Error("Admin role not found");
+      }
+
+      // Find existing admin users that have Slack accounts in this team
+      const existingSlackAdmins = await ctx.db
+        .select({
+          userId: schema.rolesXUsersXOrg.userId,
+        })
+        .from(schema.rolesXUsersXOrg)
+        .innerJoin(
+          schema.slackUsers,
+          and(
+            eq(schema.slackUsers.userId, schema.rolesXUsersXOrg.userId),
+            eq(schema.slackUsers.slackTeamId, input.teamId),
+          ),
+        )
+        .where(
+          and(
+            eq(schema.rolesXUsersXOrg.orgId, input.orgId),
+            eq(schema.rolesXUsersXOrg.roleId, adminRole.id),
+            isNotNull(schema.slackUsers.slackId),
+          ),
+        );
+
+      const existingUserIds = existingSlackAdmins.map((a) => a.userId);
+
+      // Delete existing slack-linked admin assignments
+      if (existingUserIds.length > 0) {
+        await ctx.db
+          .delete(schema.rolesXUsersXOrg)
+          .where(
+            and(
+              eq(schema.rolesXUsersXOrg.orgId, input.orgId),
+              eq(schema.rolesXUsersXOrg.roleId, adminRole.id),
+              inArray(schema.rolesXUsersXOrg.userId, existingUserIds),
+            ),
+          );
+      }
+
+      // Insert new admin assignments
+      if (input.userIds.length > 0) {
+        const values = input.userIds
+          .filter((uid) => uid != null)
+          .map((userId) => ({
+            userId,
+            orgId: input.orgId,
+            roleId: adminRole.id,
+          }));
+
+        if (values.length > 0) {
+          await ctx.db
+            .insert(schema.rolesXUsersXOrg)
+            .values(values)
+            .onConflictDoNothing();
+        }
+      }
+
+      return { success: true };
     }),
 };

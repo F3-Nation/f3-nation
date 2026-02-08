@@ -180,8 +180,9 @@ async function handleBackblastSelect(args: TypedActionArgs): Promise<void> {
           metadata,
           orgSettings,
           regionOrgId,
-          false, // isEdit
+          true, // isEdit — always open the editable form from the select list
           slackUserId,
+          backblastInfo?.eventRecord.backblastTs?.toString() ?? undefined,
         );
       },
       { showLoading: true, loadingTitle: "Loading Backblast..." },

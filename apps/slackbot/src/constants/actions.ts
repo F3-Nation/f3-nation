@@ -144,6 +144,15 @@ export const ACTIONS = {
   // Region
   REGION_CALLBACK_ID: "region-id",
   REGION_INFO_BUTTON: "region_info",
+  REGION_NAME: "region-name",
+  REGION_DESCRIPTION: "region-description",
+  REGION_LOGO: "region-logo",
+  REGION_WEBSITE: "region-website",
+  REGION_EMAIL: "region-email",
+  REGION_TWITTER: "region-twitter",
+  REGION_FACEBOOK: "region-facebook",
+  REGION_INSTAGRAM: "region-instagram",
+  REGION_ADMINS: "region-admins",
 
   // Calendar Management
   CALENDAR_ADD_SERIES_AO: "calendar_add_series_ao",
