@@ -85,6 +85,34 @@
     "/^cd /home/evan/ml/f3-nation && pnpm -C apps/slackbot lint 2>&1 \\| tail -20$/": {
       "approve": true,
       "matchCommandLine": true
+    },
+    "/^cd /home/evan/ml/f3-nation && pnpm -F f3-nation-slackbot typecheck 2>&1 \\| head -60$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^cd /home/evan/ml/f3-nation && pnpm -F @acme/api typecheck 2>&1 \\| head -60$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^cd /home/evan/ml/f3-nation && pnpm -F f3-nation-slackbot lint 2>&1 \\| grep -A 2 \"file-upload\"$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^cd /home/evan/ml/f3-nation && pnpm -F f3-nation-slackbot lint 2>&1 \\| grep -E \"\\(error\\|warning\\)\" \\| head -20$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^cd /home/evan/ml/f3-nation && pnpm -F f3-nation-slackbot lint 2>&1$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^cd /home/evan/ml/f3-nation && pnpm -F @acme/api lint 2>&1$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^cd /home/evan/ml/f3-nation/packages/api && npx eslint src/router/upload\\.ts 2>&1$/": {
+      "approve": true,
+      "matchCommandLine": true
     }
   }
 }
