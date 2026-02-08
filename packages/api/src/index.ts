@@ -20,7 +20,7 @@ import { uploadRouter } from "./router/upload";
 import { userRouter } from "./router/user";
 
 // Re-export webhook event types for external use
-export { emitWebhookEvent } from "./lib/webhook-events";
+export { notifyMapDataChange } from "./lib/webhook-events";
 export type { WebhookEvent } from "./lib/webhook-events";
 
 export const router = os.prefix(API_PREFIX_V1).router({

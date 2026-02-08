@@ -94,27 +94,36 @@ export default function AdminWorkoutsModal({
   const { data: aos } = useQuery(
     orpc.org.all.queryOptions({ input: { orgTypes: ["ao"] } }),
   );
-  const { data: eventResponse } = useQuery(
+  const { data: eventResponse, isLoading: isLoadingEvent } = useQuery(
     orpc.event.byId.queryOptions({
       input: { id: data.id ?? -1 },
       enabled: gte(data.id, 0),
     }),
   );
   const event = eventResponse?.event;
-  const { data: eventTypes } = useQuery(
-    orpc.eventType.all.queryOptions({
-      input: {
-        pageSize: 200,
-        orgIds: event?.regions.map((r) => r.regionId),
-      },
-    }),
-  );
+  const isEditing = !!event;
+  const isLoading = gte(data.id, 0) && isLoadingEvent;
+
   const router = useRouter();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const form = useForm({
     schema: EventInsertForm,
   });
+
+  // Watch regionId from form to filter event types
+  const formRegionId = form.watch("regionId");
+
+  const { data: eventTypes } = useQuery(
+    orpc.eventType.all.queryOptions({
+      input: {
+        pageSize: 200,
+        // When region is selected: filter to that region's types + Nation types
+        // When no region selected: show all event types (pass undefined to get all)
+        orgIds: formRegionId ? [formRegionId] : undefined,
+      },
+    }),
+  );
 
   useEffect(() => {
     form.reset({
@@ -142,16 +151,19 @@ export default function AdminWorkoutsModal({
   const crupdateEvent = useMutation(
     orpc.event.crupdate.mutationOptions({
       onSuccess: async () => {
+        await invalidateQueries("map");
         await invalidateQueries("event");
         closeModal();
-        toast.success("Successfully updated event");
+        toast.success(
+          isEditing ? "Successfully updated event" : "Successfully added event",
+        );
         router.refresh();
       },
       onError: (err) => {
         toast.error(
           err instanceof ORPCError && err?.code === "UNAUTHORIZED"
-            ? "You must be logged in to update events"
-            : "Failed to update event",
+            ? `You must be logged in to ${isEditing ? "update" : "create"} events`
+            : `Failed to ${isEditing ? "update" : "add"} event`,
         );
       },
     }),
@@ -222,421 +234,445 @@ export default function AdminWorkoutsModal({
           </DialogTitle>
         </DialogHeader>
 
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <div className="flex flex-wrap">
-              <div className="mb-4 w-1/2 px-2">
-                <FormField
-                  control={form.control}
-                  name="id"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>ID</FormLabel>
-                      <FormControl>
-                        <Input placeholder="ID" disabled {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <div className="mb-4 w-1/2 px-2">
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Name</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="Name"
-                          {...field}
-                          value={field.value ?? ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <div className="mb-4 w-1/2 px-2">
-                <FormField
-                  control={form.control}
-                  name="regionId"
-                  render={({ field }) => (
-                    <FormItem key={`region-${String(field.value ?? "new")}`}>
-                      <FormLabel>Region</FormLabel>
-                      <VirtualizedCombobox
-                        value={field.value?.toString()}
-                        options={
-                          regions?.orgs?.map((region) => ({
-                            value: region.id.toString(),
-                            label: region.name,
-                          })) ?? []
-                        }
-                        searchPlaceholder="Select a region"
-                        onSelect={(value) => {
-                          const orgId = safeParseInt(value as string);
-                          if (orgId == null) {
-                            toast.error("Invalid orgId");
-                            return;
-                          }
-                          field.onChange(orgId);
-                        }}
-                        isMulti={false}
-                      />
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <div className="mb-4 w-1/2 px-2">
-                <FormField
-                  control={form.control}
-                  name="aoId"
-                  render={({ field }) => {
-                    const filteredAOs = aos?.orgs.filter(
-                      (ao) => ao.parentId === form.watch("regionId"),
-                    );
-                    return (
-                      <FormItem key={`ao-${String(field.value ?? "new")}`}>
-                        <FormLabel>AO</FormLabel>
-                        <Select
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="flex flex-col items-center gap-2">
+              <Spinner className="size-8" />
+              <p className="text-sm text-muted-foreground">Loading event...</p>
+            </div>
+          </div>
+        ) : (
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <div className="flex flex-wrap">
+                <div className="mb-4 w-1/2 px-2">
+                  <FormField
+                    control={form.control}
+                    name="id"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>ID</FormLabel>
+                        <FormControl>
+                          <Input placeholder="ID" disabled {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <div className="mb-4 w-1/2 px-2">
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Name</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Name"
+                            {...field}
+                            value={field.value ?? ""}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <div className="mb-4 w-1/2 px-2">
+                  <FormField
+                    control={form.control}
+                    name="regionId"
+                    render={({ field }) => (
+                      <FormItem key={`region-${String(field.value ?? "new")}`}>
+                        <FormLabel>Region</FormLabel>
+                        <VirtualizedCombobox
                           value={field.value?.toString()}
-                          onValueChange={(value) => {
-                            const aoId = safeParseInt(value);
-                            field.onChange(aoId);
-
-                            const selectedAO = aos?.orgs.find(
-                              (ao) => ao.id === aoId,
-                            );
-                            if (!selectedAO) {
-                              toast.error("Invalid AO");
+                          options={
+                            regions?.orgs?.map((region) => ({
+                              value: region.id.toString(),
+                              label: region.name,
+                            })) ?? []
+                          }
+                          searchPlaceholder="Select a region"
+                          onSelect={(value) => {
+                            const orgId = safeParseInt(value as string);
+                            if (orgId == null) {
+                              toast.error("Invalid orgId");
                               return;
                             }
-                            if (selectedAO.parentId != null) {
-                              form.setValue("regionId", selectedAO.parentId);
-                            }
-
-                            const regionId = form.getValues("regionId");
-                            const regionLocations = locations?.locations.filter(
-                              (l) => l.regionId === regionId,
-                            );
-
-                            // If the current location's parentId is not the selected AO, then we need to update the location
-                            const locationId = form.getValues("locationId");
-                            if (
-                              !regionLocations?.find((l) => l.id === locationId)
-                            ) {
-                              form.setValue(
-                                "locationId",
-                                regionLocations?.[0]?.id ?? null,
-                              );
-                            }
+                            field.onChange(orgId);
                           }}
-                          defaultValue={field.value?.toString()}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select an AO" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {filteredAOs
-                              ?.slice()
-                              .sort(
-                                (a, b) =>
-                                  a.name?.localeCompare(b.name ?? "") ?? 0,
-                              )
-                              .map((ao) => (
-                                <SelectItem
-                                  key={`ao-${ao.id}`}
-                                  value={ao.id.toString()}
-                                >
-                                  {ao.name}
-                                </SelectItem>
-                              ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    );
-                  }}
-                />
-              </div>
-              <div className="mb-4 w-1/2 px-2">
-                <FormField
-                  control={form.control}
-                  name="locationId"
-                  render={({ field }) => {
-                    const regionId = form.getValues("regionId");
-                    const filteredLocations = locations?.locations.filter(
-                      (location) => location.regionId === regionId,
-                    );
-                    return (
-                      <FormItem
-                        key={`location-${String(field.value ?? "new")}`}
-                      >
-                        <FormLabel>Location</FormLabel>
-                        <Select
-                          value={field.value?.toString()}
-                          onValueChange={(value) => {
-                            console.log("locationId onValueChange", value);
-                            field.onChange(Number(value));
-
-                            const selectedLocation = locations?.locations.find(
-                              (location) => location.id === Number(value),
-                            );
-                            if (selectedLocation?.regionId != null) {
-                              form.setValue(
-                                "regionId",
-                                selectedLocation.regionId,
-                              );
-                            }
-                          }}
-                          defaultValue={field.value?.toString()}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a location" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {filteredLocations
-                              ?.slice()
-                              .sort(
-                                (a, b) =>
-                                  a.locationName?.localeCompare(
-                                    b.locationName ?? "",
-                                  ) ?? 0,
-                              )
-                              .map((location) => (
-                                <SelectItem
-                                  key={`location-${location.id}`}
-                                  value={location.id.toString()}
-                                >
-                                  {location.locationName}
-                                </SelectItem>
-                              ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    );
-                  }}
-                />
-              </div>
-              <div className="mb-4 w-1/2 px-2">
-                <FormField
-                  control={form.control}
-                  name="email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Email</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="Email"
-                          type="email"
-                          {...field}
-                          value={field.value ?? ""}
+                          isMulti={false}
                         />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <div className="mb-4 w-1/2 px-2">
+                  <FormField
+                    control={form.control}
+                    name="aoId"
+                    render={({ field }) => {
+                      const filteredAOs = aos?.orgs.filter(
+                        (ao) => ao.parentId === form.watch("regionId"),
+                      );
+                      return (
+                        <FormItem key={`ao-${String(field.value ?? "new")}`}>
+                          <FormLabel>AO</FormLabel>
+                          <Select
+                            value={field.value?.toString()}
+                            onValueChange={(value) => {
+                              const aoId = safeParseInt(value);
+                              field.onChange(aoId);
 
-              <div className="mb-4 w-1/2 px-2">
-                <ControlledSelect
-                  control={form.control}
-                  name="dayOfWeek"
-                  label="Day of Week"
-                  options={DayOfWeek.map((day) => ({
-                    value: day,
-                    label: convertCase({
-                      str: day,
-                      fromCase: Case.LowerCase,
-                      toCase: Case.TitleCase,
-                    }),
-                  }))}
-                  placeholder="Select a day of the week"
-                />
-              </div>
-              <div className="mb-4 w-1/2 px-2">
-                <FormField
-                  control={form.control}
-                  name="eventTypeIds"
-                  render={({ field }) => (
-                    <FormItem key={`eventTypeIds`}>
-                      <FormLabel>Event Types</FormLabel>
-                      <VirtualizedCombobox
-                        value={(field.value as number[] | undefined)?.map(
-                          String,
-                        )}
-                        options={
-                          eventTypes?.eventTypes.map((type) => ({
-                            value: type.id.toString(),
-                            label: type.name,
-                          })) ?? []
-                        }
-                        searchPlaceholder="Select event types"
-                        onSelect={(value) => {
-                          if (!Array.isArray(value)) {
-                            toast.error("Invalid event type");
-                            return;
+                              const selectedAO = aos?.orgs.find(
+                                (ao) => ao.id === aoId,
+                              );
+                              if (!selectedAO) {
+                                toast.error("Invalid AO");
+                                return;
+                              }
+                              if (selectedAO.parentId != null) {
+                                form.setValue("regionId", selectedAO.parentId);
+                              }
+
+                              const regionId = form.getValues("regionId");
+                              const regionLocations =
+                                locations?.locations.filter(
+                                  (l) => l.regionId === regionId,
+                                );
+
+                              // If the current location's parentId is not the selected AO, then we need to update the location
+                              const locationId = form.getValues("locationId");
+                              if (
+                                !regionLocations?.find(
+                                  (l) => l.id === locationId,
+                                )
+                              ) {
+                                form.setValue(
+                                  "locationId",
+                                  regionLocations?.[0]?.id ?? null,
+                                );
+                              }
+                            }}
+                            defaultValue={field.value?.toString()}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select an AO" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {filteredAOs
+                                ?.slice()
+                                .sort(
+                                  (a, b) =>
+                                    a.name?.localeCompare(b.name ?? "") ?? 0,
+                                )
+                                .map((ao) => (
+                                  <SelectItem
+                                    key={`ao-${ao.id}`}
+                                    value={ao.id.toString()}
+                                  >
+                                    {ao.name}
+                                  </SelectItem>
+                                ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      );
+                    }}
+                  />
+                </div>
+                <div className="mb-4 w-1/2 px-2">
+                  <FormField
+                    control={form.control}
+                    name="locationId"
+                    render={({ field }) => {
+                      const regionId = form.getValues("regionId");
+                      const filteredLocations = locations?.locations.filter(
+                        (location) => location.regionId === regionId,
+                      );
+                      return (
+                        <FormItem
+                          key={`location-${String(field.value ?? "new")}`}
+                        >
+                          <FormLabel>Location</FormLabel>
+                          <Select
+                            value={field.value?.toString()}
+                            onValueChange={(value) => {
+                              console.log("locationId onValueChange", value);
+                              field.onChange(Number(value));
+
+                              const selectedLocation =
+                                locations?.locations.find(
+                                  (location) => location.id === Number(value),
+                                );
+                              if (selectedLocation?.regionId != null) {
+                                form.setValue(
+                                  "regionId",
+                                  selectedLocation.regionId,
+                                );
+                              }
+                            }}
+                            defaultValue={field.value?.toString()}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select a location" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {filteredLocations
+                                ?.slice()
+                                .sort(
+                                  (a, b) =>
+                                    a.locationName?.localeCompare(
+                                      b.locationName ?? "",
+                                    ) ?? 0,
+                                )
+                                .map((location) => (
+                                  <SelectItem
+                                    key={`location-${location.id}`}
+                                    value={location.id.toString()}
+                                  >
+                                    {location.locationName}
+                                  </SelectItem>
+                                ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      );
+                    }}
+                  />
+                </div>
+                <div className="mb-4 w-1/2 px-2">
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Email"
+                            type="email"
+                            {...field}
+                            value={field.value ?? ""}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <div className="mb-4 w-1/2 px-2">
+                  <ControlledSelect
+                    control={form.control}
+                    name="dayOfWeek"
+                    label="Day of Week"
+                    options={DayOfWeek.map((day) => ({
+                      value: day,
+                      label: convertCase({
+                        str: day,
+                        fromCase: Case.LowerCase,
+                        toCase: Case.TitleCase,
+                      }),
+                    }))}
+                    placeholder="Select a day of the week"
+                  />
+                </div>
+                <div className="mb-4 w-1/2 px-2">
+                  <FormField
+                    control={form.control}
+                    name="eventTypeIds"
+                    render={({ field }) => (
+                      <FormItem key={`eventTypeIds`}>
+                        <FormLabel>Event Types</FormLabel>
+                        <VirtualizedCombobox
+                          value={(field.value as number[] | undefined)?.map(
+                            String,
+                          )}
+                          options={
+                            eventTypes?.eventTypes.map((type) => ({
+                              value: type.id.toString(),
+                              label: type.name,
+                            })) ?? []
                           }
-                          const eventTypeIds = value.map(safeParseInt);
-                          field.onChange(eventTypeIds);
-                        }}
-                        isMulti={true}
-                      />
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <div className="mb-4 w-1/2 px-2">
-                <ControlledTimeInput
-                  control={form.control}
-                  name="startTime"
-                  id={"startTime"}
-                  label={"Start Time"}
-                />
-              </div>
-              <div className="mb-4 w-1/2 px-2">
-                <ControlledTimeInput
-                  control={form.control}
-                  name="endTime"
-                  id={"endTime"}
-                  label={"End Time"}
-                />
-              </div>
-              <div className="mb-4 w-1/2 px-2">
-                <FormField
-                  control={form.control}
-                  name="startDate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Start Date</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="Start Date"
-                          type="date"
+                          searchPlaceholder={
+                            formRegionId
+                              ? "Select event types"
+                              : "Select a region first"
+                          }
+                          disabled={!formRegionId}
+                          onSelect={(value) => {
+                            if (!Array.isArray(value)) {
+                              toast.error("Invalid event type");
+                              return;
+                            }
+                            const eventTypeIds = value.map(safeParseInt);
+                            field.onChange(eventTypeIds);
+                          }}
+                          isMulti={true}
+                        />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <div className="mb-4 w-1/2 px-2">
+                  <ControlledTimeInput
+                    control={form.control}
+                    name="startTime"
+                    id={"startTime"}
+                    label={"Start Time"}
+                  />
+                </div>
+                <div className="mb-4 w-1/2 px-2">
+                  <ControlledTimeInput
+                    control={form.control}
+                    name="endTime"
+                    id={"endTime"}
+                    label={"End Time"}
+                  />
+                </div>
+                <div className="mb-4 w-1/2 px-2">
+                  <FormField
+                    control={form.control}
+                    name="startDate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Start Date</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Start Date"
+                            type="date"
+                            {...field}
+                            value={field.value ?? ""}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <div className="mb-4 w-1/2 px-2">
+                  <FormField
+                    control={form.control}
+                    name="isPrivate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Visibility</FormLabel>
+                        <Select
+                          onValueChange={(value) =>
+                            value &&
+                            field.onChange(value === "true" ? true : false)
+                          }
+                          value={field.value === true ? "true" : "false"}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select visibility" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="false">Public</SelectItem>
+                            <SelectItem value="true">Private</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <div className="mb-4 w-1/2 px-2">
+                  <FormField
+                    control={form.control}
+                    name="isActive"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Status</FormLabel>
+                        <Select
+                          onValueChange={(value) =>
+                            value &&
+                            field.onChange(value === "true" ? true : false)
+                          }
+                          value={field.value === true ? "true" : "false"}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select a status" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="true">Active</SelectItem>
+                            <SelectItem value="false">Inactive</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <div className="mb-4 w-full px-2">
+                  <FormField
+                    control={form.control}
+                    name="description"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Description</FormLabel>
+                        <Textarea
                           {...field}
                           value={field.value ?? ""}
+                          rows={5}
                         />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <div className="mb-4 w-1/2 px-2">
-                <FormField
-                  control={form.control}
-                  name="isPrivate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Visibility</FormLabel>
-                      <Select
-                        onValueChange={(value) =>
-                          value &&
-                          field.onChange(value === "true" ? true : false)
-                        }
-                        value={field.value === true ? "true" : "false"}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select visibility" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="false">Public</SelectItem>
-                          <SelectItem value="true">Private</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <div className="mb-4 w-1/2 px-2">
-                <FormField
-                  control={form.control}
-                  name="isActive"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Status</FormLabel>
-                      <Select
-                        onValueChange={(value) =>
-                          value &&
-                          field.onChange(value === "true" ? true : false)
-                        }
-                        value={field.value === true ? "true" : "false"}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a status" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="true">Active</SelectItem>
-                          <SelectItem value="false">Inactive</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <div className="mb-4 w-full px-2">
-                <FormField
-                  control={form.control}
-                  name="description"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Description</FormLabel>
-                      <Textarea {...field} value={field.value ?? ""} rows={5} />
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <div className="mb-4 w-full px-2">
-                <div className="flex space-x-4 pt-4">
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <div className="mb-4 w-full px-2">
+                  <div className="flex space-x-4 pt-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => closeModal()}
+                      className="w-full"
+                    >
+                      Cancel
+                    </Button>
+                    <Button type="submit" className="w-full">
+                      {isSubmitting ? (
+                        <div className="flex items-center gap-2">
+                          Saving... <Spinner className="size-4" />
+                        </div>
+                      ) : (
+                        "Save Changes"
+                      )}
+                    </Button>
+                  </div>
+                </div>
+                {event?.id ? (
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => closeModal()}
+                    onClick={() => {
+                      closeModal();
+                      openModal(ModalType.ADMIN_DELETE_CONFIRMATION, {
+                        id: event?.id ?? -1,
+                        type: DeleteType.EVENT,
+                      });
+                    }}
                     className="w-full"
                   >
-                    Cancel
+                    Delete Event
                   </Button>
-                  <Button type="submit" className="w-full">
-                    {isSubmitting ? (
-                      <div className="flex items-center gap-2">
-                        Saving... <Spinner className="size-4" />
-                      </div>
-                    ) : (
-                      "Save Changes"
-                    )}
-                  </Button>
-                </div>
+                ) : null}
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  closeModal();
-                  openModal(ModalType.ADMIN_DELETE_CONFIRMATION, {
-                    id: event?.id ?? -1,
-                    type: DeleteType.EVENT,
-                  });
-                }}
-                className="w-full"
-              >
-                Delete Event
-              </Button>
-            </div>
-          </form>
-        </Form>
+            </form>
+          </Form>
+        )}
       </DialogContent>
     </Dialog>
   );

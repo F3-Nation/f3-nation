@@ -48,37 +48,40 @@ describe("Event Router", () => {
     });
   });
 
-  afterAll(async () => {
-    // Clean up in reverse order, respecting FK constraints
-    for (const eventId of createdEventIds.reverse()) {
-      try {
-        await cleanup.event(eventId);
-      } catch {
-        // Ignore errors during cleanup
+  afterAll(
+    async () => {
+      // Clean up in reverse order, respecting FK constraints
+      for (const eventId of createdEventIds.reverse()) {
+        try {
+          await cleanup.event(eventId);
+        } catch {
+          // Ignore errors during cleanup
+        }
       }
-    }
-    for (const eventTypeId of createdEventTypeIds.reverse()) {
-      try {
-        await cleanup.eventType(eventTypeId);
-      } catch {
-        // Ignore errors during cleanup
+      for (const eventTypeId of createdEventTypeIds.reverse()) {
+        try {
+          await cleanup.eventType(eventTypeId);
+        } catch {
+          // Ignore errors during cleanup
+        }
       }
-    }
-    for (const locationId of createdLocationIds.reverse()) {
-      try {
-        await cleanup.location(locationId);
-      } catch {
-        // Ignore errors during cleanup
+      for (const locationId of createdLocationIds.reverse()) {
+        try {
+          await cleanup.location(locationId);
+        } catch {
+          // Ignore errors during cleanup
+        }
       }
-    }
-    for (const orgId of createdOrgIds.reverse()) {
-      try {
-        await cleanup.org(orgId);
-      } catch {
-        // Ignore errors during cleanup
+      for (const orgId of createdOrgIds.reverse()) {
+        try {
+          await cleanup.org(orgId);
+        } catch {
+          // Ignore errors during cleanup
+        }
       }
-    }
-  });
+    },
+    30000, // 30 second timeout for cleanup
+  );
 
   // Helper to create test region
   const createTestRegion = async () => {
@@ -154,9 +157,51 @@ describe("Event Router", () => {
   };
 
   describe("all", () => {
-    it("should return a list of events", async () => {
+    it("should include events without a location (locationId null)", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      // Create an event with no location
+      const [created] = await db
+        .insert(schema.events)
+        .values({
+          name: `No Location Event ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: null,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          isActive: true,
+          highlight: false,
+          startDate: "2026-01-01",
+          isPrivate: false,
+        })
+        .returning();
+
+      if (created) {
+        createdEventIds.push(created.id);
+      }
+
       const client = createTestClient();
       const result = await client.event.all({
+        pageIndex: 0,
+        pageSize: 50,
+        statuses: ["active"],
+      });
+
+      expect(result.events?.some((e) => e.id === created?.id)).toBe(true);
+    });
+  });
+
+  describe("map.event.all", () => {
+    it("should return a list of events with filtering", async () => {
+      const client = createTestClient();
+      const result = await client.map.event.all({
         pageIndex: 0,
         pageSize: 10,
       });
@@ -168,12 +213,12 @@ describe("Event Router", () => {
 
     it("should paginate results correctly", async () => {
       const client = createTestClient();
-      const page1 = await client.event.all({
+      const page1 = await client.map.event.all({
         pageIndex: 0,
         pageSize: 2,
       });
 
-      const page2 = await client.event.all({
+      const page2 = await client.map.event.all({
         pageIndex: 1,
         pageSize: 2,
       });
@@ -193,7 +238,7 @@ describe("Event Router", () => {
 
     it("should filter by status", async () => {
       const client = createTestClient();
-      const activeEvents = await client.event.all({
+      const activeEvents = await client.map.event.all({
         statuses: ["active"],
         pageIndex: 0,
         pageSize: 10,
@@ -236,7 +281,7 @@ describe("Event Router", () => {
       }
 
       const client = createTestClient();
-      const result = await client.event.all({
+      const result = await client.map.event.all({
         searchTerm: "SearchableEvent",
         pageIndex: 0,
         pageSize: 10,
@@ -280,7 +325,7 @@ describe("Event Router", () => {
       }
 
       const client = createTestClient();
-      const result = await client.event.all({
+      const result = await client.map.event.all({
         regionIds: [region.id],
         pageIndex: 0,
         pageSize: 10,
@@ -346,7 +391,7 @@ describe("Event Router", () => {
       }
 
       const client = createTestClient();
-      const result = await client.event.all({
+      const result = await client.map.event.all({
         pageIndex: 0,
         pageSize: 100,
       });
@@ -417,7 +462,7 @@ describe("Event Router", () => {
       });
 
       const client = createTestClient();
-      const result = await client.event.all({
+      const result = await client.map.event.all({
         eventTypeNames: [uniqueTypeName],
         pageIndex: 0,
         pageSize: 100,
@@ -487,7 +532,7 @@ describe("Event Router", () => {
       });
 
       const client = createTestClient();
-      const result = await client.event.all({
+      const result = await client.map.event.all({
         eventCategories: ["third_f"],
         pageIndex: 0,
         pageSize: 100,

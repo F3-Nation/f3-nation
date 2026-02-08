@@ -6,6 +6,7 @@ import { z } from "zod";
 import {
   aliasedTable,
   and,
+  count,
   countDistinct,
   eq,
   ilike,
@@ -15,6 +16,7 @@ import {
   sql,
 } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
+import { F3_NATION_ORG_ID } from "@acme/shared/app/constants";
 import { IsActiveStatus, OrgType } from "@acme/shared/app/enums";
 import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
 import type { OrgMeta } from "@acme/shared/app/types";
@@ -25,7 +27,7 @@ import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
 import { moveAOLocsToNewRegion } from "../lib/move-ao-locs-to-new-region";
-import { emitWebhookEvent } from "../lib/webhook-events";
+import { notifyMapDataChange } from "../lib/webhook-events";
 import type { Context } from "../shared";
 import { adminProcedure, editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
@@ -57,17 +59,54 @@ const orgFilterSchema = z.object({
     .refine((val) => val.length >= 1, {
       message: "At least one orgType is required",
     })
-    .default(["region"]),
-  searchTerm: z.string().optional(),
-  statuses: arrayOrSingle(z.enum(IsActiveStatus)).optional(),
-  parentOrgIds: arrayOrSingle(z.coerce.number()).optional(),
-  onlyMine: z.coerce.boolean().optional(),
+    .default(["region"])
+    .describe(
+      "Filter organizations by type. Returns orgs matching ANY of the given types (region, area, ao, sector, nation). Defaults to [region].",
+    ),
+  searchTerm: z
+    .string()
+    .optional()
+    .describe(
+      "Search organizations by name or description. Case-insensitive partial matching.",
+    ),
+  statuses: arrayOrSingle(z.enum(IsActiveStatus))
+    .optional()
+    .describe(
+      "Filter organizations by status. Matches orgs with ANY of the given statuses (active, inactive).",
+    ),
+  parentOrgIds: arrayOrSingle(z.coerce.number())
+    .optional()
+    .describe(
+      "Filter organizations by parent ID(s). Returns orgs with ANY of the specified parents.",
+    ),
+  onlyMine: z.coerce
+    .boolean()
+    .optional()
+    .describe(
+      "If true, only return organizations where the requester has editor or admin role.",
+    ),
 });
 
 type OrgFilterInput = z.infer<typeof orgFilterSchema>;
 
 // Extended schema with pagination and sorting for the `all` endpoint
 const orgAllInputSchema = orgFilterSchema.extend({
+  pageIndex: z.coerce
+    .number()
+    .optional()
+    .describe("Zero-based page index for pagination. Defaults to 0."),
+  pageSize: z.coerce
+    .number()
+    .optional()
+    .describe("Number of organizations per page. Defaults to 10."),
+  sorting: parseSorting().describe(
+    "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: id, name, orgType, isActive, created.",
+  ),
+});
+
+// Schema for the `accessible` endpoint with pagination and sorting
+const orgAccessibleInputSchema = z.object({
+  orgTypes: arrayOrSingle(z.enum(OrgType)).optional(),
   pageIndex: z.coerce.number().optional(),
   pageSize: z.coerce.number().optional(),
   sorting: parseSorting(),
@@ -174,7 +213,7 @@ export const orgRouter = {
       tags: ["org"],
       summary: "List all organizations",
       description:
-        "Get a paginated list of organizations (regions, AOs, etc.) with optional filtering and sorting",
+        "Get a paginated list of organizations (regions, areas, AOs, etc.) filtered by type, status, and other criteria. Supports searching, sorting, and pagination. Organizations are organized hierarchically.",
     })
     .handler(async ({ context: ctx, input }) => {
       const pageSize = input.pageSize ?? 10;
@@ -264,7 +303,7 @@ export const orgRouter = {
       tags: ["org"],
       summary: "Count organizations",
       description:
-        "Get the count of organizations matching the specified filters",
+        "Get the total count of organizations matching the specified filters. Useful for determining pagination requirements.",
     })
     .handler(async ({ context: ctx, input }) => {
       // Resolve editable org IDs for "onlyMine" filter
@@ -291,9 +330,225 @@ export const orgRouter = {
       return { count };
     }),
 
+  accessible: protectedProcedure
+    .input(orgAccessibleInputSchema.optional())
+    .route({
+      method: "GET",
+      path: "/accessible",
+      tags: ["org"],
+      summary: "Get accessible organizations",
+      description:
+        "Get all organizations that the current user has access to. If user has orgId=1 (F3 Nation), returns all orgs. Otherwise returns only assigned orgs. Supports pagination and sorting.",
+    })
+    .handler(async ({ context: ctx, input }) => {
+      if (!ctx.session?.id) {
+        throw new ORPCError("UNAUTHORIZED", {
+          message: "You are not authorized to get your orgs",
+        });
+      }
+
+      const pageSize = input?.pageSize ?? 10;
+      const pageIndex = (input?.pageIndex ?? 0) * pageSize;
+      const usePagination =
+        input?.pageIndex !== undefined && input?.pageSize !== undefined;
+
+      // Check if user has a role with orgId = 1 (F3 Nation)
+      const [nationRole] = await ctx.db
+        .select()
+        .from(schema.rolesXUsersXOrg)
+        .where(
+          and(
+            eq(schema.rolesXUsersXOrg.userId, ctx.session.id),
+            eq(schema.rolesXUsersXOrg.orgId, F3_NATION_ORG_ID),
+          ),
+        );
+
+      // If user has F3 Nation role, return all orgs with pagination and sorting
+      if (nationRole) {
+        const sortedColumns = getSortingColumns(
+          input?.sorting,
+          {
+            id: schema.orgs.id,
+            name: schema.orgs.name,
+            orgType: schema.orgs.orgType,
+            parentId: schema.orgs.parentId,
+          },
+          "name",
+        );
+
+        const baseQuery = ctx.db
+          .select({
+            id: schema.orgs.id,
+            name: schema.orgs.name,
+            orgType: schema.orgs.orgType,
+            parentId: schema.orgs.parentId,
+          })
+          .from(schema.orgs)
+          .where(
+            input?.orgTypes?.length
+              ? inArray(schema.orgs.orgType, input.orgTypes)
+              : undefined,
+          );
+
+        const totalQuery = ctx.db
+          .select({ count: count(schema.orgs.id) })
+          .from(schema.orgs)
+          .where(
+            input?.orgTypes?.length
+              ? inArray(schema.orgs.orgType, input.orgTypes)
+              : undefined,
+          );
+
+        const [totalResult] = await totalQuery;
+        const total = totalResult?.count ?? 0;
+
+        const allOrgs = usePagination
+          ? await withPagination(
+              baseQuery.$dynamic(),
+              sortedColumns,
+              pageIndex,
+              pageSize,
+            )
+          : await baseQuery.orderBy(...sortedColumns);
+
+        return {
+          orgs: allOrgs.map((org) => ({
+            id: org.id,
+            name: org.name,
+            orgType: org.orgType,
+            parentId: org.parentId,
+            roles: [], // No roles when returning all orgs
+          })),
+          total,
+        };
+      }
+
+      // Otherwise, return only the user's assigned orgs (same logic as `mine`)
+      const orgsQuery = await ctx.db
+        .select()
+        .from(schema.rolesXUsersXOrg)
+        .innerJoin(
+          schema.orgs,
+          eq(schema.rolesXUsersXOrg.orgId, schema.orgs.id),
+        )
+        .innerJoin(
+          schema.roles,
+          eq(schema.rolesXUsersXOrg.roleId, schema.roles.id),
+        )
+        .where(
+          and(
+            eq(schema.rolesXUsersXOrg.userId, ctx.session.id),
+            input?.orgTypes?.length
+              ? inArray(schema.orgs.orgType, input.orgTypes)
+              : undefined,
+          ),
+        );
+
+      // Reduce multiple rows per org down to one row per org with possibly multiple roles
+      const orgMap: Record<
+        number,
+        {
+          orgs: (typeof orgsQuery)[number]["orgs"];
+          roles_x_users_x_org: (typeof orgsQuery)[number]["roles_x_users_x_org"];
+          roles: (typeof orgsQuery)[number]["roles"]["name"][];
+        }
+      > = {};
+
+      for (const row of orgsQuery) {
+        const orgId = row.orgs.id;
+        if (!orgMap[orgId]) {
+          orgMap[orgId] = {
+            orgs: row.orgs,
+            roles_x_users_x_org: row.roles_x_users_x_org,
+            roles: [],
+          };
+        }
+        if (row.roles?.name) {
+          orgMap[orgId]?.roles.push(row.roles.name);
+        }
+      }
+
+      const allAssignedOrgs = Object.values(orgMap).map((org) => ({
+        id: org.orgs.id,
+        name: org.orgs.name,
+        orgType: org.orgs.orgType,
+        parentId: org.orgs.parentId,
+        roles: org.roles,
+      }));
+
+      // Sort the orgs array manually since we're working with in-memory data
+      const sortedOrgs = [...allAssignedOrgs];
+      if (input?.sorting && input.sorting.length > 0) {
+        sortedOrgs.sort((a, b) => {
+          for (const sort of input.sorting ?? []) {
+            let aVal: string | number | null;
+            let bVal: string | number | null;
+
+            switch (sort.id) {
+              case "id":
+                aVal = a.id;
+                bVal = b.id;
+                break;
+              case "name":
+                aVal = a.name;
+                bVal = b.name;
+                break;
+              case "orgType":
+                aVal = a.orgType;
+                bVal = b.orgType;
+                break;
+              case "parentId":
+                aVal = a.parentId;
+                bVal = b.parentId;
+                break;
+              default:
+                continue;
+            }
+
+            if (aVal === null && bVal === null) continue;
+            if (aVal === null) return sort.desc ? 1 : -1;
+            if (bVal === null) return sort.desc ? -1 : 1;
+
+            const comparison =
+              typeof aVal === "string" && typeof bVal === "string"
+                ? aVal.localeCompare(bVal)
+                : aVal < bVal
+                  ? -1
+                  : aVal > bVal
+                    ? 1
+                    : 0;
+
+            if (comparison !== 0) {
+              return sort.desc ? -comparison : comparison;
+            }
+          }
+          return 0;
+        });
+      }
+
+      // Apply pagination
+      const total = sortedOrgs.length;
+      const paginatedOrgs = usePagination
+        ? sortedOrgs.slice(pageIndex, pageIndex + pageSize)
+        : sortedOrgs;
+
+      return {
+        orgs: paginatedOrgs,
+        total,
+      };
+    }),
+
   byId: protectedProcedure
     .input(
-      z.object({ id: z.coerce.number(), orgType: z.enum(OrgType).optional() }),
+      z.object({
+        id: z.coerce
+          .number()
+          .describe("The unique identifier of the organization"),
+        orgType: z
+          .enum(OrgType)
+          .optional()
+          .describe("Hint for the organization type to optimize queries"),
+      }),
     )
     .route({
       method: "GET",
@@ -301,7 +556,7 @@ export const orgRouter = {
       tags: ["org"],
       summary: "Get organization by ID",
       description:
-        "Retrieve detailed information about a specific organization",
+        "Retrieve detailed information about a specific organization including its structure, metadata, and parent/child relationships",
     })
     .handler(async ({ context: ctx, input }) => {
       const [org] = await ctx.db
@@ -323,7 +578,8 @@ export const orgRouter = {
       path: "/",
       tags: ["org"],
       summary: "Create or update organization",
-      description: "Create a new organization or update an existing one",
+      description:
+        "Create a new organization or update an existing one. Requires editor role for the organization or its parent. Organizations follow a hierarchical structure (nation → region → area → ao).",
     })
     .handler(async ({ context: ctx, input }) => {
       const orgIdToCheck = input.id ?? input.parentId;
@@ -356,7 +612,7 @@ export const orgRouter = {
 
         // Notify webhooks about the org creation
         if (result) {
-          emitWebhookEvent({ type: "org.created", orgId: result.id });
+          notifyMapDataChange({ type: "org.created", orgId: result.id });
         }
 
         return { org: result ?? null };
@@ -412,7 +668,7 @@ export const orgRouter = {
 
       // Notify webhooks about the org update
       if (result) {
-        emitWebhookEvent({ type: "org.updated", orgId: result.id });
+        notifyMapDataChange({ type: "org.updated", orgId: result.id });
       }
 
       return { org: result ?? null };
@@ -523,7 +779,7 @@ export const orgRouter = {
         );
 
       // Notify webhooks about the org deletion
-      emitWebhookEvent({ type: "org.deleted", orgId: input.id });
+      notifyMapDataChange({ type: "org.deleted", orgId: input.id });
 
       // If this is an AO, cascade soft-delete to series and event instances
       if (org?.orgType === "ao") {

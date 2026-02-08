@@ -50,7 +50,9 @@ export const LocationInsertSchema = createInsertSchema(locations);
 export const LocationSelectSchema = createSelectSchema(locations);
 
 // EVENT TYPE SCHEMA
-export const EventTypeInsertSchema = createInsertSchema(eventTypes);
+export const EventTypeInsertSchema = createInsertSchema(eventTypes, {
+  name: (s: z.ZodString) => s.min(1, { message: "Required" }),
+});
 export const EventTypeSelectSchema = createSelectSchema(eventTypes);
 
 // EVENT TAG SCHEMA

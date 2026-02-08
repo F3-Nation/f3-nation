@@ -139,6 +139,121 @@ describe("Event Type Router", () => {
       expect(result).toHaveProperty("eventTypes");
       expect(Array.isArray(result.eventTypes)).toBe(true);
     });
+
+    it("should return correct event types when filtering by regionId", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+      const client = createTestClient();
+
+      // Create two test regions
+      const [region1] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Test Region 1 ${uniqueId()}`,
+          orgType: "region",
+          parentId: f3Nation.id,
+          isActive: true,
+        })
+        .returning();
+
+      const [region2] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Test Region 2 ${uniqueId()}`,
+          orgType: "region",
+          parentId: f3Nation.id,
+          isActive: true,
+        })
+        .returning();
+
+      if (!region1 || !region2) {
+        throw new Error("Failed to create test regions");
+      }
+
+      // Create event types for region1
+      const [region1EventType] = await db
+        .insert(schema.eventTypes)
+        .values({
+          name: `Region 1 Event Type ${uniqueId()}`,
+          eventCategory: "first_f",
+          specificOrgId: region1.id,
+          isActive: true,
+        })
+        .returning();
+
+      // Create event types for region2
+      const [region2EventType] = await db
+        .insert(schema.eventTypes)
+        .values({
+          name: `Region 2 Event Type ${uniqueId()}`,
+          eventCategory: "first_f",
+          specificOrgId: region2.id,
+          isActive: true,
+        })
+        .returning();
+
+      // Create Nation event type (no specificOrgId)
+      const [nationEventType] = await db
+        .insert(schema.eventTypes)
+        .values({
+          name: `Nation Event Type ${uniqueId()}`,
+          eventCategory: "first_f",
+          specificOrgId: null,
+          isActive: true,
+        })
+        .returning();
+
+      if (region1EventType) {
+        createdEventTypeIds.push(region1EventType.id);
+      }
+      if (region2EventType) {
+        createdEventTypeIds.push(region2EventType.id);
+      }
+      if (nationEventType) {
+        createdEventTypeIds.push(nationEventType.id);
+      }
+
+      // Test: Filtering by region1 should return region1's event types + Nation event types
+      const result = await client.eventType.all({
+        orgIds: [region1.id],
+        pageIndex: 0,
+        pageSize: 100,
+      });
+
+      expect(result).toHaveProperty("eventTypes");
+      expect(Array.isArray(result.eventTypes)).toBe(true);
+
+      // Should include region1's event type
+      if (region1EventType) {
+        const foundRegion1Type = result.eventTypes.some(
+          (et) => et.id === region1EventType.id,
+        );
+        expect(foundRegion1Type).toBe(true);
+      }
+
+      // Should include Nation event type
+      if (nationEventType) {
+        const foundNationType = result.eventTypes.some(
+          (et) => et.id === nationEventType.id,
+        );
+        expect(foundNationType).toBe(true);
+      }
+
+      // Should NOT include region2's event type
+      if (region2EventType) {
+        const foundRegion2Type = result.eventTypes.some(
+          (et) => et.id === region2EventType.id,
+        );
+        expect(foundRegion2Type).toBe(false);
+      }
+
+      // Cleanup regions
+      try {
+        await cleanup.org(region1.id);
+        await cleanup.org(region2.id);
+      } catch {
+        // Ignore cleanup errors
+      }
+    });
   });
 
   describe("byId", () => {

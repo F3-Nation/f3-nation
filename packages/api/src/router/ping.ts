@@ -6,7 +6,8 @@ export const pingRouter = publicProcedure
     path: "/ping",
     tags: ["ping"],
     summary: "Health check",
-    description: "Check if the API is alive and responding",
+    description:
+      "Check if the API is alive and responding. No authentication required. Useful for monitoring and testing connectivity.",
   })
   .handler(() => ({
     alive: true,

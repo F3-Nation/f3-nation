@@ -23,15 +23,24 @@ import { EventInsertSchema } from "@acme/validators";
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
-import { emitWebhookEvent } from "../lib/webhook-events";
+import { notifyMapDataChange } from "../lib/webhook-events";
 import type { Context } from "../shared";
 import { editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
 // Shared filter schema for events (used by both `all` and `count` endpoints)
 const eventFilterSchema = z.object({
-  searchTerm: z.string().optional(),
-  statuses: arrayOrSingle(z.enum(["active", "inactive"])).optional(),
+  searchTerm: z
+    .string()
+    .optional()
+    .describe(
+      "Search events by name or description. Case-insensitive partial matching.",
+    ),
+  statuses: arrayOrSingle(z.enum(["active", "inactive"]))
+    .optional()
+    .describe(
+      "Filter events by status. Matches events with ANY of the given statuses.",
+    ),
   eventTypeNames: arrayOrSingle(z.string())
     .optional()
     .describe(
@@ -42,9 +51,22 @@ const eventFilterSchema = z.object({
     .describe(
       "Filter events by event category(ies). Matches events with ANY of the given categories.",
     ),
-  regionIds: arrayOrSingle(z.coerce.number()).optional(),
-  aoIds: arrayOrSingle(z.coerce.number()).optional(),
-  onlyMine: z.coerce.boolean().optional(),
+  regionIds: arrayOrSingle(z.coerce.number())
+    .optional()
+    .describe(
+      "Filter events by region ID(s). Returns events in ANY of the specified regions.",
+    ),
+  aoIds: arrayOrSingle(z.coerce.number())
+    .optional()
+    .describe(
+      "Filter events by area organization (AO) ID(s). Returns events in ANY of the specified AOs.",
+    ),
+  onlyMine: z.coerce
+    .boolean()
+    .optional()
+    .describe(
+      "If true, only return events in organizations where the requester has editor or admin role.",
+    ),
 });
 
 type EventFilterInput = z.infer<typeof eventFilterSchema>;
@@ -52,11 +74,20 @@ type EventFilterInput = z.infer<typeof eventFilterSchema>;
 // Extended schema with pagination and sorting for the `all` endpoint
 const eventAllInputSchema = eventFilterSchema
   .extend({
-    pageIndex: z.coerce.number().optional(),
-    pageSize: z.coerce.number().optional(),
+    pageIndex: z.coerce
+      .number()
+      .optional()
+      .describe("Zero-based page index for pagination. Defaults to 0."),
+    pageSize: z.coerce
+      .number()
+      .optional()
+      .describe("Number of events per page. Defaults to 10."),
     sorting: z
       .array(z.object({ id: z.string(), desc: z.coerce.boolean() }))
-      .optional(),
+      .optional()
+      .describe(
+        "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: regions, parent, status, dayOfWeek, created.",
+      ),
   })
   .optional();
 
@@ -146,37 +177,40 @@ function buildEventWhereClause(params: {
 function buildEventBaseQuery(params: { db: AppDb; where: SQL | undefined }) {
   const { db, where } = params;
 
-  return db
-    .select({ count: countDistinct(schema.events.id) })
-    .from(schema.events)
-    .innerJoin(
-      schema.locations,
-      eq(schema.locations.id, schema.events.locationId),
-    )
-    .leftJoin(
-      parentOrg,
-      and(eq(parentOrg.orgType, "ao"), eq(parentOrg.id, schema.events.orgId)),
-    )
-    .leftJoin(
-      regionOrg,
-      and(
-        eq(regionOrg.orgType, "region"),
-        or(
-          eq(regionOrg.id, schema.locations.orgId),
-          eq(regionOrg.id, schema.events.orgId),
-          eq(regionOrg.id, parentOrg.parentId),
+  return (
+    db
+      .select({ count: countDistinct(schema.events.id) })
+      .from(schema.events)
+      // Must be a LEFT JOIN so events without a location still appear in admin lists.
+      .leftJoin(
+        schema.locations,
+        eq(schema.locations.id, schema.events.locationId),
+      )
+      .leftJoin(
+        parentOrg,
+        and(eq(parentOrg.orgType, "ao"), eq(parentOrg.id, schema.events.orgId)),
+      )
+      .leftJoin(
+        regionOrg,
+        and(
+          eq(regionOrg.orgType, "region"),
+          or(
+            eq(regionOrg.id, schema.locations.orgId),
+            eq(regionOrg.id, schema.events.orgId),
+            eq(regionOrg.id, parentOrg.parentId),
+          ),
         ),
-      ),
-    )
-    .leftJoin(
-      schema.eventsXEventTypes,
-      eq(schema.eventsXEventTypes.eventId, schema.events.id),
-    )
-    .leftJoin(
-      schema.eventTypes,
-      eq(schema.eventTypes.id, schema.eventsXEventTypes.eventTypeId),
-    )
-    .where(where);
+      )
+      .leftJoin(
+        schema.eventsXEventTypes,
+        eq(schema.eventsXEventTypes.eventId, schema.events.id),
+      )
+      .leftJoin(
+        schema.eventTypes,
+        eq(schema.eventTypes.id, schema.eventsXEventTypes.eventTypeId),
+      )
+      .where(where)
+  );
 }
 
 /**
@@ -202,7 +236,7 @@ export const eventRouter = {
       tags: ["event"],
       summary: "List all events",
       description:
-        "Get a paginated list of workout events with optional filtering and sorting",
+        "Get a paginated list of workout events with optional filtering by event type, category, region, and other criteria. Supports searching, sorting, and pagination.",
     })
     .handler(async ({ context: ctx, input }) => {
       const limit = input?.pageSize ?? 10;
@@ -318,7 +352,8 @@ export const eventRouter = {
       const query = ctx.db
         .select(select)
         .from(schema.events)
-        .innerJoin(
+        // Must be a LEFT JOIN so events without a location still appear in admin lists.
+        .leftJoin(
           schema.locations,
           eq(schema.locations.id, schema.events.locationId),
         )
@@ -379,7 +414,8 @@ export const eventRouter = {
       path: "/count",
       tags: ["event"],
       summary: "Count events",
-      description: "Get the count of events matching the given filters",
+      description:
+        "Get the total count of events matching the given filters. Useful for determining pagination requirements.",
     })
     .handler(async ({ context: ctx, input }) => {
       // Resolve editable org IDs for "onlyMine" filter
@@ -406,13 +442,18 @@ export const eventRouter = {
       return { count };
     }),
   byId: protectedProcedure
-    .input(z.object({ id: z.coerce.number() }))
+    .input(
+      z.object({
+        id: z.coerce.number().describe("The unique identifier of the event"),
+      }),
+    )
     .route({
       method: "GET",
       path: "/id/{id}",
       tags: ["event"],
       summary: "Get event by ID",
-      description: "Retrieve detailed information about a specific event",
+      description:
+        "Retrieve detailed information about a specific event including location, schedule, and associated organizations",
     })
     .handler(async ({ context: ctx, input }) => {
       const regionOrg = aliasedTable(schema.orgs, "region_org");
@@ -533,7 +574,7 @@ export const eventRouter = {
       tags: ["event"],
       summary: "Create or update event",
       description:
-        "Create a new event or update an existing one. For series (events with recurrence patterns), this also creates or updates associated event instances.",
+        "Create a new event or update an existing one. Requires editor role for the event's organization. Events are associated with locations and can have multiple event types.",
     })
     .handler(async ({ context: ctx, input }) => {
       const [existingEvent] = input.id
@@ -603,8 +644,8 @@ export const eventRouter = {
         );
       }
 
-      // Notify webhooks about the event change
-      emitWebhookEvent({
+      // Notify webhooks and invalidate cache about the event change
+      notifyMapDataChange({
         type: input.id ? "event.updated" : "event.created",
         eventId: result.id,
       });
@@ -740,14 +781,20 @@ export const eventRouter = {
       return { lookup };
     }),
   delete: editorProcedure
-    .input(z.object({ id: z.coerce.number() }))
+    .input(
+      z.object({
+        id: z.coerce
+          .number()
+          .describe("The unique identifier of the event to delete"),
+      }),
+    )
     .route({
       method: "DELETE",
       path: "/delete/{id}",
       tags: ["event"],
       summary: "Delete event",
       description:
-        "Soft delete an event (series) by marking it as inactive. For series, this also soft-deletes future event instances.",
+        "Soft delete an event by marking it as inactive. The event will no longer appear on the map but the data is preserved.",
     })
     .handler(async ({ context: ctx, input }) => {
       const [event] = await ctx.db
@@ -780,16 +827,8 @@ export const eventRouter = {
           and(eq(schema.events.id, input.id), eq(schema.events.isActive, true)),
         );
 
-      // Notify webhooks about the event deletion
-      emitWebhookEvent({ type: "event.deleted", eventId: input.id });
-
-      // If this is a series (has recurrence pattern), cascade soft-delete to future instances
-      if (event.recurrencePattern) {
-        const { softDeleteFutureInstancesForSeries } = await import(
-          "../lib/cascade-service"
-        );
-        await softDeleteFutureInstancesForSeries(ctx.db, input.id);
-      }
+      // Notify webhooks and invalidate cache about the event deletion
+      notifyMapDataChange({ type: "event.deleted", eventId: input.id });
 
       return { eventId: input.id };
     }),

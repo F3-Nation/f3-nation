@@ -45,7 +45,8 @@ export const apiKeyRouter = {
       path: "/",
       tags: ["api-key"],
       summary: "List API keys",
-      description: "List all API keys",
+      description:
+        "Retrieve all API keys with their metadata, owner information, role assignments, and status. Requires admin role for any organization.",
     })
     .handler(async ({ context: ctx }) => {
       // Check if user is a nation admin (for email visibility)
@@ -149,7 +150,8 @@ export const apiKeyRouter = {
       path: "/",
       tags: ["api-key"],
       summary: "Create API key",
-      description: "Generate a new API key for programmatic access",
+      description:
+        "Generate a new API key for programmatic access. The key can be scoped to specific organizations with specific roles (editor or admin). Requires admin role for all assigned organizations.",
     })
     .handler(async ({ context: ctx, input }) => {
       const roles = input.roles ?? [];
@@ -240,7 +242,8 @@ export const apiKeyRouter = {
       path: "/{id}/revoke",
       tags: ["api-key"],
       summary: "Revoke API key",
-      description: "Revoke or restore an API key",
+      description:
+        "Revoke an API key to prevent further use, or restore a previously revoked key. Revoked keys cannot be used to authenticate API requests.",
     })
     .handler(async ({ context: ctx, input }) => {
       const timestamp =
@@ -266,13 +269,18 @@ export const apiKeyRouter = {
       return { apiKey: apiKey ?? null };
     }),
   purge: adminProcedure
-    .input(z.object({ id: z.coerce.number() }))
+    .input(
+      z.object({
+        id: z.coerce.number().describe("The unique identifier of the API key"),
+      }),
+    )
     .route({
       method: "DELETE",
       path: "/{id}/purge",
       tags: ["api-key"],
       summary: "Purge API key",
-      description: "Permanently delete an API key",
+      description:
+        "Permanently delete an API key and all associated role assignments. This action cannot be undone.",
     })
     .handler(async ({ context: ctx, input }) => {
       // Delete org associations first (cascade should handle this, but being explicit)
@@ -292,13 +300,14 @@ export const apiKeyRouter = {
       return { apiKey: apiKey ?? null };
     }),
   validate: adminProcedure
-    .input(z.object({ key: z.string() }))
+    .input(z.object({ key: z.string().describe("The API key to validate") }))
     .route({
       method: "POST",
       path: "/{key}/validate",
       tags: ["api-key"],
       summary: "Validate API key",
-      description: "Check if an API key is valid and not expired or revoked",
+      description:
+        "Check if an API key is valid, not revoked, and not expired. Returns true only if the key can be used for authentication.",
     })
     .handler(async ({ context: ctx, input }) => {
       const [apiKey] = await ctx.db

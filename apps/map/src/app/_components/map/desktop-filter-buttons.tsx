@@ -80,7 +80,10 @@ export const DesktopFilterButtons = () => {
           "bg-red-500 text-white": am,
         })}
         onClick={(e) => {
-          filterStore.setState((fs) => ({ am: !fs.am }));
+          filterStore.setState((fs) => ({
+            am: !fs.am,
+            pm: fs.am ? fs.pm : false,
+          }));
           e.stopPropagation();
           e.preventDefault();
         }}
@@ -94,7 +97,10 @@ export const DesktopFilterButtons = () => {
           "bg-red-500 text-white": pm,
         })}
         onClick={(e) => {
-          filterStore.setState((fs) => ({ pm: !fs.pm }));
+          filterStore.setState((fs) => ({
+            pm: !fs.pm,
+            am: fs.pm ? fs.am : false,
+          }));
           e.stopPropagation();
           e.preventDefault();
         }}
