@@ -1,6 +1,5 @@
 import { ORPCError } from "@orpc/server";
 import type { SQL } from "drizzle-orm";
-import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import {
@@ -15,6 +14,7 @@ import {
   schema,
 } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
+import { env } from "@acme/env";
 import { F3_NATION_ORG_ID } from "@acme/shared/app/constants";
 import { IsActiveStatus, OrgType } from "@acme/shared/app/enums";
 import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
@@ -802,6 +802,42 @@ export const orgRouter = {
         });
       }
 
-      revalidatePath("/");
+      // Also trigger Map app revalidation via HTTP request
+      // This is necessary because the API and Map apps are separate Next.js instances
+      const mapUrl = env.NEXT_PUBLIC_MAP_URL?.endsWith("/")
+        ? env.NEXT_PUBLIC_MAP_URL.slice(0, -1)
+        : env.NEXT_PUBLIC_MAP_URL;
+
+      if (!mapUrl || !env.SUPER_ADMIN_API_KEY) {
+        console.error("Failed to revalidate Map app cache", {
+          mapUrl,
+          superAdminKeyExists: !!env.SUPER_ADMIN_API_KEY,
+        });
+        return;
+      }
+
+      try {
+        const response = await fetch(`${mapUrl}/api/revalidate`, {
+          method: "POST",
+          headers: {
+            "x-api-key": env.SUPER_ADMIN_API_KEY,
+          },
+        });
+
+        if (!response.ok) {
+          console.error("Failed to revalidate Map app cache", {
+            status: response.status,
+            statusText: response.statusText,
+          });
+          // Don't throw - API revalidation succeeded, Map revalidation is best-effort
+        } else {
+          console.log("Map app cache revalidated successfully");
+        }
+      } catch (error) {
+        console.error("Error calling Map app revalidation endpoint", {
+          error,
+        });
+        // Don't throw - API revalidation succeeded, Map revalidation is best-effort
+      }
     }),
 };

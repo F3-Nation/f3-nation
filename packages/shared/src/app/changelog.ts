@@ -10,6 +10,28 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: "3.6.6",
+    date: "2026-02-07",
+    title: "Fix Map Revalidation",
+    sections: [
+      {
+        title: "Bug Fixes",
+        items: [
+          "Fixed revalidation button in map settings - now properly revalidates map cache when clicked",
+          "API app revalidation endpoint now triggers map app cache revalidation via HTTP request",
+          "Map cache updates immediately after database changes without requiring Cloud Build rebuild",
+        ],
+      },
+      {
+        title: "Backend",
+        items: [
+          "Created dedicated revalidation endpoint in map app (/api/revalidate) that accepts internal API key authentication",
+          "API app revalidation now makes HTTP request to map app to ensure both caches are updated",
+        ],
+      },
+    ],
+  },
+  {
     version: "3.6.5",
     date: "2026-02-06",
     title: "Map Cache & Deleted Workout Fixes",
