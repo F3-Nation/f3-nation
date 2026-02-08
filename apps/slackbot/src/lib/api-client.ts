@@ -32,6 +32,9 @@ import type {
   PositionWithAssignments,
   PositionInput,
   UpdatePositionAssignmentsInput,
+  SlackFileUploadInput,
+  SlackFileUploadResponse,
+  SlackFilesUploadResponse,
 } from "../types/api-types";
 import { logger } from "./logger";
 
@@ -992,6 +995,34 @@ export const api = {
         `/attendance/event-instance/${params.eventInstanceId}/actual`,
         { method: "DELETE" },
       ),
+  },
+
+  /**
+   * Upload API methods
+   * Handles file uploads from Slack to Google Cloud Storage
+   */
+  upload: {
+    /**
+     * Upload a single Slack file to GCS.
+     * Downloads from Slack, processes (optional resize/square), and uploads to GCS.
+     */
+    slackFile: (input: SlackFileUploadInput): Promise<SlackFileUploadResponse> =>
+      apiRequest<SlackFileUploadResponse>(`/upload/slack-file`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+
+    /**
+     * Upload multiple Slack files to GCS in a batch.
+     * Processes files in parallel for efficiency.
+     */
+    slackFiles: (input: {
+      files: SlackFileUploadInput[];
+    }): Promise<SlackFilesUploadResponse> =>
+      apiRequest<SlackFilesUploadResponse>(`/upload/slack-files`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
   },
 };
 

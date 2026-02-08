@@ -557,3 +557,49 @@ export interface UpdatePositionAssignmentsInput {
     userIds: number[];
   }[];
 }
+
+/**
+ * Input for uploading a single Slack file to GCS
+ */
+export interface SlackFileUploadInput {
+  slackFileUrl: string;
+  slackToken: string;
+  fileId: string;
+  filetype: string;
+  mimetype: string;
+  enforceSquare?: boolean;
+  maxHeight?: number;
+  generateThumbnail?: boolean;
+  bucket?: string;
+}
+
+/**
+ * Response from uploading a single Slack file
+ */
+export interface SlackFileUploadResponse {
+  url: string;
+  thumbnailUrl: string | null;
+  fileId: string;
+}
+
+/**
+ * Response for a failed file upload in batch
+ */
+export interface SlackFileUploadError {
+  fileId: string;
+  error: string;
+}
+
+/**
+ * Input for batch uploading multiple Slack files
+ */
+export interface SlackFilesUploadInput {
+  files: SlackFileUploadInput[];
+}
+
+/**
+ * Response from batch uploading multiple Slack files
+ */
+export interface SlackFilesUploadResponse {
+  results: (SlackFileUploadResponse | SlackFileUploadError)[];
+}

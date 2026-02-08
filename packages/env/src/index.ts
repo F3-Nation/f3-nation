@@ -28,6 +28,7 @@ export const env = createEnv({
     GOOGLE_LOGO_BUCKET_PRIVATE_KEY: z.string().min(1),
     GOOGLE_LOGO_BUCKET_CLIENT_EMAIL: z.string().min(1),
     GOOGLE_LOGO_BUCKET_BUCKET_NAME: z.string().min(1),
+    GCS_BACKBLAST_BUCKET_NAME: z.string().min(1).default("backblast-images"),
     TEST_DATABASE_URL: z.string().min(1),
     API_KEY: z.string().min(1),
     SUPER_ADMIN_API_KEY: z.string().min(1),

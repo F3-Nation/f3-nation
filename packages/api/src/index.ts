@@ -16,6 +16,7 @@ import { pingRouter } from "./router/ping";
 import { positionRouter } from "./router/position";
 import { requestRouter } from "./router/request";
 import { slackRouter } from "./router/slack";
+import { uploadRouter } from "./router/upload";
 import { userRouter } from "./router/user";
 
 // Re-export webhook event types for external use
@@ -37,5 +38,6 @@ export const router = os.prefix(API_PREFIX_V1).router({
   position: os.prefix("/position").router(positionRouter),
   request: os.prefix("/request").router(requestRouter),
   slack: os.prefix("/slack").router(slackRouter),
+  upload: os.prefix("/upload").router(uploadRouter),
   user: os.prefix("/user").router(userRouter),
 });
