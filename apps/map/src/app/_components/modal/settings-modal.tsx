@@ -30,7 +30,6 @@ import {
 } from "@acme/ui/dialog";
 import { toast } from "@acme/ui/toast";
 
-import { orpc } from "~/orpc/react";
 import { useAuth } from "~/utils/hooks/use-auth";
 import { appStore } from "~/utils/store/app";
 import { mapStore } from "~/utils/store/map";
@@ -320,10 +319,10 @@ export default function SettingsModal() {
                   void fetch("/api/revalidate", { method: "POST" })
                     .then(async (response) => {
                       if (!response.ok) {
-                        const error = await response.json().catch(() => ({
-                          error: "Unknown error",
-                        }));
-                        throw new Error(error.error ?? "Failed to revalidate");
+                        const json = (await response.json()) as {
+                          error: string;
+                        };
+                        throw new Error(json.error ?? "Failed to revalidate");
                       }
                       toast.success("Nation revalidated");
                     })
