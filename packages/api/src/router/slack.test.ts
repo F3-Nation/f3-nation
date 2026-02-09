@@ -122,6 +122,24 @@ describe("Slack Router", () => {
         .delete(schema.slackSpaces)
         .where(eq(schema.slackSpaces.id, result!.id));
     });
+
+    it("should store botToken when provided", async () => {
+      const newTeamId = uniqueId();
+      const client = createTestClient("test-admin-key");
+      const result = await client.slack.getOrCreateSpace({
+        teamId: newTeamId,
+        workspaceName: "Token Space",
+        botToken: "xoxb-test-token",
+      });
+      expect(result).not.toBeNull();
+      expect(result!.teamId).toBe(newTeamId);
+      expect(result!.botToken).toBe("xoxb-test-token");
+
+      // Cleanup
+      await db
+        .delete(schema.slackSpaces)
+        .where(eq(schema.slackSpaces.id, result!.id));
+    });
   });
 
   describe("updateSpaceSettings", () => {

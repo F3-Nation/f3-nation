@@ -56,9 +56,13 @@ export const withOrgContext: Middleware<AnyMiddlewareArgs> = async ({
         );
       }
 
+      // Get bot token from context (provided by Slack Bolt)
+      const botToken = context.botToken;
+
       space = await api.slack.getOrCreateSpace({
         teamId,
         workspaceName,
+        botToken,
       });
     }
 

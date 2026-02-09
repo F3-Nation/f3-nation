@@ -150,6 +150,7 @@ export const slackRouter = {
       z.object({
         teamId: z.string(),
         workspaceName: z.string().optional(),
+        botToken: z.string().optional(),
       }),
     )
     .route({
@@ -175,6 +176,7 @@ export const slackRouter = {
         .values({
           teamId: input.teamId,
           workspaceName: input.workspaceName ?? null,
+          botToken: input.botToken ?? null,
           settings: {},
         })
         .returning();
