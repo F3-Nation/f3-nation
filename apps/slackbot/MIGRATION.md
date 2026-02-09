@@ -599,6 +599,7 @@ export const attendanceRouter = {
 - [ ] Add user search API and wire to backblast form
 - [ ] Add region search API and wire to home region form
 - [ ] Implement photo upload API endpoint
+- [ ] Wire photo upload function into backblast form, AO form, and Region Info form
 
 ### Phase 3: Extended Features (Weeks 7-8)
 

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { and, eq, inArray, isNotNull, schema } from "@acme/db";
+import { and, eq, ilike, inArray, isNotNull, or, schema } from "@acme/db";
 import { SlackSettingsSchema, SlackUserUpsertSchema } from "@acme/validators";
 
 import { apiKeyProcedure, publicProcedure } from "../shared";
@@ -980,5 +980,109 @@ export const slackRouter = {
       }
 
       return { success: true };
+    }),
+
+  /**
+   * Typeahead search for users by f3Name, firstName, or lastName.
+   * Used for Slack external_select elements.
+   */
+  searchUsers: apiKeyProcedure
+    .input(
+      z.object({
+        searchTerm: z.string().min(1).describe("Search query for user name"),
+        limit: z
+          .number()
+          .min(1)
+          .max(30)
+          .default(30)
+          .optional()
+          .describe("Maximum number of results to return"),
+      }),
+    )
+    .route({
+      method: "GET",
+      path: "/search/users",
+      tags: ["slack"],
+      summary: "Search users for typeahead",
+      description:
+        "Search for F3 users by f3Name, firstName, or lastName. Returns up to 30 results for use in Slack external select elements.",
+    })
+    .handler(async ({ context: ctx, input }) => {
+      const searchPattern = `%${input.searchTerm}%`;
+      const limit = input.limit ?? 30;
+
+      // Alias for the home region org join
+      const homeRegion = schema.orgs;
+
+      const users = await ctx.db
+        .select({
+          id: schema.users.id,
+          f3Name: schema.users.f3Name,
+          firstName: schema.users.firstName,
+          lastName: schema.users.lastName,
+          homeRegionName: homeRegion.name,
+        })
+        .from(schema.users)
+        .leftJoin(homeRegion, eq(schema.users.homeRegionId, homeRegion.id))
+        .where(
+          and(
+            eq(schema.users.status, "active"),
+            or(
+              ilike(schema.users.f3Name, searchPattern),
+              ilike(schema.users.firstName, searchPattern),
+              ilike(schema.users.lastName, searchPattern),
+            ),
+          ),
+        )
+        .limit(limit);
+
+      return users;
+    }),
+
+  /**
+   * Typeahead search for regions by name.
+   * Used for Slack external_select elements.
+   */
+  searchRegions: apiKeyProcedure
+    .input(
+      z.object({
+        searchTerm: z.string().min(1).describe("Search query for region name"),
+        limit: z
+          .number()
+          .min(1)
+          .max(30)
+          .default(30)
+          .optional()
+          .describe("Maximum number of results to return"),
+      }),
+    )
+    .route({
+      method: "GET",
+      path: "/search/regions",
+      tags: ["slack"],
+      summary: "Search regions for typeahead",
+      description:
+        "Search for F3 regions by name. Returns up to 30 active regions for use in Slack external select elements.",
+    })
+    .handler(async ({ context: ctx, input }) => {
+      const searchPattern = `%${input.searchTerm}%`;
+      const limit = input.limit ?? 30;
+
+      const regions = await ctx.db
+        .select({
+          id: schema.orgs.id,
+          name: schema.orgs.name,
+        })
+        .from(schema.orgs)
+        .where(
+          and(
+            eq(schema.orgs.orgType, "region"),
+            eq(schema.orgs.isActive, true),
+            ilike(schema.orgs.name, searchPattern),
+          ),
+        )
+        .limit(limit);
+
+      return regions;
     }),
 };

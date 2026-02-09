@@ -1041,7 +1041,9 @@ export const api = {
      * Upload a single Slack file to GCS.
      * Downloads from Slack, processes (optional resize/square), and uploads to GCS.
      */
-    slackFile: (input: SlackFileUploadInput): Promise<SlackFileUploadResponse> =>
+    slackFile: (
+      input: SlackFileUploadInput,
+    ): Promise<SlackFileUploadResponse> =>
       apiRequest<SlackFileUploadResponse>(`/upload/slack-file`, {
         method: "POST",
         body: JSON.stringify(input),
