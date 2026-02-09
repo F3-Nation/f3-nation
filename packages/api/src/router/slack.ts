@@ -1127,4 +1127,185 @@ export const slackRouter = {
 
       return regions;
     }),
+
+  /**
+   * Get the current user's full F3 profile.
+   * Includes home region information for populating the user profile form.
+   */
+  getSelfProfile: apiKeyProcedure
+    .input(
+      z.object({
+        teamId: z.string().describe("Slack workspace ID"),
+        slackId: z.string().describe("Slack user ID"),
+      }),
+    )
+    .route({
+      method: "GET",
+      path: "/user/self-profile",
+      tags: ["slack"],
+      summary: "Get own F3 profile",
+      description:
+        "Get the current user's F3 profile including home region information. Used to populate the user profile edit form.",
+    })
+    .handler(async ({ context: ctx, input }) => {
+      // Find the slack user
+      const [slackUser] = await ctx.db
+        .select()
+        .from(schema.slackUsers)
+        .where(
+          and(
+            eq(schema.slackUsers.slackId, input.slackId),
+            eq(schema.slackUsers.slackTeamId, input.teamId),
+          ),
+        );
+
+      if (!slackUser) {
+        throw new Error("Slack user not found");
+      }
+
+      if (!slackUser.userId) {
+        throw new Error("Slack user is not linked to an F3 user");
+      }
+
+      // Get the F3 user with home region info
+      const homeRegion = schema.orgs;
+      const [userData] = await ctx.db
+        .select({
+          id: schema.users.id,
+          f3Name: schema.users.f3Name,
+          firstName: schema.users.firstName,
+          lastName: schema.users.lastName,
+          email: schema.users.email,
+          avatarUrl: schema.users.avatarUrl,
+          homeRegionId: schema.users.homeRegionId,
+          homeRegionName: homeRegion.name,
+          emergencyContact: schema.users.emergencyContact,
+          emergencyPhone: schema.users.emergencyPhone,
+          emergencyNotes: schema.users.emergencyNotes,
+          meta: schema.users.meta,
+        })
+        .from(schema.users)
+        .leftJoin(homeRegion, eq(schema.users.homeRegionId, homeRegion.id))
+        .where(eq(schema.users.id, slackUser.userId));
+
+      if (!userData) {
+        throw new Error("F3 user not found");
+      }
+
+      return userData;
+    }),
+
+  /**
+   * Update the current user's own F3 profile.
+   * This allows users to update their profile without admin rights.
+   * Only updates non-role fields for the linked users table entry.
+   */
+  updateSelfProfile: apiKeyProcedure
+    .input(
+      z.object({
+        teamId: z.string().describe("Slack workspace ID"),
+        slackId: z.string().describe("Slack user ID"),
+        f3Name: z.string().optional().describe("User's F3 name"),
+        homeRegionId: z
+          .number()
+          .optional()
+          .describe("User's home region org ID"),
+        avatarUrl: z.string().optional().describe("User's avatar URL"),
+        emergencyContact: z
+          .string()
+          .optional()
+          .describe("Emergency contact name"),
+        emergencyPhone: z
+          .string()
+          .optional()
+          .describe("Emergency contact phone"),
+        emergencyNotes: z
+          .string()
+          .optional()
+          .describe("Emergency contact notes"),
+        meta: z.record(z.unknown()).optional().describe("Additional metadata"),
+      }),
+    )
+    .route({
+      method: "PUT",
+      path: "/user/self-profile",
+      tags: ["slack"],
+      summary: "Update own profile",
+      description:
+        "Update the current user's F3 profile. This allows users to update their own profile information (name, home region, emergency contacts, avatar) without needing admin rights.",
+    })
+    .handler(async ({ context: ctx, input }) => {
+      // Find the slack user for this team
+      const [slackUser] = await ctx.db
+        .select()
+        .from(schema.slackUsers)
+        .where(
+          and(
+            eq(schema.slackUsers.slackId, input.slackId),
+            eq(schema.slackUsers.slackTeamId, input.teamId),
+          ),
+        );
+
+      if (!slackUser) {
+        throw new Error("Slack user not found");
+      }
+
+      if (!slackUser.userId) {
+        throw new Error("Slack user is not linked to an F3 user");
+      }
+
+      // Build update object with only provided fields
+      const updateData: Partial<{
+        f3Name: string;
+        homeRegionId: number;
+        avatarUrl: string;
+        emergencyContact: string;
+        emergencyPhone: string;
+        emergencyNotes: string;
+        meta: Record<string, unknown>;
+      }> = {};
+
+      if (input.f3Name !== undefined) {
+        updateData.f3Name = input.f3Name;
+      }
+      if (input.homeRegionId !== undefined) {
+        updateData.homeRegionId = input.homeRegionId;
+      }
+      if (input.avatarUrl !== undefined) {
+        updateData.avatarUrl = input.avatarUrl;
+      }
+      if (input.emergencyContact !== undefined) {
+        updateData.emergencyContact = input.emergencyContact;
+      }
+      if (input.emergencyPhone !== undefined) {
+        updateData.emergencyPhone = input.emergencyPhone;
+      }
+      if (input.emergencyNotes !== undefined) {
+        updateData.emergencyNotes = input.emergencyNotes;
+      }
+      if (input.meta !== undefined) {
+        // Merge with existing meta
+        const [existingUser] = await ctx.db
+          .select({ meta: schema.users.meta })
+          .from(schema.users)
+          .where(eq(schema.users.id, slackUser.userId));
+
+        updateData.meta = {
+          ...(existingUser?.meta as Record<string, unknown> | undefined),
+          ...input.meta,
+        };
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        return { success: true, message: "No fields to update" };
+      }
+
+      // Update the linked F3 user
+      await ctx.db
+        .update(schema.users)
+        .set(updateData)
+        .where(eq(schema.users.id, slackUser.userId));
+
+      return { success: true };
+    }),
 };

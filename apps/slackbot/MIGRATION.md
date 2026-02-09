@@ -601,7 +601,8 @@ export const attendanceRouter = {
 - [x] Implement photo upload API endpoint
 - [x] Wire photo upload function into backblast form, AO form, and Region Info form
 - [x] Implement region configuration
-- [ ] Implement user profile management
+- [x] Implement user profile management
+- [ ] Implement custom field management
 
 ### Phase 3: Extended Features (Weeks 7-8)
 
@@ -611,7 +612,6 @@ export const attendanceRouter = {
 
 - [ ] Implement admin features (db_admin)
 - [ ] Implement achievements (weaselbot)
-- [ ] Implement custom fields
 - [ ] Add comprehensive tests
 - [ ] Documentation
 

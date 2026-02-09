@@ -77,6 +77,25 @@ export interface GetUserRolesResponse {
 }
 
 /**
+ * Response from getSelfProfile endpoint.
+ * Full F3 user profile with home region info.
+ */
+export interface SelfProfileResponse {
+  id: number;
+  f3Name: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  email: string;
+  avatarUrl: string | null;
+  homeRegionId: number | null;
+  homeRegionName: string | null;
+  emergencyContact: string | null;
+  emergencyPhone: string | null;
+  emergencyNotes: string | null;
+  meta: Record<string, unknown> | null;
+}
+
+/**
  * Input for getOrCreateSpace endpoint
  */
 export interface GetOrCreateSpaceInput {

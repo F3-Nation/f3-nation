@@ -35,6 +35,7 @@ import type {
   SlackFileUploadInput,
   SlackFileUploadResponse,
   SlackFilesUploadResponse,
+  SelfProfileResponse,
 } from "../types/api-types";
 import { logger } from "./logger";
 
@@ -286,6 +287,46 @@ export const api = {
     },
 
     /**
+     * Update the current user's own F3 profile.
+     * Allows users to update their profile without admin rights.
+     */
+    updateSelfProfile: async (input: {
+      teamId: string;
+      slackId: string;
+      f3Name?: string;
+      homeRegionId?: number;
+      avatarUrl?: string;
+      emergencyContact?: string;
+      emergencyPhone?: string;
+      emergencyNotes?: string;
+      meta?: Record<string, unknown>;
+    }): Promise<{ success: boolean; message?: string }> => {
+      const result = await apiRequest<{ success: boolean; message?: string }>(
+        `/slack/user/self-profile`,
+        {
+          method: "PUT",
+          body: JSON.stringify(input),
+        },
+      );
+      // Invalidate user cache after update
+      cache.deleteByPrefix(`user:${input.teamId}:${input.slackId}`);
+      return result;
+    },
+
+    /**
+     * Get the current user's full F3 profile.
+     * Used to populate the user profile edit form.
+     */
+    getSelfProfile: async (
+      teamId: string,
+      slackId: string,
+    ): Promise<SelfProfileResponse> => {
+      return apiRequest<SelfProfileResponse>(
+        `/slack/user/self-profile?teamId=${encodeURIComponent(teamId)}&slackId=${encodeURIComponent(slackId)}`,
+      );
+    },
+
+    /**
      * Get the org associated with a Slack workspace.
      * Results are cached for 5 minutes.
      */
@@ -503,6 +544,22 @@ export const api = {
         method: "POST",
         body: JSON.stringify(input),
       });
+    },
+
+    /**
+     * Search for regions by name.
+     * Returns up to 30 active regions for use in Slack external select elements (e.g., home region picker).
+     */
+    searchRegions: async (input: {
+      searchTerm: string;
+      limit?: number;
+    }): Promise<{ id: number; name: string }[]> => {
+      const searchParams = new URLSearchParams();
+      searchParams.append("searchTerm", input.searchTerm);
+      if (input.limit) searchParams.append("limit", input.limit.toString());
+      return apiRequest<{ id: number; name: string }[]>(
+        `/slack/search/regions?${searchParams.toString()}`,
+      );
     },
   },
 

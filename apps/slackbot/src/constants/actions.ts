@@ -297,6 +297,19 @@ export const ACTIONS = {
   BACKBLAST_DATE: "backblast-date",
   BACKBLAST_AO: "backblast-ao",
   BACKBLAST_EVENT_TYPE: "backblast-event-type",
+
+  // User Profile
+  OPEN_USER_PROFILE: "open-user-profile",
+  USER_PROFILE_CALLBACK_ID: "user-profile-callback-id",
+  USER_PROFILE_F3_NAME: "user-profile-f3-name",
+  USER_PROFILE_HOME_REGION: "user-profile-home-region",
+  USER_PROFILE_START_DATE: "user-profile-start-date",
+  USER_PROFILE_IMAGE: "user-profile-image",
+  USER_PROFILE_IMAGE_UPLOAD: "user-profile-image-upload",
+  USER_PROFILE_EMERGENCY_CONTACT: "user-profile-emergency-contact",
+  USER_PROFILE_EMERGENCY_PHONE: "user-profile-emergency-phone",
+  USER_PROFILE_EMERGENCY_NOTES: "user-profile-emergency-notes",
+  USER_PROFILE_STATS_BUTTON: "user-profile-stats-button",
 } as const;
 
 export type ActionId = (typeof ACTIONS)[keyof typeof ACTIONS];

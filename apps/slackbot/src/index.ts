@@ -15,6 +15,7 @@ import { registerCalendarFeature } from "./features/calendar";
 import { registerPreblastFeature } from "./features/preblast";
 import { registerPositionsFeature } from "./features/positions";
 import { registerRegionFeature } from "./features/region";
+import { registerUserFeature } from "./features/user";
 import { withRegionContext } from "./lib/middleware";
 import { logger } from "./lib/logger";
 
@@ -44,6 +45,7 @@ registerPreblastFeature(app);
 registerBackblastFeature(app);
 registerPositionsFeature(app);
 registerRegionFeature(app);
+registerUserFeature(app);
 
 // Health check endpoint for HTTP mode
 // eslint-disable-next-line @typescript-eslint/require-await

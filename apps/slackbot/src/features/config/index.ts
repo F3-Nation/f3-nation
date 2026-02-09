@@ -172,6 +172,31 @@ export function buildConfigModal(context: ExtendedContext) {
     });
   }
 
+  // User settings section (available to all users)
+  blocks.push({
+    type: "divider",
+  });
+  blocks.push({
+    type: "section",
+    text: {
+      type: "mrkdwn",
+      text: "*User Settings*",
+    },
+  });
+  blocks.push({
+    type: "actions",
+    elements: [
+      {
+        type: "button",
+        text: {
+          type: "plain_text",
+          text: ":bust_in_silhouette: My Profile",
+        },
+        action_id: ACTIONS.OPEN_USER_PROFILE,
+      },
+    ],
+  });
+
   return {
     type: "modal" as const,
     callback_id: ACTIONS.CONFIG_CALLBACK_ID,
