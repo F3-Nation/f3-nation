@@ -1,11 +1,16 @@
 import type { App, BlockAction } from "@slack/bolt";
-import type { ModalView, PlainTextOption, SectionBlock } from "@slack/types";
+import type { InputBlock, ModalView, PlainTextOption, SectionBlock } from "@slack/types";
 import { ACTIONS } from "../../constants/actions";
 import { api } from "../../lib/api-client";
-import type { TypedActionArgs, TypedViewArgs } from "../../types/bolt-types";
-import type { LocationResponse } from "../../types/api-types";
+import { env } from "../../lib/env";
+import {
+  extractFilesFromValues,
+  uploadSlackFile,
+} from "../../lib/file-upload";
 import { logger } from "../../lib/logger";
 import { createNavContext, navigateToView } from "../../lib/view-navigation";
+import type { TypedActionArgs, TypedViewArgs } from "../../types/bolt-types";
+import type { LocationResponse } from "../../types/api-types";
 
 /**
  * AO Response type matching the org router response
@@ -168,13 +173,23 @@ export function buildAOAddForm(
     blocks.push({
       type: "image",
       image_url: editAO.logoUrl,
-      alt_text: "AO Logo",
+      alt_text: "Current AO Logo",
     });
   }
 
-  // Note: File upload via input block requires special handling
-  // For now, we'll skip the file upload field as it requires Slack app configuration
-  // and cloud storage integration (like the Python implementation uses GCP/S3)
+  // AO Logo file upload
+  blocks.push({
+    type: "input",
+    block_id: ACTIONS.CALENDAR_ADD_AO_LOGO,
+    label: { type: "plain_text", text: "AO Logo" },
+    optional: true,
+    element: {
+      type: "file_input",
+      action_id: ACTIONS.CALENDAR_ADD_AO_LOGO,
+      max_files: 1,
+      filetypes: ["png", "jpg", "heic", "bmp"],
+    },
+  } as InputBlock);
 
   return {
     type: "modal",
@@ -227,13 +242,34 @@ export async function handleAOAdd({ ack, view, context }: TypedViewArgs) {
     return;
   }
 
+  // Handle logo upload
+  let logoUrl: string | undefined;
+  const files = extractFilesFromValues(
+    values as Parameters<typeof extractFilesFromValues>[0],
+    ACTIONS.CALENDAR_ADD_AO_LOGO,
+  );
+  if (files.length > 0) {
+    const space = await api.slack.getSpace(context.teamId!);
+    const botToken = space?.botToken;
+    if (botToken && files[0]) {
+      const result = await uploadSlackFile(files[0], botToken, {
+        enforceSquare: true,
+        maxHeight: 512,
+        bucket: env.LOGO_BUCKET_NAME,
+      });
+      if (result) {
+        logoUrl = result.url;
+      }
+    }
+  }
+
   // Build meta object, only including defined values
   const meta: Record<string, string> = {};
   if (slackChannelId) {
     meta.slack_channel_id = slackChannelId;
   }
 
-  const input = {
+  const input: Parameters<typeof api.org.crupdate>[0] = {
     id: metadata.ao_id as number | undefined,
     parentId: region.org.id,
     orgType: "ao" as const,
@@ -242,8 +278,12 @@ export async function handleAOAdd({ ack, view, context }: TypedViewArgs) {
     description: description ?? null,
     meta,
     defaultLocationId,
-    // logoUrl would be set here if we implemented file upload
   };
+
+  // Only set logoUrl if a new one was uploaded
+  if (logoUrl) {
+    input.logoUrl = logoUrl;
+  }
 
   try {
     await api.org.crupdate(input);

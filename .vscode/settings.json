@@ -113,6 +113,7 @@
     "/^cd /home/evan/ml/f3-nation/packages/api && npx eslint src/router/upload\\.ts 2>&1$/": {
       "approve": true,
       "matchCommandLine": true
-    }
+    },
+    "pnpm": true
   }
 }

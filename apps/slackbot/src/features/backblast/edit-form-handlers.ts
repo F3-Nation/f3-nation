@@ -10,6 +10,11 @@ import type { WebClient } from "@slack/web-api";
 import { ACTIONS } from "../../constants/actions";
 import { ATTENDANCE_TYPES } from "../../constants/attendance-types";
 import { api } from "../../lib/api-client";
+import { env } from "../../lib/env";
+import {
+  extractFilesFromValues,
+  uploadSlackFiles,
+} from "../../lib/file-upload";
 import {
   parseRichBlock,
   replaceUserChannelIds,
@@ -469,6 +474,33 @@ export async function handleBackblastFormSubmit(
   // Extract form values
   const formValues = extractFormValues(body);
   const customFields = extractCustomFields(body.view.state.values);
+
+  // Upload any attached files to GCS
+  const slackFiles = extractFilesFromValues(
+    body.view.state.values as Parameters<typeof extractFilesFromValues>[0],
+    ACTIONS.BACKBLAST_FILE,
+  );
+  if (slackFiles.length > 0) {
+    try {
+      const space = await api.slack.getSpace(teamId);
+      const botToken = space?.botToken;
+      if (botToken) {
+        const uploadResult = await uploadSlackFiles(slackFiles, botToken, {
+          bucket: env.BACKBLAST_BUCKET_NAME,
+        });
+        formValues.files = uploadResult.urls;
+        if (uploadResult.errors.length > 0) {
+          logger.warn("Some backblast files failed to upload", {
+            errors: uploadResult.errors,
+          });
+        }
+      } else {
+        logger.warn("No bot token available for file upload");
+      }
+    } catch (error) {
+      logger.error("Failed to upload backblast files", { error });
+    }
+  }
 
   logger.info("Backblast form values extracted", {
     title: formValues.title,

@@ -141,8 +141,17 @@ export async function uploadSlackFiles(
     }));
 
   if (uploadInputs.length === 0) {
+    logger.debug("uploadSlackFiles: No valid inputs after filtering", {
+      originalCount: files.length,
+      errorsCount: result.errors.length,
+    });
     return result;
   }
+
+  logger.debug("uploadSlackFiles: Attempting upload", {
+    inputsCount: uploadInputs.length,
+    fileIds: uploadInputs.map((i) => i.fileId),
+  });
 
   try {
     // Use batch upload for multiple files
@@ -169,14 +178,28 @@ export async function uploadSlackFiles(
       // Single file - use individual upload endpoint
       const input: SlackFileUploadInput = uploadInputs[0]!;
       try {
+        logger.debug("uploadSlackFiles: Calling API for single file", {
+          fileId: input.fileId,
+          slackFileUrl: input.slackFileUrl?.substring(0, 50) + "...",
+          mimetype: input.mimetype,
+        });
         const response: SlackFileUploadResponse =
           await api.upload.slackFile(input);
+        logger.debug("uploadSlackFiles: API response received", {
+          fileId: response.fileId,
+          url: response.url,
+          thumbnailUrl: response.thumbnailUrl,
+        });
         result.urls.push(response.url);
         result.fileIds.push(response.fileId);
         if (response.thumbnailUrl) {
           result.thumbnailUrls.push(response.thumbnailUrl);
         }
       } catch (error) {
+        logger.error("uploadSlackFiles: Single file upload failed", {
+          fileId: input.fileId,
+          error,
+        });
         result.errors.push({
           fileId: input.fileId,
           error: error instanceof Error ? error.message : String(error),

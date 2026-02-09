@@ -13,6 +13,7 @@ import type { InputBlock, ModalView } from "@slack/types";
 import type { WebClient } from "@slack/web-api";
 import { ACTIONS } from "../../constants/actions";
 import { api } from "../../lib/api-client";
+import { env } from "../../lib/env";
 import {
   extractFilesFromValues,
   uploadSlackFile,
@@ -374,18 +375,51 @@ export async function handleRegionEdit(args: TypedViewArgs) {
     ACTIONS.REGION_LOGO,
   );
 
+  logger.debug("Region logo file extraction", {
+    filesCount: files.length,
+    hasFiles: files.length > 0,
+    fileIds: files.map((f) => f.id),
+  });
+
   if (files.length > 0) {
     const space = await api.slack.getSpace(teamId);
     const botToken = space?.botToken;
 
+    logger.debug("Region logo upload attempt", {
+      hasBotToken: !!botToken,
+      firstFile: files[0]
+        ? {
+            id: files[0].id,
+            hasUrlPrivateDownload: !!files[0].url_private_download,
+            hasUrlPrivate: !!files[0].url_private,
+            mimetype: files[0].mimetype,
+            filetype: files[0].filetype,
+          }
+        : null,
+    });
+
     if (botToken && files[0]) {
-      const result = await uploadSlackFile(files[0], botToken, {
-        enforceSquare: true,
-        maxHeight: 512,
-      });
-      if (result) {
-        logoUrl = result.url;
+      try {
+        const result = await uploadSlackFile(files[0], botToken, {
+          enforceSquare: true,
+          maxHeight: 512,
+          bucket: env.LOGO_BUCKET_NAME,
+        });
+        logger.debug("Region logo upload result", {
+          success: !!result,
+          url: result?.url,
+        });
+        if (result) {
+          logoUrl = result.url;
+        }
+      } catch (error) {
+        logger.error("Region logo upload failed", { error });
       }
+    } else {
+      logger.warn("Region logo upload skipped - missing bot token or file", {
+        hasBotToken: !!botToken,
+        hasFile: !!files[0],
+      });
     }
   }
 
@@ -408,6 +442,13 @@ export async function handleRegionEdit(args: TypedViewArgs) {
   if (logoUrl) {
     updateFields.logoUrl = logoUrl;
   }
+
+  logger.debug("Region update fields", {
+    orgId,
+    hasLogoUrl: !!logoUrl,
+    logoUrl,
+    updateFields,
+  });
 
   try {
     await api.org.crupdate(updateFields);
