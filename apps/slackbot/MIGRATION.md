@@ -596,16 +596,16 @@ export const attendanceRouter = {
     - [x] Implement Edit Preblast actions
     - [x] Implement Edit Backblast actions
     - [x] Implement admin actions (assign Q, edit preblast or backblast for others)
-- [ ] Add user search API and wire to backblast form
-- [ ] Add region search API and wire to home region form
-- [ ] Implement photo upload API endpoint
-- [ ] Wire photo upload function into backblast form, AO form, and Region Info form
+- [x] Add user search API
+- [x] Add region search API
+- [x] Implement photo upload API endpoint
+- [x] Wire photo upload function into backblast form, AO form, and Region Info form
+- [x] Implement region configuration
+- [ ] Implement user profile management
 
 ### Phase 3: Extended Features (Weeks 7-8)
 
 - [ ] Implement Strava integration
-- [ ] Implement user profile management
-- [ ] Implement region configuration
 
 ### Phase 4: Admin & Polish (Weeks 9-10)
 

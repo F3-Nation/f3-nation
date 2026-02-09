@@ -362,6 +362,46 @@ export function registerBackblastFeature(app: App): void {
   app.view(ACTIONS.BACKBLAST_EDIT_CALLBACK_ID, (args: TypedViewArgs) =>
     handleBackblastFormSubmit(args),
   );
+
+  // Options handler for downrange PAX external_select
+  app.options(
+    ACTIONS.BACKBLAST_DR_PAX as string,
+    async ({ ack, options }) => {
+      const searchTerm = options.value;
+      logger.debug(`Downrange PAX search query: "${searchTerm}"`);
+
+      try {
+        const users = await api.slack.searchUsers({ searchTerm });
+
+        const optionsList = users.map((user) => {
+          // Build display name with home region if available
+          let displayName = user.f3Name ?? "Unknown";
+          if (user.homeRegionName) {
+            displayName += ` (${user.homeRegionName})`;
+          }
+          // Truncate to 75 chars (Slack limit)
+          if (displayName.length > 75) {
+            displayName = displayName.slice(0, 72) + "...";
+          }
+
+          return {
+            text: {
+              type: "plain_text" as const,
+              text: displayName,
+            },
+            value: user.id.toString(),
+          };
+        });
+
+        await ack({
+          options: optionsList,
+        });
+      } catch (error) {
+        logger.error("Error searching users for downrange PAX:", error);
+        await ack({ options: [] });
+      }
+    },
+  );
 }
 
 export { buildBackblastSelectModal } from "./select-form";

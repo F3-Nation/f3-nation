@@ -40,6 +40,7 @@ import {
   getBackblastChannel,
 } from "./edit-form";
 import { buildBackblastMessage } from "./message-builder";
+import type { DownrangePaxInfo } from "./message-builder";
 
 /**
  * Extract form values from the view submission body.
@@ -106,7 +107,20 @@ function extractFormValues(body: TypedViewArgs["body"]): BackblastFormValues {
         String(ACTIONS.BACKBLAST_PAX),
         "selected_users",
       ) ?? [],
-    downrangePax: [], // TODO: Implement when external select is added
+    downrangePax: (() => {
+      // Extract downrange PAX from multi_external_select
+      // The selected options are objects with {text: {type, text}, value: string}
+      const selectedOptions = safeGet<{ value: string }[]>(
+        values,
+        String(ACTIONS.BACKBLAST_DR_PAX),
+        String(ACTIONS.BACKBLAST_DR_PAX),
+        "selected_options",
+      );
+      if (!selectedOptions) return [];
+      return selectedOptions
+        .map((opt) => parseInt(opt.value, 10))
+        .filter((id) => !isNaN(id));
+    })(),
     nonSlackPax:
       safeGet<string>(
         values,
@@ -598,6 +612,23 @@ export async function handleBackblastFormSubmit(
     "exclude_from_pax_vault",
   );
 
+  // Fetch downrange PAX info for display names
+  let downrangePaxNames: DownrangePaxInfo[] = [];
+  if (formValues.downrangePax.length > 0) {
+    try {
+      // Use batch lookup to get user details for all downrange PAX
+      const users = await api.slack.getUsersByIds({
+        userIds: formValues.downrangePax,
+      });
+      downrangePaxNames = users.map((user) => ({
+        f3Name: user.f3Name ?? "Unknown",
+        homeRegionName: user.homeRegionName ?? null,
+      }));
+    } catch (error) {
+      logger.error("Failed to fetch downrange PAX info", { error });
+    }
+  }
+
   // Build message blocks and plain text
   const { blocks: messageBlocks, plainText: messagePlainText } =
     buildBackblastMessage(
@@ -611,6 +642,7 @@ export async function handleBackblastFormSubmit(
       eventInstanceId ?? 0,
       excludeFromPaxVault,
       orgSettings?.strava_enabled ?? false,
+      downrangePaxNames,
     );
 
   try {
@@ -701,6 +733,32 @@ export async function handleBackblastFormSubmit(
           logger.error(`Failed to create PAX attendance for user ${userId}`, {
             error,
           });
+        }
+      }
+    }
+
+    // Create actual attendance records for downrange PAX
+    // These are F3 user IDs, not Slack IDs
+    const processedUserIds = new Set([qUserId, ...coQUserIds]);
+    for (const slackId of formValues.pax) {
+      const userId = userIdMap.get(slackId);
+      if (userId) processedUserIds.add(userId);
+    }
+
+    for (const drPaxUserId of formValues.downrangePax) {
+      if (!processedUserIds.has(drPaxUserId)) {
+        try {
+          await api.attendance.createActual({
+            eventInstanceId,
+            userId: drPaxUserId,
+            attendanceTypeIds: [ATTENDANCE_TYPES.PAX],
+          });
+          processedUserIds.add(drPaxUserId);
+        } catch (error) {
+          logger.error(
+            `Failed to create downrange PAX attendance for user ${drPaxUserId}`,
+            { error },
+          );
         }
       }
     }

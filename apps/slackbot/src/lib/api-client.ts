@@ -444,6 +444,66 @@ export const api = {
       cache.deleteByPrefix(`roles:${input.teamId}:`);
       return result;
     },
+
+    /**
+     * Search for F3 users by f3Name, firstName, or lastName.
+     * Returns up to 30 results for use in Slack external select elements.
+     * This is used for downrange PAX search.
+     */
+    searchUsers: async (input: {
+      searchTerm: string;
+      limit?: number;
+    }): Promise<
+      {
+        id: number;
+        f3Name: string | null;
+        firstName: string | null;
+        lastName: string | null;
+        homeRegionName: string | null;
+      }[]
+    > => {
+      const searchParams = new URLSearchParams();
+      searchParams.append("searchTerm", input.searchTerm);
+      if (input.limit) searchParams.append("limit", input.limit.toString());
+      return apiRequest<
+        {
+          id: number;
+          f3Name: string | null;
+          firstName: string | null;
+          lastName: string | null;
+          homeRegionName: string | null;
+        }[]
+      >(`/slack/search/users?${searchParams.toString()}`);
+    },
+
+    /**
+     * Get F3 users by their IDs with home region info.
+     * Used for displaying downrange PAX in backblasts.
+     */
+    getUsersByIds: async (input: {
+      userIds: number[];
+    }): Promise<
+      {
+        id: number;
+        f3Name: string | null;
+        firstName: string | null;
+        lastName: string | null;
+        homeRegionName: string | null;
+      }[]
+    > => {
+      return apiRequest<
+        {
+          id: number;
+          f3Name: string | null;
+          firstName: string | null;
+          lastName: string | null;
+          homeRegionName: string | null;
+        }[]
+      >(`/slack/users/by-ids`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      });
+    },
   },
 
   location: {

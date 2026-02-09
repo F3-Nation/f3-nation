@@ -11,10 +11,21 @@ import { ACTIONS } from "../../constants/actions";
 import type { BackblastFormValues } from "./edit-form-types";
 
 /**
- * Format PAX list for display in the message.
- * Combines Q, Co-Qs, regular PAX, non-Slack PAX, and FNGs.
+ * Downrange PAX info structure - contains display names for external users
  */
-function formatPaxListDisplay(formValues: BackblastFormValues): {
+export interface DownrangePaxInfo {
+  f3Name: string;
+  homeRegionName: string | null;
+}
+
+/**
+ * Format PAX list for display in the message.
+ * Combines Q, Co-Qs, regular PAX, downrange PAX, non-Slack PAX, and FNGs.
+ */
+function formatPaxListDisplay(
+  formValues: BackblastFormValues,
+  downrangePaxNames: DownrangePaxInfo[],
+): {
   paxFormatted: string;
   fngFormatted: string;
 } {
@@ -28,6 +39,15 @@ function formatPaxListDisplay(formValues: BackblastFormValues): {
   ]);
   for (const userId of allSlackUsers) {
     paxParts.push(`<@${userId}>`);
+  }
+
+  // Add downrange PAX (with home region if available)
+  for (const drPax of downrangePaxNames) {
+    let displayName = drPax.f3Name;
+    if (drPax.homeRegionName) {
+      displayName += ` (${drPax.homeRegionName})`;
+    }
+    paxParts.push(displayName);
   }
 
   // Add non-Slack PAX
@@ -69,8 +89,12 @@ export function buildBackblastMessage(
   eventInstanceId: number,
   excludeFromPaxVault: boolean,
   stravaEnabled: boolean,
+  downrangePaxNames: DownrangePaxInfo[] = [],
 ): { blocks: ModalView["blocks"]; plainText: string } {
-  const { paxFormatted, fngFormatted } = formatPaxListDisplay(formValues);
+  const { paxFormatted, fngFormatted } = formatPaxListDisplay(
+    formValues,
+    downrangePaxNames,
+  );
   const coQsFormatted = formatCoQsDisplay(formValues.coQs);
   const coQsLine = coQsFormatted ? ` ${coQsFormatted}` : "";
 
@@ -186,6 +210,7 @@ export function buildBackblastMessage(
     eventDate,
     paxCount,
     moleskinePlainText,
+    downrangePaxNames,
   );
 
   return { blocks, plainText };
@@ -200,6 +225,7 @@ export function buildBackblastPlainText(
   eventDate: string,
   paxCount: number,
   moleskinePlainText: string,
+  downrangePaxNames: DownrangePaxInfo[] = [],
 ): string {
   // For plain text, we need to convert Slack IDs to names
   // This is a simplified version - the actual names would be resolved elsewhere
@@ -214,6 +240,15 @@ export function buildBackblastPlainText(
   ]);
   for (const userId of allSlackUsers) {
     paxNames.push(`@${userId}`);
+  }
+
+  // Add downrange PAX (with home region if available)
+  for (const drPax of downrangePaxNames) {
+    let displayName = drPax.f3Name;
+    if (drPax.homeRegionName) {
+      displayName += ` (${drPax.homeRegionName})`;
+    }
+    paxNames.push(displayName);
   }
 
   // Add non-Slack PAX

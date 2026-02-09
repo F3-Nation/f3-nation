@@ -1042,6 +1042,46 @@ export const slackRouter = {
     }),
 
   /**
+   * Get users by their IDs with home region info.
+   * Used for displaying downrange PAX in backblasts.
+   */
+  getUsersByIds: apiKeyProcedure
+    .input(
+      z.object({
+        userIds: z
+          .array(z.number())
+          .min(1)
+          .max(50)
+          .describe("Array of user IDs to fetch"),
+      }),
+    )
+    .route({
+      method: "POST",
+      path: "/users/by-ids",
+      tags: ["slack"],
+      summary: "Get users by IDs",
+      description:
+        "Fetch F3 users by their IDs, including home region name. Used for displaying downrange PAX in backblasts.",
+    })
+    .handler(async ({ context: ctx, input }) => {
+      const homeRegion = schema.orgs;
+
+      const users = await ctx.db
+        .select({
+          id: schema.users.id,
+          f3Name: schema.users.f3Name,
+          firstName: schema.users.firstName,
+          lastName: schema.users.lastName,
+          homeRegionName: homeRegion.name,
+        })
+        .from(schema.users)
+        .leftJoin(homeRegion, eq(schema.users.homeRegionId, homeRegion.id))
+        .where(inArray(schema.users.id, input.userIds));
+
+      return users;
+    }),
+
+  /**
    * Typeahead search for regions by name.
    * Used for Slack external_select elements.
    */

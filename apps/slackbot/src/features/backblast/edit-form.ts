@@ -597,20 +597,35 @@ export async function buildBackblastEditModal(
     },
   });
 
-  // Downrange PAX (external select) - Note: This requires external_select with options_load_url
-  // For now, we'll show a placeholder; full implementation needs the options handler
-  // blocks.push({
-  //   type: "input",
-  //   block_id: ACTIONS.BACKBLAST_DR_PAX,
-  //   optional: true,
-  //   label: { type: "plain_text", text: "Downrange PAX" },
-  //   element: {
-  //     type: "multi_external_select",
-  //     action_id: ACTIONS.BACKBLAST_DR_PAX,
-  //     placeholder: { type: "plain_text", text: "Type to search..." },
-  //     min_query_length: 2,
-  //   },
-  // });
+  // Downrange PAX (external select) - searches all F3 users across regions
+  // Build initial options from nonSlackAttendance (downrange PAX with no Slack link in this team)
+  const drPaxInitialOptions =
+    backblastInfo?.nonSlackAttendance
+      ?.filter((r) => r.user?.f3Name)
+      .map((r) => ({
+        text: { type: "plain_text" as const, text: r.user!.f3Name! },
+        value: String(r.user!.id),
+      })) ?? [];
+
+  blocks.push({
+    type: "input",
+    block_id: ACTIONS.BACKBLAST_DR_PAX,
+    optional: true,
+    label: { type: "plain_text", text: "Downrange PAX" },
+    hint: {
+      type: "plain_text",
+      text: "Search for F3 users from other regions who visited today.",
+    },
+    element: {
+      type: "multi_external_select",
+      action_id: ACTIONS.BACKBLAST_DR_PAX,
+      placeholder: { type: "plain_text", text: "Type to search..." },
+      min_query_length: 2,
+      ...(drPaxInitialOptions.length > 0
+        ? { initial_options: drPaxInitialOptions }
+        : {}),
+    },
+  });
 
   // Non-Slack PAX text input
   blocks.push({
