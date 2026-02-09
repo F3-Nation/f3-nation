@@ -14,10 +14,7 @@ import type { WebClient } from "@slack/web-api";
 import { ACTIONS } from "../../constants/actions";
 import { api } from "../../lib/api-client";
 import { env } from "../../lib/env";
-import {
-  extractFilesFromValues,
-  uploadSlackFile,
-} from "../../lib/file-upload";
+import { extractFilesFromValues, uploadSlackFile } from "../../lib/file-upload";
 import { logger } from "../../lib/logger";
 import { resolveSlackUsers } from "../../lib/slack-user-resolver";
 import type {
@@ -343,8 +340,7 @@ export async function handleRegionEdit(args: TypedViewArgs) {
   const values = view.state.values;
 
   // Extract form values
-  const name =
-    values[ACTIONS.REGION_NAME]?.[ACTIONS.REGION_NAME]?.value ?? "";
+  const name = values[ACTIONS.REGION_NAME]?.[ACTIONS.REGION_NAME]?.value ?? "";
   const description =
     values[ACTIONS.REGION_DESCRIPTION]?.[ACTIONS.REGION_DESCRIPTION]?.value ??
     null;

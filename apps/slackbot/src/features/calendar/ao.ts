@@ -1,12 +1,14 @@
 import type { App, BlockAction } from "@slack/bolt";
-import type { InputBlock, ModalView, PlainTextOption, SectionBlock } from "@slack/types";
+import type {
+  InputBlock,
+  ModalView,
+  PlainTextOption,
+  SectionBlock,
+} from "@slack/types";
 import { ACTIONS } from "../../constants/actions";
 import { api } from "../../lib/api-client";
 import { env } from "../../lib/env";
-import {
-  extractFilesFromValues,
-  uploadSlackFile,
-} from "../../lib/file-upload";
+import { extractFilesFromValues, uploadSlackFile } from "../../lib/file-upload";
 import { logger } from "../../lib/logger";
 import { createNavContext, navigateToView } from "../../lib/view-navigation";
 import type { TypedActionArgs, TypedViewArgs } from "../../types/bolt-types";
