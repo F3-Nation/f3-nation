@@ -10,9 +10,9 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
-    version: "3.6.6",
+    version: "3.6.7",
     date: "2026-02-07",
-    title: "Fix Map Revalidation",
+    title: "Map Revalidation Fixes & API Improvements",
     sections: [
       {
         title: "Bug Fixes",
@@ -23,10 +23,19 @@ export const changelog: ChangelogEntry[] = [
         ],
       },
       {
+        title: "API",
+        items: [
+          "Moved revalidation endpoint from org router to map router for better organization",
+          "Added position endpoints for SLT (Senior Leadership Team) position management",
+          "Added source field to webhook data schema to prevent circular loops in external integrations",
+        ],
+      },
+      {
         title: "Backend",
         items: [
           "Created dedicated revalidation endpoint in map app (/api/revalidate) that accepts internal API key authentication",
           "API app revalidation now makes HTTP request to map app to ensure both caches are updated",
+          "Reorganized map router endpoints for better Scalar API documentation grouping",
         ],
       },
     ],
