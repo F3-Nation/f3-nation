@@ -456,8 +456,8 @@ export const COUNTRIES = [
   { name: "Uganda", code: "UG" },
   { name: "Ukraine", code: "UA" },
   { name: "United Arab Emirates", code: "AE" },
-  { name: "England", code: "GB" },
-  { name: "United Kingdom", code: "GB" },
+  { name: "England", code: "GB" }, // England uses GB code; kept separate for map display purposes
+  { name: "United Kingdom", code: "GB" }, // Full UK including Scotland, Wales, Northern Ireland
   { name: "United States", code: "US" },
   { name: "Uruguay", code: "UY" },
   { name: "Uzbekistan", code: "UZ" },
