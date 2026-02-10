@@ -8,6 +8,7 @@ import { eventTypeRouter } from "./router/event-type";
 import { locationRouter } from "./router/location";
 import { mailRouter } from "./router/mail";
 import { mapRouter } from "./router/map/index";
+import { orgChartRouter } from "./router/org-chart";
 import { orgRouter } from "./router/org";
 import { pingRouter } from "./router/ping";
 import { requestRouter } from "./router/request";
@@ -25,6 +26,7 @@ export const router = os.prefix(API_PREFIX_V1).router({
   ping: os.router(pingRouter),
   location: os.prefix("/location").router(locationRouter),
   map: os.prefix("/map").router(mapRouter),
+  orgChart: os.prefix("/org-chart").router(orgChartRouter),
   org: os.prefix("/org").router(orgRouter),
   request: os.prefix("/request").router(requestRouter),
   user: os.prefix("/user").router(userRouter),
