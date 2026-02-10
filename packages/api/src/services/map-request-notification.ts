@@ -216,11 +216,11 @@ export const notifyMapChangeRequest = async ({
   }
 
   // Prepare email parameters
-  const baseUrl = env.NEXT_PUBLIC_API_URL?.endsWith("/")
-    ? env.NEXT_PUBLIC_API_URL.slice(0, -1)
-    : env.NEXT_PUBLIC_API_URL ?? "";
+  const mapBaseUrl = env.NEXT_PUBLIC_MAP_URL?.endsWith("/")
+    ? env.NEXT_PUBLIC_MAP_URL.slice(0, -1)
+    : env.NEXT_PUBLIC_MAP_URL ?? "";
 
-  const requestsUrl = `${baseUrl}/admin/requests`;
+  const requestsUrl = `${mapBaseUrl}/admin/requests`;
   const title = requestTypeToTitle(request.requestType);
 
   // Send emails
