@@ -136,13 +136,14 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
           "location",
           "org",
           "ping",
+          "position",
           "request",
           "user",
         ],
       },
       {
         name: "map",
-        tags: ["feedback", "map.location"],
+        tags: ["feedback", "map.event", "map.location", "revalidate"],
       },
     ],
     tags: [
@@ -161,8 +162,17 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
         description: "Organization management (regions, AOs, etc.)",
       },
       { name: "ping", description: "Health check endpoints" },
+      {
+        name: "position",
+        description: "Position and role management for organizations",
+      },
       { name: "request", description: "Data change request workflow" },
       { name: "user", description: "User account management" },
+      {
+        name: "map.event",
+        description: "Map event/workout endpoints for filtering and querying",
+      },
+      { name: "revalidate", description: "Cache revalidation for map data" },
     ],
 
     components: {
