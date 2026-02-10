@@ -10,6 +10,7 @@ import { mailRouter } from "./router/mail";
 import { mapRouter } from "./router/map/index";
 import { orgRouter } from "./router/org";
 import { pingRouter } from "./router/ping";
+import { positionRouter } from "./router/position";
 import { requestRouter } from "./router/request";
 import { userRouter } from "./router/user";
 
@@ -26,6 +27,7 @@ export const router = os.prefix(API_PREFIX_V1).router({
   location: os.prefix("/location").router(locationRouter),
   map: os.prefix("/map").router(mapRouter),
   org: os.prefix("/org").router(orgRouter),
+  position: os.prefix("/position").router(positionRouter),
   request: os.prefix("/request").router(requestRouter),
   user: os.prefix("/user").router(userRouter),
 });
