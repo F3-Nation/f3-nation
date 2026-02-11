@@ -10,6 +10,66 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: "3.6.7",
+    date: "2026-02-07",
+    title: "Map Revalidation Fixes & API Improvements",
+    sections: [
+      {
+        title: "Bug Fixes",
+        items: [
+          "Fixed revalidation button in map settings - now properly revalidates map cache when clicked",
+          "API app revalidation endpoint now triggers map app cache revalidation via HTTP request",
+          "Map cache updates immediately after database changes without requiring Cloud Build rebuild",
+        ],
+      },
+      {
+        title: "API",
+        items: [
+          "Moved revalidation endpoint from org router to map router for better organization",
+          "Added position endpoints for SLT (Senior Leadership Team) position management",
+          "Added source field to webhook data schema to prevent circular loops in external integrations",
+        ],
+      },
+      {
+        title: "Backend",
+        items: [
+          "Created dedicated revalidation endpoint in map app (/api/revalidate) that accepts internal API key authentication",
+          "API app revalidation now makes HTTP request to map app to ensure both caches are updated",
+          "Reorganized map router endpoints for better Scalar API documentation grouping",
+        ],
+      },
+    ],
+  },
+  {
+    version: "3.6.5",
+    date: "2026-02-06",
+    title: "Map Cache & Deleted Workout Fixes",
+    sections: [
+      {
+        title: "Bug Fixes",
+        items: [
+          "Fixed crash when clicking on deleted workouts - deleted AOs/workouts no longer appear on the map",
+          "Map now automatically updates when workouts or locations are created, updated, or deleted",
+          "Fixed eventsAndLocations query to exclude inactive locations and locations with no active events",
+        ],
+      },
+      {
+        title: "Performance",
+        items: [
+          "Optimized map data query - switched from LEFT JOIN to INNER JOIN to reduce dataset size",
+          "Map now only loads locations with active events, reducing initial data transfer and client-side processing",
+        ],
+      },
+      {
+        title: "Backend",
+        items: [
+          "Renamed emitWebhookEvent to notifyMapDataChange to better reflect its dual responsibility of webhook notifications and cache invalidation",
+          "Added automatic Next.js cache revalidation when map data changes",
+        ],
+      },
+    ],
+  },
+  {
     version: "3.6.4",
     date: "2026-02-04",
     title: "API Documentation",

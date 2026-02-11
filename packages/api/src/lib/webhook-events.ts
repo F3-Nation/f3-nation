@@ -1,3 +1,5 @@
+import { revalidatePath } from "next/cache";
+
 import type { WebhookPayload } from "./notify-webhooks";
 import { notifyWebhooks } from "./notify-webhooks";
 
@@ -92,7 +94,11 @@ const buildPayload = (event: WebhookEvent): WebhookPayload => {
 };
 
 /**
- * Emits a webhook event to notify external systems about map data changes.
+ * Notifies external systems and invalidates cache when map data changes.
+ *
+ * This function handles both:
+ * 1. Emitting webhook events to external systems
+ * 2. Revalidating the Next.js static page cache
  *
  * This function is fire-and-forget - it does not block the response to the client.
  * Errors are logged but do not propagate to the caller.
@@ -101,18 +107,39 @@ const buildPayload = (event: WebhookEvent): WebhookPayload => {
  *
  * @example
  * // After creating an event
- * void emitWebhookEvent({ type: "event.created", eventId: result.id });
+ * void notifyMapDataChange({ type: "event.created", eventId: result.id });
  *
  * @example
  * // After updating a location
- * void emitWebhookEvent({ type: "location.updated", locationId: result.id });
+ * void notifyMapDataChange({ type: "location.updated", locationId: result.id });
  */
-export const emitWebhookEvent = (event: WebhookEvent): void => {
+export const notifyMapDataChange = (event: WebhookEvent): void => {
   const payload = buildPayload(event);
-  console.log("emitWebhookEvent", { event, payload });
+  console.log("notifyMapDataChange", { event, payload });
+
+  // Revalidate the statically generated map page so Next.js serves fresh data
+  // on the next request. Only works in Next.js request context (not in tests).
+  try {
+    revalidatePath("/");
+  } catch (error: unknown) {
+    // revalidatePath requires Next.js static generation context, which isn't
+    // available in test environments. Silently skip revalidation in tests.
+    if (
+      error instanceof Error &&
+      error.message.includes("static generation store missing")
+    ) {
+      // Expected in test environment, no need to log
+    } else {
+      // Unexpected error, log it but don't throw
+      console.error("notifyMapDataChange revalidation failed", {
+        event,
+        error,
+      });
+    }
+  }
 
   // Fire and forget - don't await to not block response
   notifyWebhooks(payload).catch((error: unknown) => {
-    console.error("emitWebhookEvent failed", { event, error });
+    console.error("notifyMapDataChange failed", { event, error });
   });
 };

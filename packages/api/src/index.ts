@@ -11,11 +11,12 @@ import { mapRouter } from "./router/map/index";
 import { orgChartRouter } from "./router/org-chart";
 import { orgRouter } from "./router/org";
 import { pingRouter } from "./router/ping";
+import { positionRouter } from "./router/position";
 import { requestRouter } from "./router/request";
 import { userRouter } from "./router/user";
 
 // Re-export webhook event types for external use
-export { emitWebhookEvent } from "./lib/webhook-events";
+export { notifyMapDataChange } from "./lib/webhook-events";
 export type { WebhookEvent } from "./lib/webhook-events";
 
 export const router = os.prefix(API_PREFIX_V1).router({
@@ -28,6 +29,7 @@ export const router = os.prefix(API_PREFIX_V1).router({
   map: os.prefix("/map").router(mapRouter),
   orgChart: os.prefix("/org-chart").router(orgChartRouter),
   org: os.prefix("/org").router(orgRouter),
+  position: os.prefix("/position").router(positionRouter),
   request: os.prefix("/request").router(requestRouter),
   user: os.prefix("/user").router(userRouter),
 });

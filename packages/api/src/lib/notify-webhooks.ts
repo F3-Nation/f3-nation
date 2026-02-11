@@ -32,6 +32,7 @@ export interface WebhookPayload {
   locationId?: number;
   orgId?: number;
   action: "map.updated" | "map.created" | "map.deleted";
+  source?: string;
 }
 
 const webhooks: Webhook[] = [
@@ -51,12 +52,13 @@ if (env.NOTIFY_WEBHOOK_URLS_COMMA_SEPARATED) {
 }
 
 export const notifyWebhooks = async (mapData: WebhookPayload) => {
-  const { eventId, locationId, orgId, action } = mapData;
+  const { eventId, locationId, orgId, action, source } = mapData;
   const data = {
     version: "1.0",
     timestamp: new Date().toISOString(),
     action,
     channel: env.NEXT_PUBLIC_CHANNEL,
+    source,
     data: { eventId, locationId, orgId },
   };
   for (const webhook of webhooks) {
