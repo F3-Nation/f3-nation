@@ -602,7 +602,8 @@ export const attendanceRouter = {
 - [x] Wire photo upload function into backblast form, AO form, and Region Info form
 - [x] Implement region configuration
 - [x] Implement user profile management
-- [ ] Implement custom field management
+- [ ] Implement custom field management menu
+- [ ] Wire custom field functionality into backblasts
 
 ### Phase 3: Extended Features (Weeks 7-8)
 

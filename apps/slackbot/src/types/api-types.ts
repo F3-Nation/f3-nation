@@ -1,6 +1,6 @@
-import type { OrgSettings, OrgType, SlackUserData } from "./index";
+import type { CustomField, OrgSettings, OrgType, SlackUserData } from "./index";
 
-export type { SlackUserData };
+export type { CustomField, SlackUserData };
 
 /**
  * Input for updating Slack space settings
@@ -23,6 +23,7 @@ export interface UpdateSpaceSettingsInput {
   backblast_reminder_days?: number;
   automated_preblast_option?: string;
   automated_preblast_hour_cst?: number;
+  custom_fields?: CustomField[];
 }
 
 /**

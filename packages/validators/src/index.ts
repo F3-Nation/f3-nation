@@ -273,6 +273,13 @@ export const DeleteRequestResponseSchema = z.object({
 export type DeleteRequestResponse = z.infer<typeof DeleteRequestResponseSchema>;
 
 // SLACK SCHEMA
+export const CustomFieldSchema = z.object({
+  name: z.string(),
+  type: z.enum(["text", "select", "multi_select", "user_select"]),
+  options: z.array(z.string()).optional(),
+  enabled: z.boolean(),
+});
+
 export const SlackSettingsSchema = z.object({
   welcome_dm_enable: z.boolean().optional(),
   welcome_dm_template: z.string().optional(),
@@ -290,6 +297,7 @@ export const SlackSettingsSchema = z.object({
   backblast_reminder_days: z.number().optional(),
   automated_preblast_option: z.string().optional(),
   automated_preblast_hour_cst: z.number().optional(),
+  custom_fields: z.array(CustomFieldSchema).optional(),
 });
 
 export const SlackSpaceSelectSchema = createSelectSchema(slackSpaces);

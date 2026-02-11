@@ -195,24 +195,40 @@ function extractFormValues(body: TypedViewArgs["body"]): BackblastFormValues {
 
 /**
  * Extract custom field values from the form submission.
+ * Handles text, select, multi_select, and user_select field types.
  */
 function extractCustomFields(
   values: Record<string, Record<string, unknown>>,
-): Record<string, string> {
-  const customFields: Record<string, string> = {};
+): Record<string, string | string[]> {
+  const customFields: Record<string, string | string[]> = {};
   const prefix = "custom_field_";
 
   for (const [blockId, blockValue] of Object.entries(values)) {
     if (blockId.startsWith(prefix)) {
       const fieldName = blockId.slice(prefix.length);
       const actionValue = blockValue[blockId] as
-        | { value?: string; selected_option?: { value: string } }
+        | {
+            value?: string;
+            selected_option?: { value: string };
+            selected_options?: { value: string }[];
+            selected_user?: string;
+          }
         | undefined;
 
       if (actionValue?.value) {
+        // Plain text input
         customFields[fieldName] = actionValue.value;
       } else if (actionValue?.selected_option?.value) {
+        // Static select (single)
         customFields[fieldName] = actionValue.selected_option.value;
+      } else if (actionValue?.selected_options?.length) {
+        // Multi-static select
+        customFields[fieldName] = actionValue.selected_options.map(
+          (opt) => opt.value,
+        );
+      } else if (actionValue?.selected_user) {
+        // User select (single user)
+        customFields[fieldName] = actionValue.selected_user;
       }
     }
   }

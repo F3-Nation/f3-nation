@@ -447,6 +447,25 @@ function buildCustomFieldBlocks(
           },
         });
       }
+    } else if (field.type === "user_select") {
+      // User select field - uses Slack's users_select element
+      blocks.push({
+        type: "input",
+        block_id: actionId,
+        optional: true,
+        label: { type: "plain_text", text: field.name },
+        element: {
+          type: "users_select",
+          action_id: actionId,
+          placeholder: {
+            type: "plain_text",
+            text: `Select a user for ${field.name}...`,
+          },
+          ...(typeof initialValue === "string"
+            ? { initial_user: initialValue }
+            : {}),
+        },
+      });
     }
   }
 

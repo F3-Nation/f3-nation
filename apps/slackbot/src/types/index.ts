@@ -76,7 +76,7 @@ export interface OrgSettings {
 
 export interface CustomField {
   name: string;
-  type: "text" | "select" | "multi_select";
+  type: "text" | "select" | "multi_select" | "user_select";
   options?: string[];
   enabled: boolean;
 }

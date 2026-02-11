@@ -10,6 +10,7 @@ import {
   buildPreblastConfigModal,
   registerPreblastSettingsHandlers,
 } from "./preblast-settings";
+import { registerCustomFieldsSettingsHandlers } from "./custom-fields-settings";
 import { api } from "../../lib/api-client";
 import { logger } from "../../lib/logger";
 import type {
@@ -160,6 +161,14 @@ export function buildConfigModal(context: ExtendedContext) {
           },
           action_id: ACTIONS.REGION_INFO_BUTTON,
         },
+        {
+          type: "button",
+          text: {
+            type: "plain_text",
+            text: ":pencil: Custom Fields",
+          },
+          action_id: ACTIONS.CONFIG_CUSTOM_FIELDS,
+        },
       ],
     });
   } else {
@@ -290,9 +299,10 @@ export function registerConfigFeature(app: App) {
     );
   });
 
-  // Register backblast and preblast settings handlers
+  // Register settings handlers
   registerBackblastSettingsHandlers(app);
   registerPreblastSettingsHandlers(app);
+  registerCustomFieldsSettingsHandlers(app);
 
   // Options handler for region search external_select
   app.options(

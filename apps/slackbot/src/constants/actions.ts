@@ -116,6 +116,18 @@ export const ACTIONS = {
   CONFIG_REPORTING: "reporting",
   CONFIG_USER_SETTINGS: "user_settings",
 
+  // Custom Fields Management
+  CUSTOM_FIELD_MENU_CALLBACK_ID: "custom_field_menu_id",
+  CUSTOM_FIELD_ADD_CALLBACK_ID: "custom_field_add_id",
+  CUSTOM_FIELD_DELETE_CONFIRM_CALLBACK_ID: "custom_field_delete_confirm_id",
+  CUSTOM_FIELD_ADD: "custom_field_add",
+  CUSTOM_FIELD_EDIT: "custom_field_edit",
+  CUSTOM_FIELD_DELETE: "custom_field_delete",
+  CUSTOM_FIELD_NAME: "custom_field_add_name",
+  CUSTOM_FIELD_TYPE: "custom_field_add_type",
+  CUSTOM_FIELD_OPTIONS: "custom_field_add_options",
+  CUSTOM_FIELD_ENABLE_PREFIX: "custom_field_enable_",
+
   // SLT/Position Management
   SLT_LEVEL_SELECT: "slt-level-select",
   SLT_SELECT: "slt-select",
