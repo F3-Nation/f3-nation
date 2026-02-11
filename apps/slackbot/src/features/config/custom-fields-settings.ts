@@ -4,10 +4,7 @@ import { ACTIONS } from "../../constants/actions";
 import { api } from "../../lib/api-client";
 import { logger } from "../../lib/logger";
 import type { NavigationContext } from "../../lib/view-navigation";
-import {
-  createNavContext,
-  navigateToView,
-} from "../../lib/view-navigation";
+import { createNavContext, navigateToView } from "../../lib/view-navigation";
 import type { CustomField, OrgSettings } from "../../types";
 import type {
   BlockList,
@@ -120,7 +117,10 @@ export function buildCustomFieldsMenuModal(
     elements: [
       {
         type: "button",
-        text: { type: "plain_text", text: ":heavy_plus_sign: New Custom Field" },
+        text: {
+          type: "plain_text",
+          text: ":heavy_plus_sign: New Custom Field",
+        },
         action_id: ACTIONS.CUSTOM_FIELD_ADD,
         style: "primary",
       },
@@ -574,7 +574,10 @@ export function registerCustomFieldsSettingsHandlers(app: App) {
   app.view(ACTIONS.CUSTOM_FIELD_MENU_CALLBACK_ID, handleCustomFieldsMenuSubmit);
 
   // View: Add/Edit Custom Field Submit
-  app.view(ACTIONS.CUSTOM_FIELD_ADD_CALLBACK_ID, handleCustomFieldAddEditSubmit);
+  app.view(
+    ACTIONS.CUSTOM_FIELD_ADD_CALLBACK_ID,
+    handleCustomFieldAddEditSubmit,
+  );
 
   // View: Delete Confirmation Submit
   app.view(
