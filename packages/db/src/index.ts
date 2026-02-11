@@ -48,9 +48,9 @@ export const schema = {
   eventsXEventTypes,
   locations,
   orgs,
+  permissions,
   positions,
   positionsXOrgsXUsers,
-  permissions,
   roles,
   rolesXApiKeysXOrg,
   rolesXPermissions,
@@ -63,4 +63,3 @@ export const schema = {
 };
 
 export * from "drizzle-orm";
-export { positions, positionsXOrgsXUsers } from "../drizzle/schema";
