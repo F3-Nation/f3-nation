@@ -277,9 +277,9 @@ describe("Event Tag Router", () => {
         pageSize: 10,
       });
 
-      expect(
-        activeResult.eventTags.every((et) => et.isActive === true),
-      ).toBe(true);
+      expect(activeResult.eventTags.every((et) => et.isActive === true)).toBe(
+        true,
+      );
     });
   });
 
@@ -524,9 +524,7 @@ describe("Event Tag Router", () => {
         const names = result.eventTags.map((et) => et.name);
         // Should be sorted ascending
         for (let i = 1; i < names.length; i++) {
-          expect(
-            names[i]!.localeCompare(names[i - 1]!) >= 0,
-          ).toBe(true);
+          expect(names[i]!.localeCompare(names[i - 1]!) >= 0).toBe(true);
         }
       }
     });

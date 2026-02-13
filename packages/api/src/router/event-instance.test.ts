@@ -63,7 +63,10 @@ describe("Event Instance Router", () => {
         await db
           .delete(schema.eventTagsXEventInstances)
           .where(
-            eq(schema.eventTagsXEventInstances.eventInstanceId, eventInstanceId),
+            eq(
+              schema.eventTagsXEventInstances.eventInstanceId,
+              eventInstanceId,
+            ),
           );
         await db
           .delete(schema.attendance)
@@ -146,7 +149,8 @@ describe("Event Instance Router", () => {
       .values({
         name: options?.name ?? `Test Event ${uniqueId()}`,
         orgId: aoId,
-        startDate: options?.startDate ?? new Date().toISOString().split("T")[0]!,
+        startDate:
+          options?.startDate ?? new Date().toISOString().split("T")[0]!,
         isActive: true,
         highlight: false,
       })
@@ -252,9 +256,9 @@ describe("Event Instance Router", () => {
       });
 
       expect(result.eventInstances.length).toBeGreaterThanOrEqual(1);
-      expect(
-        result.eventInstances.some((e) => e.id === eventInstance.id),
-      ).toBe(true);
+      expect(result.eventInstances.some((e) => e.id === eventInstance.id)).toBe(
+        true,
+      );
     });
 
     it("should filter by region org", async () => {
@@ -278,9 +282,9 @@ describe("Event Instance Router", () => {
       });
 
       // Should include event instances from AOs in this region
-      expect(
-        result.eventInstances.some((e) => e.id === eventInstance.id),
-      ).toBe(true);
+      expect(result.eventInstances.some((e) => e.id === eventInstance.id)).toBe(
+        true,
+      );
     });
 
     it("should filter by start date", async () => {
@@ -309,9 +313,9 @@ describe("Event Instance Router", () => {
         pageSize: 10,
       });
 
-      expect(
-        result.eventInstances.some((e) => e.id === eventInstance.id),
-      ).toBe(true);
+      expect(result.eventInstances.some((e) => e.id === eventInstance.id)).toBe(
+        true,
+      );
     });
 
     it("should filter standalone instances only", async () => {
@@ -587,9 +591,21 @@ describe("Event Instance Router", () => {
           id: "1",
           email: "admin@example.com",
           name: "Admin",
-          roles: [{ orgId: ao.id, orgName: ao.name ?? "Test AO", roleName: "admin" as const }],
+          roles: [
+            {
+              orgId: ao.id,
+              orgName: ao.name ?? "Test AO",
+              roleName: "admin" as const,
+            },
+          ],
         },
-        roles: [{ orgId: ao.id, orgName: ao.name ?? "Test AO", roleName: "admin" as const }],
+        roles: [
+          {
+            orgId: ao.id,
+            orgName: ao.name ?? "Test AO",
+            roleName: "admin" as const,
+          },
+        ],
         expires: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
       };
       await mockAuthWithSession(session);

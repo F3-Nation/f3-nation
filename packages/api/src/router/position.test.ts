@@ -407,9 +407,7 @@ describe("Position Router", () => {
       expect(Array.isArray(result.positions)).toBe(true);
 
       // Find our position and check user assignment
-      const foundPosition = result.positions.find(
-        (p) => p.id === position.id,
-      );
+      const foundPosition = result.positions.find((p) => p.id === position.id);
       if (foundPosition) {
         expect(foundPosition.userIds).toContain(user.id);
       }
@@ -432,9 +430,9 @@ describe("Position Router", () => {
       });
 
       // All positions should have userIds array (possibly empty)
-      expect(
-        result.positions.every((p) => Array.isArray(p.userIds)),
-      ).toBe(true);
+      expect(result.positions.every((p) => Array.isArray(p.userIds))).toBe(
+        true,
+      );
     });
   });
 
