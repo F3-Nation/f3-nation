@@ -44,7 +44,7 @@ export const orgChartRouter = {
     .route({
       method: "GET",
       path: "/",
-      tags: ["org-chart"],
+      tags: ["Org Chart"],
       summary: "List org chart orgs",
       description:
         "Return active orgs and their hierarchy for the org chart, along with active location summaries.",
@@ -67,10 +67,8 @@ export const orgChartRouter = {
       );
 
       const orgIds = orgsForChart.map((org) => org.id);
-      const orgIdsSet = new Set(orgIds);
 
       const ancestorCache = new Map<number, number[]>();
-      const ancestorMatchCache = new Map<number, boolean>();
 
       const buildParentChain = (orgId: number): number[] => {
         const cached = ancestorCache.get(orgId);
@@ -92,22 +90,6 @@ export const orgChartRouter = {
         return chain;
       };
 
-      const hasAncestorInChart = (orgId: number): boolean => {
-        const cached = ancestorMatchCache.get(orgId);
-        if (cached !== undefined) {
-          return cached;
-        }
-
-        const chain = buildParentChain(orgId);
-        const hasMatch = chain.some((ancestorId) => orgIdsSet.has(ancestorId));
-        ancestorMatchCache.set(orgId, hasMatch);
-        return hasMatch;
-      };
-
-      const descendantOrgIds = orgs
-        .filter((org) => hasAncestorInChart(org.id) || orgIdsSet.has(org.id))
-        .map((org) => org.id);
-
       const locationSummaries: LocationSummaryRow[] = orgIds.length
         ? await ctx.db
             .select({
@@ -128,9 +110,7 @@ export const orgChartRouter = {
             )
             .where(
               and(
-                descendantOrgIds.length
-                  ? inArray(schema.locations.orgId, descendantOrgIds)
-                  : undefined,
+                inArray(schema.locations.orgId, orgIds),
                 isNotNull(schema.locations.latitude),
                 isNotNull(schema.locations.longitude),
               ),
@@ -160,37 +140,35 @@ export const orgChartRouter = {
         const eventCount = Number(summary.eventCount ?? 0);
         const aoCount = Number(summary.aoCount ?? 0);
 
-        const orgChain = [summary.orgId, ...buildParentChain(summary.orgId)];
+        const existing = activeLocationsByOrg.get(summary.orgId) ?? [];
+        const match = existing.find(
+          (location) =>
+            location.latitude === summary.latitude &&
+            location.longitude === summary.longitude,
+        );
 
-        for (const orgId of orgChain) {
-          const existing = activeLocationsByOrg.get(orgId) ?? [];
-          const match = existing.find(
-            (location) =>
-              location.latitude === summary.latitude &&
-              location.longitude === summary.longitude,
-          );
-
-          if (match) {
-            match.eventCount += eventCount;
-            match.aoCount += aoCount;
-          } else {
-            existing.push({
-              latitude: summary.latitude,
-              longitude: summary.longitude,
-              eventCount,
-              aoCount,
-            });
-          }
-          activeLocationsByOrg.set(orgId, existing);
+        if (match) {
+          match.eventCount += eventCount;
+          match.aoCount += aoCount;
+        } else {
+          existing.push({
+            latitude: summary.latitude,
+            longitude: summary.longitude,
+            eventCount,
+            aoCount,
+          });
         }
+        activeLocationsByOrg.set(summary.orgId, existing);
       }
 
-      const orgSummaries = orgs.map((org) => ({
-        orgId: org.id,
-        orgType: org.orgType,
-        hiearchy: buildParentChain(org.id),
-        activeLocations: activeLocationsByOrg.get(org.id) ?? [],
-      }));
+      const orgSummaries = orgsForChart
+        .map((org) => ({
+          orgId: org.id,
+          orgType: org.orgType,
+          hiearchy: buildParentChain(org.id),
+          activeLocations: activeLocationsByOrg.get(org.id) ?? [],
+        }))
+        .filter((org) => org.activeLocations.length > 0);
 
       return { orgs: orgSummaries };
     }),
@@ -206,7 +184,7 @@ export const orgChartRouter = {
     .route({
       method: "GET",
       path: "/{orgId}",
-      tags: ["org-chart"],
+      tags: ["Org Chart"],
       summary: "Get org chart org",
       description:
         "Return org chart details and leadership positions for the specified organization.",
