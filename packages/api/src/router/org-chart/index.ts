@@ -132,6 +132,8 @@ export const orgChartRouter = {
       );
 
       // Then get location summaries with event counts
+      // Note: aoCount is initialized to 0 here and will be populated from aoCountMap
+      // in the next step to avoid N+1 queries from a correlated subquery
       const locationSummaries: LocationSummaryRow[] = orgIds.length
         ? await ctx.db
             .select({
@@ -140,7 +142,7 @@ export const orgChartRouter = {
               latitude: schema.locations.latitude,
               longitude: schema.locations.longitude,
               eventCount: countDistinct(schema.events.id),
-              aoCount: sql<number>`0`, // Placeholder, will be filled from aoCountMap
+              aoCount: sql<number>`0`, // Will be filled from aoCountMap below
             })
             .from(schema.locations)
             .innerJoin(

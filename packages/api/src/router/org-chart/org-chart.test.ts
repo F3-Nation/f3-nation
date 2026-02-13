@@ -268,7 +268,7 @@ describe("Org Chart Router", () => {
       });
 
       if (!sector) {
-        return;
+        throw new Error("Failed to create sector for test");
       }
 
       const client = createTestClient();
