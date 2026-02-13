@@ -200,5 +200,59 @@ describe("Org Chart Router", () => {
       );
       expect(result.orgs.every((org) => org.orgType === "region")).toBe(true);
     });
+
+    it("should count distinct AOs per location", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const nation = await getOrCreateF3NationOrg();
+      const sector = await createOrg({
+        orgType: "sector",
+        parentId: nation.id,
+      });
+      const area = sector
+        ? await createOrg({ orgType: "area", parentId: sector.id })
+        : null;
+      const region = area
+        ? await createOrg({ orgType: "region", parentId: area.id })
+        : null;
+
+      if (!region) {
+        return;
+      }
+
+      const aoOne = await createOrg({ orgType: "ao", parentId: region.id });
+      const aoTwo = await createOrg({ orgType: "ao", parentId: region.id });
+
+      if (!aoOne || !aoTwo) {
+        return;
+      }
+
+      const location = await createLocation(region.id);
+      if (!location) {
+        return;
+      }
+
+      await createEvent({ orgId: aoOne.id, locationId: location.id });
+      await createEvent({ orgId: aoTwo.id, locationId: location.id });
+
+      const client = createTestClient();
+      const result = await client.orgChart.all();
+      const regionSummary = result.orgs.find((org) => org.orgId === region.id);
+
+      expect(regionSummary).toBeDefined();
+      if (regionSummary) {
+        const locationSummary = regionSummary.activeLocations.find(
+          (activeLocation) =>
+            activeLocation.latitude === 35.5 &&
+            activeLocation.longitude === -80.5,
+        );
+
+        expect(locationSummary).toBeDefined();
+        if (locationSummary) {
+          expect(locationSummary.aoCount).toBe(2);
+        }
+      }
+    });
   });
 });

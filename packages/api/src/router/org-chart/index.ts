@@ -9,6 +9,7 @@ import {
   inArray,
   isNotNull,
   schema,
+  sql,
 } from "@acme/db";
 import { positions, positionsXOrgsXUsers } from "@acme/db/schema/schema";
 import { OrgType as OrgTypeValues } from "@acme/shared/app/enums";
@@ -20,12 +21,14 @@ const orgChartOrgTypes = OrgTypeValues.filter((orgType) => orgType !== "ao");
 
 interface OrgRow {
   id: number;
+  name: string | null;
   parentId: number | null;
   orgType: OrgType;
   isActive: boolean;
 }
 
 interface LocationSummaryRow {
+  locationId: number;
   orgId: number;
   latitude: number | null;
   longitude: number | null;
@@ -35,7 +38,7 @@ interface LocationSummaryRow {
 
 interface PositionRow {
   title: string;
-  username: string | null;
+  f3Name: string | null;
   avatarUrl: string | null;
 }
 
@@ -53,6 +56,7 @@ export const orgChartRouter = {
       const orgs: OrgRow[] = await ctx.db
         .select({
           id: schema.orgs.id,
+          name: schema.orgs.name,
           parentId: schema.orgs.parentId,
           orgType: schema.orgs.orgType,
           isActive: schema.orgs.isActive,
@@ -68,22 +72,31 @@ export const orgChartRouter = {
 
       const orgIds = orgsForChart.map((org) => org.id);
 
-      const ancestorCache = new Map<number, number[]>();
+      const ancestorCache = new Map<
+        number,
+        [number, string | null, OrgType][]
+      >();
 
-      const buildParentChain = (orgId: number): number[] => {
+      const buildParentChain = (
+        orgId: number,
+      ): [number, string | null, OrgType][] => {
         const cached = ancestorCache.get(orgId);
         if (cached) {
           return cached;
         }
 
-        const chain: number[] = [];
+        const chain: [number, string | null, OrgType][] = [];
         const visited = new Set<number>();
         let current = orgMap.get(orgId)?.parentId ?? null;
 
         while (current !== null && !visited.has(current)) {
           visited.add(current);
-          chain.push(current);
-          current = orgMap.get(current)?.parentId ?? null;
+          const parent = orgMap.get(current);
+          if (!parent) {
+            break;
+          }
+          chain.push([parent.id, parent.name, parent.orgType]);
+          current = parent.parentId ?? null;
         }
 
         ancestorCache.set(orgId, chain);
@@ -93,11 +106,21 @@ export const orgChartRouter = {
       const locationSummaries: LocationSummaryRow[] = orgIds.length
         ? await ctx.db
             .select({
+              locationId: schema.locations.id,
               orgId: schema.locations.orgId,
               latitude: schema.locations.latitude,
               longitude: schema.locations.longitude,
               eventCount: countDistinct(schema.events.id),
-              aoCount: countDistinct(schema.events.orgId),
+              aoCount: sql<number>`(
+                select count(distinct ${schema.events.orgId})
+                from ${schema.events}
+                inner join ${schema.orgs}
+                  on ${schema.orgs.id} = ${schema.events.orgId}
+                 and ${schema.orgs.orgType} = 'ao'
+                where ${schema.events.locationId} = ${schema.locations.id}
+                  and ${schema.events.isActive} = true
+                  and ${schema.events.isPrivate} = false
+              )`,
             })
             .from(schema.locations)
             .innerJoin(
@@ -116,6 +139,7 @@ export const orgChartRouter = {
               ),
             )
             .groupBy(
+              schema.locations.id,
               schema.locations.orgId,
               schema.locations.latitude,
               schema.locations.longitude,
@@ -164,8 +188,9 @@ export const orgChartRouter = {
       const orgSummaries = orgsForChart
         .map((org) => ({
           orgId: org.id,
+          name: org.name,
           orgType: org.orgType,
-          hiearchy: buildParentChain(org.id),
+          hierarchy: buildParentChain(org.id),
           activeLocations: activeLocationsByOrg.get(org.id) ?? [],
         }))
         .filter((org) => org.activeLocations.length > 0);
@@ -213,7 +238,7 @@ export const orgChartRouter = {
       const orgPositions: PositionRow[] = await ctx.db
         .select({
           title: positions.name,
-          username: schema.users.f3Name,
+          f3Name: schema.users.f3Name,
           avatarUrl: schema.users.avatarUrl,
         })
         .from(positionsXOrgsXUsers)
@@ -242,7 +267,7 @@ export const orgChartRouter = {
         instagram: org.instagram,
         positions: orgPositions.map((position) => ({
           title: position.title,
-          username: position.username,
+          f3Name: position.f3Name,
           avatar_url: position.avatarUrl,
         })),
       };
