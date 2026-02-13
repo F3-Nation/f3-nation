@@ -177,7 +177,7 @@ export const orgChartRouter = {
           latitude: number;
           longitude: number;
           eventCount: number;
-          aoIds: Set<number>;
+          aoCount: number;
         }[]
       >();
 
@@ -201,15 +201,13 @@ export const orgChartRouter = {
           // For co-located venues, aoCount is already distinct per location
           // To avoid overcounting the same AO across multiple co-located locations,
           // we take the maximum instead of summing
-          match.aoIds.add(aoCount);
+          match.aoCount = Math.max(match.aoCount, aoCount);
         } else {
-          const aoIds = new Set<number>();
-          aoIds.add(aoCount);
           existing.push({
             latitude: summary.latitude,
             longitude: summary.longitude,
             eventCount,
-            aoIds,
+            aoCount,
           });
         }
         activeLocationsByOrg.set(summary.orgId, existing);
@@ -221,13 +219,7 @@ export const orgChartRouter = {
           name: org.name,
           orgType: org.orgType,
           hierarchy: buildParentChain(org.id),
-          activeLocations:
-            activeLocationsByOrg.get(org.id)?.map((loc) => ({
-              latitude: loc.latitude,
-              longitude: loc.longitude,
-              eventCount: loc.eventCount,
-              aoCount: Math.max(...loc.aoIds),
-            })) ?? [],
+          activeLocations: activeLocationsByOrg.get(org.id) ?? [],
         }))
         .filter((org) => org.activeLocations.length > 0);
 
