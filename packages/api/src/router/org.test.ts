@@ -76,12 +76,14 @@ describe("Org Router", () => {
         orgTypes: ["region"],
         pageIndex: 0,
         pageSize: 2,
+        sorting: [{ id: "id", desc: false }], // Explicit sorting for deterministic pagination
       });
 
       const page2 = await client.org.all({
         orgTypes: ["region"],
         pageIndex: 1,
         pageSize: 2,
+        sorting: [{ id: "id", desc: false }], // Same sorting
       });
 
       expect(page1.orgs.length).toBeLessThanOrEqual(2);
