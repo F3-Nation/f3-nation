@@ -255,4 +255,42 @@ describe("Org Chart Router", () => {
       }
     });
   });
+
+  describe("byId", () => {
+    it("should return organization details for a valid id", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const nation = await getOrCreateF3NationOrg();
+      const sector = await createOrg({
+        orgType: "sector",
+        parentId: nation.id,
+      });
+
+      if (!sector) {
+        throw new Error("Failed to create sector for test");
+      }
+
+      const client = createTestClient();
+      const result = await client.orgChart.byId({ orgId: sector.id });
+
+      expect(result).toBeDefined();
+      expect(result.id).toBe(sector.id);
+      expect(result.name).toBe(sector.name);
+      expect(result.orgType).toBe("sector");
+      expect(result.positions).toBeDefined();
+      expect(Array.isArray(result.positions)).toBe(true);
+    });
+
+    it("should throw an error when organization is not found", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const client = createTestClient();
+
+      await expect(
+        client.orgChart.byId({ orgId: 999999999 }),
+      ).rejects.toThrow();
+    });
+  });
 });

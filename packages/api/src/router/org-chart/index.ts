@@ -103,6 +103,37 @@ export const orgChartRouter = {
         return chain;
       };
 
+      // First, get AO counts per location
+      const aoCountsByLocation = orgIds.length
+        ? await ctx.db
+            .select({
+              locationId: schema.events.locationId,
+              aoCount: countDistinct(schema.events.orgId),
+            })
+            .from(schema.events)
+            .innerJoin(
+              schema.orgs,
+              and(
+                eq(schema.orgs.id, schema.events.orgId),
+                eq(schema.orgs.orgType, "ao"),
+              ),
+            )
+            .where(
+              and(
+                eq(schema.events.isActive, true),
+                eq(schema.events.isPrivate, false),
+              ),
+            )
+            .groupBy(schema.events.locationId)
+        : [];
+
+      const aoCountMap = new Map(
+        aoCountsByLocation.map((row) => [row.locationId, Number(row.aoCount)]),
+      );
+
+      // Then get location summaries with event counts
+      // Note: aoCount is initialized to 0 here and will be populated from aoCountMap
+      // in the next step to avoid N+1 queries from a correlated subquery
       const locationSummaries: LocationSummaryRow[] = orgIds.length
         ? await ctx.db
             .select({
@@ -111,16 +142,7 @@ export const orgChartRouter = {
               latitude: schema.locations.latitude,
               longitude: schema.locations.longitude,
               eventCount: countDistinct(schema.events.id),
-              aoCount: sql<number>`(
-                select count(distinct ${schema.events.orgId})
-                from ${schema.events}
-                inner join ${schema.orgs}
-                  on ${schema.orgs.id} = ${schema.events.orgId}
-                 and ${schema.orgs.orgType} = 'ao'
-                where ${schema.events.locationId} = ${schema.locations.id}
-                  and ${schema.events.isActive} = true
-                  and ${schema.events.isPrivate} = false
-              )`,
+              aoCount: sql<number>`0`, // Will be filled from aoCountMap below
             })
             .from(schema.locations)
             .innerJoin(
@@ -145,6 +167,11 @@ export const orgChartRouter = {
               schema.locations.longitude,
             )
         : [];
+
+      // Merge AO counts into location summaries
+      for (const summary of locationSummaries) {
+        summary.aoCount = aoCountMap.get(summary.locationId) ?? 0;
+      }
 
       const activeLocationsByOrg = new Map<
         number,
@@ -173,7 +200,10 @@ export const orgChartRouter = {
 
         if (match) {
           match.eventCount += eventCount;
-          match.aoCount += aoCount;
+          // For co-located venues, aoCount is already distinct per location
+          // To avoid overcounting the same AO across multiple co-located locations,
+          // we take the maximum instead of summing
+          match.aoCount = Math.max(match.aoCount, aoCount);
         } else {
           existing.push({
             latitude: summary.latitude,
@@ -268,7 +298,7 @@ export const orgChartRouter = {
         positions: orgPositions.map((position) => ({
           title: position.title,
           f3Name: position.f3Name,
-          avatar_url: position.avatarUrl,
+          avatarUrl: position.avatarUrl,
         })),
       };
     }),
