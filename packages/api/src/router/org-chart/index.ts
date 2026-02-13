@@ -103,6 +103,35 @@ export const orgChartRouter = {
         return chain;
       };
 
+      // First, get AO counts per location
+      const aoCountsByLocation = orgIds.length
+        ? await ctx.db
+            .select({
+              locationId: schema.events.locationId,
+              aoCount: countDistinct(schema.events.orgId),
+            })
+            .from(schema.events)
+            .innerJoin(
+              schema.orgs,
+              and(
+                eq(schema.orgs.id, schema.events.orgId),
+                eq(schema.orgs.orgType, "ao"),
+              ),
+            )
+            .where(
+              and(
+                eq(schema.events.isActive, true),
+                eq(schema.events.isPrivate, false),
+              ),
+            )
+            .groupBy(schema.events.locationId)
+        : [];
+
+      const aoCountMap = new Map(
+        aoCountsByLocation.map((row) => [row.locationId, Number(row.aoCount)]),
+      );
+
+      // Then get location summaries with event counts
       const locationSummaries: LocationSummaryRow[] = orgIds.length
         ? await ctx.db
             .select({
@@ -111,16 +140,7 @@ export const orgChartRouter = {
               latitude: schema.locations.latitude,
               longitude: schema.locations.longitude,
               eventCount: countDistinct(schema.events.id),
-              aoCount: sql<number>`(
-                select count(distinct ${schema.events.orgId})
-                from ${schema.events}
-                inner join ${schema.orgs}
-                  on ${schema.orgs.id} = ${schema.events.orgId}
-                 and ${schema.orgs.orgType} = 'ao'
-                where ${schema.events.locationId} = ${schema.locations.id}
-                  and ${schema.events.isActive} = true
-                  and ${schema.events.isPrivate} = false
-              )`,
+              aoCount: sql<number>`0`, // Placeholder, will be filled from aoCountMap
             })
             .from(schema.locations)
             .innerJoin(
@@ -146,13 +166,18 @@ export const orgChartRouter = {
             )
         : [];
 
+      // Merge AO counts into location summaries
+      for (const summary of locationSummaries) {
+        summary.aoCount = aoCountMap.get(summary.locationId) ?? 0;
+      }
+
       const activeLocationsByOrg = new Map<
         number,
         {
           latitude: number;
           longitude: number;
           eventCount: number;
-          aoCount: number;
+          aoIds: Set<number>;
         }[]
       >();
 
@@ -173,13 +198,18 @@ export const orgChartRouter = {
 
         if (match) {
           match.eventCount += eventCount;
-          match.aoCount += aoCount;
+          // For co-located venues, aoCount is already distinct per location
+          // To avoid overcounting the same AO across multiple co-located locations,
+          // we take the maximum instead of summing
+          match.aoIds.add(aoCount);
         } else {
+          const aoIds = new Set<number>();
+          aoIds.add(aoCount);
           existing.push({
             latitude: summary.latitude,
             longitude: summary.longitude,
             eventCount,
-            aoCount,
+            aoIds,
           });
         }
         activeLocationsByOrg.set(summary.orgId, existing);
@@ -191,7 +221,13 @@ export const orgChartRouter = {
           name: org.name,
           orgType: org.orgType,
           hierarchy: buildParentChain(org.id),
-          activeLocations: activeLocationsByOrg.get(org.id) ?? [],
+          activeLocations:
+            activeLocationsByOrg.get(org.id)?.map((loc) => ({
+              latitude: loc.latitude,
+              longitude: loc.longitude,
+              eventCount: loc.eventCount,
+              aoCount: Math.max(...loc.aoIds),
+            })) ?? [],
         }))
         .filter((org) => org.activeLocations.length > 0);
 
@@ -268,7 +304,7 @@ export const orgChartRouter = {
         positions: orgPositions.map((position) => ({
           title: position.title,
           f3Name: position.f3Name,
-          avatar_url: position.avatarUrl,
+          avatarUrl: position.avatarUrl,
         })),
       };
     }),
