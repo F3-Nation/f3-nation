@@ -185,7 +185,12 @@ export default function AdminLocationsModal({
                         <FormItem>
                           <FormLabel>ID</FormLabel>
                           <FormControl>
-                            <Input placeholder="ID" disabled {...field} />
+                            <Input
+                              placeholder="ID"
+                              disabled
+                              {...field}
+                              value={field.value ?? ""}
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
