@@ -1,6 +1,6 @@
 # F3 Nation - PMPM Turbo Monorepo
 
-This is a monorepo built with PNPM workspaces and Turbo for managing multiple applications and shared packages.
+This is a monorepo that is built with PNPM workspaces and Turbo for managing multiple applications and shared packages.
 
 ## Monorepo Fundamentals
 
