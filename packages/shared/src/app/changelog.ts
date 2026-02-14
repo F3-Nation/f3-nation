@@ -10,6 +10,25 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: "3.7.0",
+    date: "2026-02-07",
+    title: "Email URL Fix & Minor Improvements",
+    sections: [
+      {
+        title: "Bug Fixes",
+        items: [
+          "Fixed map change request email links - View Request button now correctly points to map.f3nation.com instead of api.f3nation.com",
+        ],
+      },
+      {
+        title: "Backend",
+        items: [
+          "Renamed baseUrl to mapBaseUrl in email notification services for clarity",
+        ],
+      },
+    ],
+  },
+  {
     version: "3.6.7",
     date: "2026-02-07",
     title: "Map Revalidation Fixes & API Improvements",
