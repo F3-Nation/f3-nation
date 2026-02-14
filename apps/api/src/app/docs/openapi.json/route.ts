@@ -131,15 +131,23 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
         name: "api",
         tags: [
           "api-key",
+          "attendance",
           "event",
+          "event-instance",
+          "event-tag",
           "event-type",
           "location",
+          "mail",
           "org",
           "ping",
           "position",
           "request",
           "user",
         ],
+      },
+      {
+        name: "slack",
+        tags: ["slack"],
       },
       {
         name: "map",
@@ -151,12 +159,25 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
         name: "api-key",
         description: "API key management for programmatic access",
       },
+      {
+        name: "attendance",
+        description: "Workout attendance tracking and management",
+      },
       { name: "event", description: "Workout event management" },
+      {
+        name: "event-instance",
+        description: "Individual event instance management",
+      },
+      { name: "event-tag", description: "Event tagging and categorization" },
       { name: "event-type", description: "Event type/category management" },
+      { name: "feedback", description: "User feedback submission" },
       {
         name: "location",
         description: "Physical location management for workouts",
       },
+      { name: "mail", description: "Email sending and management" },
+      { name: "map", description: "Map-related utilities and revalidation" },
+      { name: "map.location", description: "Map location data and search" },
       {
         name: "org",
         description: "Organization management (regions, AOs, etc.)",
@@ -167,6 +188,7 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
         description: "Position and role management for organizations",
       },
       { name: "request", description: "Data change request workflow" },
+      { name: "slack", description: "Slack integration and management" },
       { name: "user", description: "User account management" },
       {
         name: "map.event",

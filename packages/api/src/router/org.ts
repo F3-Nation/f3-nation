@@ -12,6 +12,7 @@ import {
   inArray,
   or,
   schema,
+  sql,
 } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 import { F3_NATION_ORG_ID } from "@acme/shared/app/constants";
@@ -570,7 +571,24 @@ export const orgRouter = {
     }),
 
   crupdate: editorProcedure
-    .input(OrgInsertSchema.partial({ id: true, parentId: true }))
+    .input(
+      OrgInsertSchema.partial({
+        id: true,
+        parentId: true,
+        isActive: true,
+        description: true,
+        website: true,
+        email: true,
+        twitter: true,
+        facebook: true,
+        instagram: true,
+        logoUrl: true,
+        meta: true,
+        defaultLocationId: true,
+        lastAnnualReview: true,
+        aoCount: true,
+      }),
+    )
     .route({
       method: "POST",
       path: "/",
@@ -604,6 +622,7 @@ export const orgRouter = {
           .insert(schema.orgs)
           .values({
             ...input,
+            isActive: input.isActive ?? true,
             meta: input.meta as Record<string, string>,
           })
           .returning();
@@ -652,6 +671,7 @@ export const orgRouter = {
 
       const orgToCrupdate: typeof schema.orgs.$inferInsert = {
         ...input,
+        isActive: input.isActive ?? existingOrg.isActive,
         meta: input.meta as Record<string, string>,
       };
 
@@ -734,13 +754,16 @@ export const orgRouter = {
       };
     }),
   delete: adminProcedure
-    .input(z.object({ id: z.number(), orgType: z.enum(OrgType).optional() }))
+    .input(
+      z.object({ id: z.coerce.number(), orgType: z.enum(OrgType).optional() }),
+    )
     .route({
       method: "DELETE",
       path: "/delete/{id}",
       tags: ["org"],
       summary: "Delete organization",
-      description: "Soft delete an organization by marking it as inactive",
+      description:
+        "Soft delete an organization by marking it as inactive. For AO orgs, this also soft-deletes associated series and future event instances.",
     })
     .handler(async ({ context: ctx, input }) => {
       const roleCheckResult = await checkHasRoleOnOrg({
@@ -754,6 +777,14 @@ export const orgRouter = {
           message: "You are not authorized to delete this org",
         });
       }
+
+      // Get the org type before deleting to determine if cascading is needed
+      const [org] = await ctx.db
+        .select({ orgType: schema.orgs.orgType })
+        .from(schema.orgs)
+        .where(eq(schema.orgs.id, input.id));
+
+      // Soft delete the org itself
       await ctx.db
         .update(schema.orgs)
         .set({ isActive: false })
@@ -767,6 +798,15 @@ export const orgRouter = {
 
       // Notify webhooks about the org deletion
       notifyMapDataChange({ type: "org.deleted", orgId: input.id });
+
+      // If this is an AO, cascade soft-delete to series and event instances
+      if (org?.orgType === "ao") {
+        const { softDeleteSeriesForOrg, softDeleteFutureInstancesForOrg } =
+          await import("../lib/cascade-service");
+
+        await softDeleteSeriesForOrg(ctx.db, input.id);
+        await softDeleteFutureInstancesForOrg(ctx.db, input.id);
+      }
 
       return { orgId: input.id };
     }),
