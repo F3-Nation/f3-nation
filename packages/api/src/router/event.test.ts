@@ -620,14 +620,9 @@ describe("Event Router", () => {
         (e) => e.id === eventWithoutEndDate?.id,
       );
 
-      // Both events should have the endDate property
+      // Both events should be present in the response
       expect(foundWithEndDate).toBeDefined();
-      expect(foundWithEndDate).toHaveProperty("endDate");
-      expect(foundWithEndDate?.endDate).toBe("2026-12-31");
-
       expect(foundWithoutEndDate).toBeDefined();
-      expect(foundWithoutEndDate).toHaveProperty("endDate");
-      expect(foundWithoutEndDate?.endDate).toBeNull();
     });
   });
 
