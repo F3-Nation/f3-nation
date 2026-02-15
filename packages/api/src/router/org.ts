@@ -1,6 +1,5 @@
 import { ORPCError } from "@orpc/server";
 import type { SQL } from "drizzle-orm";
-import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import {
@@ -770,38 +769,5 @@ export const orgRouter = {
       notifyMapDataChange({ type: "org.deleted", orgId: input.id });
 
       return { orgId: input.id };
-    }),
-  revalidate: adminProcedure
-    .route({
-      method: "POST",
-      path: "/revalidate",
-      tags: ["org"],
-      summary: "Revalidate cache",
-      description: "Trigger cache revalidation for the organization data",
-    })
-    .handler(async ({ context: ctx }) => {
-      const [nation] = await ctx.db
-        .select({ id: schema.orgs.id })
-        .from(schema.orgs)
-        .where(eq(schema.orgs.orgType, "nation"));
-      if (!nation) {
-        throw new ORPCError("NOT_FOUND", {
-          message: "Nation not found",
-        });
-      }
-
-      const roleCheckResult = await checkHasRoleOnOrg({
-        orgId: nation.id,
-        session: ctx.session,
-        db: ctx.db,
-        roleName: "admin",
-      });
-      if (!roleCheckResult.success) {
-        throw new ORPCError("UNAUTHORIZED", {
-          message: "You are not authorized to revalidate this Nation",
-        });
-      }
-
-      revalidatePath("/");
     }),
 };
