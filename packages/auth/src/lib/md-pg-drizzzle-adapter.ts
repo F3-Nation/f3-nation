@@ -6,6 +6,7 @@ import { and, eq } from "drizzle-orm";
 import omit from "lodash/omit";
 
 import type { UserRole } from "@acme/shared/app/enums";
+import { normalizeEmail } from "@acme/shared/common/functions";
 import { schema, sql } from "@acme/db";
 import { env } from "@acme/env";
 
@@ -212,9 +213,19 @@ export function MDPGDrizzleAdapter(
     },
     async createVerificationToken(data) {
       if (LOG) console.log("createVerificationToken", data);
+
+      // Normalize the email identifier for consistent storage
+      // Even though NextAuth should have normalized it via normalizeIdentifier,
+      // we enforce it here as a defensive measure
+      const normalizedData = {
+        ...data,
+        identifier: normalizeEmail(data.identifier),
+        expires: data.expires.toISOString(),
+      };
+
       const [token] = await client
         .insert(verificationTokens)
-        .values({ ...data, expires: data.expires.toISOString() })
+        .values(normalizedData)
         .returning();
 
       if (!token) throw new Error("Unable to create token");
@@ -228,6 +239,10 @@ export function MDPGDrizzleAdapter(
           throw new Error("No verification token found.");
         }
 
+        // Normalize the email identifier to match how it was stored during token creation
+        // This ensures case-insensitive email matching (User@Example.com === user@example.com)
+        const normalizedIdentifier = normalizeEmail(data.identifier);
+
         // Hash the token before searching (NextAuth Email providers hash tokens before storing)
         const hashedToken = createHash("sha256")
           .update(`${data.token}${env.AUTH_SECRET}`)
@@ -237,7 +252,7 @@ export function MDPGDrizzleAdapter(
           .delete(verificationTokens)
           .where(
             and(
-              eq(verificationTokens.identifier, data.identifier),
+              eq(verificationTokens.identifier, normalizedIdentifier),
               eq(verificationTokens.token, hashedToken),
             ),
           )
