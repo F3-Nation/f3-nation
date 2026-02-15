@@ -215,8 +215,9 @@ export function MDPGDrizzleAdapter(
       if (LOG) console.log("createVerificationToken", data);
 
       // Normalize the email identifier for consistent storage
+      // All providers in this system use email identifiers (emailProvider, OtpProvider)
       // Even though NextAuth should have normalized it via normalizeIdentifier,
-      // we enforce it here as a defensive measure
+      // we enforce it here as a defensive measure to ensure case-insensitive matching
       const normalizedData = {
         ...data,
         identifier: normalizeEmail(data.identifier),
@@ -240,6 +241,7 @@ export function MDPGDrizzleAdapter(
         }
 
         // Normalize the email identifier to match how it was stored during token creation
+        // All providers in this system use email identifiers (emailProvider, OtpProvider)
         // This ensures case-insensitive email matching (User@Example.com === user@example.com)
         const normalizedIdentifier = normalizeEmail(data.identifier);
 
