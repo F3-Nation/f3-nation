@@ -476,7 +476,9 @@ export const userRouter = {
   delete: adminProcedure
     .input(
       z.object({
-        id: z.number().describe("The unique identifier of the user to delete"),
+        id: z.coerce
+          .number()
+          .describe("The unique identifier of the user to delete"),
       }),
     )
     .route({
