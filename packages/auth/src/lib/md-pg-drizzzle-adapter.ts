@@ -1,6 +1,5 @@
 import type { PgDatabase } from "drizzle-orm/pg-core";
 import type { MdAdapter } from "next-auth";
-import { createHash } from "crypto";
 import dayjs from "dayjs";
 import { and, eq } from "drizzle-orm";
 import omit from "lodash/omit";
@@ -8,7 +7,6 @@ import omit from "lodash/omit";
 import type { UserRole } from "@acme/shared/app/enums";
 import { normalizeEmail } from "@acme/shared/common/functions";
 import { schema, sql } from "@acme/db";
-import { env } from "@acme/env";
 
 const {
   users,
@@ -213,20 +211,9 @@ export function MDPGDrizzleAdapter(
     },
     async createVerificationToken(data) {
       if (LOG) console.log("createVerificationToken", data);
-
-      // Normalize the email identifier for consistent storage
-      // All providers in this system use email identifiers (emailProvider, OtpProvider)
-      // Even though NextAuth should have normalized it via normalizeIdentifier,
-      // we enforce it here as a defensive measure to ensure case-insensitive matching
-      const normalizedData = {
-        ...data,
-        identifier: normalizeEmail(data.identifier),
-        expires: data.expires.toISOString(),
-      };
-
       const [token] = await client
         .insert(verificationTokens)
-        .values(normalizedData)
+        .values({ ...data, expires: data.expires.toISOString() })
         .returning();
 
       if (!token) throw new Error("Unable to create token");
@@ -236,29 +223,19 @@ export function MDPGDrizzleAdapter(
       try {
         if (LOG) console.log("useVerificationToken", data);
 
-        if (!data.token || !env.AUTH_SECRET) {
-          throw new Error("No verification token found.");
-        }
-
-        // Normalize the email identifier to match how it was stored during token creation
-        // All providers in this system use email identifiers (emailProvider, OtpProvider)
-        // This ensures case-insensitive email matching (User@Example.com === user@example.com)
+        // Normalize email to lowercase for case-insensitive matching
+        // Fixes intermittent OTP failures when users type email with different casing
         const normalizedIdentifier = normalizeEmail(data.identifier);
 
-        // Hash the token before searching (NextAuth Email providers hash tokens before storing)
-        const hashedToken = createHash("sha256")
-          .update(`${data.token}${env.AUTH_SECRET}`)
-          .digest("hex");
-
         const [token] = await client
-          .delete(verificationTokens)
+          .select()
+          .from(verificationTokens)
           .where(
             and(
               eq(verificationTokens.identifier, normalizedIdentifier),
-              eq(verificationTokens.token, hashedToken),
+              eq(verificationTokens.token, data.token),
             ),
-          )
-          .returning();
+          );
 
         if (!token) throw new Error("No verification token found.");
 
