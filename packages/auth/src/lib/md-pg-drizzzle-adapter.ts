@@ -1,11 +1,13 @@
 import type { PgDatabase } from "drizzle-orm/pg-core";
 import type { MdAdapter } from "next-auth";
+import { createHash } from "crypto";
 import dayjs from "dayjs";
 import { and, eq } from "drizzle-orm";
 import omit from "lodash/omit";
 
 import type { UserRole } from "@acme/shared/app/enums";
 import { schema, sql } from "@acme/db";
+import { env } from "@acme/env";
 
 const {
   users,
@@ -221,15 +223,21 @@ export function MDPGDrizzleAdapter(
     async useVerificationToken(data) {
       try {
         if (LOG) console.log("useVerificationToken", data);
+
+        // Hash the token before searching (NextAuth Email providers hash tokens before storing)
+        const hashedToken = createHash("sha256")
+          .update(`${data.token}${env.AUTH_SECRET}`)
+          .digest("hex");
+
         const [token] = await client
-          .select()
-          .from(verificationTokens)
+          .delete(verificationTokens)
           .where(
             and(
               eq(verificationTokens.identifier, data.identifier),
-              eq(verificationTokens.token, data.token),
+              eq(verificationTokens.token, hashedToken),
             ),
-          );
+          )
+          .returning();
 
         if (!token) throw new Error("No verification token found.");
 

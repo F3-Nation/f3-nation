@@ -2,6 +2,7 @@ import Email from "next-auth/providers/nodemailer";
 
 import { env } from "@acme/env";
 import { ProviderId } from "@acme/shared/common/enums";
+import { normalizeEmail } from "@acme/shared/common/functions";
 
 import { sendOtpVerificationRequestServer } from "./send-otp-verification-request-server";
 
@@ -17,6 +18,7 @@ const OtpProvider = Email({
     return Promise.resolve(token);
   },
   sendVerificationRequest: sendOtpVerificationRequestServer,
+  normalizeIdentifier: normalizeEmail,
 });
 
 export default OtpProvider;
