@@ -172,8 +172,11 @@ describe("Org Chart Router", () => {
       const client = createTestClient();
       const result = await client.orgChart.all();
 
-      const returnedOrgIds = result.orgs.map((org) => org.orgId);
-      const regionSummary = result.orgs.find((org) => org.orgId === region.id);
+      const orgs = result.orgs.filter((org): org is NonNullable<typeof org> =>
+        Boolean(org),
+      );
+      const returnedOrgIds = orgs.map((org) => org.orgId);
+      const regionSummary = orgs.find((org) => org.orgId === region.id);
 
       expect(returnedOrgIds).toContain(region.id);
       if (sector) {
@@ -189,16 +192,15 @@ describe("Org Chart Router", () => {
       }
 
       expect(regionSummary).toBeDefined();
-      if (regionSummary) {
-        expect(regionSummary.activeLocations.length).toBe(1);
-        expect(regionSummary.activeLocations[0]?.eventCount).toBe(1);
-        expect(regionSummary.activeLocations[0]?.aoCount).toBe(1);
+      if (!regionSummary) {
+        throw new Error("Expected region summary to be defined");
       }
+      expect(regionSummary.activeLocations.length).toBe(1);
+      expect(regionSummary.activeLocations[0]?.eventCount).toBe(1);
+      expect(regionSummary.activeLocations[0]?.aoCount).toBe(1);
 
-      expect(result.orgs.every((org) => org.activeLocations.length > 0)).toBe(
-        true,
-      );
-      expect(result.orgs.every((org) => org.orgType === "region")).toBe(true);
+      expect(orgs.every((org) => org.activeLocations.length > 0)).toBe(true);
+      expect(orgs.every((org) => org.orgType === "region")).toBe(true);
     });
 
     it("should count distinct AOs per location", async () => {
@@ -238,7 +240,10 @@ describe("Org Chart Router", () => {
 
       const client = createTestClient();
       const result = await client.orgChart.all();
-      const regionSummary = result.orgs.find((org) => org.orgId === region.id);
+      const orgs = result.orgs.filter((org): org is NonNullable<typeof org> =>
+        Boolean(org),
+      );
+      const regionSummary = orgs.find((org) => org.orgId === region.id);
 
       expect(regionSummary).toBeDefined();
       if (regionSummary) {
@@ -249,9 +254,10 @@ describe("Org Chart Router", () => {
         );
 
         expect(locationSummary).toBeDefined();
-        if (locationSummary) {
-          expect(locationSummary.aoCount).toBe(2);
+        if (!locationSummary) {
+          throw new Error("Expected location summary to be defined");
         }
+        expect(locationSummary.aoCount).toBe(2);
       }
     });
   });

@@ -14,15 +14,6 @@ interface OrgRow {
   isActive: boolean;
 }
 
-interface LocationSummaryRow {
-  locationId: number;
-  orgId: number;
-  latitude: number | null;
-  longitude: number | null;
-  eventCount: number;
-  aoCount: number;
-}
-
 interface PositionRow {
   title: string;
   f3Name: string | null;
