@@ -1,23 +1,10 @@
 import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 
-import {
-  and,
-  asc,
-  countDistinct,
-  eq,
-  inArray,
-  isNotNull,
-  schema,
-  sql,
-} from "@acme/db";
-import { positions, positionsXOrgsXUsers } from "@acme/db/schema/schema";
-import { OrgType as OrgTypeValues } from "@acme/shared/app/enums";
+import { and, asc, countDistinct, eq, isNotNull, schema, sql } from "@acme/db";
 import type { OrgType } from "@acme/shared/app/enums";
 
 import { withSessionAndDb } from "../../shared";
-
-const orgChartOrgTypes = OrgTypeValues.filter((orgType) => orgType !== "ao");
 
 interface OrgRow {
   id: number;
@@ -53,7 +40,7 @@ export const orgChartRouter = {
         "Return active orgs and their hierarchy for the org chart, along with active location summaries.",
     })
     .handler(async ({ context: ctx }) => {
-      const orgs: OrgRow[] = await ctx.db
+      const orgsPromise = ctx.db
         .select({
           id: schema.orgs.id,
           name: schema.orgs.name,
@@ -64,24 +51,77 @@ export const orgChartRouter = {
         .from(schema.orgs)
         .where(eq(schema.orgs.isActive, true));
 
-      const orgMap = new Map<number, OrgRow>(orgs.map((org) => [org.id, org]));
+      const aoCountsPromise = ctx.db
+        .select({
+          locationId: schema.events.locationId,
+          aoCount: countDistinct(schema.events.orgId),
+        })
+        .from(schema.events)
+        .where(
+          and(
+            eq(schema.events.isActive, true),
+            eq(schema.events.isPrivate, false),
+          ),
+        )
+        .groupBy(schema.events.locationId);
 
-      const orgsForChart = orgs.filter((org) =>
-        orgChartOrgTypes.includes(org.orgType),
+      const locationSummariesPromise = ctx.db
+        .select({
+          locationId: schema.locations.id,
+          orgId: schema.locations.orgId,
+          latitude: schema.locations.latitude,
+          longitude: schema.locations.longitude,
+          eventCount: countDistinct(schema.events.id),
+          aoCount: sql<number>`0`,
+        })
+        .from(schema.locations)
+        .innerJoin(
+          schema.events,
+          and(
+            eq(schema.events.locationId, schema.locations.id),
+            eq(schema.events.isActive, true),
+            eq(schema.events.isPrivate, false),
+          ),
+        )
+        .where(
+          and(
+            isNotNull(schema.locations.latitude),
+            isNotNull(schema.locations.longitude),
+            eq(schema.locations.isActive, true),
+          ),
+        )
+        .groupBy(
+          schema.locations.id,
+          schema.locations.orgId,
+          schema.locations.latitude,
+          schema.locations.longitude,
+        );
+
+      const [orgsForChart, aoCountsByLocation, locationSummaries] =
+        await Promise.all([
+          orgsPromise,
+          aoCountsPromise,
+          locationSummariesPromise,
+        ]);
+
+      if (!orgsForChart.length) {
+        return { orgs: [] };
+      }
+
+      const orgMap = new Map<number, OrgRow>(
+        orgsForChart.map((org) => [org.id, org]),
       );
-
-      const orgIds = orgsForChart.map((org) => org.id);
 
       const ancestorCache = new Map<
         number,
-        [number, string | null, OrgType][]
+        [number, string | null, OrgType][] | null
       >();
 
       const buildParentChain = (
         orgId: number,
-      ): [number, string | null, OrgType][] => {
+      ): [number, string | null, OrgType][] | null => {
         const cached = ancestorCache.get(orgId);
-        if (cached) {
+        if (cached !== undefined) {
           return cached;
         }
 
@@ -89,11 +129,16 @@ export const orgChartRouter = {
         const visited = new Set<number>();
         let current = orgMap.get(orgId)?.parentId ?? null;
 
-        while (current !== null && !visited.has(current)) {
+        while (current !== null) {
+          if (visited.has(current)) {
+            ancestorCache.set(orgId, null);
+            return null;
+          }
           visited.add(current);
           const parent = orgMap.get(current);
           if (!parent) {
-            break;
+            ancestorCache.set(orgId, null);
+            return null;
           }
           chain.push([parent.id, parent.name, parent.orgType]);
           current = parent.parentId ?? null;
@@ -103,72 +148,10 @@ export const orgChartRouter = {
         return chain;
       };
 
-      // First, get AO counts per location
-      const aoCountsByLocation = orgIds.length
-        ? await ctx.db
-            .select({
-              locationId: schema.events.locationId,
-              aoCount: countDistinct(schema.events.orgId),
-            })
-            .from(schema.events)
-            .innerJoin(
-              schema.orgs,
-              and(
-                eq(schema.orgs.id, schema.events.orgId),
-                eq(schema.orgs.orgType, "ao"),
-              ),
-            )
-            .where(
-              and(
-                eq(schema.events.isActive, true),
-                eq(schema.events.isPrivate, false),
-              ),
-            )
-            .groupBy(schema.events.locationId)
-        : [];
-
       const aoCountMap = new Map(
         aoCountsByLocation.map((row) => [row.locationId, Number(row.aoCount)]),
       );
 
-      // Then get location summaries with event counts
-      // Note: aoCount is initialized to 0 here and will be populated from aoCountMap
-      // in the next step to avoid N+1 queries from a correlated subquery
-      const locationSummaries: LocationSummaryRow[] = orgIds.length
-        ? await ctx.db
-            .select({
-              locationId: schema.locations.id,
-              orgId: schema.locations.orgId,
-              latitude: schema.locations.latitude,
-              longitude: schema.locations.longitude,
-              eventCount: countDistinct(schema.events.id),
-              aoCount: sql<number>`0`, // Will be filled from aoCountMap below
-            })
-            .from(schema.locations)
-            .innerJoin(
-              schema.events,
-              and(
-                eq(schema.events.locationId, schema.locations.id),
-                eq(schema.events.isActive, true),
-                eq(schema.events.isPrivate, false),
-              ),
-            )
-            .where(
-              and(
-                inArray(schema.locations.orgId, orgIds),
-                isNotNull(schema.locations.latitude),
-                isNotNull(schema.locations.longitude),
-              ),
-            )
-            .groupBy(
-              schema.locations.id,
-              schema.locations.orgId,
-              schema.locations.latitude,
-              schema.locations.longitude,
-            )
-        : [];
-
-      // Merge AO counts into location summaries
       for (const summary of locationSummaries) {
         summary.aoCount = aoCountMap.get(summary.locationId) ?? 0;
       }
@@ -216,14 +199,21 @@ export const orgChartRouter = {
       }
 
       const orgSummaries = orgsForChart
-        .map((org) => ({
-          orgId: org.id,
-          name: org.name,
-          orgType: org.orgType,
-          hierarchy: buildParentChain(org.id),
-          activeLocations: activeLocationsByOrg.get(org.id) ?? [],
-        }))
-        .filter((org) => org.activeLocations.length > 0);
+        .map((org) => {
+          const hierarchy = buildParentChain(org.id);
+          if (!hierarchy) {
+            return null;
+          }
+
+          return {
+            orgId: org.id,
+            name: org.name,
+            orgType: org.orgType,
+            hierarchy,
+            activeLocations: activeLocationsByOrg.get(org.id) ?? [],
+          };
+        })
+        .filter((org) => org && org.activeLocations.length > 0);
 
       return { orgs: orgSummaries };
     }),
@@ -267,24 +257,24 @@ export const orgChartRouter = {
 
       const orgPositions: PositionRow[] = await ctx.db
         .select({
-          title: positions.name,
+          title: schema.positions.name,
           f3Name: schema.users.f3Name,
           avatarUrl: schema.users.avatarUrl,
         })
-        .from(positionsXOrgsXUsers)
+        .from(schema.positionsXOrgsXUsers)
         .innerJoin(
-          positions,
+          schema.positions,
           and(
-            eq(positions.id, positionsXOrgsXUsers.positionId),
-            eq(positions.isActive, true),
+            eq(schema.positions.id, schema.positionsXOrgsXUsers.positionId),
+            eq(schema.positions.isActive, true),
           ),
         )
         .innerJoin(
           schema.users,
-          eq(schema.users.id, positionsXOrgsXUsers.userId),
+          eq(schema.users.id, schema.positionsXOrgsXUsers.userId),
         )
-        .where(eq(positionsXOrgsXUsers.orgId, input.orgId))
-        .orderBy(asc(positions.name), asc(schema.users.f3Name));
+        .where(eq(schema.positionsXOrgsXUsers.orgId, input.orgId))
+        .orderBy(asc(schema.positions.name), asc(schema.users.f3Name));
 
       return {
         id: org.id,
