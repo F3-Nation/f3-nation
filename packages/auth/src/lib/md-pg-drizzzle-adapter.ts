@@ -211,9 +211,17 @@ export function MDPGDrizzleAdapter(
     },
     async createVerificationToken(data) {
       if (LOG) console.log("createVerificationToken", data);
+
+      // Normalize email identifier for consistent storage (defensive)
+      const normalizedData = {
+        ...data,
+        identifier: normalizeEmail(data.identifier),
+        expires: data.expires.toISOString(),
+      };
+
       const [token] = await client
         .insert(verificationTokens)
-        .values({ ...data, expires: data.expires.toISOString() })
+        .values(normalizedData)
         .returning();
 
       if (!token) throw new Error("Unable to create token");
