@@ -224,6 +224,10 @@ export function MDPGDrizzleAdapter(
       try {
         if (LOG) console.log("useVerificationToken", data);
 
+        if (!data.token || !env.AUTH_SECRET) {
+          throw new Error("No verification token found.");
+        }
+
         // Hash the token before searching (NextAuth Email providers hash tokens before storing)
         const hashedToken = createHash("sha256")
           .update(`${data.token}${env.AUTH_SECRET}`)
