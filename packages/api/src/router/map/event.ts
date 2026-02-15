@@ -252,6 +252,7 @@ export const mapEventRouter = {
         parent: parentOrg.name,
         locationId: schema.events.locationId,
         startDate: schema.events.startDate,
+        endDate: schema.events.endDate,
         dayOfWeek: schema.events.dayOfWeek,
         startTime: schema.events.startTime,
         endTime: schema.events.endTime,

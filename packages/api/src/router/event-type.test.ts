@@ -387,6 +387,7 @@ describe("Event Type Router", () => {
     });
 
     it("should update an existing event type", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
       const session = await createAdminSession();
       await mockAuthWithSession(session);
 
@@ -398,6 +399,7 @@ describe("Event Type Router", () => {
         .values({
           name: `Original Event Type ${uniqueId()}`,
           eventCategory: "first_f",
+          specificOrgId: f3Nation.id,
           isActive: true,
         })
         .returning();
@@ -413,6 +415,7 @@ describe("Event Type Router", () => {
         id: testEventType.id,
         name: updatedName,
         eventCategory: "third_f",
+        specificOrgId: f3Nation.id,
         isActive: true,
       });
 
