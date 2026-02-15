@@ -11,7 +11,7 @@ import { Input } from "@acme/ui/input";
 
 import { useOnKeyPress } from "~/utils/hooks/use-on-key-press";
 import { onClickPlaceRowMap } from "~/utils/on-click-place-row-map";
-import { placesAutocomplete } from "~/utils/place-autocomplete";
+import { debouncedPlacesAutocomplete } from "~/utils/place-autocomplete";
 import { appStore } from "~/utils/store/app";
 import { mapStore } from "~/utils/store/map";
 import { searchStore } from "~/utils/store/search";
@@ -139,21 +139,27 @@ export function MapSearchBoxMobile({
                   shouldShowResults: true,
                 });
 
-                if (!e.target.value) {
+                const value = e.target.value;
+                if (!value) {
                   searchStore.setState({ placesResults: [] });
-                } else if (e.target.value.length > 2) {
+                } else if (value.length > 2) {
                   const center = mapStore.get("center") ?? {
                     lat: DEFAULT_CENTER[0] ?? 37.7937,
                     lng: DEFAULT_CENTER[1] ?? -122.3965,
                   };
                   const zoom = mapStore.get("zoom");
-                  void placesAutocomplete({
-                    input: e.target.value,
+                  // Use debounced autocomplete to reduce API calls
+                  debouncedPlacesAutocomplete(
+                    value,
                     center,
                     zoom,
-                  }).then((results) => {
-                    searchStore.setState({ placesResults: results });
-                  });
+                    (results) => {
+                      // Only update if the input hasn't changed
+                      if (searchStore.get("text") === value) {
+                        searchStore.setState({ placesResults: results });
+                      }
+                    },
+                  );
                 }
               }}
             />

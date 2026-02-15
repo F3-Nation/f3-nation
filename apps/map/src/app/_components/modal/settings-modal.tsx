@@ -30,7 +30,6 @@ import {
 } from "@acme/ui/dialog";
 import { toast } from "@acme/ui/toast";
 
-import { orpc } from "~/orpc/react";
 import { useAuth } from "~/utils/hooks/use-auth";
 import { appStore } from "~/utils/store/app";
 import { mapStore } from "~/utils/store/map";
@@ -317,14 +316,23 @@ export default function SettingsModal() {
                   "flex w-full flex-row items-center justify-center gap-1 rounded-md bg-card p-2 text-foreground shadow-sm hover:bg-accent",
                 )}
                 onClick={() => {
-                  void orpc.org.revalidate
-                    .call()
-                    .then(() => {
+                  void fetch("/api/revalidate", { method: "POST" })
+                    .then(async (response) => {
+                      if (!response.ok) {
+                        const json = (await response.json()) as {
+                          error: string;
+                        };
+                        throw new Error(json.error ?? "Failed to revalidate");
+                      }
                       toast.success("Nation revalidated");
                     })
                     .catch((error: unknown) => {
                       console.log("RevalidateNation", { error });
-                      toast.error("Failed to revalidate Nation");
+                      toast.error(
+                        error instanceof Error
+                          ? error.message
+                          : "Failed to revalidate Nation",
+                      );
                     });
                 }}
               >

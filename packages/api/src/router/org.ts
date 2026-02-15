@@ -1,6 +1,5 @@
 import { ORPCError } from "@orpc/server";
 import type { SQL } from "drizzle-orm";
-import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import {
@@ -26,7 +25,7 @@ import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
 import { moveAOLocsToNewRegion } from "../lib/move-ao-locs-to-new-region";
-import { emitWebhookEvent } from "../lib/webhook-events";
+import { notifyMapDataChange } from "../lib/webhook-events";
 import type { Context } from "../shared";
 import { adminProcedure, editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
@@ -611,7 +610,7 @@ export const orgRouter = {
 
         // Notify webhooks about the org creation
         if (result) {
-          emitWebhookEvent({ type: "org.created", orgId: result.id });
+          notifyMapDataChange({ type: "org.created", orgId: result.id });
         }
 
         return { org: result ?? null };
@@ -667,7 +666,7 @@ export const orgRouter = {
 
       // Notify webhooks about the org update
       if (result) {
-        emitWebhookEvent({ type: "org.updated", orgId: result.id });
+        notifyMapDataChange({ type: "org.updated", orgId: result.id });
       }
 
       return { org: result ?? null };
@@ -767,41 +766,8 @@ export const orgRouter = {
         );
 
       // Notify webhooks about the org deletion
-      emitWebhookEvent({ type: "org.deleted", orgId: input.id });
+      notifyMapDataChange({ type: "org.deleted", orgId: input.id });
 
       return { orgId: input.id };
-    }),
-  revalidate: adminProcedure
-    .route({
-      method: "POST",
-      path: "/revalidate",
-      tags: ["org"],
-      summary: "Revalidate cache",
-      description: "Trigger cache revalidation for the organization data",
-    })
-    .handler(async ({ context: ctx }) => {
-      const [nation] = await ctx.db
-        .select({ id: schema.orgs.id })
-        .from(schema.orgs)
-        .where(eq(schema.orgs.orgType, "nation"));
-      if (!nation) {
-        throw new ORPCError("NOT_FOUND", {
-          message: "Nation not found",
-        });
-      }
-
-      const roleCheckResult = await checkHasRoleOnOrg({
-        orgId: nation.id,
-        session: ctx.session,
-        db: ctx.db,
-        roleName: "admin",
-      });
-      if (!roleCheckResult.success) {
-        throw new ORPCError("UNAUTHORIZED", {
-          message: "You are not authorized to revalidate this Nation",
-        });
-      }
-
-      revalidatePath("/");
     }),
 };

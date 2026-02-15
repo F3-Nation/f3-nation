@@ -23,7 +23,7 @@ import { EventInsertSchema } from "@acme/validators";
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
-import { emitWebhookEvent } from "../lib/webhook-events";
+import { notifyMapDataChange } from "../lib/webhook-events";
 import type { Context } from "../shared";
 import { editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
@@ -627,8 +627,8 @@ export const eventRouter = {
         );
       }
 
-      // Notify webhooks about the event change
-      emitWebhookEvent({
+      // Notify webhooks and invalidate cache about the event change
+      notifyMapDataChange({
         type: input.id ? "event.updated" : "event.created",
         eventId: result.id,
       });
@@ -722,8 +722,8 @@ export const eventRouter = {
           and(eq(schema.events.id, input.id), eq(schema.events.isActive, true)),
         );
 
-      // Notify webhooks about the event deletion
-      emitWebhookEvent({ type: "event.deleted", eventId: input.id });
+      // Notify webhooks and invalidate cache about the event deletion
+      notifyMapDataChange({ type: "event.deleted", eventId: input.id });
 
       return { eventId: input.id };
     }),

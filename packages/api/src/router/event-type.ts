@@ -106,8 +106,10 @@ export const eventTypeRouter = {
         name: schema.eventTypes.name,
         description: schema.eventTypes.description,
         eventCategory: schema.eventTypes.eventCategory,
+        acronym: schema.eventTypes.acronym,
         specificOrgId: schema.eventTypes.specificOrgId,
         specificOrgName: schema.orgs.name,
+        isActive: schema.eventTypes.isActive,
         count: count(schema.eventsXEventTypes.eventTypeId),
       };
 
@@ -305,7 +307,7 @@ export const eventTypeRouter = {
   delete: editorProcedure
     .input(
       z.object({
-        id: z
+        id: z.coerce
           .number()
           .describe("The unique identifier of the event type to delete"),
       }),

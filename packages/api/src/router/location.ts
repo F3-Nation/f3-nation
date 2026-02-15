@@ -23,7 +23,7 @@ import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
-import { emitWebhookEvent } from "../lib/webhook-events";
+import { notifyMapDataChange } from "../lib/webhook-events";
 import { adminProcedure, editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
@@ -279,9 +279,9 @@ export const locationRouter = {
         })
         .returning();
 
-      // Notify webhooks about the location change
+      // Notify webhooks and invalidate cache about the location change
       if (result) {
-        emitWebhookEvent({
+        notifyMapDataChange({
           type: input.id ? "location.updated" : "location.created",
           locationId: result.id,
         });
@@ -292,7 +292,7 @@ export const locationRouter = {
   delete: adminProcedure
     .input(
       z.object({
-        id: z
+        id: z.coerce
           .number()
           .describe("The unique identifier of the location to delete"),
       }),
@@ -338,8 +338,8 @@ export const locationRouter = {
           ),
         );
 
-      // Notify webhooks about the location deletion
-      emitWebhookEvent({ type: "location.deleted", locationId: input.id });
+      // Notify webhooks and invalidate cache about the location deletion
+      notifyMapDataChange({ type: "location.deleted", locationId: input.id });
 
       return { locationId: input.id };
     }),
