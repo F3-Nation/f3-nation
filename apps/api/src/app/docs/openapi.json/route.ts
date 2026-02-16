@@ -145,6 +145,10 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
         name: "map",
         tags: ["feedback", "map.event", "map.location", "revalidate"],
       },
+      {
+        name: "Org Chart",
+        tags: ["Org Chart"],
+      },
     ],
     tags: [
       {
@@ -160,6 +164,10 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
       {
         name: "org",
         description: "Organization management (regions, AOs, etc.)",
+      },
+      {
+        name: "Org Chart",
+        description: "Organization chart data and leadership",
       },
       { name: "ping", description: "Health check endpoints" },
       {
