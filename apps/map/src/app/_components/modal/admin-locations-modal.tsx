@@ -26,6 +26,13 @@ import {
   useForm,
 } from "@acme/ui/form";
 import { Input } from "@acme/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@acme/ui/select";
 import { Spinner } from "@acme/ui/spinner";
 import { Textarea } from "@acme/ui/textarea";
 import { toast } from "@acme/ui/toast";
@@ -446,6 +453,36 @@ export default function AdminLocationsModal({
                           </FormItem>
                         );
                       }}
+                    />
+                  </div>
+
+                  <div className="mb-4 w-1/2 px-2">
+                    <FormField
+                      control={form.control}
+                      name="isActive"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Status</FormLabel>
+                          <Select
+                            onValueChange={(value) =>
+                              value &&
+                              field.onChange(value === "true" ? true : false)
+                            }
+                            value={field.value === true ? "true" : "false"}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select a status" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="true">Active</SelectItem>
+                              <SelectItem value="false">Inactive</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
                     />
                   </div>
 
