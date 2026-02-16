@@ -5,6 +5,7 @@ import { and, eq } from "drizzle-orm";
 import omit from "lodash/omit";
 
 import type { UserRole } from "@acme/shared/app/enums";
+import { normalizeEmail } from "@acme/shared/common/functions";
 import { schema, sql } from "@acme/db";
 
 const {
@@ -210,9 +211,17 @@ export function MDPGDrizzleAdapter(
     },
     async createVerificationToken(data) {
       if (LOG) console.log("createVerificationToken", data);
+
+      // Normalize email identifier for consistent storage (defensive)
+      const normalizedData = {
+        ...data,
+        identifier: normalizeEmail(data.identifier),
+        expires: data.expires.toISOString(),
+      };
+
       const [token] = await client
         .insert(verificationTokens)
-        .values({ ...data, expires: data.expires.toISOString() })
+        .values(normalizedData)
         .returning();
 
       if (!token) throw new Error("Unable to create token");
@@ -221,12 +230,17 @@ export function MDPGDrizzleAdapter(
     async useVerificationToken(data) {
       try {
         if (LOG) console.log("useVerificationToken", data);
+
+        // Normalize email to lowercase for case-insensitive matching
+        // Fixes intermittent OTP failures when users type email with different casing
+        const normalizedIdentifier = normalizeEmail(data.identifier);
+
         const [token] = await client
           .select()
           .from(verificationTokens)
           .where(
             and(
-              eq(verificationTokens.identifier, data.identifier),
+              eq(verificationTokens.identifier, normalizedIdentifier),
               eq(verificationTokens.token, data.token),
             ),
           );
