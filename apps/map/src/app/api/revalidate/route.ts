@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 import { auth } from "@acme/auth";
 import { env } from "@acme/env";
-import { F3_NATION_ORG_ID } from "@acme/shared/app/constants";
+import { isNationAdminFromSession } from "@acme/shared/app/role-checks";
 
 export async function POST(request: Request) {
   try {
@@ -22,15 +22,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
 
-      // Check if user is a nation admin (admin role on F3 Nation org)
-      const isNationAdmin = session.roles?.some(
-        (role) =>
-          role.roleName === "admin" &&
-          role.orgId === F3_NATION_ORG_ID &&
-          role.orgName.toLowerCase().includes("f3 nation"),
-      );
-
-      if (!isNationAdmin) {
+      if (!isNationAdminFromSession(session)) {
         console.log("User is not a nation admin");
         return NextResponse.json(
           { error: "Forbidden - Nation admin access required" },

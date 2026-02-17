@@ -8,7 +8,7 @@ import { and, eq, gt, isNull, or, schema, sql } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 import { db } from "@acme/db/client";
 import { env } from "@acme/env";
-import { F3_NATION_ORG_ID } from "@acme/shared/app/constants";
+import { isNationAdminFromSession } from "@acme/shared/app/role-checks";
 import { isDevelopmentNodeEnv } from "@acme/shared/common/constants";
 import { Client, Header } from "@acme/shared/common/enums";
 
@@ -115,16 +115,35 @@ export const adminProcedure = withSessionAndDb.use(({ context, next }) => {
   return next({ context });
 });
 
+/**
+ * Allows either SUPER_ADMIN_API_KEY (x-api-key header) OR authenticated session
+ * with nation admin role. Used for the revalidate endpoint.
+ */
+export const revalidateAuthProcedure = withSessionAndDb.use(
+  ({ context, next }) => {
+    const apiKey = context.reqHeaders?.get("x-api-key") ?? "";
+    if (env.SUPER_ADMIN_API_KEY && apiKey === env.SUPER_ADMIN_API_KEY) {
+      return next({ context });
+    }
+
+    // No valid API key - require session with nation admin role
+    if (!context.session?.user) {
+      throw new ORPCError("UNAUTHORIZED");
+    }
+
+    if (!isNationAdminFromSession(context.session)) {
+      throw new ORPCError("UNAUTHORIZED", {
+        message: "You are not authorized to revalidate this Nation",
+      });
+    }
+
+    return next({ context });
+  },
+);
+
 export const nationAdminProcedure = withSessionAndDb.use(
   ({ context, next }) => {
-    // Must be admin on orgId 1 (the F3 Nation org) - checking both ID and name for security
-    const isNationAdmin = context.session?.roles?.some(
-      (r) =>
-        r.roleName === "admin" &&
-        r.orgId === F3_NATION_ORG_ID &&
-        r.orgName.toLowerCase().includes("f3 nation"),
-    );
-    if (!isNationAdmin) {
+    if (!isNationAdminFromSession(context.session)) {
       throw new ORPCError("UNAUTHORIZED", {
         message: "This action requires F3 Nation admin privileges",
       });
