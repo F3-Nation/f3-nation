@@ -6,6 +6,7 @@ import { signIn } from "next-auth/react";
 import { z } from "zod";
 
 import { ZustandStore } from "@acme/shared/common/classes";
+import { normalizeEmail } from "@acme/shared/common/functions";
 import { ProviderId } from "@acme/shared/common/enums";
 import { cn } from "@acme/ui";
 import { Form, useForm } from "@acme/ui/form";
@@ -101,16 +102,17 @@ export const AuthForm = () => {
     });
     toast.success("Sending email link...");
     const data = getValues();
+    const normalizedEmail = normalizeEmail(data.email);
     void signIn(ProviderId.EMAIL, {
       callbackUrl: authStore.get("callbackUrl") ?? "/",
-      email: data.email,
+      email: normalizedEmail,
       redirect: false,
     }).finally(() => {
       // Timeout so it doesn't flicker back
       setTimeout(() => {
         authStore.setState({
           status: "verify-email",
-          email: data.email,
+          email: normalizedEmail,
         });
       }, 1000);
     });
@@ -127,8 +129,9 @@ export const AuthForm = () => {
     authStore.setState({ status: "loading", text: "Sending code..." });
     toast.success("Sending code...");
     const data = getValues();
+    const normalizedEmail = normalizeEmail(data.email);
     void signIn(ProviderId.OTP, {
-      email: data.email,
+      email: normalizedEmail,
       redirect: false,
     })
       .then((d) => {
@@ -136,7 +139,7 @@ export const AuthForm = () => {
         setTimeout(() => {
           authStore.setState({
             status: "verify-code",
-            email: data.email,
+            email: normalizedEmail,
           });
         }, 1000);
         console.log("success", { d });
@@ -236,8 +239,9 @@ export const VerifyCode = () => {
   const onSubmit = useCallback(() => {
     setIsLoading(true);
     try {
+      const normalizedEmail = normalizeEmail(email);
       window.location.href = `/api/auth/callback/otp?email=${encodeURIComponent(
-        email,
+        normalizedEmail,
       )}&token=${code}&callbackUrl=${encodeURIComponent(callbackUrl ?? "/")}`;
     } catch (error) {
       console.error(error);

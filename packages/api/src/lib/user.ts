@@ -13,6 +13,7 @@ import {
 } from "@acme/db";
 import { UserRole, UserStatus } from "@acme/shared/app/enums";
 import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
+import { normalizeEmail } from "@acme/shared/common/functions";
 import type { UserSelectType } from "@acme/validators";
 import { z } from "zod";
 
@@ -182,7 +183,12 @@ export const buildUserListQuery = async ({
           ilike(schema.users.lastName, `%${input?.searchTerm}%`),
           includePii
             ? ilike(schema.users.email, `%${input?.searchTerm}%`)
-            : eq(schema.users.email, input?.searchTerm ?? ""),
+            : eq(
+                schema.users.email,
+                (input?.searchTerm ?? "").includes("@")
+                  ? normalizeEmail(input.searchTerm!)
+                  : input?.searchTerm ?? "",
+              ),
         )
       : undefined,
     input?.orgIds?.length

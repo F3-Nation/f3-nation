@@ -6,6 +6,7 @@ import omit from "lodash/omit";
 
 import type { UserRole } from "@acme/shared/app/enums";
 import { normalizeEmail } from "@acme/shared/common/functions";
+import { ilike } from "drizzle-orm";
 import { schema, sql } from "@acme/db";
 
 const {
@@ -59,7 +60,11 @@ const getUser = async (
     .leftJoin(rolesXUsersXOrg, eq(users.id, rolesXUsersXOrg.userId))
     .leftJoin(roles, eq(rolesXUsersXOrg.roleId, roles.id))
     .leftJoin(orgs, eq(orgs.id, rolesXUsersXOrg.orgId))
-    .where("id" in data ? eq(users.id, data.id) : eq(users.email, data.email))
+    .where(
+      "id" in data
+        ? eq(users.id, data.id)
+        : ilike(users.email, normalizeEmail(data.email)),
+    )
     .groupBy(users.id)
     .then((res) => res[0] ?? null);
 
@@ -85,6 +90,7 @@ export function MDPGDrizzleAdapter(
         .insert(users)
         .values({
           ...omit(data, "id"),
+          email: data.email ? normalizeEmail(data.email) : data.email,
           emailVerified: data.emailVerified?.toISOString(),
         })
         .returning()
@@ -103,7 +109,7 @@ export function MDPGDrizzleAdapter(
     },
     async getUserByEmail(data) {
       if (LOG) console.log("getUserByEmail", data);
-      return await getUser({ email: data }, client);
+      return await getUser({ email: normalizeEmail(data) }, client);
     },
     async createSession(data) {
       if (LOG) console.log("createSession", data);
