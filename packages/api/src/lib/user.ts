@@ -185,9 +185,9 @@ export const buildUserListQuery = async ({
             ? ilike(schema.users.email, `%${input?.searchTerm}%`)
             : eq(
                 schema.users.email,
-                (input?.searchTerm ?? "").includes("@")
-                  ? normalizeEmail(input.searchTerm!)
-                  : input?.searchTerm ?? "",
+                input.searchTerm.includes("@")
+                  ? normalizeEmail(input.searchTerm)
+                  : input.searchTerm,
               ),
         )
       : undefined,
