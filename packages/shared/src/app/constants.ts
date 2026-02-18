@@ -482,6 +482,16 @@ export const TEST_ADMIN_USER_ID = 2;
 export const TEST_EDITOR_ROLE_ID = 1;
 export const TEST_ADMIN_ROLE_ID = 2;
 
+export const EVENT_CATEGORY_OPTIONS = [
+  { label: "1st F", value: "first_f" },
+  { label: "2nd F", value: "second_f" },
+  { label: "3rd F", value: "third_f" },
+] as const;
+
+export const EVENT_CATEGORY_LABEL_MAP: Record<string, string> = Object.fromEntries(
+  EVENT_CATEGORY_OPTIONS.map((o) => [o.value, o.label]),
+);
+
 export const API_PREFIX_V1 = "/v1" as const;
 export const MAP_API_PREFIX = "/map" as const;
 

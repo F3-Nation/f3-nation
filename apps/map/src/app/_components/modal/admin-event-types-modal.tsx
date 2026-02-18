@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { z } from "zod";
 
-import { Z_INDEX } from "@acme/shared/app/constants";
+import { EVENT_CATEGORY_OPTIONS, Z_INDEX } from "@acme/shared/app/constants";
 import { safeParseInt } from "@acme/shared/common/functions";
 import { cn } from "@acme/ui";
 import { Button } from "@acme/ui/button";
@@ -187,11 +187,7 @@ export default function AdminEventTypesModal({
                 control={form.control}
                 label="Event Category"
                 name="eventCategory"
-                options={[
-                  { label: "1st F", value: "first_f" },
-                  { label: "2nd F", value: "second_f" },
-                  { label: "3rd F", value: "third_f" },
-                ]}
+                options={[...EVENT_CATEGORY_OPTIONS]}
               />
             </div>
             <div className="mb-4 w-1/2 px-2">
