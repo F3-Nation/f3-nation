@@ -10,6 +10,20 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: "3.7.2",
+    date: "2026-02-17",
+    title: "Code Login and Location Status",
+    sections: [
+      {
+        title: "Bug Fixes",
+        items: [
+          "Login via code was case sensitive - now accepts codes regardless of case",
+          "Admins could not change Active status of Location in Admin Portal",
+        ],
+      },
+    ],
+  },
+  {
     version: "3.7.0",
     date: "2026-02-07",
     title: "Email URL Fix & Minor Improvements",

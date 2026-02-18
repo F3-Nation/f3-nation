@@ -1,12 +1,12 @@
 {
   "name": "f3-nation-map",
-  "version": "3.7.0",
+  "version": "3.7.2",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "pnpm with-env next build",
     "clean": "rm -rf .turbo node_modules .next",
-    "dev": "TZ=UTC pnpm with-env next dev",
+    "dev": "TZ=UTC pnpm with-env next dev -p 3000",
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
     "lint": "dotenv -v SKIP_ENV_VALIDATION=1 next lint",
     "start": "pnpm with-env next start",

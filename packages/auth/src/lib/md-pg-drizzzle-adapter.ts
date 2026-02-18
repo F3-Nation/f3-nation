@@ -5,6 +5,8 @@ import { and, eq } from "drizzle-orm";
 import omit from "lodash/omit";
 
 import type { UserRole } from "@acme/shared/app/enums";
+import { normalizeEmail } from "@acme/shared/common/functions";
+import { ilike } from "drizzle-orm";
 import { schema, sql } from "@acme/db";
 
 const {
@@ -58,7 +60,11 @@ const getUser = async (
     .leftJoin(rolesXUsersXOrg, eq(users.id, rolesXUsersXOrg.userId))
     .leftJoin(roles, eq(rolesXUsersXOrg.roleId, roles.id))
     .leftJoin(orgs, eq(orgs.id, rolesXUsersXOrg.orgId))
-    .where("id" in data ? eq(users.id, data.id) : eq(users.email, data.email))
+    .where(
+      "id" in data
+        ? eq(users.id, data.id)
+        : ilike(users.email, normalizeEmail(data.email)),
+    )
     .groupBy(users.id)
     .then((res) => res[0] ?? null);
 
@@ -84,6 +90,7 @@ export function MDPGDrizzleAdapter(
         .insert(users)
         .values({
           ...omit(data, "id"),
+          email: data.email ? normalizeEmail(data.email) : data.email,
           emailVerified: data.emailVerified?.toISOString(),
         })
         .returning()
@@ -102,7 +109,7 @@ export function MDPGDrizzleAdapter(
     },
     async getUserByEmail(data) {
       if (LOG) console.log("getUserByEmail", data);
-      return await getUser({ email: data }, client);
+      return await getUser({ email: normalizeEmail(data) }, client);
     },
     async createSession(data) {
       if (LOG) console.log("createSession", data);
@@ -210,9 +217,17 @@ export function MDPGDrizzleAdapter(
     },
     async createVerificationToken(data) {
       if (LOG) console.log("createVerificationToken", data);
+
+      // Normalize email identifier for consistent storage (defensive)
+      const normalizedData = {
+        ...data,
+        identifier: normalizeEmail(data.identifier),
+        expires: data.expires.toISOString(),
+      };
+
       const [token] = await client
         .insert(verificationTokens)
-        .values({ ...data, expires: data.expires.toISOString() })
+        .values(normalizedData)
         .returning();
 
       if (!token) throw new Error("Unable to create token");
@@ -221,12 +236,17 @@ export function MDPGDrizzleAdapter(
     async useVerificationToken(data) {
       try {
         if (LOG) console.log("useVerificationToken", data);
+
+        // Normalize email to lowercase for case-insensitive matching
+        // Fixes intermittent OTP failures when users type email with different casing
+        const normalizedIdentifier = normalizeEmail(data.identifier);
+
         const [token] = await client
           .select()
           .from(verificationTokens)
           .where(
             and(
-              eq(verificationTokens.identifier, data.identifier),
+              eq(verificationTokens.identifier, normalizedIdentifier),
               eq(verificationTokens.token, data.token),
             ),
           );

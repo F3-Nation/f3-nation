@@ -292,7 +292,7 @@ export const locationRouter = {
   delete: adminProcedure
     .input(
       z.object({
-        id: z
+        id: z.coerce
           .number()
           .describe("The unique identifier of the location to delete"),
       }),
