@@ -209,6 +209,11 @@ describe("Org Router", () => {
         parentId: f3Nation.id,
         isActive: true,
         email: "test@example.com",
+        description: null,
+        website: null,
+        twitter: null,
+        facebook: null,
+        instagram: null,
       });
 
       expect(result).toHaveProperty("org");
@@ -233,6 +238,11 @@ describe("Org Router", () => {
           orgType: "region",
           isActive: true,
           email: "test@example.com",
+          description: null,
+          website: null,
+          twitter: null,
+          facebook: null,
+          instagram: null,
         }),
       ).rejects.toThrow("Parent ID or ID is required");
     });
@@ -269,6 +279,11 @@ describe("Org Router", () => {
         parentId: f3Nation.id,
         isActive: true,
         email: "test@example.com",
+        description: null,
+        website: null,
+        twitter: null,
+        facebook: null,
+        instagram: null,
       });
 
       expect(result.org?.id).toBe(testOrg.id);
@@ -294,6 +309,11 @@ describe("Org Router", () => {
           parentId: f3Nation.id,
           isActive: true,
           email: "test@example.com",
+          description: null,
+          website: null,
+          twitter: null,
+          facebook: null,
+          instagram: null,
         }),
       ).rejects.toThrow();
     });

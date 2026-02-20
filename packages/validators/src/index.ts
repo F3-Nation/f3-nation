@@ -3,9 +3,12 @@ import { z } from "zod";
 
 import {
   events,
+  eventTags,
   eventTypes,
   locations,
   orgs,
+  slackSpaces,
+  slackUsers,
   updateRequests,
   users,
 } from "@acme/db/schema/schema";
@@ -52,6 +55,10 @@ export const EventTypeInsertSchema = createInsertSchema(eventTypes, {
 });
 export const EventTypeSelectSchema = createSelectSchema(eventTypes);
 
+// EVENT TAG SCHEMA
+export const EventTagInsertSchema = createInsertSchema(eventTags);
+export const EventTagSelectSchema = createSelectSchema(eventTags);
+
 // EVENT SCHEMA
 export const EventInsertSchema = createInsertSchema(events, {
   name: (s: z.ZodString) => s.min(1, { message: "Name is required" }),
@@ -77,6 +84,7 @@ export const EventInsertSchema = createInsertSchema(events, {
       .number()
       .array()
       .min(1, { message: "Event type is required" }),
+    eventTagIds: z.number().array().optional(),
   })
   .omit({
     orgId: true,
@@ -148,9 +156,15 @@ export const OrgInsertSchema = createInsertSchema(orgs, {
   name: (s: z.ZodString) => s.min(1, { message: "Name is required" }),
   parentId: z
     .number({ message: "Must have a parent" })
-    .nonnegative({ message: "Invalid selection" }),
+    .nonnegative({ message: "Invalid selection" })
+    .nullable(),
+  description: (s: z.ZodString) => s.nullable(),
   email: (s: z.ZodString) =>
-    s.email({ message: "Invalid email format" }).or(z.literal("")),
+    s.email({ message: "Invalid email format" }).or(z.literal("")).nullable(),
+  website: (s: z.ZodString) => s.nullable(),
+  twitter: (s: z.ZodString) => s.nullable(),
+  facebook: (s: z.ZodString) => s.nullable(),
+  instagram: (s: z.ZodString) => s.nullable(),
 });
 export const OrgSelectSchema = createSelectSchema(orgs);
 
@@ -257,6 +271,51 @@ export const DeleteRequestResponseSchema = z.object({
 });
 
 export type DeleteRequestResponse = z.infer<typeof DeleteRequestResponseSchema>;
+
+// SLACK SCHEMA
+export const CustomFieldSchema = z.object({
+  name: z.string(),
+  type: z.enum(["text", "select", "multi_select", "user_select"]),
+  options: z.array(z.string()).optional(),
+  enabled: z.boolean(),
+});
+
+export const SlackSettingsSchema = z.object({
+  welcome_dm_enable: z.boolean().optional(),
+  welcome_dm_template: z.string().optional(),
+  welcome_channel_enable: z.boolean().optional(),
+  welcome_channel: z.string().optional(),
+  editing_locked: z.boolean().optional(),
+  default_backblast_destination: z.string().optional(),
+  backblast_destination_channel: z.string().optional(),
+  default_preblast_destination: z.string().optional(),
+  preblast_destination_channel: z.string().optional(),
+  backblast_moleskin_template: z.string().optional(),
+  preblast_moleskin_template: z.string().optional(),
+  strava_enabled: z.boolean().optional(),
+  preblast_reminder_days: z.number().optional(),
+  backblast_reminder_days: z.number().optional(),
+  automated_preblast_option: z.string().optional(),
+  automated_preblast_hour_cst: z.number().optional(),
+  custom_fields: z.array(CustomFieldSchema).optional(),
+});
+
+export const SlackSpaceSelectSchema = createSelectSchema(slackSpaces);
+export const SlackSpaceInsertSchema = createInsertSchema(slackSpaces);
+
+export const SlackUserSelectSchema = createSelectSchema(slackUsers);
+export const SlackUserInsertSchema = createInsertSchema(slackUsers);
+
+export const SlackUserUpsertSchema = z.object({
+  slackId: z.string(),
+  userName: z.string(),
+  email: z.string().email().optional(),
+  teamId: z.string(),
+  userId: z.number().optional(),
+  isAdmin: z.boolean().default(false),
+  isOwner: z.boolean().default(false),
+  isBot: z.boolean().default(false),
+});
 
 // POSITION SCHEMA
 import { positions, positionsXOrgsXUsers } from "@acme/db/schema/schema";
