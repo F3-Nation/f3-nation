@@ -2,22 +2,36 @@ import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 
 import { and, eq, inArray, schema, sql } from "@acme/db";
+import type { AppDb } from "@acme/db/client";
 
 import { protectedProcedure } from "../shared";
 
 /**
- * Attendance type IDs (from attendance_types table)
+ * Get attendance type IDs by type name from the database
  */
-const ATTENDANCE_TYPE_IDS = {
-  PAX: 1,
-  Q: 2,
-  COQ: 3,
-} as const;
+async function getAttendanceTypeIds(db: AppDb) {
+  const types = await db
+    .select({
+      id: schema.attendanceTypes.id,
+      type: schema.attendanceTypes.type,
+    })
+    .from(schema.attendanceTypes);
+
+  const typeMap = Object.fromEntries(
+    types.map((t) => [t.type, t.id]),
+  ) as Record<string, number>;
+
+  return {
+    PAX: typeMap["PAX"] ?? 0,
+    Q: typeMap["Q"] ?? 0,
+    COQ: typeMap["Co-Q"] ?? 0,
+  };
+}
 
 /**
  * Attendance Router
  * Manages attendance records for event instances.
- * Used by the slackbot for HC/Q/Co-Q operations on preblasts.
+ * Supports HC/Q/Co-Q operations for preblasts and backblasts.
  */
 export const attendanceRouter = {
   /**
@@ -106,29 +120,7 @@ export const attendanceRouter = {
           schema.users.email,
         );
 
-      // Get slack user links for each attendee
-      const userIds = attendanceRecords.map((r) => r.userId);
-      const slackUserLinks =
-        userIds.length > 0
-          ? await ctx.db
-              .select({
-                userId: schema.slackUsers.userId,
-                slackId: schema.slackUsers.slackId,
-                slackTeamId: schema.slackUsers.slackTeamId,
-              })
-              .from(schema.slackUsers)
-              .where(inArray(schema.slackUsers.userId, userIds))
-          : [];
-
-      // Attach slack users to attendance records
-      const attendanceWithSlack = attendanceRecords.map((record) => ({
-        ...record,
-        slackUsers: slackUserLinks.filter(
-          (s) => s.userId === record.userId && s.userId !== null,
-        ),
-      }));
-
-      return { attendance: attendanceWithSlack };
+      return { attendance: attendanceRecords };
     }),
 
   /**
@@ -479,6 +471,8 @@ export const attendanceRouter = {
       description: "Sign up as Q (primary workout leader) for an event",
     })
     .handler(async ({ context: ctx, input }) => {
+      const ATTENDANCE_TYPE_IDS = await getAttendanceTypeIds(ctx.db);
+
       // Check if there's already a Q for this event
       const existingQ = await ctx.db
         .select({ id: schema.attendance.id, userId: schema.attendance.userId })
@@ -592,6 +586,8 @@ export const attendanceRouter = {
       description: "Remove Q status from attendance (keeps HC status)",
     })
     .handler(async ({ context: ctx, input }) => {
+      const ATTENDANCE_TYPE_IDS = await getAttendanceTypeIds(ctx.db);
+
       // Find the attendance record
       const [attendance] = await ctx.db
         .select({ id: schema.attendance.id })
@@ -648,6 +644,7 @@ export const attendanceRouter = {
         "Assign a Q and optional Co-Qs to an event, demoting existing Q/Co-Qs to HC",
     })
     .handler(async ({ context: ctx, input }) => {
+      const ATTENDANCE_TYPE_IDS = await getAttendanceTypeIds(ctx.db);
       const { eventInstanceId, qUserId, coQUserIds } = input;
 
       // Get all existing planned attendance for this event
