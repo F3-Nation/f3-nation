@@ -22,8 +22,8 @@ async function getAttendanceTypeIds(db: AppDb) {
   ) as Record<string, number>;
 
   return {
-    PAX: typeMap["PAX"] ?? 0,
-    Q: typeMap["Q"] ?? 0,
+    PAX: typeMap.PAX ?? 0,
+    Q: typeMap.Q ?? 0,
     COQ: typeMap["Co-Q"] ?? 0,
   };
 }
