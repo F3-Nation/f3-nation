@@ -476,6 +476,11 @@ describe("Webhook Events", () => {
         parentId: region.id,
         isActive: true,
         email: null,
+        description: null,
+        website: null,
+        twitter: null,
+        facebook: null,
+        instagram: null,
       });
 
       if (result.org) {
@@ -516,6 +521,11 @@ describe("Webhook Events", () => {
         parentId: region.id,
         isActive: true,
         email: null,
+        description: null,
+        website: null,
+        twitter: null,
+        facebook: null,
+        instagram: null,
       });
 
       // Verify notifyWebhooks was called with correct payload
