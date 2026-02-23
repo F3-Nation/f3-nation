@@ -3,6 +3,8 @@
 import gte from "lodash/gte";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { Controller } from "react-hook-form";
+import { z } from "zod";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
 import { safeParseInt } from "@acme/shared/common/functions";
@@ -38,6 +40,8 @@ import { AOInsertSchema } from "@acme/validators";
 
 import { env } from "~/env";
 import { invalidateQueries, orpc, useMutation, useQuery } from "~/orpc/react";
+import { scaleAndCropImage } from "~/utils/image/scale-and-crop-image";
+import { uploadLogo } from "~/utils/image/upload-logo";
 import type { DataType } from "~/utils/store/modal";
 import {
   DeleteType,
@@ -45,6 +49,7 @@ import {
   closeModal,
   openModal,
 } from "~/utils/store/modal";
+import { DebouncedImage } from "../debounced-image";
 import { VirtualizedCombobox } from "../virtualized-combobox";
 
 export default function AdminAOsModal({
@@ -65,7 +70,12 @@ export default function AdminAOsModal({
   const router = useRouter();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const form = useForm({ schema: AOInsertSchema });
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const form = useForm({
+    schema: AOInsertSchema.extend({
+      badImage: z.boolean().default(false),
+    }),
+  });
 
   useEffect(() => {
     form.reset({
@@ -86,6 +96,21 @@ export default function AdminAOsModal({
       meta: ao?.meta ?? null,
     });
   }, [form, ao]);
+
+  const formAoId = form.watch("id");
+
+  const generateRandomString = (length: number) => {
+    const characters =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    let result = "";
+    for (let i = 0; i < length; i++) {
+      result += characters.charAt(
+        Math.floor(Math.random() * characters.length),
+      );
+    }
+    return result;
+  };
+  const formId = generateRandomString(10);
 
   const crupdateAO = useMutation(orpc.org.crupdate.mutationOptions());
 
@@ -348,6 +373,85 @@ export default function AdminAOsModal({
                     </FormItem>
                   )}
                 />
+              </div>
+              <div className="w- mb-4 w-1/2 px-2">
+                <div className="mb-3 text-sm font-medium text-black">Logo</div>
+                <Controller
+                  control={form.control}
+                  name="logoUrl"
+                  render={({ field: { onChange, value } }) => {
+                    return (
+                      <div className="flex flex-col items-center gap-2">
+                        <Input
+                          type="file"
+                          accept="image/*"
+                          onChange={async (e) => {
+                            if (!formAoId) return;
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+
+                            setIsUploadingLogo(true);
+                            try {
+                              const blob640 = await scaleAndCropImage(
+                                file,
+                                640,
+                                640,
+                              );
+                              if (!blob640) return;
+                              const url640 = await uploadLogo({
+                                file: blob640,
+                                regionId: formAoId,
+                                requestId: formId,
+                              });
+                              onChange(url640);
+                              const blob64 = await scaleAndCropImage(
+                                file,
+                                64,
+                                64,
+                              );
+                              if (blob64) {
+                                void uploadLogo({
+                                  file: blob64,
+                                  regionId: formAoId,
+                                  requestId: formId,
+                                  size: 64,
+                                });
+                              }
+                            } finally {
+                              setIsUploadingLogo(false);
+                            }
+                          }}
+                          disabled={
+                            typeof formAoId !== "number" ||
+                            formAoId <= -1 ||
+                            isUploadingLogo
+                          }
+                        />
+                        {isUploadingLogo ? (
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Spinner className="size-4" /> Uploading...
+                          </div>
+                        ) : (
+                          value && (
+                            <DebouncedImage
+                              src={value}
+                              alt="AO Logo"
+                              onImageFail={() =>
+                                form.setValue("badImage", true)
+                              }
+                              onImageSuccess={() =>
+                                form.setValue("badImage", false)
+                              }
+                            />
+                          )
+                        )}
+                      </div>
+                    );
+                  }}
+                />
+                <p className="text-xs text-destructive">
+                  {/* {form.formState.errors.aoLogo?.message} */}
+                </p>
               </div>
               <div className="mb-4 w-full px-2">
                 <FormField
