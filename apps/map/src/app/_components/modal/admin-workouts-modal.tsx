@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { z } from "zod";
 
-import { Z_INDEX } from "@acme/shared/app/constants";
+import { EVENT_CATEGORY_LABEL_MAP, Z_INDEX } from "@acme/shared/app/constants";
 import { DayOfWeek } from "@acme/shared/app/enums";
 import {
   convertHH_mmToHHmm,
@@ -497,7 +497,9 @@ export default function AdminWorkoutsModal({
                           options={
                             eventTypes?.eventTypes.map((type) => ({
                               value: type.id.toString(),
-                              label: type.name,
+                              label: type.eventCategory
+                                ? `${type.name} (${EVENT_CATEGORY_LABEL_MAP[type.eventCategory] ?? type.eventCategory})`
+                                : type.name,
                             })) ?? []
                           }
                           searchPlaceholder={
