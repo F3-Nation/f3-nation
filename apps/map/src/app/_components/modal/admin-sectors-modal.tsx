@@ -128,7 +128,9 @@ export default function AdminSectorsModal({
     <Dialog open={true} onOpenChange={() => closeModal()}>
       <DialogContent
         style={{ zIndex: Z_INDEX.HOW_TO_JOIN_MODAL }}
-        className={cn(`max-w-[90%] rounded-lg lg:max-w-[600px]`)}
+        className={cn(
+          `max-w-[95%] rounded-lg sm:max-w-[90%] lg:max-w-[600px] max-h-[90vh] overflow-y-auto`,
+        )}
       >
         <DialogHeader>
           <DialogTitle className="text-center">
@@ -162,7 +164,7 @@ export default function AdminSectorsModal({
             className="space-y-4"
           >
             <div className="flex flex-wrap">
-              <div className="mb-4 w-1/2 px-2">
+              <div className="mb-4 w-full px-2 sm:w-1/2">
                 <FormField
                   control={form.control}
                   name="id"
@@ -177,7 +179,7 @@ export default function AdminSectorsModal({
                   )}
                 />
               </div>
-              <div className="mb-4 w-1/2 px-2">
+              <div className="mb-4 w-full px-2 sm:w-1/2">
                 <FormField
                   control={form.control}
                   name="name"
@@ -197,7 +199,7 @@ export default function AdminSectorsModal({
                 />
               </div>
 
-              <div className="mb-4 w-1/2 px-2">
+              <div className="mb-4 w-full px-2 sm:w-1/2">
                 <FormField
                   control={form.control}
                   name="parentId"
@@ -232,7 +234,7 @@ export default function AdminSectorsModal({
                   )}
                 />
               </div>
-              <div className="mb-4 w-1/2 px-2">
+              <div className="mb-4 w-full px-2 sm:w-1/2">
                 <FormField
                   control={form.control}
                   name="website"
@@ -251,7 +253,7 @@ export default function AdminSectorsModal({
                   )}
                 />
               </div>
-              <div className="mb-4 w-1/2 px-2">
+              <div className="mb-4 w-full px-2 sm:w-1/2">
                 <FormField
                   control={form.control}
                   name="email"
@@ -270,7 +272,7 @@ export default function AdminSectorsModal({
                   )}
                 />
               </div>
-              <div className="mb-4 w-1/2 px-2">
+              <div className="mb-4 w-full px-2 sm:w-1/2">
                 <FormField
                   control={form.control}
                   name="twitter"
@@ -289,7 +291,7 @@ export default function AdminSectorsModal({
                   )}
                 />
               </div>
-              <div className="mb-4 w-1/2 px-2">
+              <div className="mb-4 w-full px-2 sm:w-1/2">
                 <FormField
                   control={form.control}
                   name="facebook"
@@ -308,7 +310,7 @@ export default function AdminSectorsModal({
                   )}
                 />
               </div>
-              <div className="mb-4 w-1/2 px-2">
+              <div className="mb-4 w-full px-2 sm:w-1/2">
                 <FormField
                   control={form.control}
                   name="instagram"
@@ -327,7 +329,7 @@ export default function AdminSectorsModal({
                   )}
                 />
               </div>
-              <div className="mb-4 w-1/2 px-2">
+              <div className="mb-4 w-full px-2 sm:w-1/2">
                 <FormField
                   control={form.control}
                   name="lastAnnualReview"
@@ -347,7 +349,7 @@ export default function AdminSectorsModal({
                   )}
                 />
               </div>
-              <div className="mb-4 w-1/2 px-2">
+              <div className="mb-4 w-full px-2 sm:w-1/2">
                 <FormField
                   control={form.control}
                   name="isActive"
@@ -396,7 +398,7 @@ export default function AdminSectorsModal({
                 />
               </div>
               <div className="mb-4 w-full px-2">
-                <div className="flex space-x-4 pt-4">
+                <div className="flex flex-col space-y-2 pt-4 sm:flex-row sm:space-x-4 sm:space-y-0">
                   <Button
                     type="button"
                     variant="outline"

@@ -138,7 +138,9 @@ export default function AdminEventTypesModal({
     <Dialog open={true} onOpenChange={() => closeModal()}>
       <DialogContent
         style={{ zIndex: Z_INDEX.HOW_TO_JOIN_MODAL }}
-        className={cn(`max-w-[90%] rounded-lg lg:max-w-[600px]`)}
+        className={cn(
+          `max-w-[95%] rounded-lg sm:max-w-[90%] lg:max-w-[600px] max-h-[90vh] overflow-y-auto`,
+        )}
       >
         <DialogHeader>
           <DialogTitle className="text-center">
@@ -148,7 +150,7 @@ export default function AdminEventTypesModal({
 
         <Form {...form}>
           <div className="flex flex-wrap">
-            <div className="mb-4 w-1/2 px-2">
+            <div className="mb-4 w-full px-2 md:w-1/2">
               <FormField
                 control={form.control}
                 name="id"
@@ -163,7 +165,7 @@ export default function AdminEventTypesModal({
                 )}
               />
             </div>
-            <div className="mb-4 w-1/2 px-2">
+            <div className="mb-4 w-full px-2 md:w-1/2">
               <FormField
                 control={form.control}
                 name="name"
@@ -182,7 +184,7 @@ export default function AdminEventTypesModal({
                 )}
               />
             </div>
-            <div className="mb-4 w-1/2 px-2">
+            <div className="mb-4 w-full px-2 md:w-1/2">
               <ControlledSelect
                 control={form.control}
                 label="Event Category"
@@ -190,7 +192,7 @@ export default function AdminEventTypesModal({
                 options={[...EVENT_CATEGORY_OPTIONS]}
               />
             </div>
-            <div className="mb-4 w-1/2 px-2">
+            <div className="mb-4 w-full px-2 md:w-1/2">
               <FormField
                 control={form.control}
                 name="specificOrgId"
@@ -243,7 +245,7 @@ export default function AdminEventTypesModal({
               />
             </div>
             <div className="mb-4 w-full px-2">
-              <div className="mb-4 flex space-x-4 pt-4">
+              <div className="mb-4 flex flex-col space-y-2 pt-4 sm:flex-row sm:space-x-4 sm:space-y-0">
                 <Button
                   type="button"
                   variant="outline"

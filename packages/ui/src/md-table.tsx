@@ -205,7 +205,7 @@ export const MDTable = <T,>(params: MDTableProps<T>) => {
 
   return (
     <div className={cn("relative", containerClassName)}>
-      <div className="mt-4 flex flex-row items-center justify-between py-4">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 py-4">
         <div className="flex flex-1 items-center gap-4 pl-[1px]">
           <Input
             placeholder={`Search ${rowsName}...`}
@@ -216,27 +216,6 @@ export const MDTable = <T,>(params: MDTableProps<T>) => {
             }}
             className="max-w-60"
           />
-          <div>
-            {pagination ? (
-              table.getRowCount() === 0 ? (
-                <>Showing 0 {rowsName}</>
-              ) : (
-                <>
-                  Showing {pagination.pageIndex * pagination.pageSize + 1}-
-                  {Math.min(
-                    (pagination.pageIndex + 1) * pagination.pageSize,
-                    table.getRowCount(),
-                  )}{" "}
-                  of {table.getRowCount().toLocaleString()} {rowsName}
-                </>
-              )
-            ) : (
-              <>
-                Showing {table.getRowModel().rows?.length ?? 0} of{" "}
-                {table.getRowCount().toLocaleString()} {rowsName}
-              </>
-            )}
-          </div>
         </div>
         <div className="flex items-center gap-2">
           {downloadCSV ? (
@@ -277,6 +256,27 @@ export const MDTable = <T,>(params: MDTableProps<T>) => {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+      </div>
+      <div className="pb-2 pl-[1px] text-sm text-muted-foreground">
+        {pagination ? (
+          table.getRowCount() === 0 ? (
+            <>Showing 0 {rowsName}</>
+          ) : (
+            <>
+              Showing {pagination.pageIndex * pagination.pageSize + 1}-
+              {Math.min(
+                (pagination.pageIndex + 1) * pagination.pageSize,
+                table.getRowCount(),
+              )}{" "}
+              of {table.getRowCount().toLocaleString()} {rowsName}
+            </>
+          )
+        ) : (
+          <>
+            Showing {table.getRowModel().rows?.length ?? 0} of{" "}
+            {table.getRowCount().toLocaleString()} {rowsName}
+          </>
+        )}
       </div>
       <div className="rounded-md border">
         <Table>
@@ -350,11 +350,11 @@ export const MDTable = <T,>(params: MDTableProps<T>) => {
           </TableBody>
         </Table>
         {pagination ? (
-          <div className="flex items-center justify-between px-5 py-5">
-            <div className="flex flex-row items-center gap-2">
+          <div className="flex flex-wrap items-center justify-center gap-3 px-3 py-4 sm:justify-between sm:px-5 sm:py-5">
+            <div className="flex flex-row items-center gap-1 sm:gap-2">
               <Button
                 variant="ghost"
-                className="w-8 rounded border p-1"
+                className="h-8 w-8 rounded border p-0"
                 onClick={() => table.setPageIndex(0)}
                 disabled={!table.getCanPreviousPage()}
               >
@@ -362,21 +362,21 @@ export const MDTable = <T,>(params: MDTableProps<T>) => {
               </Button>
               <Button
                 variant="ghost"
-                className="w-8 rounded border p-1"
+                className="h-8 w-8 rounded border p-0"
                 onClick={() => table.previousPage()}
                 disabled={!table.getCanPreviousPage()}
               >
                 {"<"}
               </Button>
-              <span className="flex items-center gap-1">
-                <div>Page</div>
+              <span className="flex items-center gap-1 px-1 text-sm sm:px-2 sm:text-base">
+                <span className="hidden sm:inline">Page</span>
                 <strong>
                   {table.getState().pagination.pageIndex + 1} of {pageCount}
                 </strong>
               </span>
               <Button
                 variant="ghost"
-                className="w-8 rounded border p-1"
+                className="h-8 w-8 rounded border p-0"
                 onClick={() => table.nextPage()}
                 disabled={!table.getCanNextPage()}
               >
@@ -384,7 +384,7 @@ export const MDTable = <T,>(params: MDTableProps<T>) => {
               </Button>
               <Button
                 variant="ghost"
-                className="w-8 rounded border p-1"
+                className="h-8 w-8 rounded border p-0"
                 onClick={() => table.setPageIndex(table.getPageCount() - 1)}
                 disabled={!table.getCanNextPage()}
               >
@@ -393,7 +393,9 @@ export const MDTable = <T,>(params: MDTableProps<T>) => {
             </div>
             {/* ability to select the size of the page */}
             <div className="flex flex-row items-center gap-2">
-              <div className="pointer-events-none flex-shrink-0">Page size</div>
+              <div className="pointer-events-none flex-shrink-0 text-sm sm:text-base">
+                Page size
+              </div>
               <Select
                 value={pagination.pageSize.toString()}
                 onValueChange={(value) => {
