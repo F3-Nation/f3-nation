@@ -252,11 +252,14 @@ export const getSession = async ({ context }: { context: BaseContext }) => {
 
   if (!apiKeyRecord) {
     if (apiKey) {
-      console.log("getSession", {
-        apiKey: apiKey ? `${apiKey.slice(0, 4)}...${apiKey.slice(-4)}` : null,
-        appClient,
-        message: "API key not found in database or invalid",
-      });
+      console.log(
+        "getSession",
+        JSON.stringify({
+          apiKey: apiKey ? `${apiKey.slice(0, 4)}...${apiKey.slice(-4)}` : null,
+          appClient,
+          message: "API key not found in database or invalid",
+        }),
+      );
     }
     return null;
   }
