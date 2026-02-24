@@ -63,7 +63,7 @@ const Layout = ({
         className="fixed hidden h-full flex-col justify-between bg-muted/20 lg:flex"
         style={{ width: ADMIN_SIDEBAR_WIDTH, zIndex: 1000 }}
       >
-        <div className="">
+        <div className="flex-1 overflow-y-auto">
           <div className="px-2 py-6">
             <div className="flex justify-center">
               <Image src="/f3_logo.png" alt="F3" width={100} height={100} />
