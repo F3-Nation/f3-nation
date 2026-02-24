@@ -76,6 +76,7 @@ export default function AdminRegionsModal({
   const form = useForm({
     schema: RegionInsertSchema.extend({
       badImage: z.boolean().default(false),
+      regionLocationShortDescription: z.string().optional(),
     }),
     defaultValues: {
       id: region?.id ?? undefined,
@@ -92,6 +93,8 @@ export default function AdminRegionsModal({
       instagram: region?.instagram ?? null,
       lastAnnualReview: region?.lastAnnualReview ?? null,
       meta: region?.meta ?? {},
+      regionLocationShortDescription:
+        region?.meta?.region_location_short_description ?? "",
       badImage: false,
     },
   });
@@ -112,6 +115,8 @@ export default function AdminRegionsModal({
       instagram: region?.instagram ?? null,
       lastAnnualReview: region?.lastAnnualReview ?? null,
       meta: region?.meta ?? null,
+      regionLocationShortDescription:
+        region?.meta?.region_location_short_description ?? "",
     });
   }, [form, region]);
 
@@ -167,8 +172,14 @@ export default function AdminRegionsModal({
               async (data) => {
                 setIsSubmitting(true);
                 try {
+                  const { regionLocationShortDescription, ...rest } = data;
                   await crupdateRegion.mutateAsync({
-                    ...data,
+                    ...rest,
+                    meta: {
+                      ...rest.meta,
+                      region_location_short_description:
+                        regionLocationShortDescription?.trim() || undefined,
+                    },
                     orgType: "region",
                   });
                 } catch (error) {
@@ -428,6 +439,25 @@ export default function AdminRegionsModal({
                         <Input
                           placeholder="Last Annual Review"
                           type="date"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="mb-4 w-1/2 px-2">
+                <FormField
+                  control={form.control}
+                  name="regionLocationShortDescription"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Short Location Description</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="e.g. Denver, CO"
                           {...field}
                           value={field.value ?? ""}
                         />
