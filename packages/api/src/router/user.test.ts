@@ -291,6 +291,85 @@ describe("User Router", () => {
         }),
       ).rejects.toThrow();
     });
+
+    it("should return f3Name, firstName, and lastName in the response", async () => {
+      const dbInstance = db;
+      const client = createTestClient();
+
+      // Find or create F3 Nation org for admin role
+      let [f3Nation] = await dbInstance
+        .select({ id: schema.orgs.id })
+        .from(schema.orgs)
+        .where(
+          and(
+            eq(schema.orgs.orgType, "nation"),
+            eq(schema.orgs.name, "F3 Nation"),
+          ),
+        )
+        .limit(1);
+
+      if (!f3Nation) {
+        const [created] = await dbInstance
+          .insert(schema.orgs)
+          .values({ name: "F3 Nation", orgType: "nation", isActive: true })
+          .returning();
+        f3Nation = created;
+      }
+
+      if (!f3Nation) throw new Error("F3 Nation org not found");
+
+      const mockSession: Session = {
+        id: 1,
+        email: "admin@example.com",
+        user: {
+          id: "1",
+          email: "admin@example.com",
+          name: "Admin",
+          roles: [
+            { orgId: f3Nation.id, orgName: "F3 Nation", roleName: "admin" },
+          ],
+        },
+        roles: [
+          { orgId: f3Nation.id, orgName: "F3 Nation", roleName: "admin" },
+        ],
+        expires: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
+      };
+      await mockAuthWithSession(mockSession);
+
+      const testEmail = `f3name-test-${Date.now()}@example.com`;
+
+      // Create a user with a known f3Name, firstName, lastName
+      const created = await client.user.crupdate({
+        email: testEmail,
+        f3Name: "Cougar",
+        firstName: "John",
+        lastName: "Smith",
+        roles: [{ orgId: f3Nation.id, roleName: "editor" }],
+      });
+
+      try {
+        const result = await client.user.byEmail({
+          email: testEmail,
+          includePii: false,
+        });
+
+        expect(result.user).not.toBeNull();
+        // f3Name, firstName, lastName are non-PII fields always included
+        expect(result.user?.f3Name).toBe("Cougar");
+        expect(result.user?.firstName).toBe("John");
+        expect(result.user?.lastName).toBe("Smith");
+        // Email is always included when searching by email
+        expect(result.user?.email).toBe(testEmail);
+      } finally {
+        // Clean up
+        await dbInstance
+          .delete(schema.rolesXUsersXOrg)
+          .where(eq(schema.rolesXUsersXOrg.userId, created.id));
+        await dbInstance
+          .delete(schema.users)
+          .where(eq(schema.users.id, created.id));
+      }
+    });
   });
 
   describe("crupdate", () => {
