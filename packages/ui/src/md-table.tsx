@@ -205,7 +205,7 @@ export const MDTable = <T,>(params: MDTableProps<T>) => {
 
   return (
     <div className={cn("relative", containerClassName)}>
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 py-4">
         <div className="flex flex-1 items-center gap-4 pl-[1px]">
           <Input
             placeholder={`Search ${rowsName}...`}
@@ -350,7 +350,7 @@ export const MDTable = <T,>(params: MDTableProps<T>) => {
           </TableBody>
         </Table>
         {pagination ? (
-          <div className="flex flex-wrap items-center justify-center gap-3 px-3 py-4 sm:justify-between sm:px-5 sm:py-5">
+          <div className="flex flex-wrap items-center justify-between lg:px-3 gap-3 py-4">
             <div className="flex flex-row items-center gap-1 sm:gap-2">
               <Button
                 variant="ghost"
