@@ -65,12 +65,6 @@ export const locationRouter = {
             .describe(
               "If true, only return locations in organizations where the requester has editor or admin role.",
             ),
-          onlyActive: z.coerce
-            .boolean()
-            .optional()
-            .describe(
-              "Filter locations by status. If not specified, returns all statuses.",
-            ),
         })
         .optional(),
     )
@@ -133,7 +127,6 @@ export const locationRouter = {
         input?.onlyMine && !isNationAdmin && editableOrgIds.length > 0
           ? inArray(schema.locations.orgId, editableOrgIds)
           : undefined,
-        input?.onlyActive ? eq(schema.locations.isActive, true) : undefined,
       );
 
       const sortedColumns = getSortingColumns(

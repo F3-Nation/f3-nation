@@ -89,7 +89,7 @@ export default function AdminWorkoutsModal({
     orpc.org.all.queryOptions({ input: { orgTypes: ["region"] } }),
   );
   const { data: locations } = useQuery(
-    orpc.location.all.queryOptions({ input: { onlyActive: true } }),
+    orpc.location.all.queryOptions({ input: { statuses: ["active"] } }),
   );
   const { data: aos } = useQuery(
     orpc.org.all.queryOptions({ input: { orgTypes: ["ao"] } }),
