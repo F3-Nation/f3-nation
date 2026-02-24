@@ -2,7 +2,8 @@
 
 import gte from "lodash/gte";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Controller } from "react-hook-form";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
 import { safeParseInt } from "@acme/shared/common/functions";
@@ -38,6 +39,8 @@ import { AOInsertSchema } from "@acme/validators";
 
 import { env } from "~/env";
 import { invalidateQueries, orpc, useMutation, useQuery } from "~/orpc/react";
+import { scaleAndCropImage } from "~/utils/image/scale-and-crop-image";
+import { uploadLogo } from "~/utils/image/upload-logo";
 import type { DataType } from "~/utils/store/modal";
 import {
   DeleteType,
@@ -45,6 +48,7 @@ import {
   closeModal,
   openModal,
 } from "~/utils/store/modal";
+import { DebouncedImage } from "../debounced-image";
 import { VirtualizedCombobox } from "../virtualized-combobox";
 
 export default function AdminAOsModal({
@@ -88,6 +92,17 @@ export default function AdminAOsModal({
   }, [form, ao]);
 
   const crupdateAO = useMutation(orpc.org.crupdate.mutationOptions());
+
+  const formAoId = form.watch("id");
+  const formId = useMemo(
+    () =>
+      Array.from({ length: 10 }, () =>
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789".charAt(
+          Math.floor(Math.random() * 62),
+        ),
+      ).join(""),
+    [],
+  );
 
   return (
     <Dialog open={true} onOpenChange={() => closeModal()}>
@@ -347,6 +362,61 @@ export default function AdminAOsModal({
                       <FormMessage />
                     </FormItem>
                   )}
+                />
+              </div>
+              <div className="mb-4 w-1/2 px-2">
+                <div className="mb-3 text-sm font-medium text-black">Logo</div>
+                <Controller
+                  control={form.control}
+                  name="logoUrl"
+                  render={({ field: { onChange, value } }) => {
+                    return (
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="file"
+                          accept="image/*"
+                          onChange={async (e) => {
+                            if (!formAoId) return;
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+
+                            const blob640 = await scaleAndCropImage(
+                              file,
+                              640,
+                              640,
+                            );
+                            if (!blob640) return;
+                            const url640 = await uploadLogo({
+                              file: blob640,
+                              regionId: formAoId,
+                              requestId: formId,
+                            });
+                            onChange(url640);
+                            const blob64 = await scaleAndCropImage(
+                              file,
+                              64,
+                              64,
+                            );
+                            if (blob64) {
+                              void uploadLogo({
+                                file: blob64,
+                                regionId: formAoId,
+                                requestId: formId,
+                                size: 64,
+                              });
+                            }
+                          }}
+                          disabled={
+                            typeof formAoId !== "number" || formAoId <= -1
+                          }
+                          className="flex-1"
+                        />
+                        {value && (
+                          <DebouncedImage src={value} alt="AO Logo" />
+                        )}
+                      </div>
+                    );
+                  }}
                 />
               </div>
               <div className="mb-4 w-full px-2">
