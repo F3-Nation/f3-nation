@@ -36,6 +36,12 @@ export type EventCadence = (typeof EventCadence)[number];
 export const EventCategory = ["first_f", "second_f", "third_f"] as const;
 export type EventCategory = (typeof EventCategory)[number];
 
+export const EVENT_CATEGORY_LABELS: Record<EventCategory, string> = {
+  first_f: "1st F",
+  second_f: "2nd F",
+  third_f: "3rd F",
+};
+
 export const RequestType = [
   "create_location",
   "create_event",

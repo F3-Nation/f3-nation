@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { Controller } from "react-hook-form";
 import { z } from "zod";
 
-import { DayOfWeek } from "@acme/shared/app/enums";
+import { DayOfWeek, EVENT_CATEGORY_LABELS } from "@acme/shared/app/enums";
 import { Case } from "@acme/shared/common/enums";
 import { convertCase, isTruthy } from "@acme/shared/common/functions";
 import { Button } from "@acme/ui/button";
@@ -168,7 +168,7 @@ export const LocationEventForm = ({
                     value={(field.value ?? []).map(String)}
                     options={
                       eventTypes?.eventTypes.map((type) => ({
-                        label: type.name,
+                        label: `${type.name} (${EVENT_CATEGORY_LABELS[type.eventCategory] ?? type.eventCategory})`,
                         value: type.id.toString(),
                       })) ?? []
                     }

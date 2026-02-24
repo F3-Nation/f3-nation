@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { z } from "zod";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
-import { DayOfWeek } from "@acme/shared/app/enums";
+import { DayOfWeek, EVENT_CATEGORY_LABELS } from "@acme/shared/app/enums";
 import {
   convertHH_mmToHHmm,
   convertHHmmToHH_mm,
@@ -497,7 +497,7 @@ export default function AdminWorkoutsModal({
                           options={
                             eventTypes?.eventTypes.map((type) => ({
                               value: type.id.toString(),
-                              label: type.name,
+                              label: `${type.name} (${EVENT_CATEGORY_LABELS[type.eventCategory] ?? type.eventCategory})`,
                             })) ?? []
                           }
                           searchPlaceholder={
