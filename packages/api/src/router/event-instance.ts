@@ -16,6 +16,7 @@ import {
   schema,
   sql,
 } from "@acme/db";
+import { SeriesException } from "@acme/shared/app/enums";
 import { arrayOrSingle } from "@acme/shared/app/functions";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
@@ -101,6 +102,7 @@ export const eventInstanceRouter = {
         locationId: schema.eventInstances.locationId,
         orgId: schema.eventInstances.orgId,
         seriesId: schema.eventInstances.seriesId,
+        seriesException: schema.eventInstances.seriesException,
         startDate: schema.eventInstances.startDate,
         endDate: schema.eventInstances.endDate,
         startTime: schema.eventInstances.startTime,
@@ -199,6 +201,7 @@ export const eventInstanceRouter = {
           locationId: schema.eventInstances.locationId,
           orgId: schema.eventInstances.orgId,
           seriesId: schema.eventInstances.seriesId,
+          seriesException: schema.eventInstances.seriesException,
           startDate: schema.eventInstances.startDate,
           endDate: schema.eventInstances.endDate,
           startTime: schema.eventInstances.startTime,
@@ -333,6 +336,7 @@ export const eventInstanceRouter = {
         locationId: z.coerce.number().nullish(),
         orgId: z.coerce.number(),
         seriesId: z.coerce.number().nullish(), // Link to series if this is a series instance
+        seriesException: z.enum(SeriesException).nullish(), // Exception type for series instances
         startDate: z.string(),
         endDate: z.string().nullish(),
         startTime: z.string().nullish(),

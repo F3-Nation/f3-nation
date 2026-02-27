@@ -103,3 +103,10 @@ export const AchievementCadence = [
   "lifetime",
 ] as const;
 export type AchievementCadence = (typeof AchievementCadence)[number];
+
+export const SeriesException = [
+  "closed",
+  "different-time",
+  "miscellaneous",
+] as const;
+export type SeriesException = (typeof SeriesException)[number];

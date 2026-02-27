@@ -28,6 +28,7 @@ import {
   OrgType,
   RegionRole,
   RequestType,
+  SeriesException,
   UpdateRequestStatus,
   UserRole,
   UserStatus,
@@ -47,6 +48,7 @@ export const userRole = pgEnum("user_role", UserRole);
 export const dayOfWeek = pgEnum("day_of_week", DayOfWeek);
 export const eventCadence = pgEnum("event_cadence", EventCadence);
 export const eventCategory = pgEnum("event_category", EventCategory);
+export const seriesException = pgEnum("series_exception", SeriesException);
 export const orgType = pgEnum("org_type", OrgType);
 export const regionRole = pgEnum("region_role", RegionRole);
 export const updateRequestStatus = pgEnum(
@@ -101,6 +103,7 @@ export const eventInstances = pgTable(
     preblastTs: doublePrecision("preblast_ts"),
     backblastTs: doublePrecision("backblast_ts"),
     isPrivate: boolean("is_private").default(false).notNull(),
+    seriesException: seriesException("series_exception"),
     meta: json(),
     created: timestamp({ mode: "string" })
       .default(sql`timezone('utc'::text, now())`)
