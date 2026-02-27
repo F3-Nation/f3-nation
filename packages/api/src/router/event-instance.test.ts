@@ -18,6 +18,7 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
 }));
 
 import { eq, schema } from "@acme/db";
+import type { SeriesException } from "@acme/shared/app/enums";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
   cleanup,
@@ -142,7 +143,11 @@ describe("Event Instance Router", () => {
   // Helper to create a test event instance
   const createTestEventInstance = async (
     aoId: number,
-    options?: { name?: string; startDate?: string },
+    options?: {
+      name?: string;
+      startDate?: string;
+      seriesException?: SeriesException;
+    },
   ) => {
     const [eventInstance] = await db
       .insert(schema.eventInstances)
@@ -153,6 +158,7 @@ describe("Event Instance Router", () => {
           options?.startDate ?? new Date().toISOString().split("T")[0]!,
         isActive: true,
         highlight: false,
+        seriesException: options?.seriesException ?? null,
       })
       .returning();
 
@@ -345,6 +351,35 @@ describe("Event Instance Router", () => {
         true,
       );
     });
+
+    it("should return seriesException in list", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      const eventInstance = await createTestEventInstance(ao.id, {
+        seriesException: "closed",
+      });
+      if (!eventInstance) return;
+
+      const client = createTestClient();
+      const result = await client.eventInstance.all({
+        aoOrgId: ao.id,
+        pageIndex: 0,
+        pageSize: 10,
+      });
+
+      const found = result.eventInstances.find(
+        (e) => e.id === eventInstance.id,
+      );
+      expect(found).toBeDefined();
+      expect(found?.seriesException).toBe("closed");
+    });
   });
 
   describe("byId", () => {
@@ -425,6 +460,30 @@ describe("Event Instance Router", () => {
       expect(result?.eventTypes).toBeDefined();
       expect(Array.isArray(result?.eventTypes)).toBe(true);
     });
+
+    it("should return seriesException in response", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      const eventInstance = await createTestEventInstance(ao.id, {
+        seriesException: "closed",
+      });
+      if (!eventInstance) return;
+
+      const client = createTestClient();
+      const result = await client.eventInstance.byId({
+        id: eventInstance.id,
+      });
+
+      expect(result).not.toBeNull();
+      expect(result?.seriesException).toBe("closed");
+    });
   });
 
   describe("crupdate", () => {
@@ -484,6 +543,59 @@ describe("Event Instance Router", () => {
 
       expect(result.id).toBe(eventInstance.id);
       expect(result.name).toBe(updatedName);
+    });
+
+    it("should create event instance with seriesException", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      const client = createTestClient();
+      const result = await client.eventInstance.crupdate({
+        name: `Event With Exception ${uniqueId()}`,
+        orgId: ao.id,
+        startDate: new Date().toISOString().split("T")[0]!,
+        seriesException: "different-time",
+      });
+
+      expect(result).toBeDefined();
+      expect(result.seriesException).toBe("different-time");
+
+      if (result.id) {
+        createdEventInstanceIds.push(result.id);
+      }
+    });
+
+    it("should update seriesException on existing event instance", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      const eventInstance = await createTestEventInstance(ao.id, {
+        seriesException: "closed",
+      });
+      if (!eventInstance) return;
+
+      const client = createTestClient();
+      const result = await client.eventInstance.crupdate({
+        id: eventInstance.id,
+        orgId: ao.id,
+        startDate: eventInstance.startDate,
+        seriesException: "miscellaneous",
+      });
+
+      expect(result.id).toBe(eventInstance.id);
+      expect(result.seriesException).toBe("miscellaneous");
     });
 
     it("should create event instance with event type", async () => {
