@@ -1,0 +1,47 @@
+{
+  "name": "f3-me",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --experimental-https --port 3003",
+    "build": "next build",
+    "start": "next start --port 3003",
+    "lint": "eslint . --max-warnings 0",
+    "format:check": "prettier --check .",
+    "format": "prettier --write .",
+    "test": "vitest --run",
+    "test:watch": "vitest -w",
+    "test:coverage": "vitest --run --coverage",
+    "typecheck": "tsc --noEmit",
+    "firebase:setup-secrets": "/usr/bin/env bash scripts/firebase-env.sh"
+  },
+  "dependencies": {
+    "@google-cloud/storage": "^7.14.0",
+    "clsx": "^2.1.0",
+    "f3-nation-auth-sdk": "^0.1.0",
+    "next": "15.1.9",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwind-merge": "^2.2.1"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@next/eslint-plugin-next": "15.1.9",
+    "@testing-library/jest-dom": "^6.4.2",
+    "@testing-library/react": "^16.1.0",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^4.2.1",
+    "@vitest/coverage-v8": "^1.5.0",
+    "eslint": "^9",
+    "eslint-config-next": "15.1.9",
+    "postcss": "^8",
+    "prettier": "^3.6.2",
+    "tailwindcss": "^3.4.1",
+    "tailwindcss-animate": "^1.0.7",
+    "typescript": "^5",
+    "vitest": "^1.5.0"
+  }
+}
