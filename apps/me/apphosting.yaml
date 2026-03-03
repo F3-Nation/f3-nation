@@ -1,0 +1,30 @@
+runConfig:
+  maxInstances: 4
+  minInstances: 0
+  cpu: 1
+  memoryMiB: 512
+  concurrency: 80
+
+env:
+  - variable: NEXT_PUBLIC_SITE_URL
+    secret: next-public-site-url
+  - variable: ENVIRONMENT
+    secret: environment
+  - variable: OAUTH_CLIENT_ID
+    secret: oauth-client-id
+  - variable: OAUTH_CLIENT_SECRET
+    secret: oauth-client-secret
+  - variable: OAUTH_REDIRECT_URI
+    secret: oauth-redirect-uri
+  - variable: AUTH_PROVIDER_URL
+    secret: auth-provider-url
+  - variable: SESSION_SECRET
+    secret: session-secret
+  - variable: F3_API_KEY
+    secret: f3-api-key
+  - variable: F3_API_BASE_URL
+    secret: f3-api-base-url
+  - variable: GCS_BUCKET
+    secret: gcs-bucket
+  - variable: GCS_CREDENTIALS
+    secret: gcs-credentials
