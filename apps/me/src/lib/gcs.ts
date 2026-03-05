@@ -1,4 +1,5 @@
 import { Storage } from "@google-cloud/storage";
+import sharp from "sharp";
 
 function getStorage(): Storage {
   const credsBase64 = process.env.GCS_CREDENTIALS;
@@ -11,21 +12,27 @@ function getStorage(): Storage {
 export async function uploadAvatar(
   userId: number,
   file: Buffer,
-  filename: string,
-  contentType: string,
 ): Promise<string> {
   const bucketName = process.env.GCS_BUCKET;
   if (!bucketName) throw new Error("GCS_BUCKET is not set");
 
+  // Convert to JPEG, resize to max 512x512, strip metadata
+  const jpeg = await sharp(file)
+    .resize(512, 512, { fit: "cover", withoutEnlargement: true })
+    .jpeg({ quality: 85 })
+    .toBuffer();
+
   const bucket = getStorage().bucket(bucketName);
-  const sanitizedFilename = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const path = `avatars/${userId}/${Date.now()}-${sanitizedFilename}`;
+  const path = `user-avatars/${userId}.jpg`;
   const blob = bucket.file(path);
 
-  await blob.save(file, {
-    metadata: { contentType },
-    public: true,
+  await blob.save(jpeg, {
+    metadata: {
+      contentType: "image/jpeg",
+      cacheControl: "public, max-age=300",
+    },
   });
 
-  return `https://storage.googleapis.com/${bucketName}/${path}`;
+  // Append cache-busting param so browsers pick up the new image
+  return `https://storage.googleapis.com/${bucketName}/${path}?v=${Date.now()}`;
 }

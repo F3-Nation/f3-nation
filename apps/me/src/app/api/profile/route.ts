@@ -69,16 +69,20 @@ export async function PATCH(request: NextRequest) {
     if (Object.keys(metaUpdates).length > 0) {
       let existingMeta: UserMeta = {};
       if (currentUser.meta) {
-        try {
-          existingMeta = JSON.parse(currentUser.meta) as UserMeta;
-        } catch {
-          existingMeta = {};
+        if (typeof currentUser.meta === "object") {
+          existingMeta = currentUser.meta as UserMeta;
+        } else {
+          try {
+            existingMeta = JSON.parse(currentUser.meta) as UserMeta;
+          } catch {
+            existingMeta = {};
+          }
         }
       }
 
       // Merge: preserve all existing keys, update only the editable ones
       const mergedMeta = { ...existingMeta, ...metaUpdates };
-      updateBody.meta = JSON.stringify(mergedMeta);
+      updateBody.meta = mergedMeta;
     }
 
     // The API's CrupdateUserSchema requires `roles` — pass existing roles through

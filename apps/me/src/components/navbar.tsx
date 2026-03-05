@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { useSave } from "@/lib/save-context";
 
 export function Navbar() {
   const { user, loading, signOut } = useAuth();
+  const { isDirty, saving, save } = useSave();
 
   return (
     <nav className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -45,22 +46,15 @@ export function Navbar() {
         </div>
 
         <div className="flex items-center gap-3">
+          {isDirty && (
+            <Button size="sm" onClick={save} disabled={saving}>
+              {saving ? "Saving\u2026" : "Save Changes"}
+            </Button>
+          )}
           {!loading && user && (
-            <>
-              <div className="flex items-center gap-2">
-                <Avatar
-                  src={null}
-                  fallback={user.name ?? user.email}
-                  size="sm"
-                />
-                <span className="hidden text-sm font-medium sm:inline">
-                  {user.name ?? user.email}
-                </span>
-              </div>
-              <Button variant="ghost" size="sm" onClick={signOut}>
-                Sign out
-              </Button>
-            </>
+            <Button variant="ghost" size="sm" onClick={signOut}>
+              Sign out
+            </Button>
           )}
         </div>
       </div>

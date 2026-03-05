@@ -44,10 +44,18 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    const avatarUrl = await uploadAvatar(userId, buffer, file.name, file.type);
+    // Upload converts to JPEG and saves as user-avatars/{userId}.jpg
+    const avatarUrl = await uploadAvatar(userId, buffer);
 
     // Update user's avatarUrl in the API
-    await updateUser({ id: userId, avatarUrl });
+    await updateUser({
+      id: userId,
+      avatarUrl,
+      roles: (user.roles ?? []).map((r) => ({
+        orgId: r.orgId,
+        roleName: r.roleName,
+      })),
+    });
 
     return NextResponse.json({ avatarUrl });
   } catch (err) {
