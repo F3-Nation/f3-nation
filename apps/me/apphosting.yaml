@@ -6,25 +6,30 @@ runConfig:
   concurrency: 80
 
 env:
+  # Shared values (same in all environments)
+  - variable: AUTH_PROVIDER_URL
+    value: https://auth.f3nation.com
+  - variable: GCS_BUCKET
+    value: f3-logos
+
+  # Per-environment config (not sensitive, but differs per project)
   - variable: NEXT_PUBLIC_SITE_URL
     secret: next-public-site-url
   - variable: ENVIRONMENT
     secret: environment
   - variable: OAUTH_CLIENT_ID
     secret: oauth-client-id
-  - variable: OAUTH_CLIENT_SECRET
-    secret: oauth-client-secret
   - variable: OAUTH_REDIRECT_URI
     secret: oauth-redirect-uri
-  - variable: AUTH_PROVIDER_URL
-    secret: auth-provider-url
+  - variable: F3_API_BASE_URL
+    secret: f3-api-base-url
+
+  # Secrets (sensitive)
+  - variable: OAUTH_CLIENT_SECRET
+    secret: oauth-client-secret
   - variable: SESSION_SECRET
     secret: session-secret
   - variable: F3_API_KEY
     secret: f3-api-key
-  - variable: F3_API_BASE_URL
-    secret: f3-api-base-url
-  - variable: GCS_BUCKET
-    secret: gcs-bucket
   - variable: GCS_CREDENTIALS
     secret: gcs-credentials

@@ -8,7 +8,7 @@ export interface UserProfile {
   phone: string | null;
   homeRegionId: number | null;
   avatarUrl: string | null;
-  meta: string | null;
+  meta: Record<string, unknown> | string | null;
   emergencyContact: string | null;
   emergencyPhone: string | null;
   emergencyNotes: string | null;

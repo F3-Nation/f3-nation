@@ -1,5 +1,7 @@
 {
   "projects": {
-    "default": "f3-me"
+    "default": "f3-me-profile-manager",
+    "prod": "f3-me-profile-manager",
+    "staging": "f3-me-profile-manager-staging"
   }
 }
