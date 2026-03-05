@@ -8,12 +8,12 @@ vi.mock("@/lib/auth/server", () => ({
 
 // Mock API client
 vi.mock("@/lib/api/client", () => ({
-  getUser: vi.fn(),
+  getUserByEmail: vi.fn(),
   updateUser: vi.fn(),
 }));
 
 import { requireAuth } from "@/lib/auth/server";
-import { getUser, updateUser } from "@/lib/api/client";
+import { getUserByEmail, updateUser } from "@/lib/api/client";
 
 describe("Profile API route", () => {
   beforeEach(() => {
@@ -27,7 +27,7 @@ describe("Profile API route", () => {
         email: "test@f3.com",
         iat: Date.now(),
       });
-      vi.mocked(getUser).mockResolvedValue({
+      vi.mocked(getUserByEmail).mockResolvedValue({
         id: 42,
         f3Name: "Dredd",
         firstName: "Joe",
@@ -52,7 +52,7 @@ describe("Profile API route", () => {
 
       expect(response.status).toBe(200);
       expect(data.f3Name).toBe("Dredd");
-      expect(getUser).toHaveBeenCalledWith(42);
+      expect(getUserByEmail).toHaveBeenCalledWith("test@f3.com");
     });
   });
 
@@ -62,6 +62,24 @@ describe("Profile API route", () => {
         sub: "42",
         email: "test@f3.com",
         iat: Date.now(),
+      });
+      vi.mocked(getUserByEmail).mockResolvedValue({
+        id: 42,
+        f3Name: "Dredd",
+        firstName: "Joe",
+        lastName: "Smith",
+        email: "test@f3.com",
+        phone: null,
+        homeRegionId: 1,
+        avatarUrl: null,
+        meta: null,
+        emergencyContact: null,
+        emergencyPhone: null,
+        emergencyNotes: null,
+        status: "active",
+        roles: [],
+        created: "2024-01-01",
+        updated: "2024-01-01",
       });
       vi.mocked(updateUser).mockResolvedValue({
         id: 42,
@@ -104,7 +122,7 @@ describe("Profile API route", () => {
         email: "test@f3.com",
         iat: Date.now(),
       });
-      vi.mocked(getUser).mockResolvedValue({
+      vi.mocked(getUserByEmail).mockResolvedValue({
         id: 42,
         f3Name: "Dredd",
         firstName: null,
@@ -154,7 +172,7 @@ describe("Profile API route", () => {
 
       expect(response.status).toBe(200);
       // Should have fetched current user for existing meta
-      expect(getUser).toHaveBeenCalledWith(42);
+      expect(getUserByEmail).toHaveBeenCalledWith("test@f3.com");
       // Should have merged meta
       const updateCall = vi.mocked(updateUser).mock.calls[0]![0] as Record<
         string,
@@ -171,6 +189,24 @@ describe("Profile API route", () => {
         sub: "42",
         email: "test@f3.com",
         iat: Date.now(),
+      });
+      vi.mocked(getUserByEmail).mockResolvedValue({
+        id: 42,
+        f3Name: "Dredd",
+        firstName: null,
+        lastName: "Smith",
+        email: "test@f3.com",
+        phone: null,
+        homeRegionId: null,
+        avatarUrl: null,
+        meta: null,
+        emergencyContact: null,
+        emergencyPhone: null,
+        emergencyNotes: null,
+        status: "active",
+        roles: [],
+        created: "2024-01-01",
+        updated: "2024-01-01",
       });
       vi.mocked(updateUser).mockResolvedValue({
         id: 42,

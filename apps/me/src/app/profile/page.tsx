@@ -1,12 +1,19 @@
 import { requireAuth } from "@/lib/auth/server";
-import { getUser, getRegions } from "@/lib/api/client";
+import { getUserByEmail, getRegions } from "@/lib/api/client";
 import { ProfileForm } from "@/components/profile-form";
+import { redirect } from "next/navigation";
 
 export default async function ProfilePage() {
   const session = await requireAuth();
-  const userId = Number(session.sub);
 
-  const [user, regions] = await Promise.all([getUser(userId), getRegions()]);
+  const [user, regions] = await Promise.all([
+    getUserByEmail(session.email),
+    getRegions(),
+  ]);
+
+  if (!user) {
+    redirect("/?error=user_not_found");
+  }
 
   // Extract positions from user data
   // The API may include position data in the user response,
