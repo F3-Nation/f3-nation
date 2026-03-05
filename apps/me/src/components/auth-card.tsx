@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
+import Image from "next/image";
 import {
   Card,
   CardContent,
@@ -25,27 +25,14 @@ export function AuthCard({ error }: AuthCardProps) {
   return (
     <Card className="w-full max-w-md">
       <CardHeader className="text-center">
-        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-          <svg
-            width="32"
-            height="32"
-            viewBox="0 0 32 32"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <text
-              x="16"
-              y="16"
-              textAnchor="middle"
-              dominantBaseline="central"
-              fill="currentColor"
-              fontFamily="sans-serif"
-              fontWeight="bold"
-              fontSize="14"
-            >
-              F3
-            </text>
-          </svg>
+        <div className="mx-auto mb-4">
+          <Image
+            src="/f3_logo.png"
+            alt="F3 Nation"
+            width={80}
+            height={80}
+            className="rounded-xl"
+          />
         </div>
         <CardTitle className="text-2xl">Welcome to F3 Me</CardTitle>
         <CardDescription>
