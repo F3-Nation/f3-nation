@@ -1,14 +1,20 @@
 import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth/AuthProvider";
 import { Navbar } from "@/components/navbar";
 import { ToastProvider, Toaster } from "@/components/ui/toast";
 import { SaveProvider } from "@/lib/save-context";
 
+const inter = Inter({ subsets: ["latin"] });
+
 export const metadata: Metadata = {
   title: "F3 Me — Profile Manager",
   description:
     "Manage your F3 Nation profile, avatar, emergency contacts, and more.",
+  icons: {
+    icon: "/favicon.ico",
+  },
 };
 
 export default function RootLayout({
@@ -18,12 +24,14 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className="min-h-screen bg-background font-sans antialiased">
+      <body
+        className={`${inter.className} min-h-screen bg-background text-foreground antialiased`}
+      >
         <ToastProvider>
           <AuthProvider>
             <SaveProvider>
               <Navbar />
-              <main className="min-h-[calc(100vh-4rem)]">{children}</main>
+              <main className="min-h-[calc(100vh-3.5rem)]">{children}</main>
             </SaveProvider>
           </AuthProvider>
           <Toaster />
