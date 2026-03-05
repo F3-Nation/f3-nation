@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { Button } from "@/components/ui/button";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -13,12 +12,12 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/components/ui/toast";
 import { AvatarUpload } from "@/components/avatar-upload";
 import { RegionSelect } from "@/components/region-select";
 import { RoleList } from "@/components/role-list";
 import { PositionList } from "@/components/position-list";
+import { useSaveRegister } from "@/lib/save-context";
 import type { UserProfile, UserMeta, Region } from "@/lib/types";
 
 interface ProfileFormProps {
@@ -32,8 +31,9 @@ interface ProfileFormProps {
   }[];
 }
 
-function parseMeta(meta: string | null): UserMeta {
+function parseMeta(meta: string | Record<string, unknown> | null): UserMeta {
   if (!meta) return {};
+  if (typeof meta === "object") return meta as UserMeta;
   try {
     return JSON.parse(meta) as UserMeta;
   } catch {
@@ -62,6 +62,25 @@ export function ProfileForm({ user, regions, positions }: ProfileFormProps) {
       (meta.user_emergency_info_dr_sharing as boolean) ?? false,
     start_date_override: (meta.start_date_override as string) ?? "",
   });
+
+  const [initialForm, setInitialForm] = useState(() => ({ ...form }));
+
+  const isFieldDirty = useCallback(
+    (key: keyof typeof form) => form[key] !== initialForm[key],
+    [form, initialForm],
+  );
+
+  const isDirty = useMemo(
+    () =>
+      (Object.keys(form) as (keyof typeof form)[]).some(
+        (key) => key !== "avatarUrl" && form[key] !== initialForm[key],
+      ),
+    [form, initialForm],
+  );
+
+  // Returns a class string to visually mark dirty fields
+  const dc = (key: keyof typeof form) =>
+    isFieldDirty(key) ? " border-l-2 border-l-amber-500 pl-2" : "";
 
   const updateField = useCallback(
     <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => {
@@ -97,6 +116,9 @@ export function ProfileForm({ user, regions, positions }: ProfileFormProps) {
         throw new Error(err.error ?? "Failed to save profile");
       }
 
+      // Reset dirty tracking so indicators clear
+      setInitialForm({ ...form });
+
       toast({
         title: "Profile saved",
         description: "Your changes have been saved successfully.",
@@ -112,8 +134,18 @@ export function ProfileForm({ user, regions, positions }: ProfileFormProps) {
     }
   };
 
+  // Keep a stable ref to handleSave for the context registration
+  const saveRef = useRef(handleSave);
+  saveRef.current = handleSave;
+
+  // Register save state with the navbar
+  const { register } = useSaveRegister();
+  useEffect(() => {
+    register({ isDirty, saving, onSave: () => saveRef.current() });
+  }, [isDirty, saving, register]);
+
   return (
-    <div className="mx-auto max-w-2xl space-y-6 p-4 pb-12">
+    <div className="mx-auto max-w-5xl space-y-6 p-4 pb-12">
       {/* Header / Avatar */}
       <Card>
         <CardHeader>
@@ -131,192 +163,198 @@ export function ProfileForm({ user, regions, positions }: ProfileFormProps) {
         </CardContent>
       </Card>
 
-      {/* Personal Info */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Personal Information</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="f3Name">F3 Name</Label>
-            <Input
-              id="f3Name"
-              value={form.f3Name}
-              onChange={(e) => updateField("f3Name", e.target.value)}
-              placeholder="Your F3 name"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="firstName">First Name</Label>
+      {/* Two-column grid: Personal Info + Emergency Contact side by side on lg */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Personal Info */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Personal Information</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className={`space-y-2${dc("f3Name")}`}>
+              <Label htmlFor="f3Name">F3 Name</Label>
               <Input
-                id="firstName"
-                value={form.firstName}
-                onChange={(e) => updateField("firstName", e.target.value)}
-                placeholder="First name"
+                id="f3Name"
+                value={form.f3Name}
+                onChange={(e) => updateField("f3Name", e.target.value)}
+                placeholder="Your F3 name"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="lastName">Last Name</Label>
+            <div className="grid grid-cols-2 gap-4">
+              <div className={`space-y-2${dc("firstName")}`}>
+                <Label htmlFor="firstName">First Name</Label>
+                <Input
+                  id="firstName"
+                  value={form.firstName}
+                  onChange={(e) => updateField("firstName", e.target.value)}
+                  placeholder="First name"
+                />
+              </div>
+              <div className={`space-y-2${dc("lastName")}`}>
+                <Label htmlFor="lastName">Last Name</Label>
+                <Input
+                  id="lastName"
+                  value={form.lastName}
+                  onChange={(e) => updateField("lastName", e.target.value)}
+                  placeholder="Last name"
+                />
+              </div>
+            </div>
+            <div className={`space-y-2${dc("phone")}`}>
+              <Label htmlFor="phone">Phone</Label>
               <Input
-                id="lastName"
-                value={form.lastName}
-                onChange={(e) => updateField("lastName", e.target.value)}
-                placeholder="Last name"
+                id="phone"
+                type="tel"
+                value={form.phone}
+                onChange={(e) => updateField("phone", e.target.value)}
+                placeholder="Phone number"
               />
             </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="phone">Phone</Label>
-            <Input
-              id="phone"
-              type="tel"
-              value={form.phone}
-              onChange={(e) => updateField("phone", e.target.value)}
-              placeholder="Phone number"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="homeRegion">Home Region</Label>
-            <RegionSelect
-              regions={regions}
-              value={form.homeRegionId}
-              onChange={(id) => updateField("homeRegionId", id)}
-            />
-          </div>
-        </CardContent>
-      </Card>
+            <div className={`space-y-2${dc("homeRegionId")}`}>
+              <Label htmlFor="homeRegion">Home Region</Label>
+              <RegionSelect
+                regions={regions}
+                value={form.homeRegionId}
+                onChange={(id) => updateField("homeRegionId", id)}
+              />
+            </div>
+          </CardContent>
+        </Card>
 
-      {/* Emergency Contact */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Emergency Contact</CardTitle>
-          <CardDescription>
-            This information is private and only visible to region admins.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="emergencyContact">Contact Name</Label>
-            <Input
-              id="emergencyContact"
-              value={form.emergencyContact}
-              onChange={(e) => updateField("emergencyContact", e.target.value)}
-              placeholder="Emergency contact name"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="emergencyPhone">Contact Phone</Label>
-            <Input
-              id="emergencyPhone"
-              type="tel"
-              value={form.emergencyPhone}
-              onChange={(e) => updateField("emergencyPhone", e.target.value)}
-              placeholder="Emergency contact phone"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="emergencyNotes">Notes</Label>
-            <Textarea
-              id="emergencyNotes"
-              value={form.emergencyNotes}
-              onChange={(e) => updateField("emergencyNotes", e.target.value)}
-              placeholder="Allergies, medical conditions, etc."
-              rows={3}
-            />
-          </div>
-        </CardContent>
-      </Card>
+        {/* Emergency Contact */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Emergency Contact</CardTitle>
+            <CardDescription>
+              This information is private and only visible to region admins.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className={`space-y-2${dc("emergencyContact")}`}>
+              <Label htmlFor="emergencyContact">Contact Name</Label>
+              <Input
+                id="emergencyContact"
+                value={form.emergencyContact}
+                onChange={(e) =>
+                  updateField("emergencyContact", e.target.value)
+                }
+                placeholder="Emergency contact name"
+              />
+            </div>
+            <div className={`space-y-2${dc("emergencyPhone")}`}>
+              <Label htmlFor="emergencyPhone">Contact Phone</Label>
+              <Input
+                id="emergencyPhone"
+                type="tel"
+                value={form.emergencyPhone}
+                onChange={(e) => updateField("emergencyPhone", e.target.value)}
+                placeholder="Emergency contact phone"
+              />
+            </div>
+            <div className={`space-y-2${dc("emergencyNotes")}`}>
+              <Label htmlFor="emergencyNotes">Notes</Label>
+              <Textarea
+                id="emergencyNotes"
+                value={form.emergencyNotes}
+                onChange={(e) => updateField("emergencyNotes", e.target.value)}
+                placeholder="Allergies, medical conditions, etc."
+                rows={3}
+              />
+            </div>
+            <div
+              className={`flex items-center justify-between gap-4 rounded-lg border p-3${
+                isFieldDirty("user_emergency_info_dr_sharing")
+                  ? " border-l-2 border-l-amber-500"
+                  : ""
+              }`}
+            >
+              <div className="space-y-0.5">
+                <Label>Cross-Region Info Sharing</Label>
+                <p className="text-sm text-muted-foreground">
+                  If enabled, users can search for your emergency info from
+                  other Slack workspaces.
+                </p>
+              </div>
+              <Switch
+                checked={form.user_emergency_info_dr_sharing}
+                onCheckedChange={(checked) =>
+                  updateField("user_emergency_info_dr_sharing", checked)
+                }
+              />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
-      {/* About Me */}
+      {/* About Me — full width */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">About Me</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="f3NameOrigin">F3 Name Origin</Label>
-            <Textarea
-              id="f3NameOrigin"
-              value={form.f3_name_origin}
-              onChange={(e) => updateField("f3_name_origin", e.target.value)}
-              placeholder="How did you get your F3 name?"
-              rows={3}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="myF3Why">My F3 Why</Label>
-            <Textarea
-              id="myF3Why"
-              value={form.my_f3_why}
-              onChange={(e) => updateField("my_f3_why", e.target.value)}
-              placeholder="Why do you do F3?"
-              rows={3}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="startDate">Start Date</Label>
-            <Input
-              id="startDate"
-              type="date"
-              value={form.start_date_override}
-              onChange={(e) =>
-                updateField("start_date_override", e.target.value)
-              }
-            />
-          </div>
-
-          <Separator />
-
-          <div className="flex items-center justify-between gap-4">
-            <div className="space-y-0.5">
-              <Label>Cross-Region Info Sharing</Label>
-              <p className="text-sm text-muted-foreground">
-                If enabled, users can search for your info from other Slack
-                workspaces.
-              </p>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className={`space-y-2${dc("f3_name_origin")}`}>
+              <Label htmlFor="f3NameOrigin">F3 Name Origin</Label>
+              <Textarea
+                id="f3NameOrigin"
+                value={form.f3_name_origin}
+                onChange={(e) => updateField("f3_name_origin", e.target.value)}
+                placeholder="How did you get your F3 name?"
+                rows={3}
+              />
             </div>
-            <Switch
-              checked={form.user_emergency_info_dr_sharing}
-              onCheckedChange={(checked) =>
-                updateField("user_emergency_info_dr_sharing", checked)
-              }
-            />
+            <div className={`space-y-2${dc("my_f3_why")}`}>
+              <Label htmlFor="myF3Why">My F3 Why</Label>
+              <Textarea
+                id="myF3Why"
+                value={form.my_f3_why}
+                onChange={(e) => updateField("my_f3_why", e.target.value)}
+                placeholder="Why do you do F3?"
+                rows={3}
+              />
+            </div>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className={`space-y-2${dc("start_date_override")}`}>
+              <Label htmlFor="startDate">Start Date</Label>
+              <Input
+                id="startDate"
+                type="date"
+                value={form.start_date_override}
+                onChange={(e) =>
+                  updateField("start_date_override", e.target.value)
+                }
+              />
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Roles */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Roles</CardTitle>
-          <CardDescription>
-            Your current role assignments across F3 regions.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <RoleList roles={user.roles ?? []} />
-        </CardContent>
-      </Card>
+      {/* Roles & Positions side by side on lg */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Roles</CardTitle>
+            <CardDescription>
+              Your current role assignments across F3 regions.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <RoleList roles={user.roles ?? []} />
+          </CardContent>
+        </Card>
 
-      {/* Positions */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Positions</CardTitle>
-          <CardDescription>
-            Your current position assignments across F3 regions.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <PositionList positions={positions} />
-        </CardContent>
-      </Card>
-
-      {/* Save Button */}
-      <div className="flex justify-end">
-        <Button size="lg" onClick={handleSave} disabled={saving}>
-          {saving ? "Saving..." : "Save Changes"}
-        </Button>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Positions</CardTitle>
+            <CardDescription>
+              Your current position assignments across F3 regions.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <PositionList positions={positions} />
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

@@ -64,9 +64,9 @@ apps/me/
 
 - Node.js 20.x (`nvm use` if you have nvm)
 - pnpm (managed by the monorepo root)
-- OAuth client `f3-me-local` registered in the F3 auth provider
+- OAuth clients registered in the F3 auth provider (see [OAuth Client Registration](#oauth-client-registration) below)
 - Admin F3 API key with edit permissions
-- GCS service account credentials (base64-encoded)
+- GCS service account credentials (base64-encoded, from GCP)
 
 ### Setup
 
@@ -133,27 +133,55 @@ Tests are located in `__tests__/` and cover:
 
 ### Firebase App Hosting
 
-The app is deployed via Firebase App Hosting, which auto-builds and deploys on GitHub pushes.
+The app is deployed via Firebase App Hosting with two separate GCP/Firebase projects — one for prod, one for staging. Each project has a backend named `f3-me`. Secret names are identical in both projects; isolation comes from the project boundary.
 
-| Branch    | Environment | URL                       |
-| --------- | ----------- | ------------------------- |
-| `main`    | Production  | `me.f3nation.com`         |
-| `staging` | Staging     | `staging.me.f3nation.com` |
+| Branch    | GCP Project                     | Backend | URL                       |
+| --------- | ------------------------------- | ------- | ------------------------- |
+| `main`    | `f3-me-profile-manager`         | `f3-me` | `me.f3nation.com`         |
+| `staging` | `f3-me-profile-manager-staging` | `f3-me` | `staging.me.f3nation.com` |
 
 ### First-Time Setup
 
-1. Create a Firebase project (or reuse existing) in the GCP Console
-2. Run `firebase init apphosting` in `apps/me/`
-3. Connect to the GitHub repo, set branch and root directory (`apps/me`)
-4. Populate `.env.firebase` with production values
-5. Run `./scripts/firebase-env.sh` to push secrets to GCP Secret Manager
-6. Configure custom domain `me.f3nation.com` in Firebase Console
+1. Create two Firebase/GCP projects:
+   - `f3-me-profile-manager` (production)
+   - `f3-me-profile-manager-staging` (staging)
+2. Create an App Hosting backend in each project:
+   ```bash
+   cd apps/me
+   firebase apphosting:backends:create --project f3-me-profile-manager
+   # Backend ID: f3-me, Branch: main, Root: apps/me
+   firebase apphosting:backends:create --project f3-me-profile-manager-staging
+   # Backend ID: f3-me, Branch: staging, Root: apps/me
+   ```
+3. Populate environment files:
+   - `.env.firebase.prod` with production values
+   - `.env.firebase.staging` with staging values
+4. Push secrets to each project:
+   ```bash
+   bash scripts/firebase-env.sh --env prod
+   bash scripts/firebase-env.sh --env staging
+   ```
+5. Configure custom domains in each project's Firebase Console:
+   - `me.f3nation.com` → `f3-me-profile-manager`
+   - `staging.me.f3nation.com` → `f3-me-profile-manager-staging`
 
 ### Subsequent Deploys
 
-- **Push to `main`** → Firebase auto-builds and deploys to production
-- **Push to `staging`** → Firebase auto-builds and deploys to staging
-- **Update secrets**: Edit `.env.firebase`, then run `./scripts/firebase-env.sh`
+- **Push to `main`** → prod project auto-builds and deploys
+- **Push to `staging`** → staging project auto-builds and deploys
+- **Update secrets**: Edit `.env.firebase.prod` or `.env.firebase.staging`, then run:
+  ```bash
+  bash scripts/firebase-env.sh --env prod      # or --env staging
+  ```
+
+### Firebase Project Aliases
+
+Use `.firebaserc` aliases to switch between projects:
+
+```bash
+firebase use staging   # → f3-me-profile-manager-staging
+firebase use prod      # → f3-me-profile-manager
+```
 
 ### OAuth Client Registration
 
