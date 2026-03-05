@@ -78,9 +78,12 @@ export function ProfileForm({ user, regions, positions }: ProfileFormProps) {
     [form, initialForm],
   );
 
-  // Returns a class string to visually mark dirty fields
+  // Returns a class string to visually mark dirty fields.
+  // Always reserves space for the bar (pl-2 + left border) so fields don't shift.
   const dc = (key: keyof typeof form) =>
-    isFieldDirty(key) ? " border-l-2 border-l-amber-500 pl-2" : "";
+    isFieldDirty(key)
+      ? " pl-2 border-l-[3px] border-l-amber-500"
+      : " pl-2 border-l-[3px] border-l-transparent";
 
   const updateField = useCallback(
     <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => {
@@ -262,10 +265,10 @@ export function ProfileForm({ user, regions, positions }: ProfileFormProps) {
               />
             </div>
             <div
-              className={`flex items-center justify-between gap-4 rounded-lg border p-3${
+              className={`flex items-center justify-between gap-4 rounded-lg border border-l-[3px] p-3 ${
                 isFieldDirty("user_emergency_info_dr_sharing")
-                  ? " border-l-2 border-l-amber-500"
-                  : ""
+                  ? "border-l-amber-500"
+                  : "border-l-transparent"
               }`}
             >
               <div className="space-y-0.5">
