@@ -6,12 +6,12 @@ vi.mock("@/lib/auth/server", () => ({
 }));
 
 vi.mock("@/lib/api/client", () => ({
-  getUser: vi.fn(),
+  getUserByEmail: vi.fn(),
   updateUser: vi.fn(),
 }));
 
 import { requireAuth } from "@/lib/auth/server";
-import { getUser, updateUser } from "@/lib/api/client";
+import { getUserByEmail, updateUser } from "@/lib/api/client";
 
 describe("Roles API route", () => {
   beforeEach(() => {
@@ -24,7 +24,7 @@ describe("Roles API route", () => {
       email: "test@f3.com",
       iat: Date.now(),
     });
-    vi.mocked(getUser).mockResolvedValue({
+    vi.mocked(getUserByEmail).mockResolvedValue({
       id: 42,
       f3Name: "Dredd",
       firstName: null,

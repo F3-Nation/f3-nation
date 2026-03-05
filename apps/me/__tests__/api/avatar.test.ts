@@ -9,12 +9,13 @@ vi.mock("@/lib/gcs", () => ({
 }));
 
 vi.mock("@/lib/api/client", () => ({
+  getUserByEmail: vi.fn(),
   updateUser: vi.fn(),
 }));
 
 import { requireAuth } from "@/lib/auth/server";
 import { uploadAvatar } from "@/lib/gcs";
-import { updateUser } from "@/lib/api/client";
+import { getUserByEmail, updateUser } from "@/lib/api/client";
 
 // Helper to create a mock NextRequest whose formData() works in jsdom
 function createMockRequest(formData: FormData) {
@@ -34,6 +35,24 @@ describe("Avatar API route", () => {
       email: "test@f3.com",
       iat: Date.now(),
     });
+    vi.mocked(getUserByEmail).mockResolvedValue({
+      id: 42,
+      f3Name: "Dredd",
+      firstName: null,
+      lastName: "Smith",
+      email: "test@f3.com",
+      phone: null,
+      homeRegionId: null,
+      avatarUrl: null,
+      meta: null,
+      emergencyContact: null,
+      emergencyPhone: null,
+      emergencyNotes: null,
+      status: "active",
+      roles: [],
+      created: "2024-01-01",
+      updated: "2024-01-01",
+    });
 
     const { POST } = await import("@/app/api/profile/avatar/route");
     const formData = new FormData();
@@ -50,6 +69,24 @@ describe("Avatar API route", () => {
       sub: "42",
       email: "test@f3.com",
       iat: Date.now(),
+    });
+    vi.mocked(getUserByEmail).mockResolvedValue({
+      id: 42,
+      f3Name: "Dredd",
+      firstName: null,
+      lastName: "Smith",
+      email: "test@f3.com",
+      phone: null,
+      homeRegionId: null,
+      avatarUrl: null,
+      meta: null,
+      emergencyContact: null,
+      emergencyPhone: null,
+      emergencyNotes: null,
+      status: "active",
+      roles: [],
+      created: "2024-01-01",
+      updated: "2024-01-01",
     });
 
     const { POST } = await import("@/app/api/profile/avatar/route");
@@ -72,6 +109,24 @@ describe("Avatar API route", () => {
       sub: "42",
       email: "test@f3.com",
       iat: Date.now(),
+    });
+    vi.mocked(getUserByEmail).mockResolvedValue({
+      id: 42,
+      f3Name: "Dredd",
+      firstName: null,
+      lastName: "Smith",
+      email: "test@f3.com",
+      phone: null,
+      homeRegionId: null,
+      avatarUrl: null,
+      meta: null,
+      emergencyContact: null,
+      emergencyPhone: null,
+      emergencyNotes: null,
+      status: "active",
+      roles: [],
+      created: "2024-01-01",
+      updated: "2024-01-01",
     });
     vi.mocked(uploadAvatar).mockResolvedValue(
       "https://storage.googleapis.com/f3-logos/avatars/42/test.jpg",

@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth/server";
-import { getUser, updateUser } from "@/lib/api/client";
+import { getUserByEmail, updateUser } from "@/lib/api/client";
 
 export async function DELETE(request: NextRequest) {
   try {
     const session = await requireAuth();
-    const userId = Number(session.sub);
 
     const body = (await request.json()) as {
       orgId: number;
@@ -20,7 +19,11 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Fetch current user to get roles array
-    const currentUser = await getUser(userId);
+    const currentUser = await getUserByEmail(session.email);
+    if (!currentUser) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+    const userId = currentUser.id;
 
     // Filter out the specified role
     const filteredRoles = (currentUser.roles ?? []).filter(
@@ -29,7 +32,7 @@ export async function DELETE(request: NextRequest) {
 
     // Update user with filtered roles
     const updatedUser = await updateUser({
-      id: userId,
+      id: currentUser.id,
       roles: filteredRoles,
     });
 
