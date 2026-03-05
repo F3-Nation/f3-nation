@@ -3,12 +3,7 @@ import { requireAuth } from "@/lib/auth/server";
 import { uploadAvatar } from "@/lib/gcs";
 import { getUserByEmail, updateUser } from "@/lib/api/client";
 
-const ALLOWED_TYPES = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/gif",
-]);
+const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_SIZE = 5 * 1024 * 1024; // 5MB
 
 export async function POST(request: NextRequest) {
