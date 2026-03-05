@@ -62,11 +62,11 @@ export const buildUserSelect = ({
       '[]'
     )`,
     created: schema.users.created,
+    homeRegionId: schema.users.homeRegionId,
+    avatarUrl: schema.users.avatarUrl,
+    meta: schema.users.meta,
     ...(includeListFields
       ? {
-          homeRegionId: schema.users.homeRegionId,
-          avatarUrl: schema.users.avatarUrl,
-          meta: schema.users.meta,
           updated: schema.users.updated,
         }
       : {}),
