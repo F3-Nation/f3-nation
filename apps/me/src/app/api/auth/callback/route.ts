@@ -1,86 +1,127 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 import { exchangeCodeForToken, getUserInfo } from "@/lib/auth/oauth";
-import { signSession } from "@/lib/auth/session";
+import { createSessionValue } from "@/lib/auth/session";
 import {
-  SESSION_COOKIE_NAME,
   SESSION_COOKIE_MAX_AGE,
-  OAUTH_CSRF_COOKIE,
-  OAUTH_CODE_VERIFIER_COOKIE,
+  SESSION_COOKIE_NAME,
 } from "@/lib/auth/constants";
 
-const STATE_MAX_AGE_MS = 10 * 60 * 1000; // 10 minutes
+interface StatePayload {
+  csrfToken: string;
+  clientId: string;
+  returnTo: string;
+  timestamp: number;
+}
+
+function getPublicOrigin(request: NextRequest): string {
+  const proto = request.headers.get("x-forwarded-proto") || "https";
+  const host =
+    request.headers.get("x-forwarded-host") || request.headers.get("host");
+  if (host) return `${proto}://${host}`;
+  return request.nextUrl.origin;
+}
+
+function errorRedirect(baseUrl: string, error: string, returnTo?: string) {
+  const url = new URL("/", baseUrl);
+  url.searchParams.set("error", error);
+  if (returnTo) url.searchParams.set("redirect", returnTo);
+  return NextResponse.redirect(url.toString());
+}
 
 export async function GET(request: NextRequest) {
-  const searchParams = request.nextUrl.searchParams;
+  const { searchParams } = request.nextUrl;
   const code = searchParams.get("code");
   const stateParam = searchParams.get("state");
-  const error = searchParams.get("error");
+  const errorParam = searchParams.get("error");
+  const baseUrl = getPublicOrigin(request);
 
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? request.nextUrl.origin;
-
-  // Handle OAuth errors
-  if (error) {
-    return NextResponse.redirect(
-      `${baseUrl}/?error=${encodeURIComponent(error)}`,
-    );
+  if (errorParam) {
+    return errorRedirect(baseUrl, errorParam);
   }
 
   if (!code || !stateParam) {
-    return NextResponse.redirect(`${baseUrl}/?error=missing_params`);
+    return errorRedirect(baseUrl, "missing_params");
   }
 
+  // Decode and validate state
+  let state: StatePayload;
   try {
-    // Validate state / CSRF
-    const stateJson = Buffer.from(stateParam, "base64url").toString();
-    const state = JSON.parse(stateJson) as {
-      csrf: string;
-      returnTo: string;
-      ts: number;
-    };
-
-    const csrfCookie = request.cookies.get(OAUTH_CSRF_COOKIE)?.value;
-    if (!csrfCookie || csrfCookie !== state.csrf) {
-      return NextResponse.redirect(`${baseUrl}/?error=csrf_mismatch`);
-    }
-
-    // Check state timestamp (10 min expiry)
-    if (Date.now() - state.ts > STATE_MAX_AGE_MS) {
-      return NextResponse.redirect(`${baseUrl}/?error=state_expired`);
-    }
-
-    // Exchange code for token
-    const tokens = await exchangeCodeForToken(code);
-
-    // Fetch user info
-    const userInfo = await getUserInfo(tokens.accessToken);
-
-    // Create session
-    const sessionToken = await signSession({
-      sub: userInfo.sub,
-      email: userInfo.email,
-      name: userInfo.name,
-      iat: Math.floor(Date.now() / 1000),
-    });
-
-    const returnTo = state.returnTo || "/profile";
-    const response = NextResponse.redirect(`${baseUrl}${returnTo}`);
-
-    // Set session cookie
-    response.cookies.set(SESSION_COOKIE_NAME, sessionToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: SESSION_COOKIE_MAX_AGE,
-    });
-
-    // Clear OAuth cookies
-    response.cookies.delete(OAUTH_CSRF_COOKIE);
-    response.cookies.delete(OAUTH_CODE_VERIFIER_COOKIE);
-
-    return response;
-  } catch (err) {
-    console.error("Auth callback error:", err);
-    return NextResponse.redirect(`${baseUrl}/?error=callback_failed`);
+    state = JSON.parse(
+      Buffer.from(stateParam, "base64url").toString("utf-8"),
+    ) as StatePayload;
+  } catch {
+    return errorRedirect(baseUrl, "invalid_state");
   }
+
+  // Check timestamp (10 minute window)
+  if (Date.now() - state.timestamp > 600_000) {
+    return errorRedirect(baseUrl, "expired_state");
+  }
+
+  // Validate CSRF token against cookie
+  const csrfCookie = request.cookies.get("oauth_csrf")?.value;
+  if (!csrfCookie || csrfCookie !== state.csrfToken) {
+    return errorRedirect(baseUrl, "csrf_mismatch");
+  }
+
+  const returnTo = state.returnTo || "/profile";
+
+  // Validate PKCE code verifier cookie
+  const codeVerifier = request.cookies.get("oauth_code_verifier")?.value;
+  if (!codeVerifier) {
+    return errorRedirect(baseUrl, "missing_code_verifier", returnTo);
+  }
+
+  // Exchange code for tokens
+  let accessToken: string;
+  try {
+    const tokens = await exchangeCodeForToken({ code, codeVerifier });
+    accessToken = (tokens.access_token ?? tokens.accessToken) as string;
+    if (!accessToken) {
+      return errorRedirect(baseUrl, "token_exchange_failed", returnTo);
+    }
+  } catch (err) {
+    console.error("Token exchange failed", err);
+    return errorRedirect(baseUrl, "token_exchange_failed", returnTo);
+  }
+
+  // Fetch user info
+  let userInfo: { sub: string; email: string; name?: string };
+  try {
+    userInfo = await getUserInfo(accessToken);
+  } catch (err) {
+    console.error("Failed to fetch user info", err);
+    return errorRedirect(baseUrl, "userinfo_failed", returnTo);
+  }
+
+  // Create HMAC session cookie
+  const sessionValue = createSessionValue({
+    sub: userInfo.sub,
+    email: userInfo.email,
+    name: userInfo.name,
+  });
+
+  const response = NextResponse.redirect(new URL(returnTo, baseUrl).toString());
+
+  response.cookies.set(SESSION_COOKIE_NAME, sessionValue, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: SESSION_COOKIE_MAX_AGE,
+  });
+
+  // Clear OAuth flow cookies
+  const clearCookieOpts = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    path: "/",
+    maxAge: 0,
+  };
+  response.cookies.set("oauth_csrf", "", clearCookieOpts);
+  response.cookies.set("oauth_code_verifier", "", clearCookieOpts);
+
+  return response;
 }

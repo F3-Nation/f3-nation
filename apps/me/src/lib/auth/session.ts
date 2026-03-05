@@ -1,31 +1,5 @@
-import { SESSION_COOKIE_MAX_AGE } from "./constants";
-
-const encoder = new TextEncoder();
-
-async function getKey(): Promise<CryptoKey> {
-  const secret = process.env.SESSION_SECRET;
-  if (!secret) throw new Error("SESSION_SECRET is not set");
-  return crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign", "verify"],
-  );
-}
-
-function base64UrlEncode(data: Uint8Array): string {
-  return Buffer.from(data)
-    .toString("base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
-}
-
-function base64UrlDecode(str: string): Uint8Array {
-  const padded = str.replace(/-/g, "+").replace(/_/g, "/");
-  return new Uint8Array(Buffer.from(padded, "base64"));
-}
+import { createHmac, timingSafeEqual } from "crypto";
+import { SESSION_COOKIE_MAX_AGE } from "@/lib/auth/constants";
 
 export interface SessionPayload {
   sub: string;
@@ -34,53 +8,48 @@ export interface SessionPayload {
   iat: number;
 }
 
-export async function signSession(payload: SessionPayload): Promise<string> {
-  const key = await getKey();
-  const payloadStr = JSON.stringify(payload);
-  const payloadBytes = encoder.encode(payloadStr);
-  const payloadB64 = base64UrlEncode(payloadBytes);
-
-  const signature = await crypto.subtle.sign(
-    "HMAC",
-    key,
-    encoder.encode(payloadB64),
-  );
-  const sigB64 = base64UrlEncode(new Uint8Array(signature));
-
-  return `${payloadB64}.${sigB64}`;
+function getSecret(): string {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) throw new Error("SESSION_SECRET env var is required");
+  return secret;
 }
 
-export async function verifySession(
-  token: string,
-): Promise<SessionPayload | null> {
+function sign(data: string): string {
+  return createHmac("sha256", getSecret()).update(data).digest("base64url");
+}
+
+export function createSessionValue(
+  payload: Omit<SessionPayload, "iat">,
+): string {
+  const full: SessionPayload = {
+    ...payload,
+    iat: Math.floor(Date.now() / 1000),
+  };
+  const json = Buffer.from(JSON.stringify(full)).toString("base64url");
+  const signature = sign(json);
+  return `${json}.${signature}`;
+}
+
+export function verifySessionValue(cookie: string): SessionPayload | null {
+  const dotIdx = cookie.lastIndexOf(".");
+  if (dotIdx === -1) return null;
+
+  const json = cookie.slice(0, dotIdx);
+  const signature = cookie.slice(dotIdx + 1);
+
+  const expected = sign(json);
+  if (
+    signature.length !== expected.length ||
+    !timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
+  ) {
+    return null;
+  }
+
   try {
-    const [payloadB64, sigB64] = token.split(".");
-    if (!payloadB64 || !sigB64) return null;
-
-    const key = await getKey();
-    const expectedSig = await crypto.subtle.sign(
-      "HMAC",
-      key,
-      encoder.encode(payloadB64),
-    );
-    const expectedSigB64 = base64UrlEncode(new Uint8Array(expectedSig));
-
-    // Timing-safe comparison
-    if (sigB64.length !== expectedSigB64.length) return null;
-    const a = encoder.encode(sigB64);
-    const b = encoder.encode(expectedSigB64);
-    let diff = 0;
-    for (let i = 0; i < a.length; i++) {
-      diff |= (a[i] ?? 0) ^ (b[i] ?? 0);
-    }
-    if (diff !== 0) return null;
-
-    const payloadBytes = base64UrlDecode(payloadB64);
     const payload = JSON.parse(
-      new TextDecoder().decode(payloadBytes),
+      Buffer.from(json, "base64url").toString("utf-8"),
     ) as SessionPayload;
 
-    // Check expiry
     const age = Math.floor(Date.now() / 1000) - payload.iat;
     if (age > SESSION_COOKIE_MAX_AGE) return null;
 

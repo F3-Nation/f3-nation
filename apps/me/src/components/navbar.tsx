@@ -6,7 +6,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 
 export function Navbar() {
-  const { user, loading, logout } = useAuth();
+  const { user, loading, signOut } = useAuth();
 
   return (
     <nav className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -57,7 +57,7 @@ export function Navbar() {
                   {user.name ?? user.email}
                 </span>
               </div>
-              <Button variant="ghost" size="sm" onClick={logout}>
+              <Button variant="ghost" size="sm" onClick={signOut}>
                 Sign out
               </Button>
             </>
