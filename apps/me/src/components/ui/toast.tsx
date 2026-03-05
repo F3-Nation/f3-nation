@@ -73,6 +73,8 @@ export function Toaster() {
               )}
             </div>
             <button
+              type="button"
+              aria-label="Dismiss"
               onClick={() => dismiss(t.id)}
               className="shrink-0 rounded-md p-1 opacity-70 hover:opacity-100"
             >

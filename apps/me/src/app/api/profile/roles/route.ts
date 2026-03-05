@@ -24,10 +24,13 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Filter out the specified role
-    const filteredRoles = (currentUser.roles ?? []).filter(
-      (role) => !(role.orgId === body.orgId && role.roleName === body.roleName),
-    );
+    // Filter out the specified role and map to the expected shape
+    const filteredRoles = (currentUser.roles ?? [])
+      .filter(
+        (role) =>
+          !(role.orgId === body.orgId && role.roleName === body.roleName),
+      )
+      .map((r) => ({ orgId: r.orgId, roleName: r.roleName }));
 
     // Update user with filtered roles
     const updatedUser = await updateUser({

@@ -198,7 +198,7 @@ This requires access to the auth provider admin. The project owner handles this.
 ## Security Notes
 
 - The F3 API key (`F3_API_KEY`) is **never** exposed to the client. All API calls happen server-side.
-- Session `sub` is always validated against the requested user ID — users can only edit their own profile.
+- Profile updates are authorized using the authenticated session (resolved by email); users can only edit their own profile.
 - File uploads are validated for type (jpeg/png/webp/gif) and size (max 5MB).
 - `meta` field updates merge with existing data — unknown keys are preserved.
 - Position removal preserves all other users' assignments.
