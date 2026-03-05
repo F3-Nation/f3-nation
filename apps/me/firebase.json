@@ -11,5 +11,11 @@
         "functions"
       ]
     }
-  ]
+  ],
+  "emulators": {
+    "apphosting": {
+      "startCommand": "pnpm -F f3-me dev",
+      "port": 3003
+    }
+  }
 }
