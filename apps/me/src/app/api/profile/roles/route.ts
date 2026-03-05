@@ -23,7 +23,6 @@ export async function DELETE(request: NextRequest) {
     if (!currentUser) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
-    const userId = currentUser.id;
 
     // Filter out the specified role
     const filteredRoles = (currentUser.roles ?? []).filter(

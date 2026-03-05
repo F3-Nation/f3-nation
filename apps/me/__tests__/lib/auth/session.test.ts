@@ -42,9 +42,7 @@ describe("session", () => {
       ...testInput,
       iat: Math.floor(Date.now() / 1000) - 11 * 24 * 60 * 60, // 11 days ago
     };
-    const json = Buffer.from(JSON.stringify(expiredPayload)).toString(
-      "base64url",
-    );
+    Buffer.from(JSON.stringify(expiredPayload)).toString("base64url");
     // We need to sign it properly, so use createSessionValue then modify iat
     // Instead, just verify that a fresh token works and an old one doesn't
     const token = createSessionValue(testInput);
