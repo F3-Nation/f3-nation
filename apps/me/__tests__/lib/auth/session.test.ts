@@ -1,9 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   createSessionValue,
   verifySessionValue,
-  type SessionPayload,
 } from "@/lib/auth/session";
+import { SESSION_COOKIE_MAX_AGE } from "@/lib/auth/constants";
 
 // Set up test environment
 process.env.SESSION_SECRET =
@@ -15,6 +15,10 @@ describe("session", () => {
     email: "test@f3nation.com",
     name: "Dredd",
   };
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   it("should create and verify a valid session", () => {
     const token = createSessionValue(testInput);
@@ -37,20 +41,14 @@ describe("session", () => {
   });
 
   it("should reject an expired session", () => {
-    // Manually create a token with an old iat
-    const expiredPayload: SessionPayload = {
-      ...testInput,
-      iat: Math.floor(Date.now() / 1000) - 11 * 24 * 60 * 60, // 11 days ago
-    };
-    Buffer.from(JSON.stringify(expiredPayload)).toString("base64url");
-    // We need to sign it properly, so use createSessionValue then modify iat
-    // Instead, just verify that a fresh token works and an old one doesn't
+    vi.useFakeTimers();
+    // Create a valid token at the current (fake) time
     const token = createSessionValue(testInput);
+    // Advance time past the max session age (10 days + 1 second)
+    vi.advanceTimersByTime((SESSION_COOKIE_MAX_AGE + 1) * 1000);
+    // Token should now be considered expired
     const verified = verifySessionValue(token);
-    expect(verified).not.toBeNull();
-    // Expired tokens can't be easily tested without exposing sign(),
-    // so we test via the verify function with a manually crafted token
-    expect(verifySessionValue("")).toBeNull();
+    expect(verified).toBeNull();
   });
 
   it("should reject malformed tokens", () => {

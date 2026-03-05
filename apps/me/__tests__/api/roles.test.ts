@@ -78,7 +78,7 @@ describe("Roles API route", () => {
     expect(updateUser).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 42,
-        roles: [{ orgId: 2, roleName: "user", orgName: "Raleigh" }],
+        roles: [{ orgId: 2, roleName: "user" }],
       }),
     );
     expect(data.roles).toHaveLength(1);

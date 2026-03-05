@@ -25,6 +25,10 @@ function Avatar({
 }: AvatarProps) {
   const [imgError, setImgError] = React.useState(false);
 
+  React.useEffect(() => {
+    setImgError(false);
+  }, [src]);
+
   const showFallback = !src || imgError;
 
   return (
