@@ -121,13 +121,13 @@ export function AvatarUpload({
           {uploading ? "Uploading..." : "Change avatar"}
         </Button>
         <p className="text-xs text-muted-foreground">
-          JPEG, PNG, WebP, or GIF. Max 5MB.
+          JPEG, PNG, or WebP. Max 5MB. Will be converted to JPEG.
         </p>
       </div>
       <input
         ref={inputRef}
         type="file"
-        accept="image/jpeg,image/png,image/webp,image/gif"
+        accept="image/jpeg,image/png,image/webp"
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];

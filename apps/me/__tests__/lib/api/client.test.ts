@@ -58,7 +58,7 @@ describe("API client", () => {
   it("getRegions calls correct endpoint", async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => [{ id: 1, name: "Charlotte" }],
+      json: async () => ({ orgs: [{ id: 1, name: "Charlotte" }], total: 1 }),
     });
 
     const { getRegions } = await import("@/lib/api/client");
