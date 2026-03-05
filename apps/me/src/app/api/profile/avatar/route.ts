@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth/server";
 import { uploadAvatar } from "@/lib/gcs";
-import { updateUser } from "@/lib/api/client";
+import { getUserByEmail, updateUser } from "@/lib/api/client";
 
 const ALLOWED_TYPES = new Set([
   "image/jpeg",
@@ -14,7 +14,11 @@ const MAX_SIZE = 5 * 1024 * 1024; // 5MB
 export async function POST(request: NextRequest) {
   try {
     const session = await requireAuth();
-    const userId = Number(session.sub);
+    const user = await getUserByEmail(session.email);
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+    const userId = user.id;
 
     const formData = await request.formData();
     const file = formData.get("file") as File | null;

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth/server";
 import {
+  getUserByEmail,
   getPositionAssignments,
   updatePositionAssignments,
 } from "@/lib/api/client";
@@ -8,7 +9,11 @@ import {
 export async function DELETE(request: NextRequest) {
   try {
     const session = await requireAuth();
-    const userId = Number(session.sub);
+    const user = await getUserByEmail(session.email);
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+    const userId = user.id;
 
     const body = (await request.json()) as {
       orgId: number;

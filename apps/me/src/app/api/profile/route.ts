@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth/server";
-import { getUser, updateUser } from "@/lib/api/client";
+import { getUserByEmail, updateUser } from "@/lib/api/client";
 import type { UserMeta, ProfileUpdatePayload } from "@/lib/types";
 
 const EDITABLE_FIELDS = new Set([
@@ -25,8 +25,10 @@ const META_FIELDS = new Set([
 export async function GET() {
   try {
     const session = await requireAuth();
-    const userId = Number(session.sub);
-    const user = await getUser(userId);
+    const user = await getUserByEmail(session.email);
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
     return NextResponse.json(user);
   } catch (err) {
     console.error("Failed to fetch profile:", err);
@@ -42,7 +44,11 @@ export async function GET() {
 export async function PATCH(request: NextRequest) {
   try {
     const session = await requireAuth();
-    const userId = Number(session.sub);
+    const currentUser = await getUserByEmail(session.email);
+    if (!currentUser) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+    const userId = currentUser.id;
 
     const body = (await request.json()) as ProfileUpdatePayload;
 
@@ -61,7 +67,6 @@ export async function PATCH(request: NextRequest) {
 
     // Handle meta field updates — merge with existing meta
     if (Object.keys(metaUpdates).length > 0) {
-      const currentUser = await getUser(userId);
       let existingMeta: UserMeta = {};
       if (currentUser.meta) {
         try {
@@ -75,6 +80,12 @@ export async function PATCH(request: NextRequest) {
       const mergedMeta = { ...existingMeta, ...metaUpdates };
       updateBody.meta = JSON.stringify(mergedMeta);
     }
+
+    // The API's CrupdateUserSchema requires `roles` — pass existing roles through
+    updateBody.roles = (currentUser.roles ?? []).map((r) => ({
+      orgId: r.orgId,
+      roleName: r.roleName,
+    }));
 
     const updatedUser = await updateUser(updateBody);
     return NextResponse.json(updatedUser);

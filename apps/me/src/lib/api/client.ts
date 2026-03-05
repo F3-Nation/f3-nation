@@ -23,6 +23,24 @@ export async function getUser(id: number): Promise<UserProfile> {
   return res.json();
 }
 
+export async function getUserByEmail(
+  email: string,
+): Promise<UserProfile | null> {
+  const res = await fetch(
+    `${API_BASE}/v1/user/email/${encodeURIComponent(email)}?includePii=true`,
+    {
+      headers: getHeaders(),
+      cache: "no-store",
+    },
+  );
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`API error ${res.status}: ${text}`);
+  }
+  const data = (await res.json()) as { user: UserProfile | null };
+  return data.user;
+}
+
 export async function updateUser(
   body: Record<string, unknown>,
 ): Promise<UserProfile> {
@@ -47,7 +65,8 @@ export async function getRegions(): Promise<Region[]> {
     const text = await res.text().catch(() => "");
     throw new Error(`API error ${res.status}: ${text}`);
   }
-  return res.json();
+  const data = (await res.json()) as { orgs: Region[]; total: number };
+  return data.orgs;
 }
 
 export async function getPositionAssignments(

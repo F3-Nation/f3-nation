@@ -6,12 +6,14 @@ vi.mock("@/lib/auth/server", () => ({
 }));
 
 vi.mock("@/lib/api/client", () => ({
+  getUserByEmail: vi.fn(),
   getPositionAssignments: vi.fn(),
   updatePositionAssignments: vi.fn(),
 }));
 
 import { requireAuth } from "@/lib/auth/server";
 import {
+  getUserByEmail,
   getPositionAssignments,
   updatePositionAssignments,
 } from "@/lib/api/client";
@@ -26,6 +28,24 @@ describe("Positions API route", () => {
       sub: "42",
       email: "test@f3.com",
       iat: Date.now(),
+    });
+    vi.mocked(getUserByEmail).mockResolvedValue({
+      id: 42,
+      f3Name: "Dredd",
+      firstName: null,
+      lastName: "Smith",
+      email: "test@f3.com",
+      phone: null,
+      homeRegionId: null,
+      avatarUrl: null,
+      meta: null,
+      emergencyContact: null,
+      emergencyPhone: null,
+      emergencyNotes: null,
+      status: "active",
+      roles: [],
+      created: "2024-01-01",
+      updated: "2024-01-01",
     });
     vi.mocked(getPositionAssignments).mockResolvedValue({
       orgId: 5,
