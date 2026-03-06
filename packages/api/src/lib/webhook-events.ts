@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 
 import type { WebhookPayload } from "./notify-webhooks";
 import { notifyWebhooks } from "./notify-webhooks";
+import { triggerMapAppRevalidation } from "./revalidate-map";
 
 /**
  * Discriminated union for type-safe webhook event payloads.
@@ -148,4 +149,8 @@ export const notifyMapDataChange = (event: WebhookEvent): void => {
       JSON.stringify({ event, error }),
     );
   });
+
+  // Trigger Map app revalidation via HTTP - API and Map are separate Next.js instances,
+  // so revalidatePath above only affects the API. The Map app must be notified explicitly.
+  void triggerMapAppRevalidation({ event });
 };

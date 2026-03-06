@@ -18,6 +18,7 @@ import { Cell, Header } from "@acme/ui/table";
 import { orpc, useQuery } from "~/orpc/react";
 import type { RouterOutputs } from "~/orpc/types";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
+import { MobileFilterSheet } from "../_components/mobile-filter-sheet";
 import { ResetFilter } from "../_components/reset-filter";
 import { StatusFilter } from "../_components/status-filter";
 import { AreaFilter } from "./area-filter";
@@ -162,6 +163,20 @@ export const RegionsTable = () => {
     [setPagination],
   );
 
+  const handleResetFilters = useCallback(() => {
+    setSelectedSectors([]);
+    setSelectedAreas([]);
+    setSelectedStatuses(["active"]);
+    setOnlyMine(true);
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+  }, [setPagination]);
+
+  const activeFilterCount =
+    selectedStatuses.length +
+    selectedSectors.length +
+    selectedAreas.length +
+    (onlyMine ? 1 : 0);
+
   return (
     <MDTable
       data={regionsWithNames}
@@ -178,39 +193,63 @@ export const RegionsTable = () => {
       setSearchTerm={setSearchTerm}
       filterComponent={
         <>
-          <StatusFilter
-            selectedStatuses={selectedStatuses}
-            setSelectedStatuses={setSelectedStatuses}
-            onlyMine={onlyMine}
-            setOnlyMine={setOnlyMine}
-            resetPage={() =>
-              setPagination((prev) => ({ ...prev, pageIndex: 0 }))
-            }
-          />
-          <SectorFilter
-            onSectorSelect={handleSectorSelect}
-            selectedSectors={selectedSectors}
-          />
-          <AreaFilter
-            selectedSectors={selectedSectors}
-            onAreaSelect={handleAreaSelect}
-            selectedAreas={selectedAreas}
-          />
-          <ResetFilter
-            onClick={() => {
-              setSelectedSectors([]);
-              setSelectedAreas([]);
-              setSelectedStatuses(["active"]);
-              setOnlyMine(true);
-            }}
-          />
+          {/* Desktop: inline filters */}
+          <div className="hidden items-center gap-2 md:flex">
+            <StatusFilter
+              selectedStatuses={selectedStatuses}
+              setSelectedStatuses={setSelectedStatuses}
+              onlyMine={onlyMine}
+              setOnlyMine={setOnlyMine}
+              resetPage={() =>
+                setPagination((prev) => ({ ...prev, pageIndex: 0 }))
+              }
+            />
+            <SectorFilter
+              onSectorSelect={handleSectorSelect}
+              selectedSectors={selectedSectors}
+            />
+            <AreaFilter
+              selectedSectors={selectedSectors}
+              onAreaSelect={handleAreaSelect}
+              selectedAreas={selectedAreas}
+            />
+            <ResetFilter onClick={handleResetFilters} />
+          </div>
+          {/* Mobile: sheet-based filters */}
+          <MobileFilterSheet
+            activeFilterCount={activeFilterCount}
+            onReset={handleResetFilters}
+          >
+            <div>
+              <p className="mb-1 text-sm font-medium">Status</p>
+              <StatusFilter
+                selectedStatuses={selectedStatuses}
+                setSelectedStatuses={setSelectedStatuses}
+                onlyMine={onlyMine}
+                setOnlyMine={setOnlyMine}
+                resetPage={() =>
+                  setPagination((prev) => ({ ...prev, pageIndex: 0 }))
+                }
+              />
+            </div>
+            <div>
+              <p className="mb-1 text-sm font-medium">Sector</p>
+              <SectorFilter
+                onSectorSelect={handleSectorSelect}
+                selectedSectors={selectedSectors}
+              />
+            </div>
+            <div>
+              <p className="mb-1 text-sm font-medium">Area</p>
+              <AreaFilter
+                selectedSectors={selectedSectors}
+                onAreaSelect={handleAreaSelect}
+                selectedAreas={selectedAreas}
+              />
+            </div>
+          </MobileFilterSheet>
         </>
       }
-      // rowClassName={(row) => {
-      //   if (row.original.submitterValidated === true) {
-      //     return "opacity-30";
-      //   }
-      // }}
     />
   );
 };

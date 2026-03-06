@@ -27,6 +27,8 @@ import { MDTable, usePagination } from "@acme/ui/md-table";
 import { Popover, PopoverContent, PopoverTrigger } from "@acme/ui/popover";
 import { Cell, Header } from "@acme/ui/table";
 
+import { MobileFilterSheet } from "../../_components/mobile-filter-sheet";
+import { ResetFilter } from "../../_components/reset-filter";
 import { orpc } from "~/orpc/react";
 import type { RouterOutputs } from "~/orpc/types";
 import { useDebounce } from "~/utils/hooks/use-debounce";
@@ -189,6 +191,16 @@ export const MyUsersTable = () => {
     });
   }, []);
 
+  const handleResetFilters = useCallback(() => {
+    setSelectedStatuses(["active"]);
+    setSelectedRoles([]);
+  }, []);
+
+  const activeFilterCount =
+    (selectedStatuses.length !== 1 || selectedStatuses[0] !== "active"
+      ? selectedStatuses.length
+      : 0) + selectedRoles.length;
+
   const { data } = useQuery(
     orpc.user.byOrgs.queryOptions({
       input: {
@@ -223,14 +235,38 @@ export const MyUsersTable = () => {
         setSearchTerm={setSearchTerm}
         filterComponent={
           <>
-            <UserStatusFilter
-              onStatusSelect={handleStatusSelect}
-              selectedStatuses={selectedStatuses}
-            />
-            <UserRoleFilter
-              onRoleSelect={handleRoleSelect}
-              selectedRoles={selectedRoles ?? []}
-            />
+            {/* Desktop: inline filters */}
+            <div className="hidden items-center gap-2 md:flex">
+              <UserStatusFilter
+                onStatusSelect={handleStatusSelect}
+                selectedStatuses={selectedStatuses}
+              />
+              <UserRoleFilter
+                onRoleSelect={handleRoleSelect}
+                selectedRoles={selectedRoles ?? []}
+              />
+              <ResetFilter onClick={handleResetFilters} />
+            </div>
+            {/* Mobile: sheet-based filters */}
+            <MobileFilterSheet
+              activeFilterCount={activeFilterCount}
+              onReset={handleResetFilters}
+            >
+              <div>
+                <p className="mb-1 text-sm font-medium">Status</p>
+                <UserStatusFilter
+                  onStatusSelect={handleStatusSelect}
+                  selectedStatuses={selectedStatuses}
+                />
+              </div>
+              <div>
+                <p className="mb-1 text-sm font-medium">Role</p>
+                <UserRoleFilter
+                  onRoleSelect={handleRoleSelect}
+                  selectedRoles={selectedRoles ?? []}
+                />
+              </div>
+            </MobileFilterSheet>
           </>
         }
         cellClassName="p-1"
