@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Controller } from "react-hook-form";
 import { z } from "zod";
 
@@ -137,18 +137,7 @@ export default function AdminRegionsModal({
 
   const formRegionId = form.watch("id");
 
-  const generateRandomString = (length: number) => {
-    const characters =
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    let result = "";
-    for (let i = 0; i < length; i++) {
-      result += characters.charAt(
-        Math.floor(Math.random() * characters.length),
-      );
-    }
-    return result;
-  };
-  const formId = generateRandomString(10);
+  const formId = useMemo(() => crypto.randomUUID(), []);
 
   return (
     <Dialog open={true} onOpenChange={() => closeModal()}>
@@ -285,7 +274,7 @@ export default function AdminRegionsModal({
                               if (!blob640) return;
                               const url640 = await uploadLogo({
                                 file: blob640,
-                                regionId: formRegionId,
+                                orgId: formRegionId,
                                 requestId: formId,
                               });
                               onChange(url640);
@@ -297,7 +286,7 @@ export default function AdminRegionsModal({
                               if (blob64) {
                                 void uploadLogo({
                                   file: blob64,
-                                  regionId: formRegionId,
+                                  orgId: formRegionId,
                                   requestId: formId,
                                   size: 64,
                                 });

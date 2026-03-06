@@ -2,7 +2,7 @@
 
 import gte from "lodash/gte";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Controller } from "react-hook-form";
 import { z } from "zod";
 
@@ -99,18 +99,7 @@ export default function AdminAOsModal({
 
   const formAoId = form.watch("id");
 
-  const generateRandomString = (length: number) => {
-    const characters =
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    let result = "";
-    for (let i = 0; i < length; i++) {
-      result += characters.charAt(
-        Math.floor(Math.random() * characters.length),
-      );
-    }
-    return result;
-  };
-  const formId = generateRandomString(10);
+  const formId = useMemo(() => crypto.randomUUID(), []);
 
   const crupdateAO = useMutation(orpc.org.crupdate.mutationOptions());
 
@@ -376,7 +365,7 @@ export default function AdminAOsModal({
                   )}
                 />
               </div>
-              <div className="w- mb-4 w-1/2 px-2">
+              <div className="mb-4 w-full px-2 sm:w-1/2">
                 <div className="mb-3 text-sm font-medium text-black">Logo</div>
                 <Controller
                   control={form.control}
@@ -402,7 +391,7 @@ export default function AdminAOsModal({
                               if (!blob640) return;
                               const url640 = await uploadLogo({
                                 file: blob640,
-                                regionId: formAoId,
+                                orgId: formAoId,
                                 requestId: formId,
                               });
                               onChange(url640);
@@ -414,7 +403,7 @@ export default function AdminAOsModal({
                               if (blob64) {
                                 void uploadLogo({
                                   file: blob64,
-                                  regionId: formAoId,
+                                  orgId: formAoId,
                                   requestId: formId,
                                   size: 64,
                                 });

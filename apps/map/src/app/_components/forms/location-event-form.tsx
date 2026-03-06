@@ -448,7 +448,7 @@ export const LocationEventForm = ({
                       if (!blob640) return;
                       const url640 = await uploadLogo({
                         file: blob640,
-                        regionId: formRegionId,
+                        orgId: formRegionId,
                         requestId: formId,
                       });
                       onChange(url640);
@@ -456,7 +456,7 @@ export const LocationEventForm = ({
                       if (blob64) {
                         await uploadLogo({
                           file: blob64,
-                          regionId: formRegionId,
+                          orgId: formRegionId,
                           requestId: formId,
                           size: 64,
                         });
