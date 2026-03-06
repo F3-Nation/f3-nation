@@ -4,16 +4,18 @@ import { CreateApiKeyButton } from "./create-api-key-button";
 
 const ApiKeysPage = () => {
   return (
-    <Layout>
+    <Layout title="API Keys">
       <div className="flex flex-col gap-6">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold">API Keys</h1>
+            <h1 className="hidden text-2xl font-semibold lg:block">API Keys</h1>
             <p className="text-sm text-muted-foreground">
               Manage programmatic access for trusted integrations.
             </p>
           </div>
-          <CreateApiKeyButton />
+          <div className="ml-auto">
+            <CreateApiKeyButton />
+          </div>
         </div>
         <ApiKeysTable />
       </div>
