@@ -10,6 +10,40 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: "3.8.0",
+    date: "2026-03-06",
+    title: "Map Updates & Admin Portal Improvements",
+    sections: [
+      {
+        title: "Map Updates",
+        items: [
+          "Map now refreshes automatically when you add, edit, or approve workout changes - no manual refresh or revalidation needed",
+        ],
+      },
+      {
+        title: "Admin Portal",
+        items: [
+          "Upload logos for AOs and Regions - images are automatically scaled and cropped to fit",
+          "Sidebar now scrolls so you can navigate long menus on smaller screens",
+          "Event category labels now appear in event type pickers to help you choose the right type",
+          "Event modal only shows active locations - inactive locations no longer appear in the dropdown",
+          "Mobile-friendly filter interface - filter tables easily on phones and tablets",
+          "Improved layout and page titles across all admin pages for better navigation",
+          "Status dropdown added to Location edit form so you can change Active/Inactive status",
+        ],
+      },
+      {
+        title: "API",
+        items: [
+          "New endpoints for event instances, attendance, and event tags",
+          "Series exception support for marking series deviations and closures",
+          "Org chart APIs with role information",
+          "Improved query parameter handling for number inputs",
+        ],
+      },
+    ],
+  },
+  {
     version: "3.7.2",
     date: "2026-02-17",
     title: "Code Login and Location Status",

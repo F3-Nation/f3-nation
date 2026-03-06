@@ -333,7 +333,7 @@ export const userRouter = {
       // Normalize email for case-insensitive storage and lookup
       const normalizedEmail = _email ? normalizeEmail(_email) : _email;
 
-      console.log("Update set", updateSet);
+      console.log("Update set", JSON.stringify(updateSet));
 
       let user: typeof schema.users.$inferSelect;
       try {
@@ -364,7 +364,7 @@ export const userRouter = {
         throw error;
       }
 
-      console.log("User", user);
+      console.log("User", JSON.stringify(user));
 
       const dbRoles = await ctx.db.select().from(schema.roles);
 
@@ -382,7 +382,7 @@ export const userRouter = {
         .select()
         .from(schema.rolesXUsersXOrg)
         .where(eq(schema.rolesXUsersXOrg.userId, user.id));
-      console.log("Existing roles", existingRoles);
+      console.log("Existing roles", JSON.stringify(existingRoles));
 
       const newRolesToInsert = roles.filter(
         (role) =>
@@ -392,7 +392,7 @@ export const userRouter = {
               existingRole.orgId === role.orgId,
           ),
       );
-      console.log("New roles to insert", newRolesToInsert);
+      console.log("New roles to insert", JSON.stringify(newRolesToInsert));
 
       for (const role of newRolesToInsert) {
         const { success } = await checkHasRoleOnOrg({
@@ -416,7 +416,7 @@ export const userRouter = {
               role.orgId === existingRole.orgId,
           ),
       );
-      console.log("Roles to delete", rolesToDelete);
+      console.log("Roles to delete", JSON.stringify(rolesToDelete));
 
       for (const role of rolesToDelete) {
         const { success } = await checkHasRoleOnOrg({
@@ -458,7 +458,7 @@ export const userRouter = {
         );
       }
 
-      console.log("New roles to insert", newRolesToInsert);
+      console.log("New roles to insert", JSON.stringify(newRolesToInsert));
       const updatedRoles = await ctx.db
         .select({
           orgId: schema.rolesXUsersXOrg.orgId,

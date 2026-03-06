@@ -6,11 +6,11 @@ import { WorkoutsTable } from "./workouts-table";
 
 const WorkoutsPage = async () => {
   return (
-    <Layout>
+    <Layout title="Events">
       <div className="flex flex-col">
         <div className="flex flex-row items-center justify-between">
-          <h1 className="text-2xl font-bold">Events</h1>
-          <div className="flex flex-row items-center justify-start gap-2">
+          <h1 className="hidden text-2xl font-bold lg:block">Events</h1>
+          <div className="ml-auto flex flex-row items-center justify-start gap-2">
             <AddWorkoutButton />
           </div>
         </div>

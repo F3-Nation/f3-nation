@@ -238,16 +238,22 @@ export const notifyMapChangeRequest = async ({
         recipientOrg: recipient.orgName ?? "Unknown",
       });
 
-      console.log("notifyMapChangeRequest: Email sent", {
-        recipient: recipient.email,
-        requestId,
-      });
+      console.log(
+        "notifyMapChangeRequest: Email sent",
+        JSON.stringify({
+          recipient: recipient.email,
+          requestId,
+        }),
+      );
     } catch (error) {
-      console.error("notifyMapChangeRequest: Error sending email", {
-        error,
-        recipient: recipient.email,
-        requestId,
-      });
+      console.error(
+        "notifyMapChangeRequest: Error sending email",
+        JSON.stringify({
+          error,
+          recipient: recipient.email,
+          requestId,
+        }),
+      );
     }
   });
 
