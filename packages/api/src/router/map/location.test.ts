@@ -54,7 +54,7 @@ describe("Map Location Router", () => {
   });
 
   // Helper to create test region
-  const createTestRegion = async () => {
+  const createTestRegion = async (opts?: { logoUrl?: string | null }) => {
     const nationOrg = await getOrCreateF3NationOrg();
     const [region] = await db
       .insert(schema.orgs)
@@ -63,6 +63,7 @@ describe("Map Location Router", () => {
         orgType: "region",
         parentId: nationOrg.id,
         isActive: true,
+        ...(opts?.logoUrl !== undefined ? { logoUrl: opts.logoUrl } : {}),
       })
       .returning();
 
@@ -73,7 +74,10 @@ describe("Map Location Router", () => {
   };
 
   // Helper to create test AO
-  const createTestAO = async (regionId: number) => {
+  const createTestAO = async (
+    regionId: number,
+    opts?: { logoUrl?: string | null },
+  ) => {
     const [ao] = await db
       .insert(schema.orgs)
       .values({
@@ -81,6 +85,7 @@ describe("Map Location Router", () => {
         orgType: "ao",
         parentId: regionId,
         isActive: true,
+        ...(opts?.logoUrl !== undefined ? { logoUrl: opts.logoUrl } : {}),
       })
       .returning();
 
@@ -116,39 +121,15 @@ describe("Map Location Router", () => {
 
       const regionLogo = "https://example.com/region-logo.png";
 
-      // Create region with a custom logo
-      const nationOrg = await getOrCreateF3NationOrg();
-      const [region] = await db
-        .insert(schema.orgs)
-        .values({
-          name: `Test Region ${uniqueId()}`,
-          orgType: "region",
-          parentId: nationOrg.id,
-          isActive: true,
-          logoUrl: regionLogo,
-        })
-        .returning();
+      // Create region with a custom logo, AO without one
+      const region = await createTestRegion({ logoUrl: regionLogo });
+      if (!region) throw new Error("Failed to create test region");
 
-      if (!region) return;
-      createdOrgIds.push(region.id);
-
-      // Create AO without a logo
-      const [ao] = await db
-        .insert(schema.orgs)
-        .values({
-          name: `Test AO ${uniqueId()}`,
-          orgType: "ao",
-          parentId: region.id,
-          isActive: true,
-          logoUrl: null,
-        })
-        .returning();
-
-      if (!ao) return;
-      createdOrgIds.push(ao.id);
+      const ao = await createTestAO(region.id, { logoUrl: null });
+      if (!ao) throw new Error("Failed to create test AO");
 
       const location = await createTestLocation(region.id);
-      if (!location) return;
+      if (!location) throw new Error("Failed to create test location");
 
       const [event] = await db
         .insert(schema.events)
@@ -189,38 +170,15 @@ describe("Map Location Router", () => {
       const regionLogo = "https://example.com/region-logo2.png";
       const aoLogo = "https://example.com/ao-logo.png";
 
-      const nationOrg = await getOrCreateF3NationOrg();
-      const [region] = await db
-        .insert(schema.orgs)
-        .values({
-          name: `Test Region ${uniqueId()}`,
-          orgType: "region",
-          parentId: nationOrg.id,
-          isActive: true,
-          logoUrl: regionLogo,
-        })
-        .returning();
+      // Create region with a logo and AO with its own logo
+      const region = await createTestRegion({ logoUrl: regionLogo });
+      if (!region) throw new Error("Failed to create test region");
 
-      if (!region) return;
-      createdOrgIds.push(region.id);
-
-      // Create AO with its own logo
-      const [ao] = await db
-        .insert(schema.orgs)
-        .values({
-          name: `Test AO ${uniqueId()}`,
-          orgType: "ao",
-          parentId: region.id,
-          isActive: true,
-          logoUrl: aoLogo,
-        })
-        .returning();
-
-      if (!ao) return;
-      createdOrgIds.push(ao.id);
+      const ao = await createTestAO(region.id, { logoUrl: aoLogo });
+      if (!ao) throw new Error("Failed to create test AO");
 
       const location = await createTestLocation(region.id);
-      if (!location) return;
+      if (!location) throw new Error("Failed to create test location");
 
       const [event] = await db
         .insert(schema.events)
