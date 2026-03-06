@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
 import { GoogleAuth } from "google-auth-library";
+import { NextResponse } from "next/server";
 
 import { env } from "@acme/env";
 
@@ -8,11 +8,11 @@ export async function POST(request: Request) {
     // Get the file from the request
     const formData = await request.formData();
     const file = formData.get("file") as File;
-    const regionId = formData.get("regionId") as string;
+    const orgId = formData.get("orgId") as string;
     const requestId = formData.get("requestId") as string;
     const size = formData.get("size") as string | undefined;
 
-    if (!file || !regionId || !requestId) {
+    if (!file || !orgId || !requestId) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     const token = await client.getAccessToken();
 
     // Generate a unique filename (you might want to customize this)
-    const filename = `${regionId}-${requestId}${size ? `-${size}` : ""}.${file.type.split("/")[1]}`;
+    const filename = `${orgId}-${requestId}${size ? `-${size}` : ""}.${file.type.split("/")[1]}`;
 
     // Upload to Google Cloud Storage
     const response = await fetch(

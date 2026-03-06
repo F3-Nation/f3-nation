@@ -20,9 +20,10 @@ import type { RouterOutputs } from "~/orpc/types";
 import { orpc, useQuery } from "~/orpc/react";
 import { useDebounce } from "~/utils/hooks/use-debounce";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
+import { MobileFilterSheet } from "../_components/mobile-filter-sheet";
+import { ResetFilter } from "../_components/reset-filter";
 import { EventTypeIsActiveFilter } from "./event-type-is-active-filter";
 import { OrgFilter } from "./org-filter";
-import { ResetFilter } from "../_components/reset-filter";
 
 type Org = RouterOutputs["org"]["accessible"]["orgs"][number];
 
@@ -85,6 +86,16 @@ export const EventTypesTable = () => {
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));
   };
 
+  const handleResetFilters = () => {
+    setSelectedStatuses(["active"]);
+    setSelectedOrgs([]);
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+  };
+
+  const activeFilterCount =
+    (selectedStatuses.length > 0 ? selectedStatuses.length : 0) +
+    selectedOrgs.length;
+
   return (
     <MDTable
       data={eventTypes?.eventTypes}
@@ -103,21 +114,38 @@ export const EventTypesTable = () => {
       }}
       filterComponent={
         <>
-          <EventTypeIsActiveFilter
-            onStatusSelect={handleStatusSelect}
-            selectedStatuses={selectedStatuses}
-          />
-          <OrgFilter
-            onOrgSelect={handleOrgSelect}
-            selectedOrgs={selectedOrgs}
-          />
-          <ResetFilter
-            onClick={() => {
-              setSelectedStatuses(["active"]);
-              setSelectedOrgs([]);
-              setPagination((prev) => ({ ...prev, pageIndex: 0 }));
-            }}
-          />
+          {/* Desktop: inline filters */}
+          <div className="hidden items-center gap-2 md:flex">
+            <EventTypeIsActiveFilter
+              onStatusSelect={handleStatusSelect}
+              selectedStatuses={selectedStatuses}
+            />
+            <OrgFilter
+              onOrgSelect={handleOrgSelect}
+              selectedOrgs={selectedOrgs}
+            />
+            <ResetFilter onClick={handleResetFilters} />
+          </div>
+          {/* Mobile: sheet-based filters */}
+          <MobileFilterSheet
+            activeFilterCount={activeFilterCount}
+            onReset={handleResetFilters}
+          >
+            <div>
+              <p className="mb-1 text-sm font-medium">Status</p>
+              <EventTypeIsActiveFilter
+                onStatusSelect={handleStatusSelect}
+                selectedStatuses={selectedStatuses}
+              />
+            </div>
+            <div>
+              <p className="mb-1 text-sm font-medium">Organization</p>
+              <OrgFilter
+                onOrgSelect={handleOrgSelect}
+                selectedOrgs={selectedOrgs}
+              />
+            </div>
+          </MobileFilterSheet>
         </>
       }
     />

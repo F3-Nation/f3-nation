@@ -8,11 +8,11 @@ import { SectorsTable } from "./sectors-table";
 
 const SectorsPage = async () => {
   return (
-    <Layout>
+    <Layout title="Sectors">
       <div className="flex w-full  flex-col">
         <div className="flex flex-row items-center justify-between">
-          <h1 className="text-2xl font-bold">Sectors</h1>
-          <div className="flex flex-row items-center justify-start gap-2">
+          <h1 className="hidden text-2xl font-bold lg:block">Sectors</h1>
+          <div className="ml-auto flex flex-row items-center justify-start gap-2">
             <AddSectorButton />
           </div>
         </div>
