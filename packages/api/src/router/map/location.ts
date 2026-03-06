@@ -37,7 +37,9 @@ export const mapLocationRouter = os.router({
           locations: {
             id: schema.locations.id,
             name: aoOrg.name,
-            logo: sql<string | null>`COALESCE(${aoOrg.logoUrl}, ${regionOrg.logoUrl})`,
+            logo: sql<
+              string | null
+            >`COALESCE(${aoOrg.logoUrl}, ${regionOrg.logoUrl})`,
             lat: schema.locations.latitude,
             lon: schema.locations.longitude,
             locationAddress: schema.locations.addressStreet,
@@ -81,7 +83,10 @@ export const mapLocationRouter = os.router({
         .leftJoin(aoOrg, eq(schema.events.orgId, aoOrg.id))
         .leftJoin(
           regionOrg,
-          and(eq(regionOrg.id, aoOrg.parentId), eq(regionOrg.orgType, "region")),
+          and(
+            eq(regionOrg.id, aoOrg.parentId),
+            eq(regionOrg.orgType, "region"),
+          ),
         )
         .leftJoin(
           schema.eventsXEventTypes,
