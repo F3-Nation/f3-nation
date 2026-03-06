@@ -1,3 +1,5 @@
+This Markdown was the initiator of the F3 Me app. Saving in the repo for posterity.
+
 # F3 Me — Agent Implementation Guide
 
 > **Purpose**: This document provides everything an AI coding agent needs to build the F3 Me user profile management app from scratch. It includes architecture decisions, API contracts, auth flow, file structure, and step-by-step implementation instructions.
