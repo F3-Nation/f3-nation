@@ -13,3 +13,6 @@
 # @pstaylor-patrick built the admin and region-pages apps and manages Firebase deployments
 /apps/admin/** @pstaylor-patrick
 /apps/region-pages/** @pstaylor-patrick
+
+# @taterhead247 built F3 Me. Well, Claude built it. Tackle just watched.
+/apps/me/** @taterhead247
