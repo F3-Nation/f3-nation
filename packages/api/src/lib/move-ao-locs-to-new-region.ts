@@ -27,7 +27,7 @@ export const moveAOLocsToNewRegion = async (
   },
 ) => {
   const newLocationIds: number[] = [];
-  console.log("moveAOToNewRegion", input);
+  console.log("moveAOToNewRegion", JSON.stringify(input));
   const { aoId, oldRegionId, newRegionId } = input;
 
   const aoEvents = await ctx.db

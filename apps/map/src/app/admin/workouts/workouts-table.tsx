@@ -31,7 +31,9 @@ import { orpc, useQuery } from "~/orpc/react";
 import type { RouterOutputs } from "~/orpc/types";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
 import { AOSFilter } from "../_components/ao-filter";
+import { MobileFilterSheet } from "../_components/mobile-filter-sheet";
 import { RegionFilter } from "../_components/region-filter";
+import { ResetFilter } from "../_components/reset-filter";
 
 type Org = RouterOutputs["org"]["all"]["orgs"][number];
 
@@ -60,6 +62,34 @@ export const WorkoutsTable = () => {
     }),
   );
 
+  const handleResetFilters = () => {
+    setSelectedStatuses(["active"]);
+    setSelectedAos([]);
+    setSelectedRegions([]);
+    setOnlyMine(true);
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+  };
+
+  const activeFilterCount =
+    selectedStatuses.length +
+    selectedAos.length +
+    selectedRegions.length +
+    (onlyMine ? 1 : 0);
+
+  const handleAoSelect = (ao: Org) => {
+    const newAos = selectedAos.some((a) => a.id === ao.id)
+      ? selectedAos.filter((a) => a.id !== ao.id)
+      : [...selectedAos, ao];
+    setSelectedAos(newAos);
+  };
+
+  const handleRegionSelect = (region: Org) => {
+    const newRegions = selectedRegions.some((r) => r.id === region.id)
+      ? selectedRegions.filter((r) => r.id !== region.id)
+      : [...selectedRegions, region];
+    setSelectedRegions(newRegions);
+  };
+
   return (
     <MDTable
       data={workouts?.events}
@@ -78,30 +108,50 @@ export const WorkoutsTable = () => {
       setSorting={setSorting}
       filterComponent={
         <>
-          <FilterComponent
-            selectedStatuses={selectedStatuses}
-            setSelectedStatuses={setSelectedStatuses}
-            onlyMine={onlyMine}
-            setOnlyMine={setOnlyMine}
-          />
-          <AOSFilter
-            onAoSelect={(ao) => {
-              const newAos = selectedAos.some((a) => a.id === ao.id)
-                ? selectedAos.filter((a) => a.id !== ao.id)
-                : [...selectedAos, ao];
-              setSelectedAos(newAos);
-            }}
-            selectedAos={selectedAos}
-          />
-          <RegionFilter
-            onRegionSelect={(region) => {
-              const newRegions = selectedRegions.some((r) => r.id === region.id)
-                ? selectedRegions.filter((r) => r.id !== region.id)
-                : [...selectedRegions, region];
-              setSelectedRegions(newRegions);
-            }}
-            selectedRegions={selectedRegions}
-          />
+          {/* Desktop: inline filters */}
+          <div className="hidden items-center gap-2 md:flex">
+            <FilterComponent
+              selectedStatuses={selectedStatuses}
+              setSelectedStatuses={setSelectedStatuses}
+              onlyMine={onlyMine}
+              setOnlyMine={setOnlyMine}
+            />
+            <AOSFilter onAoSelect={handleAoSelect} selectedAos={selectedAos} />
+            <RegionFilter
+              onRegionSelect={handleRegionSelect}
+              selectedRegions={selectedRegions}
+            />
+            <ResetFilter onClick={handleResetFilters} />
+          </div>
+          {/* Mobile: sheet-based filters */}
+          <MobileFilterSheet
+            activeFilterCount={activeFilterCount}
+            onReset={handleResetFilters}
+          >
+            <div>
+              <p className="mb-1 text-sm font-medium">Status</p>
+              <FilterComponent
+                selectedStatuses={selectedStatuses}
+                setSelectedStatuses={setSelectedStatuses}
+                onlyMine={onlyMine}
+                setOnlyMine={setOnlyMine}
+              />
+            </div>
+            <div>
+              <p className="mb-1 text-sm font-medium">AO</p>
+              <AOSFilter
+                onAoSelect={handleAoSelect}
+                selectedAos={selectedAos}
+              />
+            </div>
+            <div>
+              <p className="mb-1 text-sm font-medium">Region</p>
+              <RegionFilter
+                onRegionSelect={handleRegionSelect}
+                selectedRegions={selectedRegions}
+              />
+            </div>
+          </MobileFilterSheet>
         </>
       }
     />

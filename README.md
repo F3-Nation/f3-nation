@@ -1,4 +1,4 @@
-# F3 Nation - PMPM Turbo Monorepo
+# F3 Nation - PNPM Turbo Monorepo
 
 This is a monorepo that is built with PNPM workspaces and Turbo for managing multiple applications and shared packages.
 
@@ -22,7 +22,7 @@ Each application in the `apps/` directory is a self-contained project:
 - **Shared code access**: Can import from shared packages in the monorepo
 - **Port configuration**: Each app typically runs on its own port
 
-### Using Filter Flags with PMPM Commands
+### Using Filter Flags with PNPM Commands
 
 PNPM provides powerful filtering capabilities to target specific workspaces:
 

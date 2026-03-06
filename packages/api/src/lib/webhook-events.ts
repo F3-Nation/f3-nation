@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 
 import type { WebhookPayload } from "./notify-webhooks";
 import { notifyWebhooks } from "./notify-webhooks";
+import { triggerMapAppRevalidation } from "./revalidate-map";
 
 /**
  * Discriminated union for type-safe webhook event payloads.
@@ -115,7 +116,7 @@ const buildPayload = (event: WebhookEvent): WebhookPayload => {
  */
 export const notifyMapDataChange = (event: WebhookEvent): void => {
   const payload = buildPayload(event);
-  console.log("notifyMapDataChange", { event, payload });
+  console.log("notifyMapDataChange", JSON.stringify({ event, payload }));
 
   // Revalidate the statically generated map page so Next.js serves fresh data
   // on the next request. Only works in Next.js request context (not in tests).
@@ -131,15 +132,25 @@ export const notifyMapDataChange = (event: WebhookEvent): void => {
       // Expected in test environment, no need to log
     } else {
       // Unexpected error, log it but don't throw
-      console.error("notifyMapDataChange revalidation failed", {
-        event,
-        error,
-      });
+      console.error(
+        "notifyMapDataChange revalidation failed",
+        JSON.stringify({
+          event,
+          error,
+        }),
+      );
     }
   }
 
   // Fire and forget - don't await to not block response
   notifyWebhooks(payload).catch((error: unknown) => {
-    console.error("notifyMapDataChange failed", { event, error });
+    console.error(
+      "notifyMapDataChange failed",
+      JSON.stringify({ event, error }),
+    );
   });
+
+  // Trigger Map app revalidation via HTTP - API and Map are separate Next.js instances,
+  // so revalidatePath above only affects the API. The Map app must be notified explicitly.
+  void triggerMapAppRevalidation({ event });
 };

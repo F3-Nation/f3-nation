@@ -4,7 +4,7 @@ import { z } from "zod";
 import { and, asc, countDistinct, eq, isNotNull, schema, sql } from "@acme/db";
 import type { OrgType } from "@acme/shared/app/enums";
 
-import { withSessionAndDb } from "../../shared";
+import { protectedProcedure } from "../../shared";
 
 interface OrgRow {
   id: number;
@@ -21,7 +21,7 @@ interface PositionRow {
 }
 
 export const orgChartRouter = {
-  all: withSessionAndDb
+  all: protectedProcedure
     .route({
       method: "GET",
       path: "/",
@@ -209,7 +209,7 @@ export const orgChartRouter = {
       return { orgs: orgSummaries };
     }),
 
-  byId: withSessionAndDb
+  byId: protectedProcedure
     .input(
       z.object({
         orgId: z.coerce
@@ -267,6 +267,25 @@ export const orgChartRouter = {
         .where(eq(schema.positionsXOrgsXUsers.orgId, input.orgId))
         .orderBy(asc(schema.positions.name), asc(schema.users.f3Name));
 
+      // Get roles for this org, similar to positions
+      const orgRoles: PositionRow[] = await ctx.db
+        .select({
+          title: schema.roles.name,
+          f3Name: schema.users.f3Name,
+          avatarUrl: schema.users.avatarUrl,
+        })
+        .from(schema.rolesXUsersXOrg)
+        .innerJoin(
+          schema.roles,
+          eq(schema.roles.id, schema.rolesXUsersXOrg.roleId),
+        )
+        .innerJoin(
+          schema.users,
+          eq(schema.users.id, schema.rolesXUsersXOrg.userId),
+        )
+        .where(eq(schema.rolesXUsersXOrg.orgId, input.orgId))
+        .orderBy(asc(schema.roles.name), asc(schema.users.f3Name));
+
       return {
         id: org.id,
         name: org.name,
@@ -280,6 +299,11 @@ export const orgChartRouter = {
           title: position.title,
           f3Name: position.f3Name,
           avatarUrl: position.avatarUrl,
+        })),
+        roles: orgRoles.map((role) => ({
+          title: role.title,
+          f3Name: role.f3Name,
+          avatarUrl: role.avatarUrl,
         })),
       };
     }),

@@ -2,18 +2,18 @@ import axios from "axios";
 
 export const uploadLogo = async ({
   file,
-  regionId,
+  orgId,
   requestId,
   size,
 }: {
   file: Blob;
-  regionId: number;
+  orgId: number;
   requestId: string;
   size?: number;
 }) => {
   const formData = new FormData();
   formData.append("file", file);
-  formData.append("regionId", regionId.toString());
+  formData.append("orgId", orgId.toString());
   formData.append("requestId", requestId);
   if (size) {
     formData.append("size", size.toString());

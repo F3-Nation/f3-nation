@@ -803,7 +803,7 @@ export const applyUpdateRequest = async (
   // AO
   if (updateRequest.aoId == undefined) {
     // INSERT AO
-    console.log("inserting ao", updateRequest);
+    console.log("inserting ao", JSON.stringify(updateRequest));
     const [ao] = await ctx.db
       .insert(schema.orgs)
       .values({
@@ -875,7 +875,7 @@ export const applyUpdateRequest = async (
     }
     eventId = _updated.id;
   } else {
-    console.log("inserting event", updateRequest);
+    console.log("inserting event", JSON.stringify(updateRequest));
     const newEvent: typeof schema.events.$inferInsert = {
       name: updateRequest.eventName,
       locationId: updateRequest.locationId,
