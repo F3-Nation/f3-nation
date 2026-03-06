@@ -1,8 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import {
-  createSessionValue,
-  verifySessionValue,
-} from "@/lib/auth/session";
+import { createSessionValue, verifySessionValue } from "@/lib/auth/session";
 import { SESSION_COOKIE_MAX_AGE } from "@/lib/auth/constants";
 
 // Set up test environment
