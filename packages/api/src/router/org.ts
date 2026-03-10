@@ -16,6 +16,7 @@ import {
 import type { AppDb } from "@acme/db/client";
 import { F3_NATION_ORG_ID } from "@acme/shared/app/constants";
 import { IsActiveStatus, OrgType } from "@acme/shared/app/enums";
+import type { RegionRole } from "@acme/shared/app/enums";
 import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
 import type { OrgMeta } from "@acme/shared/app/types";
 import { OrgInsertSchema } from "@acme/validators";
@@ -433,14 +434,7 @@ export const orgRouter = {
           schema.roles,
           eq(schema.rolesXUsersXOrg.roleId, schema.roles.id),
         )
-        .where(
-          and(
-            eq(schema.rolesXUsersXOrg.userId, ctx.session.id),
-            input?.orgTypes?.length
-              ? inArray(schema.orgs.orgType, input.orgTypes)
-              : undefined,
-          ),
-        );
+        .where(eq(schema.rolesXUsersXOrg.userId, ctx.session.id));
 
       // Reduce multiple rows per org down to one row per org with possibly multiple roles
       const orgMap: Record<
@@ -466,13 +460,61 @@ export const orgRouter = {
         }
       }
 
-      const allAssignedOrgs = Object.values(orgMap).map((org) => ({
+      const directlyAssignedOrgs = Object.values(orgMap).map((org) => ({
         id: org.orgs.id,
         name: org.orgs.name,
         orgType: org.orgs.orgType,
         parentId: org.orgs.parentId,
         roles: org.roles,
       }));
+
+      // For orgs where the user has admin role, also include all descendant orgs.
+      // This allows sector admins to grant roles to areas/regions beneath their sector.
+      const adminOrgIds = directlyAssignedOrgs
+        .filter((org) => org.roles.includes("admin"))
+        .map((org) => org.id);
+
+      let allAssignedOrgs = directlyAssignedOrgs;
+
+      if (adminOrgIds.length > 0) {
+        const descendantOrgIds = await getDescendantOrgIds(ctx.db, adminOrgIds);
+
+        // Fetch orgs not already in the directly-assigned set
+        const directlyAssignedOrgIdSet = new Set(
+          directlyAssignedOrgs.map((o) => o.id),
+        );
+        const newDescendantIds = descendantOrgIds.filter(
+          (id) => !directlyAssignedOrgIdSet.has(id),
+        );
+
+        if (newDescendantIds.length > 0) {
+          const descendantOrgs = await ctx.db
+            .select({
+              id: schema.orgs.id,
+              name: schema.orgs.name,
+              orgType: schema.orgs.orgType,
+              parentId: schema.orgs.parentId,
+            })
+            .from(schema.orgs)
+            .where(inArray(schema.orgs.id, newDescendantIds));
+
+          // Mark descendant orgs with "admin" to indicate inherited admin access
+          allAssignedOrgs = [
+            ...directlyAssignedOrgs,
+            ...descendantOrgs.map((org) => ({
+              ...org,
+              roles: ["admin"] as RegionRole[],
+            })),
+          ];
+        }
+      }
+
+      // Filter by orgTypes after expanding descendants
+      if (input?.orgTypes?.length) {
+        allAssignedOrgs = allAssignedOrgs.filter((org) =>
+          input.orgTypes?.includes(org.orgType),
+        );
+      }
 
       // Sort the orgs array manually since we're working with in-memory data
       const sortedOrgs = [...allAssignedOrgs];

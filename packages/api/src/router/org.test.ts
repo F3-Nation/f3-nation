@@ -360,4 +360,169 @@ describe("Org Router", () => {
       ).rejects.toThrow();
     });
   });
+
+  describe("accessible", () => {
+    it("sector admin sees their sector and descendant orgs", async () => {
+      const uid = uniqueId();
+
+      // Build: sector -> area -> region
+      const [sector] = await db
+        .insert(schema.orgs)
+        .values({ name: `Sector ${uid}`, orgType: "sector", isActive: true })
+        .returning();
+      if (!sector) throw new Error("Failed to create sector");
+      createdOrgIds.push(sector.id);
+
+      const [area] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Area ${uid}`,
+          orgType: "area",
+          parentId: sector.id,
+          isActive: true,
+        })
+        .returning();
+      if (!area) throw new Error("Failed to create area");
+      createdOrgIds.push(area.id);
+
+      const [region] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Region ${uid}`,
+          orgType: "region",
+          parentId: area.id,
+          isActive: true,
+        })
+        .returning();
+      if (!region) throw new Error("Failed to create region");
+      createdOrgIds.push(region.id);
+
+      // Create a test user and assign them admin role on the sector
+      const [testUser] = await db
+        .insert(schema.users)
+        .values({ email: `sector-admin-${uid}@example.com`, f3Name: `SectorAdmin${uid}` })
+        .returning();
+      if (!testUser) throw new Error("Failed to create test user");
+
+      const [adminRole] = await db
+        .select()
+        .from(schema.roles)
+        .where(eq(schema.roles.name, "admin"))
+        .limit(1);
+      if (!adminRole) throw new Error("Admin role not found");
+
+      await db.insert(schema.rolesXUsersXOrg).values({
+        userId: testUser.id,
+        orgId: sector.id,
+        roleId: adminRole.id,
+      });
+
+      // Mock session with the test user's DB id
+      await mockAuthWithSession({
+        id: testUser.id,
+        email: testUser.email ?? "",
+        user: {
+          id: String(testUser.id),
+          email: testUser.email ?? "",
+          name: testUser.f3Name ?? "",
+          roles: [{ orgId: sector.id, orgName: sector.name ?? "Sector", roleName: "admin" }],
+        },
+        roles: [{ orgId: sector.id, orgName: sector.name ?? "Sector", roleName: "admin" }],
+        expires: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
+      });
+
+      const client = createTestClient();
+      const result = await client.org.accessible({
+        orgTypes: ["sector", "area", "region"],
+      });
+
+      const resultIds = result.orgs.map((o) => o.id);
+      expect(resultIds).toContain(sector.id);
+      expect(resultIds).toContain(area.id);
+      expect(resultIds).toContain(region.id);
+
+      // Sector should have "admin" in roles (direct assignment)
+      const sectorOrg = result.orgs.find((o) => o.id === sector.id);
+      expect(sectorOrg?.roles).toContain("admin");
+
+      // Descendant orgs should also have "admin" (inherited)
+      const areaOrg = result.orgs.find((o) => o.id === area.id);
+      expect(areaOrg?.roles).toContain("admin");
+
+      const regionOrg = result.orgs.find((o) => o.id === region.id);
+      expect(regionOrg?.roles).toContain("admin");
+
+      // Cleanup
+      await cleanup.user(testUser.id);
+    });
+
+    it("editor-only user does not see descendant orgs beyond their assignment", async () => {
+      const uid = uniqueId();
+
+      const [sector] = await db
+        .insert(schema.orgs)
+        .values({ name: `Sector ${uid}`, orgType: "sector", isActive: true })
+        .returning();
+      if (!sector) throw new Error("Failed to create sector");
+      createdOrgIds.push(sector.id);
+
+      const [area] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Area ${uid}`,
+          orgType: "area",
+          parentId: sector.id,
+          isActive: true,
+        })
+        .returning();
+      if (!area) throw new Error("Failed to create area");
+      createdOrgIds.push(area.id);
+
+      // Create a test user with only editor role on the sector
+      const [testUser] = await db
+        .insert(schema.users)
+        .values({ email: `sector-editor-${uid}@example.com`, f3Name: `SectorEditor${uid}` })
+        .returning();
+      if (!testUser) throw new Error("Failed to create test user");
+
+      const [editorRole] = await db
+        .select()
+        .from(schema.roles)
+        .where(eq(schema.roles.name, "editor"))
+        .limit(1);
+      if (!editorRole) throw new Error("Editor role not found");
+
+      await db.insert(schema.rolesXUsersXOrg).values({
+        userId: testUser.id,
+        orgId: sector.id,
+        roleId: editorRole.id,
+      });
+
+      await mockAuthWithSession({
+        id: testUser.id,
+        email: testUser.email ?? "",
+        user: {
+          id: String(testUser.id),
+          email: testUser.email ?? "",
+          name: testUser.f3Name ?? "",
+          roles: [{ orgId: sector.id, orgName: sector.name ?? "Sector", roleName: "editor" }],
+        },
+        roles: [{ orgId: sector.id, orgName: sector.name ?? "Sector", roleName: "editor" }],
+        expires: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
+      });
+
+      const client = createTestClient();
+      const result = await client.org.accessible({
+        orgTypes: ["sector", "area", "region"],
+      });
+
+      const resultIds = result.orgs.map((o) => o.id);
+      expect(resultIds).toContain(sector.id);
+      // Editor-only users should NOT see descendant orgs they're not assigned to
+      expect(resultIds).not.toContain(area.id);
+
+      // Cleanup
+      await cleanup.user(testUser.id);
+    });
+  });
 });
