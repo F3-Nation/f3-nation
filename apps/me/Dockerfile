@@ -34,7 +34,6 @@ RUN pnpm install --frozen-lockfile
 
 # Copy source and build
 COPY --from=builder /app/out/full/ .
-ENV NODE_ENV=production
 RUN pnpm turbo build --filter=f3-me
 
 # ---------- Stage 3: Production runner ----------
