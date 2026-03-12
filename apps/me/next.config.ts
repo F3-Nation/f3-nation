@@ -7,7 +7,12 @@ const nextConfig: NextConfig = {
       {
         protocol: "https",
         hostname: "storage.googleapis.com",
-        pathname: "/f3-logos/**",
+        pathname: "/f3-public-images/**",
+      },
+      {
+        protocol: "https",
+        hostname: "storage.googleapis.com",
+        pathname: "/f3-public-images-staging/**",
       },
     ],
   },

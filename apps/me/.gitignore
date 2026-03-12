@@ -65,5 +65,12 @@ node_modules/
 # dotenv environment variables file
 .env
 
+# Local dev certificates
+certificates/
+
 # dataconnect generated files
 .dataconnect
+
+# GCP service account key files
+*-key.json
+f3-me-*.json
