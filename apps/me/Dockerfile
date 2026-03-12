@@ -1,7 +1,9 @@
 # ---------- Stage 1: Prune monorepo ----------
-FROM --platform=linux/amd64 node:20-alpine AS builder
+FROM node:20-alpine AS builder
 
 ENV TURBO_TELEMETRY_DISABLED=1
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
 RUN apk add --no-cache libc6-compat && apk update
 WORKDIR /app
 
@@ -12,7 +14,7 @@ COPY . .
 RUN turbo prune f3-me --docker
 
 # ---------- Stage 2: Install + build ----------
-FROM --platform=linux/amd64 node:20-alpine AS installer
+FROM node:20-alpine AS installer
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -33,7 +35,7 @@ COPY --from=builder /app/out/full/ .
 RUN pnpm turbo build --filter=f3-me
 
 # ---------- Stage 3: Production runner ----------
-FROM --platform=linux/amd64 node:20-alpine AS runner
+FROM node:20-alpine AS runner
 
 RUN apk add --no-cache libc6-compat && apk update
 WORKDIR /app
