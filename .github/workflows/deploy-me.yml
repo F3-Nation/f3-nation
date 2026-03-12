@@ -16,7 +16,6 @@ env:
   PROD_PROJECT: f3-me-app
   REGION: us-east1
   SERVICE_NAME: f3-me
-  # Artifact Registry repository (must exist in both projects, or use a shared one)
   AR_REPO: cloud-run-builds
 
 jobs:
@@ -117,13 +116,25 @@ jobs:
           workload_identity_provider: ${{ secrets.ME_WIF_PROVIDER }}
           service_account: ${{ secrets.ME_WIF_SA_PROD }}
 
-      - name: Authorize Docker (to pull cross-project)
+      - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
+
+      - name: Authorize Docker to Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Promote image to prod Artifact Registry
+        run: |
+          STAGING_IMAGE="${{ needs.build.outputs.image }}"
+          PROD_IMAGE="${REGION}-docker.pkg.dev/${PROD_PROJECT}/${AR_REPO}/${IMAGE_NAME}:${STAGING_IMAGE##*:}"
+          docker pull "${STAGING_IMAGE}"
+          docker tag "${STAGING_IMAGE}" "${PROD_IMAGE}"
+          docker push "${PROD_IMAGE}"
+          echo "prod_image=${PROD_IMAGE}" >> "$GITHUB_ENV"
 
       - name: Deploy to Cloud Run (prod)
         uses: google-github-actions/deploy-cloudrun@v2
         with:
           service: ${{ env.SERVICE_NAME }}
-          image: ${{ needs.build.outputs.image }}
+          image: ${{ env.prod_image }}
           region: ${{ env.REGION }}
           project_id: ${{ env.PROD_PROJECT }}
