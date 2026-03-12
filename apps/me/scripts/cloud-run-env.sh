@@ -51,7 +51,6 @@ ENV_FILE_VARS=(
 declare -A PLAIN_VARS=(
   [AUTH_PROVIDER_URL]="https://auth.f3nation.com"
   [NODE_ENV]="production"
-  [PORT]="3003"
 )
 
 # Parse flags
@@ -162,18 +161,15 @@ if [[ -z "$SA_EMAIL" ]]; then
   SA_EMAIL="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
 fi
 
-PIDS=()
 for var in "${!SECRET_MAP[@]}"; do
   secret_id="${SECRET_MAP[$var]}"
+  echo "  Granting access to $secret_id..."
   gcloud secrets add-iam-policy-binding "$secret_id" \
     --project "$PROJECT" \
     --member "serviceAccount:${SA_EMAIL}" \
     --role "roles/secretmanager.secretAccessor" \
-    --condition=None \
-    --quiet 2>/dev/null &
-  PIDS+=($!)
+    --quiet > /dev/null || echo "  WARNING: Failed to bind $secret_id"
 done
-for pid in "${PIDS[@]}"; do wait "$pid" || true; done
 
 # ── Build the Cloud Run update command ──
 echo ""

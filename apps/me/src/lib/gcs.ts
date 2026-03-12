@@ -33,6 +33,5 @@ export async function uploadAvatar(
     },
   });
 
-  // Append cache-busting param so browsers pick up the new image
-  return `https://storage.googleapis.com/${bucketName}/${path}?v=${Date.now()}`;
+  return `https://storage.googleapis.com/${bucketName}/${path}`;
 }

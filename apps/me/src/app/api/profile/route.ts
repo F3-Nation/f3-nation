@@ -82,7 +82,7 @@ export async function PATCH(request: NextRequest) {
 
       // Merge: preserve all existing keys, update only the editable ones
       const mergedMeta = { ...existingMeta, ...metaUpdates };
-      updateBody.meta = JSON.stringify(mergedMeta);
+      updateBody.meta = mergedMeta;
     }
 
     // The API's CrupdateUserSchema requires `roles` — pass existing roles through
