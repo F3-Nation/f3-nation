@@ -95,23 +95,34 @@ export function ProfileForm({ user, regions, positions }: ProfileFormProps) {
   const handleSave = async () => {
     setSaving(true);
     try {
+      // Only send fields that changed
+      const payload: Record<string, unknown> = {};
+      if (isFieldDirty("f3Name")) payload.f3Name = form.f3Name;
+      if (isFieldDirty("firstName")) payload.firstName = form.firstName || null;
+      if (isFieldDirty("lastName")) payload.lastName = form.lastName;
+      if (isFieldDirty("phone")) payload.phone = form.phone || null;
+      if (isFieldDirty("homeRegionId"))
+        payload.homeRegionId = form.homeRegionId;
+      if (isFieldDirty("emergencyContact"))
+        payload.emergencyContact = form.emergencyContact || null;
+      if (isFieldDirty("emergencyPhone"))
+        payload.emergencyPhone = form.emergencyPhone || null;
+      if (isFieldDirty("emergencyNotes"))
+        payload.emergencyNotes = form.emergencyNotes || null;
+      if (isFieldDirty("f3_name_origin"))
+        payload.f3_name_origin = form.f3_name_origin || undefined;
+      if (isFieldDirty("my_f3_why"))
+        payload.my_f3_why = form.my_f3_why || undefined;
+      if (isFieldDirty("user_emergency_info_dr_sharing"))
+        payload.user_emergency_info_dr_sharing =
+          form.user_emergency_info_dr_sharing;
+      if (isFieldDirty("start_date_override"))
+        payload.start_date_override = form.start_date_override || undefined;
+
       const res = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          f3Name: form.f3Name,
-          firstName: form.firstName || null,
-          lastName: form.lastName,
-          phone: form.phone || null,
-          homeRegionId: form.homeRegionId,
-          emergencyContact: form.emergencyContact || null,
-          emergencyPhone: form.emergencyPhone || null,
-          emergencyNotes: form.emergencyNotes || null,
-          f3_name_origin: form.f3_name_origin || undefined,
-          my_f3_why: form.my_f3_why || undefined,
-          user_emergency_info_dr_sharing: form.user_emergency_info_dr_sharing,
-          start_date_override: form.start_date_override || undefined,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {

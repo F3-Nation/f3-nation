@@ -178,10 +178,7 @@ describe("Profile API route", () => {
         string,
         unknown
       >;
-      const meta = JSON.parse(updateCall.meta as string) as Record<
-        string,
-        unknown
-      >;
+      const meta = updateCall.meta as Record<string, unknown>;
       expect(meta.f3_name_origin).toBe("new origin");
       expect(meta.my_f3_why).toBe("because");
       expect(meta.custom_key).toBe("preserve me");
