@@ -19,11 +19,14 @@ FROM node:20-alpine AS installer
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV TURBO_TELEMETRY_DISABLED=1
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
 
 RUN apk add --no-cache libc6-compat && apk update
 WORKDIR /app
 
 RUN corepack enable && corepack prepare pnpm@8.15.1 --activate
+RUN pnpm add -g turbo@^1.12.3
 
 # Install dependencies from pruned lockfile
 COPY --from=builder /app/out/json/ .
