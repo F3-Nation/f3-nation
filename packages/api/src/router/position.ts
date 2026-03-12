@@ -559,8 +559,7 @@ export const positionRouter = {
           schema.orgs,
           eq(schema.orgs.id, schema.positionsXOrgsXUsers.orgId),
         )
-        .where(eq(schema.positionsXOrgsXUsers.userId, input.userId))
-        .orderBy(asc(schema.orgs.name), asc(schema.positions.name));
+        .where(eq(schema.positionsXOrgsXUsers.userId, input.userId));
 
       return { assignments };
     }),
