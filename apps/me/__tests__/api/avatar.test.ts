@@ -129,7 +129,7 @@ describe("Avatar API route", () => {
       updated: "2024-01-01",
     });
     vi.mocked(uploadAvatar).mockResolvedValue(
-      "https://storage.googleapis.com/f3-logos/user-avatars/42.jpg?v=1234567890",
+      "https://storage.googleapis.com/f3-logos/user-avatars/42.jpg",
     );
     vi.mocked(updateUser).mockResolvedValue({
       id: 42,
@@ -139,8 +139,7 @@ describe("Avatar API route", () => {
       email: "test@f3.com",
       phone: null,
       homeRegionId: null,
-      avatarUrl:
-        "https://storage.googleapis.com/f3-logos/user-avatars/42.jpg?v=1234567890",
+      avatarUrl: "https://storage.googleapis.com/f3-logos/user-avatars/42.jpg",
       meta: null,
       emergencyContact: null,
       emergencyPhone: null,
@@ -177,8 +176,7 @@ describe("Avatar API route", () => {
     expect(uploadAvatar).toHaveBeenCalledWith(42, expect.any(Buffer));
     expect(updateUser).toHaveBeenCalledWith({
       id: 42,
-      avatarUrl:
-        "https://storage.googleapis.com/f3-logos/user-avatars/42.jpg?v=1234567890",
+      avatarUrl: "https://storage.googleapis.com/f3-logos/user-avatars/42.jpg",
       roles: [],
     });
   });

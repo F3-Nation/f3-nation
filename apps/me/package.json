@@ -14,8 +14,8 @@
     "test:watch": "vitest -w",
     "test:coverage": "vitest --run --coverage",
     "typecheck": "tsc --noEmit",
-    "deploy:setup-secrets:staging": "/usr/bin/env bash scripts/cloud-run-env.sh --env staging",
-    "deploy:setup-secrets:prod": "/usr/bin/env bash scripts/cloud-run-env.sh --env prod"
+    "deploy:variables-secrets:staging": "/usr/bin/env bash scripts/cloud-run-env.sh --env staging",
+    "deploy:variables-secrets:prod": "/usr/bin/env bash scripts/cloud-run-env.sh --env prod"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.14.0",
