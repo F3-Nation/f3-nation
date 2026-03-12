@@ -225,7 +225,7 @@ export function ProfileForm({ user, regions, positions }: ProfileFormProps) {
               />
             </div>
             <div className={`space-y-2${dc("homeRegionId")}`}>
-              <Label htmlFor="homeRegion">Home Region</Label>
+              <Label>Home Region</Label>
               <RegionSelect
                 regions={regions}
                 value={form.homeRegionId}
