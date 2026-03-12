@@ -150,8 +150,8 @@ PR → dev → tag me@1.2.3 → [CI passes] → build image → deploy staging �
 
 ### GCP Projects
 
-| Environment | GCP Project                     | Cloud Run Service | URL                       |
-| ----------- | ------------------------------- | ----------------- | ------------------------- |
+| Environment | GCP Project         | Cloud Run Service | URL                       |
+| ----------- | ------------------- | ----------------- | ------------------------- |
 | Staging     | `f3-me-app-staging` | `f3-me`           | `staging.me.f3nation.com` |
 | Production  | `f3-me-app`         | `f3-me`           | `me.f3nation.com`         |
 
@@ -229,15 +229,22 @@ git log me@1.0.0..me@1.1.0 --oneline -- apps/me/
 
 These steps only need to be done once when setting up the CI/CD pipeline.
 
-#### 1. Create GCP Artifact Registry repository
+#### 1. Create GCP Artifact Registry repositories
 
-In the **staging** project (images are stored here and pulled by prod):
+Each project gets its own Artifact Registry. The build pushes to staging; the deploy-prod job copies the image to prod's registry.
 
 ```bash
+# Staging
 gcloud artifacts repositories create cloud-run-builds \
   --repository-format=docker \
   --location=us-east1 \
   --project=f3-me-app-staging
+
+# Production
+gcloud artifacts repositories create cloud-run-builds \
+  --repository-format=docker \
+  --location=us-east1 \
+  --project=f3-me-app
 ```
 
 #### 2. Create Cloud Run services
@@ -263,28 +270,42 @@ gcloud run deploy f3-me \
 This lets GitHub Actions authenticate to GCP without service account keys.
 
 ```bash
-# Create a Workload Identity Pool (do this once, can be shared across projects)
+# Create the f3-github GCP project (shared CI/CD infrastructure).
+# The WIF pool lives here — decoupled from any app project so it survives
+# if an app project is ever torn down. Other apps can reuse this pool too.
+gcloud projects create f3-github --name="F3 GitHub CI/CD"
+
+# Enable required APIs
+gcloud services enable iam.googleapis.com iamcredentials.googleapis.com \
+  sts.googleapis.com cloudresourcemanager.googleapis.com \
+  --project=f3-github
+
+# Create a Workload Identity Pool
 gcloud iam workload-identity-pools create "github-actions" \
   --location="global" \
   --display-name="GitHub Actions" \
-  --project=f3-me-app-staging
+  --project=f3-github
 
-# Create a provider in the pool
+# Create a provider in the pool (attribute-condition restricts to our repo)
 gcloud iam workload-identity-pools providers create-oidc "github" \
   --location="global" \
   --workload-identity-pool="github-actions" \
   --display-name="GitHub" \
   --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository" \
+  --attribute-condition="attribute.repository==\"F3-Nation/f3-nation\"" \
   --issuer-uri="https://token.actions.githubusercontent.com" \
-  --project=f3-me-app-staging
+  --project=f3-github
 
-# Create service accounts for GitHub Actions
-# Staging SA:
+# Get the f3-github project number (used in SA impersonation bindings below)
+gcloud projects describe f3-github --format='value(projectNumber)'
+# ↑ Note this number — referred to as WIF_PROJECT_NUMBER below
+
+# ── Staging SA ──
 gcloud iam service-accounts create github-actions-deploy \
   --display-name="GitHub Actions Deploy" \
   --project=f3-me-app-staging
 
-# Grant it Cloud Run + Artifact Registry permissions
+# Grant it Cloud Run + Artifact Registry permissions in the staging project
 gcloud projects add-iam-policy-binding f3-me-app-staging \
   --member="serviceAccount:github-actions-deploy@f3-me-app-staging.iam.gserviceaccount.com" \
   --role="roles/run.admin"
@@ -295,14 +316,14 @@ gcloud projects add-iam-policy-binding f3-me-app-staging \
   --member="serviceAccount:github-actions-deploy@f3-me-app-staging.iam.gserviceaccount.com" \
   --role="roles/iam.serviceAccountUser"
 
-# Allow GitHub to impersonate the staging SA
+# Allow GitHub to impersonate the staging SA (pool is in f3-github project)
 gcloud iam service-accounts add-iam-policy-binding \
   github-actions-deploy@f3-me-app-staging.iam.gserviceaccount.com \
   --role="roles/iam.workloadIdentityUser" \
-  --member="principalSet://iam.googleapis.com/projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions/attribute.repository/F3-Nation/f3-nation" \
+  --member="principalSet://iam.googleapis.com/projects/WIF_PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions/attribute.repository/F3-Nation/f3-nation" \
   --project=f3-me-app-staging
 
-# Production SA:
+# ── Production SA ──
 gcloud iam service-accounts create github-actions-deploy \
   --display-name="GitHub Actions Deploy" \
   --project=f3-me-app
@@ -314,30 +335,33 @@ gcloud projects add-iam-policy-binding f3-me-app \
   --member="serviceAccount:github-actions-deploy@f3-me-app.iam.gserviceaccount.com" \
   --role="roles/iam.serviceAccountUser"
 
-# Prod SA also needs read access to staging's Artifact Registry (to pull the image)
+# Prod SA needs AR read on staging (to pull the build image) and AR write on prod (to push the promoted copy)
 gcloud projects add-iam-policy-binding f3-me-app-staging \
   --member="serviceAccount:github-actions-deploy@f3-me-app.iam.gserviceaccount.com" \
   --role="roles/artifactregistry.reader"
+gcloud projects add-iam-policy-binding f3-me-app \
+  --member="serviceAccount:github-actions-deploy@f3-me-app.iam.gserviceaccount.com" \
+  --role="roles/artifactregistry.writer"
 
 # Allow GitHub to impersonate the prod SA
 gcloud iam service-accounts add-iam-policy-binding \
   github-actions-deploy@f3-me-app.iam.gserviceaccount.com \
   --role="roles/iam.workloadIdentityUser" \
-  --member="principalSet://iam.googleapis.com/projects/PROD_PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions/attribute.repository/F3-Nation/f3-nation" \
+  --member="principalSet://iam.googleapis.com/projects/WIF_PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions/attribute.repository/F3-Nation/f3-nation" \
   --project=f3-me-app
 ```
 
-Replace `PROJECT_NUMBER` and `PROD_PROJECT_NUMBER` with the actual GCP project numbers (find them with `gcloud projects describe PROJECT_ID --format='value(projectNumber)'`).
+Replace `WIF_PROJECT_NUMBER` with the `f3-github` project number from the `gcloud projects describe` command above.
 
 #### 4. Add GitHub Secrets
 
 In GitHub → repo Settings → **Secrets and variables** → **Actions**, add:
 
-| Secret              | Value                                                                                            |
-| ------------------- | ------------------------------------------------------------------------------------------------ |
-| `ME_WIF_PROVIDER`   | `projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions/providers/github` |
-| `ME_WIF_SA_STAGING` | `github-actions-deploy@f3-me-app-staging.iam.gserviceaccount.com`                    |
-| `ME_WIF_SA_PROD`    | `github-actions-deploy@f3-me-app.iam.gserviceaccount.com`                            |
+| Secret              | Value                                                                                                |
+| ------------------- | ---------------------------------------------------------------------------------------------------- |
+| `ME_WIF_PROVIDER`   | `projects/WIF_PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions/providers/github` |
+| `ME_WIF_SA_STAGING` | `github-actions-deploy@f3-me-app-staging.iam.gserviceaccount.com`                                    |
+| `ME_WIF_SA_PROD`    | `github-actions-deploy@f3-me-app.iam.gserviceaccount.com`                                            |
 
 #### 5. Create GitHub Environments
 
