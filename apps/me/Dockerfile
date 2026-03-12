@@ -16,7 +16,6 @@ RUN turbo prune f3-me --docker
 # ---------- Stage 2: Install + build ----------
 FROM node:20-alpine AS installer
 
-ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV TURBO_TELEMETRY_DISABLED=1
 ENV PNPM_HOME="/pnpm"
@@ -35,6 +34,7 @@ RUN pnpm install --frozen-lockfile
 
 # Copy source and build
 COPY --from=builder /app/out/full/ .
+ENV NODE_ENV=production
 RUN pnpm turbo build --filter=f3-me
 
 # ---------- Stage 3: Production runner ----------
