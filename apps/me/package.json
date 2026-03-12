@@ -14,7 +14,8 @@
     "test:watch": "vitest -w",
     "test:coverage": "vitest --run --coverage",
     "typecheck": "tsc --noEmit",
-    "firebase:setup-secrets": "/usr/bin/env bash scripts/firebase-env.sh"
+    "deploy:setup-secrets:staging": "/usr/bin/env bash scripts/cloud-run-env.sh --env staging",
+    "deploy:setup-secrets:prod": "/usr/bin/env bash scripts/cloud-run-env.sh --env prod"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.14.0",
