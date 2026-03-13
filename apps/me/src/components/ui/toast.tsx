@@ -26,18 +26,34 @@ const ToastContext = React.createContext<ToastContextType>({
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = React.useState<ToastProps[]>([]);
+  const timersRef = React.useRef(new Map<string, ReturnType<typeof setTimeout>>());
+
+  React.useEffect(() => {
+    const timers = timersRef.current;
+    return () => {
+      timers.forEach((t) => clearTimeout(t));
+      timers.clear();
+    };
+  }, []);
 
   const toast = React.useCallback((props: Omit<ToastProps, "id">) => {
     const id = Math.random().toString(36).slice(2);
     setToasts((prev) => [...prev, { ...props, id }]);
 
     // Auto-dismiss after 5 seconds
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
+      timersRef.current.delete(id);
     }, 5000);
+    timersRef.current.set(id, timer);
   }, []);
 
   const dismiss = React.useCallback((id: string) => {
+    const timer = timersRef.current.get(id);
+    if (timer) {
+      clearTimeout(timer);
+      timersRef.current.delete(id);
+    }
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
