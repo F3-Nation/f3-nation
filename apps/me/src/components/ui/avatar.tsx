@@ -1,6 +1,5 @@
 import * as React from "react";
-import { cn } from "@/lib/utils";
-import { getFallbackAvatar } from "@/lib/utils";
+import { cn, getFallbackAvatar } from "@/lib/utils";
 
 interface AvatarProps extends React.HTMLAttributes<HTMLSpanElement> {
   src?: string | null;
