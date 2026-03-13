@@ -181,31 +181,13 @@ describe("Profile API route", () => {
       expect(meta.custom_key).toBe("preserve me");
     });
 
-    it("ignores unrecognized fields", async () => {
+    it("rejects unrecognized fields with 400", async () => {
       vi.mocked(requireAuth).mockResolvedValue({
         sub: "42",
         email: "test@f3.com",
         iat: Date.now(),
       });
       vi.mocked(getUserByEmail).mockResolvedValue({
-        id: 42,
-        f3Name: "Dredd",
-        firstName: null,
-        lastName: "Smith",
-        email: "test@f3.com",
-        phone: null,
-        homeRegionId: null,
-        avatarUrl: null,
-        meta: null,
-        emergencyContact: null,
-        emergencyPhone: null,
-        emergencyNotes: null,
-        status: "active",
-        roles: [],
-        created: "2024-01-01",
-        updated: "2024-01-01",
-      });
-      vi.mocked(updateUser).mockResolvedValue({
         id: 42,
         f3Name: "Dredd",
         firstName: null,
@@ -230,16 +212,15 @@ describe("Profile API route", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           f3Name: "Dredd",
-          status: "inactive", // Should be ignored
-          hackerField: "evil", // Should be ignored
+          status: "inactive",
+          hackerField: "evil",
         }),
       });
       const response = await PATCH(req);
 
-      expect(response.status).toBe(200);
-      const updateCall = vi.mocked(updateUser).mock.calls[0][0];
-      expect(updateCall).not.toHaveProperty("status");
-      expect(updateCall).not.toHaveProperty("hackerField");
+      expect(response.status).toBe(400);
+      const data = (await response.json()) as { error: string };
+      expect(data.error).toBe("Invalid request body");
     });
   });
 });

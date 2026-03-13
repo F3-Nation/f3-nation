@@ -1,8 +1,29 @@
 import type { NextRequest} from "next/server";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { requireAuth } from "@/lib/auth/server";
 import { getUserByEmail, updateUser } from "@/lib/api/client";
-import type { UserMeta, ProfileUpdatePayload } from "@/lib/types";
+import type { UserMeta } from "@/lib/types";
+
+const profileUpdateSchema = z
+  .object({
+    // Regular editable fields
+    f3Name: z.string().min(1).max(200).optional(),
+    firstName: z.string().max(200).nullable().optional(),
+    lastName: z.string().max(200).optional(),
+    phone: z.string().max(50).optional(),
+    homeRegionId: z.number().int().positive().nullable().optional(),
+    avatarUrl: z.string().url().nullable().optional(),
+    emergencyContact: z.string().max(200).nullable().optional(),
+    emergencyPhone: z.string().max(50).nullable().optional(),
+    emergencyNotes: z.string().max(1000).nullable().optional(),
+    // Meta sub-fields
+    f3_name_origin: z.string().max(1000).optional(),
+    my_f3_why: z.string().max(2000).optional(),
+    user_emergency_info_dr_sharing: z.boolean().optional(),
+    start_date_override: z.string().max(50).optional(),
+  })
+  .strict();
 
 const EDITABLE_FIELDS = new Set([
   "f3Name",
@@ -51,7 +72,15 @@ export async function PATCH(request: NextRequest) {
     }
     const userId = currentUser.id;
 
-    const body = (await request.json()) as ProfileUpdatePayload;
+    const raw: unknown = await request.json();
+    const parsed = profileUpdateSchema.safeParse(raw);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Invalid request body", details: parsed.error.flatten() },
+        { status: 400 },
+      );
+    }
+    const body = parsed.data;
 
     // Separate regular fields from meta fields
     const updateBody: Record<string, unknown> = { id: userId };
