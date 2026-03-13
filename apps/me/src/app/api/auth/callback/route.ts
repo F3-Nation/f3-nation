@@ -14,12 +14,10 @@ interface StatePayload {
   timestamp: number;
 }
 
-function getPublicOrigin(request: NextRequest): string {
-  const proto = request.headers.get("x-forwarded-proto") ?? "https";
-  const host =
-    request.headers.get("x-forwarded-host") ?? request.headers.get("host");
-  if (host) return `${proto}://${host}`;
-  return request.nextUrl.origin;
+function getPublicOrigin(): string {
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+  if (!siteUrl) throw new Error("NEXT_PUBLIC_SITE_URL is not configured");
+  return siteUrl.replace(/\/+$/, "");
 }
 
 function errorRedirect(baseUrl: string, error: string, returnTo?: string) {
@@ -34,7 +32,7 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get("code");
   const stateParam = searchParams.get("state");
   const errorParam = searchParams.get("error");
-  const baseUrl = getPublicOrigin(request);
+  const baseUrl = getPublicOrigin();
 
   if (errorParam) {
     return errorRedirect(baseUrl, errorParam);

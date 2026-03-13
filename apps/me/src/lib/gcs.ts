@@ -5,9 +5,10 @@ function getStorage(): Storage {
   const credsBase64 = process.env.GCS_CREDENTIALS;
   if (!credsBase64) throw new Error("GCS_CREDENTIALS is not set");
 
-  const creds = JSON.parse(
-    Buffer.from(credsBase64, "base64").toString(),
-  ) as { client_email: string; private_key: string };
+  const creds = JSON.parse(Buffer.from(credsBase64, "base64").toString()) as {
+    client_email: string;
+    private_key: string;
+  };
   return new Storage({ credentials: creds });
 }
 

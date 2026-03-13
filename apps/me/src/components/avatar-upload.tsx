@@ -33,9 +33,7 @@ export function AvatarUpload({
         return;
       }
 
-      if (
-        !["image/jpeg", "image/png", "image/webp"].includes(file.type)
-      ) {
+      if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
         toast({
           title: "Invalid file type",
           description: "Please upload a JPEG, PNG, or WebP image.",
