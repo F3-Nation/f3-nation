@@ -3,17 +3,17 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 
-type AuthUser = {
+interface AuthUser {
   sub: string;
   email: string;
   name?: string;
-};
+}
 
-type AuthContextValue = {
+interface AuthContextValue {
   user: AuthUser | null;
   loading: boolean;
   signOut: () => Promise<void>;
-};
+}
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -40,7 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    checkSession();
+    void checkSession();
     return () => {
       cancelled = true;
     };

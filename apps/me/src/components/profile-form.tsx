@@ -56,11 +56,11 @@ export function ProfileForm({ user, regions, positions }: ProfileFormProps) {
     emergencyContact: user.emergencyContact ?? "",
     emergencyPhone: user.emergencyPhone ?? "",
     emergencyNotes: user.emergencyNotes ?? "",
-    f3_name_origin: (meta.f3_name_origin as string) ?? "",
-    my_f3_why: (meta.my_f3_why as string) ?? "",
+    f3_name_origin: meta.f3_name_origin ?? "",
+    my_f3_why: meta.my_f3_why ?? "",
     user_emergency_info_dr_sharing:
-      (meta.user_emergency_info_dr_sharing as boolean) ?? false,
-    start_date_override: (meta.start_date_override as string) ?? "",
+      meta.user_emergency_info_dr_sharing ?? false,
+    start_date_override: meta.start_date_override ?? "",
   });
 
   const [initialForm, setInitialForm] = useState(() => ({ ...form }));
@@ -126,7 +126,9 @@ export function ProfileForm({ user, regions, positions }: ProfileFormProps) {
       });
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
+        const err = (await res.json().catch(() => ({}))) as {
+          error?: string;
+        };
         throw new Error(err.error ?? "Failed to save profile");
       }
 
@@ -155,7 +157,7 @@ export function ProfileForm({ user, regions, positions }: ProfileFormProps) {
   // Register save state with the navbar
   const { register } = useSaveRegister();
   useEffect(() => {
-    register({ isDirty, saving, onSave: () => saveRef.current() });
+    register({ isDirty, saving, onSave: () => void saveRef.current() });
   }, [isDirty, saving, register]);
 
   return (

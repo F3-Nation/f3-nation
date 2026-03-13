@@ -16,12 +16,13 @@ vi.mock("@/lib/api/client", () => ({
 import { requireAuth } from "@/lib/auth/server";
 import { uploadAvatar } from "@/lib/gcs";
 import { getUserByEmail, updateUser } from "@/lib/api/client";
+import type { NextRequest } from "next/server";
 
 // Helper to create a mock NextRequest whose formData() works in jsdom
 function createMockRequest(formData: FormData) {
   return {
     formData: async () => formData,
-  } as unknown as import("next/server").NextRequest;
+  } as unknown as NextRequest;
 }
 
 describe("Avatar API route", () => {
@@ -60,7 +61,7 @@ describe("Avatar API route", () => {
 
     const response = await POST(req);
     expect(response.status).toBe(400);
-    const data = await response.json();
+    const data = (await response.json()) as { error: string };
     expect(data.error).toContain("No file");
   });
 
@@ -100,7 +101,7 @@ describe("Avatar API route", () => {
 
     const response = await POST(req);
     expect(response.status).toBe(400);
-    const data = await response.json();
+    const data = (await response.json()) as { error: string };
     expect(data.error).toContain("Invalid file type");
   });
 
@@ -164,12 +165,12 @@ describe("Avatar API route", () => {
 
     const req = {
       formData: async () => mockFormData,
-    } as unknown as import("next/server").NextRequest;
+    } as unknown as NextRequest;
 
     const response = await POST(req);
     expect(response.status).toBe(200);
 
-    const data = await response.json();
+    const data = (await response.json()) as { avatarUrl: string };
     expect(data.avatarUrl).toContain("storage.googleapis.com");
     expect(uploadAvatar).toHaveBeenCalledWith(42, expect.any(Buffer));
     expect(updateUser).toHaveBeenCalledWith({

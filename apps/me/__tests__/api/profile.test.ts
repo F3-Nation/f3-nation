@@ -48,7 +48,7 @@ describe("Profile API route", () => {
 
       const { GET } = await import("@/app/api/profile/route");
       const response = await GET();
-      const data = await response.json();
+      const data = (await response.json()) as { f3Name: string };
 
       expect(response.status).toBe(200);
       expect(data.f3Name).toBe("Dredd");
@@ -107,7 +107,7 @@ describe("Profile API route", () => {
         body: JSON.stringify({ f3Name: "NewName" }),
       });
       const response = await PATCH(req);
-      const data = await response.json();
+      const data = (await response.json()) as { f3Name: string };
 
       expect(response.status).toBe(200);
       expect(updateUser).toHaveBeenCalledWith(
@@ -174,10 +174,7 @@ describe("Profile API route", () => {
       // Should have fetched current user for existing meta
       expect(getUserByEmail).toHaveBeenCalledWith("test@f3.com");
       // Should have merged meta
-      const updateCall = vi.mocked(updateUser).mock.calls[0]![0] as Record<
-        string,
-        unknown
-      >;
+      const updateCall = vi.mocked(updateUser).mock.calls[0][0];
       const meta = updateCall.meta as Record<string, unknown>;
       expect(meta.f3_name_origin).toBe("new origin");
       expect(meta.my_f3_why).toBe("because");
@@ -240,7 +237,7 @@ describe("Profile API route", () => {
       const response = await PATCH(req);
 
       expect(response.status).toBe(200);
-      const updateCall = vi.mocked(updateUser).mock.calls[0]![0];
+      const updateCall = vi.mocked(updateUser).mock.calls[0][0];
       expect(updateCall).not.toHaveProperty("status");
       expect(updateCall).not.toHaveProperty("hackerField");
     });

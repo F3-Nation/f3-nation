@@ -62,6 +62,7 @@ export function RegionSelect({ regions, value, onChange }: RegionSelectProps) {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="h-8"
+              // eslint-disable-next-line jsx-a11y/no-autofocus
               autoFocus
             />
           </div>
@@ -107,6 +108,7 @@ export function RegionSelect({ regions, value, onChange }: RegionSelectProps) {
 
       {/* Click-away handler */}
       {open && (
+        // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
         <div
           className="fixed inset-0 z-40"
           onClick={() => {

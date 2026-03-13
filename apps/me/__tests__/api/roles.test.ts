@@ -72,7 +72,7 @@ describe("Roles API route", () => {
     });
 
     const response = await DELETE(req);
-    const data = await response.json();
+    const data = (await response.json()) as { roles: unknown[] };
 
     expect(response.status).toBe(200);
     expect(updateUser).toHaveBeenCalledWith(

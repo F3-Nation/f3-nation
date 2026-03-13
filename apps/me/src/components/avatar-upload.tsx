@@ -34,13 +34,11 @@ export function AvatarUpload({
       }
 
       if (
-        !["image/jpeg", "image/png", "image/webp", "image/gif"].includes(
-          file.type,
-        )
+        !["image/jpeg", "image/png", "image/webp"].includes(file.type)
       ) {
         toast({
           title: "Invalid file type",
-          description: "Please upload a JPEG, PNG, WebP, or GIF image.",
+          description: "Please upload a JPEG, PNG, or WebP image.",
           variant: "destructive",
         });
         return;
@@ -58,11 +56,13 @@ export function AvatarUpload({
         });
 
         if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
+          const err = (await res.json().catch(() => ({}))) as {
+            error?: string;
+          };
           throw new Error(err.error ?? "Upload failed");
         }
 
-        const data = await res.json();
+        const data = (await res.json()) as { avatarUrl: string };
         setPreviewUrl(data.avatarUrl);
         onUploaded(data.avatarUrl);
         toast({
@@ -84,7 +84,8 @@ export function AvatarUpload({
 
   return (
     <div className="flex items-center gap-4">
-      <div
+      <button
+        type="button"
         className={`relative cursor-pointer rounded-full ${dragOver ? "ring-2 ring-primary ring-offset-2" : ""}`}
         onClick={() => inputRef.current?.click()}
         onDragOver={(e) => {
@@ -96,7 +97,7 @@ export function AvatarUpload({
           e.preventDefault();
           setDragOver(false);
           const file = e.dataTransfer.files[0];
-          if (file) handleUpload(file);
+          if (file) void handleUpload(file);
         }}
       >
         <Avatar
@@ -110,7 +111,7 @@ export function AvatarUpload({
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
           </div>
         )}
-      </div>
+      </button>
       <div className="flex flex-col gap-1">
         <Button
           variant="outline"
@@ -131,7 +132,7 @@ export function AvatarUpload({
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
-          if (file) handleUpload(file);
+          if (file) void handleUpload(file);
         }}
       />
     </div>

@@ -70,7 +70,7 @@ describe("Positions API route", () => {
     });
 
     const response = await DELETE(req);
-    const data = await response.json();
+    const data = (await response.json()) as { success: boolean };
 
     expect(response.status).toBe(200);
     expect(data.success).toBe(true);
