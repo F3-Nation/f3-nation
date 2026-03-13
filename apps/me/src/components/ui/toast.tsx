@@ -26,7 +26,9 @@ const ToastContext = React.createContext<ToastContextType>({
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = React.useState<ToastProps[]>([]);
-  const timersRef = React.useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const timersRef = React.useRef(
+    new Map<string, ReturnType<typeof setTimeout>>(),
+  );
 
   React.useEffect(() => {
     const timers = timersRef.current;
