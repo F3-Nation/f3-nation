@@ -110,14 +110,14 @@ export function ProfileForm({ user, regions, positions }: ProfileFormProps) {
       if (isFieldDirty("emergencyNotes"))
         payload.emergencyNotes = form.emergencyNotes || null;
       if (isFieldDirty("f3_name_origin"))
-        payload.f3_name_origin = form.f3_name_origin || undefined;
+        payload.f3_name_origin = form.f3_name_origin || "";
       if (isFieldDirty("my_f3_why"))
-        payload.my_f3_why = form.my_f3_why || undefined;
+        payload.my_f3_why = form.my_f3_why || "";
       if (isFieldDirty("user_emergency_info_dr_sharing"))
         payload.user_emergency_info_dr_sharing =
           form.user_emergency_info_dr_sharing;
       if (isFieldDirty("start_date_override"))
-        payload.start_date_override = form.start_date_override || undefined;
+        payload.start_date_override = form.start_date_override || "";
 
       const res = await fetch("/api/profile", {
         method: "PATCH",
