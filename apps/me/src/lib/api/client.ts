@@ -7,19 +7,20 @@ function requireEnv(name: string): string {
   return value;
 }
 
-const API_BASE = requireEnv("F3_API_BASE_URL");
-const API_KEY = requireEnv("F3_API_KEY");
-
 function getHeaders(): HeadersInit {
   return {
-    Authorization: `Bearer ${API_KEY}`,
+    Authorization: `Bearer ${requireEnv("F3_API_KEY")}`,
     Client: "f3-me",
     "Content-Type": "application/json",
   };
 }
 
+function apiUrl(path: string): string {
+  return `${requireEnv("F3_API_BASE_URL")}${path}`;
+}
+
 export async function getUser(id: number): Promise<UserProfile> {
-  const res = await fetch(`${API_BASE}/v1/user/id/${id}?includePii=true`, {
+  const res = await fetch(apiUrl(`/v1/user/id/${id}?includePii=true`), {
     headers: getHeaders(),
     cache: "no-store",
   });
@@ -34,7 +35,7 @@ export async function getUserByEmail(
   email: string,
 ): Promise<UserProfile | null> {
   const res = await fetch(
-    `${API_BASE}/v1/user/email/${encodeURIComponent(email)}?includePii=true`,
+    apiUrl(`/v1/user/email/${encodeURIComponent(email)}?includePii=true`),
     {
       headers: getHeaders(),
       cache: "no-store",
@@ -51,7 +52,7 @@ export async function getUserByEmail(
 export async function updateUser(
   body: Record<string, unknown>,
 ): Promise<UserProfile> {
-  const res = await fetch(`${API_BASE}/v1/user`, {
+  const res = await fetch(apiUrl("/v1/user"), {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify(body),
@@ -64,7 +65,7 @@ export async function updateUser(
 }
 
 export async function getRegions(): Promise<Region[]> {
-  const res = await fetch(`${API_BASE}/v1/org?orgType=region&isActive=true`, {
+  const res = await fetch(apiUrl("/v1/org?orgType=region&isActive=true"), {
     headers: getHeaders(),
     next: { revalidate: 3600 }, // Cache for 1 hour
   });
@@ -79,7 +80,7 @@ export async function getRegions(): Promise<Region[]> {
 export async function getPositionAssignments(
   orgId: number,
 ): Promise<OrgPositionAssignments> {
-  const res = await fetch(`${API_BASE}/v1/position/assignments/${orgId}`, {
+  const res = await fetch(apiUrl(`/v1/position/assignments/${orgId}`), {
     headers: getHeaders(),
     cache: "no-store",
   });
@@ -94,7 +95,7 @@ export async function updatePositionAssignments(
   orgId: number,
   assignments: { positionId: number; userIds: number[] }[],
 ): Promise<OrgPositionAssignments> {
-  const res = await fetch(`${API_BASE}/v1/position/assignments`, {
+  const res = await fetch(apiUrl("/v1/position/assignments"), {
     method: "PUT",
     headers: getHeaders(),
     body: JSON.stringify({ orgId, assignments }),
