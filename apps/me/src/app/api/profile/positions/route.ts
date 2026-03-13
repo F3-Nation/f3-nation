@@ -20,7 +20,12 @@ export async function DELETE(request: NextRequest) {
       positionId: number;
     };
 
-    if (!body.orgId || !body.positionId) {
+    if (
+      body.orgId == null ||
+      typeof body.orgId !== "number" ||
+      body.positionId == null ||
+      typeof body.positionId !== "number"
+    ) {
       return NextResponse.json(
         { error: "orgId and positionId are required" },
         { status: 400 },
