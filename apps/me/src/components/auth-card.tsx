@@ -15,10 +15,13 @@ interface AuthCardProps {
 
 const ERROR_MESSAGES: Record<string, string> = {
   unauthenticated: "Please sign in to continue.",
-  csrf_mismatch: "Security validation failed. Please try again.",
-  state_expired: "Login session expired. Please try again.",
-  callback_failed: "Authentication failed. Please try again.",
   missing_params: "Invalid authentication response. Please try again.",
+  invalid_state: "Security validation failed. Please try again.",
+  expired_state: "Login session expired. Please try again.",
+  csrf_mismatch: "Security validation failed. Please try again.",
+  missing_code_verifier: "Login session expired. Please try again.",
+  token_exchange_failed: "Authentication failed. Please try again.",
+  userinfo_failed: "Unable to retrieve your account. Please try again.",
 };
 
 export function AuthCard({ error }: AuthCardProps) {
