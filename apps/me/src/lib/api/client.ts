@@ -1,7 +1,14 @@
+import "server-only";
 import type { UserProfile, Region, OrgPositionAssignments } from "@/lib/types";
 
-const API_BASE = process.env.F3_API_BASE_URL!;
-const API_KEY = process.env.F3_API_KEY!;
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`Missing required environment variable: ${name}`);
+  return value;
+}
+
+const API_BASE = requireEnv("F3_API_BASE_URL");
+const API_KEY = requireEnv("F3_API_KEY");
 
 function getHeaders(): HeadersInit {
   return {
