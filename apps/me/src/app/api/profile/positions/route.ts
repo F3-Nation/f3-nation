@@ -36,6 +36,17 @@ export async function DELETE(request: NextRequest) {
     // Fetch current position assignments for the org
     const orgAssignments = await getPositionAssignments(body.orgId);
 
+    // Find the target position
+    const target = orgAssignments.assignments.find(
+      (a) => a.positionId === body.positionId,
+    );
+    if (!target || !target.userIds.includes(userId)) {
+      return NextResponse.json(
+        { error: "User is not assigned to this position" },
+        { status: 404 },
+      );
+    }
+
     // Remove the user's ID from the specified position's userIds
     const updatedAssignments = orgAssignments.assignments.map((assignment) => {
       if (assignment.positionId === body.positionId) {
