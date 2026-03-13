@@ -11,7 +11,11 @@ export async function DELETE(request: NextRequest) {
       roleName: string;
     };
 
-    if (!body.orgId || !body.roleName) {
+    if (
+      body.orgId == null ||
+      typeof body.orgId !== "number" ||
+      !body.roleName
+    ) {
       return NextResponse.json(
         { error: "orgId and roleName are required" },
         { status: 400 },

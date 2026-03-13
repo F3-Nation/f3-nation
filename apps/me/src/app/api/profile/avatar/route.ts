@@ -16,15 +16,17 @@ export async function POST(request: NextRequest) {
     const userId = user.id;
 
     const formData = await request.formData();
-    const file = formData.get("file") as File | null;
+    const fileValue = formData.get("file");
 
-    if (!file) {
+    if (!(fileValue instanceof File)) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
+    const file = fileValue;
+
     if (!ALLOWED_TYPES.has(file.type)) {
       return NextResponse.json(
-        { error: "Invalid file type. Allowed: jpeg, png, webp, gif" },
+        { error: "Invalid file type. Allowed: jpeg, png, webp" },
         { status: 400 },
       );
     }
