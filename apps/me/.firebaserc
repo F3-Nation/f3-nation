@@ -1,0 +1,7 @@
+{
+  "projects": {
+    "default": "f3-nation-staging",
+    "staging": "f3-nation-staging",
+    "production": "f3-nation-prod"
+  }
+}

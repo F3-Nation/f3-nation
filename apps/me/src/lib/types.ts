@@ -61,7 +61,7 @@ export interface UserUpsert {
   phone?: string;
   homeRegionId?: number | null;
   avatarUrl?: string | null;
-  meta?: string;
+  meta?: Record<string, unknown>;
   emergencyContact?: string | null;
   emergencyPhone?: string | null;
   emergencyNotes?: string | null;

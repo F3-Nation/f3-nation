@@ -152,14 +152,12 @@ describe("Avatar API route", () => {
 
     const { POST } = await import("@/app/api/profile/avatar/route");
 
-    // Create a mock file with arrayBuffer support (jsdom File lacks it)
     const content = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
-    const file = {
-      name: "avatar.jpg",
-      type: "image/jpeg",
-      size: content.byteLength,
-      arrayBuffer: async () => content.buffer,
-    } as unknown as File;
+    // jsdom's File lacks arrayBuffer(); create a File subclass with it
+    const file = Object.assign(
+      new File([content], "avatar.jpg", { type: "image/jpeg" }),
+      { arrayBuffer: async () => content.buffer },
+    );
     const mockFormData = {
       get: (key: string) => (key === "file" ? file : null),
     } as unknown as FormData;
