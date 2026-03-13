@@ -26,6 +26,7 @@ describe("API client", () => {
     expect(mockFetch).toHaveBeenCalledWith(
       "https://api.test.f3nation.com/v1/user/id/42?includePii=true",
       expect.objectContaining({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         headers: expect.objectContaining({
           Authorization: "Bearer test-api-key",
           Client: "f3-me",
@@ -67,6 +68,7 @@ describe("API client", () => {
     expect(mockFetch).toHaveBeenCalledWith(
       "https://api.test.f3nation.com/v1/org?orgType=region&isActive=true",
       expect.objectContaining({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         headers: expect.objectContaining({
           Client: "f3-me",
         }),

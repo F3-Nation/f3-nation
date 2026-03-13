@@ -34,7 +34,9 @@ export function PositionList({
       });
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
+        const err = (await res.json().catch(() => ({}))) as {
+          error?: string;
+        };
         throw new Error(err.error ?? "Failed to remove position");
       }
 

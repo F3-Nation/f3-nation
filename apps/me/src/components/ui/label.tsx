@@ -6,6 +6,7 @@ const Label = React.forwardRef<
   React.LabelHTMLAttributes<HTMLLabelElement>
 >(({ className, ...props }, ref) => {
   return (
+    // eslint-disable-next-line jsx-a11y/label-has-associated-control
     <label
       ref={ref}
       className={cn(

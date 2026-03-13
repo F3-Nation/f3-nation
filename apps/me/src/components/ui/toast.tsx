@@ -18,7 +18,9 @@ interface ToastContextType {
 
 const ToastContext = React.createContext<ToastContextType>({
   toasts: [],
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
   toast: () => {},
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
   dismiss: () => {},
 });
 

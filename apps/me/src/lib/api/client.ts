@@ -20,7 +20,7 @@ export async function getUser(id: number): Promise<UserProfile> {
     const text = await res.text().catch(() => "");
     throw new Error(`API error ${res.status}: ${text}`);
   }
-  return res.json();
+  return (await res.json()) as UserProfile;
 }
 
 export async function getUserByEmail(
@@ -53,7 +53,7 @@ export async function updateUser(
     const text = await res.text().catch(() => "");
     throw new Error(`API error ${res.status}: ${text}`);
   }
-  return res.json();
+  return (await res.json()) as UserProfile;
 }
 
 export async function getRegions(): Promise<Region[]> {
@@ -80,7 +80,7 @@ export async function getPositionAssignments(
     const text = await res.text().catch(() => "");
     throw new Error(`API error ${res.status}: ${text}`);
   }
-  return res.json();
+  return (await res.json()) as OrgPositionAssignments;
 }
 
 export async function updatePositionAssignments(
@@ -96,5 +96,5 @@ export async function updatePositionAssignments(
     const text = await res.text().catch(() => "");
     throw new Error(`API error ${res.status}: ${text}`);
   }
-  return res.json();
+  return (await res.json()) as OrgPositionAssignments;
 }

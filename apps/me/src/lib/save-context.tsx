@@ -11,6 +11,7 @@ interface SaveState {
 const SaveContext = createContext<SaveState>({
   isDirty: false,
   saving: false,
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
   save: () => {},
 });
 
@@ -22,12 +23,14 @@ interface RegisterFn {
   }) => void;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-empty-function
 const RegisterContext = createContext<RegisterFn>({ register: () => {} });
 
 export function SaveProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<SaveState>({
     isDirty: false,
     saving: false,
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
     save: () => {},
   });
 
