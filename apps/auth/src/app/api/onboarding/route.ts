@@ -4,7 +4,6 @@ import { getServerSession } from "next-auth";
 
 import { eq } from "@acme/db";
 import { users } from "@acme/db/schema/schema";
-import type { UserMeta } from "@acme/shared/app/types";
 
 import { authOptions } from "~/lib/auth-options";
 import { db } from "~/lib/db";
@@ -69,7 +68,7 @@ export async function POST(request: NextRequest) {
     .where(eq(users.id, session.user.id))
     .limit(1);
 
-  const currentMeta = (user?.meta ?? {}) as UserMeta;
+  const currentMeta = (user?.meta ?? {}) as Record<string, unknown>;
   const updatedMeta = { ...currentMeta, onboarding_completed: true };
 
   await db

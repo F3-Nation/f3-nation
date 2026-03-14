@@ -4,7 +4,6 @@ import { getServerSession } from "next-auth";
 
 import { eq } from "@acme/db";
 import { users } from "@acme/db/schema/schema";
-import type { UserMeta } from "@acme/shared/app/types";
 
 import { authOptions } from "~/lib/auth-options";
 import { db } from "~/lib/db";
@@ -85,7 +84,7 @@ export async function GET(request: NextRequest) {
     .where(eq(users.id, session.user.id))
     .limit(1);
 
-  const meta = (dbUser?.meta ?? {}) as UserMeta;
+  const meta = (dbUser?.meta ?? {}) as Record<string, unknown>;
   if (!meta.onboarding_completed) {
     const callbackUrl = request.url;
     const onboardingUrl = new URL("/onboarding", request.url);

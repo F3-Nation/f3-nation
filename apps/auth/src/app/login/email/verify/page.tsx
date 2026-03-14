@@ -85,7 +85,6 @@ function VerifyEmailForm() {
               onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
               placeholder="000000"
               className="w-full rounded-md border bg-background px-3 py-2 text-center text-2xl font-mono tracking-[0.5em] outline-none focus:ring-2 focus:ring-ring"
-              autoFocus
             />
           </div>
 

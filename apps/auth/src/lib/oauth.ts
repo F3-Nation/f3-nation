@@ -39,7 +39,7 @@ export function validateRedirectUri(
   client: typeof oauthClients.$inferSelect,
   redirectUri: string,
 ): boolean {
-  const uris: string[] = JSON.parse(client.redirectUris);
+  const uris = JSON.parse(client.redirectUris) as string[];
   return uris.includes(redirectUri);
 }
 

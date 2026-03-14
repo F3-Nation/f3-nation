@@ -52,7 +52,11 @@
     "root": true,
     "extends": [
       "@acme/eslint-config/base",
-      "@acme/eslint-config/next"
+      "@acme/eslint-config/nextjs",
+      "@acme/eslint-config/react"
+    ],
+    "ignorePatterns": [
+      "next-env.d.ts"
     ]
   },
   "prettier": "@acme/prettier-config"
