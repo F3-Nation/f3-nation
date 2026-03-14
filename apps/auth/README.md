@@ -8,7 +8,7 @@ Central authentication and authorization server for the F3 Nation ecosystem. Iss
 - **Deployment**: Docker → Cloud Run (GCP), tag-triggered via GitHub Actions
 - **Production URL**: `auth.f3nation.com`
 
-> **Spec**: See [SEED.md](SEED.md) for the full architectural specification and design decisions.
+> **Spec**: See [SEED.md](SEED.md) for the design basis. SEED was the initiator. It should not be used going forward. It is kept as a reference.
 
 ---
 
