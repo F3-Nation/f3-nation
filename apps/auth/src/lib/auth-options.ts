@@ -104,8 +104,8 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.userId as number;
-        session.user.name = token.name as string;
-        session.user.email = token.email as string;
+        session.user.name = String(token.name);
+        session.user.email = String(token.email);
         session.user.image = token.picture as string | undefined;
         session.onboardingCompleted = !!token.onboardingCompleted;
       }
