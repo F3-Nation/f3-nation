@@ -60,6 +60,7 @@ export const authOptions: NextAuthOptions = {
           id: String(user.id),
           email: user.email,
           name: user.f3Name,
+          roles: [],
         };
       },
     }),
