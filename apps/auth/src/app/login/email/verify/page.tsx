@@ -71,10 +71,7 @@ function VerifyEmailForm() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label
-              htmlFor="code"
-              className="block text-sm font-medium mb-1"
-            >
+            <label htmlFor="code" className="block text-sm font-medium mb-1">
               Verification code
             </label>
             <input
@@ -92,9 +89,7 @@ function VerifyEmailForm() {
             />
           </div>
 
-          {error && (
-            <p className="text-sm text-destructive">{error}</p>
-          )}
+          {error && <p className="text-sm text-destructive">{error}</p>}
 
           <button
             type="submit"
@@ -109,7 +104,11 @@ function VerifyEmailForm() {
           Didn&apos;t receive a code?{" "}
           <button
             type="button"
-            onClick={() => router.push(`/login/email?callbackUrl=${encodeURIComponent(callbackUrl)}`)}
+            onClick={() =>
+              router.push(
+                `/login/email?callbackUrl=${encodeURIComponent(callbackUrl)}`,
+              )
+            }
             className="text-primary underline hover:no-underline"
           >
             Try again

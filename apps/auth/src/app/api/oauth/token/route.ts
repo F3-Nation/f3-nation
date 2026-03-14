@@ -42,10 +42,7 @@ export async function POST(request: NextRequest) {
   // Rate limit per client
   const { allowed } = rateLimit(`token:${resolvedClientId}`, 60, 60 * 1000);
   if (!allowed) {
-    return NextResponse.json(
-      { error: "rate_limit_exceeded" },
-      { status: 429 },
-    );
+    return NextResponse.json({ error: "rate_limit_exceeded" }, { status: 429 });
   }
 
   const corsHeaders = await getCorsHeaders(request, resolvedClientId);

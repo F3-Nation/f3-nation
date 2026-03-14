@@ -1,10 +1,7 @@
 import crypto from "crypto";
 
 import { and, eq, gt, isNull, sql } from "@acme/db";
-import {
-  emailMfaCodes,
-  users,
-} from "@acme/db/schema/schema";
+import { emailMfaCodes, users } from "@acme/db/schema/schema";
 
 import { db } from "~/lib/db";
 import { env } from "~/env";
@@ -66,14 +63,12 @@ export async function sendEmailCode(email: string): Promise<void> {
             pass: env.SENDGRID_API_KEY,
           },
         }
-      : await nodemailer
-          .createTestAccount()
-          .then(({ user, pass }) => ({
-            host: "smtp.ethereal.email",
-            port: 587,
-            secure: false,
-            auth: { user, pass },
-          })),
+      : await nodemailer.createTestAccount().then(({ user, pass }) => ({
+          host: "smtp.ethereal.email",
+          port: 587,
+          secure: false,
+          auth: { user, pass },
+        })),
   );
 
   const info = await transporter.sendMail({

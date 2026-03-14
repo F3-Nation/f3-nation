@@ -18,9 +18,7 @@ export const authOptions: NextAuthOptions = {
   cookies: {
     sessionToken: {
       name:
-        env.NODE_ENV === "production"
-          ? "__session"
-          : "next-auth.session-token",
+        env.NODE_ENV === "production" ? "__session" : "next-auth.session-token",
       options: {
         httpOnly: true,
         sameSite: "none",
@@ -95,8 +93,8 @@ export const authOptions: NextAuthOptions = {
           token.picture = dbUser.avatarUrl;
           token.meta = dbUser.meta;
           token.status = dbUser.status;
-          token.onboardingCompleted =
-            !!(dbUser.meta as UserMeta | null)?.onboarding_completed;
+          token.onboardingCompleted = !!(dbUser.meta as UserMeta | null)
+            ?.onboarding_completed;
         }
       }
 

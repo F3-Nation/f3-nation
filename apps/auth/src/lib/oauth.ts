@@ -135,9 +135,7 @@ export async function exchangeAuthorizationCode(params: {
   // Create tokens
   const accessToken = generateToken();
   const refreshToken = generateToken();
-  const accessExpiresAt = new Date(
-    Date.now() + 60 * 60 * 1000,
-  ).toISOString(); // 1 hour
+  const accessExpiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour
   const refreshExpiresAt = new Date(
     Date.now() + 30 * 24 * 60 * 60 * 1000,
   ).toISOString(); // 30 days
@@ -212,9 +210,7 @@ export async function exchangeRefreshToken(params: {
   // Create new token pair
   const accessToken = generateToken();
   const refreshToken = generateToken();
-  const accessExpiresAt = new Date(
-    Date.now() + 60 * 60 * 1000,
-  ).toISOString();
+  const accessExpiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
   const refreshExpiresAt = new Date(
     Date.now() + 30 * 24 * 60 * 60 * 1000,
   ).toISOString();

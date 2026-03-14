@@ -20,10 +20,7 @@ export async function GET(request: NextRequest) {
   const ip = request.headers.get("x-forwarded-for") ?? "unknown";
   const { allowed } = rateLimit(`authorize:${ip}`, 30, 60 * 1000);
   if (!allowed) {
-    return NextResponse.json(
-      { error: "Too many requests" },
-      { status: 429 },
-    );
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
   const { searchParams } = new URL(request.url);
@@ -46,7 +43,10 @@ export async function GET(request: NextRequest) {
 
   if (!clientId || !redirectUri) {
     return NextResponse.json(
-      { error: "invalid_request", error_description: "Missing client_id or redirect_uri" },
+      {
+        error: "invalid_request",
+        error_description: "Missing client_id or redirect_uri",
+      },
       { status: 400 },
     );
   }
@@ -54,10 +54,7 @@ export async function GET(request: NextRequest) {
   // Validate client
   const client = await getClient(clientId);
   if (!client) {
-    return NextResponse.json(
-      { error: "invalid_client" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "invalid_client" }, { status: 400 });
   }
 
   if (!validateRedirectUri(client, redirectUri)) {
@@ -68,10 +65,7 @@ export async function GET(request: NextRequest) {
   }
 
   if (!validateScopes(client, scope)) {
-    return NextResponse.json(
-      { error: "invalid_scope" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "invalid_scope" }, { status: 400 });
   }
 
   // Check if user is authenticated

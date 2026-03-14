@@ -141,9 +141,7 @@ async function main() {
     scopes = existing.scopes ?? "openid profile email";
 
     // Allow editing
-    const newUris = await ask(
-      `Redirect URIs [${redirectUris.join(", ")}]: `,
-    );
+    const newUris = await ask(`Redirect URIs [${redirectUris.join(", ")}]: `);
     if (newUris.trim()) {
       redirectUris = newUris.split(",").map((u) => u.trim());
     }
@@ -206,9 +204,7 @@ async function main() {
     }
     allowedOrigin = allowedOrigin.trim();
 
-    const rawScopes = await ask(
-      "Scopes [openid profile email]: ",
-    );
+    const rawScopes = await ask("Scopes [openid profile email]: ");
     scopes = rawScopes.trim() || "openid profile email";
   }
 
@@ -252,9 +248,7 @@ async function main() {
   console.log("\n✅ Client saved successfully!\n");
   console.log(`  Client ID:     ${clientId}`);
   console.log(`  Client Secret: ${clientSecret}`);
-  console.log(
-    "\n⚠️  Save the secret now — it cannot be retrieved later.\n",
-  );
+  console.log("\n⚠️  Save the secret now — it cannot be retrieved later.\n");
 
   rl.close();
   await sql.end();
