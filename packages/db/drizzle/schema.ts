@@ -9,6 +9,7 @@ import {
   integer,
   json,
   pgEnum,
+  pgSchema,
   pgTable,
   primaryKey,
   real,
@@ -1086,3 +1087,90 @@ export const rolesXApiKeysXOrg = pgTable(
     }),
   ],
 );
+
+// ---------------------------------------------------------------------------
+// Auth schema — OAuth 2.0 / OIDC tables owned by apps/auth
+// ---------------------------------------------------------------------------
+
+export const authProviderSchema = pgSchema("auth");
+
+export const oauthClients = authProviderSchema.table("oauth_clients", {
+  id: text().primaryKey().notNull(),
+  name: text().notNull(),
+  clientSecret: text("client_secret").notNull(),
+  redirectUris: text("redirect_uris").notNull(), // JSON array
+  allowedOrigin: text("allowed_origin").notNull(),
+  scopes: text().default("openid profile email"),
+  createdAt: timestamp("created_at", { mode: "string" })
+    .default(sql`timezone('utc'::text, now())`)
+    .notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+});
+
+export const oauthAuthorizationCodes = authProviderSchema.table(
+  "oauth_authorization_codes",
+  {
+    code: text().primaryKey().notNull(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => oauthClients.id),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    redirectUri: text("redirect_uri").notNull(),
+    scopes: text(),
+    codeChallenge: text("code_challenge"),
+    codeChallengeMethod: text("code_challenge_method"),
+    expiresAt: timestamp("expires_at", { mode: "string" }).notNull(),
+    createdAt: timestamp("created_at", { mode: "string" })
+      .default(sql`timezone('utc'::text, now())`)
+      .notNull(),
+  },
+);
+
+export const oauthAccessTokens = authProviderSchema.table(
+  "oauth_access_tokens",
+  {
+    token: text().primaryKey().notNull(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => oauthClients.id),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    scopes: text(),
+    expiresAt: timestamp("expires_at", { mode: "string" }).notNull(),
+    createdAt: timestamp("created_at", { mode: "string" })
+      .default(sql`timezone('utc'::text, now())`)
+      .notNull(),
+  },
+);
+
+export const oauthRefreshTokens = authProviderSchema.table(
+  "oauth_refresh_tokens",
+  {
+    token: text().primaryKey().notNull(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => oauthClients.id),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    expiresAt: timestamp("expires_at", { mode: "string" }).notNull(),
+    createdAt: timestamp("created_at", { mode: "string" })
+      .default(sql`timezone('utc'::text, now())`)
+      .notNull(),
+  },
+);
+
+export const emailMfaCodes = authProviderSchema.table("email_mfa_codes", {
+  id: text().primaryKey().notNull(), // UUID
+  email: text().notNull(),
+  codeHash: text("code_hash").notNull(),
+  expiresAt: timestamp("expires_at", { mode: "string" }).notNull(),
+  consumedAt: timestamp("consumed_at", { mode: "string" }),
+  attemptCount: integer("attempt_count").default(0).notNull(),
+  createdAt: timestamp("created_at", { mode: "string" })
+    .default(sql`timezone('utc'::text, now())`)
+    .notNull(),
+});
