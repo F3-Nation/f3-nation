@@ -1,0 +1,138 @@
+name: Deploy Auth
+
+on:
+  push:
+    tags:
+      - "auth@*"
+
+concurrency:
+  group: deploy-auth-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE_NAME: f3-auth
+  AR_REPO: cloud-run-builds
+  REGION: us-east1
+
+jobs:
+  # Wait for CI to pass on the tagged commit
+  ci-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wait for CI checks
+        uses: lewagon/wait-on-check-action@v1.3.4
+        with:
+          ref: ${{ github.sha }}
+          check-name: "build"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 15
+
+  build:
+    needs: ci-gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      STAGING_PROJECT: ${{ vars.AUTH_STAGING_GCP_PROJECT }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.AUTH_STAGING_WIF_PROVIDER }}
+          service_account: ${{ vars.AUTH_STAGING_WIF_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push image
+        run: |
+          TAG="${GITHUB_REF#refs/tags/auth@}"
+          IMAGE="${REGION}-docker.pkg.dev/${STAGING_PROJECT}/${AR_REPO}/${IMAGE_NAME}:${TAG}"
+          docker build -t "$IMAGE" -f apps/auth/Dockerfile .
+          docker push "$IMAGE"
+          echo "IMAGE=${IMAGE}" >> "$GITHUB_ENV"
+          echo "TAG=${TAG}" >> "$GITHUB_ENV"
+
+    outputs:
+      image: ${{ env.IMAGE }}
+      tag: ${{ env.TAG }}
+
+  deploy-staging:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: auth-staging
+      url: ${{ steps.deploy.outputs.url }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      STAGING_PROJECT: ${{ vars.AUTH_STAGING_GCP_PROJECT }}
+      SERVICE_NAME: f3-auth
+    steps:
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.AUTH_STAGING_WIF_PROVIDER }}
+          service_account: ${{ vars.AUTH_STAGING_WIF_SA }}
+
+      - id: deploy
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE_NAME }}
+          image: ${{ needs.build.outputs.image }}
+          region: ${{ env.REGION }}
+          project_id: ${{ env.STAGING_PROJECT }}
+
+  deploy-production:
+    needs: [build, deploy-staging]
+    runs-on: ubuntu-latest
+    environment:
+      name: auth-production
+      url: ${{ steps.deploy.outputs.url }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      STAGING_PROJECT: ${{ vars.AUTH_STAGING_GCP_PROJECT }}
+      PROD_PROJECT: ${{ vars.AUTH_PROD_GCP_PROJECT }}
+      SERVICE_NAME: f3-auth
+    steps:
+      - id: auth-staging
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.AUTH_STAGING_WIF_PROVIDER }}
+          service_account: ${{ vars.AUTH_STAGING_WIF_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Promote image to production AR
+        run: |
+          TAG="${{ needs.build.outputs.tag }}"
+          SRC="${REGION}-docker.pkg.dev/${STAGING_PROJECT}/${AR_REPO}/${IMAGE_NAME}:${TAG}"
+          DST="${REGION}-docker.pkg.dev/${PROD_PROJECT}/${AR_REPO}/${IMAGE_NAME}:${TAG}"
+          gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
+          docker pull "$SRC"
+          docker tag "$SRC" "$DST"
+          docker push "$DST"
+          echo "PROD_IMAGE=${DST}" >> "$GITHUB_ENV"
+
+      - id: auth-prod
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.AUTH_PROD_WIF_PROVIDER }}
+          service_account: ${{ vars.AUTH_PROD_WIF_SA }}
+
+      - id: deploy
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE_NAME }}
+          image: ${{ env.PROD_IMAGE }}
+          region: ${{ env.REGION }}
+          project_id: ${{ env.PROD_PROJECT }}
