@@ -106,8 +106,7 @@ export const authOptions: NextAuthOptions = {
         session.user.name = token.name as string;
         session.user.email = token.email as string;
         session.user.image = token.picture as string | undefined;
-        (session as Record<string, unknown>).onboardingCompleted =
-          token.onboardingCompleted as boolean;
+        session.onboardingCompleted = token.onboardingCompleted as boolean;
       }
       return session;
     },
