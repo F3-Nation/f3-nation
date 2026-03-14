@@ -10,10 +10,6 @@
     "plugins": [{ "name": "next" }],
     "strictNullChecks": true
   },
-  "include": [
-    ".",
-    ".next/types/**/*.ts",
-    "next-env.d.ts"
-  ],
+  "include": [".", ".next/types/**/*.ts", "next-env.d.ts"],
   "exclude": ["node_modules"]
 }

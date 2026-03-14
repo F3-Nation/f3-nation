@@ -62,10 +62,7 @@ function EmailLoginForm() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label
-              htmlFor="email"
-              className="block text-sm font-medium mb-1"
-            >
+            <label htmlFor="email" className="block text-sm font-medium mb-1">
               Email address
             </label>
             <input
@@ -80,9 +77,7 @@ function EmailLoginForm() {
             />
           </div>
 
-          {error && (
-            <p className="text-sm text-destructive">{error}</p>
-          )}
+          {error && <p className="text-sm text-destructive">{error}</p>}
 
           <button
             type="submit"

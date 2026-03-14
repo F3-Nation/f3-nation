@@ -8,10 +8,7 @@ export async function POST(request: NextRequest) {
   const ip = request.headers.get("x-forwarded-for") ?? "unknown";
   const { allowed } = rateLimit(`verify-email:${ip}`, 10, 60 * 1000);
   if (!allowed) {
-    return NextResponse.json(
-      { error: "Too many requests" },
-      { status: 429 },
-    );
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
   const body = (await request.json()) as {

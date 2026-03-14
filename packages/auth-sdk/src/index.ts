@@ -73,10 +73,7 @@ export class AuthClient {
     codeChallenge?: string;
     codeChallengeMethod?: string;
   }): string {
-    const url = new URL(
-      "/api/oauth/authorize",
-      this.config.authServerUrl,
-    );
+    const url = new URL("/api/oauth/authorize", this.config.authServerUrl);
     url.searchParams.set("response_type", "code");
     url.searchParams.set("client_id", this.config.clientId);
     url.searchParams.set("redirect_uri", this.config.redirectUri);
@@ -108,14 +105,11 @@ export class AuthClient {
       body.set("code_verifier", params.codeVerifier);
     }
 
-    const res = await fetch(
-      `${this.config.authServerUrl}/api/oauth/token`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: body.toString(),
-      },
-    );
+    const res = await fetch(`${this.config.authServerUrl}/api/oauth/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString(),
+    });
 
     const data = (await res.json()) as Record<string, unknown>;
 
@@ -139,9 +133,7 @@ export class AuthClient {
   }
 
   /** Uses a refresh token to get a new access token. Server-side only. */
-  async refreshToken(params: {
-    refreshToken: string;
-  }): Promise<AuthTokens> {
+  async refreshToken(params: { refreshToken: string }): Promise<AuthTokens> {
     const body = new URLSearchParams({
       grant_type: "refresh_token",
       refresh_token: params.refreshToken,
@@ -149,14 +141,11 @@ export class AuthClient {
       client_secret: this.config.clientSecret,
     });
 
-    const res = await fetch(
-      `${this.config.authServerUrl}/api/oauth/token`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: body.toString(),
-      },
-    );
+    const res = await fetch(`${this.config.authServerUrl}/api/oauth/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString(),
+    });
 
     const data = (await res.json()) as Record<string, unknown>;
 
@@ -181,12 +170,9 @@ export class AuthClient {
 
   /** Fetches user profile from the userinfo endpoint. Server-side only. */
   async getUserInfo(accessToken: string): Promise<AuthUser> {
-    const res = await fetch(
-      `${this.config.authServerUrl}/api/oauth/userinfo`,
-      {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      },
-    );
+    const res = await fetch(`${this.config.authServerUrl}/api/oauth/userinfo`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
 
     const data = (await res.json()) as Record<string, unknown>;
 
@@ -211,14 +197,11 @@ export class AuthClient {
   async revokeToken(token: string): Promise<void> {
     const body = new URLSearchParams({ token });
 
-    const res = await fetch(
-      `${this.config.authServerUrl}/api/oauth/revoke`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: body.toString(),
-      },
-    );
+    const res = await fetch(`${this.config.authServerUrl}/api/oauth/revoke`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString(),
+    });
 
     if (!res.ok) {
       const data = (await res.json()) as Record<string, unknown>;

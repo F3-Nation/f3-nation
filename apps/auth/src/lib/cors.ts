@@ -20,8 +20,7 @@ export async function getCorsHeaders(
       return {
         "Access-Control-Allow-Origin": origin,
         "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers":
-          "Content-Type, Authorization, Cookie",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization, Cookie",
         "Access-Control-Allow-Credentials": "true",
       };
     }
