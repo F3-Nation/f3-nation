@@ -3,7 +3,6 @@ import { getServerSession } from "next-auth";
 
 import { eq } from "@acme/db";
 import { users } from "@acme/db/schema/schema";
-import type { UserMeta } from "@acme/shared/app/types";
 
 import { authOptions } from "~/lib/auth-options";
 import { db } from "~/lib/db";
@@ -33,7 +32,7 @@ export async function GET() {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  const meta = (user.meta ?? {}) as UserMeta;
+  const meta = (user.meta ?? {}) as Record<string, unknown>;
 
   return NextResponse.json({
     user: {

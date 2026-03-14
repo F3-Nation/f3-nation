@@ -94,7 +94,7 @@ export const authOptions: NextAuthOptions = {
           token.picture = dbUser.avatarUrl;
           token.meta = dbUser.meta;
           token.status = dbUser.status;
-          token.onboardingCompleted = !!(dbUser.meta as UserMeta | null)
+          token.onboardingCompleted = !!(dbUser.meta as UserMeta | undefined)
             ?.onboarding_completed;
         }
       }
@@ -107,7 +107,7 @@ export const authOptions: NextAuthOptions = {
         session.user.name = token.name as string;
         session.user.email = token.email as string;
         session.user.image = token.picture as string | undefined;
-        session.onboardingCompleted = token.onboardingCompleted as boolean;
+        session.onboardingCompleted = !!token.onboardingCompleted;
       }
       return session;
     },

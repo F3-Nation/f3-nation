@@ -81,7 +81,6 @@ function OnboardingForm() {
               onChange={(e) => setF3Name(e.target.value)}
               placeholder="Your F3 name (e.g. Dredd)"
               className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-              autoFocus
             />
           </div>
 
