@@ -210,6 +210,13 @@ describe("User Router", () => {
 
         // Should not have PII fields when includePii is false
         expect(result.user).not.toHaveProperty("phone");
+
+        // Should include homeRegionId, avatarUrl, meta, and positions
+        expect(result.user).toHaveProperty("homeRegionId");
+        expect(result.user).toHaveProperty("avatarUrl");
+        expect(result.user).toHaveProperty("meta");
+        expect(result.user).toHaveProperty("positions");
+        expect(Array.isArray(result.user?.positions)).toBe(true);
       }
     });
 
@@ -270,6 +277,13 @@ describe("User Router", () => {
       expect(result.user?.id).toBe(testUser.id);
       // Email should always be included when searching by email
       expect(result.user).toHaveProperty("email");
+
+      // Should include homeRegionId, avatarUrl, meta, and positions
+      expect(result.user).toHaveProperty("homeRegionId");
+      expect(result.user).toHaveProperty("avatarUrl");
+      expect(result.user).toHaveProperty("meta");
+      expect(result.user).toHaveProperty("positions");
+      expect(Array.isArray(result.user?.positions)).toBe(true);
     });
 
     it("should return null for non-existent email", async () => {

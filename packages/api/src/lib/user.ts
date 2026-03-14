@@ -40,12 +40,16 @@ export const buildUserSelect = ({
   // Base select fields (non-PII)
   let select: Pick<Columns, "id" | "status" | "created"> & {
     roles: SQL<{ orgId: number; orgName: string; roleName: UserRole }[]>;
+    positions: SQL<{ positionName: string; orgId: number; orgName: string }[]>;
   } & Partial<Columns> = {
     id: schema.users.id,
     f3Name: schema.users.f3Name,
     firstName: schema.users.firstName,
     lastName: schema.users.lastName,
     status: schema.users.status,
+    homeRegionId: schema.users.homeRegionId,
+    avatarUrl: schema.users.avatarUrl,
+    meta: schema.users.meta,
     roles: sql<
       { orgId: number; orgName: string; roleName: UserRole }[]
     >`COALESCE(
@@ -61,12 +65,27 @@ export const buildUserSelect = ({
       ), 
       '[]'
     )`,
+    positions: sql<
+      { positionName: string; orgId: number; orgName: string }[]
+    >`COALESCE(
+      (
+        SELECT json_agg(
+          json_build_object(
+            'positionName', p.name,
+            'orgId', pxu.org_id,
+            'orgName', o.name
+          )
+        )
+        FROM positions_x_orgs_x_users pxu
+        JOIN positions p ON p.id = pxu.position_id
+        JOIN orgs o ON o.id = pxu.org_id
+        WHERE pxu.user_id = ${schema.users.id}
+      ),
+      '[]'
+    )`,
     created: schema.users.created,
     ...(includeListFields
       ? {
-          homeRegionId: schema.users.homeRegionId,
-          avatarUrl: schema.users.avatarUrl,
-          meta: schema.users.meta,
           updated: schema.users.updated,
         }
       : {}),
@@ -273,6 +292,11 @@ export const buildSingleUserQuery = async (
   user:
     | (Pick<UserSelectType, "id"> & {
         roles: { orgId: number; orgName: string; roleName: UserRole }[];
+        positions: {
+          positionName: string;
+          orgId: number;
+          orgName: string;
+        }[];
       } & Partial<UserSelectType>)
     | null;
   includePii: boolean;
