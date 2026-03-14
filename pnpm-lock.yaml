@@ -362,7 +362,7 @@ importers:
         specifier: workspace:*
         version: link:../../tooling/typescript
       '@types/node':
-        specifier: ^20.11.5
+        specifier: ^20.11.13
         version: 20.19.26
       '@types/nodemailer':
         specifier: ^6.4.17
@@ -371,11 +371,11 @@ importers:
         specifier: ^8.10.9
         version: 8.16.0
       '@types/react':
-        specifier: 18.3.5
-        version: 18.3.5
+        specifier: ^18.3.1
+        version: 18.3.20
       '@types/react-dom':
-        specifier: 18.3.0
-        version: 18.3.0
+        specifier: ^18.3.1
+        version: 18.3.7(@types/react@18.3.20)
       autoprefixer:
         specifier: ^10.4.17
         version: 10.4.17(postcss@8.5.6)
@@ -386,7 +386,7 @@ importers:
         specifier: ^8.56.0
         version: 8.56.0
       postcss:
-        specifier: ^8.4.33
+        specifier: ^8.4.35
         version: 8.5.6
       prettier:
         specifier: ^3.2.5
@@ -1104,8 +1104,8 @@ importers:
         specifier: ^0.557.0
         version: 0.557.0(react@18.3.1)
       next-themes:
-        specifier: ^0.2.1
-        version: 0.2.1(next@15.5.9)(react-dom@18.3.1)(react@18.3.1)
+        specifier: ^0.4.4
+        version: 0.4.6(react-dom@18.3.1)(react@18.3.1)
       react-day-picker:
         specifier: ^8.10.0
         version: 8.10.0(date-fns@3.6.0)(react@18.3.1)
@@ -8639,12 +8639,6 @@ packages:
   /@types/prop-types@15.7.5:
     resolution: {integrity: sha512-JCB8C6SnDoQf0cNycqd/35A7MjcnK+ZTqE7judS6o7utxUCg6imJg3QK2qzHKszlTjcj2cn+NwMB2i96ubpj7w==}
 
-  /@types/react-dom@18.3.0:
-    resolution: {integrity: sha512-EhwApuTmMBmXuFOikhQLIBUn6uFg81SwLMOAUgodJF14SOBOCMdU04gDoYi0WOJJHD144TL32z4yDqCW3dnkQg==}
-    dependencies:
-      '@types/react': 18.3.5
-    dev: true
-
   /@types/react-dom@18.3.7(@types/react@18.3.20):
     resolution: {integrity: sha512-MEe3UeoENYVFXzoXEWsvcpg6ZvlrFNlOQ7EOsvhI3CfAXwzPfO8Qwuxd40nepsYKqyyVQnTdEfv68q91yLcKrQ==}
     peerDependencies:
@@ -8665,13 +8659,6 @@ packages:
     dependencies:
       '@types/prop-types': 15.7.5
       csstype: 3.1.2
-
-  /@types/react@18.3.5:
-    resolution: {integrity: sha512-WeqMfGJLGuLCqHGYRGHxnKrXcTitc6L/nBUWfWPcTarG3t9PsquqUMuVeXZeca+mglY4Vo5GZjCi0A3Or2lnxA==}
-    dependencies:
-      '@types/prop-types': 15.7.5
-      csstype: 3.2.3
-    dev: true
 
   /@types/react@19.2.7:
     resolution: {integrity: sha512-MWtvHrGZLFttgeEj28VXHxpmwYbor/ATPYbBfSFZEIRK0ecCFLl2Qo55z52Hss+UV9CRN7trSeq1zbgx7YDWWg==}
@@ -16792,18 +16779,6 @@ packages:
       next: ^11.1.0 || ^12.0.0 || ^13.0.0 || ^14.0.0
       react: ^16.8.0 || ^17.0.0 || ^18.0.0
       react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0
-    dependencies:
-      next: 15.5.9(@babel/core@7.23.9)(@opentelemetry/api@1.9.0)(@playwright/test@1.52.0)(react-dom@18.3.1)(react@18.3.1)
-      react: 18.3.1
-      react-dom: 18.3.1(react@18.3.1)
-    dev: false
-
-  /next-themes@0.2.1(next@15.5.9)(react-dom@18.3.1)(react@18.3.1):
-    resolution: {integrity: sha512-B+AKNfYNIzh0vqQQKqQItTS8evEouKD7H5Hj3kmuPERwddR2TxvDSFZuTj6T7Jfn1oyeUyJMydPl1Bkxkh0W7A==}
-    peerDependencies:
-      next: '*'
-      react: '*'
-      react-dom: '*'
     dependencies:
       next: 15.5.9(@babel/core@7.23.9)(@opentelemetry/api@1.9.0)(@playwright/test@1.52.0)(react-dom@18.3.1)(react@18.3.1)
       react: 18.3.1
