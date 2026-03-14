@@ -6,20 +6,14 @@ import { validateAccessToken } from "~/lib/oauth";
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
   if (!authHeader?.startsWith("Bearer ")) {
-    return NextResponse.json(
-      { error: "invalid_token" },
-      { status: 401 },
-    );
+    return NextResponse.json({ error: "invalid_token" }, { status: 401 });
   }
 
   const token = authHeader.slice(7);
   const result = await validateAccessToken(token);
 
   if (!result) {
-    return NextResponse.json(
-      { error: "invalid_token" },
-      { status: 401 },
-    );
+    return NextResponse.json({ error: "invalid_token" }, { status: 401 });
   }
 
   const scopes = new Set((result.scopes ?? "").split(" "));

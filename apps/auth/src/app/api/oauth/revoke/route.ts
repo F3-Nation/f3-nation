@@ -8,10 +8,7 @@ export async function POST(request: NextRequest) {
   const token = formData.get("token") as string | null;
 
   if (!token) {
-    return NextResponse.json(
-      { error: "invalid_request" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "invalid_request" }, { status: 400 });
   }
 
   await revokeToken(token);
