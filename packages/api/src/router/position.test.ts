@@ -115,7 +115,7 @@ describe("Position Router", () => {
     return region;
   };
 
-  const createTestAO = async (regionId: number) => {
+  const _createTestAO = async (regionId: number) => {
     const [ao] = await db
       .insert(schema.orgs)
       .values({
