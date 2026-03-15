@@ -545,9 +545,8 @@ export const positionRouter = {
       const assignments = await ctx.db
         .select({
           positionId: schema.positionsXOrgsXUsers.positionId,
-          orgId: schema.positionsXOrgsXUsers.orgId,
-          userId: schema.positionsXOrgsXUsers.userId,
           positionName: schema.positions.name,
+          orgId: schema.positionsXOrgsXUsers.orgId,
           orgName: schema.orgs.name,
         })
         .from(schema.positionsXOrgsXUsers)
