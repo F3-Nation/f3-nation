@@ -85,7 +85,8 @@ describe("Org Router", () => {
             isActive: true,
           })
           .returning();
-        if (org) createdOrgIds.push(org.id);
+        if (!org) throw new Error(`Failed to create test org ${i}`);
+        createdOrgIds.push(org.id);
       }
 
       const client = createTestClient();
@@ -108,7 +109,7 @@ describe("Org Router", () => {
       });
 
       expect(page1.orgs.length).toBe(2);
-      expect(page1.total).toBeGreaterThanOrEqual(3);
+      expect(page1.total).toBe(all.total);
 
       const page2 = await client.org.all({
         orgTypes: ["region"],
@@ -118,7 +119,15 @@ describe("Org Router", () => {
       });
 
       expect(page2.orgs.length).toBeGreaterThanOrEqual(1);
-      expect(page2.total).toBeGreaterThanOrEqual(3);
+      expect(page2.orgs.length).toBeLessThanOrEqual(2);
+      expect(page2.total).toBe(all.total);
+
+      // Pages should contain disjoint org IDs
+      const page1Ids = new Set(page1.orgs.map((o) => o.id));
+      const page2Ids = page2.orgs.map((o) => o.id);
+      for (const id of page2Ids) {
+        expect(page1Ids.has(id)).toBe(false);
+      }
     });
 
     it("should filter by status", async () => {
