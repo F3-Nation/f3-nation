@@ -1,10 +1,11 @@
-/** User profile as returned by the F3 API */
+/** User profile as returned by the /me/profile endpoint */
 export interface UserProfile {
   id: number;
   f3Name: string;
   firstName: string | null;
   lastName: string;
   email: string;
+  emailVerified: boolean | null;
   phone: string | null;
   homeRegionId: number | null;
   avatarUrl: string | null;
@@ -14,14 +15,23 @@ export interface UserProfile {
   emergencyNotes: string | null;
   status: "active" | "inactive";
   roles: UserRole[];
+  positions: UserPosition[];
   created: string;
   updated: string;
 }
 
 export interface UserRole {
+  roleId: number;
   orgId: number;
   roleName: "user" | "editor" | "admin";
-  orgName?: string;
+  orgName: string;
+}
+
+export interface UserPosition {
+  positionId: number;
+  orgId: number;
+  positionName: string;
+  orgName: string;
 }
 
 /** Parsed meta fields that users can edit */
@@ -30,6 +40,7 @@ export interface UserMeta {
   my_f3_why?: string;
   user_emergency_info_dr_sharing?: boolean;
   start_date_override?: string;
+  brought_by?: number | null;
   [key: string]: unknown;
 }
 
@@ -40,33 +51,15 @@ export interface Region {
   isActive: boolean;
 }
 
-export interface PositionAssignment {
-  positionId: number;
-  positionName: string;
-  userIds: number[];
-}
-
-export interface OrgPositionAssignments {
-  orgId: number;
-  assignments: PositionAssignment[];
-}
-
-/** Body for user upsert (POST /v1/user) */
-export interface UserUpsert {
+/** Lightweight user record for the "Who Brought You?" dropdown */
+export interface UserListItem {
   id: number;
-  f3Name?: string;
-  firstName?: string | null;
-  lastName?: string;
-  email?: string;
-  phone?: string;
-  homeRegionId?: number | null;
-  avatarUrl?: string | null;
-  meta?: Record<string, unknown>;
-  emergencyContact?: string | null;
-  emergencyPhone?: string | null;
-  emergencyNotes?: string | null;
-  status?: "active" | "inactive";
-  roles?: { orgId: number; roleName: "user" | "editor" | "admin" }[];
+  f3Name: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  homeRegionId: number | null;
+  homeRegionName: string | null;
+  status: "active" | "inactive";
 }
 
 /** Fields editable on the profile form */
@@ -85,4 +78,5 @@ export interface ProfileUpdatePayload {
   my_f3_why?: string;
   user_emergency_info_dr_sharing?: boolean;
   start_date_override?: string;
+  brought_by?: number | null;
 }

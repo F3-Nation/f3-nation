@@ -21,10 +21,12 @@ export function RegionSelect({ regions, value, onChange }: RegionSelectProps) {
   );
 
   const filteredRegions = useMemo(() => {
-    if (!search) return regions;
+    // Show active regions + the currently selected region (even if inactive)
+    const base = regions.filter((r) => r.isActive || r.id === value);
+    if (!search) return base;
     const lower = search.toLowerCase();
-    return regions.filter((r) => r.name.toLowerCase().includes(lower));
-  }, [regions, search]);
+    return base.filter((r) => r.name.toLowerCase().includes(lower));
+  }, [regions, search, value]);
 
   return (
     <div className="relative">
@@ -89,16 +91,23 @@ export function RegionSelect({ regions, value, onChange }: RegionSelectProps) {
                 <button
                   key={region.id}
                   type="button"
+                  disabled={!region.isActive && region.id !== value}
                   className={`relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent ${
                     region.id === value ? "bg-accent font-medium" : ""
-                  }`}
+                  }${!region.isActive ? " opacity-50" : ""}`}
                   onClick={() => {
+                    if (!region.isActive) return;
                     onChange(region.id);
                     setOpen(false);
                     setSearch("");
                   }}
                 >
                   {region.name}
+                  {!region.isActive && (
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      Inactive
+                    </span>
+                  )}
                 </button>
               ))
             )}

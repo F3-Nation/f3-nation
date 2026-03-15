@@ -1,45 +1,31 @@
-import type { NextRequest} from "next/server";
+import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth/server";
-import { getUserByEmail, updateUser } from "@/lib/api/client";
+import { deleteMyRole } from "@/lib/api/client";
 
 export async function DELETE(request: NextRequest) {
   try {
-    const session = await requireAuth();
+    await requireAuth();
 
     const body = (await request.json()) as {
       orgId: number;
-      roleName: string;
+      roleId: number;
     };
 
-    if (body.orgId == null || typeof body.orgId !== "number" || !body.roleName) {
+    if (
+      body.orgId == null ||
+      typeof body.orgId !== "number" ||
+      body.roleId == null ||
+      typeof body.roleId !== "number"
+    ) {
       return NextResponse.json(
-        { error: "orgId and roleName are required" },
+        { error: "orgId and roleId are required" },
         { status: 400 },
       );
     }
 
-    // Fetch current user to get roles array
-    const currentUser = await getUserByEmail(session.email);
-    if (!currentUser) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-
-    // Filter out the specified role and map to the expected shape
-    const filteredRoles = (currentUser.roles ?? [])
-      .filter(
-        (role) =>
-          !(role.orgId === body.orgId && role.roleName === body.roleName),
-      )
-      .map((r) => ({ orgId: r.orgId, roleName: r.roleName }));
-
-    // Update user with filtered roles
-    const updatedUser = await updateUser({
-      id: currentUser.id,
-      roles: filteredRoles,
-    });
-
-    return NextResponse.json({ roles: updatedUser.roles });
+    const result = await deleteMyRole(body.orgId, body.roleId);
+    return NextResponse.json(result);
   } catch (err) {
     console.error("Failed to remove role:", err);
     if (err instanceof Error && err.message.includes("NEXT_REDIRECT"))

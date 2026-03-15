@@ -6,17 +6,11 @@ vi.mock("@/lib/auth/server", () => ({
 }));
 
 vi.mock("@/lib/api/client", () => ({
-  getUserByEmail: vi.fn(),
-  getPositionAssignments: vi.fn(),
-  updatePositionAssignments: vi.fn(),
+  deleteMyPosition: vi.fn(),
 }));
 
 import { requireAuth } from "@/lib/auth/server";
-import {
-  getUserByEmail,
-  getPositionAssignments,
-  updatePositionAssignments,
-} from "@/lib/api/client";
+import { deleteMyPosition } from "@/lib/api/client";
 
 describe("Positions API route", () => {
   beforeEach(() => {
@@ -29,37 +23,9 @@ describe("Positions API route", () => {
       email: "test@f3.com",
       iat: Date.now(),
     });
-    vi.mocked(getUserByEmail).mockResolvedValue({
-      id: 42,
-      f3Name: "Dredd",
-      firstName: null,
-      lastName: "Smith",
-      email: "test@f3.com",
-      phone: null,
-      homeRegionId: null,
-      avatarUrl: null,
-      meta: null,
-      emergencyContact: null,
-      emergencyPhone: null,
-      emergencyNotes: null,
-      status: "active",
-      roles: [],
-      created: "2024-01-01",
-      updated: "2024-01-01",
-    });
-    vi.mocked(getPositionAssignments).mockResolvedValue({
-      orgId: 5,
-      assignments: [
-        { positionId: 10, positionName: "Nantan", userIds: [42, 100, 200] },
-        { positionId: 20, positionName: "Weasel Shaker", userIds: [300] },
-      ],
-    });
-    vi.mocked(updatePositionAssignments).mockResolvedValue({
-      orgId: 5,
-      assignments: [
-        { positionId: 10, positionName: "Nantan", userIds: [100, 200] },
-        { positionId: 20, positionName: "Weasel Shaker", userIds: [300] },
-      ],
+    vi.mocked(deleteMyPosition).mockResolvedValue({
+      success: true,
+      found: true,
     });
 
     const { DELETE } = await import("@/app/api/profile/positions/route");
@@ -70,16 +36,15 @@ describe("Positions API route", () => {
     });
 
     const response = await DELETE(req);
-    const data = (await response.json()) as { success: boolean };
+    const data = (await response.json()) as {
+      success: boolean;
+      found: boolean;
+    };
 
     expect(response.status).toBe(200);
     expect(data.success).toBe(true);
-
-    // Verify it preserved other users and other positions
-    expect(updatePositionAssignments).toHaveBeenCalledWith(5, [
-      { positionId: 10, userIds: [100, 200] }, // 42 removed
-      { positionId: 20, userIds: [300] }, // Untouched
-    ]);
+    expect(data.found).toBe(true);
+    expect(deleteMyPosition).toHaveBeenCalledWith(5, 10);
   });
 
   it("returns 400 when missing required fields", async () => {

@@ -15,6 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/toast";
 import { AvatarUpload } from "@/components/avatar-upload";
 import { RegionSelect } from "@/components/region-select";
+import { UserSelect } from "@/components/user-select";
 import { RoleList } from "@/components/role-list";
 import { PositionList } from "@/components/position-list";
 import { useSaveRegister } from "@/lib/save-context";
@@ -23,12 +24,6 @@ import type { UserProfile, UserMeta, Region } from "@/lib/types";
 interface ProfileFormProps {
   user: UserProfile;
   regions: Region[];
-  positions: {
-    orgId: number;
-    orgName?: string;
-    positionId: number;
-    positionName: string;
-  }[];
 }
 
 function parseMeta(meta: string | Record<string, unknown> | null): UserMeta {
@@ -41,7 +36,7 @@ function parseMeta(meta: string | Record<string, unknown> | null): UserMeta {
   }
 }
 
-export function ProfileForm({ user, regions, positions }: ProfileFormProps) {
+export function ProfileForm({ user, regions }: ProfileFormProps) {
   const meta = parseMeta(user.meta);
   const { toast } = useToast();
 
@@ -61,6 +56,7 @@ export function ProfileForm({ user, regions, positions }: ProfileFormProps) {
     user_emergency_info_dr_sharing:
       meta.user_emergency_info_dr_sharing ?? false,
     start_date_override: meta.start_date_override ?? "",
+    brought_by: (meta.brought_by as number | null) ?? null,
   });
 
   const [initialForm, setInitialForm] = useState(() => ({ ...form }));
@@ -117,6 +113,7 @@ export function ProfileForm({ user, regions, positions }: ProfileFormProps) {
           form.user_emergency_info_dr_sharing;
       if (isFieldDirty("start_date_override"))
         payload.start_date_override = form.start_date_override || "";
+      if (isFieldDirty("brought_by")) payload.brought_by = form.brought_by;
 
       const res = await fetch("/api/profile", {
         method: "PATCH",
@@ -171,6 +168,7 @@ export function ProfileForm({ user, regions, positions }: ProfileFormProps) {
         </CardHeader>
         <CardContent>
           <AvatarUpload
+            userId={user.id}
             currentUrl={form.avatarUrl}
             fallbackName={form.f3Name || form.firstName}
             onUploaded={(url) => updateField("avatarUrl", url)}
@@ -186,6 +184,24 @@ export function ProfileForm({ user, regions, positions }: ProfileFormProps) {
             <CardTitle className="text-lg">Personal Information</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="space-y-2 pl-2 border-l-[3px] border-l-transparent">
+              <Label>Email</Label>
+              <Input
+                value={user.email}
+                disabled
+                className="disabled:opacity-70"
+              />
+              <p className="text-xs text-muted-foreground">
+                Email{" "}
+                <a
+                  href="mailto:it@f3nation.com?subject=Need%20to%20change%20F3%20email%20address"
+                  className="text-primary underline hover:text-primary/80"
+                >
+                  it@f3nation.com
+                </a>{" "}
+                to change
+              </p>
+            </div>
             <div className={`space-y-2${dc("f3Name")}`}>
               <Label htmlFor="f3Name">F3 Name</Label>
               <Input
@@ -341,6 +357,14 @@ export function ProfileForm({ user, regions, positions }: ProfileFormProps) {
                 }
               />
             </div>
+            <div className={`space-y-2${dc("brought_by")}`}>
+              <Label>Who Brought You?</Label>
+              <UserSelect
+                value={form.brought_by}
+                homeRegionId={form.homeRegionId}
+                onChange={(id) => updateField("brought_by", id)}
+              />
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -367,7 +391,7 @@ export function ProfileForm({ user, regions, positions }: ProfileFormProps) {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <PositionList positions={positions} />
+            <PositionList positions={user.positions ?? []} />
           </CardContent>
         </Card>
       </div>

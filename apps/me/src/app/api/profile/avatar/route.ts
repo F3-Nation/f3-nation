@@ -1,22 +1,27 @@
-import type { NextRequest} from "next/server";
+import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth/server";
 import { uploadAvatar } from "@/lib/gcs";
-import { getUserByEmail, updateUser } from "@/lib/api/client";
+import { updateMyProfile } from "@/lib/api/client";
 
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_SIZE = 5 * 1024 * 1024; // 5MB
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await requireAuth();
-    const user = await getUserByEmail(session.email);
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-    const userId = user.id;
+    await requireAuth();
 
     const formData = await request.formData();
+
+    const userIdStr = formData.get("userId");
+    const userId = Number(userIdStr);
+    if (!Number.isInteger(userId) || userId < 1) {
+      return NextResponse.json(
+        { error: "Missing or invalid userId" },
+        { status: 400 },
+      );
+    }
+
     const fileEntry = formData.get("file");
 
     if (!(fileEntry instanceof File)) {
@@ -44,15 +49,8 @@ export async function POST(request: NextRequest) {
     // Upload converts to JPEG and saves as user-avatars/{userId}.jpg
     const avatarUrl = await uploadAvatar(userId, buffer);
 
-    // Update user's avatarUrl in the API
-    await updateUser({
-      id: userId,
-      avatarUrl,
-      roles: (user.roles ?? []).map((r) => ({
-        orgId: r.orgId,
-        roleName: r.roleName,
-      })),
-    });
+    // Update user's avatarUrl via the me API
+    await updateMyProfile({ avatarUrl });
 
     return NextResponse.json({ avatarUrl });
   } catch (err) {

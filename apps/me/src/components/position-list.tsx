@@ -3,16 +3,10 @@
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast";
-
-interface Position {
-  orgId: number;
-  orgName?: string;
-  positionId: number;
-  positionName: string;
-}
+import type { UserPosition } from "@/lib/types";
 
 interface PositionListProps {
-  positions: Position[];
+  positions: UserPosition[];
 }
 
 export function PositionList({
@@ -76,14 +70,14 @@ export function PositionList({
               className="flex items-center gap-1.5 pr-1"
             >
               <span>
-                {pos.orgName ?? `Org ${pos.orgId}`} — {pos.positionName}
+                {pos.orgName} — {pos.positionName}
               </span>
               <button
                 type="button"
                 className="ml-1 rounded-full p-0.5 hover:bg-foreground/10 disabled:opacity-50"
                 disabled={removing === key}
                 onClick={() => handleRemove(pos.orgId, pos.positionId)}
-                aria-label={`Remove ${pos.positionName} position from ${pos.orgName ?? `Org ${pos.orgId}`}`}
+                aria-label={`Remove ${pos.positionName} position from ${pos.orgName}`}
               >
                 {removing === key ? (
                   <div className="h-3 w-3 animate-spin rounded-full border border-current border-t-transparent" />
