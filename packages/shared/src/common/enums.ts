@@ -6,6 +6,7 @@ export enum Header {
   MobileVersion = "mobile_version",
   MobileBuild = "mobile_build",
   Source = "x-source",
+  UserId = "x-user-id",
 }
 
 export enum Case {

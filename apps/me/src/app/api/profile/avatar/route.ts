@@ -9,19 +9,10 @@ const MAX_SIZE = 5 * 1024 * 1024; // 5MB
 
 export async function POST(request: NextRequest) {
   try {
-    await requireAuth();
+    const session = await requireAuth();
+    const userId = session.userId;
 
     const formData = await request.formData();
-
-    const userIdStr = formData.get("userId");
-    const userId = Number(userIdStr);
-    if (!Number.isInteger(userId) || userId < 1) {
-      return NextResponse.json(
-        { error: "Missing or invalid userId" },
-        { status: 400 },
-      );
-    }
-
     const fileEntry = formData.get("file");
 
     if (!(fileEntry instanceof File)) {

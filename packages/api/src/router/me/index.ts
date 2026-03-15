@@ -3,8 +3,34 @@ import { z } from "zod";
 
 import { and, asc, eq, schema, sql } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
+import { Header } from "@acme/shared/common/enums";
 
 import { protectedProcedure } from "../../shared";
+
+/**
+ * Scoped procedure for /me endpoints that need to act on behalf of
+ * a specific user. Reads the X-User-Id header and overrides session.id.
+ * Only API key holders (server-to-server calls) can set this header;
+ * browser requests go through the BFF, which sets it from the signed
+ * session cookie.
+ */
+const meProtectedProcedure = protectedProcedure.use(({ context, next }) => {
+  const reqHeaders = (context as unknown as { reqHeaders?: Headers })
+    .reqHeaders;
+  const userIdHeader = reqHeaders?.get(Header.UserId as string);
+  if (userIdHeader) {
+    const overrideId = Number(userIdHeader);
+    if (Number.isInteger(overrideId) && overrideId > 0) {
+      return next({
+        context: {
+          ...context,
+          session: { ...context.session!, id: overrideId },
+        },
+      });
+    }
+  }
+  return next({ context });
+});
 
 /**
  * /me router — self-service endpoints for authenticated users.
@@ -150,7 +176,7 @@ export const meRouter = {
   /**
    * Get the authenticated user's own profile with PII, roles, and positions.
    */
-  profile: protectedProcedure
+  profile: meProtectedProcedure
     .route({
       method: "GET",
       path: "/profile",
@@ -168,7 +194,7 @@ export const meRouter = {
    * Update the authenticated user's own profile.
    * Only whitelisted fields can be changed. Roles cannot be self-assigned.
    */
-  updateProfile: protectedProcedure
+  updateProfile: meProtectedProcedure
     .input(profileUpdateSchema)
     .route({
       method: "PATCH",
@@ -268,7 +294,7 @@ export const meRouter = {
   /**
    * Remove the authenticated user from a specific position assignment.
    */
-  deletePosition: protectedProcedure
+  deletePosition: meProtectedProcedure
     .input(
       z
         .object({
@@ -315,7 +341,7 @@ export const meRouter = {
   /**
    * Remove the authenticated user from a specific role at an org.
    */
-  deleteRole: protectedProcedure
+  deleteRole: meProtectedProcedure
     .input(
       z
         .object({
@@ -409,5 +435,39 @@ export const meRouter = {
         .orderBy(asc(schema.users.f3Name), asc(schema.users.lastName));
 
       return { users: rows };
+    }),
+
+  /**
+   * Look up a user's ID by email address.
+   * Used during OAuth callback to resolve email → numeric user ID.
+   */
+  lookupByEmail: protectedProcedure
+    .input(
+      z.object({
+        email: z.string().email().describe("The email address to look up."),
+      }),
+    )
+    .route({
+      method: "GET",
+      path: "/lookup-by-email",
+      tags: ["Me"],
+      summary: "Look up user ID by email",
+      description:
+        "Resolve an email address to a numeric user ID. Used during login to populate the session.",
+    })
+    .handler(async ({ context: ctx, input }) => {
+      const [user] = await ctx.db
+        .select({ id: schema.users.id })
+        .from(schema.users)
+        .where(eq(schema.users.email, input.email))
+        .limit(1);
+
+      if (!user) {
+        throw new ORPCError("NOT_FOUND", {
+          message: "No user found for this email",
+        });
+      }
+
+      return { userId: user.id };
     }),
 };

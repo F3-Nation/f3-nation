@@ -5,6 +5,7 @@ export interface SessionPayload {
   sub: string;
   email: string;
   name?: string;
+  userId: number;
   iat: number;
 }
 

@@ -6,14 +6,12 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 
 interface AvatarUploadProps {
-  userId: number;
   currentUrl: string | null;
   fallbackName?: string;
   onUploaded: (url: string) => void;
 }
 
 export function AvatarUpload({
-  userId,
   currentUrl,
   fallbackName,
   onUploaded,
@@ -49,7 +47,6 @@ export function AvatarUpload({
       try {
         const formData = new FormData();
         formData.append("file", file);
-        formData.append("userId", String(userId));
 
         const res = await fetch("/api/profile/avatar", {
           method: "POST",

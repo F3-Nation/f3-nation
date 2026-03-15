@@ -1,5 +1,8 @@
 import "server-only";
+import { cookies } from "next/headers";
 import type { UserProfile, Region, UserListItem } from "@/lib/types";
+import { SESSION_COOKIE_NAME } from "@/lib/auth/constants";
+import { verifySessionValue } from "@/lib/auth/session";
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -7,7 +10,35 @@ function requireEnv(name: string): string {
   return value;
 }
 
-function getHeaders(): HeadersInit {
+/**
+ * Build headers for API calls. Includes X-User-Id from the session cookie
+ * so the API knows which user the request is for.
+ */
+async function getHeaders(): Promise<HeadersInit> {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${requireEnv("F3_API_KEY")}`,
+    Client: "f3-me",
+    "Content-Type": "application/json",
+  };
+
+  // Read userId from the session cookie and pass as X-User-Id
+  const cookieStore = await cookies();
+  const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  if (sessionCookie) {
+    const session = verifySessionValue(sessionCookie);
+    if (session?.userId) {
+      headers["X-User-Id"] = String(session.userId);
+    }
+  }
+
+  return headers;
+}
+
+/**
+ * Build headers for the email lookup call during OAuth callback.
+ * Does NOT include X-User-Id since we don't have it yet.
+ */
+function getBaseHeaders(): HeadersInit {
   return {
     Authorization: `Bearer ${requireEnv("F3_API_KEY")}`,
     Client: "f3-me",
@@ -25,7 +56,7 @@ function apiUrl(path: string): string {
  */
 export async function getMyProfile(): Promise<UserProfile> {
   const res = await fetch(apiUrl("/me/profile"), {
-    headers: getHeaders(),
+    headers: await getHeaders(),
     cache: "no-store",
   });
   if (!res.ok) {
@@ -45,7 +76,7 @@ export async function updateMyProfile(
 ): Promise<UserProfile> {
   const res = await fetch(apiUrl("/me/profile"), {
     method: "PATCH",
-    headers: getHeaders(),
+    headers: await getHeaders(),
     body: JSON.stringify(body),
   });
   if (!res.ok) {
@@ -62,7 +93,7 @@ export async function updateMyProfile(
  */
 export async function getRegions(): Promise<Region[]> {
   const res = await fetch(apiUrl("/me/regions"), {
-    headers: getHeaders(),
+    headers: await getHeaders(),
     next: { revalidate: 3600 }, // Cache for 1 hour
   });
   if (!res.ok) {
@@ -83,7 +114,7 @@ export async function deleteMyPosition(
 ): Promise<{ success: boolean; found: boolean }> {
   const res = await fetch(apiUrl("/me/positions"), {
     method: "DELETE",
-    headers: getHeaders(),
+    headers: await getHeaders(),
     body: JSON.stringify({ orgId, positionId }),
   });
   if (!res.ok) {
@@ -103,7 +134,7 @@ export async function deleteMyRole(
 ): Promise<{ success: boolean; found: boolean }> {
   const res = await fetch(apiUrl("/me/roles"), {
     method: "DELETE",
-    headers: getHeaders(),
+    headers: await getHeaders(),
     body: JSON.stringify({ orgId, roleId }),
   });
   if (!res.ok) {
@@ -126,7 +157,7 @@ export async function getUsers(
   }
   const qs = params.toString();
   const res = await fetch(apiUrl(`/me/users${qs ? `?${qs}` : ""}`), {
-    headers: getHeaders(),
+    headers: await getHeaders(),
     cache: "no-store",
   });
   if (!res.ok) {
@@ -135,4 +166,23 @@ export async function getUsers(
   }
   const data = (await res.json()) as { users: UserListItem[] };
   return data.users;
+}
+
+/**
+ * Look up a user's numeric ID by email address.
+ * Used during OAuth callback before the session cookie exists.
+ * Uses getBaseHeaders() (no X-User-Id needed).
+ */
+export async function lookupUserByEmail(email: string): Promise<number> {
+  const params = new URLSearchParams({ email });
+  const res = await fetch(apiUrl(`/me/lookup-by-email?${params.toString()}`), {
+    headers: getBaseHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`API error ${res.status}: ${text}`);
+  }
+  const data = (await res.json()) as { userId: number };
+  return data.userId;
 }
