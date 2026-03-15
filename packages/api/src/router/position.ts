@@ -554,6 +554,7 @@ export const positionRouter = {
           positionName: schema.positions.name,
           orgId: schema.positionsXOrgsXUsers.orgId,
           orgName: schema.orgs.name,
+          orgType: schema.positions.orgType
         })
         .from(schema.positionsXOrgsXUsers)
         .innerJoin(
