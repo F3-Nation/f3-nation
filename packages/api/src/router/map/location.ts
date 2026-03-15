@@ -39,7 +39,7 @@ export const mapLocationRouter = os.router({
             name: aoOrg.name,
             logo: sql<
               string | null
-            >`COALESCE(${aoOrg.logoUrl}, ${regionOrg.logoUrl})`,
+            >`COALESCE(NULLIF(${aoOrg.logoUrl}, ''), NULLIF(${regionOrg.logoUrl}, ''))`,
             lat: schema.locations.latitude,
             lon: schema.locations.longitude,
             locationAddress: schema.locations.addressStreet,
