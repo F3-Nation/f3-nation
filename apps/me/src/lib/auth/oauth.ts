@@ -1,5 +1,5 @@
-import { AuthClient  } from "f3-nation-auth-sdk";
-import type {AuthClientConfig} from "f3-nation-auth-sdk";
+import { AuthClient } from "f3-nation-auth-sdk";
+import type { AuthClientConfig } from "f3-nation-auth-sdk";
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name];
