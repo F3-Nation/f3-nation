@@ -1,8 +1,8 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { SESSION_COOKIE_NAME } from "@/lib/auth/constants";
-import { verifySessionValue  } from "@/lib/auth/session";
-import type {SessionPayload} from "@/lib/auth/session";
+import { verifySessionValue } from "@/lib/auth/session";
+import type { SessionPayload } from "@/lib/auth/session";
 
 export type { SessionPayload };
 
