@@ -71,41 +71,54 @@ describe("Org Router", () => {
     });
 
     it("should paginate results correctly", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+
+      // Create 3 orgs with a unique prefix so we can isolate them via searchTerm
+      const prefix = `PagTest ${uniqueId()}`;
+      for (let i = 0; i < 3; i++) {
+        const [org] = await db
+          .insert(schema.orgs)
+          .values({
+            name: `${prefix} Region ${i}`,
+            orgType: "region",
+            parentId: f3Nation.id,
+            isActive: true,
+          })
+          .returning();
+        if (org) createdOrgIds.push(org.id);
+      }
+
       const client = createTestClient();
 
-      // Fetch all results in one query to get a stable snapshot, then verify
-      // that paginated queries return correct page sizes and totals.
-      // We avoid asserting cross-page uniqueness because parallel test files
-      // can insert orgs between separate queries, shifting offset-based pages.
+      // Use searchTerm to scope queries to only our test orgs
       const all = await client.org.all({
         orgTypes: ["region"],
+        searchTerm: prefix,
         pageIndex: 0,
         pageSize: 100,
       });
 
-      if (all.total <= 2) {
-        // Not enough data to meaningfully test pagination
-        return;
-      }
+      expect(all.total).toBeGreaterThanOrEqual(3);
 
       const page1 = await client.org.all({
         orgTypes: ["region"],
+        searchTerm: prefix,
         pageIndex: 0,
         pageSize: 2,
       });
 
       expect(page1.orgs.length).toBe(2);
-      expect(page1.total).toBeGreaterThan(2);
+      expect(page1.total).toBeGreaterThanOrEqual(3);
 
       const page2 = await client.org.all({
         orgTypes: ["region"],
+        searchTerm: prefix,
         pageIndex: 1,
         pageSize: 2,
       });
 
-      expect(page2.orgs.length).toBeLessThanOrEqual(2);
-      // Total should be consistent (or close) across pages
-      expect(page2.total).toBeGreaterThan(2);
+      expect(page2.orgs.length).toBeGreaterThanOrEqual(1);
+      expect(page2.total).toBeGreaterThanOrEqual(3);
     });
 
     it("should filter by status", async () => {
