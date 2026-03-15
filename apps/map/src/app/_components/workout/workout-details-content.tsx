@@ -234,7 +234,7 @@ export const WorkoutDetailsContent = ({
                 src:
                   location.parentLogo ?? location.regionLogo ?? "/f3_logo.png",
                 fallbackSrc: "/f3_logo.png",
-                alt: location.parentLogo ?? location.regionLogo ?? "F3 logo",
+                alt: `Logo for ${location.parentName ?? "F3"}`,
               })
             }
           >
@@ -245,7 +245,7 @@ export const WorkoutDetailsContent = ({
               loading="lazy"
               width={64}
               height={64}
-              alt={location.parentLogo ?? location.regionLogo ?? "F3 logo"}
+              alt={`Logo for ${location.parentName ?? "F3"}`}
               className="rounded-lg bg-black"
             />
           </button>
