@@ -137,8 +137,8 @@ describe("Position Router", () => {
       .insert(schema.positions)
       .values({
         name: opts?.name ?? `Test Position ${uniqueId()}`,
-        orgId: opts?.orgId ?? undefined,
-        orgType: opts?.orgType ?? undefined,
+        orgId: opts?.orgId === undefined ? undefined : opts.orgId,
+        orgType: opts?.orgType === undefined ? undefined : opts.orgType,
         isActive: true,
       })
       .returning();
