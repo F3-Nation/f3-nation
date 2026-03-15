@@ -578,7 +578,8 @@ export const positionRouter = {
               ? undefined
               : eq(schema.users.status, "active"),
           ),
-        );
+        )
+        .orderBy(asc(schema.orgs.name), asc(schema.positions.name));
 
       return { assignments };
     }),
