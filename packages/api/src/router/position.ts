@@ -478,7 +478,7 @@ export const positionRouter = {
     )
     .route({
       method: "DELETE",
-      path: "/assignments",
+      path: "/assignments/org/{orgId}/position/{positionId}/user/{userId}",
       tags: ["position"],
       summary: "Delete a single position assignment",
       description:
