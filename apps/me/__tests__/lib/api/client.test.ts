@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // Mock environment variables
-process.env.F3_API_BASE_URL = "https://api.test.f3nation.com";
+process.env.F3_API_BASE_URL = "https://api.test.f3nation.com/v1";
 process.env.F3_API_KEY = "test-api-key";
 
 // Mock fetch globally
@@ -13,18 +13,17 @@ describe("API client", () => {
     vi.clearAllMocks();
   });
 
-  it("getUser sends correct headers and URL", async () => {
+  it("getMyProfile sends correct headers and URL", async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ id: 42, f3Name: "Dredd" }),
+      json: async () => ({ user: { id: 42, f3Name: "Dredd" } }),
     });
 
-    // Dynamic import to pick up mocked env vars
-    const { getUser } = await import("@/lib/api/client");
-    const user = await getUser(42);
+    const { getMyProfile } = await import("@/lib/api/client");
+    const user = await getMyProfile();
 
     expect(mockFetch).toHaveBeenCalledWith(
-      "https://api.test.f3nation.com/v1/user/id/42?includePii=true",
+      "https://api.test.f3nation.com/v1/me/profile",
       expect.objectContaining({
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         headers: expect.objectContaining({
@@ -37,20 +36,20 @@ describe("API client", () => {
     expect(user.f3Name).toBe("Dredd");
   });
 
-  it("updateUser sends POST with body", async () => {
+  it("updateMyProfile sends PATCH with body", async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ id: 42, f3Name: "UpdatedName" }),
+      json: async () => ({ user: { id: 42, f3Name: "UpdatedName" } }),
     });
 
-    const { updateUser } = await import("@/lib/api/client");
-    const result = await updateUser({ id: 42, f3Name: "UpdatedName" });
+    const { updateMyProfile } = await import("@/lib/api/client");
+    const result = await updateMyProfile({ f3Name: "UpdatedName" });
 
     expect(mockFetch).toHaveBeenCalledWith(
-      "https://api.test.f3nation.com/v1/user",
+      "https://api.test.f3nation.com/v1/me/profile",
       expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({ id: 42, f3Name: "UpdatedName" }),
+        method: "PATCH",
+        body: JSON.stringify({ f3Name: "UpdatedName" }),
       }),
     );
     expect(result.f3Name).toBe("UpdatedName");
@@ -59,14 +58,16 @@ describe("API client", () => {
   it("getRegions calls correct endpoint", async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ orgs: [{ id: 1, name: "Charlotte" }], total: 1 }),
+      json: async () => ({
+        orgs: [{ id: 1, name: "Charlotte", orgType: "region", isActive: true }],
+      }),
     });
 
     const { getRegions } = await import("@/lib/api/client");
     const regions = await getRegions();
 
     expect(mockFetch).toHaveBeenCalledWith(
-      "https://api.test.f3nation.com/v1/org?orgType=region&isActive=true",
+      "https://api.test.f3nation.com/v1/me/regions",
       expect.objectContaining({
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         headers: expect.objectContaining({
@@ -85,46 +86,47 @@ describe("API client", () => {
       text: async () => "Not Found",
     });
 
-    const { getUser } = await import("@/lib/api/client");
-    await expect(getUser(999)).rejects.toThrow("API error 404");
+    const { getMyProfile } = await import("@/lib/api/client");
+    await expect(getMyProfile()).rejects.toThrow("API error 404");
   });
 
-  it("getPositionAssignments calls correct endpoint", async () => {
+  it("deleteMyPosition sends DELETE with body", async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({
-        orgId: 5,
-        assignments: [{ positionId: 1, positionName: "Nantan", userIds: [42] }],
-      }),
+      json: async () => ({ success: true, found: true }),
     });
 
-    const { getPositionAssignments } = await import("@/lib/api/client");
-    const result = await getPositionAssignments(5);
+    const { deleteMyPosition } = await import("@/lib/api/client");
+    const result = await deleteMyPosition(5, 10);
 
     expect(mockFetch).toHaveBeenCalledWith(
-      "https://api.test.f3nation.com/v1/position/assignments/5",
-      expect.anything(),
-    );
-    expect(result.orgId).toBe(5);
-    expect(result.assignments).toHaveLength(1);
-  });
-
-  it("updatePositionAssignments sends PUT with body", async () => {
-    const updatedAssignments = [{ positionId: 1, userIds: [100, 200] }];
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ orgId: 5, assignments: updatedAssignments }),
-    });
-
-    const { updatePositionAssignments } = await import("@/lib/api/client");
-    await updatePositionAssignments(5, updatedAssignments);
-
-    expect(mockFetch).toHaveBeenCalledWith(
-      "https://api.test.f3nation.com/v1/position/assignments",
+      "https://api.test.f3nation.com/v1/me/positions",
       expect.objectContaining({
-        method: "PUT",
-        body: JSON.stringify({ orgId: 5, assignments: updatedAssignments }),
+        method: "DELETE",
+        body: JSON.stringify({ orgId: 5, positionId: 10 }),
       }),
     );
+    expect(result.success).toBe(true);
+    expect(result.found).toBe(true);
+  });
+
+  it("deleteMyRole sends DELETE with body", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true, found: true }),
+    });
+
+    const { deleteMyRole } = await import("@/lib/api/client");
+    const result = await deleteMyRole(1, 5);
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "https://api.test.f3nation.com/v1/me/roles",
+      expect.objectContaining({
+        method: "DELETE",
+        body: JSON.stringify({ orgId: 1, roleId: 5 }),
+      }),
+    );
+    expect(result.success).toBe(true);
+    expect(result.found).toBe(true);
   });
 });

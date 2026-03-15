@@ -14,15 +14,15 @@ export function RoleList({ roles: initialRoles }: RoleListProps) {
   const [removing, setRemoving] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const handleRemove = async (orgId: number, roleName: string) => {
-    const key = `${orgId}-${roleName}`;
+  const handleRemove = async (role: UserRole) => {
+    const key = `${role.orgId}-${role.roleId}`;
     setRemoving(key);
 
     try {
       const res = await fetch("/api/profile/roles", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId, roleName }),
+        body: JSON.stringify({ orgId: role.orgId, roleId: role.roleId }),
       });
 
       if (!res.ok) {
@@ -33,11 +33,13 @@ export function RoleList({ roles: initialRoles }: RoleListProps) {
       }
 
       setRoles((prev) =>
-        prev.filter((r) => !(r.orgId === orgId && r.roleName === roleName)),
+        prev.filter(
+          (r) => !(r.orgId === role.orgId && r.roleId === role.roleId),
+        ),
       );
       toast({
         title: "Role removed",
-        description: `Removed ${roleName} role.`,
+        description: `Removed ${role.roleName} role.`,
       });
     } catch (err) {
       toast({
@@ -58,7 +60,7 @@ export function RoleList({ roles: initialRoles }: RoleListProps) {
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2">
         {roles.map((role) => {
-          const key = `${role.orgId}-${role.roleName}`;
+          const key = `${role.orgId}-${role.roleId}`;
           return (
             <Badge
               key={key}
@@ -72,7 +74,7 @@ export function RoleList({ roles: initialRoles }: RoleListProps) {
                 type="button"
                 className="ml-1 rounded-full p-0.5 hover:bg-foreground/10 disabled:opacity-50"
                 disabled={removing === key}
-                onClick={() => handleRemove(role.orgId, role.roleName)}
+                onClick={() => handleRemove(role)}
                 aria-label={`Remove ${role.roleName} role from ${role.orgName ?? `Org ${role.orgId}`}`}
               >
                 {removing === key ? (

@@ -6,12 +6,11 @@ vi.mock("@/lib/auth/server", () => ({
 }));
 
 vi.mock("@/lib/api/client", () => ({
-  getUserByEmail: vi.fn(),
-  updateUser: vi.fn(),
+  deleteMyRole: vi.fn(),
 }));
 
 import { requireAuth } from "@/lib/auth/server";
-import { getUserByEmail, updateUser } from "@/lib/api/client";
+import { deleteMyRole } from "@/lib/api/client";
 
 describe("Roles API route", () => {
   beforeEach(() => {
@@ -24,64 +23,27 @@ describe("Roles API route", () => {
       email: "test@f3.com",
       iat: Date.now(),
     });
-    vi.mocked(getUserByEmail).mockResolvedValue({
-      id: 42,
-      f3Name: "Dredd",
-      firstName: null,
-      lastName: "Smith",
-      email: "test@f3.com",
-      phone: null,
-      homeRegionId: null,
-      avatarUrl: null,
-      meta: null,
-      emergencyContact: null,
-      emergencyPhone: null,
-      emergencyNotes: null,
-      status: "active",
-      roles: [
-        { orgId: 1, roleName: "admin", orgName: "Charlotte" },
-        { orgId: 2, roleName: "user", orgName: "Raleigh" },
-      ],
-      created: "2024-01-01",
-      updated: "2024-01-01",
-    });
-    vi.mocked(updateUser).mockResolvedValue({
-      id: 42,
-      f3Name: "Dredd",
-      firstName: null,
-      lastName: "Smith",
-      email: "test@f3.com",
-      phone: null,
-      homeRegionId: null,
-      avatarUrl: null,
-      meta: null,
-      emergencyContact: null,
-      emergencyPhone: null,
-      emergencyNotes: null,
-      status: "active",
-      roles: [{ orgId: 2, roleName: "user", orgName: "Raleigh" }],
-      created: "2024-01-01",
-      updated: "2024-01-01",
+    vi.mocked(deleteMyRole).mockResolvedValue({
+      success: true,
+      found: true,
     });
 
     const { DELETE } = await import("@/app/api/profile/roles/route");
     const req = new NextRequest("http://localhost/api/profile/roles", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ orgId: 1, roleName: "admin" }),
+      body: JSON.stringify({ orgId: 1, roleId: 5 }),
     });
 
     const response = await DELETE(req);
-    const data = (await response.json()) as { roles: unknown[] };
+    const data = (await response.json()) as {
+      success: boolean;
+      found: boolean;
+    };
 
     expect(response.status).toBe(200);
-    expect(updateUser).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: 42,
-        roles: [{ orgId: 2, roleName: "user" }],
-      }),
-    );
-    expect(data.roles).toHaveLength(1);
+    expect(data.success).toBe(true);
+    expect(deleteMyRole).toHaveBeenCalledWith(1, 5);
   });
 
   it("returns 400 when missing required fields", async () => {
@@ -95,7 +57,7 @@ describe("Roles API route", () => {
     const req = new NextRequest("http://localhost/api/profile/roles", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ orgId: 1 }), // Missing roleName
+      body: JSON.stringify({ orgId: 1 }), // Missing roleId
     });
 
     const response = await DELETE(req);

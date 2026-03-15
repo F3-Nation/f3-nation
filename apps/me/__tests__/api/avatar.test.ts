@@ -9,13 +9,12 @@ vi.mock("@/lib/gcs", () => ({
 }));
 
 vi.mock("@/lib/api/client", () => ({
-  getUserByEmail: vi.fn(),
-  updateUser: vi.fn(),
+  updateMyProfile: vi.fn(),
 }));
 
 import { requireAuth } from "@/lib/auth/server";
 import { uploadAvatar } from "@/lib/gcs";
-import { getUserByEmail, updateUser } from "@/lib/api/client";
+import { updateMyProfile } from "@/lib/api/client";
 import type { NextRequest } from "next/server";
 
 // Helper to create a mock NextRequest whose formData() works in jsdom
@@ -36,24 +35,6 @@ describe("Avatar API route", () => {
       email: "test@f3.com",
       iat: Date.now(),
     });
-    vi.mocked(getUserByEmail).mockResolvedValue({
-      id: 42,
-      f3Name: "Dredd",
-      firstName: null,
-      lastName: "Smith",
-      email: "test@f3.com",
-      phone: null,
-      homeRegionId: null,
-      avatarUrl: null,
-      meta: null,
-      emergencyContact: null,
-      emergencyPhone: null,
-      emergencyNotes: null,
-      status: "active",
-      roles: [],
-      created: "2024-01-01",
-      updated: "2024-01-01",
-    });
 
     const { POST } = await import("@/app/api/profile/avatar/route");
     const formData = new FormData();
@@ -70,24 +51,6 @@ describe("Avatar API route", () => {
       sub: "42",
       email: "test@f3.com",
       iat: Date.now(),
-    });
-    vi.mocked(getUserByEmail).mockResolvedValue({
-      id: 42,
-      f3Name: "Dredd",
-      firstName: null,
-      lastName: "Smith",
-      email: "test@f3.com",
-      phone: null,
-      homeRegionId: null,
-      avatarUrl: null,
-      meta: null,
-      emergencyContact: null,
-      emergencyPhone: null,
-      emergencyNotes: null,
-      status: "active",
-      roles: [],
-      created: "2024-01-01",
-      updated: "2024-01-01",
     });
 
     const { POST } = await import("@/app/api/profile/avatar/route");
@@ -111,33 +74,16 @@ describe("Avatar API route", () => {
       email: "test@f3.com",
       iat: Date.now(),
     });
-    vi.mocked(getUserByEmail).mockResolvedValue({
-      id: 42,
-      f3Name: "Dredd",
-      firstName: null,
-      lastName: "Smith",
-      email: "test@f3.com",
-      phone: null,
-      homeRegionId: null,
-      avatarUrl: null,
-      meta: null,
-      emergencyContact: null,
-      emergencyPhone: null,
-      emergencyNotes: null,
-      status: "active",
-      roles: [],
-      created: "2024-01-01",
-      updated: "2024-01-01",
-    });
     vi.mocked(uploadAvatar).mockResolvedValue(
       "https://storage.googleapis.com/f3-logos/user-avatars/42.jpg",
     );
-    vi.mocked(updateUser).mockResolvedValue({
+    vi.mocked(updateMyProfile).mockResolvedValue({
       id: 42,
       f3Name: "Dredd",
       firstName: null,
       lastName: "Smith",
       email: "test@f3.com",
+      emailVerified: true,
       phone: null,
       homeRegionId: null,
       avatarUrl: "https://storage.googleapis.com/f3-logos/user-avatars/42.jpg",
@@ -145,8 +91,9 @@ describe("Avatar API route", () => {
       emergencyContact: null,
       emergencyPhone: null,
       emergencyNotes: null,
-      status: "active",
+      status: "active" as const,
       roles: [],
+      positions: [],
       created: "2024-01-01",
       updated: "2024-01-01",
     });
@@ -173,10 +120,8 @@ describe("Avatar API route", () => {
     const data = (await response.json()) as { avatarUrl: string };
     expect(data.avatarUrl).toContain("storage.googleapis.com");
     expect(uploadAvatar).toHaveBeenCalledWith(42, expect.any(Buffer));
-    expect(updateUser).toHaveBeenCalledWith({
-      id: 42,
+    expect(updateMyProfile).toHaveBeenCalledWith({
       avatarUrl: "https://storage.googleapis.com/f3-logos/user-avatars/42.jpg",
-      roles: [],
     });
   });
 });

@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuth } from "@/lib/auth/server";
-import { getUserByEmail, updateUser } from "@/lib/api/client";
+import { getMyProfile, updateMyProfile } from "@/lib/api/client";
 import type { UserMeta } from "@/lib/types";
 
 const profileUpdateSchema = z
@@ -22,6 +22,7 @@ const profileUpdateSchema = z
     my_f3_why: z.string().max(2000).optional(),
     user_emergency_info_dr_sharing: z.boolean().optional(),
     start_date_override: z.string().max(50).optional(),
+    brought_by: z.number().int().positive().nullable().optional(),
   })
   .strict();
 
@@ -42,15 +43,13 @@ const META_FIELDS = new Set([
   "my_f3_why",
   "user_emergency_info_dr_sharing",
   "start_date_override",
+  "brought_by",
 ]);
 
 export async function GET() {
   try {
-    const session = await requireAuth();
-    const user = await getUserByEmail(session.email);
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
+    await requireAuth();
+    const user = await getMyProfile();
     return NextResponse.json(user);
   } catch (err) {
     console.error("Failed to fetch profile:", err);
@@ -65,12 +64,7 @@ export async function GET() {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const session = await requireAuth();
-    const currentUser = await getUserByEmail(session.email);
-    if (!currentUser) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-    const userId = currentUser.id;
+    await requireAuth();
 
     const raw: unknown = await request.json();
     const parsed = profileUpdateSchema.safeParse(raw);
@@ -83,7 +77,7 @@ export async function PATCH(request: NextRequest) {
     const body = parsed.data;
 
     // Separate regular fields from meta fields
-    const updateBody: Record<string, unknown> = { id: userId };
+    const updateBody: Record<string, unknown> = {};
     const metaUpdates: Partial<UserMeta> = {};
 
     for (const [key, value] of Object.entries(body)) {
@@ -92,36 +86,14 @@ export async function PATCH(request: NextRequest) {
       } else if (META_FIELDS.has(key)) {
         metaUpdates[key] = value;
       }
-      // Silently ignore unrecognized fields
     }
 
-    // Handle meta field updates — merge with existing meta
+    // Pass meta fields to the API — the me router merges them with existing meta
     if (Object.keys(metaUpdates).length > 0) {
-      let existingMeta: UserMeta = {};
-      if (currentUser.meta) {
-        if (typeof currentUser.meta === "object") {
-          existingMeta = currentUser.meta as UserMeta;
-        } else {
-          try {
-            existingMeta = JSON.parse(currentUser.meta) as UserMeta;
-          } catch {
-            existingMeta = {};
-          }
-        }
-      }
-
-      // Merge: preserve all existing keys, update only the editable ones
-      const mergedMeta = { ...existingMeta, ...metaUpdates };
-      updateBody.meta = mergedMeta;
+      updateBody.meta = metaUpdates;
     }
 
-    // The API's CrupdateUserSchema requires `roles` — pass existing roles through
-    updateBody.roles = (currentUser.roles ?? []).map((r) => ({
-      orgId: r.orgId,
-      roleName: r.roleName,
-    }));
-
-    const updatedUser = await updateUser(updateBody);
+    const updatedUser = await updateMyProfile(updateBody);
     return NextResponse.json(updatedUser);
   } catch (err) {
     console.error("Failed to update profile:", err);

@@ -1,5 +1,5 @@
 import "server-only";
-import type { UserProfile, Region, OrgPositionAssignments } from "@/lib/types";
+import type { UserProfile, Region, UserListItem } from "@/lib/types";
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -19,8 +19,12 @@ function apiUrl(path: string): string {
   return `${requireEnv("F3_API_BASE_URL")}${path}`;
 }
 
-export async function getUser(id: number): Promise<UserProfile> {
-  const res = await fetch(apiUrl(`/v1/user/id/${id}?includePii=true`), {
+/**
+ * Get the authenticated user's full profile (user fields + roles + positions).
+ * Calls GET /me/profile on the F3 API.
+ */
+export async function getMyProfile(): Promise<UserProfile> {
+  const res = await fetch(apiUrl("/me/profile"), {
     headers: getHeaders(),
     cache: "no-store",
   });
@@ -28,32 +32,19 @@ export async function getUser(id: number): Promise<UserProfile> {
     const text = await res.text().catch(() => "");
     throw new Error(`API error ${res.status}: ${text}`);
   }
-  return (await res.json()) as UserProfile;
-}
-
-export async function getUserByEmail(
-  email: string,
-): Promise<UserProfile | null> {
-  const res = await fetch(
-    apiUrl(`/v1/user/email/${encodeURIComponent(email)}?includePii=true`),
-    {
-      headers: getHeaders(),
-      cache: "no-store",
-    },
-  );
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`API error ${res.status}: ${text}`);
-  }
-  const data = (await res.json()) as { user: UserProfile | null };
+  const data = (await res.json()) as { user: UserProfile };
   return data.user;
 }
 
-export async function updateUser(
+/**
+ * Update the authenticated user's profile.
+ * Calls PATCH /me/profile on the F3 API.
+ */
+export async function updateMyProfile(
   body: Record<string, unknown>,
 ): Promise<UserProfile> {
-  const res = await fetch(apiUrl("/v1/user"), {
-    method: "POST",
+  const res = await fetch(apiUrl("/me/profile"), {
+    method: "PATCH",
     headers: getHeaders(),
     body: JSON.stringify(body),
   });
@@ -61,11 +52,16 @@ export async function updateUser(
     const text = await res.text().catch(() => "");
     throw new Error(`API error ${res.status}: ${text}`);
   }
-  return (await res.json()) as UserProfile;
+  const data = (await res.json()) as { user: UserProfile };
+  return data.user;
 }
 
+/**
+ * List all regions (active and inactive) for the region dropdown.
+ * Calls GET /me/regions on the F3 API.
+ */
 export async function getRegions(): Promise<Region[]> {
-  const res = await fetch(apiUrl("/v1/org?orgType=region&isActive=true"), {
+  const res = await fetch(apiUrl("/me/regions"), {
     headers: getHeaders(),
     next: { revalidate: 3600 }, // Cache for 1 hour
   });
@@ -73,14 +69,63 @@ export async function getRegions(): Promise<Region[]> {
     const text = await res.text().catch(() => "");
     throw new Error(`API error ${res.status}: ${text}`);
   }
-  const data = (await res.json()) as { orgs: Region[]; total: number };
+  const data = (await res.json()) as { orgs: Region[] };
   return data.orgs;
 }
 
-export async function getPositionAssignments(
+/**
+ * Remove the authenticated user from a position assignment.
+ * Calls DELETE /me/positions on the F3 API.
+ */
+export async function deleteMyPosition(
   orgId: number,
-): Promise<OrgPositionAssignments> {
-  const res = await fetch(apiUrl(`/v1/position/assignments/${orgId}`), {
+  positionId: number,
+): Promise<{ success: boolean; found: boolean }> {
+  const res = await fetch(apiUrl("/me/positions"), {
+    method: "DELETE",
+    headers: getHeaders(),
+    body: JSON.stringify({ orgId, positionId }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`API error ${res.status}: ${text}`);
+  }
+  return (await res.json()) as { success: boolean; found: boolean };
+}
+
+/**
+ * Remove the authenticated user from a role assignment.
+ * Calls DELETE /me/roles on the F3 API.
+ */
+export async function deleteMyRole(
+  orgId: number,
+  roleId: number,
+): Promise<{ success: boolean; found: boolean }> {
+  const res = await fetch(apiUrl("/me/roles"), {
+    method: "DELETE",
+    headers: getHeaders(),
+    body: JSON.stringify({ orgId, roleId }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`API error ${res.status}: ${text}`);
+  }
+  return (await res.json()) as { success: boolean; found: boolean };
+}
+
+/**
+ * List users for the "Who Brought You?" dropdown.
+ * Optionally filter by homeRegionId.
+ */
+export async function getUsers(
+  homeRegionId?: number | null,
+): Promise<UserListItem[]> {
+  const params = new URLSearchParams();
+  if (homeRegionId) {
+    params.set("homeRegionId", String(homeRegionId));
+  }
+  const qs = params.toString();
+  const res = await fetch(apiUrl(`/me/users${qs ? `?${qs}` : ""}`), {
     headers: getHeaders(),
     cache: "no-store",
   });
@@ -88,21 +133,6 @@ export async function getPositionAssignments(
     const text = await res.text().catch(() => "");
     throw new Error(`API error ${res.status}: ${text}`);
   }
-  return (await res.json()) as OrgPositionAssignments;
-}
-
-export async function updatePositionAssignments(
-  orgId: number,
-  assignments: { positionId: number; userIds: number[] }[],
-): Promise<OrgPositionAssignments> {
-  const res = await fetch(apiUrl("/v1/position/assignments"), {
-    method: "PUT",
-    headers: getHeaders(),
-    body: JSON.stringify({ orgId, assignments }),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`API error ${res.status}: ${text}`);
-  }
-  return (await res.json()) as OrgPositionAssignments;
+  const data = (await res.json()) as { users: UserListItem[] };
+  return data.users;
 }
