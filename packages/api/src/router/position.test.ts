@@ -829,5 +829,89 @@ describe("Position Router", () => {
       expect(orgIds).toContain(region1.id);
       expect(orgIds).toContain(region2.id);
     });
+
+    it("should exclude inactive positions by default", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      const user = await createTestUser();
+      const activePos = await createTestPosition({ orgId: region.id });
+      const inactivePos = await createTestPosition({ orgId: region.id });
+
+      // Deactivate one position
+      await db
+        .update(schema.positions)
+        .set({ isActive: false })
+        .where(eq(schema.positions.id, inactivePos.id));
+
+      await createTestAssignment(activePos.id, region.id, user.id);
+      await createTestAssignment(inactivePos.id, region.id, user.id);
+
+      const client = createTestClient();
+      const result = await client.position.getAssignmentsByUserId({
+        userId: user.id,
+      });
+
+      expect(result.assignments).toHaveLength(1);
+      expect(result.assignments[0]!.positionId).toBe(activePos.id);
+    });
+
+    it("should exclude inactive users by default", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      const activeUser = await createTestUser();
+      const inactiveUser = await createTestUser();
+
+      // Deactivate one user
+      await db
+        .update(schema.users)
+        .set({ status: "inactive" })
+        .where(eq(schema.users.id, inactiveUser.id));
+
+      const pos = await createTestPosition({ orgId: region.id });
+      await createTestAssignment(pos.id, region.id, activeUser.id);
+      await createTestAssignment(pos.id, region.id, inactiveUser.id);
+
+      const client = createTestClient();
+      const activeResult = await client.position.getAssignmentsByUserId({
+        userId: activeUser.id,
+      });
+      const inactiveResult = await client.position.getAssignmentsByUserId({
+        userId: inactiveUser.id,
+      });
+
+      expect(activeResult.assignments).toHaveLength(1);
+      expect(inactiveResult.assignments).toHaveLength(0);
+    });
+
+    it("should include inactive when includeInactive is true", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      const user = await createTestUser();
+      const activePos = await createTestPosition({ orgId: region.id });
+      const inactivePos = await createTestPosition({ orgId: region.id });
+
+      // Deactivate one position
+      await db
+        .update(schema.positions)
+        .set({ isActive: false })
+        .where(eq(schema.positions.id, inactivePos.id));
+
+      await createTestAssignment(activePos.id, region.id, user.id);
+      await createTestAssignment(inactivePos.id, region.id, user.id);
+
+      const client = createTestClient();
+      const result = await client.position.getAssignmentsByUserId({
+        userId: user.id,
+        includeInactive: true,
+      });
+
+      expect(result.assignments).toHaveLength(2);
+    });
   });
 });

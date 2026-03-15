@@ -531,6 +531,12 @@ export const positionRouter = {
         userId: z.coerce
           .number()
           .describe("The ID of the user to get position assignments for"),
+        includeInactive: z.coerce
+          .boolean()
+          .optional()
+          .describe(
+            "Include assignments where the position or user is inactive. Defaults to false",
+          ),
       }),
     )
     .route({
@@ -539,7 +545,7 @@ export const positionRouter = {
       tags: ["position"],
       summary: "Get position assignments by user",
       description:
-        "Get all position assignments for a specific user across all orgs, including position name and org name",
+        "Get all position assignments for a specific user across all orgs, including position name and org name. By default only returns assignments where both the position and user are active.",
     })
     .handler(async ({ context: ctx, input }) => {
       const assignments = await ctx.db
@@ -558,7 +564,21 @@ export const positionRouter = {
           schema.orgs,
           eq(schema.orgs.id, schema.positionsXOrgsXUsers.orgId),
         )
-        .where(eq(schema.positionsXOrgsXUsers.userId, input.userId));
+        .innerJoin(
+          schema.users,
+          eq(schema.users.id, schema.positionsXOrgsXUsers.userId),
+        )
+        .where(
+          and(
+            eq(schema.positionsXOrgsXUsers.userId, input.userId),
+            input.includeInactive
+              ? undefined
+              : eq(schema.positions.isActive, true),
+            input.includeInactive
+              ? undefined
+              : eq(schema.users.status, "active"),
+          ),
+        );
 
       return { assignments };
     }),
