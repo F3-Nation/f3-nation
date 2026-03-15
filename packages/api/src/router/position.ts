@@ -508,7 +508,7 @@ export const positionRouter = {
             eq(schema.positionsXOrgsXUsers.userId, input.userId),
           ),
         )
-        .returning();
+        .returning({ positionId: schema.positionsXOrgsXUsers.positionId });
 
       return {
         success: true,
