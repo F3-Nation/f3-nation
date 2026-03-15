@@ -533,7 +533,7 @@ export const positionRouter = {
           .describe("The ID of the user to get position assignments for"),
         includeInactive: z.coerce
           .boolean()
-          .optional()
+          .default(false)
           .describe(
             "Include assignments where the position or user is inactive. Defaults to false",
           ),
