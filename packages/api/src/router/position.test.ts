@@ -115,21 +115,6 @@ describe("Position Router", () => {
     return region;
   };
 
-  const _createTestAO = async (regionId: number) => {
-    const [ao] = await db
-      .insert(schema.orgs)
-      .values({
-        name: `Test AO ${uniqueId()}`,
-        orgType: "ao",
-        parentId: regionId,
-        isActive: true,
-      })
-      .returning();
-    if (!ao) throw new Error("Failed to create test AO");
-    createdOrgIds.push(ao.id);
-    return ao;
-  };
-
   const createTestUser = async () => {
     const [user] = await db
       .insert(schema.users)
@@ -912,6 +897,32 @@ describe("Position Router", () => {
       });
 
       expect(result.assignments).toHaveLength(2);
+    });
+
+    it("should include inactive users when includeInactive is true", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      const user = await createTestUser();
+
+      // Deactivate user
+      await db
+        .update(schema.users)
+        .set({ status: "inactive" })
+        .where(eq(schema.users.id, user.id));
+
+      const pos = await createTestPosition({ orgId: region.id });
+      await createTestAssignment(pos.id, region.id, user.id);
+
+      const client = createTestClient();
+      const result = await client.position.getAssignmentsByUserId({
+        userId: user.id,
+        includeInactive: true,
+      });
+
+      expect(result.assignments).toHaveLength(1);
+      expect(result.assignments[0]!.positionId).toBe(pos.id);
     });
   });
 });
