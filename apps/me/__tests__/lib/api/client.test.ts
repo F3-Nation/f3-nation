@@ -3,6 +3,18 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // Mock environment variables
 process.env.F3_API_BASE_URL = "https://api.test.f3nation.com/v1";
 process.env.F3_API_KEY = "test-api-key";
+process.env.SESSION_SECRET = "test-secret-that-is-long-enough-for-hmac";
+
+// Mock server-only (no-op in tests)
+vi.mock("server-only", () => ({}));
+
+// Mock next/headers cookies()
+const mockCookieStore = {
+  get: vi.fn().mockReturnValue(undefined),
+};
+vi.mock("next/headers", () => ({
+  cookies: vi.fn().mockResolvedValue(mockCookieStore),
+}));
 
 // Mock fetch globally
 const mockFetch = vi.fn();
@@ -11,6 +23,7 @@ global.fetch = mockFetch;
 describe("API client", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockCookieStore.get.mockReturnValue(undefined);
   });
 
   it("getMyProfile sends correct headers and URL", async () => {

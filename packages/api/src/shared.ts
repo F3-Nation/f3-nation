@@ -328,6 +328,7 @@ export const getSession = async ({ context }: { context: BaseContext }) => {
     },
     expires: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString(),
   };
+
   return session;
 };
 

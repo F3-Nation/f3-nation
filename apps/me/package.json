@@ -52,6 +52,9 @@
       "@acme/eslint-config/base",
       "@acme/eslint-config/nextjs",
       "@acme/eslint-config/react"
+    ],
+    "ignorePatterns": [
+      "next-env.d.ts"
     ]
   }
 }

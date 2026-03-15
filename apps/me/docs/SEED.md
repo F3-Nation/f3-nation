@@ -18,17 +18,17 @@ A self-service profile editor for F3 Nation users. Users authenticate via F3 SSO
 
 ## 2. Tech Stack
 
-| Layer           | Choice                                                           | Notes                                                                                                                                       |
-| --------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Framework       | **Next.js 15** (App Router)                                      | TypeScript, strict mode                                                                                                                     |
-| Styling         | **TailwindCSS**                                                  |                                                                                                                                             |
-| Components      | **shadcn/ui**                                                    | `button`, `input`, `textarea`, `select`, `label`, `card`, `dialog`, `avatar`, `badge`, `separator`, `toast`, `switch`, `command` (combobox) |
-| Auth            | **F3 SSO** via `f3-nation-auth-sdk`                              | OAuth 2.0 Authorization Code + PKCE                                                                                                         |
-| API             | **F3 Nation API** (`api.f3nation.com`)                           | Bearer API key, server-side only                                                                                                            |
-| Image Storage   | **Google Cloud Storage** (existing `f3-logos` bucket or similar) | `@google-cloud/storage`                                                                                                                     |
-| Hosting         | **Firebase App Hosting** (Cloud Run)                             | Prod + Staging                                                                                                                              |
-| Node            | **20.x** (add `.nvmrc`)                                          |                                                                                                                                             |
-| Package Manager | **npm**                                                          |                                                                                                                                             |
+| Layer           | Choice                                                                     | Notes                                                                                                                                       |
+| --------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Framework       | **Next.js 15** (App Router)                                                | TypeScript, strict mode                                                                                                                     |
+| Styling         | **TailwindCSS**                                                            |                                                                                                                                             |
+| Components      | **shadcn/ui**                                                              | `button`, `input`, `textarea`, `select`, `label`, `card`, `dialog`, `avatar`, `badge`, `separator`, `toast`, `switch`, `command` (combobox) |
+| Auth            | **F3 SSO** via `f3-nation-auth-sdk`                                        | OAuth 2.0 Authorization Code + PKCE                                                                                                         |
+| API             | **F3 Nation API** (`api.f3nation.com`)                                     | Bearer API key, server-side only                                                                                                            |
+| Image Storage   | **Google Cloud Storage** (`f3-public-images` / `f3-public-images-staging`) | `@google-cloud/storage`                                                                                                                     |
+| Hosting         | **Firebase App Hosting** (Cloud Run)                                       | Prod + Staging                                                                                                                              |
+| Node            | **20.x** (add `.nvmrc`)                                                    |                                                                                                                                             |
+| Package Manager | **npm**                                                                    |                                                                                                                                             |
 
 ---
 
@@ -324,7 +324,7 @@ F3_API_KEY=<admin-api-key-from-f3-nation>
 F3_API_BASE_URL=https://staging.api.f3nation.com
 
 # Google Cloud Storage (avatar uploads)
-GCS_BUCKET=f3-logos
+GCS_BUCKET=f3-public-images-staging
 GCS_CREDENTIALS=<service-account-json-base64-encoded>
 
 # App
@@ -659,7 +659,7 @@ const nextConfig: NextConfig = {
       {
         protocol: "https",
         hostname: "storage.googleapis.com",
-        pathname: "/f3-logos/**",
+        pathname: "/f3-public-images*/**",
       },
     ],
   },

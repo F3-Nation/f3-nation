@@ -168,7 +168,6 @@ export function ProfileForm({ user, regions }: ProfileFormProps) {
         </CardHeader>
         <CardContent>
           <AvatarUpload
-            userId={user.id}
             currentUrl={form.avatarUrl}
             fallbackName={form.f3Name || form.firstName}
             onUploaded={(url) => updateField("avatarUrl", url)}
