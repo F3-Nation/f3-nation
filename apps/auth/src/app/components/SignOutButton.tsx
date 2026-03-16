@@ -6,6 +6,13 @@ import { signOut } from "next-auth/react";
 export default function SignOutButton() {
   const [confirming, setConfirming] = useState(false);
 
+  async function handleLogout() {
+    // Revoke all refresh tokens so client apps can't get new access tokens
+    await fetch("/api/logout", { method: "POST" });
+    // Clear the session cookie and redirect to login
+    await signOut({ callbackUrl: "/login" });
+  }
+
   if (confirming) {
     return (
       <div className="space-y-4 rounded-md border border-destructive/50 bg-destructive/5 p-5">
@@ -14,7 +21,7 @@ export default function SignOutButton() {
         </p>
         <div className="flex gap-3">
           <button
-            onClick={() => signOut({ callbackUrl: "/login" })}
+            onClick={handleLogout}
             className="flex-1 rounded-md bg-primary px-4 py-3 text-base font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
           >
             Log Out

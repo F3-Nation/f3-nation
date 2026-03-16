@@ -310,3 +310,14 @@ export async function revokeToken(token: string): Promise<void> {
       .where(eq(oauthRefreshTokens.token, token));
   }
 }
+
+/**
+ * Revoke all refresh tokens for a user. Called on logout so that
+ * client apps can no longer obtain new access tokens on the user's behalf.
+ * Existing access tokens (JWTs) will expire naturally within 1 hour.
+ */
+export async function revokeAllUserTokens(userId: number): Promise<void> {
+  await db
+    .delete(oauthRefreshTokens)
+    .where(eq(oauthRefreshTokens.userId, userId));
+}
