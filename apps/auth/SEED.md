@@ -16,10 +16,10 @@ system should work** once integrated into this monorepo.
 | Workspace               | Purpose                                                                                                                              |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | **`apps/auth`**         | Next.js OAuth 2.0 / OIDC server, deployed at `auth.f3nation.com`                                                                     |
-| **`packages/auth-sdk`** | TypeScript SDK consumed by any app that needs to authenticate against the auth server (e.g. `apps/me`, external apps like pax-vault) |
+| **`packages/sso`** | TypeScript SDK consumed by any app that needs to authenticate against the auth server (e.g. `apps/me`, external apps like pax-vault) |
 
 There is no standalone demo client app. `apps/me` serves as the primary reference
-integration. The `packages/auth-sdk` README must contain a complete, step-by-step
+integration. The `packages/sso` README must contain a complete, step-by-step
 client setup guide (see §12).
 
 ### 1.2 OAuth Consumers
@@ -51,7 +51,7 @@ any registered client — a fundamentally different role. The long-term plan is
 for `apps/auth` to become the single sign-on source for every F3 app, at which
 point `packages/auth` will be retired.
 
-Until that migration, both coexist. The SDK lives at `packages/auth-sdk` to
+Until that migration, both coexist. The SDK lives at `packages/sso` to
 avoid naming conflicts.
 
 ---
@@ -432,11 +432,11 @@ pnpm -C apps/auth add-client --env prod   # prompts for confirmation
 
 ---
 
-## 9. `packages/auth-sdk`
+## 9. `packages/sso`
 
 A lightweight TypeScript SDK that any F3 consumer app uses to integrate with the
-auth server. Lives in the monorepo at `packages/auth-sdk` and is also published
-to npm as `@f3-nation/auth-sdk` for external consumers.
+auth server. Lives in the monorepo at `packages/sso` and is also published
+to npm as `@acme/sso` for external consumers.
 
 ### Interface
 
@@ -511,7 +511,7 @@ interface OauthClient {
 | `EMAIL_FROM`       | From address for verification emails                                                  |
 | `NODE_ENV`         | `production` / `development`                                                          |
 
-### `packages/auth-sdk` consumers
+### `packages/sso` consumers
 
 | Variable              | Purpose                                           |
 | --------------------- | ------------------------------------------------- |
@@ -608,7 +608,7 @@ schema mismatches before serving traffic.
 
 ---
 
-## 12. Client Setup Guide (`packages/auth-sdk` README)
+## 12. Client Setup Guide (`packages/sso` README)
 
 The SDK README must walk a volunteer developer through the complete integration —
 no assumed knowledge. This is the outline of what it should cover:
@@ -621,9 +621,9 @@ no assumed knowledge. This is the outline of what it should cover:
 ### Step 1: Install the SDK
 
 ```bash
-pnpm add @f3-nation/auth-sdk
+pnpm add @acme/sso
 # or for monorepo consumers:
-# add "auth-sdk": "workspace:*" to package.json
+# add "sso": "workspace:*" to package.json
 ```
 
 ### Step 2: Set Environment Variables
@@ -710,11 +710,11 @@ GRANT ALL ON ALL TABLES IN SCHEMA auth TO app_auth;
 `packages/auth` currently handles authentication for `apps/map` via NextAuth v5
 with email OTP. The plan to consolidate:
 
-1. **Phase 1 (now)**: Build `apps/auth` + `packages/auth-sdk`. `apps/me` and
+1. **Phase 1 (now)**: Build `apps/auth` + `packages/sso`. `apps/me` and
    external apps use the new auth server. `apps/map` continues using `packages/auth`.
 
 2. **Phase 2**: Register `apps/map` as an OAuth client of `apps/auth`. Update
-   `apps/map` to use `packages/auth-sdk` for login. Verify all roles/permissions
+   `apps/map` to use `packages/sso` for login. Verify all roles/permissions
    still work.
 
 3. **Phase 3**: Remove `packages/auth`. All apps authenticate through `apps/auth`.

@@ -1,5 +1,5 @@
 {
-  "name": "@f3-nation/auth-sdk",
+  "name": "@acme/sso",
   "version": "0.1.0",
   "private": false,
   "type": "module",

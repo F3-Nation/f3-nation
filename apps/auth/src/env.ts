@@ -8,7 +8,10 @@ export const env = createEnv({
     AUTH_SECRET: z.string().min(1),
     DATABASE_URL: z.string().min(1),
     EMAIL_FROM: z.string().min(1),
-    SENDGRID_API_KEY: z.string().min(1),
+    SENDGRID_API_KEY:
+      process.env.NODE_ENV === "production"
+        ? z.string().min(1)
+        : z.string().optional(),
     NODE_ENV: z
       .enum(["development", "production", "test"])
       .default("development"),
