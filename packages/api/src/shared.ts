@@ -330,12 +330,20 @@ export const getSession = async ({ context }: { context: BaseContext }) => {
 async function getSessionFromOAuthToken(
   token: string,
 ): Promise<Session | null> {
-  const [oauthToken] = await db
+  // userId in auth.oauth_access_token is actually the user's email address.
+  // users.email is citext so eq() is case-insensitive on the DB side.
+  const [tokenUser] = await db
     .select({
-      userId: auth_oauthAccessToken.userId,
+      userId: schema.users.id,
+      email: schema.users.email,
+      f3Name: schema.users.f3Name,
       expires: auth_oauthAccessToken.expires,
     })
     .from(auth_oauthAccessToken)
+    .innerJoin(
+      schema.users,
+      eq(schema.users.email, auth_oauthAccessToken.userId),
+    )
     .where(
       and(
         eq(auth_oauthAccessToken.token, token),
@@ -344,20 +352,7 @@ async function getSessionFromOAuthToken(
     )
     .limit(1);
 
-  if (!oauthToken) return null;
-
-  // Fetch user details
-  const [user] = await db
-    .select({
-      id: schema.users.id,
-      email: schema.users.email,
-      f3Name: schema.users.f3Name,
-    })
-    .from(schema.users)
-    .where(eq(schema.users.id, oauthToken.userId))
-    .limit(1);
-
-  if (!user) return null;
+  if (!tokenUser) return null;
 
   // Fetch user roles (not API-key-scoped — these are the user's own roles)
   const userRoles = await db
@@ -369,7 +364,7 @@ async function getSessionFromOAuthToken(
     .from(schema.rolesXUsersXOrg)
     .innerJoin(schema.orgs, eq(schema.orgs.id, schema.rolesXUsersXOrg.orgId))
     .innerJoin(schema.roles, eq(schema.roles.id, schema.rolesXUsersXOrg.roleId))
-    .where(eq(schema.rolesXUsersXOrg.userId, user.id));
+    .where(eq(schema.rolesXUsersXOrg.userId, tokenUser.userId));
 
   const roles = userRoles.map((r) => ({
     orgId: r.orgId,
@@ -378,15 +373,15 @@ async function getSessionFromOAuthToken(
   }));
 
   return {
-    id: user.id,
-    email: user.email,
+    id: tokenUser.userId,
+    email: tokenUser.email,
     roles,
     user: {
-      id: user.id.toString(),
-      email: user.email,
-      name: user.f3Name ?? undefined,
+      id: tokenUser.userId.toString(),
+      email: tokenUser.email,
+      name: tokenUser.f3Name ?? undefined,
       roles,
     },
-    expires: oauthToken.expires,
+    expires: tokenUser.expires,
   };
 }

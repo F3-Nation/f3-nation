@@ -1110,7 +1110,7 @@ export const auth_oauthAuthorizationCode = authProviderSchema.table(
   {
     code: text().primaryKey().notNull(),
     clientId: text("client_id").notNull(),
-    userId: integer("user_id").notNull(),
+    userId: text("user_id").notNull(),
     redirectUri: text("redirect_uri").notNull(),
     scopes: text().notNull(),
     codeChallenge: text("code_challenge"),
@@ -1134,7 +1134,7 @@ export const auth_oauthAccessToken = authProviderSchema.table(
   {
     token: text().primaryKey().notNull(),
     clientId: text("client_id").notNull(),
-    userId: integer("user_id").notNull(),
+    userId: text("user_id").notNull(),
     scopes: text().notNull(),
     expires: timestamp({ mode: "string" }).notNull(),
     createdAt: timestamp("created_at", { mode: "string" })
@@ -1156,7 +1156,7 @@ export const auth_oauthRefreshToken = authProviderSchema.table(
     token: text().primaryKey().notNull(),
     accessToken: text("access_token").notNull(),
     clientId: text("client_id").notNull(),
-    userId: integer("user_id").notNull(),
+    userId: text("user_id").notNull(),
     expires: timestamp({ mode: "string" }).notNull(),
     createdAt: timestamp("created_at", { mode: "string" })
       .defaultNow()

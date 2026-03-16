@@ -80,7 +80,7 @@ async function createTestOAuthClient(clientId: string) {
 async function createTestAccessToken(params: {
   token: string;
   clientId: string;
-  userId: number;
+  userId: string;
   expires: string;
 }) {
   await db.insert(auth_oauthAccessToken).values({
@@ -128,14 +128,12 @@ describe("OAuth Access Token Authentication", () => {
 
   const testClientId = `${TEST_PREFIX}-client`;
   let testUserId: number;
+  const testEmail = `${TEST_PREFIX}@example.com`;
 
   beforeAll(async () => {
     await createTestOAuthClient(testClientId);
 
-    testUserId = await createTestUser(
-      `${TEST_PREFIX}@example.com`,
-      `${TEST_PREFIX}-user`,
-    );
+    testUserId = await createTestUser(testEmail, `${TEST_PREFIX}-user`);
 
     // Assign editor role to test user
     const [org] = await db
@@ -184,7 +182,7 @@ describe("OAuth Access Token Authentication", () => {
       await createTestAccessToken({
         token: validToken,
         clientId: testClientId,
-        userId: testUserId,
+        userId: testEmail,
         expires: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
       });
     });
@@ -209,7 +207,7 @@ describe("OAuth Access Token Authentication", () => {
       await createTestAccessToken({
         token: expiredToken,
         clientId: testClientId,
-        userId: testUserId,
+        userId: testEmail,
         expires: new Date(Date.now() - 60 * 1000).toISOString(),
       });
     });
@@ -239,7 +237,7 @@ describe("OAuth Access Token Authentication", () => {
       await createTestAccessToken({
         token: orderToken,
         clientId: testClientId,
-        userId: testUserId,
+        userId: testEmail,
         expires: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
       });
 
@@ -260,7 +258,7 @@ describe("OAuth Access Token Authentication", () => {
       await createTestAccessToken({
         token: roleToken,
         clientId: testClientId,
-        userId: testUserId,
+        userId: testEmail,
         expires: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
       });
 
