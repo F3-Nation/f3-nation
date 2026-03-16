@@ -1,17 +1,18 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
 
 import { eq } from "@acme/db";
 import { users } from "@acme/db/schema/schema";
 
-import { authOptions } from "~/lib/auth-options";
+import { auth } from "~/lib/auth";
 import { db } from "~/lib/db";
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const userId = Number(session.user.id);
 
   const [user] = await db
     .select({
@@ -25,7 +26,7 @@ export async function GET() {
       status: users.status,
     })
     .from(users)
-    .where(eq(users.id, session.user.id))
+    .where(eq(users.id, userId))
     .limit(1);
 
   if (!user) {
