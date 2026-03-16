@@ -227,7 +227,9 @@ const columns: TableOptions<
     accessorFn: (row) =>
       row.lastAnnualReview == null
         ? ""
-        : new Date(row.lastAnnualReview).toLocaleDateString(),
+        : new Date(
+            row.lastAnnualReview.substring(0, 10) + "T00:00:00",
+          ).toLocaleDateString(),
     meta: { name: "Last Annual Review" },
     header: Header,
     cell: (cell) => <Cell {...cell} />,
