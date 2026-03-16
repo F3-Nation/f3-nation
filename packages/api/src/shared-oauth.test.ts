@@ -2,7 +2,7 @@
  * Tests for f3-nation-auth OAuth token validation in getSession()
  *
  * Tests the new auth path that resolves sessions from f3-nation-auth
- * OAuth access tokens stored in auth.oauth_access_tokens.
+ * OAuth access tokens stored in auth.oauth_access_token.
  *
  * These are integration tests that require:
  * - TEST_DATABASE_URL environment variable
@@ -29,9 +29,10 @@ vi.mock("@acme/auth", () => ({
 import { eq, schema, sql } from "@acme/db";
 import { db } from "@acme/db/client";
 import {
-  auth_oauthAccessTokens,
-  auth_oauthClients,
+  auth_oauthAccessToken,
+  auth_oauthClient,
 } from "@acme/db/schema/schema";
+import { isDevelopmentNodeEnv } from "@acme/shared/common/constants";
 import { Client, Header } from "@acme/shared/common/enums";
 import { createRouterClient } from "@orpc/server";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -45,7 +46,7 @@ import { router } from "./index";
 async function authSchemaExists(): Promise<boolean> {
   try {
     const result = await db.execute(
-      sql`SELECT 1 FROM information_schema.tables WHERE table_schema = 'auth' AND table_name = 'oauth_access_tokens' LIMIT 1`,
+      sql`SELECT 1 FROM information_schema.tables WHERE table_schema = 'auth' AND table_name = 'oauth_access_token' LIMIT 1`,
     );
     return result.length > 0;
   } catch {
@@ -54,6 +55,7 @@ async function authSchemaExists(): Promise<boolean> {
 }
 
 const TEST_PREFIX = `oauth-test-${Date.now()}`;
+const HAS_AUTH_SCHEMA = await authSchemaExists();
 
 async function createTestUser(email: string, f3Name: string) {
   const [user] = await db
@@ -64,7 +66,7 @@ async function createTestUser(email: string, f3Name: string) {
 }
 
 async function createTestOAuthClient(clientId: string) {
-  await db.insert(auth_oauthClients).values({
+  await db.insert(auth_oauthClient).values({
     id: clientId,
     name: `Test Client ${clientId}`,
     clientSecret: `secret-${clientId}`,
@@ -81,7 +83,7 @@ async function createTestAccessToken(params: {
   userId: number;
   expires: string;
 }) {
-  await db.insert(auth_oauthAccessTokens).values({
+  await db.insert(auth_oauthAccessToken).values({
     token: params.token,
     clientId: params.clientId,
     userId: params.userId,
@@ -117,10 +119,8 @@ function createApiKeyClient(apiKey: string) {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe("OAuth Access Token Authentication", async () => {
-  const hasAuthSchema = await authSchemaExists();
-
-  if (!hasAuthSchema) {
+describe("OAuth Access Token Authentication", () => {
+  if (!HAS_AUTH_SCHEMA) {
     // eslint-disable-next-line @typescript-eslint/no-empty-function
     it.skip("auth schema not present in test DB — run auth migrations first", () => {});
     return;
@@ -156,15 +156,15 @@ describe("OAuth Access Token Authentication", async () => {
 
   afterAll(async () => {
     await db
-      .delete(auth_oauthAccessTokens)
-      .where(eq(auth_oauthAccessTokens.clientId, testClientId));
+      .delete(auth_oauthAccessToken)
+      .where(eq(auth_oauthAccessToken.clientId, testClientId));
     await db
       .delete(schema.rolesXUsersXOrg)
       .where(eq(schema.rolesXUsersXOrg.userId, testUserId));
     await db.delete(schema.users).where(eq(schema.users.id, testUserId));
     await db
-      .delete(auth_oauthClients)
-      .where(eq(auth_oauthClients.id, testClientId));
+      .delete(auth_oauthClient)
+      .where(eq(auth_oauthClient.id, testClientId));
   });
 
   beforeEach(() => {
@@ -249,8 +249,8 @@ describe("OAuth Access Token Authentication", async () => {
       expect(result.alive).toBe(true);
 
       await db
-        .delete(auth_oauthAccessTokens)
-        .where(eq(auth_oauthAccessTokens.token, orderToken));
+        .delete(auth_oauthAccessToken)
+        .where(eq(auth_oauthAccessToken.token, orderToken));
     });
   });
 
@@ -269,13 +269,13 @@ describe("OAuth Access Token Authentication", async () => {
       expect(result).toHaveProperty("users");
 
       await db
-        .delete(auth_oauthAccessTokens)
-        .where(eq(auth_oauthAccessTokens.token, roleToken));
+        .delete(auth_oauthAccessToken)
+        .where(eq(auth_oauthAccessToken.token, roleToken));
     });
   });
 
   describe("no bearer token", () => {
-    it("should fall through to dev mock when no token is provided", async () => {
+    it("should use dev mock only in development on protected endpoints", async () => {
       const client = createRouterClient(router, {
         context: () =>
           Promise.resolve({
@@ -283,8 +283,15 @@ describe("OAuth Access Token Authentication", async () => {
           }),
       });
 
-      const result = await client.ping();
-      expect(result.alive).toBe(true);
+      const result = await client.user
+        .all({ pageIndex: 0, pageSize: 1 })
+        .catch((e: Error) => e);
+
+      if (isDevelopmentNodeEnv) {
+        expect(result).toHaveProperty("users");
+      } else {
+        expect(result).toBeInstanceOf(Error);
+      }
     });
   });
 });

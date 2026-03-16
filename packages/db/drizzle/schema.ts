@@ -1094,21 +1094,19 @@ export const rolesXApiKeysXOrg = pgTable(
 
 export const authProviderSchema = pgSchema("auth");
 
-export const auth_oauthClients = authProviderSchema.table("oauth_clients", {
+export const auth_oauthClient = authProviderSchema.table("oauth_client", {
   id: text().primaryKey().notNull(),
   name: text().notNull(),
   clientSecret: text("client_secret").notNull(),
   redirectUris: text("redirect_uris").notNull(), // JSON array
   allowedOrigin: text("allowed_origin").notNull(),
   scopes: text().default("openid profile email").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
-    .defaultNow()
-    .notNull(),
+  createdAt: timestamp("created_at", { mode: "string" }).defaultNow().notNull(),
   isActive: boolean("is_active").default(true).notNull(),
 });
 
-export const auth_oauthAuthorizationCodes = authProviderSchema.table(
-  "oauth_authorization_codes",
+export const auth_oauthAuthorizationCode = authProviderSchema.table(
+  "oauth_authorization_code",
   {
     code: text().primaryKey().notNull(),
     clientId: text("client_id").notNull(),
@@ -1117,83 +1115,77 @@ export const auth_oauthAuthorizationCodes = authProviderSchema.table(
     scopes: text().notNull(),
     codeChallenge: text("code_challenge"),
     codeChallengeMethod: text("code_challenge_method"),
-    expires: timestamp({ withTimezone: true, mode: "string" }).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+    expires: timestamp({ mode: "string" }).notNull(),
+    createdAt: timestamp("created_at", { mode: "string" })
       .defaultNow()
       .notNull(),
   },
   (table) => [
     foreignKey({
       columns: [table.clientId],
-      foreignColumns: [auth_oauthClients.id],
-      name: "oauth_authorization_codes_client_id_oauth_clients_id_fk",
+      foreignColumns: [auth_oauthClient.id],
+      name: "oauth_authorization_code_client_id_oauth_client_id_fk",
     }).onDelete("cascade"),
   ],
 );
 
-export const auth_oauthAccessTokens = authProviderSchema.table(
-  "oauth_access_tokens",
+export const auth_oauthAccessToken = authProviderSchema.table(
+  "oauth_access_token",
   {
     token: text().primaryKey().notNull(),
     clientId: text("client_id").notNull(),
     userId: integer("user_id").notNull(),
     scopes: text().notNull(),
-    expires: timestamp({ withTimezone: true, mode: "string" }).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+    expires: timestamp({ mode: "string" }).notNull(),
+    createdAt: timestamp("created_at", { mode: "string" })
       .defaultNow()
       .notNull(),
   },
   (table) => [
     foreignKey({
       columns: [table.clientId],
-      foreignColumns: [auth_oauthClients.id],
-      name: "oauth_access_tokens_client_id_oauth_clients_id_fk",
+      foreignColumns: [auth_oauthClient.id],
+      name: "oauth_access_token_client_id_oauth_client_id_fk",
     }).onDelete("cascade"),
   ],
 );
 
-export const auth_oauthRefreshTokens = authProviderSchema.table(
-  "oauth_refresh_tokens",
+export const auth_oauthRefreshToken = authProviderSchema.table(
+  "oauth_refresh_token",
   {
     token: text().primaryKey().notNull(),
     accessToken: text("access_token").notNull(),
     clientId: text("client_id").notNull(),
     userId: integer("user_id").notNull(),
-    expires: timestamp({ withTimezone: true, mode: "string" }).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+    expires: timestamp({ mode: "string" }).notNull(),
+    createdAt: timestamp("created_at", { mode: "string" })
       .defaultNow()
       .notNull(),
   },
   (table) => [
     foreignKey({
       columns: [table.accessToken],
-      foreignColumns: [auth_oauthAccessTokens.token],
-      name: "oauth_refresh_tokens_access_token_oauth_access_tokens_token_fk",
+      foreignColumns: [auth_oauthAccessToken.token],
+      name: "oauth_refresh_token_access_token_oauth_access_token_token_fk",
     }).onDelete("cascade"),
     foreignKey({
       columns: [table.clientId],
-      foreignColumns: [auth_oauthClients.id],
-      name: "oauth_refresh_tokens_client_id_oauth_clients_id_fk",
+      foreignColumns: [auth_oauthClient.id],
+      name: "oauth_refresh_token_client_id_oauth_client_id_fk",
     }).onDelete("cascade"),
   ],
 );
 
-export const auth_emailMfaCodes = authProviderSchema.table(
-  "email_mfa_codes",
+export const auth_emailMfaCode = authProviderSchema.table(
+  "email_mfa_code",
   {
     id: text().primaryKey().notNull(),
     email: text().notNull(),
     codeHash: text("code_hash").notNull(),
-    expiresAt: timestamp("expires_at", {
-      withTimezone: true,
-      mode: "string",
-    }).notNull(),
-    consumedAt: timestamp("consumed_at", {
-      withTimezone: true,
-      mode: "string",
-    }),
+    expiresAt: timestamp("expires_at", { mode: "string" }).notNull(),
+    consumedAt: timestamp("consumed_at", { mode: "string" }),
     attemptCount: integer("attempt_count").default(0).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+    createdAt: timestamp("created_at", { mode: "string" })
       .defaultNow()
       .notNull(),
   },

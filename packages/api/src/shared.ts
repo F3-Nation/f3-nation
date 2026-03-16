@@ -7,7 +7,7 @@ import { auth } from "@acme/auth";
 import { and, eq, gt, isNull, or, schema, sql } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 import { db } from "@acme/db/client";
-import { auth_oauthAccessTokens } from "@acme/db/schema/schema";
+import { auth_oauthAccessToken } from "@acme/db/schema/schema";
 import { env } from "@acme/env";
 import { isNationAdminFromSession } from "@acme/shared/app/role-checks";
 import { isDevelopmentNodeEnv } from "@acme/shared/common/constants";
@@ -45,6 +45,10 @@ const getDevMockSession = (): Session => ({
 // For true distributed rate limiting, use Redis/Upstash instead.
 const RATE_LIMIT_WINDOW_MS = 60000; // 60 seconds
 const RATE_LIMIT_MAX_REQUESTS = isDevelopmentNodeEnv ? 10000 : 200;
+
+// Keep expiry checks anchored to one canonical DB clock source to avoid
+// app-server clock skew and cross-check inconsistencies.
+const DB_NOW = sql`timezone('utc'::text, now())`;
 
 const limiter = new MemoryRatelimiter({
   maxRequests: RATE_LIMIT_MAX_REQUESTS,
@@ -174,7 +178,7 @@ export const apiKeyProcedure = withSessionAndDb.use(
           isNull(schema.apiKeys.revokedAt),
           or(
             isNull(schema.apiKeys.expiresAt),
-            gt(schema.apiKeys.expiresAt, sql`timezone('utc'::text, now())`),
+            gt(schema.apiKeys.expiresAt, DB_NOW),
           ),
         ),
       )
@@ -229,7 +233,8 @@ export const getSession = async ({ context }: { context: BaseContext }) => {
 
   if (!appClient) {
     throw new ORPCError("UNAUTHORIZED", {
-      message: "You must provide a client header when using an API key",
+      message:
+        "Invalid or expired bearer token. Or, if using API Key auth, ensure the 'client' header is set.",
     });
   }
 
@@ -252,7 +257,7 @@ export const getSession = async ({ context }: { context: BaseContext }) => {
         isNull(schema.apiKeys.revokedAt),
         or(
           isNull(schema.apiKeys.expiresAt),
-          gt(schema.apiKeys.expiresAt, sql`timezone('utc'::text, now())`),
+          gt(schema.apiKeys.expiresAt, DB_NOW),
         ),
       ),
     );
@@ -318,32 +323,26 @@ export const getSession = async ({ context }: { context: BaseContext }) => {
 
 /**
  * Resolve a session from an f3-nation-auth OAuth access token.
- * Looks up the token in the shared auth.oauth_access_tokens table,
+ * Looks up the token in the shared auth.oauth_access_token table,
  * then fetches the user's roles from roles_x_users_x_org.
  * Returns null if the token is not found or expired.
  */
 async function getSessionFromOAuthToken(
   token: string,
 ): Promise<Session | null> {
-  let oauthToken;
-  try {
-    [oauthToken] = await db
-      .select({
-        userId: auth_oauthAccessTokens.userId,
-        expires: auth_oauthAccessTokens.expires,
-      })
-      .from(auth_oauthAccessTokens)
-      .where(
-        and(
-          eq(auth_oauthAccessTokens.token, token),
-          gt(auth_oauthAccessTokens.expires, new Date().toISOString()),
-        ),
-      )
-      .limit(1);
-  } catch {
-    // auth.oauth_access_tokens table may not exist yet (migration pending)
-    return null;
-  }
+  const [oauthToken] = await db
+    .select({
+      userId: auth_oauthAccessToken.userId,
+      expires: auth_oauthAccessToken.expires,
+    })
+    .from(auth_oauthAccessToken)
+    .where(
+      and(
+        eq(auth_oauthAccessToken.token, token),
+        gt(auth_oauthAccessToken.expires, DB_NOW),
+      ),
+    )
+    .limit(1);
 
   if (!oauthToken) return null;
 
@@ -388,6 +387,6 @@ async function getSessionFromOAuthToken(
       name: user.f3Name ?? undefined,
       roles,
     },
-    expires: new Date(Date.now() + 1000 * 60 * 60).toISOString(), // 1h (matches token TTL)
+    expires: oauthToken.expires,
   };
 }
