@@ -75,7 +75,7 @@ The API and auth server **share the same PostgreSQL database**. The `auth.oauth_
 **Changes:**
 
 1. Replace NextAuth `SessionProvider` / `useSession()` with f3-nation-auth SDK flow
-2. Use `packages/auth-sdk` for OAuth login (authorization code + PKCE)
+2. Use `packages/sso` for OAuth login (authorization code + PKCE)
 3. Store access token in secure httpOnly cookie or BFF pattern
 4. Send `Authorization: Bearer {access_token}` to the API
 5. Handle token refresh (1h access token, 30d refresh token)
