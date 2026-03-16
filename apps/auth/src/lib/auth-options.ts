@@ -10,7 +10,7 @@ import { sendEmailCode, verifyEmailCode } from "~/lib/email-mfa";
 import { env } from "~/env";
 
 export const authOptions: NextAuthConfig = {
-  secret: env.NEXTAUTH_SECRET,
+  secret: env.AUTH_SECRET,
   session: {
     strategy: "jwt",
     maxAge: 30 * 24 * 60 * 60, // 30 days

@@ -46,7 +46,7 @@ export async function signAccessToken(params: {
   expiresInSeconds: number;
 }): Promise<string> {
   const privateKey = await getPrivateKey();
-  const issuer = env.NEXTAUTH_URL;
+  const issuer = env.NEXT_PUBLIC_AUTH_URL;
 
   return new SignJWT({
     email: params.email,

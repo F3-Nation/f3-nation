@@ -39,10 +39,10 @@ pnpm install
 #    (see Environment Variables section below)
 cp .env.example .env
 
-# 3. Start the dev server (port 3002)
+# 3. Start the dev server (port 3004)
 pnpm dev --filter f3-auth
 
-# 4. Open http://localhost:3002
+# 4. Open http://localhost:3004
 ```
 
 ### Build & Run Production Locally
@@ -72,19 +72,19 @@ pnpm -C apps/auth typecheck
 
 ## Environment Variables
 
-All variables are server-side only. Defined and validated in `src/env.ts` using `@t3-oss/env-nextjs`.
+Defined and validated in `src/env.ts` using `@t3-oss/env-nextjs`. Variables prefixed with `NEXT_PUBLIC_` are exposed to the browser; all others are server-side only.
 
-| Variable               | Description                                                                 | Required                       |
-| ---------------------- | --------------------------------------------------------------------------- | ------------------------------ |
-| `AUTH_JWT_PRIVATE_KEY` | RSA private key (PEM) for signing JWT access tokens (see below)             | Yes                            |
-| `DATABASE_URL`         | PostgreSQL connection string (e.g. `postgresql://user:pass@host:5432/db`)   | Yes                            |
-| `NEXTAUTH_SECRET`      | Secret for signing/encrypting JWTs. Generate with `openssl rand -base64 32` | Yes                            |
-| `NEXTAUTH_URL`         | Base URL of the auth server (e.g. `https://auth.f3nation.com`)              | Yes                            |
-| `F3_API_BASE_URL`      | F3 API endpoint for user management (e.g. `https://api.f3nation.com`)       | Yes                            |
-| `F3_API_KEY`           | API key for authenticating calls to the F3 API                              | Yes                            |
-| `SENDGRID_API_KEY`     | SendGrid SMTP API key (used in production for transactional email)          | Yes                            |
-| `EMAIL_FROM`           | Sender email address (e.g. `noreply@f3nation.com`)                          | Yes                            |
-| `NODE_ENV`             | `development`, `production`, or `test`                                      | No (defaults to `development`) |
+| Variable               | Description                                                                         | Required                       |
+| ---------------------- | ----------------------------------------------------------------------------------- | ------------------------------ |
+| `AUTH_JWT_PRIVATE_KEY` | RSA private key (PEM) for signing JWT access tokens (see below)                     | Yes                            |
+| `AUTH_SECRET`          | Secret for signing/encrypting session JWTs. Generate with `openssl rand -base64 32` | Yes                            |
+| `DATABASE_URL`         | PostgreSQL connection string (e.g. `postgresql://user:pass@host:5432/db`)           | Yes                            |
+| `NEXT_PUBLIC_AUTH_URL` | Base URL of the auth server (e.g. `https://auth.f3nation.com`)                      | Yes                            |
+| `NEXT_PUBLIC_API_URL`  | F3 API endpoint for user management (e.g. `https://api.f3nation.com`)               | Yes                            |
+| `API_KEY`              | API key for authenticating calls to the F3 API                                      | Yes                            |
+| `SENDGRID_API_KEY`     | SendGrid SMTP API key (used in production for transactional email)                  | Yes                            |
+| `EMAIL_FROM`           | Sender email address (e.g. `noreply@f3nation.com`)                                  | Yes                            |
+| `NODE_ENV`             | `development`, `production`, or `test`                                              | No (defaults to `development`) |
 
 Set `SKIP_ENV_VALIDATION=1` to bypass validation during CI builds.
 
