@@ -18,9 +18,6 @@ import {
   TimeSelection,
 } from "~/utils/store/filter";
 import BootSvgComponent from "../SVGs/boot-camp";
-import ConvergenceSvgComponent from "../SVGs/convergence";
-import csaupSvgComponent from "../SVGs/csaup";
-import gteSvgComponent from "../SVGs/gte";
 import RuckSvgComponent from "../SVGs/ruck";
 import RunSvgComponent from "../SVGs/run";
 
@@ -61,23 +58,6 @@ export const FiltersAll = (props: ComponentProps<"div">) => {
     }));
   };
 
-  const handleEventClick = (
-    filterName: keyof FiltersType,
-    newState?: boolean,
-  ) => {
-    if (filterName === "allFilters") {
-      filterStore.setState((s) => ({ allFilters: !s.allFilters }));
-    } else {
-      filterStore.setState((s) => ({
-        Bootcamp: false,
-        Ruck: false,
-        Run: false,
-        Swim: false,
-        [filterName]: newState ?? !s[filterName],
-      }));
-    }
-  };
-
   const handleResetFilters = () => {
     filterStore.setState(initialFilterState);
   };
@@ -102,30 +82,6 @@ export const FiltersAll = (props: ComponentProps<"div">) => {
       img: RunSvgComponent,
       onClick: () => {
         handleTypeClick("Run");
-      },
-    },
-  ];
-
-  const eventItems = [
-    {
-      name: "CSAUPs" as const,
-      img: csaupSvgComponent,
-      onClick: () => {
-        handleEventClick("CSAUPs");
-      },
-    },
-    {
-      name: "Convergence" as const,
-      img: ConvergenceSvgComponent,
-      onClick: () => {
-        handleEventClick("Convergence");
-      },
-    },
-    {
-      name: "GTE" as const,
-      img: gteSvgComponent,
-      onClick: () => {
-        handleEventClick("GTE");
       },
     },
   ];
@@ -260,44 +216,6 @@ export const FiltersAll = (props: ComponentProps<"div">) => {
                       <item.img
                         className="h-full w-full"
                         fill={filters[item.name] ? "#3B82F6" : "#6B7280"}
-                      />
-                    )}
-                  </div>
-                </div>
-                <p className="text-sm text-foreground">{item.name}</p>
-              </button>
-            ))}
-          </div>
-        </div>
-        <div>
-          <h2 className="mb-2 text-lg font-semibold">Events</h2>
-          <div className="grid grid-cols-3 gap-4">
-            {eventItems.map((item, index) => (
-              <button
-                key={index}
-                className="flex flex-col items-center space-y-2"
-                onClick={item.onClick ?? (() => handleFilterClick(item.name))}
-              >
-                <div
-                  className={`rounded-lg border p-4 ${
-                    filters[item.name]
-                      ? isDark
-                        ? "border-blue-500 bg-blue-900"
-                        : "border-blue-500 bg-blue-100"
-                      : "border-gray-300 bg-background"
-                  }`}
-                >
-                  <div className="flex h-6 w-6 items-center justify-center">
-                    {typeof item.img === "string" ? (
-                      <Image
-                        className="max-h-full w-auto object-contain"
-                        src={item.img}
-                        alt={item.name}
-                      />
-                    ) : (
-                      <item.img
-                        className="h-full w-full"
-                        fillcolor={filters[item.name] ? "#3B82F6" : "#6B7280"}
                       />
                     )}
                   </div>
