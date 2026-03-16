@@ -133,7 +133,8 @@ describe("Avatar API route", () => {
       emailVerified: true,
       phone: null,
       homeRegionId: null,
-      avatarUrl: "https://storage.googleapis.com/f3-public-images-staging/user-avatars/42.jpg",
+      avatarUrl:
+        "https://storage.googleapis.com/f3-public-images-staging/user-avatars/42.jpg",
       meta: null,
       emergencyContact: null,
       emergencyPhone: null,
@@ -176,7 +177,8 @@ describe("Avatar API route", () => {
       emailVerified: true,
       phone: null,
       homeRegionId: null,
-      avatarUrl: "https://storage.googleapis.com/f3-public-images-staging/user-avatars/42.jpg",
+      avatarUrl:
+        "https://storage.googleapis.com/f3-public-images-staging/user-avatars/42.jpg",
       meta: null,
       emergencyContact: null,
       emergencyPhone: null,
@@ -208,7 +210,8 @@ describe("Avatar API route", () => {
     expect(data.avatarUrl).toContain("storage.googleapis.com");
     expect(uploadAvatar).toHaveBeenCalledWith(42, expect.any(Buffer));
     expect(updateMyProfile).toHaveBeenCalledWith({
-      avatarUrl: "https://storage.googleapis.com/f3-public-images-staging/user-avatars/42.jpg",
+      avatarUrl:
+        "https://storage.googleapis.com/f3-public-images-staging/user-avatars/42.jpg",
     });
   });
 
@@ -226,7 +229,8 @@ describe("Avatar API route", () => {
       emailVerified: true,
       phone: null,
       homeRegionId: null,
-      avatarUrl: "https://storage.googleapis.com/f3-public-images-staging/user-avatars/42.jpg",
+      avatarUrl:
+        "https://storage.googleapis.com/f3-public-images-staging/user-avatars/42.jpg",
       meta: null,
       emergencyContact: null,
       emergencyPhone: null,
@@ -269,7 +273,8 @@ describe("Avatar API route", () => {
       emailVerified: true,
       phone: null,
       homeRegionId: null,
-      avatarUrl: "https://storage.googleapis.com/f3-public-images-staging/user-avatars/42.jpg",
+      avatarUrl:
+        "https://storage.googleapis.com/f3-public-images-staging/user-avatars/42.jpg",
       meta: null,
       emergencyContact: null,
       emergencyPhone: null,
@@ -313,7 +318,8 @@ describe("Avatar API route", () => {
       emailVerified: true,
       phone: null,
       homeRegionId: null,
-      avatarUrl: "https://storage.googleapis.com/f3-public-images-staging/user-avatars/99.jpg",
+      avatarUrl:
+        "https://storage.googleapis.com/f3-public-images-staging/user-avatars/99.jpg",
       meta: null,
       emergencyContact: null,
       emergencyPhone: null,

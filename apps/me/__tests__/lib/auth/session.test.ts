@@ -29,7 +29,7 @@ describe("session", () => {
       const token = createSessionValue(testInput);
       const [payloadB64] = token.split(".");
       const decoded = JSON.parse(
-        Buffer.from(payloadB64!, "base64url").toString("utf-8"),
+        Buffer.from(payloadB64, "base64url").toString("utf-8"),
       ) as Record<string, unknown>;
       expect(decoded.sub).toBe("123");
       expect(decoded.email).toBe("test@f3nation.com");
@@ -44,7 +44,7 @@ describe("session", () => {
 
       const [payloadB64] = token.split(".");
       const decoded = JSON.parse(
-        Buffer.from(payloadB64!, "base64url").toString("utf-8"),
+        Buffer.from(payloadB64, "base64url").toString("utf-8"),
       ) as { iat: number };
 
       expect(decoded.iat).toBeGreaterThanOrEqual(before);
