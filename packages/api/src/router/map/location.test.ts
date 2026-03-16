@@ -54,7 +54,7 @@ describe("Map Location Router", () => {
   });
 
   // Helper to create test region
-  const createTestRegion = async () => {
+  const createTestRegion = async (opts?: { logoUrl?: string | null }) => {
     const nationOrg = await getOrCreateF3NationOrg();
     const [region] = await db
       .insert(schema.orgs)
@@ -63,6 +63,7 @@ describe("Map Location Router", () => {
         orgType: "region",
         parentId: nationOrg.id,
         isActive: true,
+        ...(opts?.logoUrl !== undefined ? { logoUrl: opts.logoUrl } : {}),
       })
       .returning();
 
@@ -73,7 +74,10 @@ describe("Map Location Router", () => {
   };
 
   // Helper to create test AO
-  const createTestAO = async (regionId: number) => {
+  const createTestAO = async (
+    regionId: number,
+    opts?: { logoUrl?: string | null },
+  ) => {
     const [ao] = await db
       .insert(schema.orgs)
       .values({
@@ -81,6 +85,7 @@ describe("Map Location Router", () => {
         orgType: "ao",
         parentId: regionId,
         isActive: true,
+        ...(opts?.logoUrl !== undefined ? { logoUrl: opts.logoUrl } : {}),
       })
       .returning();
 
@@ -110,6 +115,102 @@ describe("Map Location Router", () => {
   };
 
   describe("eventsAndLocations", () => {
+    it("should inherit region logo when AO has no logo", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const regionLogo = "https://example.com/region-logo.png";
+
+      // Create region with a custom logo, AO without one
+      const region = await createTestRegion({ logoUrl: regionLogo });
+      if (!region) throw new Error("Failed to create test region");
+
+      const ao = await createTestAO(region.id, { logoUrl: null });
+      if (!ao) throw new Error("Failed to create test AO");
+
+      const location = await createTestLocation(region.id);
+      if (!location) throw new Error("Failed to create test location");
+
+      const [event] = await db
+        .insert(schema.events)
+        .values({
+          name: `Logo Inherit Event ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: location.id,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          isActive: true,
+          highlight: false,
+          startDate: "2026-01-01",
+          isPrivate: false,
+        })
+        .returning();
+
+      if (event) {
+        createdEventIds.push(event.id);
+      }
+
+      const client = createTestClient();
+      const result = await client.map.location.eventsAndLocations();
+
+      // Map data format: [locationId, name, logo, lat, lon, fullAddress, events[]]
+      const locationData = result.find(
+        (loc: [number, ...unknown[]]) => loc[0] === location.id,
+      );
+
+      expect(locationData).toBeDefined();
+      // logo is at index 2; should be the region logo since AO has none
+      expect(locationData?.[2]).toBe(regionLogo);
+    });
+
+    it("should use AO logo when AO has its own logo", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const regionLogo = "https://example.com/region-logo2.png";
+      const aoLogo = "https://example.com/ao-logo.png";
+
+      // Create region with a logo and AO with its own logo
+      const region = await createTestRegion({ logoUrl: regionLogo });
+      if (!region) throw new Error("Failed to create test region");
+
+      const ao = await createTestAO(region.id, { logoUrl: aoLogo });
+      if (!ao) throw new Error("Failed to create test AO");
+
+      const location = await createTestLocation(region.id);
+      if (!location) throw new Error("Failed to create test location");
+
+      const [event] = await db
+        .insert(schema.events)
+        .values({
+          name: `AO Logo Event ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: location.id,
+          dayOfWeek: "tuesday",
+          startTime: "0530",
+          isActive: true,
+          highlight: false,
+          startDate: "2026-01-01",
+          isPrivate: false,
+        })
+        .returning();
+
+      if (event) {
+        createdEventIds.push(event.id);
+      }
+
+      const client = createTestClient();
+      const result = await client.map.location.eventsAndLocations();
+
+      const locationData = result.find(
+        (loc: [number, ...unknown[]]) => loc[0] === location.id,
+      );
+
+      expect(locationData).toBeDefined();
+      // AO's own logo should take precedence over region logo
+      expect(locationData?.[2]).toBe(aoLogo);
+    });
+
     it("should return locations with events for the map", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
