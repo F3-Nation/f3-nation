@@ -1,4 +1,4 @@
-import type { NextAuthOptions } from "next-auth";
+import type { NextAuthConfig } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 
 import { eq } from "@acme/db";
@@ -9,12 +9,14 @@ import { db } from "~/lib/db";
 import { sendEmailCode, verifyEmailCode } from "~/lib/email-mfa";
 import { env } from "~/env";
 
-export const authOptions: NextAuthOptions = {
+export const authOptions: NextAuthConfig = {
   secret: env.NEXTAUTH_SECRET,
   session: {
     strategy: "jwt",
     maxAge: 30 * 24 * 60 * 60, // 30 days
   },
+  basePath: "/api/auth",
+  trustHost: true,
   cookies: {
     sessionToken: {
       name:
@@ -43,7 +45,7 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.email) return null;
 
-        const email = credentials.email.toLowerCase().trim();
+        const email = (credentials.email as string).toLowerCase().trim();
 
         // Step 1: Send code (action=send or no code provided)
         if (credentials.action === "send" || !credentials.code) {
@@ -53,12 +55,12 @@ export const authOptions: NextAuthOptions = {
         }
 
         // Step 2: Verify code
-        const user = await verifyEmailCode(email, credentials.code);
+        const user = await verifyEmailCode(email, credentials.code as string);
         if (!user) return null;
 
         return {
           id: String(user.id),
-          email: user.email,
+          email: user.email ?? undefined,
           name: user.f3Name,
           roles: [],
         };
@@ -69,7 +71,7 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user }) {
       if (user) {
         token.userId = Number(user.id);
-        token.email = user.email;
+        token.email = user.email ?? undefined;
         token.name = user.name;
       }
 
@@ -103,13 +105,15 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, token }) {
       if (session.user) {
-        session.user.id = token.userId as number;
+        session.user.id = String(token.userId);
         session.user.name = String(token.name);
         session.user.email = String(token.email);
         session.user.image = token.picture as string | undefined;
-        session.onboardingCompleted = !!token.onboardingCompleted;
       }
-      return session;
+      return {
+        ...session,
+        onboardingCompleted: !!token.onboardingCompleted,
+      };
     },
   },
 };

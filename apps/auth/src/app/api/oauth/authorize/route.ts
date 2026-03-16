@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getServerSession } from "next-auth";
 
 import { eq } from "@acme/db";
 import { users } from "@acme/db/schema/schema";
 
-import { authOptions } from "~/lib/auth-options";
+import { auth } from "~/lib/auth";
 import { db } from "~/lib/db";
 import {
   createAuthorizationCode,
@@ -68,7 +67,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Check if user is authenticated
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   if (!session?.user?.id) {
     // Redirect to login with callback to this authorize URL
     const callbackUrl = request.url;
@@ -77,11 +76,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
+  const userId = Number(session.user.id);
+
   // Check onboarding status
   const [dbUser] = await db
     .select({ meta: users.meta })
     .from(users)
-    .where(eq(users.id, session.user.id))
+    .where(eq(users.id, userId))
     .limit(1);
 
   const meta = (dbUser?.meta ?? {}) as Record<string, unknown>;
@@ -95,7 +96,7 @@ export async function GET(request: NextRequest) {
   // Generate authorization code
   const code = await createAuthorizationCode({
     clientId,
-    userId: session.user.id,
+    userId: userId,
     redirectUri,
     scopes: scope,
     codeChallenge: codeChallenge ?? undefined,
