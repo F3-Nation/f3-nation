@@ -31,11 +31,11 @@ export async function POST(request: NextRequest) {
 
   // Update user profile via F3 API
   try {
-    const res = await fetch(`${env.F3_API_BASE_URL}/api/users/${userId}`, {
+    const res = await fetch(`${env.NEXT_PUBLIC_API_URL}/api/users/${userId}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": env.F3_API_KEY,
+        "x-api-key": env.API_KEY,
       },
       body: JSON.stringify({
         f3Name: body.f3Name,

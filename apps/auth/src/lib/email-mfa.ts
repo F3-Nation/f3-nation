@@ -47,7 +47,7 @@ export async function sendEmailCode(email: string): Promise<void> {
   });
 
   // Build the magic link
-  const authUrl = env.NEXTAUTH_URL;
+  const authUrl = env.NEXT_PUBLIC_AUTH_URL;
   const magicLink = `${authUrl}/login/email/verify?email=${encodeURIComponent(email)}&code=${code}`;
 
   // Send via SendGrid SMTP
@@ -146,6 +146,7 @@ export async function verifyEmailCode(
     .select({
       id: users.id,
       email: users.email,
+      emailVerified: users.emailVerified,
       f3Name: users.f3Name,
     })
     .from(users)
@@ -153,8 +154,9 @@ export async function verifyEmailCode(
     .limit(1);
 
   if (user) {
-    // Mark email as verified if not already
-    if (!user.email) {
+    // Mark email as verified if not already (direct DB write — avoids
+    // crupdate's roles-diffing which would wipe existing roles)
+    if (!user.emailVerified) {
       await db
         .update(users)
         .set({ emailVerified: now })
@@ -163,33 +165,6 @@ export async function verifyEmailCode(
     return user;
   }
 
-  // User doesn't exist — create via F3 API
-  try {
-    const res = await fetch(`${env.F3_API_BASE_URL}/api/users`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": env.F3_API_KEY,
-      },
-      body: JSON.stringify({ email: normalizedEmail }),
-    });
-
-    if (!res.ok) {
-      console.error("Failed to create user via F3 API:", await res.text());
-      return null;
-    }
-
-    const created = (await res.json()) as { id: number; email: string };
-
-    // Set email_verified
-    await db
-      .update(users)
-      .set({ emailVerified: now })
-      .where(eq(users.id, created.id));
-
-    return { id: created.id, email: created.email, f3Name: null };
-  } catch (err) {
-    console.error("Error creating user:", err);
-    return null;
-  }
+  // User doesn't exist — registration required
+  return null;
 }

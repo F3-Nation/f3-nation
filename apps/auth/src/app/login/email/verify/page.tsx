@@ -4,6 +4,8 @@ import { Suspense, useState, useEffect, useCallback } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import ThemeImage from "~/app/components/ThemeImage";
+
 export default function VerifyEmailPage() {
   return (
     <Suspense>
@@ -27,6 +29,26 @@ function VerifyEmailForm() {
       setLoading(true);
       setError("");
 
+      // Check if user exists before consuming the MFA code
+      const checkRes = await fetch("/api/check-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const checkData = (await checkRes.json()) as { exists: boolean };
+
+      if (!checkData.exists) {
+        // New user — redirect to registration (code stays valid)
+        const params = new URLSearchParams({
+          email,
+          code: verifyCode,
+          callbackUrl,
+        });
+        router.push(`/register?${params.toString()}`);
+        return;
+      }
+
+      // Existing user — sign in (consumes the code)
       const result = await signIn("email-mfa", {
         email,
         code: verifyCode,
@@ -60,18 +82,25 @@ function VerifyEmailForm() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center">
-      <div className="w-full max-w-md space-y-6 rounded-lg border bg-card p-8 shadow-sm">
-        <div className="space-y-2 text-center">
-          <h1 className="text-2xl font-bold">Enter your code</h1>
-          <p className="text-sm text-muted-foreground">
+      <div className="w-full max-w-lg space-y-8 rounded-lg border bg-card p-10 shadow-sm">
+        <div className="flex flex-col items-center space-y-4">
+          <ThemeImage
+            src="/f3nation.svg"
+            alt="F3 Nation Logo"
+            width={100}
+            height={100}
+            priority
+          />
+          <h1 className="text-3xl font-bold">Enter your code</h1>
+          <p className="text-base text-muted-foreground">
             We sent a 6-digit code to{" "}
             <span className="font-medium text-foreground">{email}</span>
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label htmlFor="code" className="block text-sm font-medium mb-1">
+            <label htmlFor="code" className="block text-base font-medium mb-2">
               Verification code
             </label>
             <input
@@ -88,18 +117,18 @@ function VerifyEmailForm() {
             />
           </div>
 
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && <p className="text-base text-destructive">{error}</p>}
 
           <button
             type="submit"
             disabled={loading || code.length !== 6}
-            className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+            className="w-full rounded-md bg-primary px-4 py-3 text-base font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
           >
             {loading ? "Verifying..." : "Verify"}
           </button>
         </form>
 
-        <p className="text-center text-sm text-muted-foreground">
+        <p className="text-center text-base text-muted-foreground">
           Didn&apos;t receive a code?{" "}
           <button
             type="button"

@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { env } from "~/env";
 
 export async function GET() {
-  const issuer = env.NEXTAUTH_URL;
+  const issuer = env.NEXT_PUBLIC_AUTH_URL;
 
   return NextResponse.json({
     issuer,

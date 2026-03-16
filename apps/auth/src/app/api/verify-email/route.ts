@@ -23,6 +23,13 @@ export async function POST(request: NextRequest) {
 
   const email = body.email.toLowerCase().trim();
 
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+    return NextResponse.json(
+      { error: "Invalid email address" },
+      { status: 400 },
+    );
+  }
+
   // Send code
   if (body.action === "send" || !body.code) {
     await sendEmailCode(email);

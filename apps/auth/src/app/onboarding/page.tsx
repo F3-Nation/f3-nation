@@ -4,6 +4,8 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 
+import ThemeImage from "~/app/components/ThemeImage";
+
 export default function OnboardingPage() {
   return (
     <Suspense>
@@ -60,17 +62,27 @@ function OnboardingForm() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center">
-      <div className="w-full max-w-md space-y-6 rounded-lg border bg-card p-8 shadow-sm">
-        <div className="space-y-2 text-center">
-          <h1 className="text-2xl font-bold">Welcome to F3 Nation</h1>
-          <p className="text-sm text-muted-foreground">
+      <div className="w-full max-w-lg space-y-8 rounded-lg border bg-card p-10 shadow-sm">
+        <div className="flex flex-col items-center space-y-4">
+          <ThemeImage
+            src="/f3nation.svg"
+            alt="F3 Nation Logo"
+            width={96}
+            height={96}
+            priority
+          />
+          <h1 className="text-3xl font-bold">Welcome to F3 Nation!</h1>
+          <p className="text-base text-muted-foreground">
             Let&apos;s set up your profile before continuing
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label htmlFor="f3Name" className="block text-sm font-medium mb-1">
+            <label
+              htmlFor="f3Name"
+              className="block text-base font-medium mb-2"
+            >
               F3 Name
             </label>
             <input
@@ -80,14 +92,14 @@ function OnboardingForm() {
               value={f3Name}
               onChange={(e) => setF3Name(e.target.value)}
               placeholder="Your F3 name (e.g. Dredd)"
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+              className="w-full rounded-md border bg-background px-4 py-3 text-base outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
 
           <div>
             <label
               htmlFor="firstName"
-              className="block text-sm font-medium mb-1"
+              className="block text-base font-medium mb-2"
             >
               First Name
             </label>
@@ -98,14 +110,14 @@ function OnboardingForm() {
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
               placeholder="John"
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+              className="w-full rounded-md border bg-background px-4 py-3 text-base outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
 
           <div>
             <label
               htmlFor="lastName"
-              className="block text-sm font-medium mb-1"
+              className="block text-base font-medium mb-2"
             >
               Last Name
             </label>
@@ -116,16 +128,16 @@ function OnboardingForm() {
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
               placeholder="Doe"
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+              className="w-full rounded-md border bg-background px-4 py-3 text-base outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
 
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && <p className="text-base text-destructive">{error}</p>}
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+            className="w-full rounded-md bg-primary px-4 py-3 text-base font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
           >
             {loading ? "Saving..." : "Continue"}
           </button>
