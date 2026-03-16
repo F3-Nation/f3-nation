@@ -28,31 +28,28 @@ The API and auth server **share the same PostgreSQL database**. The `auth.oauth_
 
 ## Migration Plan
 
-### Step 1: API Accepts F3-Auth Tokens (this PR)
+### Step 1: JWT Access Tokens + API Verification (this PR)
 
-**Goal:** Make `getSession()` in `packages/api/src/shared.ts` accept f3-nation-auth OAuth access tokens alongside NextAuth JWTs and legacy API keys. Zero breaking changes.
+**Goal:** Issue RS256 JWT access tokens from `apps/auth` and make `getSession()` in `packages/api` verify them cryptographically — zero DB lookups for auth, zero network calls after JWKS cache.
 
-**Changes:**
+**Changes in apps/auth:**
 
-1. **`packages/api/src/shared.ts`** — Add a new auth path in `getSession()`:
+1. Add `jose` dependency
+2. Add `AUTH_JWT_PRIVATE_KEY` env var (PEM-encoded RS256 private key)
+3. Replace `crypto.randomBytes()` with `jose.SignJWT()` in `exchangeAuthorizationCode()` and `exchangeRefreshToken()`
+4. JWT claims: `sub` (user ID), `email`, `scope`, `client_id`, `iat`, `exp`
+5. Serve public key at `/.well-known/jwks.json`
+6. Update `validateAccessToken()` (userinfo) to decode JWT locally instead of DB lookup
+7. Token revocation still deletes from DB (refresh tokens remain opaque)
 
-   - After NextAuth check fails, before API key lookup
-   - Query `auth.oauth_access_tokens` table for the bearer token
-   - If found and not expired, look up the user and build a session
-   - Falls through to API key auth if not found (backwards compatible)
+**Changes in packages/api:**
 
-2. **`packages/env/src/index.ts`** — No changes needed (the DB connection is already shared)
+1. Add `jose` dependency
+2. Add `AUTH_JWKS_URL` env var (e.g. `https://auth.f3nation.com/.well-known/jwks.json`)
+3. Add `getSessionFromJWT()` in `shared.ts` — verify bearer tokens with `jose.jwtVerify()` using cached remote JWKS
+4. Resolution order: NextAuth cookie → JWT bearer → API key → dev mock
 
-**Resolution order in `getSession()` after this change:**
-
-```
-1. NextAuth session (JWT cookie)     ← legacy apps/map
-2. F3-auth access token (DB lookup)  ← any f3-nation-auth app
-3. API key (DB lookup)               ← Scalar, mobile, scripts
-4. Dev mock session                  ← local dev only
-```
-
-**What this enables:** Any app that authenticates through f3-nation-auth can call the API with `Authorization: Bearer {access_token}` and be recognized as the correct user. No X-User-Id, no per-app secrets.
+**What this enables:** Any app that authenticates through f3-nation-auth can call the API with `Authorization: Bearer {jwt}` and be recognized as the correct user. No DB round-trip, no per-app secrets.
 
 ---
 
@@ -103,37 +100,16 @@ The API and auth server **share the same PostgreSQL database**. The `auth.oauth_
 
 ---
 
-### Step 5 (Future): Switch to JWT Access Tokens
-
-**Goal:** Eliminate per-request DB lookups for token validation.
-
-**Changes in apps/auth:**
-
-1. Generate RS256 key pair, store private key as env var
-2. Replace `crypto.randomBytes()` with `jose.SignJWT()` in token issuance
-3. Serve public key at `/.well-known/jwks.json`
-4. Update userinfo to decode JWT instead of DB lookup
-
-**Changes in packages/api:**
-
-1. Replace DB token lookup with `jose.jwtVerify()` using remote JWKS
-2. JWKS is cached automatically by the `jose` library
-
-**Impact:** Zero DB queries for auth, zero network calls after JWKS cache. Better for high-throughput and multi-region deployments.
-
----
-
 ## Compatibility Matrix
 
 Each step is backwards-compatible. All existing auth methods continue working until explicitly removed.
 
-| After Step | NextAuth JWT | F3-Auth Token | API Key | X-User-Id          |
-| ---------- | ------------ | ------------- | ------- | ------------------ |
-| 1          | ✅           | ✅            | ✅      | ✅ (if on feat/me) |
-| 2          | ✅           | ✅            | ✅      | ❌ removed         |
-| 3          | ✅           | ✅            | ✅      | ❌                 |
-| 4          | ❌ removed   | ✅            | ✅      | ❌                 |
-| 5          | ❌           | ✅ (JWT)      | ✅      | ❌                 |
+| After Step | NextAuth JWT | F3-Auth JWT | API Key | X-User-Id          |
+| ---------- | ------------ | ----------- | ------- | ------------------ |
+| 1          | ✅           | ✅          | ✅      | ✅ (if on feat/me) |
+| 2          | ✅           | ✅          | ✅      | ❌ removed         |
+| 3          | ✅           | ✅          | ✅      | ❌                 |
+| 4          | ❌ removed   | ✅          | ✅      | ❌                 |
 
 ---
 
@@ -141,7 +117,7 @@ Each step is backwards-compatible. All existing auth methods continue working un
 
 | Step | Added                                                                                             | Removed                                            |
 | ---- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| 1    | —                                                                                                 | —                                                  |
+| 1    | `AUTH_JWT_PRIVATE_KEY` (apps/auth), `AUTH_JWKS_URL` (packages/env)                                | —                                                  |
 | 2    | —                                                                                                 | `ME_BFF_API_KEY`, `F3_API_KEY` (from apps/me)      |
 | 3    | `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET`, `OAUTH_REDIRECT_URI`, `AUTH_PROVIDER_URL` (on apps/map) | NextAuth env vars from apps/map                    |
 | 4    | —                                                                                                 | `AUTH_SECRET`, NextAuth env vars from packages/env |
