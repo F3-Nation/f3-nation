@@ -4,7 +4,7 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 
-import ThemeImage from "~/app/components/ThemeImage";
+import Image from "next/image";
 
 export default function OnboardingPage() {
   return (
@@ -64,7 +64,7 @@ function OnboardingForm() {
     <div className="flex min-h-screen flex-col items-center justify-center">
       <div className="w-full max-w-lg space-y-8 rounded-lg border bg-card p-10 shadow-sm">
         <div className="flex flex-col items-center space-y-4">
-          <ThemeImage
+          <Image
             src="/f3nation.svg"
             alt="F3 Nation Logo"
             width={96}
