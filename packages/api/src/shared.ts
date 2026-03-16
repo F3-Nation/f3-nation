@@ -333,9 +333,7 @@ export const getSession = async ({ context }: { context: BaseContext }) => {
  * roles from roles_x_users_x_org.
  * Returns null if JWKS is not configured, or the token is invalid/expired.
  */
-async function getSessionFromJWT(
-  token: string,
-): Promise<Session | null> {
+async function getSessionFromJWT(token: string): Promise<Session | null> {
   if (!authJwks) return null;
 
   let payload;
