@@ -14,6 +14,7 @@ if (nodeEnv !== "production") {
 
 export const env = createEnv({
   server: {
+    AUTH_JWKS_URL: z.string().url().optional(),
     AUTH_SECRET:
       process.env.NODE_ENV === "production"
         ? z.string().min(1)

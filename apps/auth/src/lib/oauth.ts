@@ -2,16 +2,17 @@ import crypto from "crypto";
 
 import { and, eq, gt } from "@acme/db";
 import {
-  oauthAccessTokens,
   oauthAuthorizationCodes,
   oauthClients,
   oauthRefreshTokens,
   users,
 } from "@acme/db/schema/schema";
+import { importJWK, jwtVerify } from "jose";
 
 import { db } from "~/lib/db";
+import { getJWKS, signAccessToken } from "~/lib/jwt";
 
-function generateToken(): string {
+function generateOpaqueToken(): string {
   return crypto.randomBytes(32).toString("base64url");
 }
 
@@ -64,7 +65,7 @@ export async function createAuthorizationCode(params: {
   codeChallenge?: string;
   codeChallengeMethod?: string;
 }): Promise<string> {
-  const code = generateToken();
+  const code = generateOpaqueToken();
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min
 
   await db.insert(oauthAuthorizationCodes).values({
@@ -132,21 +133,28 @@ export async function exchangeAuthorizationCode(params: {
     .delete(oauthAuthorizationCodes)
     .where(eq(oauthAuthorizationCodes.code, params.code));
 
-  // Create tokens
-  const accessToken = generateToken();
-  const refreshToken = generateToken();
-  const accessExpiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour
+  // Look up user email for JWT claims
+  const [user] = await db
+    .select({ email: users.email })
+    .from(users)
+    .where(eq(users.id, authCode.userId))
+    .limit(1);
+  if (!user) return { error: "invalid_grant" as const };
+
+  // Create tokens — access token is a JWT, refresh token is opaque
+  const ACCESS_TOKEN_TTL = 3600; // 1 hour
+  const accessToken = await signAccessToken({
+    sub: authCode.userId,
+    email: user.email,
+    scope: authCode.scopes ?? "openid profile email",
+    clientId: authCode.clientId,
+    expiresInSeconds: ACCESS_TOKEN_TTL,
+  });
+
+  const refreshToken = generateOpaqueToken();
   const refreshExpiresAt = new Date(
     Date.now() + 30 * 24 * 60 * 60 * 1000,
   ).toISOString(); // 30 days
-
-  await db.insert(oauthAccessTokens).values({
-    token: accessToken,
-    clientId: authCode.clientId,
-    userId: authCode.userId,
-    scopes: authCode.scopes,
-    expiresAt: accessExpiresAt,
-  });
 
   await db.insert(oauthRefreshTokens).values({
     token: refreshToken,
@@ -158,7 +166,7 @@ export async function exchangeAuthorizationCode(params: {
   return {
     access_token: accessToken,
     token_type: "Bearer" as const,
-    expires_in: 3600,
+    expires_in: ACCESS_TOKEN_TTL,
     refresh_token: refreshToken,
     scope: authCode.scopes,
   };
@@ -194,37 +202,34 @@ export async function exchangeRefreshToken(params: {
 
   if (!existing) return { error: "invalid_grant" as const };
 
-  // Delete old tokens (rotation)
-  await db
-    .delete(oauthAccessTokens)
-    .where(
-      and(
-        eq(oauthAccessTokens.clientId, existing.clientId),
-        eq(oauthAccessTokens.userId, existing.userId),
-      ),
-    );
+  // Delete old refresh token (rotation)
   await db
     .delete(oauthRefreshTokens)
     .where(eq(oauthRefreshTokens.token, params.refreshToken));
 
-  // Create new token pair
-  const accessToken = generateToken();
-  const refreshToken = generateToken();
-  const accessExpiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  // Look up user email for JWT claims
+  const [user] = await db
+    .select({ email: users.email })
+    .from(users)
+    .where(eq(users.id, existing.userId))
+    .limit(1);
+  if (!user) return { error: "invalid_grant" as const };
+
+  const scopes = client.scopes ?? "openid profile email";
+  const ACCESS_TOKEN_TTL = 3600; // 1 hour
+
+  const accessToken = await signAccessToken({
+    sub: existing.userId,
+    email: user.email,
+    scope: scopes,
+    clientId: existing.clientId,
+    expiresInSeconds: ACCESS_TOKEN_TTL,
+  });
+
+  const refreshToken = generateOpaqueToken();
   const refreshExpiresAt = new Date(
     Date.now() + 30 * 24 * 60 * 60 * 1000,
   ).toISOString();
-
-  // Look up scopes from previous access token or use client defaults
-  const scopes = client.scopes ?? "openid profile email";
-
-  await db.insert(oauthAccessTokens).values({
-    token: accessToken,
-    clientId: existing.clientId,
-    userId: existing.userId,
-    scopes,
-    expiresAt: accessExpiresAt,
-  });
 
   await db.insert(oauthRefreshTokens).values({
     token: refreshToken,
@@ -236,7 +241,7 @@ export async function exchangeRefreshToken(params: {
   return {
     access_token: accessToken,
     token_type: "Bearer" as const,
-    expires_in: 3600,
+    expires_in: ACCESS_TOKEN_TTL,
     refresh_token: refreshToken,
     scope: scopes,
   };
@@ -247,26 +252,22 @@ export async function exchangeRefreshToken(params: {
 // ---------------------------------------------------------------------------
 
 export async function validateAccessToken(token: string) {
-  const [accessToken] = await db
-    .select({
-      token: oauthAccessTokens.token,
-      userId: oauthAccessTokens.userId,
-      scopes: oauthAccessTokens.scopes,
-      expiresAt: oauthAccessTokens.expiresAt,
-      clientId: oauthAccessTokens.clientId,
-    })
-    .from(oauthAccessTokens)
-    .where(
-      and(
-        eq(oauthAccessTokens.token, token),
-        gt(oauthAccessTokens.expiresAt, new Date().toISOString()),
-      ),
-    )
-    .limit(1);
+  // Verify JWT signature and expiry using our own public key
+  const jwks = await getJWKS();
+  const publicKey = await importJWK(jwks.keys[0]!, "RS256");
 
-  if (!accessToken) return null;
+  let payload;
+  try {
+    const result = await jwtVerify(token, publicKey);
+    payload = result.payload;
+  } catch {
+    return null;
+  }
 
-  // Fetch user data
+  const userId = Number(payload.sub);
+  if (!userId) return null;
+
+  // Fetch user data for userinfo endpoint
   const [user] = await db
     .select({
       id: users.id,
@@ -276,12 +277,18 @@ export async function validateAccessToken(token: string) {
       avatarUrl: users.avatarUrl,
     })
     .from(users)
-    .where(eq(users.id, accessToken.userId))
+    .where(eq(users.id, userId))
     .limit(1);
 
   if (!user) return null;
 
-  return { ...accessToken, user };
+  return {
+    token,
+    userId,
+    scopes: payload.scope as string | null,
+    clientId: payload.client_id as string,
+    user,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -289,21 +296,8 @@ export async function validateAccessToken(token: string) {
 // ---------------------------------------------------------------------------
 
 export async function revokeToken(token: string): Promise<void> {
-  // Try access token first
-  const [access] = await db
-    .select()
-    .from(oauthAccessTokens)
-    .where(eq(oauthAccessTokens.token, token))
-    .limit(1);
-
-  if (access) {
-    await db
-      .delete(oauthAccessTokens)
-      .where(eq(oauthAccessTokens.token, token));
-    return;
-  }
-
-  // Try refresh token — also delete associated access tokens
+  // JWT access tokens can't be revoked (they expire naturally).
+  // Revoke refresh tokens to prevent new access tokens from being issued.
   const [refresh] = await db
     .select()
     .from(oauthRefreshTokens)
@@ -311,14 +305,6 @@ export async function revokeToken(token: string): Promise<void> {
     .limit(1);
 
   if (refresh) {
-    await db
-      .delete(oauthAccessTokens)
-      .where(
-        and(
-          eq(oauthAccessTokens.clientId, refresh.clientId),
-          eq(oauthAccessTokens.userId, refresh.userId),
-        ),
-      );
     await db
       .delete(oauthRefreshTokens)
       .where(eq(oauthRefreshTokens.token, token));
