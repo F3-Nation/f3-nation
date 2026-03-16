@@ -134,18 +134,22 @@ apps/auth/
 │   │   │   │   ├── openid-configuration/       # OIDC discovery document
 │   │   │   │   └── jwks.json/                 # JWKS public key endpoint
 │   │   │   ├── verify-email/route.ts          # Email MFA send/verify
-│   │   │   ├── onboarding/route.ts            # Profile completion
+│   │   │   ├── check-user/route.ts            # Email existence check
+│   │   │   ├── regions/route.ts               # Active regions for registration
+│   │   │   ├── register/route.ts              # New user creation via F3 API
+│   │   │   ├── onboarding/route.ts            # Profile completion (legacy)
 │   │   │   ├── session/route.ts               # Enhanced session info
 │   │   │   └── health/route.ts                # Liveness probe
 │   │   ├── login/                             # Login UI pages
 │   │   │   ├── page.tsx                       # Method selection
 │   │   │   └── email/
 │   │   │       ├── page.tsx                   # Email input
-│   │   │       └── verify/page.tsx            # Code verification
-│   │   ├── onboarding/page.tsx                # Profile setup form
+│   │   │       └── verify/page.tsx            # Code verification + new user detection
+│   │   ├── register/page.tsx                  # New user registration form
+│   │   ├── onboarding/page.tsx                # Profile setup (legacy users)
 │   │   ├── page.tsx                           # Home / OAuth entry point
 │   │   ├── layout.tsx                         # Root layout
-│   │   ├── providers.tsx                      # Session + Theme providers
+│   │   ├── providers.tsx                      # Session provider
 │   │   └── globals.css                        # Tailwind + CSS variables
 │   ├── lib/
 │   │   ├── auth-options.ts                    # NextAuth v5 configuration
@@ -191,14 +195,28 @@ User → /login → /login/email → enters email
          /login/email/verify → user enters code (or clicks magic link)
                                     │
                                     ▼
-                          POST /api/verify-email (action=verify)
-                          → validates hash, checks attempts (max 5)
-                          → creates user via F3 API if new
-                          → returns user data
+                          POST /api/check-user { email }
+                          → checks if email exists in public.users
                                     │
-                                    ▼
-                          signIn("email-mfa") → JWT session created
-                                    │
+                         ┌──────────┴──────────┐
+                    User exists            User NOT found
+                         │                      │
+                         ▼                      ▼
+               signIn("email-mfa")       Redirect to /register
+               → verifies MFA code       (code + email in query params)
+               → JWT session created            │
+                         │                      ▼
+                         │              /register → fill profile
+                         │              (firstName*, lastName*, f3Name,
+                         │               homeRegion, phone, emergency)
+                         │                      │
+                         │                      ▼
+                         │              POST /api/register
+                         │              → creates user via F3 API
+                         │              → signIn("email-mfa")
+                         │              → JWT session created
+                         │                      │
+                         └──────────┬───────────┘
                                     ▼
               If onboarding incomplete → /onboarding (set f3Name, firstName, lastName)
               Else → redirect to original callbackUrl or home
@@ -262,13 +280,16 @@ Client App → GET /api/oauth/userinfo
 
 ### Internal Endpoints
 
-| Method     | Path                      | Description                                                                                              |
-| ---------- | ------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `GET/POST` | `/api/auth/[...nextauth]` | NextAuth.js dynamic handler. Manages sessions, CSRF, sign-in/sign-out.                                   |
-| `POST`     | `/api/verify-email`       | Send or verify an email MFA code. Body: `{ email, action?, code? }`. Rate-limited: 5 req/min per IP.     |
-| `POST`     | `/api/onboarding`         | Save user profile (f3Name, firstName, lastName) and mark onboarding complete. Requires active session.   |
-| `GET`      | `/api/session`            | Returns enriched user profile data (f3Name, firstName, lastName, email, avatarUrl, onboardingCompleted). |
-| `GET`      | `/api/health`             | Returns `{ status: "ok" }`. Used as a Cloud Run liveness probe.                                          |
+| Method     | Path                      | Description                                                                                                                                |
+| ---------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET/POST` | `/api/auth/[...nextauth]` | NextAuth.js dynamic handler. Manages sessions, CSRF, sign-in/sign-out.                                                                     |
+| `POST`     | `/api/verify-email`       | Send or verify an email MFA code. Body: `{ email, action?, code? }`. Rate-limited: 10 req/min per IP.                                      |
+| `POST`     | `/api/check-user`         | Check if an email exists in `public.users`. Body: `{ email }`. Returns `{ exists: boolean }`.                                              |
+| `GET`      | `/api/regions`            | Returns active regions (`orgType='region'`, `isActive=true`) for the registration dropdown. Returns `[{ id, name }]`.                      |
+| `POST`     | `/api/register`           | Create a new user via the F3 API. Body: `{ email, firstName, lastName, f3Name?, homeRegionId?, phone?, emergency* }`. Rate-limited: 5/min. |
+| `POST`     | `/api/onboarding`         | Save user profile (f3Name, firstName, lastName) and mark onboarding complete. Requires active session.                                     |
+| `GET`      | `/api/session`            | Returns enriched user profile data (f3Name, firstName, lastName, email, avatarUrl, onboardingCompleted).                                   |
+| `GET`      | `/api/health`             | Returns `{ status: "ok" }`. Used as a Cloud Run liveness probe.                                                                            |
 
 ### OIDC Discovery
 
@@ -297,15 +318,16 @@ GET /.well-known/openid-configuration
 
 ## UI Pages
 
-| Route                 | Purpose                                                                                                         |
-| --------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `/`                   | Home page. Forwards OAuth parameters to `/api/oauth/authorize` if present. Shows session info if authenticated. |
-| `/login`              | Sign-in method selection (currently email only).                                                                |
-| `/login/email`        | Email address input form. Submits to `/api/verify-email` to send a 6-digit code.                                |
-| `/login/email/verify` | Code input form. Accepts magic link auto-fill via `?code=` query param. Calls NextAuth `signIn()` on success.   |
-| `/onboarding`         | Profile completion form (F3 Name, First Name, Last Name). Required before OAuth codes are issued.               |
+| Route                 | Purpose                                                                                                                                |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `/`                   | Home page. Forwards OAuth parameters to `/api/oauth/authorize` if present. Shows session info if authenticated.                        |
+| `/login`              | Sign-in method selection (currently email only).                                                                                       |
+| `/login/email`        | Email address input form. Client-side email validation with regex. Submits to `/api/verify-email` to send a 6-digit code.              |
+| `/login/email/verify` | Code input form. Checks if user exists first — existing users sign in, new users are redirected to `/register` with their MFA code.    |
+| `/register`           | New user registration form. Collects First Name, Last Name, F3 Name, Home Region (searchable dropdown), Phone, Emergency Contact info. |
+| `/onboarding`         | Profile completion form (F3 Name, First Name, Last Name). For legacy users who haven't completed onboarding.                           |
 
-All pages use Tailwind CSS with HSL CSS variables for light/dark theme support via `next-themes`.
+All pages use Tailwind CSS with HSL CSS variables (light mode, F3 Nation color scheme: cream background, white cards, F3 red primary).
 
 ---
 

@@ -3,10 +3,10 @@ import type { NextRequest } from "next/server";
 
 import { eq } from "@acme/db";
 import { users } from "@acme/db/schema/schema";
+import type { UserMeta } from "@acme/shared/app/types";
 
 import { auth } from "~/lib/auth";
 import { db } from "~/lib/db";
-import { env } from "~/env";
 
 export async function POST(request: NextRequest) {
   const session = await auth();
@@ -29,47 +29,27 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Update user profile via F3 API
-  try {
-    const res = await fetch(`${env.NEXT_PUBLIC_API_URL}/api/users/${userId}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": env.API_KEY,
-      },
-      body: JSON.stringify({
-        f3Name: body.f3Name,
-        firstName: body.firstName,
-        lastName: body.lastName,
-      }),
-    });
-
-    if (!res.ok) {
-      console.error("Failed to update user via API:", await res.text());
-      return NextResponse.json(
-        { error: "Failed to update profile" },
-        { status: 502 },
-      );
-    }
-  } catch (err) {
-    console.error("Error updating user:", err);
-    return NextResponse.json(
-      { error: "Failed to update profile" },
-      { status: 502 },
-    );
-  }
-
-  // Set onboarding_completed in meta
+  // Direct DB write — the F3 API's crupdate endpoint requires a `roles`
+  // array that replaces existing roles, so a partial profile update would
+  // risk wiping the user's roles. Same justification as emailVerified.
   const [user] = await db
     .select({ meta: users.meta })
     .from(users)
     .where(eq(users.id, userId))
     .limit(1);
 
-  const currentMeta = (user?.meta ?? {}) as Record<string, unknown>;
+  const currentMeta = ((user?.meta ?? {}) as UserMeta) || {};
   const updatedMeta = { ...currentMeta, onboarding_completed: true };
 
-  await db.update(users).set({ meta: updatedMeta }).where(eq(users.id, userId));
+  await db
+    .update(users)
+    .set({
+      f3Name: body.f3Name,
+      firstName: body.firstName,
+      lastName: body.lastName,
+      meta: updatedMeta,
+    })
+    .where(eq(users.id, userId));
 
   return NextResponse.json({ success: true });
 }
