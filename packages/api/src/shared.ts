@@ -7,6 +7,7 @@ import { auth } from "@acme/auth";
 import { and, eq, gt, isNull, or, schema, sql } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 import { db } from "@acme/db/client";
+import { auth_oauthAccessTokens } from "@acme/db/schema/schema";
 import { env } from "@acme/env";
 import { isNationAdminFromSession } from "@acme/shared/app/role-checks";
 import { isDevelopmentNodeEnv } from "@acme/shared/common/constants";
@@ -199,33 +200,39 @@ export const getSession = async ({ context }: { context: BaseContext }) => {
     if (session) return session;
   }
 
-  // If there is no session, check for Bearer token ("api key") and attempt to build a replica session
+  // Extract bearer token from Authorization header
   const authHeader =
     context.reqHeaders?.get(Header.Authorization) ??
     context.reqHeaders?.get(Header.Authorization.toLowerCase());
 
-  const appClient = context.reqHeaders?.get(Header.Client);
-
-  let apiKey: string | null = null;
+  let bearerToken: string | null = null;
   if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
-    apiKey = authHeader.slice(7).trim();
+    bearerToken = authHeader.slice(7).trim();
   }
 
-  // No session or API key provided
-  if (!apiKey) {
-    // In dev mode, return a mock session so endpoints work without an API key
+  // No session or bearer token provided
+  if (!bearerToken) {
     if (isDevelopmentNodeEnv) return getDevMockSession();
     return null;
   }
 
-  // API key provided but no client header
-  if (apiKey && !appClient) {
+  // ---------------------------------------------------------------------------
+  // Try f3-nation-auth OAuth access token (shared DB lookup)
+  // ---------------------------------------------------------------------------
+  session = await getSessionFromOAuthToken(bearerToken);
+  if (session) return session;
+
+  // ---------------------------------------------------------------------------
+  // Try API key auth (Scalar, scripts, custom apps)
+  // ---------------------------------------------------------------------------
+  const appClient = context.reqHeaders?.get(Header.Client);
+
+  if (!appClient) {
     throw new ORPCError("UNAUTHORIZED", {
       message: "You must provide a client header when using an API key",
     });
   }
 
-  // Get the api key info and associated owner and orgs
   const [apiKeyRecord] = await db
     .select({
       apiKeyId: schema.apiKeys.id,
@@ -241,7 +248,7 @@ export const getSession = async ({ context }: { context: BaseContext }) => {
     .innerJoin(schema.users, eq(schema.users.id, schema.apiKeys.ownerId))
     .where(
       and(
-        eq(schema.apiKeys.key, apiKey),
+        eq(schema.apiKeys.key, bearerToken),
         isNull(schema.apiKeys.revokedAt),
         or(
           isNull(schema.apiKeys.expiresAt),
@@ -251,16 +258,14 @@ export const getSession = async ({ context }: { context: BaseContext }) => {
     );
 
   if (!apiKeyRecord) {
-    if (apiKey) {
-      console.log(
-        "getSession",
-        JSON.stringify({
-          apiKey: apiKey ? `${apiKey.slice(0, 4)}...${apiKey.slice(-4)}` : null,
-          appClient,
-          message: "API key not found in database or invalid",
-        }),
-      );
-    }
+    console.log(
+      "getSession",
+      JSON.stringify({
+        apiKey: `${bearerToken.slice(0, 4)}...${bearerToken.slice(-4)}`,
+        appClient,
+        message: "API key not found in database or invalid",
+      }),
+    );
     return null;
   }
 
@@ -310,3 +315,79 @@ export const getSession = async ({ context }: { context: BaseContext }) => {
   };
   return session;
 };
+
+/**
+ * Resolve a session from an f3-nation-auth OAuth access token.
+ * Looks up the token in the shared auth.oauth_access_tokens table,
+ * then fetches the user's roles from roles_x_users_x_org.
+ * Returns null if the token is not found or expired.
+ */
+async function getSessionFromOAuthToken(
+  token: string,
+): Promise<Session | null> {
+  let oauthToken;
+  try {
+    [oauthToken] = await db
+      .select({
+        userId: auth_oauthAccessTokens.userId,
+        expires: auth_oauthAccessTokens.expires,
+      })
+      .from(auth_oauthAccessTokens)
+      .where(
+        and(
+          eq(auth_oauthAccessTokens.token, token),
+          gt(auth_oauthAccessTokens.expires, new Date().toISOString()),
+        ),
+      )
+      .limit(1);
+  } catch {
+    // auth.oauth_access_tokens table may not exist yet (migration pending)
+    return null;
+  }
+
+  if (!oauthToken) return null;
+
+  // Fetch user details
+  const [user] = await db
+    .select({
+      id: schema.users.id,
+      email: schema.users.email,
+      f3Name: schema.users.f3Name,
+    })
+    .from(schema.users)
+    .where(eq(schema.users.id, oauthToken.userId))
+    .limit(1);
+
+  if (!user) return null;
+
+  // Fetch user roles (not API-key-scoped — these are the user's own roles)
+  const userRoles = await db
+    .select({
+      orgId: schema.orgs.id,
+      orgName: schema.orgs.name,
+      roleName: schema.roles.name,
+    })
+    .from(schema.rolesXUsersXOrg)
+    .innerJoin(schema.orgs, eq(schema.orgs.id, schema.rolesXUsersXOrg.orgId))
+    .innerJoin(schema.roles, eq(schema.roles.id, schema.rolesXUsersXOrg.roleId))
+    .where(eq(schema.rolesXUsersXOrg.userId, user.id));
+
+  const roles = userRoles.map((r) => ({
+    orgId: r.orgId,
+    orgName: r.orgName,
+    roleName: r.roleName,
+  }));
+
+  return {
+    id: user.id,
+    email: user.email,
+    roles,
+    user: {
+      id: user.id.toString(),
+      email: user.email,
+      name: user.f3Name ?? undefined,
+      roles,
+    },
+    expires: new Date(Date.now() + 1000 * 60 * 60).toISOString(), // 1h (matches token TTL)
+  };
+}

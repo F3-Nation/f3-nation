@@ -6,6 +6,11 @@ import {
   authAccounts,
   authSessions,
   authVerificationTokens,
+  auth_emailMfaCodes,
+  auth_oauthAccessTokens,
+  auth_oauthAuthorizationCodes,
+  auth_oauthClients,
+  auth_oauthRefreshTokens,
   eventInstances,
   eventInstancesXEventTypes,
   events,
@@ -30,6 +35,7 @@ import {
   users,
 } from "../drizzle/schema";
 
+/** Public schema tables */
 export const schema = {
   attendance,
   attendanceTypes,
@@ -60,6 +66,15 @@ export const schema = {
   orgsXSlackSpaces,
   updateRequests,
   users,
+};
+
+/** Auth schema tables (auth.*) — kept separate to avoid name collisions */
+export const authSchema = {
+  emailMfaCodes: auth_emailMfaCodes,
+  oauthAccessTokens: auth_oauthAccessTokens,
+  oauthAuthorizationCodes: auth_oauthAuthorizationCodes,
+  oauthClients: auth_oauthClients,
+  oauthRefreshTokens: auth_oauthRefreshTokens,
 };
 
 export * from "drizzle-orm";

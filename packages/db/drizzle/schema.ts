@@ -9,6 +9,7 @@ import {
   integer,
   json,
   pgEnum,
+  pgSchema,
   pgTable,
   primaryKey,
   real,
@@ -1084,5 +1085,120 @@ export const rolesXApiKeysXOrg = pgTable(
       columns: [table.roleId, table.apiKeyId, table.orgId],
       name: "roles_x_api_keys_x_org_pkey",
     }),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Auth schema — OAuth 2.0 / OIDC tables owned by apps/auth
+// ---------------------------------------------------------------------------
+
+export const authProviderSchema = pgSchema("auth");
+
+export const auth_oauthClients = authProviderSchema.table("oauth_clients", {
+  id: text().primaryKey().notNull(),
+  name: text().notNull(),
+  clientSecret: text("client_secret").notNull(),
+  redirectUris: text("redirect_uris").notNull(), // JSON array
+  allowedOrigin: text("allowed_origin").notNull(),
+  scopes: text().default("openid profile email").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+    .defaultNow()
+    .notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+});
+
+export const auth_oauthAuthorizationCodes = authProviderSchema.table(
+  "oauth_authorization_codes",
+  {
+    code: text().primaryKey().notNull(),
+    clientId: text("client_id").notNull(),
+    userId: integer("user_id").notNull(),
+    redirectUri: text("redirect_uri").notNull(),
+    scopes: text().notNull(),
+    codeChallenge: text("code_challenge"),
+    codeChallengeMethod: text("code_challenge_method"),
+    expires: timestamp({ withTimezone: true, mode: "string" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.clientId],
+      foreignColumns: [auth_oauthClients.id],
+      name: "oauth_authorization_codes_client_id_oauth_clients_id_fk",
+    }).onDelete("cascade"),
+  ],
+);
+
+export const auth_oauthAccessTokens = authProviderSchema.table(
+  "oauth_access_tokens",
+  {
+    token: text().primaryKey().notNull(),
+    clientId: text("client_id").notNull(),
+    userId: integer("user_id").notNull(),
+    scopes: text().notNull(),
+    expires: timestamp({ withTimezone: true, mode: "string" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.clientId],
+      foreignColumns: [auth_oauthClients.id],
+      name: "oauth_access_tokens_client_id_oauth_clients_id_fk",
+    }).onDelete("cascade"),
+  ],
+);
+
+export const auth_oauthRefreshTokens = authProviderSchema.table(
+  "oauth_refresh_tokens",
+  {
+    token: text().primaryKey().notNull(),
+    accessToken: text("access_token").notNull(),
+    clientId: text("client_id").notNull(),
+    userId: integer("user_id").notNull(),
+    expires: timestamp({ withTimezone: true, mode: "string" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.accessToken],
+      foreignColumns: [auth_oauthAccessTokens.token],
+      name: "oauth_refresh_tokens_access_token_oauth_access_tokens_token_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.clientId],
+      foreignColumns: [auth_oauthClients.id],
+      name: "oauth_refresh_tokens_client_id_oauth_clients_id_fk",
+    }).onDelete("cascade"),
+  ],
+);
+
+export const auth_emailMfaCodes = authProviderSchema.table(
+  "email_mfa_codes",
+  {
+    id: text().primaryKey().notNull(),
+    email: text().notNull(),
+    codeHash: text("code_hash").notNull(),
+    expiresAt: timestamp("expires_at", {
+      withTimezone: true,
+      mode: "string",
+    }).notNull(),
+    consumedAt: timestamp("consumed_at", {
+      withTimezone: true,
+      mode: "string",
+    }),
+    attemptCount: integer("attempt_count").default(0).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("email_mfa_code_email_idx").on(table.email),
+    index("email_mfa_code_expires_idx").on(table.expiresAt),
   ],
 );
