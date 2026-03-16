@@ -3,7 +3,7 @@
 Central authentication and authorization server for the F3 Nation ecosystem. Issues OAuth 2.0 tokens to any registered client application (pax-vault, the-codex, apps/me, etc.) via the Authorization Code Grant with PKCE support.
 
 - **Runtime**: Next.js 15 (App Router, standalone output)
-- **Auth**: NextAuth.js v4 with email-based MFA (6-digit codes + magic links)
+- **Auth**: NextAuth.js v5 with email-based MFA (6-digit codes + magic links)
 - **Database**: Drizzle ORM → Cloud SQL PostgreSQL (shared `@acme/db` schema)
 - **Deployment**: Docker → Cloud Run (GCP), tag-triggered via GitHub Actions
 - **Production URL**: `auth.f3nation.com`
@@ -74,18 +74,46 @@ pnpm -C apps/auth typecheck
 
 All variables are server-side only. Defined and validated in `src/env.ts` using `@t3-oss/env-nextjs`.
 
-| Variable           | Description                                                                 | Required                       |
-| ------------------ | --------------------------------------------------------------------------- | ------------------------------ |
-| `DATABASE_URL`     | PostgreSQL connection string (e.g. `postgresql://user:pass@host:5432/db`)   | Yes                            |
-| `NEXTAUTH_SECRET`  | Secret for signing/encrypting JWTs. Generate with `openssl rand -base64 32` | Yes                            |
-| `NEXTAUTH_URL`     | Base URL of the auth server (e.g. `https://auth.f3nation.com`)              | Yes                            |
-| `F3_API_BASE_URL`  | F3 API endpoint for user management (e.g. `https://api.f3nation.com`)       | Yes                            |
-| `F3_API_KEY`       | API key for authenticating calls to the F3 API                              | Yes                            |
-| `SENDGRID_API_KEY` | SendGrid SMTP API key (used in production for transactional email)          | Yes                            |
-| `EMAIL_FROM`       | Sender email address (e.g. `noreply@f3nation.com`)                          | Yes                            |
-| `NODE_ENV`         | `development`, `production`, or `test`                                      | No (defaults to `development`) |
+| Variable               | Description                                                                 | Required                       |
+| ---------------------- | --------------------------------------------------------------------------- | ------------------------------ |
+| `AUTH_JWT_PRIVATE_KEY` | RSA private key (PEM) for signing JWT access tokens (see below)             | Yes                            |
+| `DATABASE_URL`         | PostgreSQL connection string (e.g. `postgresql://user:pass@host:5432/db`)   | Yes                            |
+| `NEXTAUTH_SECRET`      | Secret for signing/encrypting JWTs. Generate with `openssl rand -base64 32` | Yes                            |
+| `NEXTAUTH_URL`         | Base URL of the auth server (e.g. `https://auth.f3nation.com`)              | Yes                            |
+| `F3_API_BASE_URL`      | F3 API endpoint for user management (e.g. `https://api.f3nation.com`)       | Yes                            |
+| `F3_API_KEY`           | API key for authenticating calls to the F3 API                              | Yes                            |
+| `SENDGRID_API_KEY`     | SendGrid SMTP API key (used in production for transactional email)          | Yes                            |
+| `EMAIL_FROM`           | Sender email address (e.g. `noreply@f3nation.com`)                          | Yes                            |
+| `NODE_ENV`             | `development`, `production`, or `test`                                      | No (defaults to `development`) |
 
 Set `SKIP_ENV_VALIDATION=1` to bypass validation during CI builds.
+
+### Generating the JWT Private Key
+
+The auth server signs OAuth access tokens as RS256 JWTs. You need an RSA key pair:
+
+```bash
+# Generate a 2048-bit RSA private key
+openssl genpkey -algorithm RSA -out private.pem -pkeyopt rsa_keygen_bits:2048
+
+# (Optional) Extract the public key (for verification by other services)
+openssl rsa -in private.pem -pubout -out public.pem
+```
+
+Set `AUTH_JWT_PRIVATE_KEY` in your `.env` file. The value is the **full PEM contents** including the header/footer lines. Since `.env` files don't handle multi-line well, convert to a single line:
+
+```bash
+# Convert to single-line (use \n as literal newline markers)
+awk 'NF {sub(/\r/, ""); printf "%s\\n",$0;}' private.pem
+```
+
+Then in `.env`:
+
+```
+AUTH_JWT_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIEv...base64...\n-----END PRIVATE KEY-----"
+```
+
+The corresponding public key is served automatically at `/.well-known/jwks.json` (derived from the private key at runtime). API consumers (`packages/api`) fetch this JWKS endpoint to verify tokens — set `AUTH_JWKS_URL` in the root `.env` to point to it (e.g. `https://auth.f3nation.com/api/.well-known/jwks.json`).
 
 ---
 
@@ -96,14 +124,15 @@ apps/auth/
 ├── src/
 │   ├── app/
 │   │   ├── api/
-│   │   │   ├── auth/[...nextauth]/route.ts   # NextAuth handler
+│   │   │   ├── auth/[...nextauth]/route.ts   # NextAuth v5 handler
 │   │   │   ├── oauth/
 │   │   │   │   ├── authorize/route.ts         # Authorization endpoint
 │   │   │   │   ├── token/route.ts             # Token exchange endpoint
 │   │   │   │   ├── userinfo/route.ts          # UserInfo endpoint
 │   │   │   │   └── revoke/route.ts            # Token revocation (RFC 7009)
 │   │   │   ├── .well-known/
-│   │   │   │   └── openid-configuration/      # OIDC discovery document
+│   │   │   │   ├── openid-configuration/       # OIDC discovery document
+│   │   │   │   └── jwks.json/                 # JWKS public key endpoint
 │   │   │   ├── verify-email/route.ts          # Email MFA send/verify
 │   │   │   ├── onboarding/route.ts            # Profile completion
 │   │   │   ├── session/route.ts               # Enhanced session info
@@ -119,7 +148,9 @@ apps/auth/
 │   │   ├── providers.tsx                      # Session + Theme providers
 │   │   └── globals.css                        # Tailwind + CSS variables
 │   ├── lib/
-│   │   ├── auth-options.ts                    # NextAuth v4 configuration
+│   │   ├── auth-options.ts                    # NextAuth v5 configuration
+│   │   ├── auth.ts                            # NextAuth instance (handlers, auth, signIn, signOut)
+│   │   ├── jwt.ts                             # RS256 JWT signing + JWKS generation
 │   │   ├── oauth.ts                           # OAuth 2.0 server logic
 │   │   ├── email-mfa.ts                       # Email code generation/verification
 │   │   ├── db.ts                              # Drizzle database client
@@ -204,6 +235,7 @@ Client App → POST /api/oauth/token
                          │
                          ▼
               Returns: { access_token, refresh_token, expires_in, token_type, scope }
+              (access_token is an RS256 JWT — verified via JWKS, not DB lookup)
                          │
                          ▼
 Client App → GET /api/oauth/userinfo
@@ -226,6 +258,7 @@ Client App → GET /api/oauth/userinfo
 | `GET`  | `/api/oauth/userinfo`               | Returns user claims (`sub`, `name`, `email`, `email_verified`, `picture`) based on the access token's scope.                                                      |
 | `POST` | `/api/oauth/revoke`                 | Revokes an access or refresh token (RFC 7009). Always returns 200.                                                                                                |
 | `GET`  | `/.well-known/openid-configuration` | OpenID Connect discovery document. Lists all endpoints, supported scopes, grant types, and auth methods.                                                          |
+| `GET`  | `/.well-known/jwks.json`            | JSON Web Key Set. Contains the RS256 public key used to verify access tokens. Cached for 1 hour.                                                                  |
 
 ### Internal Endpoints
 
@@ -355,6 +388,8 @@ Short-lived authorization codes (10-minute TTL).
 
 ### `auth.oauth_access_tokens`
 
+> **Note**: With JWT access tokens, this table is no longer written to during token exchange. Access tokens are self-contained RS256 JWTs verified via the JWKS endpoint. The table is retained in the schema for potential future use (e.g., token blocklisting).
+
 Bearer access tokens (1-hour TTL).
 
 | Column       | Type                | Description                     |
@@ -455,10 +490,11 @@ The monorepo has `packages/auth` — a NextAuth v5 session config used by `apps/
 
 |                      | `packages/auth`          | `apps/auth`                     |
 | -------------------- | ------------------------ | ------------------------------- |
-| **NextAuth version** | v5 (beta)                | v4                              |
+| **NextAuth version** | v5 (beta)                | v5 (beta)                       |
 | **Purpose**          | Session auth for map app | OAuth token issuer for all apps |
 | **Consumers**        | `apps/map` only          | Any registered client           |
 | **Session type**     | Cookie-based             | JWT-based                       |
+| **Access tokens**    | N/A                      | RS256 JWTs (verified via JWKS)  |
 
 The long-term plan is for `apps/map` to migrate to `apps/auth` as an OAuth client.
 
