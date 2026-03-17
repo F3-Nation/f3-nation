@@ -20,6 +20,5 @@
     "next/router.d.ts",
     "next/dist/client/router.d.ts"
   ],
-  "typescript.tsdk": "node_modules/typescript/lib",
-  "css.validate": false
+  "typescript.tsdk": "node_modules/typescript/lib"
 }
