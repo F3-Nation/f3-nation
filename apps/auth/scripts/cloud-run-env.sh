@@ -54,9 +54,10 @@ echo "=== Deploying secrets for $ENV (project: $PROJECT) ==="
 # ---------------------------------------------------------------------------
 declare -A SECRET_MAP=(
   ["DATABASE_URL"]="${DATABASE_URL:-}"
-  ["NEXTAUTH_SECRET"]="${NEXTAUTH_SECRET:-}"
+  ["AUTH_SECRET"]="${AUTH_SECRET:-}"
+  ["AUTH_JWT_PRIVATE_KEY"]="${AUTH_JWT_PRIVATE_KEY:-}"
   ["SENDGRID_API_KEY"]="${SENDGRID_API_KEY:-}"
-  ["F3_API_KEY"]="${F3_API_KEY:-}"
+  ["API_KEY"]="${API_KEY:-}"
 )
 
 for SECRET_NAME in "${!SECRET_MAP[@]}"; do
@@ -100,7 +101,7 @@ done
 SECRET_FLAGS="${SECRET_FLAGS%,}" # trim trailing comma
 
 # Plain env vars
-PLAIN_VARS="NEXTAUTH_URL=${NEXTAUTH_URL:-},F3_API_BASE_URL=${F3_API_BASE_URL:-},EMAIL_FROM=${EMAIL_FROM:-},NODE_ENV=production"
+PLAIN_VARS="NEXT_PUBLIC_AUTH_URL=${NEXT_PUBLIC_AUTH_URL:-},NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-},EMAIL_FROM=${EMAIL_FROM:-},NODE_ENV=production"
 
 echo ""
 echo "Updating Cloud Run service: $SERVICE"

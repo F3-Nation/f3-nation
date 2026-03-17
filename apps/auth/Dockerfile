@@ -41,8 +41,8 @@ WORKDIR /app
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 auth
 USER auth
-EXPOSE 3002
-ENV PORT=3002
+EXPOSE 8080
+ENV PORT=8080
 
 ENV NODE_ENV=production
 ENV SKIP_ENV_VALIDATION=true

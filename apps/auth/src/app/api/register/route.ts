@@ -64,8 +64,8 @@ export async function POST(request: NextRequest) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": env.API_KEY,
-        "x-client": "orpc",
+        Authorization: `Bearer ${env.API_KEY}`,
+        client: env.NEXT_PUBLIC_AUTH_URL,
       },
       body: JSON.stringify(payload),
     });

@@ -16,6 +16,10 @@ function generateOpaqueToken(): string {
   return crypto.randomBytes(32).toString("base64url");
 }
 
+function hashSecret(secret: string): string {
+  return crypto.createHash("sha256").update(secret).digest("hex");
+}
+
 function constantTimeEqual(a: string, b: string): boolean {
   const bufA = Buffer.from(a);
   const bufB = Buffer.from(b);
@@ -104,10 +108,12 @@ export async function exchangeAuthorizationCode(params: {
   if (authCode.redirectUri !== params.redirectUri)
     return { error: "invalid_grant" as const };
 
-  // Validate client secret
+  // Validate client secret (compare hash)
   const client = await getClient(params.clientId);
   if (!client) return { error: "invalid_client" as const };
-  if (!constantTimeEqual(client.clientSecret, params.clientSecret))
+  if (
+    !constantTimeEqual(client.clientSecretHash, hashSecret(params.clientSecret))
+  )
     return { error: "invalid_client" as const };
 
   // PKCE verification
@@ -184,7 +190,9 @@ export async function exchangeRefreshToken(params: {
   // Validate client
   const client = await getClient(params.clientId);
   if (!client) return { error: "invalid_client" as const };
-  if (!constantTimeEqual(client.clientSecret, params.clientSecret))
+  if (
+    !constantTimeEqual(client.clientSecretHash, hashSecret(params.clientSecret))
+  )
     return { error: "invalid_client" as const };
 
   // Find refresh token

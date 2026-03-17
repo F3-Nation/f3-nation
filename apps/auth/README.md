@@ -88,6 +88,12 @@ Defined and validated in `src/env.ts` using `@t3-oss/env-nextjs`. Variables pref
 
 Set `SKIP_ENV_VALIDATION=1` to bypass validation during CI builds.
 
+### Shared vs. Auth-Only Variables
+
+Most of these variables (`AUTH_SECRET`, `DATABASE_URL`, `API_KEY`, `SENDGRID_API_KEY`, `EMAIL_FROM`) are already in the root `.env` and shared across all apps. **You only need to define them once** — `apps/auth` reads from the same root `.env` as `apps/map` and `apps/api`.
+
+The only variable unique to `apps/auth` is **`AUTH_JWT_PRIVATE_KEY`** — the RSA key for signing OAuth access tokens. Add it to your root `.env` alongside the existing variables. No duplication needed.
+
 ### Generating the JWT Private Key
 
 The auth server signs OAuth access tokens as RS256 JWTs. You need an RSA key pair:
@@ -113,7 +119,19 @@ Then in `.env`:
 AUTH_JWT_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIEv...base64...\n-----END PRIVATE KEY-----"
 ```
 
-The corresponding public key is served automatically at `/.well-known/jwks.json` (derived from the private key at runtime). API consumers (`packages/api`) fetch this JWKS endpoint to verify tokens — set `AUTH_JWKS_URL` in the root `.env` to point to it (e.g. `https://auth.f3nation.com/api/.well-known/jwks.json`).
+The corresponding public key is served automatically at `/.well-known/jwks.json` (derived from the private key at runtime). API consumers (`packages/api`) fetch this JWKS endpoint to verify access token signatures without sharing the private key.
+
+#### `NEXT_PUBLIC_AUTH_URL` in the Root `.env`
+
+`packages/api` (via `packages/env`) reads `NEXT_PUBLIC_AUTH_URL` from the root `.env` to discover the auth server's JWKS public key and verify JWT access tokens. The JWKS URL is derived automatically: `${NEXT_PUBLIC_AUTH_URL}/.well-known/jwks.json`. This is the same variable that `apps/auth` uses for its own base URL — no extra env var needed.
+
+```
+# Root .env
+NEXT_PUBLIC_AUTH_URL=https://auth.f3nation.com
+```
+
+- If `NEXT_PUBLIC_AUTH_URL` is **not set** in the root `.env`, the API ignores JWT auth entirely — existing auth flows (NextAuth cookies, API keys) continue to work unchanged.
+- If `NEXT_PUBLIC_AUTH_URL` **is set**, the API fetches `${NEXT_PUBLIC_AUTH_URL}/.well-known/jwks.json`, accepts `Authorization: Bearer <jwt>` tokens, and validates the issuer matches.
 
 ---
 
@@ -123,6 +141,9 @@ The corresponding public key is served automatically at `/.well-known/jwks.json`
 apps/auth/
 ├── src/
 │   ├── app/
+│   │   ├── .well-known/
+│   │   │   ├── openid-configuration/route.ts  # OIDC discovery document
+│   │   │   └── jwks.json/route.ts             # JWKS public key endpoint
 │   │   ├── api/
 │   │   │   ├── auth/[...nextauth]/route.ts   # NextAuth v5 handler
 │   │   │   ├── oauth/
@@ -130,9 +151,6 @@ apps/auth/
 │   │   │   │   ├── token/route.ts             # Token exchange endpoint
 │   │   │   │   ├── userinfo/route.ts          # UserInfo endpoint
 │   │   │   │   └── revoke/route.ts            # Token revocation (RFC 7009)
-│   │   │   ├── .well-known/
-│   │   │   │   ├── openid-configuration/       # OIDC discovery document
-│   │   │   │   └── jwks.json/                 # JWKS public key endpoint
 │   │   │   ├── verify-email/route.ts          # Email MFA send/verify
 │   │   │   ├── check-user/route.ts            # Email existence check
 │   │   │   ├── regions/route.ts               # Active regions for registration
@@ -346,25 +364,27 @@ pnpm -C apps/auth add-client -- --env prod
 
 The CLI prompts for:
 
-- **Client ID**: kebab-case identifier (e.g. `pax-vault`)
-- **Client Secret**: auto-generated 32-byte base64url secret, or enter your own
-- **Redirect URIs**: comma-separated (must be HTTPS in staging/prod)
-- **Allowed Origins**: comma-separated (for CORS)
+- **Client name**: Human-readable name (e.g. `Pax Vault`)
+- **Client ID**: kebab-case slug (e.g. `pax-vault`), or auto-generated
+- **Client Secret**: auto-generated 32-byte base64url (stored as SHA-256 hash)
+- **Redirect URIs**: comma-separated (must be HTTPS or localhost)
+- **Allowed Origin**: CORS origin
 - **Scopes**: defaults to `openid profile email`
 
-Production modifications require explicit confirmation.
+Production modifications require explicit confirmation. The plaintext secret is displayed once and cannot be retrieved later.
 
 ### Programmatic Registration
 
 ```sql
 INSERT INTO auth.oauth_clients (
-  client_id, client_secret_hash, redirect_uris,
-  allowed_origins, scopes, active
+  id, name, client_secret_hash, redirect_uris,
+  allowed_origin, scopes, is_active
 ) VALUES (
   'my-app',
+  'My App',
   encode(digest('my-secret', 'sha256'), 'hex'),
-  '{"https://myapp.com/callback"}',
-  '{"https://myapp.com"}',
+  '["https://myapp.com/callback"]',
+  'https://myapp.com',
   'openid profile email',
   true
 );
@@ -380,75 +400,71 @@ Auth-owned tables live in the `auth` PostgreSQL schema. User data is read from t
 
 Registered OAuth client applications.
 
-| Column               | Type           | Description                     |
-| -------------------- | -------------- | ------------------------------- |
-| `id`                 | `serial` (PK)  | Internal ID                     |
-| `client_id`          | `varchar(255)` | Unique client identifier        |
-| `client_secret_hash` | `varchar(512)` | SHA-256 hash of client secret   |
-| `redirect_uris`      | `text[]`       | Allowed redirect URIs           |
-| `allowed_origins`    | `text[]`       | Allowed CORS origins            |
-| `scopes`             | `text`         | Space-separated allowed scopes  |
-| `active`             | `boolean`      | Whether client can authenticate |
-| `created_at`         | `timestamp`    | Creation time                   |
-| `updated_at`         | `timestamp`    | Last update time                |
+| Column               | Type        | Description                             |
+| -------------------- | ----------- | --------------------------------------- |
+| `id`                 | `text` PK   | Unique client identifier (slug or UUID) |
+| `name`               | `text`      | Human-readable client name              |
+| `client_secret_hash` | `text`      | SHA-256 hex hash of client secret       |
+| `redirect_uris`      | `text`      | JSON array of allowed redirect URIs     |
+| `allowed_origin`     | `text`      | Allowed CORS origin                     |
+| `scopes`             | `text`      | Space-separated allowed scopes          |
+| `created_at`         | `timestamp` | Creation time (UTC default)             |
+| `is_active`          | `boolean`   | Whether client can authenticate         |
 
 ### `auth.oauth_authorization_codes`
 
 Short-lived authorization codes (10-minute TTL).
 
-| Column                  | Type                | Description                      |
-| ----------------------- | ------------------- | -------------------------------- |
-| `code`                  | `varchar(512)` (PK) | The authorization code           |
-| `client_id`             | `varchar(255)`      | FK to `oauth_clients.client_id`  |
-| `user_id`               | `integer`           | FK to `public.users.id`          |
-| `redirect_uri`          | `text`              | Redirect URI used in the request |
-| `scopes`                | `text`              | Granted scopes                   |
-| `code_challenge`        | `text`              | PKCE code challenge (nullable)   |
-| `code_challenge_method` | `varchar(10)`       | `S256` or `plain` (nullable)     |
-| `expires_at`            | `timestamp`         | Expiration time                  |
-| `consumed`              | `boolean`           | Whether code has been exchanged  |
+| Column                  | Type        | Description                      |
+| ----------------------- | ----------- | -------------------------------- |
+| `code`                  | `text` PK   | The authorization code           |
+| `client_id`             | `text`      | FK → `oauth_clients.id`          |
+| `user_id`               | `integer`   | FK → `public.users.id`           |
+| `redirect_uri`          | `text`      | Redirect URI used in the request |
+| `scopes`                | `text`      | Granted scopes (nullable)        |
+| `code_challenge`        | `text`      | PKCE code challenge (nullable)   |
+| `code_challenge_method` | `text`      | `S256` or `plain` (nullable)     |
+| `expires_at`            | `timestamp` | Expiration time                  |
+| `created_at`            | `timestamp` | Creation time (UTC default)      |
 
 ### `auth.oauth_access_tokens`
 
 > **Note**: With JWT access tokens, this table is no longer written to during token exchange. Access tokens are self-contained RS256 JWTs verified via the JWKS endpoint. The table is retained in the schema for potential future use (e.g., token blocklisting).
 
-Bearer access tokens (1-hour TTL).
-
-| Column       | Type                | Description                     |
-| ------------ | ------------------- | ------------------------------- |
-| `token`      | `varchar(512)` (PK) | The access token                |
-| `client_id`  | `varchar(255)`      | FK to `oauth_clients.client_id` |
-| `user_id`    | `integer`           | FK to `public.users.id`         |
-| `scopes`     | `text`              | Granted scopes                  |
-| `expires_at` | `timestamp`         | Expiration time                 |
-| `revoked`    | `boolean`           | Whether token has been revoked  |
+| Column       | Type        | Description                 |
+| ------------ | ----------- | --------------------------- |
+| `token`      | `text` PK   | The access token            |
+| `client_id`  | `text`      | FK → `oauth_clients.id`     |
+| `user_id`    | `integer`   | FK → `public.users.id`      |
+| `scopes`     | `text`      | Granted scopes (nullable)   |
+| `expires_at` | `timestamp` | Expiration time             |
+| `created_at` | `timestamp` | Creation time (UTC default) |
 
 ### `auth.oauth_refresh_tokens`
 
 Long-lived refresh tokens (30-day TTL, rotation on use).
 
-| Column       | Type                | Description                     |
-| ------------ | ------------------- | ------------------------------- |
-| `token`      | `varchar(512)` (PK) | The refresh token               |
-| `client_id`  | `varchar(255)`      | FK to `oauth_clients.client_id` |
-| `user_id`    | `integer`           | FK to `public.users.id`         |
-| `scopes`     | `text`              | Granted scopes                  |
-| `expires_at` | `timestamp`         | Expiration time                 |
-| `revoked`    | `boolean`           | Whether token has been revoked  |
+| Column       | Type        | Description                 |
+| ------------ | ----------- | --------------------------- |
+| `token`      | `text` PK   | The refresh token           |
+| `client_id`  | `text`      | FK → `oauth_clients.id`     |
+| `user_id`    | `integer`   | FK → `public.users.id`      |
+| `expires_at` | `timestamp` | Expiration time             |
+| `created_at` | `timestamp` | Creation time (UTC default) |
 
 ### `auth.email_mfa_codes`
 
 Temporary email verification codes (10-minute TTL).
 
-| Column       | Type           | Description                        |
-| ------------ | -------------- | ---------------------------------- |
-| `id`         | `serial` (PK)  | Internal ID                        |
-| `email`      | `varchar(255)` | Email address                      |
-| `code_hash`  | `varchar(512)` | SHA-256 hash of the 6-digit code   |
-| `expires_at` | `timestamp`    | Expiration time                    |
-| `consumed`   | `boolean`      | Whether code has been used         |
-| `attempts`   | `integer`      | Verification attempt count (max 5) |
-| `created_at` | `timestamp`    | Creation time                      |
+| Column          | Type        | Description                        |
+| --------------- | ----------- | ---------------------------------- |
+| `id`            | `text` PK   | UUID                               |
+| `email`         | `text`      | Email address                      |
+| `code_hash`     | `text`      | SHA-256 hash of the 6-digit code   |
+| `expires_at`    | `timestamp` | Expiration time                    |
+| `consumed_at`   | `timestamp` | When code was used (nullable)      |
+| `attempt_count` | `integer`   | Verification attempt count (max 5) |
+| `created_at`    | `timestamp` | Creation time (UTC default)        |
 
 All tables are defined in `packages/db/drizzle/schema.ts` using Drizzle ORM's `pgSchema("auth")`.
 
@@ -462,14 +478,14 @@ The Dockerfile uses a 3-stage build for minimal image size:
 
 1. **Builder**: `node:20-alpine` + turbo prune for minimal workspace
 2. **Installer**: `pnpm install --frozen-lockfile` + `turbo build`
-3. **Runner**: Standalone Next.js output, non-root user (`nextjs`, UID 1001), port 3002
+3. **Runner**: Standalone Next.js output, non-root user (`auth`, UID 1001), default port 8080 (Cloud Run-compatible)
 
 ```bash
 # Build locally
 docker build -f apps/auth/Dockerfile -t f3-auth .
 
-# Run
-docker run -p 3002:3002 --env-file .env f3-auth
+# Run (Cloud Run injects $PORT; locally default is 8080)
+docker run -p 8080:8080 --env-file .env f3-auth
 ```
 
 ### GitHub Actions (`.github/workflows/deploy-auth.yml`)
@@ -529,6 +545,10 @@ The current rate limiter is in-memory (suitable for single Cloud Run instances).
 - **Production**: SendGrid SMTP (`smtp.sendgrid.net:465`)
 - **Development**: Ethereal (auto-generated test account, preview URLs logged to console)
 
+### CI Exclusion
+
+`@acme/auth` is excluded from the root `lint:ws`, `typecheck`, and `ci:local` scripts because next-auth v5 (beta) has transient build/type issues when hoisted into the Turborepo workspace graph. The auth server has its own lint/typecheck commands (`pnpm -C apps/auth lint`, `pnpm -C apps/auth typecheck`) and is validated in its own CI workflow. This exclusion should be removed once the next-auth v5 stable release resolves the workspace compatibility issues.
+
 ### Security Features
 
 - PKCE support (S256 and plain methods)
@@ -537,5 +557,5 @@ The current rate limiter is in-memory (suitable for single Cloud Run instances).
 - Brute-force protection (max 5 attempts per code)
 - Rate limiting on all public endpoints
 - Per-client CORS with origin validation
-- `httpOnly`, `secure`, `sameSite=none` cookies
+- `httpOnly`, `secure`, `sameSite=none` cookies (production); `sameSite=lax` in dev
 - Non-root Docker user

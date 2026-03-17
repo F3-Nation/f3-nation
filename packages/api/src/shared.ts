@@ -52,9 +52,15 @@ const DB_NOW = sql`timezone('utc'::text, now())`;
 
 // Cached JWKS fetcher for f3-nation-auth JWT verification.
 // jose caches the key set automatically after the first fetch.
-const authJwks = env.AUTH_JWKS_URL
-  ? createRemoteJWKSet(new URL(env.AUTH_JWKS_URL))
+const authJwks = env.NEXT_PUBLIC_AUTH_URL
+  ? createRemoteJWKSet(
+      new URL(`${env.NEXT_PUBLIC_AUTH_URL}/.well-known/jwks.json`),
+    )
   : null;
+
+// The issuer is the auth server's base URL (e.g. https://auth.f3nation.com)
+const authIssuer: string | null =
+  (env.NEXT_PUBLIC_AUTH_URL as string | undefined) ?? null;
 
 const limiter = new MemoryRatelimiter({
   maxRequests: RATE_LIMIT_MAX_REQUESTS,
@@ -338,7 +344,10 @@ async function getSessionFromJWT(token: string): Promise<Session | null> {
 
   let payload;
   try {
-    const result = await jwtVerify(token, authJwks);
+    const result = await jwtVerify(token, authJwks, {
+      issuer: authIssuer ?? undefined,
+      algorithms: ["RS256"],
+    });
     payload = result.payload;
   } catch {
     return null;

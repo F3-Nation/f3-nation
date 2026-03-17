@@ -14,7 +14,7 @@
     ".",
     ".next/types/**/*.ts",
     "next-env.d.ts",
-    "src/app/api/.well-known/**/*.ts"
+    "src/app/.well-known/**/*.ts"
   ],
   "exclude": ["node_modules"]
 }

@@ -2262,8 +2262,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "client_secret": {
-          "name": "client_secret",
+        "client_secret_hash": {
+          "name": "client_secret_hash",
           "type": "text",
           "primaryKey": false,
           "notNull": true

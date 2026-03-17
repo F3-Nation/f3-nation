@@ -34,7 +34,7 @@ CREATE TABLE "auth"."oauth_authorization_codes" (
 CREATE TABLE "auth"."oauth_clients" (
 	"id" text PRIMARY KEY NOT NULL,
 	"name" text NOT NULL,
-	"client_secret" text NOT NULL,
+	"client_secret_hash" text NOT NULL,
 	"redirect_uris" text NOT NULL,
 	"allowed_origin" text NOT NULL,
 	"scopes" text DEFAULT 'openid profile email',

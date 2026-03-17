@@ -1097,7 +1097,7 @@ export const authProviderSchema = pgSchema("auth");
 export const oauthClients = authProviderSchema.table("oauth_clients", {
   id: text().primaryKey().notNull(),
   name: text().notNull(),
-  clientSecret: text("client_secret").notNull(),
+  clientSecretHash: text("client_secret_hash").notNull(),
   redirectUris: text("redirect_uris").notNull(), // JSON array
   allowedOrigin: text("allowed_origin").notNull(),
   scopes: text().default("openid profile email"),
