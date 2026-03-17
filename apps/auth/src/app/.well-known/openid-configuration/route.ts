@@ -11,7 +11,7 @@ export async function GET() {
     token_endpoint: `${issuer}/api/oauth/token`,
     userinfo_endpoint: `${issuer}/api/oauth/userinfo`,
     revocation_endpoint: `${issuer}/api/oauth/revoke`,
-    jwks_uri: `${issuer}/api/.well-known/jwks.json`,
+    jwks_uri: `${issuer}/.well-known/jwks.json`,
     response_types_supported: ["code"],
     grant_types_supported: ["authorization_code", "refresh_token"],
     subject_types_supported: ["public"],

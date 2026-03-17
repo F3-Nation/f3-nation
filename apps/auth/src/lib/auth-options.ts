@@ -23,9 +23,9 @@ export const authOptions: NextAuthConfig = {
         env.NODE_ENV === "production" ? "__session" : "next-auth.session-token",
       options: {
         httpOnly: true,
-        sameSite: "none",
+        sameSite: env.NODE_ENV === "production" ? "none" : "lax",
         path: "/",
-        secure: true,
+        secure: env.NODE_ENV === "production",
       },
     },
   },

@@ -208,8 +208,12 @@ async function main() {
     scopes = rawScopes.trim() || "openid profile email";
   }
 
-  // Generate new secret
+  // Generate new secret and hash it
   const clientSecret = crypto.randomBytes(32).toString("base64url");
+  const clientSecretHash = crypto
+    .createHash("sha256")
+    .update(clientSecret)
+    .digest("hex");
 
   // Review
   console.log("\n--- Review ---");
@@ -228,7 +232,7 @@ async function main() {
     await db
       .update(oauthClients)
       .set({
-        clientSecret,
+        clientSecretHash,
         redirectUris: JSON.stringify(redirectUris),
         allowedOrigin,
         scopes,
@@ -238,7 +242,7 @@ async function main() {
     await db.insert(oauthClients).values({
       id: clientId,
       name: clientName.trim(),
-      clientSecret,
+      clientSecretHash,
       redirectUris: JSON.stringify(redirectUris),
       allowedOrigin,
       scopes,

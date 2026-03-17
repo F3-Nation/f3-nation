@@ -45,7 +45,7 @@ The API and auth server **share the same PostgreSQL database**. The `auth.oauth_
 **Changes in packages/api:**
 
 1. Add `jose` dependency
-2. Add `AUTH_JWKS_URL` env var (e.g. `https://auth.f3nation.com/.well-known/jwks.json`)
+2. Add `NEXT_PUBLIC_AUTH_URL` to root `.env` (e.g. `https://auth.f3nation.com`)
 3. Add `getSessionFromJWT()` in `shared.ts` — verify bearer tokens with `jose.jwtVerify()` using cached remote JWKS
 4. Resolution order: NextAuth cookie → JWT bearer → API key → dev mock
 
@@ -117,7 +117,7 @@ Each step is backwards-compatible. All existing auth methods continue working un
 
 | Step | Added                                                                                             | Removed                                            |
 | ---- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| 1    | `AUTH_JWT_PRIVATE_KEY` (apps/auth), `AUTH_JWKS_URL` (packages/env)                                | —                                                  |
+| 1    | `AUTH_JWT_PRIVATE_KEY` (apps/auth), `NEXT_PUBLIC_AUTH_URL` (root .env)                            | —                                                  |
 | 2    | —                                                                                                 | `ME_BFF_API_KEY`, `F3_API_KEY` (from apps/me)      |
 | 3    | `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET`, `OAUTH_REDIRECT_URI`, `AUTH_PROVIDER_URL` (on apps/map) | NextAuth env vars from apps/map                    |
 | 4    | —                                                                                                 | `AUTH_SECRET`, NextAuth env vars from packages/env |
