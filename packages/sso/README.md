@@ -56,7 +56,7 @@ The F3 Nation auth server implements the **OAuth 2.0 Authorization Code** flow w
 
 ## Installation
 
-**Monorepo (workspace dependency):**
+**Monorepo apps** (inside the f3-nation workspace):
 
 ```bash
 pnpm add @acme/sso --filter your-app
@@ -73,6 +73,10 @@ Or add to your app's `package.json`:
 ```
 
 Then run `pnpm install`.
+
+**External apps** (outside the monorepo):
+
+Copy `packages/sso/src/index.ts` into your project — it's a single file with zero dependencies. Then import `AuthClient` from wherever you placed it.
 
 ---
 
@@ -100,8 +104,8 @@ const tokens = await auth.exchangeCodeForToken({ code: "abc123" });
 // 4. Fetch the user's profile
 const user = await auth.getUserInfo(tokens.accessToken);
 // user.sub   → 42 (user ID)
-// user.name  → "Dredd" (F3 name)
-// user.email → "dredd@f3nation.com"
+// user.name  → "Tackle" (F3 name)
+// user.email → "NotTackle@f3nation.com"
 
 // 5. Refresh when the access token expires
 const newTokens = await auth.refreshToken({
