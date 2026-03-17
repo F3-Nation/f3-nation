@@ -13,9 +13,9 @@ system should work** once integrated into this monorepo.
 
 ### 1.1 What Ships
 
-| Workspace               | Purpose                                                                                                                              |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| **`apps/auth`**         | Next.js OAuth 2.0 / OIDC server, deployed at `auth.f3nation.com`                                                                     |
+| Workspace          | Purpose                                                                                                                              |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| **`apps/auth`**    | Next.js OAuth 2.0 / OIDC server, deployed at `auth.f3nation.com`                                                                     |
 | **`packages/sso`** | TypeScript SDK consumed by any app that needs to authenticate against the auth server (e.g. `apps/me`, external apps like pax-vault) |
 
 There is no standalone demo client app. `apps/me` serves as the primary reference
