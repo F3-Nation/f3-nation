@@ -50,17 +50,15 @@ const RATE_LIMIT_MAX_REQUESTS = isDevelopmentNodeEnv ? 10000 : 200;
 // app-server clock skew and cross-check inconsistencies.
 const DB_NOW = sql`timezone('utc'::text, now())`;
 
+// The auth server's base URL (e.g. https://auth.f3nation.com).
+// Read from process.env to avoid t3-env client/server type mismatch.
+const authIssuer = process.env.NEXT_PUBLIC_AUTH_URL ?? null;
+
 // Cached JWKS fetcher for f3-nation-auth JWT verification.
 // jose caches the key set automatically after the first fetch.
-const authJwks = env.NEXT_PUBLIC_AUTH_URL
-  ? createRemoteJWKSet(
-      new URL(`${env.NEXT_PUBLIC_AUTH_URL}/.well-known/jwks.json`),
-    )
+const authJwks = authIssuer
+  ? createRemoteJWKSet(new URL(`${authIssuer}/.well-known/jwks.json`))
   : null;
-
-// The issuer is the auth server's base URL (e.g. https://auth.f3nation.com)
-const authIssuer: string | null =
-  (env.NEXT_PUBLIC_AUTH_URL as string | undefined) ?? null;
 
 const limiter = new MemoryRatelimiter({
   maxRequests: RATE_LIMIT_MAX_REQUESTS,
