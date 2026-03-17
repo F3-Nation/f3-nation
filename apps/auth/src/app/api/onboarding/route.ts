@@ -3,7 +3,6 @@ import type { NextRequest } from "next/server";
 
 import { eq } from "@acme/db";
 import { users } from "@acme/db/schema/schema";
-import type { UserMeta } from "@acme/shared/app/types";
 
 import { auth } from "~/lib/auth";
 import { db } from "~/lib/db";
@@ -38,7 +37,7 @@ export async function POST(request: NextRequest) {
     .where(eq(users.id, userId))
     .limit(1);
 
-  const currentMeta = ((user?.meta ?? {}) as UserMeta) || {};
+  const currentMeta = user?.meta ?? {};
   const updatedMeta = { ...currentMeta, onboarding_completed: true };
 
   await db
