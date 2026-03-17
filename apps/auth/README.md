@@ -472,6 +472,180 @@ All tables are defined in `packages/db/drizzle/schema.ts` using Drizzle ORM's `p
 
 ## Deployment
 
+### First-Time Setup
+
+These steps only need to be done once when setting up the CI/CD pipeline.
+
+#### 1. Create GCP Artifact Registry repositories
+
+Each project gets its own Artifact Registry. The build pushes to staging; the deploy-prod job copies the image to prod's registry.
+
+```bash
+# Staging
+gcloud artifacts repositories create cloud-run-builds \
+  --repository-format=docker \
+  --location=us-east1 \
+  --project=f3-authentication-staging
+
+# Production
+gcloud artifacts repositories create cloud-run-builds \
+  --repository-format=docker \
+  --location=us-east1 \
+  --project=f3-authentication
+```
+
+#### 2. Create Cloud Run services
+
+```bash
+# Staging — deploy a placeholder first (Cloud Run needs an initial image)
+gcloud run deploy f3-auth \
+  --image=us-docker.pkg.dev/cloudrun/container/hello \
+  --region=us-east1 \
+  --project=f3-authentication-staging \
+  --allow-unauthenticated
+
+# Production
+gcloud run deploy f3-auth \
+  --image=us-docker.pkg.dev/cloudrun/container/hello \
+  --region=us-east1 \
+  --project=f3-authentication \
+  --allow-unauthenticated
+```
+
+#### 3. Set up Workload Identity Federation (WIF)
+
+This lets GitHub Actions authenticate to GCP without service account keys. The WIF pool is shared across all F3 apps in the `f3-github` project — if it already exists (e.g. from the `apps/me` setup), skip to the service account steps.
+
+```bash
+# ── Skip if f3-github project + WIF pool already exist ──
+
+gcloud projects create f3-github --name="F3 GitHub CI/CD"
+
+gcloud services enable iam.googleapis.com iamcredentials.googleapis.com \
+  sts.googleapis.com cloudresourcemanager.googleapis.com \
+  --project=f3-github
+
+gcloud iam workload-identity-pools create "github-actions" \
+  --location="global" \
+  --display-name="GitHub Actions" \
+  --project=f3-github
+
+gcloud iam workload-identity-pools providers create-oidc "github" \
+  --location="global" \
+  --workload-identity-pool="github-actions" \
+  --display-name="GitHub" \
+  --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository" \
+  --attribute-condition="attribute.repository==\"F3-Nation/f3-nation\"" \
+  --issuer-uri="https://token.actions.githubusercontent.com" \
+  --project=f3-github
+
+# Get the f3-github project number (used in SA bindings below)
+gcloud projects describe f3-github --format='value(projectNumber)'
+# ↑ Note this — referred to as WIF_PROJECT_NUMBER below
+
+# ── Staging SA ──
+gcloud iam service-accounts create github-actions-deploy \
+  --display-name="GitHub Actions Deploy" \
+  --project=f3-authentication-staging
+
+gcloud projects add-iam-policy-binding f3-authentication-staging \
+  --member="serviceAccount:github-actions-deploy@f3-authentication-staging.iam.gserviceaccount.com" \
+  --role="roles/run.admin"
+gcloud projects add-iam-policy-binding f3-authentication-staging \
+  --member="serviceAccount:github-actions-deploy@f3-authentication-staging.iam.gserviceaccount.com" \
+  --role="roles/artifactregistry.writer"
+gcloud projects add-iam-policy-binding f3-authentication-staging \
+  --member="serviceAccount:github-actions-deploy@f3-authentication-staging.iam.gserviceaccount.com" \
+  --role="roles/iam.serviceAccountUser"
+
+# Allow GitHub to impersonate the staging SA
+gcloud iam service-accounts add-iam-policy-binding \
+  github-actions-deploy@f3-authentication-staging.iam.gserviceaccount.com \
+  --role="roles/iam.workloadIdentityUser" \
+  --member="principalSet://iam.googleapis.com/projects/WIF_PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions/attribute.repository/F3-Nation/f3-nation" \
+  --project=f3-authentication-staging
+
+# ── Production SA ──
+gcloud iam service-accounts create github-actions-deploy \
+  --display-name="GitHub Actions Deploy" \
+  --project=f3-authentication
+
+gcloud projects add-iam-policy-binding f3-authentication \
+  --member="serviceAccount:github-actions-deploy@f3-authentication.iam.gserviceaccount.com" \
+  --role="roles/run.admin"
+gcloud projects add-iam-policy-binding f3-authentication \
+  --member="serviceAccount:github-actions-deploy@f3-authentication.iam.gserviceaccount.com" \
+  --role="roles/iam.serviceAccountUser"
+
+# Prod SA needs AR read on staging (to pull the build image) and AR write on prod
+gcloud projects add-iam-policy-binding f3-authentication-staging \
+  --member="serviceAccount:github-actions-deploy@f3-authentication.iam.gserviceaccount.com" \
+  --role="roles/artifactregistry.reader"
+gcloud projects add-iam-policy-binding f3-authentication \
+  --member="serviceAccount:github-actions-deploy@f3-authentication.iam.gserviceaccount.com" \
+  --role="roles/artifactregistry.writer"
+
+# Allow GitHub to impersonate the prod SA
+gcloud iam service-accounts add-iam-policy-binding \
+  github-actions-deploy@f3-authentication.iam.gserviceaccount.com \
+  --role="roles/iam.workloadIdentityUser" \
+  --member="principalSet://iam.googleapis.com/projects/WIF_PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions/attribute.repository/F3-Nation/f3-nation" \
+  --project=f3-authentication
+```
+
+Replace `WIF_PROJECT_NUMBER` with the `f3-github` project number from the `gcloud projects describe` command above.
+
+#### 4. Add GitHub Variables
+
+In GitHub → repo Settings → **Secrets and variables** → **Actions** → **Variables** tab, add:
+
+| Variable                    | Value                                                                                                |
+| --------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `AUTH_STAGING_GCP_PROJECT`  | `f3-auth-staging`                                                                                    |
+| `AUTH_PROD_GCP_PROJECT`     | `f3-auth`                                                                                            |
+| `AUTH_STAGING_WIF_PROVIDER` | `projects/WIF_PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions/providers/github` |
+| `AUTH_STAGING_WIF_SA`       | `github-actions-deploy@f3-auth-staging.iam.gserviceaccount.com`                                      |
+| `AUTH_PROD_WIF_PROVIDER`    | `projects/WIF_PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions/providers/github` |
+| `AUTH_PROD_WIF_SA`          | `github-actions-deploy@f3-auth.iam.gserviceaccount.com`                                              |
+
+#### 5. Create GitHub Environments
+
+In GitHub → repo Settings → **Environments**:
+
+1. Create **`auth-staging`** — no special rules needed
+2. Create **`auth-production`** — add **Required reviewers** (add yourself or your team)
+
+#### 6. Push secrets to Cloud Run
+
+```bash
+# Source your .env so the script can read secret values
+source .env
+
+# Push to staging
+bash apps/auth/scripts/cloud-run-env.sh --env staging
+
+# Push to production
+bash apps/auth/scripts/cloud-run-env.sh --env prod
+```
+
+#### 7. Map custom domains
+
+```bash
+gcloud run domain-mappings create \
+  --service=f3-auth \
+  --domain=staging.auth.f3nation.com \
+  --region=us-east1 \
+  --project=f3-authentication-staging
+
+gcloud run domain-mappings create \
+  --service=f3-auth \
+  --domain=auth.f3nation.com \
+  --region=us-east1 \
+  --project=f3-authentication
+```
+
+---
+
 ### Docker
 
 The Dockerfile uses a 3-stage build for minimal image size:
