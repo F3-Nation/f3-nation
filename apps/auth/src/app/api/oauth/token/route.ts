@@ -6,9 +6,7 @@ import { getCorsHeaders, handlePreflight } from "~/lib/cors";
 import { rateLimit } from "~/lib/rate-limit";
 
 export async function OPTIONS(request: NextRequest) {
-  const body = new URL(request.url).searchParams;
-  const clientId = body.get("client_id") ?? undefined;
-  const headers = await getCorsHeaders(request, clientId);
+  const headers = await getCorsHeaders(request);
   return handlePreflight(headers);
 }
 
