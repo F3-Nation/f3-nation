@@ -34,7 +34,10 @@ REGION="us-east1"
 # Env vars that map to GCP secrets (var name → secret ID).
 # Only genuinely sensitive values go here.
 declare -A SECRET_MAP=(
-  [DATABASE_URL]="database-url"
+  [DATABASE_HOST]="database-host"
+  [DATABASE_USER]="database-user"
+  [DATABASE_PASSWORD]="database-password"
+  [DATABASE_NAME]="database-name"
   [AUTH_SECRET]="auth-secret"
   [AUTH_JWT_PRIVATE_KEY]="auth-jwt-private-key"
   [SENDGRID_API_KEY]="sendgrid-api-key"
