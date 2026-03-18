@@ -599,14 +599,13 @@ Replace `WIF_PROJECT_NUMBER` with the `f3-github` project number from the `gclou
 
 In GitHub → repo Settings → **Secrets and variables** → **Actions** → **Variables** tab, add:
 
-| Variable                    | Value                                                                                                |
-| --------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `AUTH_STAGING_GCP_PROJECT`  | `f3-auth-staging`                                                                                    |
-| `AUTH_PROD_GCP_PROJECT`     | `f3-auth`                                                                                            |
-| `AUTH_STAGING_WIF_PROVIDER` | `projects/WIF_PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions/providers/github` |
-| `AUTH_STAGING_WIF_SA`       | `github-actions-deploy@f3-auth-staging.iam.gserviceaccount.com`                                      |
-| `AUTH_PROD_WIF_PROVIDER`    | `projects/WIF_PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions/providers/github` |
-| `AUTH_PROD_WIF_SA`          | `github-actions-deploy@f3-auth.iam.gserviceaccount.com`                                              |
+| Variable              | Value                                                                                                | Notes                  |
+| --------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------- |
+| `WIF_PROVIDER`        | `projects/WIF_PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions/providers/github` | Shared across all apps |
+| `WIF_SA_AUTH_STAGING` | `github-actions-deploy@f3-authentication-staging.iam.gserviceaccount.com`                            | Auth staging SA        |
+| `WIF_SA_AUTH_PROD`    | `github-actions-deploy@f3-authentication.iam.gserviceaccount.com`                                    | Auth production SA     |
+
+> **Convention**: `WIF_PROVIDER` is shared by all apps (me, auth, map, etc.). Service accounts follow the pattern `WIF_SA_<APP>_<ENV>` — e.g. `WIF_SA_ME_STAGING`, `WIF_SA_AUTH_PROD`. GCP project IDs are hardcoded in each workflow's `env:` block, not stored as variables.
 
 #### 5. Create GitHub Environments
 
@@ -618,13 +617,13 @@ In GitHub → repo Settings → **Environments**:
 #### 6. Push secrets to Cloud Run
 
 ```bash
-# Source your .env so the script can read secret values
-source .env
+# Copy and populate env files from the example
+cp apps/auth/.env.cloud-run.example apps/auth/.env.cloud-run.staging
+cp apps/auth/.env.cloud-run.example apps/auth/.env.cloud-run.prod
+# Edit each with the correct values
 
-# Push to staging
+# Push to GCP
 bash apps/auth/scripts/cloud-run-env.sh --env staging
-
-# Push to production
 bash apps/auth/scripts/cloud-run-env.sh --env prod
 ```
 
@@ -648,11 +647,11 @@ gcloud run domain-mappings create \
 
 ### Docker
 
-The Dockerfile uses a 3-stage build for minimal image size:
+The Dockerfile uses a 3-stage build:
 
-1. **Builder**: `node:20-alpine` + turbo prune for minimal workspace
+1. **Builder**: `node:20-alpine` + corepack/pnpm + turbo prune for minimal workspace
 2. **Installer**: `pnpm install --frozen-lockfile` + `turbo build`
-3. **Runner**: Standalone Next.js output, non-root user (`auth`, UID 1001), default port 8080 (Cloud Run-compatible)
+3. **Runner**: Standalone Next.js output, non-root user (`auth`, UID 1001), port 8080 (Cloud Run default)
 
 ```bash
 # Build locally
@@ -664,7 +663,7 @@ docker run -p 8080:8080 --env-file .env f3-auth
 
 ### GitHub Actions (`.github/workflows/deploy-auth.yml`)
 
-Triggered by tags matching `auth@*` (e.g. `auth@v1.0.0`).
+Triggered by tags matching `auth@*` (e.g. `auth@1.0.0`).
 
 | Job                 | Description                                                                           |
 | ------------------- | ------------------------------------------------------------------------------------- |
@@ -675,7 +674,8 @@ Triggered by tags matching `auth@*` (e.g. `auth@v1.0.0`).
 
 **Infrastructure**:
 
-- GCP Workload Identity Federation for keyless auth
+- GCP Workload Identity Federation for keyless auth (shared `WIF_PROVIDER`, per-app `WIF_SA_AUTH_*` variables)
+- GCP project IDs hardcoded in workflow `env:` block (no GitHub variables needed)
 - Artifact Registry for container images
 - Cloud Run (us-east1) for compute
 - GCP Secret Manager for secrets (see `scripts/cloud-run-env.sh`)

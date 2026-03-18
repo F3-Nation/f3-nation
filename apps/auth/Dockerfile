@@ -1,57 +1,62 @@
-FROM --platform=linux/amd64 node:20-alpine AS builder
+# ---------- Stage 1: Prune monorepo ----------
+FROM node:20-alpine AS builder
+
+ENV TURBO_TELEMETRY_DISABLED=1
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN apk add --no-cache libc6-compat && apk update
+WORKDIR /app
+
+RUN corepack enable && corepack prepare pnpm@8.15.1 --activate
+RUN pnpm add -g turbo@^1.12.3
+
+COPY . .
+RUN turbo prune f3-auth --docker
+
+# ---------- Stage 2: Install + build ----------
+FROM node:20-alpine AS installer
 
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV TURBO_TELEMETRY_DISABLED=1
-
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
 RUN apk add --no-cache libc6-compat openssl && apk update
 WORKDIR /app
-RUN yarn global add turbo@^1.12.3
-COPY . .
 
-# Prune the workspace to only include f3-auth and its dependencies
-RUN turbo prune f3-auth --docker
+RUN corepack enable && corepack prepare pnpm@8.15.1 --activate
+RUN pnpm add -g turbo@^1.12.3
 
-FROM --platform=linux/amd64 node:20-alpine AS installer
-RUN apk add --no-cache libc6-compat openssl && apk update
-WORKDIR /app
+# Install dependencies from pruned lockfile
+COPY --from=builder /app/out/json/ .
+COPY --from=builder /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
+RUN pnpm install --frozen-lockfile
+
+# Copy source and build
+COPY --from=builder /app/out/full/ .
 
 ENV NODE_ENV=production
 ENV CI=true
 ENV SKIP_ENV_VALIDATION=true
 
-RUN yarn global add turbo@^1.12.3 pnpm@8.15.1
-
-# Copy the pruned workspace
-COPY .gitignore .gitignore
-COPY --from=builder /app/out/json/ .
-COPY --from=builder /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
-
-# Install dependencies
-RUN pnpm install --frozen-lockfile
-
-COPY --from=builder /app/out/full/ .
-
 RUN pnpm turbo build --filter=f3-auth
 
-FROM --platform=linux/amd64 node:20-alpine AS runner
+# ---------- Stage 3: Production runner ----------
+FROM node:20-alpine AS runner
+
 RUN apk add --no-cache libc6-compat openssl && apk update
 WORKDIR /app
 
-# Don't run production as root
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 auth
-USER auth
-EXPOSE 8080
-ENV PORT=8080
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 auth
 
-ENV NODE_ENV=production
-ENV SKIP_ENV_VALIDATION=true
-
-COPY --from=installer /app/apps/auth/next.config.js ./
-COPY --from=installer /app/apps/auth/package.json ./
-
+# Copy standalone output
 COPY --from=installer --chown=auth:nodejs /app/apps/auth/.next/standalone ./
 COPY --from=installer --chown=auth:nodejs /app/apps/auth/.next/static ./apps/auth/.next/static
 COPY --from=installer --chown=auth:nodejs /app/apps/auth/public ./apps/auth/public
+
+USER auth
+
+ENV PORT=8080
+EXPOSE 8080
 
 CMD ["node", "apps/auth/server.js"]
