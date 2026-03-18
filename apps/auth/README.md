@@ -542,7 +542,11 @@ gcloud iam workload-identity-pools providers create-oidc "github" \
 # Get the f3-github project number (used in SA bindings below)
 gcloud projects describe f3-github --format='value(projectNumber)'
 # ↑ Note this — referred to as WIF_PROJECT_NUMBER below
+```
 
+Make sure the org has a variable for the WIF Provider. Go to https://github.com/organizations/F3-Nation/settings/variables and make sure there is a variable called WIP_PROVIDER with value "projects/WIF_PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions/providers/github". (Make sure WIF_PROJECT_NUMBER uses the number from the previous step). This one provider is used for all F3 Nation repos to deploy to GCP.
+
+```bash
 # ── Staging SA ──
 gcloud iam service-accounts create github-actions-deploy \
   --display-name="GitHub Actions Deploy" \
@@ -595,26 +599,19 @@ gcloud iam service-accounts add-iam-policy-binding \
 
 Replace `WIF_PROJECT_NUMBER` with the `f3-github` project number from the `gcloud projects describe` command above.
 
-#### 4. Add GitHub Variables
-
-In GitHub → repo Settings → **Secrets and variables** → **Actions** → **Variables** tab, add:
-
-| Variable              | Value                                                                                                | Notes                  |
-| --------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------- |
-| `WIF_PROVIDER`        | `projects/WIF_PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions/providers/github` | Shared across all apps |
-| `WIF_SA_AUTH_STAGING` | `github-actions-deploy@f3-authentication-staging.iam.gserviceaccount.com`                            | Auth staging SA        |
-| `WIF_SA_AUTH_PROD`    | `github-actions-deploy@f3-authentication.iam.gserviceaccount.com`                                    | Auth production SA     |
-
-> **Convention**: `WIF_PROVIDER` is shared by all apps (me, auth, map, etc.). Service accounts follow the pattern `WIF_SA_<APP>_<ENV>` — e.g. `WIF_SA_ME_STAGING`, `WIF_SA_AUTH_PROD`. GCP project IDs are hardcoded in each workflow's `env:` block, not stored as variables.
-
-#### 5. Create GitHub Environments
+#### 54. Create GitHub Environments
 
 In GitHub → repo Settings → **Environments**:
 
 1. Create **`auth-staging`** — no special rules needed
+
+- Add an Environment variable called WIF_SA and set it to github-actions-deploy@f3-authentication-staging.iam.gserviceaccount.com
+
 2. Create **`auth-production`** — add **Required reviewers** (add yourself or your team)
 
-#### 6. Push secrets to Cloud Run
+- Add an Environment variable called WIF_SA and set it to github-actions-deploy@f3-authentication.iam.gserviceaccount.com
+
+#### 5. Push secrets to Cloud Run
 
 ```bash
 # Copy and populate env files from the example
@@ -627,7 +624,7 @@ bash apps/auth/scripts/cloud-run-env.sh --env staging
 bash apps/auth/scripts/cloud-run-env.sh --env prod
 ```
 
-#### 7. Map custom domains
+#### 6. Map custom domains
 
 ```bash
 gcloud run domain-mappings create \
