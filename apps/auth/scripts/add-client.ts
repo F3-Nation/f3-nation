@@ -72,7 +72,7 @@ async function main() {
     process.exit(1);
   }
 
-  // Load DATABASE_URL from appropriate env file
+  // Load individual DB env vars from appropriate env file
   const { config } = await import("dotenv");
   if (targetEnv === "local") {
     config({ path: "../../.env" });
@@ -80,9 +80,15 @@ async function main() {
     config({ path: `.env.${targetEnv}` });
   }
 
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) {
-    console.error("DATABASE_URL not found. Check your .env file.");
+  const databaseHost = process.env.DATABASE_HOST;
+  const databaseUser = process.env.DATABASE_USER;
+  const databasePassword = process.env.DATABASE_PASSWORD;
+  const databaseName = process.env.DATABASE_NAME;
+
+  if (!databaseHost || !databaseUser || !databasePassword || !databaseName) {
+    console.error(
+      "Missing one or more required database env vars: DATABASE_HOST, DATABASE_USER, DATABASE_PASSWORD, DATABASE_NAME",
+    );
     process.exit(1);
   }
 
@@ -93,10 +99,18 @@ async function main() {
     }
   }
 
-  const sql = postgres(databaseUrl);
+  const sql = postgres({
+    host: databaseHost,
+    port: 5432,
+    user: databaseUser,
+    password: databasePassword,
+    database: databaseName,
+  });
   const db = drizzle(sql);
 
-  console.log(`\nConnected to ${targetEnv} database.\n`);
+  console.log(
+    `\nConnected to ${targetEnv} database at ${databaseHost}/${databaseName}.\n`,
+  );
 
   // Step 1: Client name
   const clientName = await ask("Client name: ");

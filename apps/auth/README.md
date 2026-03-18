@@ -74,17 +74,17 @@ pnpm -C apps/auth typecheck
 
 Defined and validated in `src/env.ts` using `@t3-oss/env-nextjs`. Variables prefixed with `NEXT_PUBLIC_` are exposed to the browser; all others are server-side only.
 
-| Variable               | Description                                                                         | Required                       |
-| ---------------------- | ----------------------------------------------------------------------------------- | ------------------------------ |
-| `AUTH_JWT_PRIVATE_KEY` | RSA private key (PEM) for signing JWT access tokens (see below)                     | Yes                            |
-| `AUTH_SECRET`          | Secret for signing/encrypting session JWTs. Generate with `openssl rand -base64 32` | Yes                            |
-| `DATABASE_URL`         | PostgreSQL connection string (e.g. `postgresql://user:pass@host:5432/db`)           | Yes                            |
-| `NEXT_PUBLIC_AUTH_URL` | Base URL of the auth server (e.g. `https://auth.f3nation.com`)                      | Yes                            |
-| `NEXT_PUBLIC_API_URL`  | F3 API endpoint for user management (e.g. `https://api.f3nation.com`)               | Yes                            |
-| `API_KEY`              | API key for authenticating calls to the F3 API                                      | Yes                            |
-| `SENDGRID_API_KEY`     | SendGrid SMTP API key (used in production for transactional email)                  | Yes                            |
-| `EMAIL_FROM`           | Sender email address (e.g. `noreply@f3nation.com`)                                  | Yes                            |
-| `NODE_ENV`             | `development`, `production`, or `test`                                              | No (defaults to `development`) |
+| Variable               | Description                                                                                                                                                                | Required                       |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| `AUTH_JWT_PRIVATE_KEY` | RSA private key (PEM) for signing JWT access tokens (see below)                                                                                                            | Yes                            |
+| `AUTH_SECRET`          | Secret for signing/encrypting session JWTs. Generate with `openssl rand -base64 32`                                                                                        | Yes                            |
+| `DATABASE_URL`         | Cloud SQL Auth Proxy enabled PostgreSQL connection string (e.g. for staging `postgresql://app_auth:PASSWORD@/f3_staging?host=/cloudsql/f3data:us-central1:f3data-nonprod`) | Yes                            |
+| `NEXT_PUBLIC_AUTH_URL` | Base URL of the auth server (e.g. `https://auth.f3nation.com`)                                                                                                             | Yes                            |
+| `NEXT_PUBLIC_API_URL`  | F3 API endpoint for user management (e.g. `https://api.f3nation.com`)                                                                                                      | Yes                            |
+| `API_KEY`              | API key for authenticating calls to the F3 API                                                                                                                             | Yes                            |
+| `SENDGRID_API_KEY`     | SendGrid SMTP API key (used in production for transactional email)                                                                                                         | Yes                            |
+| `EMAIL_FROM`           | Sender email address (e.g. `noreply@f3nation.com`)                                                                                                                         | Yes                            |
+| `NODE_ENV`             | `development`, `production`, or `test`                                                                                                                                     | No (defaults to `development`) |
 
 Set `SKIP_ENV_VALIDATION=1` to bypass validation during CI builds.
 
@@ -497,11 +497,14 @@ gcloud artifacts repositories create cloud-run-builds \
 #### 2. Create Cloud Run services
 
 ```bash
-# Staging — deploy a placeholder first (Cloud Run needs an initial image)
+# Deploy a placeholder first (Cloud Run needs an initial image). Note that this enables Cloud SQL Auth Proxy
+
+# Staging
 gcloud run deploy f3-auth \
   --image=us-docker.pkg.dev/cloudrun/container/hello \
   --region=us-east1 \
   --project=f3-authentication-staging \
+  --add-cloudsql-instances=f3data:us-central1:f3data-nonprod \
   --allow-unauthenticated
 
 # Production
@@ -509,6 +512,7 @@ gcloud run deploy f3-auth \
   --image=us-docker.pkg.dev/cloudrun/container/hello \
   --region=us-east1 \
   --project=f3-authentication \
+  --add-cloudsql-instances=f3data:us-central1:f3data \
   --allow-unauthenticated
 ```
 
@@ -638,6 +642,38 @@ gcloud run domain-mappings create \
   --domain=auth.f3nation.com \
   --region=us-east1 \
   --project=f3-authentication
+```
+
+#### 7. Set Cloud SQL Permissions
+
+This will allow Auth Proxy to work.
+
+Make sure the Cloud SQL Admin API is enabled on the Data (postgres) GCP project and the Auth projects. Go to https://console.cloud.google.com/apis/library/sqladmin.googleapis.com, select the project from the top drop down and hit Enable if not enabled.
+
+Get the service accounts Cloud Run is using. You will need to use the output to modify the next set of command.
+
+```bash
+gcloud run services describe f3-auth \
+  --region=us-east1 \
+  --project=f3-authentication-staging \
+  --format="value(spec.template.spec.serviceAccountName)"
+
+gcloud run services describe f3-auth \
+  --region=us-east1 \
+  --project=f3-authentication \
+  --format="value(spec.template.spec.serviceAccountName)"
+```
+
+Take the output from above and insert it below into SA_EMAIL before running
+
+```bash
+gcloud projects add-iam-policy-binding f3data \
+  --member="serviceAccount:615846288284-compute@developer.gserviceaccount.com" \
+  --role="roles/cloudsql.client"
+
+gcloud projects add-iam-policy-binding f3data \
+  --member="serviceAccount:516015729503-compute@developer.gserviceaccount.com" \
+  --role="roles/cloudsql.client"
 ```
 
 ---

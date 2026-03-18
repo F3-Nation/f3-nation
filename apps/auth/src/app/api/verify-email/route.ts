@@ -32,8 +32,31 @@ export async function POST(request: NextRequest) {
 
   // Send code
   if (body.action === "send" || !body.code) {
-    await sendEmailCode(email);
-    return NextResponse.json({ sent: true });
+    try {
+      await sendEmailCode(email);
+      return NextResponse.json({ sent: true });
+    } catch (err: unknown) {
+      let errorMessage = "Failed to send code";
+      let errorStack: string | undefined = undefined;
+      // Type guard for Error
+      if (err instanceof Error) {
+        errorMessage = err.message;
+        errorStack = err.stack;
+      }
+      // Log error as JSON for GCP
+      console.error(
+        JSON.stringify({
+          error: errorMessage,
+          stack: errorStack,
+        }),
+      );
+      return NextResponse.json(
+        {
+          error: errorMessage,
+        },
+        { status: 500 },
+      );
+    }
   }
 
   // Verify code
