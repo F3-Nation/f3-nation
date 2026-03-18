@@ -34,6 +34,7 @@ jobs:
   build:
     needs: ci-gate
     runs-on: ubuntu-latest
+    environment: auth-staging
     permissions:
       contents: read
       id-token: write
@@ -47,7 +48,7 @@ jobs:
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ vars.WIF_PROVIDER }}
-          service_account: ${{ vars.WIF_SA_AUTH_STAGING }}
+          service_account: ${{ vars.WIF_SA }}
 
       - uses: google-github-actions/setup-gcloud@v2
 
@@ -85,7 +86,7 @@ jobs:
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ vars.WIF_PROVIDER }}
-          service_account: ${{ vars.WIF_SA_AUTH_STAGING }}
+          service_account: ${{ vars.WIF_SA }}
 
       - name: Deploy to Cloud Run (staging)
         uses: google-github-actions/deploy-cloudrun@v2
@@ -109,7 +110,7 @@ jobs:
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ vars.WIF_PROVIDER }}
-          service_account: ${{ vars.WIF_SA_AUTH_STAGING }}
+          service_account: ${{ vars.WIF_SA }}
 
       - uses: google-github-actions/setup-gcloud@v2
 
@@ -127,7 +128,7 @@ jobs:
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ vars.WIF_PROVIDER }}
-          service_account: ${{ vars.WIF_SA_AUTH_PROD }}
+          service_account: ${{ vars.WIF_SA }}
 
       - name: Deploy to Cloud Run (prod)
         uses: google-github-actions/deploy-cloudrun@v2
