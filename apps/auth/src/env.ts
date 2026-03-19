@@ -10,6 +10,7 @@ export const env = createEnv({
     DATABASE_USER: z.string().min(1),
     DATABASE_PASSWORD: z.string().min(1),
     DATABASE_NAME: z.string().min(1),
+    DATABASE_PORT: z.coerce.number().min(1).default(5432),
     EMAIL_FROM: z.string().min(1),
     SENDGRID_API_KEY:
       process.env.NODE_ENV === "production"

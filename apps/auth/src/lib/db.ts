@@ -9,6 +9,7 @@ const databaseHost = env.DATABASE_HOST;
 const databaseUser = env.DATABASE_USER;
 const databasePassword = env.DATABASE_PASSWORD;
 const databaseName = env.DATABASE_NAME;
+const databasePort = env.DATABASE_PORT;
 
 declare global {
   // eslint-disable-next-line no-var
@@ -18,7 +19,7 @@ declare global {
 function createDb() {
   const client = postgres({
     host: databaseHost,
-    port: 5432,
+    port: databasePort,
     user: databaseUser,
     password: databasePassword,
     database: databaseName,
