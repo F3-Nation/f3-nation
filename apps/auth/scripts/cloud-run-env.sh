@@ -110,42 +110,42 @@ echo ""
 # ---------------------------------------------------------------------------
 # Push secrets to Secret Manager
 # ---------------------------------------------------------------------------
-echo "Pushing secrets to GCP Secret Manager..."
-
 push_secret() {
   local var="$1" secret_id="$2" value="$3" project="$4" sa_email="$5"
+  echo " [$var] Processing secret $secret_id..."
 
   if [[ -z "$value" ]]; then
-    echo "  SKIP: $var (empty)"
+    echo " [$var] Value not in environment. Skipping."
     return 0
   fi
 
   # Create secret if it doesn't exist
-  echo "Processing $var → $secret_id..."
+  echo " [$var] Checking if secret exists."
   if ! gcloud secrets describe "$secret_id" --project "$project" &>/dev/null; then
     
-    echo "  CREATE: $secret_id"
+    echo " [$var] Secret $secret_id does not exist. Creating."
     gcloud secrets create "$secret_id" --project "$project" --replication-policy="automatic" 2>/dev/null || true
-    
-    echo "  Granting access to $secret_id for $sa_email..."
+    echo -n "$value" | gcloud secrets versions add "$secret_id" --project "$project" --data-file=-
+
+    echo " [$var] Granting access to Cloud Run service account."
     gcloud secrets add-iam-policy-binding "$secret_id" \
       --project "$project" \
       --member "serviceAccount:${sa_email}" \
       --role "roles/secretmanager.secretAccessor" \
-      --quiet > /dev/null || echo "  WARNING: Failed to bind $secret_id"
+      --quiet > /dev/null || echo " [$var] WARNING: Failed to bind $secret_id"
     
     return 0
   fi
 
-  echo "  Secret $secret_id already exists. Checking if update is needed..."
+  echo " [$var] Secret already exists. Checking if update is needed."
   existing="$(gcloud secrets versions access latest --secret="$secret_id" --project "$project" 2>/dev/null)" || existing=""
 
   if [[ "$existing" == "$value" ]]; then
-    echo "  UNCHANGED: $secret_id"
+    echo " [$var] Value is unchanged. No action."
     return 0
   fi
 
-  echo "  UPDATE: $secret_id"
+  echo " [$var] Updating secret."
   echo -n "$value" | gcloud secrets versions add "$secret_id" --project "$project" --data-file=-
 
   # Delete all previous versions (keep only the one we just created)
@@ -153,7 +153,7 @@ push_secret() {
     --filter="state=ENABLED" --sort-by="~createTime" --limit=1 --format='value(name)' 2>/dev/null)"
   while IFS= read -r ver; do
     [[ -z "$ver" || "$ver" == "$latest" ]] && continue
-    echo "    DESTROY old version: $ver"
+    echo " [$var] Destroying old version: $ver"
     gcloud secrets versions destroy "$ver" --secret="$secret_id" --project "$project" --quiet 2>/dev/null || true
   done < <(gcloud secrets versions list "$secret_id" --project "$project" \
     --filter="state!=DESTROYED" --format='value(name)' 2>/dev/null)
@@ -169,13 +169,14 @@ SA_EMAIL="$(gcloud run services describe "$SERVICE_NAME" \
   --format='value(spec.template.spec.serviceAccountName)' 2>/dev/null)" || SA_EMAIL=""
 
 if [[ -z "$SA_EMAIL" ]]; then
-  echo "  Service $SERVICE_NAME not found. Defaulting to Compute Engine default service account."
+  echo "Service $SERVICE_NAME not found in project $PROJECT. Defaulting to default Compute Engine service account."
   PROJECT_NUMBER="$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')"
   SA_EMAIL="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
 fi
 
 # Run secret pushes in parallel
 PIDS=()
+echo "Pushing secrets to GCP Secret Manager..."
 for var in "${!SECRET_MAP[@]}"; do
   push_secret "$var" "${SECRET_MAP[$var]}" "${!var:-}" "$PROJECT" "$SA_EMAIL" &
   PIDS+=($!)
@@ -193,14 +194,14 @@ UPDATE_ARGS=()
 
 # Plain env vars (hardcoded)
 for var in "${!PLAIN_VARS[@]}"; do
-  echo "Setting $var=${PLAIN_VARS[$var]}"
+  echo " [$var] Setting to ${PLAIN_VARS[$var]}"
   UPDATE_ARGS+=("${var}=${PLAIN_VARS[$var]}")
 done
 
 # Per-environment env vars (from env file, not secrets)
 for var in "${ENV_FILE_VARS[@]}"; do
   value="${!var:-}"
-  echo "Setting $var=$value"
+  echo " [$var] Setting to $value"
   [[ -n "$value" ]] && UPDATE_ARGS+=("${var}=${value}")
 done
 
@@ -208,7 +209,7 @@ done
 SECRET_ARGS=()
 for var in "${!SECRET_MAP[@]}"; do
   secret_id="${SECRET_MAP[$var]}"
-  echo "Mapping $var to secret $secret_id"
+  echo " [$var] Mapping to secret $secret_id"
   SECRET_ARGS+=("${var}=${secret_id}:latest")
 done
 
@@ -216,7 +217,7 @@ done
 # Build the Cloud Run update command
 # ---------------------------------------------------------------------------
 
-
+echo ""
 echo "Pushing updates to Cloud Run service $SERVICE_NAME in project $PROJECT."
 gcloud run services update "$SERVICE_NAME" \
     --project "$PROJECT" \
