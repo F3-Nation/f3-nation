@@ -1,6 +1,7 @@
 import { and, eq, schema } from "@acme/db";
 import { ERRORS } from "@acme/shared/app/errors";
 import { isValidEmail } from "@acme/shared/app/functions";
+import { normalizeEmail } from "@acme/shared/common/functions";
 import { CrupdateUserSchema } from "@acme/validators";
 import { ORPCError } from "@orpc/server";
 import { z } from "zod";
@@ -202,13 +203,14 @@ export const userRouter = {
         "Retrieve a user's detailed information and role assignments by email address. PII fields are only included if requester is admin for one of the user's organizations.",
     })
     .handler(async ({ context: ctx, input }) => {
+      const normalizedEmail = normalizeEmail(input.email);
       let includePii = false;
       if (input?.includePii) {
         // First, get the user to check their orgs
         const [user] = await ctx.db
           .select({ id: schema.users.id })
           .from(schema.users)
-          .where(eq(schema.users.email, input.email));
+          .where(eq(schema.users.email, normalizedEmail));
 
         if (user) {
           includePii = await checkUserPiiAccess({
@@ -220,7 +222,7 @@ export const userRouter = {
 
       return buildSingleUserQuery({
         ctx,
-        whereCondition: eq(schema.users.email, input.email),
+        whereCondition: eq(schema.users.email, normalizedEmail),
         includePii,
         includeEmail: true, // Always include email when searching by email
       });
@@ -298,7 +300,8 @@ export const userRouter = {
         // For updates with PII access, only include PII fields that are actually provided
         updateSet = {
           ...nonPiiData,
-          ...(_email !== undefined && _email !== "" && { email: _email }),
+          ...(_email !== undefined &&
+            _email !== "" && { email: normalizeEmail(_email) }),
           ...(_phone !== undefined && _phone !== "" && { phone: _phone }),
           ...(_emergencyContact !== undefined &&
             _emergencyContact !== "" && {
@@ -327,7 +330,10 @@ export const userRouter = {
         });
       }
 
-      console.log("Update set", updateSet);
+      // Normalize email for case-insensitive storage and lookup
+      const normalizedEmail = _email ? normalizeEmail(_email) : _email;
+
+      console.log("Update set", JSON.stringify(updateSet));
 
       let user: typeof schema.users.$inferSelect;
       try {
@@ -335,7 +341,7 @@ export const userRouter = {
           .insert(schema.users)
           .values({
             ...rest,
-            email: _email ?? "", // Ensure required email is not undefined
+            email: normalizedEmail ?? "", // Ensure required email is not undefined
           })
           .onConflictDoUpdate({
             target: [schema.users.id],
@@ -358,7 +364,7 @@ export const userRouter = {
         throw error;
       }
 
-      console.log("User", user);
+      console.log("User", JSON.stringify(user));
 
       const dbRoles = await ctx.db.select().from(schema.roles);
 
@@ -376,7 +382,7 @@ export const userRouter = {
         .select()
         .from(schema.rolesXUsersXOrg)
         .where(eq(schema.rolesXUsersXOrg.userId, user.id));
-      console.log("Existing roles", existingRoles);
+      console.log("Existing roles", JSON.stringify(existingRoles));
 
       const newRolesToInsert = roles.filter(
         (role) =>
@@ -386,7 +392,7 @@ export const userRouter = {
               existingRole.orgId === role.orgId,
           ),
       );
-      console.log("New roles to insert", newRolesToInsert);
+      console.log("New roles to insert", JSON.stringify(newRolesToInsert));
 
       for (const role of newRolesToInsert) {
         const { success } = await checkHasRoleOnOrg({
@@ -410,7 +416,7 @@ export const userRouter = {
               role.orgId === existingRole.orgId,
           ),
       );
-      console.log("Roles to delete", rolesToDelete);
+      console.log("Roles to delete", JSON.stringify(rolesToDelete));
 
       for (const role of rolesToDelete) {
         const { success } = await checkHasRoleOnOrg({
@@ -452,7 +458,7 @@ export const userRouter = {
         );
       }
 
-      console.log("New roles to insert", newRolesToInsert);
+      console.log("New roles to insert", JSON.stringify(newRolesToInsert));
       const updatedRoles = await ctx.db
         .select({
           orgId: schema.rolesXUsersXOrg.orgId,

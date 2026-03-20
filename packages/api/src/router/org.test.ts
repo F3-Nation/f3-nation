@@ -71,25 +71,62 @@ describe("Org Router", () => {
     });
 
     it("should paginate results correctly", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+
+      // Create 3 orgs with a unique prefix so we can isolate them via searchTerm
+      const prefix = `PagTest ${uniqueId()}`;
+      for (let i = 0; i < 3; i++) {
+        const [org] = await db
+          .insert(schema.orgs)
+          .values({
+            name: `${prefix} Region ${i}`,
+            orgType: "region",
+            parentId: f3Nation.id,
+            isActive: true,
+          })
+          .returning();
+        if (!org) throw new Error(`Failed to create test org ${i}`);
+        createdOrgIds.push(org.id);
+      }
+
       const client = createTestClient();
+
+      // Use searchTerm to scope queries to only our test orgs
+      const all = await client.org.all({
+        orgTypes: ["region"],
+        searchTerm: prefix,
+        pageIndex: 0,
+        pageSize: 100,
+      });
+
+      expect(all.total).toBeGreaterThanOrEqual(3);
+
       const page1 = await client.org.all({
         orgTypes: ["region"],
+        searchTerm: prefix,
         pageIndex: 0,
         pageSize: 2,
       });
 
+      expect(page1.orgs.length).toBe(2);
+      expect(page1.total).toBe(all.total);
+
       const page2 = await client.org.all({
         orgTypes: ["region"],
+        searchTerm: prefix,
         pageIndex: 1,
         pageSize: 2,
       });
 
-      expect(page1.orgs.length).toBeLessThanOrEqual(2);
+      expect(page2.orgs.length).toBeGreaterThanOrEqual(1);
       expect(page2.orgs.length).toBeLessThanOrEqual(2);
+      expect(page2.total).toBe(all.total);
 
-      // Results should be different if there are more than 2 orgs
-      if (page1.total > 2 && page1.orgs.length > 0 && page2.orgs.length > 0) {
-        expect(page1.orgs[0]?.id).not.toBe(page2.orgs[0]?.id);
+      // Pages should contain disjoint org IDs
+      const page1Ids = new Set(page1.orgs.map((o) => o.id));
+      const page2Ids = page2.orgs.map((o) => o.id);
+      for (const id of page2Ids) {
+        expect(page1Ids.has(id)).toBe(false);
       }
     });
 
@@ -171,6 +208,11 @@ describe("Org Router", () => {
         parentId: f3Nation.id,
         isActive: true,
         email: "test@example.com",
+        description: null,
+        website: null,
+        twitter: null,
+        facebook: null,
+        instagram: null,
       });
 
       expect(result).toHaveProperty("org");
@@ -195,6 +237,11 @@ describe("Org Router", () => {
           orgType: "region",
           isActive: true,
           email: "test@example.com",
+          description: null,
+          website: null,
+          twitter: null,
+          facebook: null,
+          instagram: null,
         }),
       ).rejects.toThrow("Parent ID or ID is required");
     });
@@ -231,6 +278,11 @@ describe("Org Router", () => {
         parentId: f3Nation.id,
         isActive: true,
         email: "test@example.com",
+        description: null,
+        website: null,
+        twitter: null,
+        facebook: null,
+        instagram: null,
       });
 
       expect(result.org?.id).toBe(testOrg.id);
@@ -256,6 +308,11 @@ describe("Org Router", () => {
           parentId: f3Nation.id,
           isActive: true,
           email: "test@example.com",
+          description: null,
+          website: null,
+          twitter: null,
+          facebook: null,
+          instagram: null,
         }),
       ).rejects.toThrow();
     });

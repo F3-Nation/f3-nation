@@ -132,7 +132,10 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
         tags: [
           "api-key",
           "event",
+          "event-instance",
           "event-type",
+          "event-tag",
+          "attendance",
           "location",
           "org",
           "ping",
@@ -145,6 +148,10 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
         name: "map",
         tags: ["feedback", "map.event", "map.location", "revalidate"],
       },
+      {
+        name: "Org Chart",
+        tags: ["Org Chart"],
+      },
     ],
     tags: [
       {
@@ -152,7 +159,16 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
         description: "API key management for programmatic access",
       },
       { name: "event", description: "Workout event management" },
+      {
+        name: "event-instance",
+        description: "Specific occurrences of workout events",
+      },
       { name: "event-type", description: "Event type/category management" },
+      {
+        name: "event-tag",
+        description: "Event tag management for categorization",
+      },
+      { name: "attendance", description: "Attendance management for events" },
       {
         name: "location",
         description: "Physical location management for workouts",
@@ -160,6 +176,10 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
       {
         name: "org",
         description: "Organization management (regions, AOs, etc.)",
+      },
+      {
+        name: "Org Chart",
+        description: "Organization chart data and leadership",
       },
       { name: "ping", description: "Health check endpoints" },
       {

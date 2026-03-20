@@ -6,11 +6,11 @@ import { EventTypesTable } from "./event-types-table";
 
 const EventTypesPage = async () => {
   return (
-    <Layout>
-      <div className="flex w-full  flex-col">
+    <Layout title="Event Types">
+      <div className="flex w-full flex-col">
         <div className="flex flex-row items-center justify-between">
-          <h1 className="text-2xl font-bold">Event Types</h1>
-          <div className="flex flex-row items-center justify-start gap-2">
+          <h1 className="hidden text-2xl font-bold lg:block">Event Types</h1>
+          <div className="ml-auto flex flex-row items-end gap-2">
             <AddEventTypeButton />
           </div>
         </div>

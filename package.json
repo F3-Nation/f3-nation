@@ -1,9 +1,9 @@
 {
   "name": "f3-nation",
-  "version": "3.7.0",
+  "version": "3.8.0",
   "private": true,
   "engines": {
-    "node": ">=20.19.0"
+    "node": ">=20.19.0 <21"
   },
   "packageManager": "pnpm@8.15.1",
   "scripts": {
@@ -29,6 +29,7 @@
     "typecheck": "turbo typecheck",
     "test": "turbo test",
     "test:coverage": "turbo test -- --coverage",
+    "ci:local": "pnpm format && pnpm lint && pnpm typecheck && pnpm build && pnpm test:coverage",
     "with-env": "dotenv -e .env --",
     "doppler": "pnpm exec ./tooling/scripts/doppler.sh",
     "db:update-db": "pnpm -F db update-db",
