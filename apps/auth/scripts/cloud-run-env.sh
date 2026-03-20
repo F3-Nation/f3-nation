@@ -47,6 +47,7 @@ declare -A SECRET_MAP=(
 # Per-environment env vars read from the env file (not sensitive, set as plain
 # Cloud Run env vars)
 ENV_FILE_VARS=(
+  NEXTAUTH_URL
   NEXT_PUBLIC_AUTH_URL
   NEXT_PUBLIC_API_URL
   EMAIL_FROM
@@ -112,7 +113,7 @@ echo ""
 echo "Pushing secrets to GCP Secret Manager..."
 
 push_secret() {
-  local var="$1" secret_id="$2" value="$3" project="$4"
+  local var="$1" secret_id="$2" value="$3" project="$4" sa_email="$5"
 
   if [[ -z "$value" ]]; then
     echo "  SKIP: $var (empty)"
@@ -120,13 +121,24 @@ push_secret() {
   fi
 
   # Create secret if it doesn't exist
+  echo "Processing $var → $secret_id..."
   if ! gcloud secrets describe "$secret_id" --project "$project" &>/dev/null; then
+    
     echo "  CREATE: $secret_id"
     gcloud secrets create "$secret_id" --project "$project" --replication-policy="automatic" 2>/dev/null || true
-    existing=""
-  else
-    existing="$(gcloud secrets versions access latest --secret="$secret_id" --project "$project" 2>/dev/null)" || existing=""
+    
+    echo "  Granting access to $secret_id for $sa_email..."
+    gcloud secrets add-iam-policy-binding "$secret_id" \
+      --project "$project" \
+      --member "serviceAccount:${sa_email}" \
+      --role "roles/secretmanager.secretAccessor" \
+      --quiet > /dev/null || echo "  WARNING: Failed to bind $secret_id"
+    
+    return 0
   fi
+
+  echo "  Secret $secret_id already exists. Checking if update is needed..."
+  existing="$(gcloud secrets versions access latest --secret="$secret_id" --project "$project" 2>/dev/null)" || existing=""
 
   if [[ "$existing" == "$value" ]]; then
     echo "  UNCHANGED: $secret_id"
@@ -147,19 +159,9 @@ push_secret() {
     --filter="state!=DESTROYED" --format='value(name)' 2>/dev/null)
 }
 
-# Run secret pushes in parallel
-PIDS=()
-for var in "${!SECRET_MAP[@]}"; do
-  push_secret "$var" "${SECRET_MAP[$var]}" "${!var:-}" "$PROJECT" &
-  PIDS+=($!)
-done
-for pid in "${PIDS[@]}"; do wait "$pid"; done
-
-# ---------------------------------------------------------------------------
-# Grant Cloud Run service account access to secrets
-# ---------------------------------------------------------------------------
+# Get the Cloud Run service account email to grant it access to secrets. If the service doesn't exist yet, we'll default to the Compute Engine default service account, which is what Cloud Run
 echo ""
-echo "Granting secret access to Cloud Run service account..."
+echo "Preparing Cloud Run service account email for granting secret permissions."
 
 SA_EMAIL="$(gcloud run services describe "$SERVICE_NAME" \
   --project "$PROJECT" \
@@ -167,22 +169,22 @@ SA_EMAIL="$(gcloud run services describe "$SERVICE_NAME" \
   --format='value(spec.template.spec.serviceAccountName)' 2>/dev/null)" || SA_EMAIL=""
 
 if [[ -z "$SA_EMAIL" ]]; then
+  echo "  Service $SERVICE_NAME not found. Defaulting to Compute Engine default service account."
   PROJECT_NUMBER="$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')"
   SA_EMAIL="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
 fi
 
+# Run secret pushes in parallel
+PIDS=()
 for var in "${!SECRET_MAP[@]}"; do
-  secret_id="${SECRET_MAP[$var]}"
-  echo "  Granting access to $secret_id..."
-  gcloud secrets add-iam-policy-binding "$secret_id" \
-    --project "$PROJECT" \
-    --member "serviceAccount:${SA_EMAIL}" \
-    --role "roles/secretmanager.secretAccessor" \
-    --quiet > /dev/null || echo "  WARNING: Failed to bind $secret_id"
+  push_secret "$var" "${SECRET_MAP[$var]}" "${!var:-}" "$PROJECT" "$SA_EMAIL" &
+  PIDS+=($!)
 done
+for pid in "${PIDS[@]}"; do wait "$pid"; done
+
 
 # ---------------------------------------------------------------------------
-# Build the Cloud Run update command
+# Update Cloud Run service with env vars and secret references
 # ---------------------------------------------------------------------------
 echo ""
 echo "Updating Cloud Run service env vars and secret references..."
@@ -191,12 +193,14 @@ UPDATE_ARGS=()
 
 # Plain env vars (hardcoded)
 for var in "${!PLAIN_VARS[@]}"; do
+  echo "Setting $var=${PLAIN_VARS[$var]}"
   UPDATE_ARGS+=("${var}=${PLAIN_VARS[$var]}")
 done
 
 # Per-environment env vars (from env file, not secrets)
 for var in "${ENV_FILE_VARS[@]}"; do
   value="${!var:-}"
+  echo "Setting $var=$value"
   [[ -n "$value" ]] && UPDATE_ARGS+=("${var}=${value}")
 done
 
@@ -204,15 +208,22 @@ done
 SECRET_ARGS=()
 for var in "${!SECRET_MAP[@]}"; do
   secret_id="${SECRET_MAP[$var]}"
+  echo "Mapping $var to secret $secret_id"
   SECRET_ARGS+=("${var}=${secret_id}:latest")
 done
 
+# ---------------------------------------------------------------------------
+# Build the Cloud Run update command
+# ---------------------------------------------------------------------------
+
+
+echo "Pushing updates to Cloud Run service $SERVICE_NAME in project $PROJECT."
 gcloud run services update "$SERVICE_NAME" \
-  --project "$PROJECT" \
-  --region "$REGION" \
-  --update-env-vars "$(IFS=,; echo "${UPDATE_ARGS[*]}")" \
-  --update-secrets "$(IFS=,; echo "${SECRET_ARGS[*]}")" \
-  --quiet
+    --project "$PROJECT" \
+    --region "$REGION" \
+    --update-env-vars "$(IFS=,; echo "${UPDATE_ARGS[*]}")" \
+    --update-secrets "$(IFS=,; echo "${SECRET_ARGS[*]}")" \
+    --quiet
 
 echo ""
 echo "Done! Service $SERVICE_NAME in $PROJECT updated."
