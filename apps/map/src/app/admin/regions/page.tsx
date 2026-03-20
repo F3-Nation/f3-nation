@@ -8,11 +8,11 @@ import { RegionsTable } from "./regions-table";
 
 const RegionsPage = async () => {
   return (
-    <Layout>
+    <Layout title="Regions">
       <div className="flex w-full flex-col">
         <div className="flex flex-row items-center justify-between">
-          <h1 className="text-2xl font-bold">Regions</h1>
-          <div className="flex flex-row items-center justify-start gap-2">
+          <h1 className="hidden text-2xl font-bold lg:block">Regions</h1>
+          <div className="ml-auto flex flex-row items-center justify-start gap-2">
             <AddRegionButton />
           </div>
         </div>

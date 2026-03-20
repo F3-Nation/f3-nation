@@ -18,6 +18,7 @@ import { Cell, Header } from "@acme/ui/table";
 import { orpc, useQuery } from "~/orpc/react";
 import type { RouterOutputs } from "~/orpc/types";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
+import { MobileFilterSheet } from "../_components/mobile-filter-sheet";
 import { ResetFilter } from "../_components/reset-filter";
 import { StatusFilter } from "../_components/status-filter";
 import { SectorFilter } from "../regions/sector-filter";
@@ -100,6 +101,16 @@ export const AreasTable = () => {
     [setPagination],
   );
 
+  const handleResetFilters = useCallback(() => {
+    setSelectedSectors([]);
+    setSelectedStatuses(["active"]);
+    setOnlyMine(true);
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+  }, [setPagination]);
+
+  const activeFilterCount =
+    selectedStatuses.length + selectedSectors.length + (onlyMine ? 1 : 0);
+
   return (
     <MDTable
       data={areasWithSectorNames}
@@ -116,26 +127,48 @@ export const AreasTable = () => {
       setSearchTerm={setSearchTerm}
       filterComponent={
         <>
-          <StatusFilter
-            selectedStatuses={selectedStatuses}
-            setSelectedStatuses={setSelectedStatuses}
-            onlyMine={onlyMine}
-            setOnlyMine={setOnlyMine}
-            resetPage={() =>
-              setPagination((prev) => ({ ...prev, pageIndex: 0 }))
-            }
-          />
-          <SectorFilter
-            onSectorSelect={handleSectorSelect}
-            selectedSectors={selectedSectors}
-          />
-          <ResetFilter
-            onClick={() => {
-              setSelectedSectors([]);
-              setSelectedStatuses(["active"]);
-              setOnlyMine(true);
-            }}
-          />
+          {/* Desktop: inline filters */}
+          <div className="hidden items-center gap-2 md:flex">
+            <StatusFilter
+              selectedStatuses={selectedStatuses}
+              setSelectedStatuses={setSelectedStatuses}
+              onlyMine={onlyMine}
+              setOnlyMine={setOnlyMine}
+              resetPage={() =>
+                setPagination((prev) => ({ ...prev, pageIndex: 0 }))
+              }
+            />
+            <SectorFilter
+              onSectorSelect={handleSectorSelect}
+              selectedSectors={selectedSectors}
+            />
+            <ResetFilter onClick={handleResetFilters} />
+          </div>
+          {/* Mobile: sheet-based filters */}
+          <MobileFilterSheet
+            activeFilterCount={activeFilterCount}
+            onReset={handleResetFilters}
+          >
+            <div>
+              <p className="mb-1 text-sm font-medium">Status</p>
+              <StatusFilter
+                selectedStatuses={selectedStatuses}
+                setSelectedStatuses={setSelectedStatuses}
+                onlyMine={onlyMine}
+                setOnlyMine={setOnlyMine}
+                resetPage={() =>
+                  setPagination((prev) => ({ ...prev, pageIndex: 0 }))
+                }
+              />
+            </div>
+            <div>
+              <p className="mb-1 text-sm font-medium">Sector</p>
+              <SectorFilter
+                onSectorSelect={handleSectorSelect}
+                selectedSectors={selectedSectors}
+              />
+            </div>
+          </MobileFilterSheet>
         </>
       }
     />
@@ -194,7 +227,9 @@ const columns: TableOptions<
     accessorFn: (row) =>
       row.lastAnnualReview == null
         ? ""
-        : new Date(row.lastAnnualReview).toLocaleDateString(),
+        : new Date(
+            row.lastAnnualReview.substring(0, 10) + "T00:00:00",
+          ).toLocaleDateString(),
     meta: { name: "Last Annual Review" },
     header: Header,
     cell: (cell) => <Cell {...cell} />,

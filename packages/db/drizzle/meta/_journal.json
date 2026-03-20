@@ -71,6 +71,13 @@
       "when": 1767319310605,
       "tag": "0009_gifted_typhoid_mary",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1772193724674,
+      "tag": "0010_silly_giant_man",
+      "breakpoints": true
     }
   ]
 }
