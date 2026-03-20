@@ -140,7 +140,9 @@ export default function AdminLocationsModal({
     <Dialog open={true} onOpenChange={() => closeModal()}>
       <DialogContent
         style={{ zIndex: Z_INDEX.HOW_TO_JOIN_MODAL }}
-        className={cn(`max-w-[90%] rounded-lg lg:max-w-[1024px]`)}
+        className={cn(
+          `max-w-[95%] rounded-lg sm:max-w-[90%] lg:max-w-[1024px] max-h-[90vh] overflow-y-auto`,
+        )}
       >
         <DialogHeader>
           <DialogTitle className="text-center">
@@ -148,10 +150,10 @@ export default function AdminLocationsModal({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex flex-wrap">
+        <div className="flex flex-col md:flex-row md:flex-wrap">
           Locations are the the placements of workouts. They are grouped by
           regions.
-          <div className="w-1/2">
+          <div className="w-full md:w-1/2">
             <Form {...form}>
               <form
                 onSubmit={form.handleSubmit(
@@ -184,7 +186,7 @@ export default function AdminLocationsModal({
                 className="space-y-4"
               >
                 <div className="flex flex-wrap">
-                  <div className="mb-4 w-1/2 px-2">
+                  <div className="mb-4 w-full px-2 sm:w-1/2">
                     <FormField
                       control={form.control}
                       name="id"
@@ -199,7 +201,7 @@ export default function AdminLocationsModal({
                       )}
                     />
                   </div>
-                  <div className="mb-4 w-1/2 px-2">
+                  <div className="mb-4 w-full px-2 sm:w-1/2">
                     <FormField
                       control={form.control}
                       name="name"
@@ -231,7 +233,7 @@ export default function AdminLocationsModal({
                       )}
                     />
                   </div>
-                  <div className="mb-4 w-1/2 px-2">
+                  <div className="mb-4 w-full px-2 sm:w-1/2">
                     <FormField
                       control={form.control}
                       name="regionId"
@@ -265,7 +267,7 @@ export default function AdminLocationsModal({
                     />
                   </div>
 
-                  <div className="mb-4 w-1/2 px-2">
+                  <div className="mb-4 w-full px-2 sm:w-1/2">
                     <FormField
                       control={form.control}
                       name="email"
@@ -285,7 +287,7 @@ export default function AdminLocationsModal({
                       )}
                     />
                   </div>
-                  <div className="mb-4 w-1/2 px-2">
+                  <div className="mb-4 w-full px-2 sm:w-1/2">
                     <FormField
                       control={form.control}
                       name="latitude"
@@ -305,7 +307,7 @@ export default function AdminLocationsModal({
                       )}
                     />
                   </div>
-                  <div className="mb-4 w-1/2 px-2">
+                  <div className="mb-4 w-full px-2 sm:w-1/2">
                     <FormField
                       control={form.control}
                       name="longitude"
@@ -325,7 +327,18 @@ export default function AdminLocationsModal({
                       )}
                     />
                   </div>
-                  <div className="mb-4 w-1/2 px-2">
+                  {/* Map shown inline on mobile, right after lat/lng fields */}
+                  <div className="mb-4 h-[250px] w-full px-2 md:hidden">
+                    <GoogleMapSimple
+                      onCenterChanged={(center) => {
+                        form.setValue("latitude", center.lat.toString());
+                        form.setValue("longitude", center.lng.toString());
+                      }}
+                      latitude={safeParseFloat(formLatitude)}
+                      longitude={safeParseFloat(formLongitude)}
+                    />
+                  </div>
+                  <div className="mb-4 w-full px-2 sm:w-1/2">
                     <FormField
                       control={form.control}
                       name="addressStreet"
@@ -344,7 +357,7 @@ export default function AdminLocationsModal({
                       )}
                     />
                   </div>
-                  <div className="mb-4 w-1/2 px-2">
+                  <div className="mb-4 w-full px-2 sm:w-1/2">
                     <FormField
                       control={form.control}
                       name="addressStreet2"
@@ -363,7 +376,7 @@ export default function AdminLocationsModal({
                       )}
                     />
                   </div>
-                  <div className="mb-4 w-1/2 px-2">
+                  <div className="mb-4 w-full px-2 sm:w-1/2">
                     <FormField
                       control={form.control}
                       name="addressCity"
@@ -382,7 +395,7 @@ export default function AdminLocationsModal({
                       )}
                     />
                   </div>
-                  <div className="mb-4 w-1/2 px-2">
+                  <div className="mb-4 w-full px-2 sm:w-1/2">
                     <FormField
                       control={form.control}
                       name="addressState"
@@ -401,7 +414,7 @@ export default function AdminLocationsModal({
                       )}
                     />
                   </div>
-                  <div className="mb-4 w-1/2 px-2">
+                  <div className="mb-4 w-full px-2 sm:w-1/2">
                     <FormField
                       control={form.control}
                       name="addressZip"
@@ -420,7 +433,7 @@ export default function AdminLocationsModal({
                       )}
                     />
                   </div>
-                  <div className="mb-4 w-1/2 px-2">
+                  <div className="mb-4 w-full px-2 sm:w-1/2">
                     <FormField
                       control={form.control}
                       name="addressCountry"
@@ -456,7 +469,7 @@ export default function AdminLocationsModal({
                     />
                   </div>
 
-                  <div className="mb-4 w-1/2 px-2">
+                  <div className="mb-4 w-full px-2 sm:w-1/2">
                     <FormField
                       control={form.control}
                       name="isActive"
@@ -506,7 +519,7 @@ export default function AdminLocationsModal({
                     />
                   </div>
                   <div className="w-full px-2">
-                    <div className="flex space-x-4 pt-4">
+                    <div className="flex flex-col space-y-2 pt-4 sm:flex-row sm:space-x-4 sm:space-y-0">
                       <Button
                         type="button"
                         variant="outline"
@@ -572,7 +585,8 @@ export default function AdminLocationsModal({
               </form>
             </Form>
           </div>
-          <div className="w-1/2">
+          {/* Map shown as right column on desktop */}
+          <div className="hidden md:block md:w-1/2">
             <GoogleMapSimple
               onCenterChanged={(center) => {
                 form.setValue("latitude", center.lat.toString());

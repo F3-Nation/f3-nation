@@ -337,7 +337,9 @@ export default function AdminManageAccessModal({
     <Dialog open={true} onOpenChange={() => closeModal()}>
       <DialogContent
         style={{ zIndex: Z_INDEX.HOW_TO_JOIN_MODAL }}
-        className={cn(`max-w-[90%] rounded-lg lg:max-w-[600px]`)}
+        className={cn(
+          `max-h-[90vh] max-w-[95%] overflow-y-auto rounded-lg sm:max-w-[90%] md:max-w-[600px]`,
+        )}
       >
         <DialogHeader>
           <DialogTitle className="text-center">Manage Access</DialogTitle>
@@ -577,7 +579,7 @@ export default function AdminManageAccessModal({
               {/* Show additional fields when creating new user */}
               {isCreatingNew && (
                 <>
-                  <div className="mb-4 w-1/2 px-2">
+                  <div className="mb-4 w-full px-2 sm:w-1/2">
                     <FormField
                       control={form.control}
                       name="firstName"
@@ -597,7 +599,7 @@ export default function AdminManageAccessModal({
                     />
                   </div>
 
-                  <div className="mb-4 w-1/2 px-2">
+                  <div className="mb-4 w-full px-2 sm:w-1/2">
                     <FormField
                       control={form.control}
                       name="lastName"
@@ -617,7 +619,7 @@ export default function AdminManageAccessModal({
                     />
                   </div>
 
-                  <div className="mb-4 w-1/2 px-2">
+                  <div className="mb-4 w-full px-2 sm:w-1/2">
                     <FormField
                       control={form.control}
                       name="f3Name"
@@ -637,7 +639,7 @@ export default function AdminManageAccessModal({
                     />
                   </div>
 
-                  <div className="mb-4 w-1/2 px-2">
+                  <div className="mb-4 w-full px-2 sm:w-1/2">
                     <FormField
                       control={form.control}
                       name="phone"
@@ -693,9 +695,9 @@ export default function AdminManageAccessModal({
                               return (
                                 <div
                                   key={index}
-                                  className="flex items-center gap-2 opacity-50"
+                                  className="flex flex-col gap-2 rounded-md border border-input p-2 opacity-50 sm:flex-row sm:items-center sm:border-0 sm:p-0"
                                 >
-                                  <div className="flex h-9 w-[200px] items-center rounded-md border border-input bg-muted px-3 text-sm text-muted-foreground">
+                                  <div className="flex h-9 w-full items-center rounded-md border border-input bg-muted px-3 text-sm text-muted-foreground sm:w-[200px]">
                                     {roleEntry.roleName === "admin"
                                       ? "Admin"
                                       : "Editor"}
@@ -703,7 +705,7 @@ export default function AdminManageAccessModal({
                                   <div className="flex h-9 flex-1 items-center rounded-md border border-input bg-muted px-3 text-sm text-muted-foreground">
                                     {orgName ?? `Org #${roleEntry.orgId}`}
                                   </div>
-                                  <div className="h-8 w-8" />
+                                  <div className="hidden h-8 w-8 sm:block" />
                                 </div>
                               );
                             }
@@ -711,7 +713,7 @@ export default function AdminManageAccessModal({
                             return (
                               <div
                                 key={index}
-                                className="flex items-center gap-2"
+                                className="flex flex-col gap-2 rounded-md border p-2 sm:flex-row sm:items-center sm:border-0 sm:p-0"
                               >
                                 <Select
                                   onValueChange={(value) => {
@@ -727,7 +729,7 @@ export default function AdminManageAccessModal({
                                   value={roleEntry.roleName}
                                 >
                                   <FormControl>
-                                    <SelectTrigger className="w-[200px]">
+                                    <SelectTrigger className="w-full sm:w-[200px]">
                                       <SelectValue placeholder="Select a role" />
                                     </SelectTrigger>
                                   </FormControl>
@@ -772,6 +774,7 @@ export default function AdminManageAccessModal({
                                   variant="ghost"
                                   type="button"
                                   size="sm"
+                                  className="self-end sm:self-auto"
                                   onClick={() => {
                                     const newRoles = [
                                       ...(field.value as RoleEntry[]),

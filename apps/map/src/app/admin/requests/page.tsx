@@ -5,10 +5,10 @@ import { RequestsTable } from "./requests-table";
 
 const RequestsPage = async () => {
   return (
-    <Layout>
+    <Layout title="Requests">
       <div className="flex h-full w-full flex-col">
         <div className="flex flex-row items-center justify-between">
-          <h1 className="text-2xl font-bold">Requests</h1>
+          <h1 className="hidden text-2xl font-bold lg:block">Requests</h1>
         </div>
         <Suspense fallback={<div>Loading...</div>}>
           <RequestsTable />
