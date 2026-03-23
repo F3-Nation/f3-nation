@@ -44,6 +44,32 @@ export const positionRouter = {
       description:
         "Get a list of positions with optional filtering by organization and type",
     })
+    .output(
+      z.object({
+        positions: z
+          .array(
+            z.object({
+              id: z.number().describe("Position ID"),
+              name: z.string().describe("Position name"),
+              description: z
+                .string()
+                .nullable()
+                .describe("Position description"),
+              orgId: z.number().nullable().describe("Organization ID"),
+              orgType: z
+                .enum(["ao", "region", "area", "sector", "nation"])
+                .nullable()
+                .describe("Organization type level"),
+              isActive: z.boolean().describe("Whether the position is active"),
+              created: z.string().describe("Date the position was created"),
+              updated: z
+                .string()
+                .describe("Date the position was last updated"),
+            }),
+          )
+          .describe("List of positions"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const where = and(
         input?.isActive !== undefined
@@ -98,6 +124,32 @@ export const positionRouter = {
       description:
         "Retrieve positions specific to an organization (excludes global)",
     })
+    .output(
+      z.object({
+        positions: z
+          .array(
+            z.object({
+              id: z.number().describe("Position ID"),
+              name: z.string().describe("Position name"),
+              description: z
+                .string()
+                .nullable()
+                .describe("Position description"),
+              orgId: z.number().nullable().describe("Organization ID"),
+              orgType: z
+                .enum(["ao", "region", "area", "sector", "nation"])
+                .nullable()
+                .describe("Organization type level"),
+              isActive: z.boolean().describe("Whether the position is active"),
+              created: z.string().describe("Date the position was created"),
+              updated: z
+                .string()
+                .describe("Date the position was last updated"),
+            }),
+          )
+          .describe("List of positions"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const positions = await ctx.db
         .select()
@@ -127,6 +179,26 @@ export const positionRouter = {
       summary: "Get position by ID",
       description: "Retrieve detailed information about a specific position",
     })
+    .output(
+      z.object({
+        position: z
+          .object({
+            id: z.number().describe("Position ID"),
+            name: z.string().describe("Position name"),
+            description: z.string().nullable().describe("Position description"),
+            orgId: z.number().nullable().describe("Organization ID"),
+            orgType: z
+              .enum(["ao", "region", "area", "sector", "nation"])
+              .nullable()
+              .describe("Organization type level"),
+            isActive: z.boolean().describe("Whether the position is active"),
+            created: z.string().describe("Date the position was created"),
+            updated: z.string().describe("Date the position was last updated"),
+          })
+          .nullable()
+          .describe("The position"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const [result] = await ctx.db
         .select()
@@ -163,6 +235,35 @@ export const positionRouter = {
       description:
         "Get all positions with their assigned users for a specific org",
     })
+    .output(
+      z.object({
+        positions: z
+          .array(
+            z.object({
+              id: z.number().describe("Position ID"),
+              name: z.string().describe("Position name"),
+              description: z
+                .string()
+                .nullable()
+                .describe("Position description"),
+              orgId: z.number().nullable().describe("Organization ID"),
+              orgType: z
+                .enum(["ao", "region", "area", "sector", "nation"])
+                .nullable()
+                .describe("Organization type level"),
+              isActive: z.boolean().describe("Whether the position is active"),
+              created: z.string().describe("Date the position was created"),
+              updated: z
+                .string()
+                .describe("Date the position was last updated"),
+              userIds: z
+                .array(z.number())
+                .describe("User IDs assigned to the position"),
+            }),
+          )
+          .describe("List of positions"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       // Determine org type level for filtering positions
       const [org] = await ctx.db
@@ -239,6 +340,26 @@ export const positionRouter = {
       summary: "Create or update position",
       description: "Create a new position or update an existing one",
     })
+    .output(
+      z.object({
+        position: z
+          .object({
+            id: z.number().describe("Position ID"),
+            name: z.string().describe("Position name"),
+            description: z.string().nullable().describe("Position description"),
+            orgId: z.number().nullable().describe("Organization ID"),
+            orgType: z
+              .enum(["ao", "region", "area", "sector", "nation"])
+              .nullable()
+              .describe("Organization type level"),
+            isActive: z.boolean().describe("Whether the position is active"),
+            created: z.string().describe("Date the position was created"),
+            updated: z.string().describe("Date the position was last updated"),
+          })
+          .nullable()
+          .describe("The created or updated position"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       // For editing, check permission on the position's org
       // For creating, check permission on the target org
@@ -308,6 +429,11 @@ export const positionRouter = {
       summary: "Delete position",
       description: "Soft delete a position by marking it as inactive",
     })
+    .output(
+      z.object({
+        positionId: z.number().describe("Position ID"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const [existingPosition] = await ctx.db
         .select()
@@ -368,6 +494,18 @@ export const positionRouter = {
       description:
         "Replace all position assignments for an org with new assignments",
     })
+    .output(
+      z.object({
+        success: z
+          .boolean()
+          .describe(
+            "Whether the position assignments were updated successfully",
+          ),
+        assignmentCount: z
+          .number()
+          .describe("The number of assignments updated"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const roleCheckResult = await checkHasRoleOnOrg({
         orgId: input.orgId,

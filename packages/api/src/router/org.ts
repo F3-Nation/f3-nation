@@ -49,6 +49,7 @@ interface Org {
   created: string;
   parentOrgName: string;
   parentOrgType: "ao" | "region" | "area" | "sector" | "nation";
+  aoCount: number | null;
 }
 
 // Shared filter schema for orgs (used by both `all` and `count` endpoints)
@@ -213,6 +214,66 @@ export const orgRouter = {
       description:
         "Get a paginated list of organizations (regions, areas, AOs, etc.) filtered by type, status, and other criteria. Supports searching, sorting, and pagination. Organizations are organized hierarchically.",
     })
+    .output(
+      z.object({
+        orgs: z.array(
+          z.object({
+            id: z.number().describe("Organization ID"),
+            parentId: z.number().nullable().describe("Parent organization ID"),
+            name: z.string().describe("Organization name"),
+            orgType: z.enum(OrgType).describe("Organization type"),
+            defaultLocationId: z
+              .number()
+              .nullable()
+              .describe("Default location ID"),
+            description: z
+              .string()
+              .nullable()
+              .describe("Organization description"),
+            isActive: z
+              .boolean()
+              .describe("Whether the organization is active"),
+            logoUrl: z.string().nullable().describe("Organization logo URL"),
+            website: z.string().nullable().describe("Organization website"),
+            email: z.string().nullable().describe("Organization email"),
+            twitter: z
+              .string()
+              .nullable()
+              .describe("Organization Twitter handle"),
+            facebook: z
+              .string()
+              .nullable()
+              .describe("Organization Facebook page"),
+            instagram: z
+              .string()
+              .nullable()
+              .describe("Organization Instagram handle"),
+            lastAnnualReview: z
+              .string()
+              .nullable()
+              .describe("Last annual review date"),
+            meta: z
+              .record(z.unknown())
+              .nullable()
+              .describe("Organization metadata"),
+            created: z.string().describe("Organization creation date"),
+            parentOrgName: z
+              .string()
+              .nullable()
+              .describe("Parent organization name"),
+            parentOrgType: z
+              .enum(OrgType)
+              .nullable()
+              .describe("Parent organization type"),
+            aoCount: z
+              .number()
+              .nullable()
+              .describe("Number of AOs under this organization"),
+          }),
+        ),
+        total: z.number().describe("Total number of organizations"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const pageSize = input.pageSize ?? 10;
       const pageIndex = (input.pageIndex ?? 0) * pageSize;
@@ -303,6 +364,11 @@ export const orgRouter = {
       description:
         "Get the total count of organizations matching the specified filters. Useful for determining pagination requirements.",
     })
+    .output(
+      z.object({
+        count: z.number().describe("Total number of matching organizations"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       // Resolve editable org IDs for "onlyMine" filter
       const editableResult = await resolveEditableOrgIds({
@@ -338,6 +404,27 @@ export const orgRouter = {
       description:
         "Get all organizations that the current user has access to. If user has orgId=1 (F3 Nation), returns all orgs. Otherwise returns only assigned orgs. Supports pagination and sorting.",
     })
+    .output(
+      z.object({
+        orgs: z
+          .array(
+            z.object({
+              id: z.number().describe("Organization ID"),
+              name: z.string().describe("Organization name"),
+              orgType: z.enum(OrgType).describe("Organization type"),
+              parentId: z
+                .number()
+                .nullable()
+                .describe("Parent organization ID"),
+              roles: z
+                .array(z.string())
+                .describe("Roles the user has on this organization"),
+            }),
+          )
+          .describe("List of accessible organizations"),
+        total: z.number().describe("Total number of accessible organizations"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       if (!ctx.session?.id) {
         throw new ORPCError("UNAUTHORIZED", {
@@ -556,6 +643,59 @@ export const orgRouter = {
       description:
         "Retrieve detailed information about a specific organization including its structure, metadata, and parent/child relationships",
     })
+    .output(
+      z.object({
+        org: z
+          .object({
+            id: z.number().describe("Organization ID"),
+            parentId: z.number().nullable().describe("Parent organization ID"),
+            name: z.string().describe("Organization name"),
+            orgType: z.enum(OrgType).describe("Organization type"),
+            defaultLocationId: z
+              .number()
+              .nullable()
+              .describe("Default location ID"),
+            description: z
+              .string()
+              .nullable()
+              .describe("Organization description"),
+            isActive: z
+              .boolean()
+              .describe("Whether the organization is active"),
+            logoUrl: z.string().nullable().describe("Organization logo URL"),
+            website: z.string().nullable().describe("Organization website"),
+            email: z.string().nullable().describe("Organization email"),
+            twitter: z
+              .string()
+              .nullable()
+              .describe("Organization Twitter handle"),
+            facebook: z
+              .string()
+              .nullable()
+              .describe("Organization Facebook page"),
+            instagram: z
+              .string()
+              .nullable()
+              .describe("Organization Instagram handle"),
+            lastAnnualReview: z
+              .string()
+              .nullable()
+              .describe("Last annual review date"),
+            meta: z
+              .record(z.unknown())
+              .nullable()
+              .describe("Organization metadata"),
+            created: z.string().describe("Organization creation date"),
+            updated: z.string().describe("Organization last updated date"),
+            aoCount: z
+              .number()
+              .nullable()
+              .describe("Number of AOs under this organization"),
+          })
+          .nullable()
+          .describe("The organization"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const [org] = await ctx.db
         .select()
@@ -579,6 +719,59 @@ export const orgRouter = {
       description:
         "Create a new organization or update an existing one. Requires editor role for the organization or its parent. Organizations follow a hierarchical structure (nation → region → area → ao).",
     })
+    .output(
+      z.object({
+        org: z
+          .object({
+            id: z.number().describe("Organization ID"),
+            parentId: z.number().nullable().describe("Parent organization ID"),
+            name: z.string().describe("Organization name"),
+            orgType: z.enum(OrgType).describe("Organization type"),
+            defaultLocationId: z
+              .number()
+              .nullable()
+              .describe("Default location ID"),
+            description: z
+              .string()
+              .nullable()
+              .describe("Organization description"),
+            isActive: z
+              .boolean()
+              .describe("Whether the organization is active"),
+            logoUrl: z.string().nullable().describe("Organization logo URL"),
+            website: z.string().nullable().describe("Organization website"),
+            email: z.string().nullable().describe("Organization email"),
+            twitter: z
+              .string()
+              .nullable()
+              .describe("Organization Twitter handle"),
+            facebook: z
+              .string()
+              .nullable()
+              .describe("Organization Facebook page"),
+            instagram: z
+              .string()
+              .nullable()
+              .describe("Organization Instagram handle"),
+            lastAnnualReview: z
+              .string()
+              .nullable()
+              .describe("Last annual review date"),
+            meta: z
+              .record(z.unknown())
+              .nullable()
+              .describe("Organization metadata"),
+            created: z.string().describe("Organization creation date"),
+            updated: z.string().describe("Organization last updated date"),
+            aoCount: z
+              .number()
+              .nullable()
+              .describe("Number of AOs under this organization"),
+          })
+          .nullable()
+          .describe("The created or updated organization"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const orgIdToCheck = input.id ?? input.parentId;
       if (!orgIdToCheck) {
@@ -679,6 +872,26 @@ export const orgRouter = {
       summary: "Get my organizations",
       description: "Get all organizations where the current user has roles",
     })
+    .output(
+      z.object({
+        orgs: z
+          .array(
+            z.object({
+              id: z.number().describe("Organization ID"),
+              name: z.string().describe("Organization name"),
+              orgType: z.enum(OrgType).describe("Organization type"),
+              parentId: z
+                .number()
+                .nullable()
+                .describe("Parent organization ID"),
+              roles: z
+                .array(z.string())
+                .describe("Roles the user has on this organization"),
+            }),
+          )
+          .describe("List of user's organizations"),
+      }),
+    )
     .handler(async ({ context: ctx }) => {
       if (!ctx.session?.id) {
         throw new ORPCError("UNAUTHORIZED", {
@@ -734,7 +947,15 @@ export const orgRouter = {
       };
     }),
   delete: adminProcedure
-    .input(z.object({ id: z.number(), orgType: z.enum(OrgType).optional() }))
+    .input(
+      z.object({
+        id: z.coerce.number().describe("The ID of the organization to delete"),
+        orgType: z
+          .enum(OrgType)
+          .optional()
+          .describe("The type of the organization to delete"),
+      }),
+    )
     .route({
       method: "DELETE",
       path: "/delete/{id}",
@@ -742,6 +963,11 @@ export const orgRouter = {
       summary: "Delete organization",
       description: "Soft delete an organization by marking it as inactive",
     })
+    .output(
+      z.object({
+        orgId: z.number().describe("The ID of the deleted organization"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const roleCheckResult = await checkHasRoleOnOrg({
         orgId: input.id,

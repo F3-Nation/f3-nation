@@ -2,7 +2,7 @@ import { and, eq, schema } from "@acme/db";
 import { ERRORS } from "@acme/shared/app/errors";
 import { isValidEmail } from "@acme/shared/app/functions";
 import { normalizeEmail } from "@acme/shared/common/functions";
-import { CrupdateUserSchema } from "@acme/validators";
+import { CrupdateUserSchema, UserSelectSchema } from "@acme/validators";
 import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 
@@ -33,6 +33,35 @@ export const userRouter = {
       description:
         "Get a paginated list of users with optional filtering by role, status, and organization. Includes PII fields (email, phone, emergency contacts) if includePii is true and the user is an F3 Nation admin.",
     })
+    .output(
+      z.object({
+        users: z.array(
+          UserSelectSchema.partial()
+            .required({ id: true, status: true, created: true })
+            .extend({
+              roles: z
+                .array(
+                  z.object({
+                    orgId: z.number().describe("Organization ID"),
+                    orgName: z.string().describe("Organization name"),
+                    roleName: z
+                      .enum(["user", "editor", "admin"])
+                      .describe("Role name"),
+                  }),
+                )
+                .describe("User roles"),
+              name: z.string().describe("Full name (firstName + lastName)"),
+              meta: z
+                .record(z.unknown())
+                .nullable()
+                .optional()
+                .describe("User metadata"),
+            }),
+        ),
+        totalCount: z.number().describe("Total number of users"),
+        includePii: z.boolean().describe("Whether PII fields are included"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       // Always set to false by default
       let includePii = false;
@@ -75,6 +104,38 @@ export const userRouter = {
       description:
         "Get a paginated list of users associated with the specified organizations and all their descendant organizations through their roles. PII fields (email, phone, emergency contacts) are only included if the requester is an admin for all of the specified organizations.",
     })
+    .output(
+      z.object({
+        users: z.array(
+          UserSelectSchema.partial()
+            .required({ id: true, status: true, created: true })
+            .extend({
+              roles: z
+                .array(
+                  z.object({
+                    orgId: z.number().describe("Organization ID"),
+                    orgName: z.string().describe("Organization name"),
+                    roleName: z
+                      .enum(["user", "editor", "admin"])
+                      .describe("Role name"),
+                  }),
+                )
+                .describe("User roles"),
+              name: z.string().describe("Full name (firstName + lastName)"),
+              meta: z
+                .record(z.unknown())
+                .nullable()
+                .optional()
+                .describe("User metadata"),
+            }),
+        ),
+        totalCount: z.number().describe("Total number of users"),
+        includePii: z
+          .boolean()
+          .optional()
+          .describe("Whether PII fields are included"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       if (!input?.orgIds || input.orgIds.length === 0) {
         throw new ORPCError("BAD_REQUEST", {
@@ -146,6 +207,32 @@ export const userRouter = {
       description:
         "Retrieve detailed information about a specific user including their roles, status, and organization assignments. PII fields (email, phone) are only included if the requester has admin role for any of the user's organizations.",
     })
+    .output(
+      z.object({
+        user: UserSelectSchema.partial()
+          .required({ id: true })
+          .extend({
+            roles: z
+              .array(
+                z.object({
+                  orgId: z.number().describe("Organization ID"),
+                  orgName: z.string().describe("Organization name"),
+                  roleName: z
+                    .enum(["user", "editor", "admin"])
+                    .describe("Role name"),
+                }),
+              )
+              .describe("User roles"),
+            meta: z
+              .record(z.unknown())
+              .nullable()
+              .optional()
+              .describe("User metadata"),
+          })
+          .nullable(),
+        includePii: z.boolean().describe("Whether PII fields are included"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       let includePii = false;
       if (input?.includePii) {
@@ -203,6 +290,32 @@ export const userRouter = {
       description:
         "Retrieve a user's detailed information and role assignments by email address. PII fields are only included if requester is admin for one of the user's organizations.",
     })
+    .output(
+      z.object({
+        user: UserSelectSchema.partial()
+          .required({ id: true })
+          .extend({
+            roles: z
+              .array(
+                z.object({
+                  orgId: z.number().describe("Organization ID"),
+                  orgName: z.string().describe("Organization name"),
+                  roleName: z
+                    .enum(["user", "editor", "admin"])
+                    .describe("Role name"),
+                }),
+              )
+              .describe("User roles"),
+            meta: z
+              .record(z.unknown())
+              .nullable()
+              .optional()
+              .describe("User metadata"),
+          })
+          .nullable(),
+        includePii: z.boolean().describe("Whether PII fields are included"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const normalizedEmail = normalizeEmail(input.email);
       let includePii = false;
@@ -239,6 +352,24 @@ export const userRouter = {
       description:
         "Create a new user or update an existing one, including role assignments for organizations. Requires admin role for organizations where roles are being assigned. PII fields (email, phone, emergency contacts) can only be set if requester has admin access.",
     })
+    .output(
+      UserSelectSchema.extend({
+        roles: z
+          .array(
+            z.object({
+              orgId: z.number().describe("Organization ID"),
+              orgName: z.string().nullable().describe("Organization name"),
+              roleName: z.string().nullable().describe("Role name"),
+            }),
+          )
+          .describe("User roles"),
+        meta: z
+          .record(z.unknown())
+          .nullable()
+          .optional()
+          .describe("User metadata"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const { roles: rawRoles, ...rest } = input;
       const roles = rawRoles as RoleInput[];

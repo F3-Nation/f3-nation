@@ -351,9 +351,9 @@ describe("Event Type Router", () => {
 
       expect(result).toHaveProperty("eventType");
       expect(Array.isArray(result.eventType)).toBe(true);
-      expect(result.eventType.length).toBeGreaterThan(0);
+      expect(result.eventType?.length).toBeGreaterThan(0);
 
-      const created = result.eventType[0];
+      const created = result.eventType?.[0];
       if (created) {
         expect(created.name).toBe(eventTypeName);
         createdEventTypeIds.push(created.id);
@@ -378,7 +378,7 @@ describe("Event Type Router", () => {
       expect(result).toHaveProperty("eventType");
       expect(Array.isArray(result.eventType)).toBe(true);
 
-      const created = result.eventType[0];
+      const created = result.eventType?.[0];
       if (created) {
         expect(created.name).toBe(eventTypeName);
         expect(created.specificOrgId).toBe(f3Nation.id);
@@ -417,7 +417,7 @@ describe("Event Type Router", () => {
       });
 
       expect(result).toHaveProperty("eventType");
-      const updated = result.eventType[0];
+      const updated = result.eventType?.[0];
       expect(updated?.id).toBe(testEventType.id);
       expect(updated?.name).toBe(updatedName);
     });
