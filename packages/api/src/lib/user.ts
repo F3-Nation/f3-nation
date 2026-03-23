@@ -1,5 +1,6 @@
 import type { SQL } from "@acme/db";
 import {
+  aliasedTable,
   and,
   count,
   eq,
@@ -22,10 +23,16 @@ import { getSortingColumns } from "../get-sorting-columns";
 import type { Context } from "../shared";
 import { withPagination } from "../with-pagination";
 
+interface HomeRegionSummary {
+  homeRegionId: number;
+  homeRegionName: string | null;
+}
+
 interface BuildUserSelectParams {
   includePii: boolean;
   includeEmail?: boolean;
   includeListFields?: boolean;
+  homeRegionOrg?: typeof schema.orgs;
 }
 
 // Shared function to build user select fields
@@ -33,6 +40,7 @@ export const buildUserSelect = ({
   includePii,
   includeEmail = false,
   includeListFields = false,
+  homeRegionOrg,
 }: BuildUserSelectParams) => {
   const columns = getTableColumns(schema.users);
   type Columns = typeof columns;
@@ -40,6 +48,7 @@ export const buildUserSelect = ({
   // Base select fields (non-PII)
   let select: Pick<Columns, "id" | "status" | "created"> & {
     roles: SQL<{ orgId: number; orgName: string; roleName: UserRole }[]>;
+    homeRegion?: SQL<HomeRegionSummary | null>;
   } & Partial<Columns> = {
     id: schema.users.id,
     f3Name: schema.users.f3Name,
@@ -64,6 +73,17 @@ export const buildUserSelect = ({
     created: schema.users.created,
     ...(includeListFields
       ? {
+          ...(homeRegionOrg
+            ? {
+                homeRegion: sql<HomeRegionSummary | null>`CASE
+                  WHEN ${schema.users.homeRegionId} IS NULL THEN NULL
+                  ELSE json_build_object(
+                    'homeRegionId', ${schema.users.homeRegionId},
+                    'homeRegionName', ${homeRegionOrg.name}
+                  )
+                END`,
+              }
+            : {}),
           homeRegionId: schema.users.homeRegionId,
           avatarUrl: schema.users.avatarUrl,
           meta: schema.users.meta,
@@ -212,9 +232,11 @@ export const buildUserListQuery = async ({
     "id",
   );
 
+  const homeRegion = aliasedTable(schema.orgs, "homeRegion");
   const select = buildUserSelect({
     includePii,
     includeListFields: true, // Include list-specific fields
+    homeRegionOrg: homeRegion,
   });
 
   const userIdsQuery = ctx.db
@@ -243,8 +265,9 @@ export const buildUserListQuery = async ({
     )
     .leftJoin(schema.orgs, eq(schema.orgs.id, schema.rolesXUsersXOrg.orgId))
     .leftJoin(schema.roles, eq(schema.roles.id, schema.rolesXUsersXOrg.roleId))
+    .leftJoin(homeRegion, eq(homeRegion.id, schema.users.homeRegionId))
     .where(where)
-    .groupBy(schema.users.id);
+    .groupBy(schema.users.id, homeRegion.id, homeRegion.name);
 
   const users = usePagination
     ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
@@ -254,6 +277,7 @@ export const buildUserListQuery = async ({
     users: users.map((user: (typeof users)[number]) => ({
       ...user,
       name: [user.firstName, user.lastName].join(" ").trim(),
+      homeRegion: user.homeRegion ?? null,
     })),
     totalCount: userCount?.count ?? 0,
     includePii,
@@ -266,6 +290,7 @@ interface BuildSingleUserQueryParams {
   whereCondition: ReturnType<typeof eq>;
   includePii: boolean;
   includeEmail?: boolean;
+  includeListFields?: boolean;
 }
 export const buildSingleUserQuery = async (
   params: BuildSingleUserQueryParams,
@@ -273,14 +298,30 @@ export const buildSingleUserQuery = async (
   user:
     | (Pick<UserSelectType, "id"> & {
         roles: { orgId: number; orgName: string; roleName: UserRole }[];
+        homeRegion?: HomeRegionSummary | null;
+        positions?: {
+          positionId: number;
+          positionName: string;
+          orgId: number;
+          orgName: string | null;
+        }[];
       } & Partial<UserSelectType>)
     | null;
   includePii: boolean;
 }> => {
-  const { ctx, whereCondition, includePii, includeEmail = false } = params;
+  const {
+    ctx,
+    whereCondition,
+    includePii,
+    includeEmail = false,
+    includeListFields = false,
+  } = params;
+  const homeRegion = aliasedTable(schema.orgs, "homeRegion");
   const select = buildUserSelect({
     includePii,
     includeEmail,
+    includeListFields,
+    homeRegionOrg: homeRegion,
   });
 
   const [user] = await ctx.db
@@ -292,11 +333,39 @@ export const buildSingleUserQuery = async (
     )
     .leftJoin(schema.orgs, eq(schema.orgs.id, schema.rolesXUsersXOrg.orgId))
     .leftJoin(schema.roles, eq(schema.roles.id, schema.rolesXUsersXOrg.roleId))
+    .leftJoin(homeRegion, eq(homeRegion.id, schema.users.homeRegionId))
     .where(whereCondition)
-    .groupBy(schema.users.id);
+    .groupBy(schema.users.id, homeRegion.id, homeRegion.name);
+
+  if (!user) {
+    return { user: null, includePii };
+  }
+
+  const positionOrgs = aliasedTable(schema.orgs, "positionOrgs");
+  const positions = await ctx.db
+    .select({
+      positionId: schema.positions.id,
+      positionName: schema.positions.name,
+      orgId: schema.positionsXOrgsXUsers.orgId,
+      orgName: positionOrgs.name,
+    })
+    .from(schema.positionsXOrgsXUsers)
+    .innerJoin(
+      schema.positions,
+      eq(schema.positions.id, schema.positionsXOrgsXUsers.positionId),
+    )
+    .leftJoin(
+      positionOrgs,
+      eq(positionOrgs.id, schema.positionsXOrgsXUsers.orgId),
+    )
+    .where(eq(schema.positionsXOrgsXUsers.userId, user.id));
 
   return {
-    user: user ?? null,
+    user: {
+      ...user,
+      homeRegion: user.homeRegion ?? null,
+      positions,
+    },
     includePii,
   };
 };

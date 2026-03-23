@@ -28,7 +28,12 @@ import { db } from "@acme/db/client";
 import { Client, Header } from "@acme/shared/common/enums";
 import { createRouterClient } from "@orpc/server";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { mockAuthWithSession } from "../__tests__/test-utils";
+import {
+  cleanup,
+  getOrCreateF3NationOrg,
+  mockAuthWithSession,
+  uniqueId,
+} from "../__tests__/test-utils";
 import { router } from "../index";
 
 describe("User Router", () => {
@@ -213,6 +218,97 @@ describe("User Router", () => {
       }
     });
 
+    it("should return homeRegionId, avatarUrl, meta, homeRegion, and positions", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+      const regionName = `ByIdFieldsRegion-${uniqueId()}`;
+      const createdIds: {
+        userId?: number;
+        regionId?: number;
+        positionId?: number;
+      } = {};
+
+      try {
+        const [region] = await db
+          .insert(schema.orgs)
+          .values({
+            name: regionName,
+            orgType: "region",
+            parentId: f3Nation.id,
+            isActive: true,
+          })
+          .returning();
+        if (!region) throw new Error("Failed to create region");
+        createdIds.regionId = region.id;
+
+        const [position] = await db
+          .insert(schema.positions)
+          .values({ name: `Pos-${uniqueId()}`, orgType: "region" })
+          .returning();
+        if (!position) throw new Error("Failed to create position");
+        createdIds.positionId = position.id;
+
+        const email = `byid-fields-${uniqueId()}@example.com`;
+        const [user] = await db
+          .insert(schema.users)
+          .values({
+            email,
+            f3Name: "FieldsTest",
+            homeRegionId: region.id,
+            avatarUrl: "https://example.com/avatar.png",
+          })
+          .returning();
+        if (!user) throw new Error("Failed to create user");
+        createdIds.userId = user.id;
+
+        await db.insert(schema.positionsXOrgsXUsers).values({
+          positionId: position.id,
+          orgId: region.id,
+          userId: user.id,
+        });
+
+        const client = createTestClient();
+        const result = await client.user.byId({
+          id: user.id,
+          includePii: false,
+        });
+
+        expect(result.user).not.toBeNull();
+        expect(result.user).toHaveProperty("homeRegionId", region.id);
+        expect(result.user).toHaveProperty(
+          "avatarUrl",
+          "https://example.com/avatar.png",
+        );
+        expect(result.user).toHaveProperty("meta");
+        expect(result.user?.homeRegion).toEqual({
+          homeRegionId: region.id,
+          homeRegionName: regionName,
+        });
+        expect(result.user?.positions).toEqual([
+          {
+            positionId: position.id,
+            positionName: position.name,
+            orgId: region.id,
+            orgName: regionName,
+          },
+        ]);
+      } finally {
+        if (createdIds.userId) {
+          await db
+            .delete(schema.positionsXOrgsXUsers)
+            .where(eq(schema.positionsXOrgsXUsers.userId, createdIds.userId));
+          await cleanup.user(createdIds.userId);
+        }
+        if (createdIds.positionId) {
+          await db
+            .delete(schema.positions)
+            .where(eq(schema.positions.id, createdIds.positionId));
+        }
+        if (createdIds.regionId) {
+          await cleanup.org(createdIds.regionId);
+        }
+      }
+    });
+
     it("should return null for non-existent user", async () => {
       const client = createTestClient();
       const result = await client.user.byId({
@@ -270,6 +366,97 @@ describe("User Router", () => {
       expect(result.user?.id).toBe(testUser.id);
       // Email should always be included when searching by email
       expect(result.user).toHaveProperty("email");
+    });
+
+    it("should return homeRegionId, avatarUrl, meta, homeRegion, and positions", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+      const regionName = `ByEmailFieldsRegion-${uniqueId()}`;
+      const createdIds: {
+        userId?: number;
+        regionId?: number;
+        positionId?: number;
+      } = {};
+
+      try {
+        const [region] = await db
+          .insert(schema.orgs)
+          .values({
+            name: regionName,
+            orgType: "region",
+            parentId: f3Nation.id,
+            isActive: true,
+          })
+          .returning();
+        if (!region) throw new Error("Failed to create region");
+        createdIds.regionId = region.id;
+
+        const [position] = await db
+          .insert(schema.positions)
+          .values({ name: `Pos-${uniqueId()}`, orgType: "region" })
+          .returning();
+        if (!position) throw new Error("Failed to create position");
+        createdIds.positionId = position.id;
+
+        const email = `byemail-fields-${uniqueId()}@example.com`;
+        const [user] = await db
+          .insert(schema.users)
+          .values({
+            email,
+            f3Name: "EmailFieldsTest",
+            homeRegionId: region.id,
+            avatarUrl: "https://example.com/avatar2.png",
+          })
+          .returning();
+        if (!user) throw new Error("Failed to create user");
+        createdIds.userId = user.id;
+
+        await db.insert(schema.positionsXOrgsXUsers).values({
+          positionId: position.id,
+          orgId: region.id,
+          userId: user.id,
+        });
+
+        const client = createTestClient();
+        const result = await client.user.byEmail({
+          email,
+          includePii: false,
+        });
+
+        expect(result.user).not.toBeNull();
+        expect(result.user).toHaveProperty("homeRegionId", region.id);
+        expect(result.user).toHaveProperty(
+          "avatarUrl",
+          "https://example.com/avatar2.png",
+        );
+        expect(result.user).toHaveProperty("meta");
+        expect(result.user?.homeRegion).toEqual({
+          homeRegionId: region.id,
+          homeRegionName: regionName,
+        });
+        expect(result.user?.positions).toEqual([
+          {
+            positionId: position.id,
+            positionName: position.name,
+            orgId: region.id,
+            orgName: regionName,
+          },
+        ]);
+      } finally {
+        if (createdIds.userId) {
+          await db
+            .delete(schema.positionsXOrgsXUsers)
+            .where(eq(schema.positionsXOrgsXUsers.userId, createdIds.userId));
+          await cleanup.user(createdIds.userId);
+        }
+        if (createdIds.positionId) {
+          await db
+            .delete(schema.positions)
+            .where(eq(schema.positions.id, createdIds.positionId));
+        }
+        if (createdIds.regionId) {
+          await cleanup.org(createdIds.regionId);
+        }
+      }
     });
 
     it("should return null for non-existent email", async () => {

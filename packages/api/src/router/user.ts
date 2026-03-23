@@ -176,6 +176,7 @@ export const userRouter = {
         ctx,
         whereCondition: eq(schema.users.id, input.id),
         includePii,
+        includeListFields: true,
       });
     }),
   byEmail: editorProcedure
@@ -225,6 +226,7 @@ export const userRouter = {
         whereCondition: eq(schema.users.email, normalizedEmail),
         includePii,
         includeEmail: true, // Always include email when searching by email
+        includeListFields: true,
       });
     }),
   crupdate: adminProcedure
