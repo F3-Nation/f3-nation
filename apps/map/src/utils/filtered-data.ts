@@ -68,12 +68,7 @@ export const filterData = <
         (!filters.Ruck ||
           event.eventTypes.some((type) => type.name === "Ruck")) &&
         (!filters.Swim ||
-          event.eventTypes.some((type) => type.name === "Swimming")) &&
-        (!filters.CSAUPs ||
-          event.eventTypes.some((type) => type.name === "CSAUPs")) &&
-        (!filters.Convergence ||
-          event.eventTypes.some((type) => type.name === "Convergence")) &&
-        (!filters.GTE || event.eventTypes.some((type) => type.name === "GTE"));
+          event.eventTypes.some((type) => type.name === "Swimming"));
 
       // // Check if the after time filter matches the station's end time
       let includeThisLocationMarkerOnTime = true;

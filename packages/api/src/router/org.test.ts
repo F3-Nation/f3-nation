@@ -94,12 +94,26 @@ describe("Org Router", () => {
       }
 
       const client = createTestClient();
+
+      // Use searchTerm to scope queries to only our test orgs
+      const all = await client.org.all({
+        orgTypes: ["region"],
+        searchTerm: prefix,
+        pageIndex: 0,
+        pageSize: 100,
+      });
+
+      expect(all.total).toBeGreaterThanOrEqual(3);
+
       const page1 = await client.org.all({
         orgTypes: ["region"],
         searchTerm: prefix,
         pageIndex: 0,
         pageSize: 2,
       });
+
+      expect(page1.orgs.length).toBe(2);
+      expect(page1.total).toBe(all.total);
 
       const page2 = await client.org.all({
         orgTypes: ["region"],

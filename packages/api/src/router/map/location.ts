@@ -37,12 +37,15 @@ export const mapLocationRouter = os.router({
     )
     .handler(async ({ context: ctx }) => {
       const aoOrg = aliasedTable(schema.orgs, "ao_org");
+      const regionOrg = aliasedTable(schema.orgs, "region_org");
       const locationsAndEvents = await ctx.db
         .select({
           locations: {
             id: schema.locations.id,
             name: aoOrg.name,
-            logo: aoOrg.logoUrl,
+            logo: sql<
+              string | null
+            >`COALESCE(NULLIF(${aoOrg.logoUrl}, ''), NULLIF(${regionOrg.logoUrl}, ''))`,
             lat: schema.locations.latitude,
             lon: schema.locations.longitude,
             locationAddress: schema.locations.addressStreet,
@@ -85,6 +88,13 @@ export const mapLocationRouter = os.router({
         )
         .leftJoin(aoOrg, eq(schema.events.orgId, aoOrg.id))
         .leftJoin(
+          regionOrg,
+          and(
+            eq(regionOrg.id, aoOrg.parentId),
+            eq(regionOrg.orgType, "region"),
+          ),
+        )
+        .leftJoin(
           schema.eventsXEventTypes,
           eq(schema.eventsXEventTypes.eventId, schema.events.id),
         )
@@ -97,6 +107,7 @@ export const mapLocationRouter = os.router({
           schema.locations.id,
           aoOrg.name,
           aoOrg.logoUrl,
+          regionOrg.logoUrl,
           schema.events.id,
         );
 

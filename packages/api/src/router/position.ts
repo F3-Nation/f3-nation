@@ -24,17 +24,32 @@ export const positionRouter = {
       z
         .object({
           /** The org to get positions for (includes nation-wide positions) */
-          orgId: z.coerce.number().optional(),
+          orgId: z.coerce
+            .number()
+            .optional()
+            .describe(
+              "The org to get positions for (includes nation-wide positions)",
+            ),
           /** Filter by org type level (ao, region, etc.) */
           orgType: z
             .enum(["ao", "region", "area", "sector", "nation"])
-            .optional(),
+            .optional()
+            .describe("Filter by org type level (ao, region, etc.)"),
           /** Only get org-specific positions (exclude nation-wide) */
-          ignoreGlobalPositions: z.coerce.boolean().optional(),
+          ignoreGlobalPositions: z.coerce
+            .boolean()
+            .optional()
+            .describe("Only get org-specific positions (exclude nation-wide)"),
           /** Filter by active status */
-          isActive: z.coerce.boolean().optional(),
+          isActive: z.coerce
+            .boolean()
+            .optional()
+            .describe("Filter by active status. Defaults to true"),
         })
-        .optional(),
+        .optional()
+        .describe(
+          "Optional filters for listing positions by org, type, and status",
+        ),
     )
     .route({
       method: "GET",
@@ -112,8 +127,13 @@ export const positionRouter = {
   byOrgId: protectedProcedure
     .input(
       z.object({
-        orgId: z.coerce.number(),
-        isActive: z.coerce.boolean().optional(),
+        orgId: z.coerce
+          .number()
+          .describe("The ID of the organization to get positions for"),
+        isActive: z.coerce
+          .boolean()
+          .optional()
+          .describe("Filter by active status. Defaults to true"),
       }),
     )
     .route({
@@ -171,7 +191,11 @@ export const positionRouter = {
    * Get a single position by ID
    */
   byId: protectedProcedure
-    .input(z.object({ id: z.coerce.number() }))
+    .input(
+      z.object({
+        id: z.coerce.number().describe("The ID of the position to retrieve"),
+      }),
+    )
     .route({
       method: "GET",
       path: "/id/{id}",
@@ -222,9 +246,16 @@ export const positionRouter = {
     .input(
       z.object({
         /** The org (AO or region) to get assignments for */
-        orgId: z.coerce.number(),
+        orgId: z.coerce
+          .number()
+          .describe("The org (AO or region) to get assignments for"),
         /** The region org ID (to determine what positions to show) */
-        regionOrgId: z.coerce.number().optional(),
+        regionOrgId: z.coerce
+          .number()
+          .optional()
+          .describe(
+            "The region org ID (to determine what positions to show). Defaults to orgId",
+          ),
       }),
     )
     .route({
@@ -421,7 +452,11 @@ export const positionRouter = {
    * Soft delete a position (set isActive to false)
    */
   delete: editorProcedure
-    .input(z.object({ id: z.coerce.number() }))
+    .input(
+      z.object({
+        id: z.coerce.number().describe("The ID of the position to delete"),
+      }),
+    )
     .route({
       method: "DELETE",
       path: "/id/{id}",
@@ -559,5 +594,132 @@ export const positionRouter = {
       }
 
       return { success: true, assignmentCount: newAssignments.length };
+    }),
+
+  /**
+   * Delete a single position assignment.
+   * Removes a specific user from a specific position at a specific org.
+   */
+  deleteAssignment: editorProcedure
+    .input(
+      z.object({
+        positionId: z.coerce
+          .number()
+          .describe("The ID of the position to unassign"),
+        orgId: z.coerce
+          .number()
+          .describe("The ID of the organization the assignment belongs to"),
+        userId: z.coerce
+          .number()
+          .describe("The ID of the user to remove from the position"),
+      }),
+    )
+    .route({
+      method: "DELETE",
+      path: "/assignments/org/{orgId}/position/{positionId}/user/{userId}",
+      tags: ["position"],
+      summary: "Delete a single position assignment",
+      description:
+        "Remove a specific user from a specific position at a specific org. Returns success even if the assignment did not exist.",
+    })
+    .handler(async ({ context: ctx, input }) => {
+      const roleCheckResult = await checkHasRoleOnOrg({
+        orgId: input.orgId,
+        session: ctx.session,
+        db: ctx.db,
+        roleName: "editor",
+      });
+
+      if (!roleCheckResult.success) {
+        throw new ORPCError("UNAUTHORIZED", {
+          message:
+            "You are not authorized to manage position assignments for this org",
+        });
+      }
+
+      const result = await ctx.db
+        .delete(schema.positionsXOrgsXUsers)
+        .where(
+          and(
+            eq(schema.positionsXOrgsXUsers.positionId, input.positionId),
+            eq(schema.positionsXOrgsXUsers.orgId, input.orgId),
+            eq(schema.positionsXOrgsXUsers.userId, input.userId),
+          ),
+        )
+        .returning({ positionId: schema.positionsXOrgsXUsers.positionId });
+
+      return {
+        success: true,
+        found: result.length > 0,
+        message:
+          result.length > 0
+            ? "Assignment deleted"
+            : "No matching assignment found",
+      };
+    }),
+
+  /**
+   * Get position assignments for a specific user.
+   * Returns all position assignments across all orgs for the given user,
+   * including position and org details.
+   */
+  getAssignmentsByUserId: protectedProcedure
+    .input(
+      z.object({
+        userId: z.coerce
+          .number()
+          .describe("The ID of the user to get position assignments for"),
+        includeInactive: z.coerce
+          .boolean()
+          .default(false)
+          .describe(
+            "Include assignments where the position or user is inactive. Defaults to false",
+          ),
+      }),
+    )
+    .route({
+      method: "GET",
+      path: "/assignments/user/{userId}",
+      tags: ["position"],
+      summary: "Get position assignments by user",
+      description:
+        "Get all position assignments for a specific user across all orgs, including position name and org name. By default only returns assignments where both the position and user are active.",
+    })
+    .handler(async ({ context: ctx, input }) => {
+      const assignments = await ctx.db
+        .select({
+          positionId: schema.positionsXOrgsXUsers.positionId,
+          positionName: schema.positions.name,
+          orgId: schema.positionsXOrgsXUsers.orgId,
+          orgName: schema.orgs.name,
+          orgType: schema.positions.orgType,
+        })
+        .from(schema.positionsXOrgsXUsers)
+        .innerJoin(
+          schema.positions,
+          eq(schema.positions.id, schema.positionsXOrgsXUsers.positionId),
+        )
+        .innerJoin(
+          schema.orgs,
+          eq(schema.orgs.id, schema.positionsXOrgsXUsers.orgId),
+        )
+        .innerJoin(
+          schema.users,
+          eq(schema.users.id, schema.positionsXOrgsXUsers.userId),
+        )
+        .where(
+          and(
+            eq(schema.positionsXOrgsXUsers.userId, input.userId),
+            input.includeInactive
+              ? undefined
+              : eq(schema.positions.isActive, true),
+            input.includeInactive
+              ? undefined
+              : eq(schema.users.status, "active"),
+          ),
+        )
+        .orderBy(asc(schema.orgs.name), asc(schema.positions.name));
+
+      return { assignments };
     }),
 };

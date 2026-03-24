@@ -87,7 +87,7 @@ importers:
   apps/api:
     dependencies:
       '@acme/api':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../../packages/api
       '@acme/auth':
         specifier: workspace:^0.1.0
@@ -310,7 +310,7 @@ importers:
   apps/map:
     dependencies:
       '@acme/api':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../../packages/api
       '@acme/auth':
         specifier: workspace:^0.1.0
@@ -707,7 +707,7 @@ importers:
         version: 0.6.3(nodemailer@6.10.0)
       next:
         specifier: ^15.3.6
-        version: 15.5.9(@babel/core@7.23.9)(@opentelemetry/api@1.9.0)(@playwright/test@1.52.0)(react-dom@18.3.1)(react@18.3.1)
+        version: 15.5.9(@babel/core@7.28.5)(@opentelemetry/api@1.9.0)(@playwright/test@1.52.0)(react-dom@18.3.1)(react@18.3.1)
       next-auth:
         specifier: 5.0.0-beta.25
         version: 5.0.0-beta.25(next@15.5.9)(nodemailer@6.10.0)(react@18.3.1)
@@ -16518,7 +16518,7 @@ packages:
         optional: true
     dependencies:
       '@auth/core': 0.37.2(nodemailer@6.10.0)
-      next: 15.5.9(@babel/core@7.23.9)(@opentelemetry/api@1.9.0)(@playwright/test@1.52.0)(react-dom@18.3.1)(react@18.3.1)
+      next: 15.5.9(@babel/core@7.28.5)(@opentelemetry/api@1.9.0)(@playwright/test@1.52.0)(react-dom@18.3.1)(react@18.3.1)
       nodemailer: 6.10.0
       react: 18.3.1
     dev: false
@@ -16542,7 +16542,7 @@ packages:
       react: '*'
       react-dom: '*'
     dependencies:
-      next: 15.5.9(@babel/core@7.23.9)(@opentelemetry/api@1.9.0)(@playwright/test@1.52.0)(react-dom@18.3.1)(react@18.3.1)
+      next: 15.5.9(@babel/core@7.28.5)(@opentelemetry/api@1.9.0)(@playwright/test@1.52.0)(react-dom@18.3.1)(react@18.3.1)
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
     dev: false

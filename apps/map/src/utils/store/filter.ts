@@ -49,9 +49,6 @@ export const initialFilterState = {
   Run: false,
   beforeAfterDirection: "before" as "before" | "after",
   beforeAfterTime: TimeSelection.none,
-  CSAUPs: false,
-  Convergence: false,
-  GTE: false,
   position: { latitude: 0, longitude: 0 },
 };
 
