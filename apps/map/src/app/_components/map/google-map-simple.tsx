@@ -1,5 +1,5 @@
-import { useEffect } from "react";
 import { APIProvider, Map, Marker, useMap } from "@vis.gl/react-google-maps";
+import { useEffect } from "react";
 
 import { DEFAULT_CENTER } from "@acme/shared/app/constants";
 
@@ -68,4 +68,3 @@ const ProvidedGoogleMapSimple = ({
     </Map>
   );
 };
-
