@@ -508,8 +508,8 @@ export const orgRouter = {
         };
       }
 
-      // Otherwise, return only the user's assigned orgs (same logic as `mine`)
-      const orgsQuery = await ctx.db
+      // Get the user's direct role assignments
+      const directRolesQuery = await ctx.db
         .select()
         .from(schema.rolesXUsersXOrg)
         .innerJoin(
@@ -520,45 +520,54 @@ export const orgRouter = {
           schema.roles,
           eq(schema.rolesXUsersXOrg.roleId, schema.roles.id),
         )
+        .where(eq(schema.rolesXUsersXOrg.userId, ctx.session.id));
+
+      // Build a map of orgId -> role names for the user's direct assignments
+      const directRolesMap = new Map<string, string[]>();
+      for (const row of directRolesQuery) {
+        const orgId = row.orgs.id;
+        const key = String(orgId);
+        const existing = directRolesMap.get(key) ?? [];
+        if (row.roles?.name) {
+          existing.push(row.roles.name);
+        }
+        directRolesMap.set(key, existing);
+      }
+
+      // Get all editable orgs (includes descendants via hierarchy traversal)
+      const { editableOrgs } = await getEditableOrgIdsForUser(ctx);
+      const editableOrgIds = editableOrgs
+        .map((o) => o.id)
+        .filter((id): id is number => id !== null);
+
+      if (editableOrgIds.length === 0) {
+        return { orgs: [], total: 0 };
+      }
+
+      // Query full org details for all editable orgs
+      const editableOrgsData = await ctx.db
+        .select({
+          id: schema.orgs.id,
+          name: schema.orgs.name,
+          orgType: schema.orgs.orgType,
+          parentId: schema.orgs.parentId,
+        })
+        .from(schema.orgs)
         .where(
           and(
-            eq(schema.rolesXUsersXOrg.userId, ctx.session.id),
+            inArray(schema.orgs.id, editableOrgIds),
             input?.orgTypes?.length
               ? inArray(schema.orgs.orgType, input.orgTypes)
               : undefined,
           ),
         );
 
-      // Reduce multiple rows per org down to one row per org with possibly multiple roles
-      const orgMap: Record<
-        number,
-        {
-          orgs: (typeof orgsQuery)[number]["orgs"];
-          roles_x_users_x_org: (typeof orgsQuery)[number]["roles_x_users_x_org"];
-          roles: (typeof orgsQuery)[number]["roles"]["name"][];
-        }
-      > = {};
-
-      for (const row of orgsQuery) {
-        const orgId = row.orgs.id;
-        if (!orgMap[orgId]) {
-          orgMap[orgId] = {
-            orgs: row.orgs,
-            roles_x_users_x_org: row.roles_x_users_x_org,
-            roles: [],
-          };
-        }
-        if (row.roles?.name) {
-          orgMap[orgId]?.roles.push(row.roles.name);
-        }
-      }
-
-      const allAssignedOrgs = Object.values(orgMap).map((org) => ({
-        id: org.orgs.id,
-        name: org.orgs.name,
-        orgType: org.orgs.orgType,
-        parentId: org.orgs.parentId,
-        roles: org.roles,
+      const allAssignedOrgs = editableOrgsData.map((org) => ({
+        id: org.id,
+        name: org.name,
+        orgType: org.orgType,
+        parentId: org.parentId,
+        roles: directRolesMap.get(String(org.id)) ?? [],
       }));
 
       // Sort the orgs array manually since we're working with in-memory data
