@@ -435,7 +435,7 @@ export const mapLocationRouter = os.router({
         ),
       };
 
-      return { location: locationWithEvents, message: null };
+      return { location: locationWithEvents, message: undefined };
     }),
   regions: protectedProcedure
     .route({

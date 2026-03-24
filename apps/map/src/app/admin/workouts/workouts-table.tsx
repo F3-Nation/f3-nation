@@ -158,7 +158,7 @@ export const WorkoutsTable = () => {
   );
 };
 
-type WorkoutEvent = RouterOutputs["event"]["all"]["events"][number];
+type WorkoutEvent = RouterOutputs["map"]["event"]["all"]["events"][number];
 
 const columns: TableOptions<WorkoutEvent>["columns"] = [
   {
@@ -175,7 +175,8 @@ const columns: TableOptions<WorkoutEvent>["columns"] = [
       <Cell {...cell}>
         {Array.isArray(cell.row.original.regions)
           ? cell.row.original.regions
-              .map((region: { regionName: string }) => region.regionName)
+              .map((region) => region.regionName ?? "")
+              .filter(Boolean)
               .join(", ")
           : ""}
       </Cell>
