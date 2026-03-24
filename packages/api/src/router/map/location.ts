@@ -424,7 +424,7 @@ export const mapLocationRouter = os.router({
         ),
       };
 
-      return { location: locationWithEvents };
+      return { location: locationWithEvents, message: null };
     }),
   regions: protectedProcedure
     .route({
