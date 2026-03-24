@@ -48,7 +48,7 @@ export const WorkoutsTable = () => {
   const [onlyMine, setOnlyMine] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const { data: workouts } = useQuery(
-    orpc.event.all.queryOptions({
+    orpc.map.event.all.queryOptions({
       input: {
         pageIndex: pagination.pageIndex,
         pageSize: pagination.pageSize,
