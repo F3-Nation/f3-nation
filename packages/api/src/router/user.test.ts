@@ -209,7 +209,7 @@ describe("User Router", () => {
         });
 
         expect(result).toHaveProperty("user");
-        expect(result.user).not.toBeNull();
+        expect(result.user).toBeDefined();
         expect(result.user?.id).toBe(testUser.id);
         expect(result.includePii).toBe(false);
 
@@ -336,6 +336,40 @@ describe("User Router", () => {
 
         expect(result.user?.id).toBe(testUser.id);
       }
+    });
+
+    it("should return the user's home region details", async () => {
+      const client = createTestClient();
+
+      const [testUser] = await db
+        .select({ id: schema.users.id })
+        .from(schema.users)
+        .limit(1);
+      const [testRegion] = await db
+        .select({ id: schema.orgs.id, name: schema.orgs.name })
+        .from(schema.orgs)
+        .where(eq(schema.orgs.orgType, "region"))
+        .limit(1);
+
+      if (!testUser || !testRegion) {
+        return;
+      }
+
+      await db
+        .update(schema.users)
+        .set({ homeRegionId: testRegion.id })
+        .where(eq(schema.users.id, testUser.id));
+
+      const result = await client.user.byId({
+        id: testUser.id,
+        includePii: false,
+      });
+
+      expect(result.user?.homeRegionId).toBe(testRegion.id);
+      expect(result.user?.homeRegion).toEqual({
+        homeRegionId: testRegion.id,
+        homeRegionName: testRegion.name,
+      });
     });
   });
 
@@ -832,6 +866,253 @@ describe("User Router", () => {
           roles: [],
         }),
       ).rejects.toThrow("already exists");
+    });
+
+    it("should reject update when admin does not manage user's home region", async () => {
+      const dbInstance = db;
+
+      // Create two region orgs
+      const [regionA] = await dbInstance
+        .insert(schema.orgs)
+        .values({
+          name: `RegionA-${Date.now()}`,
+          orgType: "region",
+          isActive: true,
+        })
+        .returning();
+      const [regionB] = await dbInstance
+        .insert(schema.orgs)
+        .values({
+          name: `RegionB-${Date.now()}`,
+          orgType: "region",
+          isActive: true,
+        })
+        .returning();
+
+      if (!regionA || !regionB)
+        throw new Error("Failed to create test regions");
+
+      // Create a user with homeRegionId = regionB
+      const [testUser] = await dbInstance
+        .insert(schema.users)
+        .values({
+          email: `hr-test-${Date.now()}@example.com`,
+          f3Name: "HomeRegionTest",
+          homeRegionId: regionB.id,
+        })
+        .returning();
+
+      if (!testUser) throw new Error("Failed to create test user");
+
+      // Mock session as admin of regionA only
+      const mockSession: Session = {
+        id: 1,
+        email: "admin-a@example.com",
+        user: {
+          id: "1",
+          email: "admin-a@example.com",
+          name: "AdminA",
+          roles: [
+            { orgId: regionA.id, orgName: regionA.name, roleName: "admin" },
+          ],
+        },
+        roles: [
+          { orgId: regionA.id, orgName: regionA.name, roleName: "admin" },
+        ],
+        expires: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
+      };
+      await mockAuthWithSession(mockSession);
+
+      const client = createTestClient();
+
+      await expect(
+        client.user.crupdate({
+          id: testUser.id,
+          f3Name: "Updated",
+          roles: [],
+        }),
+      ).rejects.toThrow(
+        "You can only modify users whose home region you manage",
+      );
+
+      // Clean up
+      await dbInstance
+        .delete(schema.users)
+        .where(eq(schema.users.id, testUser.id));
+      await dbInstance
+        .delete(schema.orgs)
+        .where(eq(schema.orgs.id, regionA.id));
+      await dbInstance
+        .delete(schema.orgs)
+        .where(eq(schema.orgs.id, regionB.id));
+    });
+
+    it("should allow update when user has null home region", async () => {
+      const dbInstance = db;
+
+      let [f3Nation] = await dbInstance
+        .select({ id: schema.orgs.id })
+        .from(schema.orgs)
+        .where(
+          and(
+            eq(schema.orgs.orgType, "nation"),
+            eq(schema.orgs.name, "F3 Nation"),
+          ),
+        )
+        .limit(1);
+
+      if (!f3Nation) {
+        const [created] = await dbInstance
+          .insert(schema.orgs)
+          .values({ name: "F3 Nation", orgType: "nation", isActive: true })
+          .returning();
+        f3Nation = created;
+      }
+
+      if (!f3Nation) throw new Error("F3 Nation org not found");
+
+      // Create a region for the admin
+      const [region] = await dbInstance
+        .insert(schema.orgs)
+        .values({
+          name: `Region-${Date.now()}`,
+          orgType: "region",
+          isActive: true,
+          parentId: f3Nation.id,
+        })
+        .returning();
+
+      if (!region) throw new Error("Failed to create test region");
+
+      // Create a user with no home region
+      const [testUser] = await dbInstance
+        .insert(schema.users)
+        .values({
+          email: `null-hr-${Date.now()}@example.com`,
+          f3Name: "NullHomeRegion",
+          homeRegionId: null,
+        })
+        .returning();
+
+      if (!testUser) throw new Error("Failed to create test user");
+
+      // Mock session as admin of the region (not nation)
+      const mockSession: Session = {
+        id: 1,
+        email: "region-admin@example.com",
+        user: {
+          id: "1",
+          email: "region-admin@example.com",
+          name: "RegionAdmin",
+          roles: [
+            { orgId: region.id, orgName: region.name, roleName: "admin" },
+          ],
+        },
+        roles: [{ orgId: region.id, orgName: region.name, roleName: "admin" }],
+        expires: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
+      };
+      await mockAuthWithSession(mockSession);
+
+      const client = createTestClient();
+
+      const result = await client.user.crupdate({
+        id: testUser.id,
+        f3Name: "Updated",
+        roles: [],
+      });
+
+      expect(result.id).toBe(testUser.id);
+      expect(result.f3Name).toBe("Updated");
+
+      // Clean up
+      await dbInstance
+        .delete(schema.users)
+        .where(eq(schema.users.id, testUser.id));
+      await dbInstance.delete(schema.orgs).where(eq(schema.orgs.id, region.id));
+    });
+
+    it("should allow update when admin manages user's home region", async () => {
+      const dbInstance = db;
+
+      let [f3Nation] = await dbInstance
+        .select({ id: schema.orgs.id })
+        .from(schema.orgs)
+        .where(
+          and(
+            eq(schema.orgs.orgType, "nation"),
+            eq(schema.orgs.name, "F3 Nation"),
+          ),
+        )
+        .limit(1);
+
+      if (!f3Nation) {
+        const [created] = await dbInstance
+          .insert(schema.orgs)
+          .values({ name: "F3 Nation", orgType: "nation", isActive: true })
+          .returning();
+        f3Nation = created;
+      }
+
+      if (!f3Nation) throw new Error("F3 Nation org not found");
+
+      // Create a region
+      const [region] = await dbInstance
+        .insert(schema.orgs)
+        .values({
+          name: `Region-${Date.now()}`,
+          orgType: "region",
+          isActive: true,
+          parentId: f3Nation.id,
+        })
+        .returning();
+
+      if (!region) throw new Error("Failed to create test region");
+
+      // Create a user with homeRegionId set to this region
+      const [testUser] = await dbInstance
+        .insert(schema.users)
+        .values({
+          email: `same-hr-${Date.now()}@example.com`,
+          f3Name: "SameHomeRegion",
+          homeRegionId: region.id,
+        })
+        .returning();
+
+      if (!testUser) throw new Error("Failed to create test user");
+
+      // Mock session as admin of that same region
+      const mockSession: Session = {
+        id: 1,
+        email: "region-admin@example.com",
+        user: {
+          id: "1",
+          email: "region-admin@example.com",
+          name: "RegionAdmin",
+          roles: [
+            { orgId: region.id, orgName: region.name, roleName: "admin" },
+          ],
+        },
+        roles: [{ orgId: region.id, orgName: region.name, roleName: "admin" }],
+        expires: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
+      };
+      await mockAuthWithSession(mockSession);
+
+      const client = createTestClient();
+
+      const result = await client.user.crupdate({
+        id: testUser.id,
+        f3Name: "UpdatedByRegionAdmin",
+        roles: [],
+      });
+
+      expect(result.id).toBe(testUser.id);
+      expect(result.f3Name).toBe("UpdatedByRegionAdmin");
+
+      // Clean up
+      await dbInstance
+        .delete(schema.users)
+        .where(eq(schema.users.id, testUser.id));
+      await dbInstance.delete(schema.orgs).where(eq(schema.orgs.id, region.id));
     });
   });
 

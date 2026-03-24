@@ -18,7 +18,9 @@ import {
   buildUserListQuery,
   checkUserPiiAccess,
   isDuplicateEmailError,
+  userDetailOutputSchema,
   userListInputSchema,
+  userListUserOutputSchema,
 } from "../lib/user";
 import { adminProcedure, editorProcedure } from "../shared";
 
@@ -35,29 +37,7 @@ export const userRouter = {
     })
     .output(
       z.object({
-        users: z.array(
-          UserSelectSchema.partial()
-            .required({ id: true, status: true, created: true })
-            .extend({
-              roles: z
-                .array(
-                  z.object({
-                    orgId: z.number().describe("Organization ID"),
-                    orgName: z.string().describe("Organization name"),
-                    roleName: z
-                      .enum(["user", "editor", "admin"])
-                      .describe("Role name"),
-                  }),
-                )
-                .describe("User roles"),
-              name: z.string().describe("Full name (firstName + lastName)"),
-              meta: z
-                .record(z.unknown())
-                .nullable()
-                .optional()
-                .describe("User metadata"),
-            }),
-        ),
+        users: z.array(userListUserOutputSchema),
         totalCount: z.number().describe("Total number of users"),
         includePii: z.boolean().describe("Whether PII fields are included"),
       }),
@@ -106,29 +86,7 @@ export const userRouter = {
     })
     .output(
       z.object({
-        users: z.array(
-          UserSelectSchema.partial()
-            .required({ id: true, status: true, created: true })
-            .extend({
-              roles: z
-                .array(
-                  z.object({
-                    orgId: z.number().describe("Organization ID"),
-                    orgName: z.string().describe("Organization name"),
-                    roleName: z
-                      .enum(["user", "editor", "admin"])
-                      .describe("Role name"),
-                  }),
-                )
-                .describe("User roles"),
-              name: z.string().describe("Full name (firstName + lastName)"),
-              meta: z
-                .record(z.unknown())
-                .nullable()
-                .optional()
-                .describe("User metadata"),
-            }),
-        ),
+        users: z.array(userListUserOutputSchema),
         totalCount: z.number().describe("Total number of users"),
         includePii: z
           .boolean()
@@ -157,6 +115,7 @@ export const userRouter = {
       let includePii = false;
 
       if (input?.includePii) {
+        includePii = true;
         // Check if user is an admin for all of the specified parent orgs
         // (not all descendants, just the ones they requested)
         for (const orgId of input.orgIds) {
@@ -171,7 +130,6 @@ export const userRouter = {
             break;
           }
         }
-        includePii = true;
       }
 
       // Update input to use all descendant org IDs
@@ -209,27 +167,7 @@ export const userRouter = {
     })
     .output(
       z.object({
-        user: UserSelectSchema.partial()
-          .required({ id: true })
-          .extend({
-            roles: z
-              .array(
-                z.object({
-                  orgId: z.number().describe("Organization ID"),
-                  orgName: z.string().describe("Organization name"),
-                  roleName: z
-                    .enum(["user", "editor", "admin"])
-                    .describe("Role name"),
-                }),
-              )
-              .describe("User roles"),
-            meta: z
-              .record(z.unknown())
-              .nullable()
-              .optional()
-              .describe("User metadata"),
-          })
-          .nullable(),
+        user: userDetailOutputSchema.nullable(),
         includePii: z.boolean().describe("Whether PII fields are included"),
       }),
     )
@@ -292,27 +230,7 @@ export const userRouter = {
     })
     .output(
       z.object({
-        user: UserSelectSchema.partial()
-          .required({ id: true })
-          .extend({
-            roles: z
-              .array(
-                z.object({
-                  orgId: z.number().describe("Organization ID"),
-                  orgName: z.string().describe("Organization name"),
-                  roleName: z
-                    .enum(["user", "editor", "admin"])
-                    .describe("Role name"),
-                }),
-              )
-              .describe("User roles"),
-            meta: z
-              .record(z.unknown())
-              .nullable()
-              .optional()
-              .describe("User metadata"),
-          })
-          .nullable(),
+        user: userDetailOutputSchema.nullable(),
         includePii: z.boolean().describe("Whether PII fields are included"),
       }),
     )
@@ -342,7 +260,7 @@ export const userRouter = {
         includeListFields: true,
       });
     }),
-  crupdate: adminProcedure
+  crupdate: editorProcedure
     .input(CrupdateUserSchema)
     .route({
       method: "POST",
@@ -373,6 +291,28 @@ export const userRouter = {
     .handler(async ({ context: ctx, input }) => {
       const { roles: rawRoles, ...rest } = input;
       const roles = rawRoles as RoleInput[];
+
+      // Enforce home-region authorization for existing users
+      if (input.id && ctx.session?.id !== input.id) {
+        const [existingUser] = await ctx.db
+          .select({ homeRegionId: schema.users.homeRegionId })
+          .from(schema.users)
+          .where(eq(schema.users.id, input.id));
+
+        if (existingUser?.homeRegionId) {
+          const { success } = await checkHasRoleOnOrg({
+            orgId: existingUser.homeRegionId,
+            session: ctx.session,
+            db: ctx.db,
+            roleName: "editor",
+          });
+          if (!success) {
+            throw new ORPCError("UNAUTHORIZED", {
+              message: "You can only modify users whose home region you manage",
+            });
+          }
+        }
+      }
 
       // Check if this is an update (has id) and if requester has PII access
       let hasPiiAccess = false;

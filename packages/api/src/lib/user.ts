@@ -15,6 +15,7 @@ import {
 import { UserRole, UserStatus } from "@acme/shared/app/enums";
 import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
 import { normalizeEmail } from "@acme/shared/common/functions";
+import { UserSelectSchema } from "@acme/validators";
 import type { UserSelectType } from "@acme/validators";
 import { z } from "zod";
 
@@ -33,6 +34,11 @@ interface BuildUserSelectParams {
   includeEmail?: boolean;
   includeListFields?: boolean;
   homeRegionOrg?: typeof schema.orgs;
+}
+
+interface HomeRegionSummary {
+  homeRegionId: number;
+  homeRegionName: string | null;
 }
 
 // Shared function to build user select fields
@@ -162,6 +168,11 @@ export const userListInputSchema = z.object({
     .describe(
       "Filter users by organization ID(s). Returns users with roles in ANY of the specified organizations.",
     ),
+  homeRegionIds: arrayOrSingle(z.coerce.number())
+    .optional()
+    .describe(
+      "Filter users by home region ID(s). Returns users whose home region matches ANY of the specified regions.",
+    ),
   includePii: z.coerce
     .boolean()
     .optional()
@@ -170,6 +181,70 @@ export const userListInputSchema = z.object({
       "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is an F3 Nation admin.",
     ),
 });
+
+export const userListUserOutputSchema = UserSelectSchema.partial()
+  .required({ id: true, status: true, created: true })
+  .extend({
+    roles: z
+      .array(
+        z.object({
+          orgId: z.number().describe("Organization ID"),
+          orgName: z.string().describe("Organization name"),
+          roleName: z.enum(["user", "editor", "admin"]).describe("Role name"),
+        }),
+      )
+      .describe("User roles"),
+    name: z.string().describe("Full name (firstName + lastName)"),
+    meta: z.record(z.unknown()).nullable().optional().describe("User metadata"),
+    homeRegion: z
+      .object({
+        homeRegionId: z.number().describe("Home region ID"),
+        homeRegionName: z
+          .string()
+          .nullable()
+          .describe("Home region display name"),
+      })
+      .nullable()
+      .optional()
+      .describe("User's home region when set"),
+  });
+
+/** User shape for `byId`, `byEmail`, etc. (matches `buildSingleUserQuery`). */
+export const userDetailOutputSchema = UserSelectSchema.partial()
+  .required({ id: true })
+  .extend({
+    roles: z
+      .array(
+        z.object({
+          orgId: z.number().describe("Organization ID"),
+          orgName: z.string().describe("Organization name"),
+          roleName: z.enum(["user", "editor", "admin"]).describe("Role name"),
+        }),
+      )
+      .describe("User roles"),
+    meta: z.record(z.unknown()).nullable().optional().describe("User metadata"),
+    homeRegion: z
+      .object({
+        homeRegionId: z.number().describe("Home region ID"),
+        homeRegionName: z
+          .string()
+          .nullable()
+          .describe("Home region display name"),
+      })
+      .nullable()
+      .optional()
+      .describe("User's home region when set"),
+    positions: z
+      .array(
+        z.object({
+          positionId: z.number().describe("Position ID"),
+          positionName: z.string().describe("Position name"),
+          orgId: z.number().describe("Organization ID"),
+          orgName: z.string().nullable().describe("Organization name"),
+        }),
+      )
+      .describe("Positions held by the user"),
+  });
 
 // Shared query logic for list queries
 export const buildUserListQuery = async ({
@@ -212,7 +287,16 @@ export const buildUserListQuery = async ({
         )
       : undefined,
     input?.orgIds?.length
-      ? inArray(schema.rolesXUsersXOrg.orgId, input.orgIds)
+      ? or(
+          inArray(schema.rolesXUsersXOrg.orgId, input.orgIds),
+          and(
+            isNull(schema.rolesXUsersXOrg.orgId),
+            inArray(schema.users.homeRegionId, input.orgIds),
+          ),
+        )
+      : undefined,
+    input?.homeRegionIds?.length
+      ? inArray(schema.users.homeRegionId, input.homeRegionIds)
       : undefined,
   );
 
@@ -232,13 +316,6 @@ export const buildUserListQuery = async ({
     "id",
   );
 
-  const homeRegion = aliasedTable(schema.orgs, "homeRegion");
-  const select = buildUserSelect({
-    includePii,
-    includeListFields: true, // Include list-specific fields
-    homeRegionOrg: homeRegion,
-  });
-
   const userIdsQuery = ctx.db
     .selectDistinct({ id: schema.users.id })
     .from(schema.users)
@@ -255,6 +332,13 @@ export const buildUserListQuery = async ({
     .from(userIdsQuery.as("distinct_users"));
 
   const userCount = countResult[0];
+
+  const homeRegion = aliasedTable(schema.orgs, "homeRegion");
+  const select = buildUserSelect({
+    includePii,
+    includeListFields: true, // Include list-specific fields
+    homeRegionOrg: homeRegion,
+  });
 
   const query = ctx.db
     .select(select)
@@ -299,7 +383,7 @@ export const buildSingleUserQuery = async (
     | (Pick<UserSelectType, "id"> & {
         roles: { orgId: number; orgName: string; roleName: UserRole }[];
         homeRegion?: HomeRegionSummary | null;
-        positions?: {
+        positions: {
           positionId: number;
           positionName: string;
           orgId: number;
