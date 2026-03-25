@@ -291,7 +291,7 @@ export async function createEventInstancesForSeries(
           endDate: formatDate(currentDate),
           startTime: series.startTime,
           endTime: series.endTime,
-          isActive: true,
+          isActive: series.isActive,
           seriesId: series.id,
           isPrivate: series.isPrivate,
           meta: series.meta,
