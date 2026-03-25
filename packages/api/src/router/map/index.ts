@@ -47,6 +47,13 @@ export const mapRouter = os.router({
       summary: "Submit feedback",
       description: "Submit user feedback via email to the F3 Nation team",
     })
+    .output(
+      z.object({
+        success: z
+          .boolean()
+          .describe("Whether the feedback was submitted successfully"),
+      }),
+    )
     .handler(async ({ input }) => {
       // testing type validation of overridden next-auth Session in @acme/auth package
 

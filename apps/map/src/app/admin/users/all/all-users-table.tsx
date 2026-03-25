@@ -160,6 +160,7 @@ export const AllUsersTable = () => {
   ]);
   const [selectedRoles, setSelectedRoles] = useState<UserRole[]>([]);
   const [selectedOrgs, setSelectedOrgs] = useState<Org[]>([]);
+  const [selectedHomeRegions, setSelectedHomeRegions] = useState<Org[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
   const { pagination, setPagination } = usePagination({
@@ -196,8 +197,19 @@ export const AllUsersTable = () => {
     });
   }, []);
 
+  const handleHomeRegionSelect = useCallback((homeRegion: Org) => {
+    setSelectedHomeRegions((prev) => {
+      if (prev.includes(homeRegion)) {
+        return prev.filter((h) => h !== homeRegion);
+      } else {
+        return [...prev, homeRegion];
+      }
+    });
+  }, []);
+
   const handleResetFilters = useCallback(() => {
     setSelectedOrgs([]);
+    setSelectedHomeRegions([]);
     setSelectedStatuses(["active"]);
     setSelectedRoles([]);
   }, []);
@@ -218,6 +230,7 @@ export const AllUsersTable = () => {
         pageSize: pagination.pageSize,
         pageIndex: pagination.pageIndex,
         orgIds: selectedOrgs.map((org) => org.id),
+        homeRegionIds: selectedHomeRegions.map((region) => region.id),
       },
     }),
   );
@@ -235,6 +248,13 @@ export const AllUsersTable = () => {
               <OrgFilter
                 onOrgSelect={handleOrgSelect}
                 selectedOrgs={selectedOrgs}
+                label="Org"
+              />
+              <OrgFilter
+                onOrgSelect={handleHomeRegionSelect}
+                selectedOrgs={selectedHomeRegions}
+                label="Home Region"
+                orgTypes={["region"]}
               />
               <UserStatusFilter
                 onStatusSelect={handleStatusSelect}
@@ -256,6 +276,16 @@ export const AllUsersTable = () => {
                 <OrgFilter
                   onOrgSelect={handleOrgSelect}
                   selectedOrgs={selectedOrgs}
+                  label="Org"
+                />
+              </div>
+              <div>
+                <p className="mb-1 text-sm font-medium">Home Region</p>
+                <OrgFilter
+                  onOrgSelect={handleHomeRegionSelect}
+                  selectedOrgs={selectedHomeRegions}
+                  label="Home Region"
+                  orgTypes={["region"]}
                 />
               </div>
               <div>
@@ -369,6 +399,18 @@ const columns: TableOptions<
         </div>
       );
     },
+  },
+  {
+    accessorKey: "homeRegion",
+    meta: { name: "Home Region" },
+    header: Header,
+    cell: ({ row }) => (
+      <Cell>
+        {row.original.homeRegion
+          ? `${row.original.homeRegion.homeRegionName}`
+          : ""}
+      </Cell>
+    ),
   },
   {
     accessorKey: "regions",

@@ -200,6 +200,48 @@ describe("Event Router", () => {
 
   describe("map.event.all", () => {
     it("should return a list of events with filtering", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      const location = await createTestLocation(region.id);
+      if (!location) return;
+
+      const [created] = await db
+        .insert(schema.events)
+        .values({
+          name: `MapFilterEvent ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: location.id,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          isActive: true,
+          highlight: false,
+          startDate: "2026-01-01",
+        })
+        .returning();
+
+      if (created) {
+        createdEventIds.push(created.id);
+      }
+
+      const client = createTestClient();
+      const result = await client.map.event.all({
+        pageIndex: 0,
+        pageSize: 50,
+        statuses: ["active"],
+      });
+
+      expect(result.events?.length).toBeGreaterThanOrEqual(1);
+      expect(result.events?.length).toBeLessThanOrEqual(50);
+    });
+
+    it("should return response shape without pre-existing data", async () => {
       const client = createTestClient();
       const result = await client.map.event.all({
         pageIndex: 0,

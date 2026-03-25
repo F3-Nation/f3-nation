@@ -16,7 +16,12 @@ import {
   sql,
 } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
-import { EventCategory, IsActiveStatus } from "@acme/shared/app/enums";
+import {
+  DayOfWeek,
+  EventCadence,
+  EventCategory,
+  IsActiveStatus,
+} from "@acme/shared/app/enums";
 import { arrayOrSingle, getFullAddress } from "@acme/shared/app/functions";
 import { EventInsertSchema } from "@acme/validators";
 
@@ -238,6 +243,68 @@ export const eventRouter = {
       description:
         "Get a paginated list of workout events with optional filtering by event type, category, region, and other criteria. Supports searching, sorting, and pagination.",
     })
+    .output(
+      z.object({
+        events: z.array(
+          z.object({
+            id: z.number().describe("Event ID"),
+            name: z.string().describe("Event name"),
+            description: z.string().nullable().describe("Event description"),
+            isActive: z.boolean().describe("Whether the event is active"),
+            isPrivate: z.boolean().describe("Whether the event is private"),
+            parent: z.string().nullable().describe("Parent organization name"),
+            locationId: z.number().nullable().describe("Location ID"),
+            startDate: z.string().nullable().describe("Event start date"),
+            dayOfWeek: z
+              .enum(DayOfWeek)
+              .nullable()
+              .describe("Event day of week"),
+            startTime: z.string().nullable().describe("Event start time"),
+            endTime: z.string().nullable().describe("Event end time"),
+            email: z.string().nullable().describe("Event email"),
+            created: z.string().describe("Event creation date"),
+            locationName: z.string().nullable().describe("Location name"),
+            locationAddress: z.string().nullable().describe("Location address"),
+            locationAddress2: z
+              .string()
+              .nullable()
+              .describe("Location address 2"),
+            locationCity: z.string().nullable().describe("Location city"),
+            locationState: z.string().nullable().describe("Location state"),
+            locationZip: z.string().nullable().describe("Location zip"),
+            parents: z
+              .array(
+                z.object({
+                  parentId: z.number().describe("Parent organization ID"),
+                  parentName: z.string().describe("Parent organization name"),
+                }),
+              )
+              .describe("Parent organizations"),
+            regions: z
+              .array(
+                z.object({
+                  regionId: z.number().describe("Region ID"),
+                  regionName: z.string().describe("Region name"),
+                }),
+              )
+              .describe("Regions"),
+            eventTypes: z
+              .array(
+                z.object({
+                  eventTypeId: z.number().describe("Event type ID"),
+                  eventTypeName: z.string().describe("Event type name"),
+                  eventCategory: z
+                    .enum(EventCategory)
+                    .describe("Event category"),
+                }),
+              )
+              .describe("Event types"),
+            location: z.string().nullable().describe("Location"),
+          }),
+        ),
+        totalCount: z.number().describe("Total number of events"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const limit = input?.pageSize ?? 10;
       const offset = (input?.pageIndex ?? 0) * limit;
@@ -301,7 +368,7 @@ export const eventRouter = {
         locationCity: schema.locations.addressCity,
         locationState: schema.locations.addressState,
         locationZip: schema.locations.addressZip,
-        parents: sql<{ aoId: number; aoName: string }[]>`COALESCE(
+        parents: sql<{ parentId: number; parentName: string }[]>`COALESCE(
         json_agg(
           DISTINCT jsonb_build_object(
             'parentId', ${parentOrg.id}, 
@@ -329,7 +396,7 @@ export const eventRouter = {
           {
             eventTypeId: number;
             eventTypeName: string;
-            eventCategory: string;
+            eventCategory: EventCategory;
           }[]
         >`COALESCE(
             json_agg(
@@ -417,6 +484,11 @@ export const eventRouter = {
       description:
         "Get the total count of events matching the given filters. Useful for determining pagination requirements.",
     })
+    .output(
+      z.object({
+        count: z.number().describe("Total number of events"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       // Resolve editable org IDs for "onlyMine" filter
       const editableResult = await resolveEditableOrgIds({
@@ -455,6 +527,57 @@ export const eventRouter = {
       description:
         "Retrieve detailed information about a specific event including location, schedule, and associated organizations",
     })
+    .output(
+      z.object({
+        event: z
+          .object({
+            id: z.number().describe("Event ID"),
+            name: z.string().describe("Event name"),
+            description: z.string().nullable().describe("Event description"),
+            isActive: z.boolean().describe("Whether the event is active"),
+            location: z.string().nullable().describe("Location"),
+            locationId: z.number().nullable().describe("Location ID"),
+            startDate: z.string().nullable().describe("Event start date"),
+            dayOfWeek: z
+              .enum(DayOfWeek)
+              .nullable()
+              .describe("Event day of week"),
+            startTime: z.string().nullable().describe("Event start time"),
+            endTime: z.string().nullable().describe("Event end time"),
+            email: z.string().nullable().describe("Event email"),
+            highlight: z.boolean().describe("Whether the event is highlighted"),
+            created: z.string().describe("Event creation date"),
+            meta: z.record(z.unknown()).nullable().describe("Event metadata"),
+            isPrivate: z.boolean().describe("Whether the event is private"),
+            aos: z
+              .array(
+                z.object({
+                  aoId: z.number().describe("Parent organization ID"),
+                  aoName: z.string().describe("Parent organization name"),
+                }),
+              )
+              .describe("Parent organizations"),
+            regions: z
+              .array(
+                z.object({
+                  regionId: z.number().describe("Region ID"),
+                  regionName: z.string().describe("Region name"),
+                }),
+              )
+              .describe("Regions"),
+            eventTypes: z
+              .array(
+                z.object({
+                  eventTypeId: z.number().describe("Event type ID"),
+                  eventTypeName: z.string().describe("Event type name"),
+                }),
+              )
+              .describe("Event types"),
+          })
+          .nullable()
+          .describe("The event"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const regionOrg = aliasedTable(schema.orgs, "region_org");
       const aoOrg = aliasedTable(schema.orgs, "ao_org");
@@ -557,6 +680,45 @@ export const eventRouter = {
       description:
         "Create a new event or update an existing one. Requires editor role for the event's organization. Events are associated with locations and can have multiple event types.",
     })
+    .output(
+      z.object({
+        event: z
+          .object({
+            id: z.number().describe("Event ID"),
+            orgId: z.number().describe("Organization ID"),
+            locationId: z.number().nullable().describe("Location ID"),
+            seriesId: z.number().nullable().describe("Series ID"),
+            isActive: z.boolean().describe("Whether the event is active"),
+            highlight: z.boolean().describe("Whether the event is highlighted"),
+            startDate: z.string().describe("Event start date"),
+            endDate: z.string().nullable().describe("Event end date"),
+            startTime: z.string().nullable().describe("Event start time"),
+            endTime: z.string().nullable().describe("Event end time"),
+            dayOfWeek: z.enum(DayOfWeek).nullable().describe("Day of week"),
+            name: z.string().describe("Event name"),
+            description: z.string().nullable().describe("Event description"),
+            recurrencePattern: z
+              .enum(EventCadence)
+              .nullable()
+              .describe("Recurrence pattern"),
+            recurrenceInterval: z
+              .number()
+              .nullable()
+              .describe("Recurrence interval"),
+            indexWithinInterval: z
+              .number()
+              .nullable()
+              .describe("Index within interval"),
+            meta: z.record(z.unknown()).nullable().describe("Event metadata"),
+            isPrivate: z.boolean().describe("Whether the event is private"),
+            created: z.string().describe("Date the event was created"),
+            updated: z.string().describe("Date the event was last updated"),
+            email: z.string().nullable().describe("Event contact email"),
+          })
+          .nullable()
+          .describe("The created or updated event"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const [existingEvent] = input.id
         ? await ctx.db
@@ -641,6 +803,13 @@ export const eventRouter = {
       summary: "Event to region lookup",
       description: "Get a mapping of event IDs to their region names",
     })
+    .output(
+      z.object({
+        lookup: z
+          .record(z.string(), z.string())
+          .describe("Mapping of event IDs to region names"),
+      }),
+    )
     .handler(async ({ context: ctx }) => {
       const result = await ctx.db
         .select({
@@ -680,7 +849,16 @@ export const eventRouter = {
   delete: editorProcedure
     .input(
       z.object({
-        id: z.number().describe("The unique identifier of the event to delete"),
+        id: z.coerce
+          .number()
+          .describe("The unique identifier of the event to delete"),
+      }),
+    )
+    .output(
+      z.object({
+        eventId: z.coerce
+          .number()
+          .describe("The unique identifier of the event that was deleted"),
       }),
     )
     .route({

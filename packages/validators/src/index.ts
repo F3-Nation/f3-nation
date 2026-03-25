@@ -144,6 +144,19 @@ export const AreaInsertSchema = createInsertSchema(orgs, {
 }).omit({ orgType: true });
 export const AreaSelectSchema = createSelectSchema(orgs);
 
+const socialUrlSchema = z
+  .string()
+  .trim()
+  .refine(
+    (value) =>
+      value === "" ||
+      value.startsWith("http://") ||
+      value.startsWith("https://"),
+    {
+      message: "Please enter the full link, including https://",
+    },
+  );
+
 // REGION SCHEMA
 export const RegionInsertSchema = createInsertSchema(orgs, {
   name: (s: z.ZodString) => s.min(1, { message: "Name is required" }),
@@ -153,10 +166,10 @@ export const RegionInsertSchema = createInsertSchema(orgs, {
   email: (s: z.ZodString) =>
     s.email({ message: "Invalid email format" }).or(z.literal("")).nullable(),
   description: (s: z.ZodString) => s.nullable(),
-  website: (s: z.ZodString) => s.nullable(),
-  twitter: (s: z.ZodString) => s.nullable(),
-  facebook: (s: z.ZodString) => s.nullable(),
-  instagram: (s: z.ZodString) => s.nullable(),
+  website: socialUrlSchema.nullable(),
+  twitter: socialUrlSchema.nullable(),
+  facebook: socialUrlSchema.nullable(),
+  instagram: socialUrlSchema.nullable(),
 }).omit({ orgType: true });
 export const RegionSelectSchema = createSelectSchema(orgs);
 

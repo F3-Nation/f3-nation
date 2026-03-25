@@ -28,7 +28,12 @@ import { db } from "@acme/db/client";
 import { Client, Header } from "@acme/shared/common/enums";
 import { createRouterClient } from "@orpc/server";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { mockAuthWithSession } from "../__tests__/test-utils";
+import {
+  cleanup,
+  getOrCreateF3NationOrg,
+  mockAuthWithSession,
+  uniqueId,
+} from "../__tests__/test-utils";
 import { router } from "../index";
 
 describe("User Router", () => {
@@ -204,12 +209,103 @@ describe("User Router", () => {
         });
 
         expect(result).toHaveProperty("user");
-        expect(result.user).not.toBeNull();
+        expect(result.user).toBeDefined();
         expect(result.user?.id).toBe(testUser.id);
         expect(result.includePii).toBe(false);
 
         // Should not have PII fields when includePii is false
         expect(result.user).not.toHaveProperty("phone");
+      }
+    });
+
+    it("should return homeRegionId, avatarUrl, meta, homeRegion, and positions", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+      const regionName = `ByIdFieldsRegion-${uniqueId()}`;
+      const createdIds: {
+        userId?: number;
+        regionId?: number;
+        positionId?: number;
+      } = {};
+
+      try {
+        const [region] = await db
+          .insert(schema.orgs)
+          .values({
+            name: regionName,
+            orgType: "region",
+            parentId: f3Nation.id,
+            isActive: true,
+          })
+          .returning();
+        if (!region) throw new Error("Failed to create region");
+        createdIds.regionId = region.id;
+
+        const [position] = await db
+          .insert(schema.positions)
+          .values({ name: `Pos-${uniqueId()}`, orgType: "region" })
+          .returning();
+        if (!position) throw new Error("Failed to create position");
+        createdIds.positionId = position.id;
+
+        const email = `byid-fields-${uniqueId()}@example.com`;
+        const [user] = await db
+          .insert(schema.users)
+          .values({
+            email,
+            f3Name: "FieldsTest",
+            homeRegionId: region.id,
+            avatarUrl: "https://example.com/avatar.png",
+          })
+          .returning();
+        if (!user) throw new Error("Failed to create user");
+        createdIds.userId = user.id;
+
+        await db.insert(schema.positionsXOrgsXUsers).values({
+          positionId: position.id,
+          orgId: region.id,
+          userId: user.id,
+        });
+
+        const client = createTestClient();
+        const result = await client.user.byId({
+          id: user.id,
+          includePii: false,
+        });
+
+        expect(result.user).not.toBeNull();
+        expect(result.user).toHaveProperty("homeRegionId", region.id);
+        expect(result.user).toHaveProperty(
+          "avatarUrl",
+          "https://example.com/avatar.png",
+        );
+        expect(result.user).toHaveProperty("meta");
+        expect(result.user?.homeRegion).toEqual({
+          homeRegionId: region.id,
+          homeRegionName: regionName,
+        });
+        expect(result.user?.positions).toEqual([
+          {
+            positionId: position.id,
+            positionName: position.name,
+            orgId: region.id,
+            orgName: regionName,
+          },
+        ]);
+      } finally {
+        if (createdIds.userId) {
+          await db
+            .delete(schema.positionsXOrgsXUsers)
+            .where(eq(schema.positionsXOrgsXUsers.userId, createdIds.userId));
+          await cleanup.user(createdIds.userId);
+        }
+        if (createdIds.positionId) {
+          await db
+            .delete(schema.positions)
+            .where(eq(schema.positions.id, createdIds.positionId));
+        }
+        if (createdIds.regionId) {
+          await cleanup.org(createdIds.regionId);
+        }
       }
     });
 
@@ -241,6 +337,40 @@ describe("User Router", () => {
         expect(result.user?.id).toBe(testUser.id);
       }
     });
+
+    it("should return the user's home region details", async () => {
+      const client = createTestClient();
+
+      const [testUser] = await db
+        .select({ id: schema.users.id })
+        .from(schema.users)
+        .limit(1);
+      const [testRegion] = await db
+        .select({ id: schema.orgs.id, name: schema.orgs.name })
+        .from(schema.orgs)
+        .where(eq(schema.orgs.orgType, "region"))
+        .limit(1);
+
+      if (!testUser || !testRegion) {
+        return;
+      }
+
+      await db
+        .update(schema.users)
+        .set({ homeRegionId: testRegion.id })
+        .where(eq(schema.users.id, testUser.id));
+
+      const result = await client.user.byId({
+        id: testUser.id,
+        includePii: false,
+      });
+
+      expect(result.user?.homeRegionId).toBe(testRegion.id);
+      expect(result.user?.homeRegion).toEqual({
+        homeRegionId: testRegion.id,
+        homeRegionName: testRegion.name,
+      });
+    });
   });
 
   describe("byEmail", () => {
@@ -270,6 +400,97 @@ describe("User Router", () => {
       expect(result.user?.id).toBe(testUser.id);
       // Email should always be included when searching by email
       expect(result.user).toHaveProperty("email");
+    });
+
+    it("should return homeRegionId, avatarUrl, meta, homeRegion, and positions", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+      const regionName = `ByEmailFieldsRegion-${uniqueId()}`;
+      const createdIds: {
+        userId?: number;
+        regionId?: number;
+        positionId?: number;
+      } = {};
+
+      try {
+        const [region] = await db
+          .insert(schema.orgs)
+          .values({
+            name: regionName,
+            orgType: "region",
+            parentId: f3Nation.id,
+            isActive: true,
+          })
+          .returning();
+        if (!region) throw new Error("Failed to create region");
+        createdIds.regionId = region.id;
+
+        const [position] = await db
+          .insert(schema.positions)
+          .values({ name: `Pos-${uniqueId()}`, orgType: "region" })
+          .returning();
+        if (!position) throw new Error("Failed to create position");
+        createdIds.positionId = position.id;
+
+        const email = `byemail-fields-${uniqueId()}@example.com`;
+        const [user] = await db
+          .insert(schema.users)
+          .values({
+            email,
+            f3Name: "EmailFieldsTest",
+            homeRegionId: region.id,
+            avatarUrl: "https://example.com/avatar2.png",
+          })
+          .returning();
+        if (!user) throw new Error("Failed to create user");
+        createdIds.userId = user.id;
+
+        await db.insert(schema.positionsXOrgsXUsers).values({
+          positionId: position.id,
+          orgId: region.id,
+          userId: user.id,
+        });
+
+        const client = createTestClient();
+        const result = await client.user.byEmail({
+          email,
+          includePii: false,
+        });
+
+        expect(result.user).not.toBeNull();
+        expect(result.user).toHaveProperty("homeRegionId", region.id);
+        expect(result.user).toHaveProperty(
+          "avatarUrl",
+          "https://example.com/avatar2.png",
+        );
+        expect(result.user).toHaveProperty("meta");
+        expect(result.user?.homeRegion).toEqual({
+          homeRegionId: region.id,
+          homeRegionName: regionName,
+        });
+        expect(result.user?.positions).toEqual([
+          {
+            positionId: position.id,
+            positionName: position.name,
+            orgId: region.id,
+            orgName: regionName,
+          },
+        ]);
+      } finally {
+        if (createdIds.userId) {
+          await db
+            .delete(schema.positionsXOrgsXUsers)
+            .where(eq(schema.positionsXOrgsXUsers.userId, createdIds.userId));
+          await cleanup.user(createdIds.userId);
+        }
+        if (createdIds.positionId) {
+          await db
+            .delete(schema.positions)
+            .where(eq(schema.positions.id, createdIds.positionId));
+        }
+        if (createdIds.regionId) {
+          await cleanup.org(createdIds.regionId);
+        }
+      }
     });
 
     it("should return null for non-existent email", async () => {
@@ -645,6 +866,253 @@ describe("User Router", () => {
           roles: [],
         }),
       ).rejects.toThrow("already exists");
+    });
+
+    it("should reject update when admin does not manage user's home region", async () => {
+      const dbInstance = db;
+
+      // Create two region orgs
+      const [regionA] = await dbInstance
+        .insert(schema.orgs)
+        .values({
+          name: `RegionA-${Date.now()}`,
+          orgType: "region",
+          isActive: true,
+        })
+        .returning();
+      const [regionB] = await dbInstance
+        .insert(schema.orgs)
+        .values({
+          name: `RegionB-${Date.now()}`,
+          orgType: "region",
+          isActive: true,
+        })
+        .returning();
+
+      if (!regionA || !regionB)
+        throw new Error("Failed to create test regions");
+
+      // Create a user with homeRegionId = regionB
+      const [testUser] = await dbInstance
+        .insert(schema.users)
+        .values({
+          email: `hr-test-${Date.now()}@example.com`,
+          f3Name: "HomeRegionTest",
+          homeRegionId: regionB.id,
+        })
+        .returning();
+
+      if (!testUser) throw new Error("Failed to create test user");
+
+      // Mock session as admin of regionA only
+      const mockSession: Session = {
+        id: 1,
+        email: "admin-a@example.com",
+        user: {
+          id: "1",
+          email: "admin-a@example.com",
+          name: "AdminA",
+          roles: [
+            { orgId: regionA.id, orgName: regionA.name, roleName: "admin" },
+          ],
+        },
+        roles: [
+          { orgId: regionA.id, orgName: regionA.name, roleName: "admin" },
+        ],
+        expires: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
+      };
+      await mockAuthWithSession(mockSession);
+
+      const client = createTestClient();
+
+      await expect(
+        client.user.crupdate({
+          id: testUser.id,
+          f3Name: "Updated",
+          roles: [],
+        }),
+      ).rejects.toThrow(
+        "You can only modify users whose home region you manage",
+      );
+
+      // Clean up
+      await dbInstance
+        .delete(schema.users)
+        .where(eq(schema.users.id, testUser.id));
+      await dbInstance
+        .delete(schema.orgs)
+        .where(eq(schema.orgs.id, regionA.id));
+      await dbInstance
+        .delete(schema.orgs)
+        .where(eq(schema.orgs.id, regionB.id));
+    });
+
+    it("should allow update when user has null home region", async () => {
+      const dbInstance = db;
+
+      let [f3Nation] = await dbInstance
+        .select({ id: schema.orgs.id })
+        .from(schema.orgs)
+        .where(
+          and(
+            eq(schema.orgs.orgType, "nation"),
+            eq(schema.orgs.name, "F3 Nation"),
+          ),
+        )
+        .limit(1);
+
+      if (!f3Nation) {
+        const [created] = await dbInstance
+          .insert(schema.orgs)
+          .values({ name: "F3 Nation", orgType: "nation", isActive: true })
+          .returning();
+        f3Nation = created;
+      }
+
+      if (!f3Nation) throw new Error("F3 Nation org not found");
+
+      // Create a region for the admin
+      const [region] = await dbInstance
+        .insert(schema.orgs)
+        .values({
+          name: `Region-${Date.now()}`,
+          orgType: "region",
+          isActive: true,
+          parentId: f3Nation.id,
+        })
+        .returning();
+
+      if (!region) throw new Error("Failed to create test region");
+
+      // Create a user with no home region
+      const [testUser] = await dbInstance
+        .insert(schema.users)
+        .values({
+          email: `null-hr-${Date.now()}@example.com`,
+          f3Name: "NullHomeRegion",
+          homeRegionId: null,
+        })
+        .returning();
+
+      if (!testUser) throw new Error("Failed to create test user");
+
+      // Mock session as admin of the region (not nation)
+      const mockSession: Session = {
+        id: 1,
+        email: "region-admin@example.com",
+        user: {
+          id: "1",
+          email: "region-admin@example.com",
+          name: "RegionAdmin",
+          roles: [
+            { orgId: region.id, orgName: region.name, roleName: "admin" },
+          ],
+        },
+        roles: [{ orgId: region.id, orgName: region.name, roleName: "admin" }],
+        expires: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
+      };
+      await mockAuthWithSession(mockSession);
+
+      const client = createTestClient();
+
+      const result = await client.user.crupdate({
+        id: testUser.id,
+        f3Name: "Updated",
+        roles: [],
+      });
+
+      expect(result.id).toBe(testUser.id);
+      expect(result.f3Name).toBe("Updated");
+
+      // Clean up
+      await dbInstance
+        .delete(schema.users)
+        .where(eq(schema.users.id, testUser.id));
+      await dbInstance.delete(schema.orgs).where(eq(schema.orgs.id, region.id));
+    });
+
+    it("should allow update when admin manages user's home region", async () => {
+      const dbInstance = db;
+
+      let [f3Nation] = await dbInstance
+        .select({ id: schema.orgs.id })
+        .from(schema.orgs)
+        .where(
+          and(
+            eq(schema.orgs.orgType, "nation"),
+            eq(schema.orgs.name, "F3 Nation"),
+          ),
+        )
+        .limit(1);
+
+      if (!f3Nation) {
+        const [created] = await dbInstance
+          .insert(schema.orgs)
+          .values({ name: "F3 Nation", orgType: "nation", isActive: true })
+          .returning();
+        f3Nation = created;
+      }
+
+      if (!f3Nation) throw new Error("F3 Nation org not found");
+
+      // Create a region
+      const [region] = await dbInstance
+        .insert(schema.orgs)
+        .values({
+          name: `Region-${Date.now()}`,
+          orgType: "region",
+          isActive: true,
+          parentId: f3Nation.id,
+        })
+        .returning();
+
+      if (!region) throw new Error("Failed to create test region");
+
+      // Create a user with homeRegionId set to this region
+      const [testUser] = await dbInstance
+        .insert(schema.users)
+        .values({
+          email: `same-hr-${Date.now()}@example.com`,
+          f3Name: "SameHomeRegion",
+          homeRegionId: region.id,
+        })
+        .returning();
+
+      if (!testUser) throw new Error("Failed to create test user");
+
+      // Mock session as admin of that same region
+      const mockSession: Session = {
+        id: 1,
+        email: "region-admin@example.com",
+        user: {
+          id: "1",
+          email: "region-admin@example.com",
+          name: "RegionAdmin",
+          roles: [
+            { orgId: region.id, orgName: region.name, roleName: "admin" },
+          ],
+        },
+        roles: [{ orgId: region.id, orgName: region.name, roleName: "admin" }],
+        expires: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
+      };
+      await mockAuthWithSession(mockSession);
+
+      const client = createTestClient();
+
+      const result = await client.user.crupdate({
+        id: testUser.id,
+        f3Name: "UpdatedByRegionAdmin",
+        roles: [],
+      });
+
+      expect(result.id).toBe(testUser.id);
+      expect(result.f3Name).toBe("UpdatedByRegionAdmin");
+
+      // Clean up
+      await dbInstance
+        .delete(schema.users)
+        .where(eq(schema.users.id, testUser.id));
+      await dbInstance.delete(schema.orgs).where(eq(schema.orgs.id, region.id));
     });
   });
 

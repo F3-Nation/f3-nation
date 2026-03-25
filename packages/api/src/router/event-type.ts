@@ -14,7 +14,7 @@ import {
   or,
   schema,
 } from "@acme/db";
-import { IsActiveStatus } from "@acme/shared/app/enums";
+import { EventCategory, IsActiveStatus } from "@acme/shared/app/enums";
 import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
 import { EventTypeInsertSchema } from "@acme/validators";
 
@@ -75,6 +75,35 @@ export const eventTypeRouter = {
       description:
         "Get a paginated list of event types with optional filtering by organization",
     })
+    .output(
+      z.object({
+        eventTypes: z.array(
+          z.object({
+            id: z.number().describe("Event type ID"),
+            name: z.string().describe("Event type name"),
+            description: z
+              .string()
+              .nullable()
+              .describe("Event type description"),
+            eventCategory: z.enum(EventCategory).describe("Event category"),
+            acronym: z.string().nullable().describe("Event type acronym"),
+            specificOrgId: z
+              .number()
+              .nullable()
+              .describe("Specific organization ID"),
+            specificOrgName: z
+              .string()
+              .nullable()
+              .describe("Specific organ ization name"),
+            isActive: z.boolean().describe("Whether the event type is active"),
+            count: z
+              .number()
+              .describe("Number of events using this event type"),
+          }),
+        ),
+        totalCount: z.number().describe("Total number of event types"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const limit = input?.pageSize ?? 10;
       const offset = (input?.pageIndex ?? 0) * limit;
@@ -189,6 +218,27 @@ export const eventTypeRouter = {
       summary: "Get event types by organization",
       description: "Retrieve all event types for a specific organization",
     })
+    .output(
+      z.object({
+        eventTypes: z.array(
+          z.object({
+            id: z.number().describe("Event type ID"),
+            name: z.string().describe("Event type name"),
+            description: z
+              .string()
+              .nullable()
+              .describe("Event type description"),
+            eventCategory: z.enum(EventCategory).describe("Event category"),
+            acronym: z.string().nullable().describe("Event type acronym"),
+            specificOrgId: z
+              .number()
+              .nullable()
+              .describe("Specific organization ID"),
+            isActive: z.boolean().describe("Whether the event type is active"),
+          }),
+        ),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const eventTypes = await ctx.db
         .select()
@@ -220,6 +270,32 @@ export const eventTypeRouter = {
       description:
         "Retrieve detailed information about a specific event type including its category and usage count",
     })
+    .output(
+      z.object({
+        eventType: z
+          .object({
+            id: z.number().describe("Event type ID"),
+            name: z.string().describe("Event type name"),
+            description: z
+              .string()
+              .nullable()
+              .describe("Event type description"),
+            eventCategory: z.enum(EventCategory).describe("Event category"),
+            acronym: z.string().nullable().describe("Event type acronym"),
+            specificOrgId: z
+              .number()
+              .nullable()
+              .describe("Specific organization ID"),
+            isActive: z.boolean().describe("Whether the event type is active"),
+            created: z.string().describe("Date the event type was created"),
+            updated: z
+              .string()
+              .describe("Date the event type was last updated"),
+          })
+          .nullable()
+          .describe("The event type"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const [result] = await ctx.db
         .select()
@@ -244,6 +320,36 @@ export const eventTypeRouter = {
       description:
         "Create a new event type or update an existing one. Can be created at nation level (for all orgs) or scoped to a specific organization. Requires appropriate permissions.",
     })
+    .output(
+      z.object({
+        eventType: z
+          .array(
+            z.object({
+              id: z.number().describe("Event type ID"),
+              name: z.string().describe("Event type name"),
+              description: z
+                .string()
+                .nullable()
+                .describe("Event type description"),
+              eventCategory: z.enum(EventCategory).describe("Event category"),
+              acronym: z.string().nullable().describe("Event type acronym"),
+              specificOrgId: z
+                .number()
+                .nullable()
+                .describe("Specific organization ID"),
+              isActive: z
+                .boolean()
+                .describe("Whether the event type is active"),
+              created: z.string().describe("Date the event type was created"),
+              updated: z
+                .string()
+                .describe("Date the event type was last updated"),
+            }),
+          )
+          .nullable()
+          .describe("The created or updated event type"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const [existingEventType] = input.id
         ? await ctx.db
@@ -320,6 +426,13 @@ export const eventTypeRouter = {
       description:
         "Soft delete an event type by marking it as inactive. Also removes all associations with events.",
     })
+    .output(
+      z.object({
+        eventTypeId: z.coerce
+          .number()
+          .describe("The unique identifier of the event type that was deleted"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const [existingEventType] = await ctx.db
         .select()
@@ -357,5 +470,7 @@ export const eventTypeRouter = {
         .update(schema.eventTypes)
         .set({ isActive: false })
         .where(eq(schema.eventTypes.id, input.id));
+
+      return { eventTypeId: input.id };
     }),
 };
