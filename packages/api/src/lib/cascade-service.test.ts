@@ -415,7 +415,7 @@ describe("Cascade Service", () => {
       expect(count).toBe(0);
     });
 
-    it("should create event type join rows when eventTypeId is provided", async () => {
+    it("should create event type join rows when eventTypeIds is provided", async () => {
       const region = await createTestRegion();
       const ao = await createTestAO(region.id);
       const eventType = await createTestEventType();
@@ -426,7 +426,7 @@ describe("Cascade Service", () => {
         recurrenceInterval: 1,
         startDate: "2026-04-01",
         endDate: "2026-04-30",
-        eventTypeId: eventType.id,
+        eventTypeIds: [eventType.id],
       });
 
       const count = await createEventInstancesForSeries(
@@ -745,7 +745,7 @@ describe("Cascade Service", () => {
         recurrencePattern: "weekly",
         startDate: "2026-04-01",
         endDate: "2026-04-30",
-        eventTypeId: eventType1.id,
+        eventTypeIds: [eventType1.id],
       });
 
       await createEventInstancesForSeries(db, series, 4, "2026-04-01");
@@ -753,7 +753,7 @@ describe("Cascade Service", () => {
       // Change event type
       const updatedSeries: SeriesData = {
         ...series,
-        eventTypeId: eventType2.id,
+        eventTypeIds: [eventType2.id],
       };
 
       await updateFutureInstances(db, updatedSeries, "2026-04-01");

@@ -30,7 +30,7 @@ export interface SeriesData {
   isPrivate: boolean;
   highlight: boolean;
   meta: Record<string, unknown> | null;
-  eventTypeId?: number;
+  eventTypeIds?: number[];
   // eventTagId?: number; // TODO: event tag support
 }
 
@@ -325,12 +325,14 @@ export async function createEventInstancesForSeries(
     .returning({ id: schema.eventInstances.id });
 
   // Handle event type join table
-  if (series.eventTypeId && created.length > 0) {
+  if (series.eventTypeIds?.length && created.length > 0) {
     await db.insert(schema.eventInstancesXEventTypes).values(
-      created.map((instance) => ({
-        eventInstanceId: instance.id,
-        eventTypeId: series.eventTypeId!,
-      })),
+      created.flatMap((instance) =>
+        series.eventTypeIds!.map((eventTypeId) => ({
+          eventInstanceId: instance.id,
+          eventTypeId,
+        })),
+      ),
     );
   }
 
@@ -392,7 +394,7 @@ export async function updateFutureInstances(
     .where(inArray(schema.eventInstances.id, instanceIds));
 
   // Update event types if provided
-  if (series.eventTypeId !== undefined) {
+  if (series.eventTypeIds !== undefined) {
     // Delete existing event type associations
     await db
       .delete(schema.eventInstancesXEventTypes)
@@ -401,12 +403,14 @@ export async function updateFutureInstances(
       );
 
     // Add new associations
-    if (series.eventTypeId) {
+    if (series.eventTypeIds.length > 0) {
       await db.insert(schema.eventInstancesXEventTypes).values(
-        instanceIds.map((id) => ({
-          eventInstanceId: id,
-          eventTypeId: series.eventTypeId!,
-        })),
+        instanceIds.flatMap((id) =>
+          series.eventTypeIds!.map((eventTypeId) => ({
+            eventInstanceId: id,
+            eventTypeId,
+          })),
+        ),
       );
     }
   }
