@@ -9,6 +9,7 @@
 import { and, eq, gte, inArray, isNotNull, schema } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 import type { DayOfWeek, EventCadence } from "@acme/shared/app/enums";
+import { get } from "lodash";
 
 // Type for a series (event with recurrence pattern)
 export interface SeriesData {
@@ -230,7 +231,7 @@ export async function createEventInstancesForSeries(
   }
 
   const seriesStartDate = parseDate(series.startDate);
-  const today = fromDate ? parseDate(fromDate) : new Date();
+  const today = fromDate ? parseDate(fromDate) : getCurrentDate();
 
   // Start from the later of series start date or today
   const startDate = seriesStartDate > today ? seriesStartDate : new Date(today);
