@@ -1001,23 +1001,57 @@ export const orgRouter = {
           ),
         );
 
-      // Notify webhooks about the org deletion
-      notifyMapDataChange({ type: "org.deleted", orgId: input.id });
-
-      // Get the org type before deleting to determine if cascading is needed
+      // Get the org first to validate it exists and matches the provided type
       const [org] = await ctx.db
-        .select({ orgType: schema.orgs.orgType })
+        .select({
+          orgType: schema.orgs.orgType,
+          isActive: schema.orgs.isActive,
+        })
         .from(schema.orgs)
         .where(eq(schema.orgs.id, input.id));
 
+      if (!org) {
+        throw new ORPCError("NOT_FOUND", {
+          message: "Organization not found",
+        });
+      }
+
+      if (input.orgType && org.orgType !== input.orgType) {
+        throw new ORPCError("CONFLICT", {
+          message: `Organization type mismatch: expected ${input.orgType}, got ${org.orgType}`,
+        });
+      }
+
+      if (!org.isActive) {
+        throw new ORPCError("CONFLICT", {
+          message: "Organization is already inactive",
+        });
+      }
+
+      // Perform the soft delete with .returning() to confirm success
+      const [deletedOrg] = await ctx.db
+        .update(schema.orgs)
+        .set({ isActive: false })
+        .where(eq(schema.orgs.id, input.id))
+        .returning();
+
+      if (!deletedOrg) {
+        throw new ORPCError("CONFLICT", {
+          message: "Failed to delete organization",
+        });
+      }
+
       // If this is an AO, cascade soft-delete to series and event instances
-      if (org?.orgType === "ao") {
+      if (org.orgType === "ao") {
         const { softDeleteSeriesForOrg, softDeleteFutureInstancesForOrg } =
           await import("../lib/cascade-service");
 
         await softDeleteSeriesForOrg(ctx.db, input.id);
         await softDeleteFutureInstancesForOrg(ctx.db, input.id);
       }
+
+      // Notify webhooks about the org deletion
+      notifyMapDataChange({ type: "org.deleted", orgId: input.id });
 
       return { orgId: input.id };
     }),
