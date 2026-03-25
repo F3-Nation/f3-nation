@@ -49,14 +49,20 @@ describe("Cascade Service", () => {
     // Clean up event instances first (FK references events via seriesId)
     for (const eventId of createdEventIds) {
       try {
-        await db.delete(schema.eventInstancesXEventTypes).where(
-          eq(
-            schema.eventInstancesXEventTypes.eventInstanceId,
-            // Delete all join rows for instances of this series
-            // Use a subquery approach: delete instances then join rows
-            eventId,
-          ),
-        );
+        // Delete all join rows for instances of this series by resolving
+        // instance IDs from the event_instances table.
+        const instances = await db
+          .select({ id: schema.eventInstances.id })
+          .from(schema.eventInstances)
+          .where(eq(schema.eventInstances.seriesId, eventId));
+
+        for (const instance of instances) {
+          await db
+            .delete(schema.eventInstancesXEventTypes)
+            .where(
+              eq(schema.eventInstancesXEventTypes.eventInstanceId, instance.id),
+            );
+        }
       } catch {
         // ignore
       }
