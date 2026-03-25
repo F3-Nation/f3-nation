@@ -990,16 +990,6 @@ export const orgRouter = {
           message: "You are not authorized to delete this org",
         });
       }
-      await ctx.db
-        .update(schema.orgs)
-        .set({ isActive: false })
-        .where(
-          and(
-            eq(schema.orgs.id, input.id),
-            input.orgType ? eq(schema.orgs.orgType, input.orgType) : undefined,
-            eq(schema.orgs.isActive, true),
-          ),
-        );
 
       // Get the org first to validate it exists and matches the provided type
       const [org] = await ctx.db
