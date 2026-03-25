@@ -363,9 +363,9 @@ describe("Position Router", () => {
       const client = createTestClient();
       const result = await client.position.byId({ id: pos.id });
 
-      expect(result.position.id).toBe(pos.id);
-      expect(result.position.name).toBe(pos.name);
-      expect(result.position.isActive).toBe(true);
+      expect(result.position?.id).toBe(pos.id);
+      expect(result.position?.name).toBe(pos.name);
+      expect(result.position?.isActive).toBe(true);
     });
 
     it("should throw NOT_FOUND for non-existent position", async () => {

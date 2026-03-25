@@ -6,24 +6,45 @@
  * Run with: pnpm test --filter @acme/api user-grant-access.test.ts
  */
 
+import { vi } from "vitest";
+
+const mockLimit = vi.hoisted(() => vi.fn());
+
+vi.mock("@orpc/experimental-ratelimit/memory", () => ({
+  MemoryRatelimiter: vi.fn().mockImplementation(() => ({
+    limit: mockLimit,
+  })),
+}));
+
 import type { Session } from "@acme/auth";
 import { eq, schema } from "@acme/db";
 import { db } from "@acme/db/client";
 import { ERRORS } from "@acme/shared/app/errors";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   cleanup,
   createAdminSession,
   createEditorSession,
   createTestClient,
   getOrCreateF3NationOrg,
+  getOrCreateRoles,
   mockAuthWithSession,
   uniqueId,
 } from "../__tests__/test-utils";
 
 describe("User Router - Grant Access", () => {
+  beforeAll(async () => {
+    await getOrCreateRoles();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
+    mockLimit.mockResolvedValue({
+      success: true,
+      limit: 10,
+      remaining: 9,
+      reset: Date.now() + 60000,
+    });
   });
 
   describe("PII access scenarios", () => {
@@ -322,14 +343,14 @@ describe("User Router - Grant Access", () => {
       await mockAuthWithSession(editorSession);
       const client = createTestClient();
 
-      // adminProcedure requires admin role, so editor will be rejected
+      // Granting roles requires org admin; editors cannot insert new role rows
       await expect(
         client.user.crupdate({
           email: `new-${uniqueId()}@example.com`,
           f3Name: "Test",
           roles: [{ orgId: nationOrg.id, roleName: "editor" }],
         }),
-      ).rejects.toThrow();
+      ).rejects.toThrow(ERRORS.MUST_BE_ADMIN_TO_GRANT_ROLES);
     });
 
     it("should allow admin to remove roles they have permission for", async () => {
@@ -368,7 +389,7 @@ describe("User Router - Grant Access", () => {
       await cleanup.user(user.id);
     });
 
-    it("should prevent editor from granting roles to other orgs", async () => {
+    it("editor cannot grant new roles without org admin", async () => {
       const nationOrg = await getOrCreateF3NationOrg();
 
       // First, create a user as admin
@@ -376,7 +397,7 @@ describe("User Router - Grant Access", () => {
       await mockAuthWithSession(adminSession);
       const _adminClient = createTestClient();
 
-      // Create user with editor role on nation org
+      // User with no roles yet
       const [user] = await db
         .insert(schema.users)
         .values({
@@ -397,20 +418,20 @@ describe("User Router - Grant Access", () => {
       await mockAuthWithSession(editorSession);
       const editorClient = createTestClient();
 
-      // Editor tries to grant role - should fail because adminProcedure requires admin role
+      // Editor tries to grant a new role — requires org admin
       await expect(
         editorClient.user.crupdate({
           id: user.id,
           roles: [{ orgId: nationOrg.id, roleName: "editor" }],
         }),
-      ).rejects.toThrow("Unauthorized");
+      ).rejects.toThrow(ERRORS.MUST_BE_ADMIN_TO_GRANT_ROLES);
 
       // Cleanup as admin
       await mockAuthWithSession(adminSession);
       await cleanup.user(user.id);
     });
 
-    it("editor updating user yields unauthorized unless role already present", async () => {
+    it("editor may noop role update but cannot grant roles without org admin", async () => {
       const nationOrg = await getOrCreateF3NationOrg();
 
       // Create user as admin first
@@ -445,16 +466,15 @@ describe("User Router - Grant Access", () => {
       await mockAuthWithSession(editorSession);
       const editorClient = createTestClient();
 
-      // Editor tries to update the same user with the same role - should fail
-      // because crupdate requires adminProcedure
+      // Same roles as already stored — no inserts/removals; editor may apply update
       await expect(
         editorClient.user.crupdate({
           id: user.id,
           roles: [{ orgId: nationOrg.id, roleName: "editor" }],
         }),
-      ).rejects.toThrow("Unauthorized");
+      ).resolves.toMatchObject({ id: user.id });
 
-      // Editor tries to add a new role - should also fail
+      // Adding a role requires org admin
       await expect(
         editorClient.user.crupdate({
           id: user.id,
@@ -463,9 +483,9 @@ describe("User Router - Grant Access", () => {
             { orgId: nationOrg.id, roleName: "admin" },
           ],
         }),
-      ).rejects.toThrow("Unauthorized");
+      ).rejects.toThrow(ERRORS.MUST_BE_ADMIN_TO_GRANT_ROLES);
 
-      // Editor tries to update a different user's access - should fail
+      // Granting a role on another user also requires org admin
       const [anotherUser] = await db
         .insert(schema.users)
         .values({
@@ -480,7 +500,7 @@ describe("User Router - Grant Access", () => {
             id: anotherUser.id,
             roles: [{ orgId: nationOrg.id, roleName: "editor" }],
           }),
-        ).rejects.toThrow("Unauthorized");
+        ).rejects.toThrow(ERRORS.MUST_BE_ADMIN_TO_GRANT_ROLES);
 
         // Cleanup another user as admin
         await mockAuthWithSession(adminSession);

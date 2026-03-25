@@ -70,11 +70,13 @@ describe("Org Router", () => {
       expect(Array.isArray(result.orgs)).toBe(true);
     });
 
-    it("should paginate results correctly", async () => {
+    it("should paginate without overlapping org ids between pages", async () => {
       const f3Nation = await getOrCreateF3NationOrg();
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
 
-      // Create 3 orgs with a unique prefix so we can isolate them via searchTerm
-      const prefix = `PagTest ${uniqueId()}`;
+      const prefix = `PaginateTest-${uniqueId()}`;
+      const insertedIds: number[] = [];
       for (let i = 0; i < 3; i++) {
         const [org] = await db
           .insert(schema.orgs)
@@ -85,8 +87,10 @@ describe("Org Router", () => {
             isActive: true,
           })
           .returning();
-        if (!org) throw new Error(`Failed to create test org ${i}`);
-        createdOrgIds.push(org.id);
+        if (org) {
+          createdOrgIds.push(org.id);
+          insertedIds.push(org.id);
+        }
       }
 
       const client = createTestClient();
@@ -118,15 +122,19 @@ describe("Org Router", () => {
         pageSize: 2,
       });
 
-      expect(page2.orgs.length).toBeGreaterThanOrEqual(1);
-      expect(page2.orgs.length).toBeLessThanOrEqual(2);
-      expect(page2.total).toBe(all.total);
+      expect(page1.total).toBe(3);
+      expect(page1.orgs).toHaveLength(2);
+      expect(page2.orgs).toHaveLength(1);
 
-      // Pages should contain disjoint org IDs
       const page1Ids = new Set(page1.orgs.map((o) => o.id));
-      const page2Ids = page2.orgs.map((o) => o.id);
-      for (const id of page2Ids) {
-        expect(page1Ids.has(id)).toBe(false);
+      const page2Ids = new Set(page2.orgs.map((o) => o.id));
+      // Consecutive pages must be disjoint — same org must not appear twice
+      expect([...page2Ids].every((id) => !page1Ids.has(id))).toBe(true);
+
+      const seen = new Set([...page1Ids, ...page2Ids]);
+      expect(seen.size).toBe(insertedIds.length);
+      for (const id of insertedIds) {
+        expect(seen.has(id)).toBe(true);
       }
     });
 

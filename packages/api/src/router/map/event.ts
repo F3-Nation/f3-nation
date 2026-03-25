@@ -15,7 +15,11 @@ import {
   sql,
 } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
-import { EventCategory, IsActiveStatus } from "@acme/shared/app/enums";
+import {
+  DayOfWeek,
+  EventCategory,
+  IsActiveStatus,
+} from "@acme/shared/app/enums";
 import { arrayOrSingle, getFullAddress } from "@acme/shared/app/functions";
 
 import { getDescendantOrgIds } from "../../get-descendant-org-ids";
@@ -200,6 +204,69 @@ export const mapEventRouter = {
       description:
         "Get a paginated list of workout events with optional filtering and sorting",
     })
+    .output(
+      z.object({
+        events: z.array(
+          z.object({
+            id: z.number().describe("Event ID"),
+            name: z.string().describe("Event name"),
+            description: z.string().nullable().describe("Event description"),
+            isActive: z.boolean().describe("Whether the event is active"),
+            isPrivate: z.boolean().describe("Whether the event is private"),
+            parent: z.string().nullable().describe("Parent AO name"),
+            locationId: z.number().nullable().describe("Location ID"),
+            startDate: z.string().nullable().describe("Event start date"),
+            dayOfWeek: z.enum(DayOfWeek).nullable().describe("Day of week"),
+            startTime: z.string().nullable().describe("Event start time"),
+            endTime: z.string().nullable().describe("Event end time"),
+            email: z.string().nullable().describe("Event contact email"),
+            created: z.string().describe("Date the event was created"),
+            locationName: z.string().nullable().describe("Location name"),
+            locationAddress: z
+              .string()
+              .nullable()
+              .describe("Location street address"),
+            locationAddress2: z
+              .string()
+              .nullable()
+              .describe("Location street address line 2"),
+            locationCity: z.string().nullable().describe("Location city"),
+            locationState: z.string().nullable().describe("Location state"),
+            locationZip: z.string().nullable().describe("Location zip code"),
+            parents: z
+              .array(
+                z.object({
+                  parentId: z.number().describe("Parent org ID"),
+                  parentName: z.string().nullable().describe("Parent org name"),
+                }),
+              )
+              .describe("Parent AOs"),
+            regions: z
+              .array(
+                z.object({
+                  regionId: z.number().describe("Region ID"),
+                  regionName: z.string().nullable().describe("Region name"),
+                }),
+              )
+              .describe("Regions"),
+            eventTypes: z
+              .array(
+                z.object({
+                  eventTypeId: z.number().describe("Event type ID"),
+                  eventTypeName: z.string().describe("Event type name"),
+                  eventCategory: z.string().describe("Event category"),
+                }),
+              )
+              .describe("Event types"),
+            location: z
+              .string()
+              .nullable()
+              .describe("Full formatted location address"),
+          }),
+        ),
+        totalCount: z.number().describe("Total number of events"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const limit = input?.pageSize ?? 10;
       const offset = (input?.pageIndex ?? 0) * limit;
@@ -263,7 +330,9 @@ export const mapEventRouter = {
         locationCity: schema.locations.addressCity,
         locationState: schema.locations.addressState,
         locationZip: schema.locations.addressZip,
-        parents: sql<{ aoId: number; aoName: string }[]>`COALESCE(
+        parents: sql<
+          { parentId: number; parentName: string | null }[]
+        >`COALESCE(
         json_agg(
           DISTINCT jsonb_build_object(
             'parentId', ${parentOrg.id}, 

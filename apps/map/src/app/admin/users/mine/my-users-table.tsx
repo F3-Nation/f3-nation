@@ -33,6 +33,9 @@ import { orpc } from "~/orpc/react";
 import type { RouterOutputs } from "~/orpc/types";
 import { useDebounce } from "~/utils/hooks/use-debounce";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
+import { OrgFilter } from "../org-filter";
+
+type Org = RouterOutputs["org"]["all"]["orgs"][number];
 
 const UserRoleFilter = ({
   onRoleSelect,
@@ -158,6 +161,8 @@ export const MyUsersTable = () => {
   ]);
   const [selectedRoles, setSelectedRoles] = useState<UserRole[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedHomeRegions, setSelectedHomeRegions] = useState<Org[]>([]);
+
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
   const { pagination, setPagination } = usePagination({
     pageSize: 20,
@@ -192,6 +197,7 @@ export const MyUsersTable = () => {
   }, []);
 
   const handleResetFilters = useCallback(() => {
+    setSelectedHomeRegions([]);
     setSelectedStatuses(["active"]);
     setSelectedRoles([]);
   }, []);
@@ -211,10 +217,21 @@ export const MyUsersTable = () => {
         pageIndex: pagination.pageIndex,
         orgIds: adminAndEditorOrgIds,
         includePii: true,
+        homeRegionIds: selectedHomeRegions.map((region) => region.id),
       },
       enabled: adminAndEditorOrgIds.length > 0,
     }),
   );
+
+  const handleHomeRegionSelect = useCallback((homeRegion: Org) => {
+    setSelectedHomeRegions((prev) => {
+      if (prev.includes(homeRegion)) {
+        return prev.filter((h) => h !== homeRegion);
+      } else {
+        return [...prev, homeRegion];
+      }
+    });
+  }, []);
 
   if (adminAndEditorOrgIds.length === 0) {
     return (
@@ -237,6 +254,12 @@ export const MyUsersTable = () => {
           <>
             {/* Desktop: inline filters */}
             <div className="hidden items-center gap-2 md:flex">
+              <OrgFilter
+                onOrgSelect={handleHomeRegionSelect}
+                selectedOrgs={selectedHomeRegions}
+                label="Home Region"
+                orgTypes={["region"]}
+              />
               <UserStatusFilter
                 onStatusSelect={handleStatusSelect}
                 selectedStatuses={selectedStatuses}
@@ -252,6 +275,14 @@ export const MyUsersTable = () => {
               activeFilterCount={activeFilterCount}
               onReset={handleResetFilters}
             >
+              <div>
+                <p className="mb-1 text-sm font-medium">Home Region</p>
+                <OrgFilter
+                  onOrgSelect={handleHomeRegionSelect}
+                  selectedOrgs={selectedHomeRegions}
+                  label="Home Region"
+                />
+              </div>
               <div>
                 <p className="mb-1 text-sm font-medium">Status</p>
                 <UserStatusFilter
@@ -375,6 +406,18 @@ const columns: TableOptions<
     meta: { name: "Phone" },
     header: Header,
     cell: (cell) => <Cell {...cell} />,
+  },
+  {
+    accessorKey: "homeRegion",
+    meta: { name: "Home Region" },
+    header: Header,
+    cell: ({ row }) => (
+      <Cell>
+        {row.original.homeRegion
+          ? `${row.original.homeRegion.homeRegionName}`
+          : ""}
+      </Cell>
+    ),
   },
   {
     accessorKey: "regions",
