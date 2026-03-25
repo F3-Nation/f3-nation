@@ -224,7 +224,7 @@ export async function createEventInstancesForSeries(
   yearsAhead = 4,
   fromDate?: string,
 ): Promise<number> {
-  if (!series.dayOfWeek || !series.recurrencePattern) {
+  if (!series.dayOfWeek) {
     // Not a valid recurring series
     return 0;
   }
@@ -246,7 +246,7 @@ export async function createEventInstancesForSeries(
 
   const maxInterval = series.recurrenceInterval ?? 1;
   const indexWithinInterval = series.indexWithinInterval ?? 1;
-  const recurrencePattern = series.recurrencePattern;
+  const recurrencePattern = series.recurrencePattern ?? "weekly";
 
   const instanceRecords: (typeof schema.eventInstances.$inferInsert)[] = [];
 
