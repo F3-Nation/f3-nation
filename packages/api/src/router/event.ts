@@ -787,12 +787,6 @@ export const eventRouter = {
         );
       }
 
-      // Notify webhooks and invalidate cache about the event change
-      notifyMapDataChange({
-        type: input.id ? "event.updated" : "event.created",
-        eventId: result.id,
-      });
-
       // Handle event instance cascade operations for series (events with recurrence patterns).
       // null recurrencePattern defaults to weekly in createEventInstancesForSeries.
       if (result.dayOfWeek) {
@@ -870,6 +864,12 @@ export const eventRouter = {
             seriesData.startDate,
           );
         }
+
+        // Notify webhooks and invalidate cache about the event change
+        notifyMapDataChange({
+          type: input.id ? "event.updated" : "event.created",
+          eventId: result.id,
+        });
       }
 
       return { event: result ?? null };
@@ -977,14 +977,14 @@ export const eventRouter = {
           and(eq(schema.events.id, input.id), eq(schema.events.isActive, true)),
         );
 
-      // Notify webhooks and invalidate cache about the event deletion
-      notifyMapDataChange({ type: "event.deleted", eventId: input.id });
-
       // Cascade delete event instances for series events
       const { softDeleteFutureInstancesForSeries } = await import(
         "../lib/cascade-service"
       );
       await softDeleteFutureInstancesForSeries(ctx.db, input.id);
+
+      // Notify webhooks and invalidate cache about the event deletion
+      notifyMapDataChange({ type: "event.deleted", eventId: input.id });
 
       return { eventId: input.id };
     }),
