@@ -30,7 +30,7 @@ export interface SeriesData {
   highlight: boolean;
   meta: Record<string, unknown> | null;
   eventTypeId?: number;
-  eventTagId?: number;
+  // eventTagId?: number; // TODO: event tag support
 }
 
 // Structural fields that require recreating instances
@@ -334,14 +334,15 @@ export async function createEventInstancesForSeries(
   }
 
   // Handle event tag join table
-  if (series.eventTagId && created.length > 0) {
-    await db.insert(schema.eventTagsXEventInstances).values(
-      created.map((instance) => ({
-        eventInstanceId: instance.id,
-        eventTagId: series.eventTagId!,
-      })),
-    );
-  }
+  // TODO: event tag support - need to add eventTagId to SeriesData and handle in event router
+  // if (series.eventTagId && created.length > 0) {
+  //   await db.insert(schema.eventTagsXEventInstances).values(
+  //     created.map((instance) => ({
+  //       eventInstanceId: instance.id,
+  //       eventTagId: series.eventTagId!,
+  //     })),
+  //   );
+  // }
 
   return created.length;
 }
@@ -384,6 +385,8 @@ export async function updateFutureInstances(
       meta: series.meta,
       description: series.description,
       highlight: series.highlight,
+      name: series.name,
+      orgId: series.orgId,
     })
     .where(inArray(schema.eventInstances.id, instanceIds));
 
@@ -408,29 +411,28 @@ export async function updateFutureInstances(
   }
 
   // Update event tags if provided
-  if (series.eventTagId !== undefined) {
-    // Delete existing event tag associations
-    await db
-      .delete(schema.eventTagsXEventInstances)
-      .where(
-        inArray(schema.eventTagsXEventInstances.eventInstanceId, instanceIds),
-      );
+  // TODO: event tag support - need to add eventTagId to SeriesData and handle in event router
+  // if (series.eventTagId !== undefined) {
+  //   // Delete existing event tag associations
+  //   await db
+  //     .delete(schema.eventTagsXEventInstances)
+  //     .where(
+  //       inArray(schema.eventTagsXEventInstances.eventInstanceId, instanceIds),
+  //     );
 
-    // Add new associations
-    if (series.eventTagId) {
-      await db.insert(schema.eventTagsXEventInstances).values(
-        instanceIds.map((id) => ({
-          eventInstanceId: id,
-          eventTagId: series.eventTagId!,
-        })),
-      );
-    }
-  }
+  //   // Add new associations
+  //   if (series.eventTagId) {
+  //     await db.insert(schema.eventTagsXEventInstances).values(
+  //       instanceIds.map((id) => ({
+  //         eventInstanceId: id,
+  //         eventTagId: series.eventTagId!,
+  //       })),
+  //     );
+  //   }
+  // }
 
   return futureInstances.length;
-}
-
-/**
+} /**
  * Recreate future event instances (delete and recreate)
  * Used when structural changes are made to a series
  */

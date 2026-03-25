@@ -678,7 +678,7 @@ export const eventRouter = {
       tags: ["event"],
       summary: "Create or update event",
       description:
-        "Create a new event or update an existing one. Requires editor role for the event's organization. Events are associated with locations and can have multiple event types.",
+        "Create a new event or update an existing one. Requires editor role for the event's organization. Events are associated with locations and can have multiple event types. When creating or updating an event, future instances will be automatically created or updated based on the event's recurrence pattern. Changes to series events will cascade to future instances.",
     })
     .output(
       z.object({
@@ -793,6 +793,74 @@ export const eventRouter = {
         eventId: result.id,
       });
 
+      // Handle event instance cascade operations for series (events with recurrence patterns)
+      if (result.recurrencePattern) {
+        const {
+          isStructuralChange,
+          createEventInstancesForSeries,
+          updateFutureInstances,
+          recreateFutureInstances,
+        } = await import("../lib/cascade-service");
+
+        // Build series data for cascade operations
+        const seriesData = {
+          id: result.id,
+          orgId: result.orgId,
+          locationId: result.locationId,
+          name: result.name,
+          description: result.description,
+          startDate: result.startDate,
+          endDate: result.endDate,
+          startTime: result.startTime,
+          endTime: result.endTime,
+          dayOfWeek: result.dayOfWeek,
+          recurrencePattern: result.recurrencePattern,
+          recurrenceInterval: result.recurrenceInterval,
+          indexWithinInterval: result.indexWithinInterval,
+          isActive: result.isActive,
+          isPrivate: result.isPrivate,
+          highlight: result.highlight,
+          meta: result.meta as Record<string, unknown> | null,
+          eventTypeId: eventTypeIds?.[0],
+          // eventTagId: eventTagIds?.[0], // TODO: event tag support
+        };
+
+        if (!existingEvent) {
+          // New series: create event instances
+          await createEventInstancesForSeries(ctx.db, seriesData);
+        } else if (existingEvent.recurrencePattern) {
+          // Existing series: check for structural changes
+          const existingSeriesData = {
+            dayOfWeek: existingEvent.dayOfWeek,
+            recurrencePattern: existingEvent.recurrencePattern,
+            recurrenceInterval: existingEvent.recurrenceInterval,
+            indexWithinInterval: existingEvent.indexWithinInterval,
+            startDate: existingEvent.startDate,
+            endDate: existingEvent.endDate,
+          };
+
+          const updatedSeriesData = {
+            dayOfWeek: result.dayOfWeek,
+            recurrencePattern: result.recurrencePattern,
+            recurrenceInterval: result.recurrenceInterval,
+            indexWithinInterval: result.indexWithinInterval,
+            startDate: result.startDate,
+            endDate: result.endDate,
+          };
+
+          if (isStructuralChange(existingSeriesData, updatedSeriesData)) {
+            // Structural change: delete and recreate future instances
+            await recreateFutureInstances(ctx.db, seriesData);
+          } else {
+            // Non-structural change: update future instances in place
+            await updateFutureInstances(ctx.db, seriesData);
+          }
+        } else {
+          // Converting a non-series event to a series: create instances
+          await createEventInstancesForSeries(ctx.db, seriesData);
+        }
+      }
+
       return { event: result ?? null };
     }),
   eventIdToRegionNameLookup: protectedProcedure
@@ -867,7 +935,7 @@ export const eventRouter = {
       tags: ["event"],
       summary: "Delete event",
       description:
-        "Soft delete an event by marking it as inactive. The event will no longer appear on the map but the data is preserved.",
+        "Soft delete an event by marking it as inactive. The event will no longer appear on the map but the data is preserved. Future instances of this series event will also be soft deleted.",
     })
     .handler(async ({ context: ctx, input }) => {
       const [event] = await ctx.db
@@ -900,6 +968,12 @@ export const eventRouter = {
 
       // Notify webhooks and invalidate cache about the event deletion
       notifyMapDataChange({ type: "event.deleted", eventId: input.id });
+
+      // Cascade delete event instances for series events
+      const { softDeleteFutureInstancesForSeries } = await import(
+        "../lib/cascade-service"
+      );
+      await softDeleteFutureInstancesForSeries(ctx.db, input.id);
 
       return { eventId: input.id };
     }),

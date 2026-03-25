@@ -970,7 +970,8 @@ export const orgRouter = {
       path: "/delete/{id}",
       tags: ["org"],
       summary: "Delete organization",
-      description: "Soft delete an organization by marking it as inactive",
+      description:
+        "Soft delete an organization by marking it as inactive. This will also soft delete all associated event series and instances if the org is an AO.",
     })
     .output(
       z.object({
@@ -1002,6 +1003,21 @@ export const orgRouter = {
 
       // Notify webhooks about the org deletion
       notifyMapDataChange({ type: "org.deleted", orgId: input.id });
+
+      // Get the org type before deleting to determine if cascading is needed
+      const [org] = await ctx.db
+        .select({ orgType: schema.orgs.orgType })
+        .from(schema.orgs)
+        .where(eq(schema.orgs.id, input.id));
+
+      // If this is an AO, cascade soft-delete to series and event instances
+      if (org?.orgType === "ao") {
+        const { softDeleteSeriesForOrg, softDeleteFutureInstancesForOrg } =
+          await import("../lib/cascade-service");
+
+        await softDeleteSeriesForOrg(ctx.db, input.id);
+        await softDeleteFutureInstancesForOrg(ctx.db, input.id);
+      }
 
       return { orgId: input.id };
     }),
