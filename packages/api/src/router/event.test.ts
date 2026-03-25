@@ -17,7 +17,7 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   })),
 }));
 
-import { eq, schema } from "@acme/db";
+import { eq, schema, and } from "@acme/db";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
   cleanup,
@@ -1137,6 +1137,438 @@ describe("Event Router", () => {
 
       expect(result).toHaveProperty("lookup");
       expect(typeof result.lookup).toBe("object");
+    });
+  });
+  describe("cascade service integration", () => {
+    describe("crupdate with recurrence", () => {
+      it("should create event instances when creating a new recurring series", async () => {
+        const session = await createAdminSession();
+        await mockAuthWithSession(session);
+
+        const region = await createTestRegion();
+        if (!region) return;
+
+        const ao = await createTestAO(region.id);
+        if (!ao) return;
+
+        const location = await createTestLocation(region.id);
+        if (!location) return;
+
+        const eventType = await createTestEventType();
+        if (!eventType) return;
+
+        const editorSession = createEditorSession({
+          orgId: ao.id,
+          orgName: ao.name,
+        });
+        await mockAuthWithSession(editorSession);
+
+        const client = createTestClient();
+        const seriesName = `Recurring Series ${uniqueId()}`;
+
+        const result = await client.event.crupdate({
+          name: seriesName,
+          aoId: ao.id,
+          regionId: region.id,
+          locationId: location.id,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          endTime: "0615",
+          startDate: "2026-01-01",
+          endDate: "2026-03-31",
+          recurrencePattern: "weekly",
+          recurrenceInterval: 1,
+          indexWithinInterval: null,
+          highlight: false,
+          isActive: true,
+          eventTypeIds: [eventType.id],
+          email: null,
+        });
+
+        expect(result.event).not.toBeNull();
+        expect(result.event?.recurrencePattern).toBe("weekly");
+
+        const seriesId = result.event?.id;
+        if (seriesId) {
+          createdEventIds.push(seriesId);
+
+          // Verify instances were created
+          const instances = await db
+            .select()
+            .from(schema.eventInstances)
+            .where(eq(schema.eventInstances.seriesId, seriesId));
+
+          expect(instances.length).toBeGreaterThan(0);
+          // Should have instances for each Monday from Jan 1 to March 31, 2026
+          expect(instances.length).toBeGreaterThanOrEqual(12);
+          // Instances in eventInstances are cascade-deleted with the parent series event
+        }
+      });
+
+      it("should update future instances in place for non-structural changes", async () => {
+        const session = await createAdminSession();
+        await mockAuthWithSession(session);
+
+        const region = await createTestRegion();
+        if (!region) return;
+
+        const ao = await createTestAO(region.id);
+        if (!ao) return;
+
+        const location = await createTestLocation(region.id);
+        if (!location) return;
+
+        const eventType = await createTestEventType();
+        if (!eventType) return;
+
+        // Create initial series
+        const [seriesEvent] = await db
+          .insert(schema.events)
+          .values({
+            name: `Original Series ${uniqueId()}`,
+            orgId: ao.id,
+            locationId: location.id,
+            dayOfWeek: "monday",
+            startTime: "0530",
+            endTime: "0615",
+            startDate: "2026-01-01",
+            endDate: "2026-03-31",
+            recurrencePattern: "weekly",
+            recurrenceInterval: 1,
+            indexWithinInterval: null,
+            isActive: true,
+            highlight: false,
+          })
+          .returning();
+
+        if (!seriesEvent) return;
+        createdEventIds.push(seriesEvent.id);
+
+        // Create some instances
+        const [instance1] = await db
+          .insert(schema.eventInstances)
+          .values({
+            name: `Original Series ${uniqueId()}`,
+            orgId: ao.id,
+            locationId: location.id,
+            startTime: "0530",
+            endTime: "0615",
+            startDate: "2026-04-07",
+            isActive: true,
+            highlight: false,
+            seriesId: seriesEvent.id,
+            isPrivate: false,
+          })
+          .returning();
+
+        const editorSession = createEditorSession({
+          orgId: ao.id,
+          orgName: ao.name,
+        });
+        await mockAuthWithSession(editorSession);
+
+        const client = createTestClient();
+        const updatedName = `Updated Series ${uniqueId()}`;
+
+        // Non-structural change: update name and time (not dayOfWeek, recurrence pattern, etc.)
+        const result = await client.event.crupdate({
+          id: seriesEvent.id,
+          name: updatedName,
+          aoId: ao.id,
+          regionId: region.id,
+          locationId: location.id,
+          dayOfWeek: "monday", // Same
+          startTime: "0600", // Changed (non-structural)
+          endTime: "0645", // Changed (non-structural)
+          startDate: "2026-01-01", // Same
+          endDate: "2026-03-31", // Same
+          recurrencePattern: "weekly", // Same
+          recurrenceInterval: 1, // Same
+          indexWithinInterval: null, // Same
+          highlight: false,
+          isActive: true,
+          eventTypeIds: [eventType.id],
+          email: null,
+        });
+
+        expect(result.event?.name).toBe(updatedName);
+        expect(result.event?.startTime).toBe("0600");
+
+        // Verify instance was updated in place (not recreated with new ID)
+        if (instance1) {
+          const [updatedInstance] = await db
+            .select()
+            .from(schema.eventInstances)
+            .where(eq(schema.eventInstances.id, instance1.id));
+
+          expect(updatedInstance?.name).toBe(updatedName);
+          expect(updatedInstance?.startTime).toBe("0600");
+          expect(updatedInstance?.seriesId).toBe(seriesEvent.id);
+        }
+      });
+
+      it("should recreate future instances for structural changes", async () => {
+        const session = await createAdminSession();
+        await mockAuthWithSession(session);
+
+        const region = await createTestRegion();
+        if (!region) return;
+
+        const ao = await createTestAO(region.id);
+        if (!ao) return;
+
+        const location = await createTestLocation(region.id);
+        if (!location) return;
+
+        const eventType = await createTestEventType();
+        if (!eventType) return;
+
+        // Create initial series on Mondays
+        const [seriesEvent] = await db
+          .insert(schema.events)
+          .values({
+            name: `Structural Change Series ${uniqueId()}`,
+            orgId: ao.id,
+            locationId: location.id,
+            dayOfWeek: "monday",
+            startTime: "0530",
+            endTime: "0615",
+            startDate: "2026-01-01",
+            endDate: "2026-03-31",
+            recurrencePattern: "weekly",
+            recurrenceInterval: 1,
+            indexWithinInterval: null,
+            isActive: true,
+            highlight: false,
+          })
+          .returning();
+
+        if (!seriesEvent) return;
+        createdEventIds.push(seriesEvent.id);
+
+        // Create initial instance on Monday
+        const [instance1] = await db
+          .insert(schema.eventInstances)
+          .values({
+            name: `Structural Change Series ${uniqueId()}`,
+            orgId: ao.id,
+            locationId: location.id,
+            startTime: "0530",
+            endTime: "0615",
+            startDate: "2026-04-07",
+            isActive: true,
+            highlight: false,
+            seriesId: seriesEvent.id,
+            isPrivate: false,
+          })
+          .returning();
+
+        const editorSession = createEditorSession({
+          orgId: ao.id,
+          orgName: ao.name,
+        });
+        await mockAuthWithSession(editorSession);
+
+        const client = createTestClient();
+
+        // Structural change: change dayOfWeek from Monday to Tuesday
+        const result = await client.event.crupdate({
+          id: seriesEvent.id,
+          name: seriesEvent.name,
+          aoId: ao.id,
+          regionId: region.id,
+          locationId: location.id,
+          dayOfWeek: "tuesday", // Changed from Monday (structural)
+          startTime: "0530",
+          endTime: "0615",
+          startDate: "2026-01-01",
+          endDate: "2026-03-31",
+          recurrencePattern: "weekly",
+          recurrenceInterval: 1,
+          indexWithinInterval: null,
+          highlight: false,
+          isActive: true,
+          eventTypeIds: [eventType.id],
+          email: null,
+        });
+
+        expect(result.event?.dayOfWeek).toBe("tuesday");
+
+        // Verify old instance was hard-deleted (recreateFutureInstances deletes and recreates)
+        if (instance1) {
+          const [deletedInstance] = await db
+            .select()
+            .from(schema.eventInstances)
+            .where(eq(schema.eventInstances.id, instance1.id));
+
+          expect(deletedInstance).toBeUndefined();
+        }
+
+        // Verify new instances were created for Tuesdays
+        const newInstances = await db
+          .select()
+          .from(schema.eventInstances)
+          .where(eq(schema.eventInstances.seriesId, seriesEvent.id));
+
+        expect(newInstances.length).toBeGreaterThan(0);
+      });
+
+      it("should create weekly instances when recurrencePattern is null (defaults to weekly)", async () => {
+        const session = await createAdminSession();
+        await mockAuthWithSession(session);
+
+        const region = await createTestRegion();
+        if (!region) return;
+
+        const ao = await createTestAO(region.id);
+        if (!ao) return;
+
+        const location = await createTestLocation(region.id);
+        if (!location) return;
+
+        const eventType = await createTestEventType();
+        if (!eventType) return;
+
+        const editorSession = createEditorSession({
+          orgId: ao.id,
+          orgName: ao.name,
+        });
+        await mockAuthWithSession(editorSession);
+
+        const client = createTestClient();
+
+        // Create event with null recurrencePattern — should default to weekly
+        const result = await client.event.crupdate({
+          name: `Null Recurrence Weekly ${uniqueId()}`,
+          aoId: ao.id,
+          regionId: region.id,
+          locationId: location.id,
+          dayOfWeek: "wednesday",
+          startTime: "0530",
+          endTime: "0615",
+          startDate: "2026-01-01",
+          endDate: "2026-03-31",
+          recurrencePattern: null,
+          recurrenceInterval: null,
+          indexWithinInterval: null,
+          highlight: false,
+          isActive: true,
+          eventTypeIds: [eventType.id],
+          email: null,
+        });
+
+        expect(result.event).not.toBeNull();
+        expect(result.event?.recurrencePattern).toBeNull();
+
+        if (result.event) {
+          createdEventIds.push(result.event.id);
+
+          // Should still have weekly instances generated
+          const instances = await db
+            .select()
+            .from(schema.eventInstances)
+            .where(eq(schema.eventInstances.seriesId, result.event.id));
+
+          expect(instances.length).toBeGreaterThan(0);
+          // ~12 Wednesdays from Jan 1 to March 31
+          expect(instances.length).toBeGreaterThanOrEqual(12);
+        }
+      });
+
+      it("should cascade soft-delete to instances when deleting a series", async () => {
+        const session = await createAdminSession();
+        await mockAuthWithSession(session);
+
+        const region = await createTestRegion();
+        if (!region) return;
+
+        const ao = await createTestAO(region.id);
+        if (!ao) return;
+
+        const location = await createTestLocation(region.id);
+        if (!location) return;
+
+        // Create initial recurring series
+        const [seriesEvent] = await db
+          .insert(schema.events)
+          .values({
+            name: `Delete Series ${uniqueId()}`,
+            orgId: ao.id,
+            locationId: location.id,
+            dayOfWeek: "monday",
+            startTime: "0530",
+            endTime: "0615",
+            startDate: "2026-01-01",
+            endDate: "2026-03-31",
+            recurrencePattern: "weekly",
+            recurrenceInterval: 1,
+            indexWithinInterval: null,
+            isActive: true,
+            highlight: false,
+          })
+          .returning();
+
+        if (!seriesEvent) return;
+        createdEventIds.push(seriesEvent.id);
+
+        // Create instances
+        const [instance1] = await db
+          .insert(schema.eventInstances)
+          .values({
+            name: `Delete Series ${uniqueId()}`,
+            orgId: ao.id,
+            locationId: location.id,
+            startTime: "0530",
+            endTime: "0615",
+            startDate: "2026-04-07",
+            isActive: true,
+            highlight: false,
+            seriesId: seriesEvent.id,
+            isPrivate: false,
+          })
+          .returning();
+
+        const adminSession = await createAdminSession();
+        if (adminSession.roles && adminSession.user?.roles) {
+          adminSession.roles.push({
+            orgId: ao.id,
+            orgName: ao.name,
+            roleName: "admin",
+          });
+          adminSession.user.roles.push({
+            orgId: ao.id,
+            orgName: ao.name,
+            roleName: "admin",
+          });
+        }
+        await mockAuthWithSession(adminSession);
+
+        const client = createTestClient();
+
+        const result = await client.event.delete({
+          id: seriesEvent.id,
+        });
+
+        expect(result.eventId).toBe(seriesEvent.id);
+
+        // Verify series is soft-deleted
+        const [deletedSeries] = await db
+          .select()
+          .from(schema.events)
+          .where(eq(schema.events.id, seriesEvent.id));
+
+        expect(deletedSeries?.isActive).toBe(false);
+
+        // Verify instances are soft-deleted
+        if (instance1) {
+          const [deletedInstance] = await db
+            .select()
+            .from(schema.eventInstances)
+            .where(eq(schema.eventInstances.id, instance1.id));
+
+          expect(deletedInstance?.isActive).toBe(false);
+        }
+      });
     });
   });
 });

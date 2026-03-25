@@ -793,8 +793,9 @@ export const eventRouter = {
         eventId: result.id,
       });
 
-      // Handle event instance cascade operations for series (events with recurrence patterns)
-      if (result.recurrencePattern) {
+      // Handle event instance cascade operations for series (events with recurrence patterns).
+      // null recurrencePattern defaults to weekly in createEventInstancesForSeries.
+      if (result.dayOfWeek) {
         const {
           isStructuralChange,
           createEventInstancesForSeries,
@@ -826,8 +827,13 @@ export const eventRouter = {
         };
 
         if (!existingEvent) {
-          // New series: create event instances
-          await createEventInstancesForSeries(ctx.db, seriesData);
+          // New series: create event instances from series start date
+          await createEventInstancesForSeries(
+            ctx.db,
+            seriesData,
+            4,
+            seriesData.startDate,
+          );
         } else if (existingEvent.recurrencePattern) {
           // Existing series: check for structural changes
           const existingSeriesData = {
@@ -856,8 +862,13 @@ export const eventRouter = {
             await updateFutureInstances(ctx.db, seriesData);
           }
         } else {
-          // Converting a non-series event to a series: create instances
-          await createEventInstancesForSeries(ctx.db, seriesData);
+          // Converting a non-series event to a series: create instances from series start date
+          await createEventInstancesForSeries(
+            ctx.db,
+            seriesData,
+            4,
+            seriesData.startDate,
+          );
         }
       }
 
