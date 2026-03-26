@@ -292,7 +292,7 @@ export const userRouter = {
       const { roles: rawRoles, ...rest } = input;
       const roles = rawRoles as RoleInput[];
 
-      // Enforce home-region authorization for existing users
+      let canEditProfile = true;
       if (input.id && ctx.session?.id !== input.id) {
         const [existingUser] = await ctx.db
           .select({ homeRegionId: schema.users.homeRegionId })
@@ -307,9 +307,7 @@ export const userRouter = {
             roleName: "editor",
           });
           if (!success) {
-            throw new ORPCError("UNAUTHORIZED", {
-              message: "You can only modify users whose home region you manage",
-            });
+            canEditProfile = false;
           }
         }
       }
@@ -409,32 +407,45 @@ export const userRouter = {
       console.log("Update set", JSON.stringify(updateSet));
 
       let user: typeof schema.users.$inferSelect;
-      try {
-        const result = await ctx.db
-          .insert(schema.users)
-          .values({
-            ...rest,
-            email: normalizedEmail ?? "", // Ensure required email is not undefined
-          })
-          .onConflictDoUpdate({
-            target: [schema.users.id],
-            set: updateSet,
-          })
-          .returning();
 
-        const insertedUser = result[0];
-        if (!insertedUser) {
+      if (input.id && !canEditProfile) {
+        // Cannot edit profile data but can still manage roles.
+        // Just fetch the existing user without modifying profile fields.
+        const [existingUser] = await ctx.db
+          .select()
+          .from(schema.users)
+          .where(eq(schema.users.id, input.id));
+        if (!existingUser) {
           throw new Error("User not found");
         }
-        user = insertedUser;
-      } catch (error) {
-        if (isDuplicateEmailError(error)) {
-          throw new ORPCError("BAD_REQUEST", {
-            message: `A user with the email address "${_email ?? ""}" already exists. Please use a different email address.`,
-          });
+        user = existingUser;
+      } else {
+        try {
+          const result = await ctx.db
+            .insert(schema.users)
+            .values({
+              ...rest,
+              email: normalizedEmail ?? "",
+            })
+            .onConflictDoUpdate({
+              target: [schema.users.id],
+              set: updateSet,
+            })
+            .returning();
+
+          const insertedUser = result[0];
+          if (!insertedUser) {
+            throw new Error("User not found");
+          }
+          user = insertedUser;
+        } catch (error) {
+          if (isDuplicateEmailError(error)) {
+            throw new ORPCError("BAD_REQUEST", {
+              message: `A user with the email address "${_email ?? ""}" already exists. Please use a different email address.`,
+            });
+          }
+          throw error;
         }
-        // Re-throw other errors
-        throw error;
       }
 
       console.log("User", JSON.stringify(user));

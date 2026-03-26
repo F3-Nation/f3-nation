@@ -1,6 +1,6 @@
 {
   "name": "f3-nation-api",
-  "version": "3.9.0",
+  "version": "3.9.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -21,7 +21,7 @@
     "with-env": "dotenv -e ../../.env --"
   },
   "dependencies": {
-    "@acme/api": "workspace:*",
+    "@acme/api": "workspace:^0.2.0",
     "@acme/auth": "workspace:^0.1.0",
     "@acme/db": "workspace:^0.1.0",
     "@acme/env": "workspace:^0.1.0",

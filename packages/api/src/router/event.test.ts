@@ -245,6 +245,19 @@ describe("Event Router", () => {
       const client = createTestClient();
       const result = await client.map.event.all({
         pageIndex: 0,
+        pageSize: 50,
+        statuses: ["active"],
+      });
+
+      expect(result.events?.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("map.event.all", () => {
+    it("should return a list of events with filtering", async () => {
+      const client = createTestClient();
+      const result = await client.map.event.all({
+        pageIndex: 0,
         pageSize: 10,
       });
 

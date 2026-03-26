@@ -87,7 +87,7 @@ importers:
   apps/api:
     dependencies:
       '@acme/api':
-        specifier: workspace:*
+        specifier: workspace:^0.2.0
         version: link:../../packages/api
       '@acme/auth':
         specifier: workspace:^0.1.0
@@ -310,7 +310,7 @@ importers:
   apps/map:
     dependencies:
       '@acme/api':
-        specifier: workspace:*
+        specifier: workspace:^0.2.0
         version: link:../../packages/api
       '@acme/auth':
         specifier: workspace:^0.1.0

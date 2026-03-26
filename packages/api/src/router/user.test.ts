@@ -868,7 +868,7 @@ describe("User Router", () => {
       ).rejects.toThrow("already exists");
     });
 
-    it("should reject update when admin does not manage user's home region", async () => {
+    it("should skip profile update but allow role changes when admin does not manage user's home region", async () => {
       const dbInstance = db;
 
       // Create two region orgs
@@ -925,17 +925,127 @@ describe("User Router", () => {
 
       const client = createTestClient();
 
-      await expect(
-        client.user.crupdate({
-          id: testUser.id,
-          f3Name: "Updated",
-          roles: [],
-        }),
-      ).rejects.toThrow(
-        "You can only modify users whose home region you manage",
-      );
+      // Should succeed — profile data is skipped, roles are processed
+      const result = await client.user.crupdate({
+        id: testUser.id,
+        f3Name: "Updated",
+        roles: [{ orgId: regionA.id, roleName: "admin" }],
+      });
+
+      // Profile data should NOT have been modified
+      expect(result.id).toBe(testUser.id);
+      expect(result.f3Name).toBe("HomeRegionTest");
+
+      // Role on regionA should have been granted
+      const grantedRoles = await dbInstance
+        .select()
+        .from(schema.rolesXUsersXOrg)
+        .where(eq(schema.rolesXUsersXOrg.userId, testUser.id));
+      expect(grantedRoles.some((r) => r.orgId === regionA.id)).toBe(true);
 
       // Clean up
+      await dbInstance
+        .delete(schema.rolesXUsersXOrg)
+        .where(eq(schema.rolesXUsersXOrg.userId, testUser.id));
+      await dbInstance
+        .delete(schema.users)
+        .where(eq(schema.users.id, testUser.id));
+      await dbInstance
+        .delete(schema.orgs)
+        .where(eq(schema.orgs.id, regionA.id));
+      await dbInstance
+        .delete(schema.orgs)
+        .where(eq(schema.orgs.id, regionB.id));
+    });
+
+    it("should not modify profile fields when admin does not manage user's home region", async () => {
+      const dbInstance = db;
+
+      const [regionA] = await dbInstance
+        .insert(schema.orgs)
+        .values({
+          name: `RegionA-${Date.now()}`,
+          orgType: "region",
+          isActive: true,
+        })
+        .returning();
+      const [regionB] = await dbInstance
+        .insert(schema.orgs)
+        .values({
+          name: `RegionB-${Date.now()}`,
+          orgType: "region",
+          isActive: true,
+        })
+        .returning();
+
+      if (!regionA || !regionB)
+        throw new Error("Failed to create test regions");
+
+      const originalF3Name = "OriginalName";
+      const originalFirstName = "OriginalFirst";
+      const [testUser] = await dbInstance
+        .insert(schema.users)
+        .values({
+          email: `profile-guard-${Date.now()}@example.com`,
+          f3Name: originalF3Name,
+          firstName: originalFirstName,
+          homeRegionId: regionB.id,
+        })
+        .returning();
+
+      if (!testUser) throw new Error("Failed to create test user");
+
+      const mockSession: Session = {
+        id: 1,
+        email: "admin-a@example.com",
+        user: {
+          id: "1",
+          email: "admin-a@example.com",
+          name: "AdminA",
+          roles: [
+            { orgId: regionA.id, orgName: regionA.name, roleName: "admin" },
+          ],
+        },
+        roles: [
+          { orgId: regionA.id, orgName: regionA.name, roleName: "admin" },
+        ],
+        expires: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
+      };
+      await mockAuthWithSession(mockSession);
+
+      const client = createTestClient();
+
+      // Attempt to modify profile fields and add a role on regionA
+      const result = await client.user.crupdate({
+        id: testUser.id,
+        f3Name: "AttemptedChange",
+        firstName: "AttemptedFirst",
+        roles: [{ orgId: regionA.id, roleName: "editor" }],
+      });
+
+      // Profile fields must be unchanged
+      expect(result.f3Name).toBe(originalF3Name);
+      expect(result.firstName).toBe(originalFirstName);
+
+      // Verify directly in DB that profile wasn't modified
+      const [dbUser] = await dbInstance
+        .select()
+        .from(schema.users)
+        .where(eq(schema.users.id, testUser.id));
+      expect(dbUser?.f3Name).toBe(originalF3Name);
+      expect(dbUser?.firstName).toBe(originalFirstName);
+
+      // Role on regionA should have been granted
+      const grantedRoles = await dbInstance
+        .select()
+        .from(schema.rolesXUsersXOrg)
+        .where(eq(schema.rolesXUsersXOrg.userId, testUser.id));
+      expect(grantedRoles.some((r) => r.orgId === regionA.id)).toBe(true);
+
+      // Clean up
+      await dbInstance
+        .delete(schema.rolesXUsersXOrg)
+        .where(eq(schema.rolesXUsersXOrg.userId, testUser.id));
       await dbInstance
         .delete(schema.users)
         .where(eq(schema.users.id, testUser.id));
