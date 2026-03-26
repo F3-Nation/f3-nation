@@ -75,6 +75,23 @@ export default function AdminAOsModal({
     schema: AOInsertSchema.extend({
       badImage: z.boolean().default(false),
     }),
+    defaultValues: {
+      id: ao?.id ?? undefined,
+      name: ao?.name ?? "",
+      parentId: ao?.parentId ?? -1,
+      defaultLocationId: ao?.defaultLocationId ?? null,
+      isActive: ao?.isActive ?? true,
+      description: ao?.description ?? "",
+      logoUrl: ao?.logoUrl ?? null,
+      website: ao?.website ?? null,
+      email: ao?.email ?? null,
+      twitter: ao?.twitter ?? null,
+      facebook: ao?.facebook ?? null,
+      instagram: ao?.instagram ?? null,
+      lastAnnualReview: ao?.lastAnnualReview ?? null,
+      meta: ao?.meta ?? null,
+      badImage: false,
+    },
   });
 
   useEffect(() => {

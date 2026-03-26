@@ -2,7 +2,7 @@ import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 
 import { and, asc, countDistinct, eq, isNotNull, schema, sql } from "@acme/db";
-import type { OrgType } from "@acme/shared/app/enums";
+import { OrgType } from "@acme/shared/app/enums";
 
 import { protectedProcedure } from "../../shared";
 
@@ -30,6 +30,44 @@ export const orgChartRouter = {
       description:
         "Return active orgs and their hierarchy for the org chart, along with active location summaries.",
     })
+    .output(
+      z.object({
+        orgs: z.array(
+          z
+            .object({
+              orgId: z.number().describe("Organization ID"),
+              name: z.string().nullable().describe("Organization name"),
+              orgType: z.enum(OrgType).describe("Organization type"),
+              hierarchy: z
+                .array(
+                  z.tuple([
+                    z.number().describe("Ancestor org ID"),
+                    z.string().nullable().describe("Ancestor org name"),
+                    z.enum(OrgType).describe("Ancestor org type"),
+                  ]),
+                )
+                .describe(
+                  "Parent chain from immediate parent to root (each entry is [id, name, orgType])",
+                ),
+              activeLocations: z
+                .array(
+                  z.object({
+                    latitude: z.number().describe("Location latitude"),
+                    longitude: z.number().describe("Location longitude"),
+                    eventCount: z
+                      .number()
+                      .describe("Number of active events at this location"),
+                    aoCount: z
+                      .number()
+                      .describe("Number of distinct AOs at this location"),
+                  }),
+                )
+                .describe("Active locations with event/AO counts"),
+            })
+            .nullable(),
+        ),
+      }),
+    )
     .handler(async ({ context: ctx }) => {
       const orgsPromise = ctx.db
         .select({
@@ -225,6 +263,30 @@ export const orgChartRouter = {
       description:
         "Return org chart details and leadership positions for the specified organization.",
     })
+    .output(
+      z.object({
+        id: z.number().describe("Organization ID"),
+        name: z.string().nullable().describe("Organization name"),
+        orgType: z.enum(OrgType).describe("Organization type"),
+        email: z.string().nullable().describe("Organization email"),
+        website: z.string().nullable().describe("Organization website"),
+        twitter: z.string().nullable().describe("Organization Twitter handle"),
+        facebook: z.string().nullable().describe("Organization Facebook page"),
+        instagram: z
+          .string()
+          .nullable()
+          .describe("Organization Instagram handle"),
+        positions: z
+          .array(
+            z.object({
+              title: z.string().describe("Position title"),
+              f3Name: z.string().nullable().describe("User F3 name"),
+              avatarUrl: z.string().nullable().describe("User avatar URL"),
+            }),
+          )
+          .describe("Leadership positions for this organization"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const [org] = await ctx.db
         .select({

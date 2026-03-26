@@ -2,7 +2,7 @@ import { and, eq, schema } from "@acme/db";
 import { ERRORS } from "@acme/shared/app/errors";
 import { isValidEmail } from "@acme/shared/app/functions";
 import { normalizeEmail } from "@acme/shared/common/functions";
-import { CrupdateUserSchema } from "@acme/validators";
+import { CrupdateUserSchema, UserSelectSchema } from "@acme/validators";
 import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 
@@ -18,7 +18,9 @@ import {
   buildUserListQuery,
   checkUserPiiAccess,
   isDuplicateEmailError,
+  userDetailOutputSchema,
   userListInputSchema,
+  userListUserOutputSchema,
 } from "../lib/user";
 import { adminProcedure, editorProcedure } from "../shared";
 
@@ -33,6 +35,13 @@ export const userRouter = {
       description:
         "Get a paginated list of users with optional filtering by role, status, and organization. Includes PII fields (email, phone, emergency contacts) if includePii is true and the user is an F3 Nation admin.",
     })
+    .output(
+      z.object({
+        users: z.array(userListUserOutputSchema),
+        totalCount: z.number().describe("Total number of users"),
+        includePii: z.boolean().describe("Whether PII fields are included"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       // Always set to false by default
       let includePii = false;
@@ -75,6 +84,16 @@ export const userRouter = {
       description:
         "Get a paginated list of users associated with the specified organizations and all their descendant organizations through their roles. PII fields (email, phone, emergency contacts) are only included if the requester is an admin for all of the specified organizations.",
     })
+    .output(
+      z.object({
+        users: z.array(userListUserOutputSchema),
+        totalCount: z.number().describe("Total number of users"),
+        includePii: z
+          .boolean()
+          .optional()
+          .describe("Whether PII fields are included"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       if (!input?.orgIds || input.orgIds.length === 0) {
         throw new ORPCError("BAD_REQUEST", {
@@ -96,6 +115,7 @@ export const userRouter = {
       let includePii = false;
 
       if (input?.includePii) {
+        includePii = true;
         // Check if user is an admin for all of the specified parent orgs
         // (not all descendants, just the ones they requested)
         for (const orgId of input.orgIds) {
@@ -110,7 +130,6 @@ export const userRouter = {
             break;
           }
         }
-        includePii = true;
       }
 
       // Update input to use all descendant org IDs
@@ -146,6 +165,12 @@ export const userRouter = {
       description:
         "Retrieve detailed information about a specific user including their roles, status, and organization assignments. PII fields (email, phone) are only included if the requester has admin role for any of the user's organizations.",
     })
+    .output(
+      z.object({
+        user: userDetailOutputSchema.nullable(),
+        includePii: z.boolean().describe("Whether PII fields are included"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       let includePii = false;
       if (input?.includePii) {
@@ -176,6 +201,7 @@ export const userRouter = {
         ctx,
         whereCondition: eq(schema.users.id, input.id),
         includePii,
+        includeListFields: true,
       });
     }),
   byEmail: editorProcedure
@@ -202,6 +228,12 @@ export const userRouter = {
       description:
         "Retrieve a user's detailed information and role assignments by email address. PII fields are only included if requester is admin for one of the user's organizations.",
     })
+    .output(
+      z.object({
+        user: userDetailOutputSchema.nullable(),
+        includePii: z.boolean().describe("Whether PII fields are included"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const normalizedEmail = normalizeEmail(input.email);
       let includePii = false;
@@ -225,9 +257,10 @@ export const userRouter = {
         whereCondition: eq(schema.users.email, normalizedEmail),
         includePii,
         includeEmail: true, // Always include email when searching by email
+        includeListFields: true,
       });
     }),
-  crupdate: adminProcedure
+  crupdate: editorProcedure
     .input(CrupdateUserSchema)
     .route({
       method: "POST",
@@ -237,9 +270,47 @@ export const userRouter = {
       description:
         "Create a new user or update an existing one, including role assignments for organizations. Requires admin role for organizations where roles are being assigned. PII fields (email, phone, emergency contacts) can only be set if requester has admin access.",
     })
+    .output(
+      UserSelectSchema.extend({
+        roles: z
+          .array(
+            z.object({
+              orgId: z.number().describe("Organization ID"),
+              orgName: z.string().nullable().describe("Organization name"),
+              roleName: z.string().nullable().describe("Role name"),
+            }),
+          )
+          .describe("User roles"),
+        meta: z
+          .record(z.unknown())
+          .nullable()
+          .optional()
+          .describe("User metadata"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const { roles: rawRoles, ...rest } = input;
       const roles = rawRoles as RoleInput[];
+
+      let canEditProfile = true;
+      if (input.id && ctx.session?.id !== input.id) {
+        const [existingUser] = await ctx.db
+          .select({ homeRegionId: schema.users.homeRegionId })
+          .from(schema.users)
+          .where(eq(schema.users.id, input.id));
+
+        if (existingUser?.homeRegionId) {
+          const { success } = await checkHasRoleOnOrg({
+            orgId: existingUser.homeRegionId,
+            session: ctx.session,
+            db: ctx.db,
+            roleName: "editor",
+          });
+          if (!success) {
+            canEditProfile = false;
+          }
+        }
+      }
 
       // Check if this is an update (has id) and if requester has PII access
       let hasPiiAccess = false;
@@ -336,32 +407,45 @@ export const userRouter = {
       console.log("Update set", JSON.stringify(updateSet));
 
       let user: typeof schema.users.$inferSelect;
-      try {
-        const result = await ctx.db
-          .insert(schema.users)
-          .values({
-            ...rest,
-            email: normalizedEmail ?? "", // Ensure required email is not undefined
-          })
-          .onConflictDoUpdate({
-            target: [schema.users.id],
-            set: updateSet,
-          })
-          .returning();
 
-        const insertedUser = result[0];
-        if (!insertedUser) {
+      if (input.id && !canEditProfile) {
+        // Cannot edit profile data but can still manage roles.
+        // Just fetch the existing user without modifying profile fields.
+        const [existingUser] = await ctx.db
+          .select()
+          .from(schema.users)
+          .where(eq(schema.users.id, input.id));
+        if (!existingUser) {
           throw new Error("User not found");
         }
-        user = insertedUser;
-      } catch (error) {
-        if (isDuplicateEmailError(error)) {
-          throw new ORPCError("BAD_REQUEST", {
-            message: `A user with the email address "${_email ?? ""}" already exists. Please use a different email address.`,
-          });
+        user = existingUser;
+      } else {
+        try {
+          const result = await ctx.db
+            .insert(schema.users)
+            .values({
+              ...rest,
+              email: normalizedEmail ?? "",
+            })
+            .onConflictDoUpdate({
+              target: [schema.users.id],
+              set: updateSet,
+            })
+            .returning();
+
+          const insertedUser = result[0];
+          if (!insertedUser) {
+            throw new Error("User not found");
+          }
+          user = insertedUser;
+        } catch (error) {
+          if (isDuplicateEmailError(error)) {
+            throw new ORPCError("BAD_REQUEST", {
+              message: `A user with the email address "${_email ?? ""}" already exists. Please use a different email address.`,
+            });
+          }
+          throw error;
         }
-        // Re-throw other errors
-        throw error;
       }
 
       console.log("User", JSON.stringify(user));

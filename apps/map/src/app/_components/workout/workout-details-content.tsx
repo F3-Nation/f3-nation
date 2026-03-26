@@ -231,20 +231,21 @@ export const WorkoutDetailsContent = ({
             onClick={() =>
               openModal(ModalType.FULL_IMAGE, {
                 title: `${location.parentName} logo`,
-                src: location.parentLogo ?? "/f3_logo.png",
+                src:
+                  location.parentLogo ?? location.regionLogo ?? "/f3_logo.png",
                 fallbackSrc: "/f3_logo.png",
-                alt: location.parentLogo ?? "F3 logo",
+                alt: `Logo for ${location.parentName ?? "F3"}`,
               })
             }
           >
             <ImageWithFallback
-              key={location.parentLogo}
-              src={location.parentLogo ?? "/f3_logo.png"}
+              key={location.parentLogo ?? location.regionLogo}
+              src={location.parentLogo ?? location.regionLogo ?? "/f3_logo.png"}
               fallbackSrc="/f3_logo.png"
               loading="lazy"
               width={64}
               height={64}
-              alt={location.parentLogo ?? "F3 logo"}
+              alt={`Logo for ${location.parentName ?? "F3"}`}
               className="rounded-lg bg-black"
             />
           </button>

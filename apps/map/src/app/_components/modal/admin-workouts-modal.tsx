@@ -103,7 +103,6 @@ export default function AdminWorkoutsModal({
   const event = eventResponse?.event;
   const isEditing = !!event;
   const isLoading = gte(data.id, 0) && isLoadingEvent;
-
   const router = useRouter();
 
   const [isSubmitting, setIsSubmitting] = useState(false);

@@ -1,19 +1,24 @@
 import type { RouterOutputs } from "~/orpc/types";
 import { VirtualizedCombobox } from "~/app/_components/virtualized-combobox";
 import { orpc, useQuery } from "~/orpc/react";
+import type { OrgType } from "@acme/shared/app/enums";
 
 type Org = RouterOutputs["org"]["all"]["orgs"][number];
 
 export const OrgFilter = ({
   onOrgSelect,
   selectedOrgs,
+  label = "Org",
+  orgTypes = ["region", "area", "sector"],
 }: {
   onOrgSelect: (org: Org) => void;
   selectedOrgs: Org[];
+  label?: string;
+  orgTypes?: OrgType[];
 }) => {
   const { data: orgs } = useQuery(
     orpc.org.all.queryOptions({
-      input: { orgTypes: ["region", "area", "sector"] },
+      input: { orgTypes },
     }),
   );
 
@@ -36,7 +41,7 @@ export const OrgFilter = ({
             onOrgSelect(org);
           }
         }}
-        searchPlaceholder="Org"
+        searchPlaceholder={label}
       />
     </div>
   );

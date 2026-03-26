@@ -36,6 +36,23 @@ export const uniqueId = () =>
   `test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 /**
+ * Ensures required roles (editor, admin) exist in the roles table.
+ * Many tests depend on these roles being present for role assignment to work.
+ */
+export const getOrCreateRoles = async () => {
+  const existing = await db.select().from(schema.roles);
+  const existingNames = new Set(existing.map((r) => r.name));
+
+  for (const roleName of ["editor", "admin"] as const) {
+    if (!existingNames.has(roleName)) {
+      await db
+        .insert(schema.roles)
+        .values({ name: roleName, description: `${roleName} role` });
+    }
+  }
+};
+
+/**
  * Gets or creates the F3 Nation org (required for admin operations)
  * This uses the same query pattern as the routers do to find the nation org.
  */

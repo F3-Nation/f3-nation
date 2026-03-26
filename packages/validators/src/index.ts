@@ -89,6 +89,27 @@ export const EventInsertSchema = createInsertSchema(events, {
   .omit({
     orgId: true,
   });
+
+const socialUrlSchema = z.union([
+  z.literal(""),
+  z
+    .string()
+    .trim()
+    .superRefine((val, ctx) => {
+      const hasProtocol =
+        val.startsWith("http://") || val.startsWith("https://");
+      const isValid = z.string().url().safeParse(val).success;
+      if (!isValid) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: hasProtocol
+            ? "Invalid URL format"
+            : "URL must start with http:// or https://",
+        });
+      }
+    }),
+]);
+
 export const EventSelectSchema = createSelectSchema(events);
 
 export const CreateEventSchema = EventInsertSchema.omit({
@@ -104,10 +125,10 @@ export const NationInsertSchema = createInsertSchema(orgs, {
   email: (s: z.ZodString) =>
     s.email({ message: "Invalid email format" }).or(z.literal("")).nullable(),
   description: (s: z.ZodString) => s.nullable(),
-  website: (s: z.ZodString) => s.nullable(),
-  twitter: (s: z.ZodString) => s.nullable(),
-  facebook: (s: z.ZodString) => s.nullable(),
-  instagram: (s: z.ZodString) => s.nullable(),
+  website: socialUrlSchema.nullable(),
+  twitter: socialUrlSchema.nullable(),
+  facebook: socialUrlSchema.nullable(),
+  instagram: socialUrlSchema.nullable(),
   parentId: z.null({ message: "Must not have a parent" }).optional(),
 }).omit({ orgType: true });
 export const NationSelectSchema = createSelectSchema(orgs);
@@ -121,10 +142,10 @@ export const SectorInsertSchema = createInsertSchema(orgs, {
   email: (s: z.ZodString) =>
     s.email({ message: "Invalid email format" }).or(z.literal("")).nullable(),
   description: (s: z.ZodString) => s.nullable(),
-  website: (s: z.ZodString) => s.nullable(),
-  twitter: (s: z.ZodString) => s.nullable(),
-  facebook: (s: z.ZodString) => s.nullable(),
-  instagram: (s: z.ZodString) => s.nullable(),
+  website: socialUrlSchema.nullable(),
+  twitter: socialUrlSchema.nullable(),
+  facebook: socialUrlSchema.nullable(),
+  instagram: socialUrlSchema.nullable(),
 }).omit({ orgType: true });
 export const SectorSelectSchema = createSelectSchema(orgs);
 
@@ -137,10 +158,10 @@ export const AreaInsertSchema = createInsertSchema(orgs, {
   email: (s: z.ZodString) =>
     s.email({ message: "Invalid email format" }).or(z.literal("")).nullable(),
   description: (s: z.ZodString) => s.nullable(),
-  website: (s: z.ZodString) => s.nullable(),
-  twitter: (s: z.ZodString) => s.nullable(),
-  facebook: (s: z.ZodString) => s.nullable(),
-  instagram: (s: z.ZodString) => s.nullable(),
+  website: socialUrlSchema.nullable(),
+  twitter: socialUrlSchema.nullable(),
+  facebook: socialUrlSchema.nullable(),
+  instagram: socialUrlSchema.nullable(),
 }).omit({ orgType: true });
 export const AreaSelectSchema = createSelectSchema(orgs);
 
@@ -153,10 +174,10 @@ export const RegionInsertSchema = createInsertSchema(orgs, {
   email: (s: z.ZodString) =>
     s.email({ message: "Invalid email format" }).or(z.literal("")).nullable(),
   description: (s: z.ZodString) => s.nullable(),
-  website: (s: z.ZodString) => s.nullable(),
-  twitter: (s: z.ZodString) => s.nullable(),
-  facebook: (s: z.ZodString) => s.nullable(),
-  instagram: (s: z.ZodString) => s.nullable(),
+  website: socialUrlSchema.nullable(),
+  twitter: socialUrlSchema.nullable(),
+  facebook: socialUrlSchema.nullable(),
+  instagram: socialUrlSchema.nullable(),
 }).omit({ orgType: true });
 export const RegionSelectSchema = createSelectSchema(orgs);
 
@@ -169,10 +190,10 @@ export const AOInsertSchema = createInsertSchema(orgs, {
   email: (s: z.ZodString) =>
     s.email({ message: "Invalid email format" }).or(z.literal("")).nullable(),
   description: (s: z.ZodString) => s.nullable(),
-  website: (s: z.ZodString) => s.nullable(),
-  twitter: (s: z.ZodString) => s.nullable(),
-  facebook: (s: z.ZodString) => s.nullable(),
-  instagram: (s: z.ZodString) => s.nullable(),
+  website: socialUrlSchema.nullable(),
+  twitter: socialUrlSchema.nullable(),
+  facebook: socialUrlSchema.nullable(),
+  instagram: socialUrlSchema.nullable(),
 }).omit({ orgType: true });
 export const AOSelectSchema = createSelectSchema(orgs);
 
@@ -186,10 +207,10 @@ export const OrgInsertSchema = createInsertSchema(orgs, {
   description: (s: z.ZodString) => s.nullable(),
   email: (s: z.ZodString) =>
     s.email({ message: "Invalid email format" }).or(z.literal("")).nullable(),
-  website: (s: z.ZodString) => s.nullable(),
-  twitter: (s: z.ZodString) => s.nullable(),
-  facebook: (s: z.ZodString) => s.nullable(),
-  instagram: (s: z.ZodString) => s.nullable(),
+  website: socialUrlSchema.nullable(),
+  twitter: socialUrlSchema.nullable(),
+  facebook: socialUrlSchema.nullable(),
+  instagram: socialUrlSchema.nullable(),
 });
 export const OrgSelectSchema = createSelectSchema(orgs);
 

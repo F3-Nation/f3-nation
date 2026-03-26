@@ -48,6 +48,57 @@ export const apiKeyRouter = {
       description:
         "Retrieve all API keys with their metadata, owner information, role assignments, and status. Requires admin role for any organization.",
     })
+    .output(
+      z.object({
+        apiKeys: z
+          .array(
+            z.object({
+              id: z.number().describe("API key ID"),
+              name: z.string().describe("API key name"),
+              description: z
+                .string()
+                .nullable()
+                .describe("API key description"),
+              ownerId: z.number().nullable().describe("Owner user ID"),
+              revokedAt: z
+                .string()
+                .nullable()
+                .describe("Date the API key was revoked"),
+              lastUsedAt: z
+                .string()
+                .nullable()
+                .describe("Date the API key was last used"),
+              expiresAt: z
+                .string()
+                .nullable()
+                .describe("Date the API key expires"),
+              created: z.string().describe("Date the API key was created"),
+              updated: z.string().describe("Date the API key was last updated"),
+              ownerName: z.string().nullable().describe("Owner user name"),
+              ownerEmail: z
+                .string()
+                .email()
+                .nullable()
+                .describe("Owner user email"),
+              keySignature: z
+                .string()
+                .describe("Last 4 characters of the API key"),
+              roles: z
+                .array(
+                  z.object({
+                    orgId: z.number().describe("Organization ID"),
+                    orgName: z.string().describe("Organization name"),
+                    roleName: z.enum(["editor", "admin"]).describe("Role name"),
+                  }),
+                )
+                .describe("Roles assigned to the API key"),
+              orgIds: z.array(z.number()).describe("Organization IDs"),
+              orgNames: z.array(z.string()).describe("Organization names"),
+            }),
+          )
+          .describe("List of API keys"),
+      }),
+    )
     .handler(async ({ context: ctx }) => {
       // Check if user is a nation admin (for email visibility)
       const { isNationAdmin } = await getEditableOrgIdsForUser(ctx);
@@ -153,6 +204,29 @@ export const apiKeyRouter = {
       description:
         "Generate a new API key for programmatic access. The key can be scoped to specific organizations with specific roles (editor or admin). Requires admin role for all assigned organizations.",
     })
+    .output(
+      z.object({
+        id: z.number().describe("API key ID"),
+        key: z.string().describe("API key value"),
+        name: z.string().describe("API key name"),
+        description: z.string().nullable().describe("API key description"),
+        ownerId: z.number().nullable().describe("Owner user ID"),
+        revokedAt: z
+          .string()
+          .nullable()
+          .describe("Date the API key was revoked"),
+        lastUsedAt: z
+          .string()
+          .nullable()
+          .describe("Date the API key was last used"),
+        expiresAt: z.string().nullable().describe("Date the API key expires"),
+        created: z.string().describe("Date the API key was created"),
+        updated: z.string().describe("Date the API key was last updated"),
+        secret: z
+          .string()
+          .describe("The full API key secret (only returned on creation)"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const roles = input.roles ?? [];
       const expiresAt = input.expiresAt ?? null;
@@ -245,6 +319,34 @@ export const apiKeyRouter = {
       description:
         "Revoke an API key to prevent further use, or restore a previously revoked key. Revoked keys cannot be used to authenticate API requests.",
     })
+    .output(
+      z.object({
+        apiKey: z
+          .object({
+            id: z.number().describe("API key ID"),
+            key: z.string().describe("API key value"),
+            name: z.string().describe("API key name"),
+            description: z.string().nullable().describe("API key description"),
+            ownerId: z.number().nullable().describe("Owner user ID"),
+            revokedAt: z
+              .string()
+              .nullable()
+              .describe("Date the API key was revoked"),
+            lastUsedAt: z
+              .string()
+              .nullable()
+              .describe("Date the API key was last used"),
+            expiresAt: z
+              .string()
+              .nullable()
+              .describe("Date the API key expires"),
+            created: z.string().describe("Date the API key was created"),
+            updated: z.string().describe("Date the API key was last updated"),
+          })
+          .nullable()
+          .describe("API key"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const timestamp =
         input.revoke === false
@@ -282,6 +384,34 @@ export const apiKeyRouter = {
       description:
         "Permanently delete an API key and all associated role assignments. This action cannot be undone.",
     })
+    .output(
+      z.object({
+        apiKey: z
+          .object({
+            id: z.number().describe("API key ID"),
+            key: z.string().describe("API key value"),
+            name: z.string().describe("API key name"),
+            description: z.string().nullable().describe("API key description"),
+            ownerId: z.number().nullable().describe("Owner user ID"),
+            revokedAt: z
+              .string()
+              .nullable()
+              .describe("Date the API key was revoked"),
+            lastUsedAt: z
+              .string()
+              .nullable()
+              .describe("Date the API key was last used"),
+            expiresAt: z
+              .string()
+              .nullable()
+              .describe("Date the API key expires"),
+            created: z.string().describe("Date the API key was created"),
+            updated: z.string().describe("Date the API key was last updated"),
+          })
+          .nullable()
+          .describe("API key"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       // Delete org associations first (cascade should handle this, but being explicit)
       await ctx.db
@@ -309,6 +439,11 @@ export const apiKeyRouter = {
       description:
         "Check if an API key is valid, not revoked, and not expired. Returns true only if the key can be used for authentication.",
     })
+    .output(
+      z.object({
+        isValid: z.boolean().describe("Whether the API key is valid"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const [apiKey] = await ctx.db
         .select({

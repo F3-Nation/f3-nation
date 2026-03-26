@@ -16,6 +16,7 @@ import { DayOfWeek } from "@acme/shared/app/enums";
 import { getFullAddress } from "@acme/shared/app/functions";
 import { isTruthy } from "@acme/shared/common/functions";
 import type { LowBandwidthF3Marker } from "@acme/validators";
+import { LowBandwidthF3Marker as LowBandwidthF3MarkerSchema } from "@acme/validators";
 
 import { protectedProcedure } from "../../shared";
 
@@ -29,14 +30,22 @@ export const mapLocationRouter = os.router({
       description:
         "Retrieve all locations and events for displaying on the map. Returns data in a low-bandwidth array format optimized for client-side rendering. Includes only active, non-private events.",
     })
+    .output(
+      z
+        .array(LowBandwidthF3MarkerSchema)
+        .describe("Low-bandwidth array of events and locations"),
+    )
     .handler(async ({ context: ctx }) => {
       const aoOrg = aliasedTable(schema.orgs, "ao_org");
+      const regionOrg = aliasedTable(schema.orgs, "region_org");
       const locationsAndEvents = await ctx.db
         .select({
           locations: {
             id: schema.locations.id,
             name: aoOrg.name,
-            logo: aoOrg.logoUrl,
+            logo: sql<
+              string | null
+            >`COALESCE(NULLIF(${aoOrg.logoUrl}, ''), NULLIF(${regionOrg.logoUrl}, ''))`,
             lat: schema.locations.latitude,
             lon: schema.locations.longitude,
             locationAddress: schema.locations.addressStreet,
@@ -79,6 +88,13 @@ export const mapLocationRouter = os.router({
         )
         .leftJoin(aoOrg, eq(schema.events.orgId, aoOrg.id))
         .leftJoin(
+          regionOrg,
+          and(
+            eq(regionOrg.id, aoOrg.parentId),
+            eq(regionOrg.orgType, "region"),
+          ),
+        )
+        .leftJoin(
           schema.eventsXEventTypes,
           eq(schema.eventsXEventTypes.eventId, schema.events.id),
         )
@@ -91,6 +107,7 @@ export const mapLocationRouter = os.router({
           schema.locations.id,
           aoOrg.name,
           aoOrg.logoUrl,
+          regionOrg.logoUrl,
           schema.events.id,
         );
 
@@ -180,6 +197,101 @@ export const mapLocationRouter = os.router({
       description:
         "Retrieve detailed workout information for a specific location, including all events, associated organizations, and metadata",
     })
+    .output(
+      z.object({
+        location: z
+          .object({
+            id: z.number().describe("Location ID"),
+            name: z.string().describe("Location name"),
+            description: z.string().nullable().describe("Location description"),
+            lat: z.number().describe("Location latitude"),
+            lon: z.number().describe("Location longitude"),
+            orgId: z.number().describe("Organization ID"),
+            locationName: z.string().describe("Location name (alias)"),
+            locationMeta: z
+              .record(z.unknown())
+              .nullable()
+              .describe("Location metadata"),
+            locationAddress: z
+              .string()
+              .nullable()
+              .describe("Location street address"),
+            locationAddress2: z
+              .string()
+              .nullable()
+              .describe("Location street address line 2"),
+            locationCity: z.string().nullable().describe("Location city"),
+            locationState: z.string().nullable().describe("Location state"),
+            locationZip: z.string().nullable().describe("Location zip code"),
+            locationCountry: z.string().nullable().describe("Location country"),
+            isActive: z.boolean().describe("Whether the location is active"),
+            created: z.string().describe("Location creation date"),
+            updated: z.string().describe("Location last updated date"),
+            locationDescription: z
+              .string()
+              .nullable()
+              .describe("Location description (alias)"),
+            parentId: z.number().nullable().describe("Parent AO org ID"),
+            parentLogo: z.string().nullable().describe("Parent AO logo URL"),
+            parentName: z.string().nullable().describe("Parent AO name"),
+            parentWebsite: z.string().nullable().describe("Parent AO website"),
+            parentEmail: z.string().nullable().describe("Parent AO email"),
+            parentTwitter: z.string().nullable().describe("Parent AO Twitter"),
+            parentFacebook: z
+              .string()
+              .nullable()
+              .describe("Parent AO Facebook"),
+            parentInstagram: z
+              .string()
+              .nullable()
+              .describe("Parent AO Instagram"),
+            regionId: z.number().nullable().describe("Region org ID"),
+            regionName: z.string().nullable().describe("Region name"),
+            regionLogo: z.string().nullable().describe("Region logo URL"),
+            regionWebsite: z.string().nullable().describe("Region website"),
+            regionEmail: z.string().nullable().describe("Region email"),
+            regionTwitter: z.string().nullable().describe("Region Twitter"),
+            regionFacebook: z.string().nullable().describe("Region Facebook"),
+            regionInstagram: z.string().nullable().describe("Region Instagram"),
+            regionType: z.string().nullable().describe("Region org type"),
+            fullAddress: z
+              .string()
+              .nullable()
+              .describe("Full formatted address"),
+            events: z
+              .array(
+                z.object({
+                  id: z.number().describe("Event ID"),
+                  name: z.string().describe("Event name"),
+                  description: z
+                    .string()
+                    .nullable()
+                    .describe("Event description"),
+                  dayOfWeek: z
+                    .enum(DayOfWeek)
+                    .nullable()
+                    .describe("Day of week"),
+                  startTime: z.string().nullable().describe("Event start time"),
+                  endTime: z.string().nullable().describe("Event end time"),
+                  eventTypes: z
+                    .array(z.object({ id: z.number(), name: z.string() }))
+                    .describe("Event types"),
+                  aoId: z.number().nullable().describe("AO org ID"),
+                  aoLogo: z.string().nullable().describe("AO logo URL"),
+                  aoWebsite: z.string().nullable().describe("AO website"),
+                  aoName: z.string().nullable().describe("AO name"),
+                }),
+              )
+              .describe("Events at this location"),
+          })
+          .nullable()
+          .describe("Location with events"),
+        message: z
+          .string()
+          .optional()
+          .describe("Error message if location not found"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const parentOrg = aliasedTable(schema.orgs, "parent_org");
       const regionOrg = aliasedTable(schema.orgs, "region_org");
@@ -323,7 +435,7 @@ export const mapLocationRouter = os.router({
         ),
       };
 
-      return { location: locationWithEvents };
+      return { location: locationWithEvents, message: undefined };
     }),
   regions: protectedProcedure
     .route({
@@ -334,6 +446,18 @@ export const mapLocationRouter = os.router({
       description:
         "Retrieve a list of all active F3 regions with their basic information (id, name, logo, website)",
     })
+    .output(
+      z.object({
+        regions: z.array(
+          z.object({
+            id: z.number().describe("Region ID"),
+            name: z.string().describe("Region name"),
+            logo: z.string().nullable().describe("Region logo"),
+            website: z.string().nullable().describe("Region website"),
+          }),
+        ),
+      }),
+    )
     .handler(async ({ context: ctx }) => {
       const regions = await ctx.db
         .select()
@@ -357,6 +481,20 @@ export const mapLocationRouter = os.router({
       description:
         "Retrieve all active regions that have associated location coordinates. Useful for displaying region centers on a map.",
     })
+    .output(
+      z.object({
+        regionsWithLocation: z.array(
+          z.object({
+            id: z.number().describe("Region ID"),
+            name: z.string().describe("Region name"),
+            locationId: z.number().describe("Location ID"),
+            lat: z.number().describe("Location latitude"),
+            lon: z.number().describe("Location longitude"),
+            logo: z.string().nullable().describe("AO logo URL"),
+          }),
+        ),
+      }),
+    )
     .handler(async ({ context: ctx }) => {
       const ao = aliasedTable(schema.orgs, "ao");
       const region = aliasedTable(schema.orgs, "region");
@@ -403,6 +541,14 @@ export const mapLocationRouter = os.router({
       description:
         "Get the total count of active workouts across all locations",
     })
+    .output(
+      z.object({
+        count: z
+          .number()
+          .optional()
+          .describe("Total number of active workouts"),
+      }),
+    )
     .handler(async ({ context: ctx }) => {
       const [result] = await ctx.db
         .select({ count: count() })
@@ -424,6 +570,14 @@ export const mapLocationRouter = os.router({
       summary: "Get region count",
       description: "Get the total count of active F3 regions",
     })
+    .output(
+      z.object({
+        count: z
+          .number()
+          .optional()
+          .describe("Total number of active F3 regions"),
+      }),
+    )
     .handler(async ({ context: ctx }) => {
       const regionOrg = aliasedTable(schema.orgs, "region_org");
       const [result] = await ctx.db
