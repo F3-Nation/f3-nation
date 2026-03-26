@@ -10,6 +10,35 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: "3.9.1",
+    date: "2026-03-26",
+    title: "Map Updates & Admin Portal Improvements",
+    sections: [
+      {
+        title: "Map Updates",
+        items: [
+          "Map now refreshes automatically when you add, edit, or approve workout changes - no manual refresh or revalidation needed",
+        ],
+      },
+      {
+        title: "Admin Portal",
+        items: [
+          "Bug Fix: Higher level admins can again grant access to lower orgs they manage.",
+          "Feature: User pages now show Home Region",
+          "Enhancement: Better experience when using the built-in map feature when editing a Location.",
+          "Enhancement: Social media fields now require http or https in the field. This ensure people enter full URLs and not handles.",
+        ],
+      },
+      {
+        title: "API",
+        items: [
+          "Feature: /docs now displays a sample response for each endpoint, making it easier to understand the data structure and test API calls.",
+          "Feature: /user/byEmail now returns more information on a user.",
+        ],
+      },
+    ],
+  },
+  {
     version: "3.8.0",
     date: "2026-03-06",
     title: "Map Updates & Admin Portal Improvements",
