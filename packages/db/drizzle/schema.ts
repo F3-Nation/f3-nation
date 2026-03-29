@@ -129,10 +129,9 @@ export const eventInstances = pgTable(
       "btree",
       table.startDate.asc().nullsLast().op("date_ops"),
     ),
-    index("idx_event_instances_start_date_active").using(
-      "btree",
-      sql`(start_date ASC NULLS LAST) WHERE (is_active)`,
-    ),
+    index("idx_event_instances_start_date_active")
+      .using("btree", table.startDate.asc().nullsLast().op("date_ops"))
+      .where(sql`is_active`),
     foreignKey({
       columns: [table.locationId],
       foreignColumns: [locations.id],
@@ -226,7 +225,8 @@ export const slackUsers = pgTable(
   (table) => [
     index("idx_slack_users_user_team_id").using(
       "btree",
-      sql`(user_id ASC NULLS LAST), (slack_team_id ASC NULLS LAST)`,
+      table.userId.asc().nullsLast(),
+      table.slackTeamId.asc().nullsLast(),
     ),
     foreignKey({
       columns: [table.userId],

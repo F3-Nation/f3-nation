@@ -1013,13 +1013,15 @@
           "name": "idx_event_instances_start_date_active",
           "columns": [
             {
-              "expression": "(start_date ASC NULLS LAST) WHERE (is_active)",
+              "expression": "start_date",
+              "isExpression": false,
               "asc": true,
-              "isExpression": true,
-              "nulls": "last"
+              "nulls": "last",
+              "opclass": "date_ops"
             }
           ],
           "isUnique": false,
+          "where": "is_active",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -2966,9 +2968,15 @@
           "name": "idx_slack_users_user_team_id",
           "columns": [
             {
-              "expression": "(user_id ASC NULLS LAST), (slack_team_id ASC NULLS LAST)",
+              "expression": "user_id",
+              "isExpression": false,
               "asc": true,
-              "isExpression": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "slack_team_id",
+              "isExpression": false,
+              "asc": true,
               "nulls": "last"
             }
           ],
