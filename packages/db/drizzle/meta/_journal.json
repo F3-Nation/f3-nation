@@ -78,6 +78,13 @@
       "when": 1772193724674,
       "tag": "0010_silly_giant_man",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1774783073729,
+      "tag": "0011_nervous_sleeper",
+      "breakpoints": true
     }
   ]
 }
