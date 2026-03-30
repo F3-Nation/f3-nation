@@ -18,7 +18,10 @@ import {
 } from "~/utils/store/selected-item";
 import { ImageWithFallback } from "@acme/ui/image-with-fallback";
 import { EventChip } from "./event-chip";
-import { getDominantStatus, getSelectedBorder } from "~/utils/map-status-colors";
+import {
+  getDominantStatus,
+  getSelectedBorder,
+} from "~/utils/map-status-colors";
 
 export const MobileNearbyLocationsItem = (props: {
   searchResult: LocationMarkerWithDistance;

@@ -8,6 +8,7 @@ import type { DayOfWeek } from "@acme/shared/app/enums";
 import { RERENDER_LOGS } from "@acme/shared/common/constants";
 
 import { groupMarkersByAo } from "~/utils/group-markers-by-ao";
+import { DAYS_OF_WEEK } from "~/utils/days-of-week";
 import type { MapStatus, SparseF3Marker } from "~/utils/types";
 import { orpc, useQuery } from "~/orpc/react";
 import { filterData } from "~/utils/filtered-data";
@@ -40,16 +41,6 @@ const FilteredMapResultsContext = createContext<{
   aoGroupedLocationMarkers: undefined,
   allLocationMarkersWithLatLngAndFilterData: undefined,
 });
-
-const DAYS_OF_WEEK: DayOfWeek[] = [
-  "sunday",
-  "monday",
-  "tuesday",
-  "wednesday",
-  "thursday",
-  "friday",
-  "saturday",
-];
 
 function dateToDayOfWeek(dateStr: string): DayOfWeek {
   const d = new Date(dateStr + "T00:00:00");

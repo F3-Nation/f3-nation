@@ -16,6 +16,7 @@ import { cn } from "@acme/ui";
 import { toast } from "@acme/ui/toast";
 
 import { invalidateQueries, orpc, useQuery } from "~/orpc/react";
+import { DAYS_OF_WEEK } from "~/utils/days-of-week";
 import { getWhenFromWorkout } from "~/utils/get-when-from-workout";
 import { useUpdateEventSearchParams } from "~/utils/hooks/use-update-event-search-params";
 import { appStore } from "~/utils/store/app";
@@ -32,19 +33,7 @@ import { ContactLinks } from "../contact-links";
 import { ImageWithFallback } from "@acme/ui/image-with-fallback";
 import { EventChip } from "../map/event-chip";
 import { WorkoutDetailsSkeleton } from "../modal/workout-details-skeleton";
-import type { DayOfWeek } from "@acme/shared/app/enums";
-
 import { DeletedWorkoutWarning } from "./deleted-workout-warning";
-
-const DAYS_OF_WEEK: DayOfWeek[] = [
-  "sunday",
-  "monday",
-  "tuesday",
-  "wednesday",
-  "thursday",
-  "friday",
-  "saturday",
-];
 
 function getUpdateStatusColor(instance: {
   seriesException: string | null;
@@ -108,24 +97,45 @@ export const WorkoutDetailsContent = ({
     }),
   );
 
-  const selectedEventId = useMemo(() => {
-    if (providedEventId) return providedEventId;
-    return results?.location?.events?.[0]?.id ?? null;
-  }, [providedEventId, results]);
-
-  const { data: canDeleteEventResponse } = useQuery(
-    orpc.request.canDeleteEvent.queryOptions({
-      input: { eventId: selectedEventId ?? 0 },
-      enabled: !!selectedEventId,
-    }),
-  );
-  const canDeleteEvent = canDeleteEventResponse?.canDelete;
-
   const { data: upcomingInstancesData } = useQuery(
     orpc.map.location.upcomingInstances.queryOptions({
       input: undefined,
     }),
   );
+
+  const selectedEventId = useMemo(() => {
+    if (providedEventId != null) return providedEventId;
+    const firstDbEventId = results?.location?.events?.[0]?.id ?? null;
+    if (firstDbEventId != null) return firstDbEventId;
+
+    const loc = results?.location;
+    if (
+      loc &&
+      (loc.events?.length ?? 0) === 0 &&
+      upcomingInstancesData?.length
+    ) {
+      let earliest: (typeof upcomingInstancesData)[number] | undefined;
+      for (const i of upcomingInstancesData) {
+        if (
+          i.seriesId == null &&
+          i.locationId === loc.id &&
+          (!earliest || i.startDate < earliest.startDate)
+        ) {
+          earliest = i;
+        }
+      }
+      if (earliest) return -earliest.id;
+    }
+    return null;
+  }, [providedEventId, results, upcomingInstancesData]);
+
+  const { data: canDeleteEventResponse } = useQuery(
+    orpc.request.canDeleteEvent.queryOptions({
+      input: { eventId: selectedEventId ?? 0 },
+      enabled: !!selectedEventId && selectedEventId > 0,
+    }),
+  );
+  const canDeleteEvent = canDeleteEventResponse?.canDelete;
 
   const locationUpdates = useMemo(() => {
     if (!upcomingInstancesData || !results?.location) return [];

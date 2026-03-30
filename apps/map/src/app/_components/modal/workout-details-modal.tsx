@@ -4,7 +4,6 @@ import { BreakPoints, Z_INDEX } from "@acme/shared/app/constants";
 import { Dialog, DialogContent, DialogHeader } from "@acme/ui/dialog";
 
 import type { DataType, ModalType } from "~/utils/store/modal";
-import { orpc, useQuery } from "~/orpc/react";
 import { closeModal } from "~/utils/store/modal";
 import { selectedItemStore } from "~/utils/store/selected-item";
 import { WorkoutDetailsContent } from "../workout/workout-details-content";
@@ -19,17 +18,9 @@ export const WorkoutDetailsModal = ({
   const providedLocationId =
     typeof data.locationId === "number" ? data.locationId : -1;
   const locationId = selectedLocationId ?? providedLocationId;
-  const { data: results } = useQuery(
-    orpc.map.location.locationWorkout.queryOptions({
-      input: { locationId },
-      enabled: locationId >= 0,
-    }),
-  );
-  const location = results?.location;
   const modalEventId =
-    location?.events.find((e) => e.id === selectedEventId)?.id ??
-    location?.events[0]?.id ??
-    null;
+    typeof data.eventId === "number" ? data.eventId : selectedEventId ?? null;
+
   const width = useWindowWidth();
   const isLarge = width > Number(BreakPoints.LG);
   const isMedium = width > Number(BreakPoints.MD);

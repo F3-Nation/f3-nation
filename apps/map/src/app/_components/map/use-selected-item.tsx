@@ -6,6 +6,7 @@ import { CLOSE_ZOOM } from "@acme/shared/app/constants";
 import { RERENDER_LOGS } from "@acme/shared/common/constants";
 
 import { orpc, useQuery } from "~/orpc/react";
+import { DAYS_OF_WEEK } from "~/utils/days-of-week";
 import { mapStore } from "~/utils/store/map";
 import { selectedItemStore } from "~/utils/store/selected-item";
 
@@ -24,6 +25,12 @@ export const useSelectedItem = () => {
     orpc.map.location.locationWorkout.queryOptions({
       input: { locationId: debouncedLocationId ?? -1 },
       enabled: typeof debouncedLocationId === "number",
+    }),
+  );
+
+  const { data: upcomingInstancesData } = useQuery(
+    orpc.map.location.upcomingInstances.queryOptions({
+      input: undefined,
     }),
   );
 
@@ -68,18 +75,46 @@ export const useSelectedItem = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- zoom is not a dependency but we need to monitor its changes
   }, [selectedLocation?.lat, selectedLocation?.lon, map, zoom, bounds]);
 
-  const selectedEvent = useMemo(
-    () =>
-      !selectedLocation
-        ? undefined
-        : // check for null or undefined
-          eventId === null || eventId === undefined
-          ? // get the first of the week (monday is first)
-            selectedLocation.events[0]
-          : // use == incase it is a string
-            selectedLocation.events.find((event) => event.id == eventId),
-    [selectedLocation, eventId],
-  );
+  const selectedEvent = useMemo(() => {
+    if (!selectedLocation) return undefined;
+    if (eventId === null || eventId === undefined) {
+      return selectedLocation.events[0];
+    }
+
+    const realEvent = selectedLocation.events.find(
+      (event) => event.id == eventId,
+    );
+    if (realEvent) return realEvent;
+
+    if (eventId < 0) {
+      const instanceId = -eventId;
+      const instance = upcomingInstancesData?.find((i) => i.id === instanceId);
+      if (instance) {
+        const dayOfWeek = instance.startDate
+          ? DAYS_OF_WEEK[
+              new Date(instance.startDate + "T00:00:00").getUTCDay()
+            ] ?? null
+          : null;
+        return {
+          id: eventId,
+          name: instance.name,
+          dayOfWeek,
+          startTime: instance.startTime,
+          endTime: instance.endTime,
+          description: null,
+          eventTypes: instance.eventTypes,
+          aoId: null,
+          aoName: instance.aoName,
+          aoLogo: instance.aoLogo,
+          aoWebsite: null,
+        } as NonNullable<
+          NonNullable<typeof data>["location"]
+        >["events"][number];
+      }
+    }
+
+    return undefined;
+  }, [selectedLocation, eventId, upcomingInstancesData]);
 
   // Create memoized debounced function
   const debouncedSetSelectedItem = useMemo(

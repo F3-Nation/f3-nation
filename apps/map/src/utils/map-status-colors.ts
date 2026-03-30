@@ -100,7 +100,11 @@ export const getClusterMid = (status: MapStatus) =>
 export const getClusterInner = (status: MapStatus) =>
   status ? STATUS_STYLES[status].clusterInner : "";
 
-const STATUSES: NonNullable<MapStatus>[] = ["closing", "deviation", "highlight"];
+const STATUSES: NonNullable<MapStatus>[] = [
+  "closing",
+  "deviation",
+  "highlight",
+];
 
 export const getDominantStatus = (
   events: { mapStatus: MapStatus }[],
