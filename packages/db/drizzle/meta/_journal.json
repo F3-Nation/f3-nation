@@ -92,6 +92,13 @@
       "when": 1773688200000,
       "tag": "0012_fix_client_secret_hash_column",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1774844224218,
+      "tag": "0013_smiling_warhawk",
+      "breakpoints": true
     }
   ]
 }
