@@ -42,6 +42,8 @@ export const eventInstanceRouter = {
             .optional(),
           regionOrgId: z.coerce.number().optional(),
           aoOrgId: z.coerce.number().optional(),
+          regionOrgIds: z.array(z.coerce.number()).optional(),
+          aoOrgIds: z.array(z.coerce.number()).optional(),
           startDate: z.string().optional(),
           seriesId: z.coerce.number().optional(),
           onlyStandalone: z.coerce.boolean().optional(), // Only instances without a series
@@ -64,11 +66,17 @@ export const eventInstanceRouter = {
       const usePagination =
         input?.pageIndex !== undefined && input?.pageSize !== undefined;
 
+      const statusFilter = (() => {
+        const s = input?.statuses;
+        if (!s?.length) return eq(schema.eventInstances.isActive, true);
+        if (s.length >= 2) return undefined;
+        return s.includes("active")
+          ? eq(schema.eventInstances.isActive, true)
+          : eq(schema.eventInstances.isActive, false);
+      })();
+
       const where = and(
-        // Active status filter
-        input?.statuses?.includes("inactive")
-          ? undefined
-          : eq(schema.eventInstances.isActive, true),
+        statusFilter,
         // Search filter
         input?.searchTerm
           ? or(
@@ -77,9 +85,17 @@ export const eventInstanceRouter = {
             )
           : undefined,
         // Region filter (through AO's parent)
-        input?.regionOrgId ? eq(regionOrg.id, input.regionOrgId) : undefined,
+        input?.regionOrgIds?.length
+          ? inArray(regionOrg.id, input.regionOrgIds)
+          : input?.regionOrgId
+            ? eq(regionOrg.id, input.regionOrgId)
+            : undefined,
         // AO filter
-        input?.aoOrgId ? eq(aoOrg.id, input.aoOrgId) : undefined,
+        input?.aoOrgIds?.length
+          ? inArray(aoOrg.id, input.aoOrgIds)
+          : input?.aoOrgId
+            ? eq(aoOrg.id, input.aoOrgId)
+            : undefined,
         // Start date filter
         input?.startDate
           ? gte(schema.eventInstances.startDate, input.startDate)
@@ -99,6 +115,8 @@ export const eventInstanceRouter = {
         name: schema.eventInstances.name,
         description: schema.eventInstances.description,
         isActive: schema.eventInstances.isActive,
+        aoName: aoOrg.name,
+        regionName: regionOrg.name,
         locationId: schema.eventInstances.locationId,
         orgId: schema.eventInstances.orgId,
         seriesId: schema.eventInstances.seriesId,
@@ -220,12 +238,14 @@ export const eventInstanceRouter = {
           org: sql<{
             id: number;
             name: string;
+            parentId: number | null;
             meta: Record<string, unknown> | null;
           } | null>`
             CASE WHEN ${aoOrg.id} IS NOT NULL THEN
               jsonb_build_object(
                 'id', ${aoOrg.id},
                 'name', ${aoOrg.name},
+                'parentId', ${aoOrg.parentId},
                 'meta', ${aoOrg.meta}
               )
             ELSE NULL END
@@ -316,6 +336,7 @@ export const eventInstanceRouter = {
           schema.eventInstances.id,
           aoOrg.id,
           aoOrg.name,
+          aoOrg.parentId,
           sql`${aoOrg.meta}::text`,
           schema.locations.id,
           schema.locations.name,
@@ -506,7 +527,7 @@ export const eventInstanceRouter = {
         .set({ isActive: false })
         .where(eq(schema.eventInstances.id, input.id));
 
-      return { success: true };
+      return { eventInstanceId: input.id };
     }),
 
   /**

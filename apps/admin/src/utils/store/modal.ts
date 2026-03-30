@@ -36,6 +36,8 @@ export enum DeleteType {
   NATION = "NATION",
   POSITION = "POSITION",
   ASSIGNMENT = "ASSIGNMENT",
+  EVENT_TAG = "EVENT_TAG",
+  EVENT_INSTANCE = "EVENT_INSTANCE",
 }
 
 export const eventDefaults = {

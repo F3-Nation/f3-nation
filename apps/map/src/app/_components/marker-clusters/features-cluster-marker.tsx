@@ -4,6 +4,14 @@ import {
   useAdvancedMarkerRef,
 } from "@vis.gl/react-google-maps";
 
+import { cn } from "@acme/ui";
+
+import type { MapStatus } from "~/utils/types";
+import {
+  getClusterBg,
+  getClusterInner,
+  getClusterMid,
+} from "~/utils/map-status-colors";
 import { closePanel } from "~/utils/store/selected-item";
 
 interface TreeClusterMarkerProps {
@@ -15,6 +23,7 @@ interface TreeClusterMarkerProps {
   position: google.maps.LatLngLiteral;
   size: number;
   sizeAsText: string;
+  statusColor?: MapStatus;
 }
 
 export const FeaturesClusterMarker = ({
@@ -23,6 +32,7 @@ export const FeaturesClusterMarker = ({
   sizeAsText,
   onMarkerClick,
   clusterId,
+  statusColor,
 }: TreeClusterMarkerProps) => {
   const [markerRef, marker] = useAdvancedMarkerRef();
   const markerSize = Math.floor(36 + Math.sqrt(size) * 2);
@@ -41,15 +51,26 @@ export const FeaturesClusterMarker = ({
         closePanel();
         return onMarkerClick?.(marker, clusterId);
       }}
-      className={
-        "marker cluster flex items-center justify-center rounded-full bg-foreground/30"
-      }
+      className={cn(
+        "marker cluster flex items-center justify-center rounded-full",
+        statusColor ? getClusterBg(statusColor) : "bg-foreground/30",
+      )}
       style={{ width: markerSize, height: markerSize }}
       anchorPoint={AdvancedMarkerAnchorPoint.CENTER}
     >
-      <div className="relative flex h-4/5 w-4/5 items-center justify-center rounded-full bg-foreground/50">
+      <div
+        className={cn(
+          "relative flex h-4/5 w-4/5 items-center justify-center rounded-full",
+          statusColor ? getClusterMid(statusColor) : "bg-foreground/50",
+        )}
+      >
         <div
-          className="absolute flex h-3/4 w-3/4 items-center justify-center rounded-full bg-foreground text-background"
+          className={cn(
+            "absolute flex h-3/4 w-3/4 items-center justify-center rounded-full",
+            statusColor
+              ? `${getClusterInner(statusColor)} text-white`
+              : "bg-foreground text-background",
+          )}
           style={{ fontSize: Math.max(markerSize / 4, 12) }}
         >
           {sizeAsText}

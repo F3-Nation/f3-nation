@@ -1,3 +1,4 @@
+import dayjs from "dayjs";
 import gte from "lodash/gte";
 import { Edit, PlusCircle, Trash } from "lucide-react";
 import { useSession } from "next-auth/react";
@@ -5,6 +6,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo } from "react";
 
+import {
+  START_END_TIME_DB_FORMAT,
+  START_END_TIME_DISPLAY_FORMAT,
+} from "@acme/shared/app/constants";
 import { isProd } from "@acme/shared/common/constants";
 import { isTruthy } from "@acme/shared/common/functions";
 import { cn } from "@acme/ui";
@@ -27,7 +32,61 @@ import { ContactLinks } from "../contact-links";
 import { ImageWithFallback } from "@acme/ui/image-with-fallback";
 import { EventChip } from "../map/event-chip";
 import { WorkoutDetailsSkeleton } from "../modal/workout-details-skeleton";
+import type { DayOfWeek } from "@acme/shared/app/enums";
+
 import { DeletedWorkoutWarning } from "./deleted-workout-warning";
+
+const DAYS_OF_WEEK: DayOfWeek[] = [
+  "sunday",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+];
+
+function getUpdateStatusColor(instance: {
+  seriesException: string | null;
+  seriesId: number | null;
+}) {
+  if (instance.seriesException === "closed")
+    return "bg-red-500 dark:bg-red-400";
+  if (instance.seriesException === "different-time")
+    return "bg-orange-400 dark:bg-orange-300";
+  if (instance.seriesId == null) return "bg-purple-500 dark:bg-purple-400";
+  return "bg-gray-400 dark:bg-gray-500";
+}
+
+function formatUpdateText(instance: {
+  startDate: string;
+  startTime: string | null;
+  seriesException: string | null;
+  seriesId: number | null;
+  name: string;
+}) {
+  const date = dayjs(instance.startDate).format("M/D");
+  const time = instance.startTime
+    ? dayjs(instance.startTime, START_END_TIME_DB_FORMAT).format(
+        START_END_TIME_DISPLAY_FORMAT,
+      )
+    : null;
+
+  if (instance.seriesException === "closed") {
+    return `${date} - Closed`;
+  }
+  if (instance.seriesException === "different-time") {
+    return time
+      ? `${date} - Different time: ${time}`
+      : `${date} - Different time`;
+  }
+  if (instance.seriesId == null) {
+    return time
+      ? `${date} - ${instance.name} at ${time}`
+      : `${date} - ${instance.name}`;
+  }
+  return `${date} - ${instance.name}`;
+}
 
 export interface WorkoutDetailsContentProps {
   locationId: number;
@@ -62,14 +121,79 @@ export const WorkoutDetailsContent = ({
   );
   const canDeleteEvent = canDeleteEventResponse?.canDelete;
 
+  const { data: upcomingInstancesData } = useQuery(
+    orpc.map.location.upcomingInstances.queryOptions({
+      input: undefined,
+    }),
+  );
+
+  const locationUpdates = useMemo(() => {
+    if (!upcomingInstancesData || !results?.location) return [];
+    const eventIds = new Set(results.location.events.map((e) => e.id));
+    return upcomingInstancesData.filter(
+      (instance) =>
+        (instance.seriesId != null && eventIds.has(instance.seriesId)) ||
+        (instance.seriesId == null &&
+          instance.locationId === results.location?.id),
+    );
+  }, [upcomingInstancesData, results?.location]);
+
+  const eventStatusMap = useMemo(() => {
+    const map = new Map<number, "closing" | "deviation" | "highlight">();
+    for (const instance of locationUpdates) {
+      if (instance.seriesId == null) continue;
+      const current = map.get(instance.seriesId);
+      if (instance.seriesException === "closed" && current !== "closing") {
+        map.set(instance.seriesId, "closing");
+      } else if (instance.seriesException === "different-time" && !current) {
+        map.set(instance.seriesId, "deviation");
+      }
+    }
+    return map;
+  }, [locationUpdates]);
+
   const mode = appStore.use.mode();
 
-  const event = useMemo(
-    () =>
-      // Dont provide a fallback. This is indicative of worse problems
-      results?.location?.events?.find((event) => event.id === selectedEventId),
-    [selectedEventId, results],
-  );
+  const event = useMemo(() => {
+    // Dont provide a fallback. This is indicative of worse problems
+    const realEvent = results?.location?.events?.find(
+      (event) => event.id === selectedEventId,
+    );
+    if (realEvent) return realEvent;
+
+    if (selectedEventId != null && selectedEventId < 0) {
+      const instanceId = -selectedEventId;
+      const instance = upcomingInstancesData?.find((i) => i.id === instanceId);
+      if (instance) {
+        const dayOfWeek = instance.startDate
+          ? DAYS_OF_WEEK[
+              new Date(instance.startDate + "T00:00:00").getUTCDay()
+            ] ?? null
+          : null;
+        return {
+          id: selectedEventId,
+          name: instance.name,
+          dayOfWeek,
+          startTime: instance.startTime,
+          endTime: instance.endTime,
+          startDate: instance.startDate,
+          endDate: null,
+          description: null,
+          highlight: true,
+          isActive: true,
+          isPrivate: false,
+          eventTypes: instance.eventTypes,
+          aoId: null,
+          aoName: instance.aoName,
+          aoLogo: instance.aoLogo,
+          aoWebsite: null,
+        } as unknown as NonNullable<
+          NonNullable<typeof results>["location"]
+        >["events"][number];
+      }
+    }
+    return undefined;
+  }, [selectedEventId, results, upcomingInstancesData]);
   const location = useMemo(() => results?.location ?? null, [results]);
 
   // Update the search params when the panel is open
@@ -275,6 +399,28 @@ export const WorkoutDetailsContent = ({
         </button>
       ) : null}
 
+      {locationUpdates.length > 0 && (
+        <div className="mt-1">
+          <div className="text-sm font-bold">Updates</div>
+          <div className="mt-1 flex flex-col gap-1">
+            {locationUpdates.map((instance) => (
+              <div
+                key={instance.id}
+                className="flex items-center gap-2 text-sm"
+              >
+                <div
+                  className={cn(
+                    "h-3 w-3 flex-shrink-0 rounded-sm",
+                    getUpdateStatusColor(instance),
+                  )}
+                />
+                <span>{formatUpdateText(instance)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div>
         {(location?.events.length ?? 0) > 1 ? (
           <span className="text-sm">
@@ -284,10 +430,34 @@ export const WorkoutDetailsContent = ({
           <div className="h-1" />
         )}
         <div className="flex flex-row flex-wrap gap-1">
-          {location?.events.map((event) => (
+          {location?.events.map((locEvent) => (
+            <EventChip
+              key={locEvent.id}
+              selected={selectedEventId === locEvent.id}
+              mapStatus={eventStatusMap.get(locEvent.id) ?? null}
+              event={{
+                id: locEvent.id,
+                name: locEvent.name,
+                locationId: location?.id ?? 0,
+                dayOfWeek: locEvent.dayOfWeek,
+                startTime: locEvent.startTime,
+                endTime: locEvent.endTime,
+                eventTypes: locEvent.eventTypes,
+              }}
+              location={{
+                lat: location?.lat ?? null,
+                lon: location?.lon ?? null,
+                id: location?.id ?? 0,
+              }}
+              size={chipSize}
+              hideName={(location?.events.length ?? 0) === 1}
+            />
+          ))}
+          {event && selectedEventId != null && selectedEventId < 0 && (
             <EventChip
               key={event.id}
-              selected={selectedEventId === event.id}
+              selected={true}
+              mapStatus="highlight"
               event={{
                 id: event.id,
                 name: event.name,
@@ -303,9 +473,9 @@ export const WorkoutDetailsContent = ({
                 id: location?.id ?? 0,
               }}
               size={chipSize}
-              hideName={(location?.events.length ?? 0) === 1}
+              hideName={location?.events.length === 0}
             />
-          ))}
+          )}
           {mode === "edit" ? (
             <button
               className={cn(

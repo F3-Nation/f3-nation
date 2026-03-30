@@ -302,5 +302,7 @@ export const eventTagRouter = {
         .update(schema.eventTags)
         .set({ isActive: false })
         .where(eq(schema.eventTags.id, input.id));
+
+      return { eventTagId: input.id };
     }),
 };

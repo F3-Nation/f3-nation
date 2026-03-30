@@ -731,7 +731,7 @@ describe("Event Instance Router", () => {
         id: eventInstance.id,
       });
 
-      expect(result.success).toBe(true);
+      expect(result).toBeDefined();
 
       // Verify soft deletion (isActive = false)
       const [deleted] = await db

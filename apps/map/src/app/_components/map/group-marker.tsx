@@ -10,6 +10,13 @@ import { dayOfWeekToShortDayOfWeek } from "@acme/shared/app/functions";
 import { cn } from "@acme/ui";
 
 import { groupMarkerClick } from "~/utils/actions/group-marker-click";
+import {
+  getDominantStatus,
+  getSelectedBg,
+  getSelectedBorder,
+  getStatusBase,
+  STATUS_BASE_DEFAULT,
+} from "~/utils/map-status-colors";
 import { appStore } from "~/utils/store/app";
 import { mapStore } from "~/utils/store/map";
 import {
@@ -93,12 +100,15 @@ export const FeatureMarker = ({
     [id],
   );
 
+  const dominantStatus = events?.length ? getDominantStatus(events) : null;
+
   return !events?.length ? null : !isClose ? (
     <FeaturesClusterMarker
       clusterId={id}
       position={position}
       size={1}
       sizeAsText={"1"}
+      statusColor={dominantStatus}
       onMarkerClick={() => {
         const eventId = events.find(
           (event) => event.id === selectedEventId,
@@ -170,21 +180,24 @@ export const FeatureMarker = ({
                 }}
                 className={cn(
                   // min-h-[32.5px] so it doesn't collapse with no text
-                  "min-h-[32.5px] flex-1 cursor-pointer bg-foreground py-2 text-center text-background",
-                  "border-b-2 border-l-2 border-r-2 border-t-2 border-foreground ",
+                  "min-h-[32.5px] flex-1 cursor-pointer py-2 text-center",
+                  "border-b-2 border-l-2 border-r-2 border-t-2",
                   `google-eventid-${event.id}`,
+                  (event.mapStatus && getStatusBase(event.mapStatus)) ??
+                    STATUS_BASE_DEFAULT,
                   {
                     "rounded-r-full": isEnd,
                     "rounded-l-full": isStart,
-                    "border-red-600 dark:border-red-400":
-                      isCurrentSelectedEvent ||
-                      (isCurrentSelectedLocation && noSelectedEvent),
-                    "border-red-600 bg-red-600 font-bold dark:bg-red-400":
-                      // On mobile we always use the background
-                      (touchDevice && isCurrentSelectedEvent) ||
-                      isCurrentPanelEvent ||
-                      (isCurrentPanelLocation && noSelectedPanelEvent),
                   },
+                  (isCurrentSelectedEvent ||
+                    (isCurrentSelectedLocation && noSelectedEvent)) &&
+                    getSelectedBorder(event.mapStatus),
+                  ((touchDevice && isCurrentSelectedEvent) ||
+                    isCurrentPanelEvent ||
+                    (isCurrentPanelLocation && noSelectedPanelEvent)) && [
+                    getSelectedBg(event.mapStatus),
+                    "font-bold",
+                  ],
                 )}
               >
                 {dayText}
@@ -198,9 +211,7 @@ export const FeatureMarker = ({
           style={{ zIndex: 0 }}
         >
           <path
-            className={cn("fill-foreground", {
-              "fill-[#dc2626] dark:fill-[#f87171]": false,
-            })}
+            className="fill-foreground"
             d={
               events.length === 1
                 ? "M34 10 L26 24.249 Q20 34.641 14 24.249 L6 10"

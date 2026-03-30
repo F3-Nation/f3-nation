@@ -33,6 +33,8 @@ export default function AdminDeleteModal({
     eventId?: number;
     locationId?: number;
     userId?: number;
+    eventTagId?: number;
+    eventInstanceId?: number;
   } | void>;
 
   switch (data.type) {
@@ -57,9 +59,14 @@ export default function AdminDeleteModal({
       break;
     case DeleteType.POSITION:
       mutation = orpc.position.delete.call;
+    case DeleteType.EVENT_TAG:
+      mutation = orpc.eventTag.delete.call;
+      break;
+    case DeleteType.EVENT_INSTANCE:
+      mutation = orpc.eventInstance.delete.call;
       break;
     default:
-      // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
+       
       throw new Error(`Invalid delete type: ${data.type}`);
   }
 
@@ -96,9 +103,16 @@ export default function AdminDeleteModal({
           break;
         case DeleteType.POSITION:
           await invalidateQueries("position");
+        case DeleteType.EVENT_TAG:
+          await invalidateQueries("eventTag");
+          await invalidateQueries("map");
+          break;
+        case DeleteType.EVENT_INSTANCE:
+          await invalidateQueries("eventInstance");
+          await invalidateQueries("map");
           break;
         default:
-          // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
+           
           throw new Error(`Invalid delete type: ${data.type}`);
       }
 
@@ -180,8 +194,12 @@ const dataTypeToName = (
       return "Location";
     case DeleteType.POSITION:
       return "Position";
+    case DeleteType.EVENT_TAG:
+      return "Event Tag";
+    case DeleteType.EVENT_INSTANCE:
+      return "Event Instance";
     default:
-      // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
+       
       throw new Error(`Invalid delete type: ${dataType}`);
   }
 };

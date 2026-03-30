@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BadgeCheck,
+  CalendarClock,
   Earth,
   CircleSmall,
   CirclePile,
@@ -14,6 +15,7 @@ import {
   PersonStanding,
   Shield,
   SquareChartGantt,
+  Tags,
   Turtle,
   UserCheck,
   Users,
@@ -98,6 +100,18 @@ export const AdminNavLinks = ({
       href: routes.admin.positions.__path,
       icon: BadgeCheck,
       label: "Positions",
+      type: "link",
+    },
+    {
+      href: routes.admin.eventTags.__path,
+      icon: Tags,
+      label: "Event tags",
+      type: "link",
+    },
+    {
+      href: routes.admin.eventInstances.__path,
+      icon: CalendarClock,
+      label: "Event instances",
       type: "link",
     },
     {

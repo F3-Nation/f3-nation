@@ -8,6 +8,7 @@ import {
   count,
   eq,
   isNotNull,
+  isNull,
   or,
   schema,
   sql,
@@ -60,6 +61,8 @@ export const mapLocationRouter = os.router({
             dayOfWeek: schema.events.dayOfWeek,
             startTime: schema.events.startTime,
             endTime: schema.events.endTime,
+            startDate: schema.events.startDate,
+            endDate: schema.events.endDate,
             name: schema.events.name,
             eventTypes: sql<{ id: number; name: string }[]>`COALESCE(
             json_agg(
@@ -185,10 +188,112 @@ export const mapLocationRouter = os.router({
             event.eventTypes,
             event.aoName,
             event.aoLogo,
+            event.startDate,
+            event.endDate ?? null,
           ]),
       ]);
 
       return lowBandwidthLocationEvents;
+    }),
+  upcomingInstances: protectedProcedure
+    .route({
+      method: "GET",
+      path: "/upcoming-instances",
+      tags: ["map.location"],
+      summary: "Get upcoming event instance exceptions and one-off events",
+      description:
+        "Returns event instances in the next 30 days that have a series exception (closed, different-time) or are standalone one-off events (no seriesId). Used for map pin status flagging.",
+    })
+    .handler(async ({ context: ctx }) => {
+      const aoOrg = aliasedTable(schema.orgs, "ao_org");
+
+      const instances = await ctx.db
+        .select({
+          id: schema.eventInstances.id,
+          seriesId: schema.eventInstances.seriesId,
+          locationId: schema.eventInstances.locationId,
+          startDate: schema.eventInstances.startDate,
+          startTime: schema.eventInstances.startTime,
+          endTime: schema.eventInstances.endTime,
+          seriesException: schema.eventInstances.seriesException,
+          highlight: schema.eventInstances.highlight,
+          name: schema.eventInstances.name,
+          lat: schema.locations.latitude,
+          lon: schema.locations.longitude,
+          aoName: aoOrg.name,
+          aoLogo: aoOrg.logoUrl,
+          locationAddress: schema.locations.addressStreet,
+          locationAddress2: schema.locations.addressStreet2,
+          locationCity: schema.locations.addressCity,
+          locationState: schema.locations.addressState,
+          locationCountry: schema.locations.addressCountry,
+          eventTypes: sql<{ id: number; name: string }[]>`COALESCE(
+            json_agg(
+              DISTINCT jsonb_build_object(
+                'id', ${schema.eventTypes.id},
+                'name', ${schema.eventTypes.name}
+              )
+            )
+            FILTER (
+              WHERE ${schema.eventTypes.id} IS NOT NULL
+            ),
+            '[]'
+          )`,
+        })
+        .from(schema.eventInstances)
+        .innerJoin(
+          schema.locations,
+          and(
+            eq(schema.eventInstances.locationId, schema.locations.id),
+            eq(schema.locations.isActive, true),
+          ),
+        )
+        .leftJoin(aoOrg, eq(schema.eventInstances.orgId, aoOrg.id))
+        .leftJoin(
+          schema.eventInstancesXEventTypes,
+          eq(
+            schema.eventInstancesXEventTypes.eventInstanceId,
+            schema.eventInstances.id,
+          ),
+        )
+        .leftJoin(
+          schema.eventTypes,
+          eq(
+            schema.eventTypes.id,
+            schema.eventInstancesXEventTypes.eventTypeId,
+          ),
+        )
+        .where(
+          and(
+            eq(schema.eventInstances.isActive, true),
+            eq(schema.eventInstances.isPrivate, false),
+            sql`${schema.eventInstances.startDate} >= CURRENT_DATE`,
+            sql`${schema.eventInstances.startDate} <= CURRENT_DATE + INTERVAL '30 days'`,
+            or(
+              isNotNull(schema.eventInstances.seriesException),
+              isNull(schema.eventInstances.seriesId),
+            ),
+          ),
+        )
+        .groupBy(
+          schema.eventInstances.id,
+          schema.locations.id,
+          schema.locations.latitude,
+          schema.locations.longitude,
+          schema.locations.addressStreet,
+          schema.locations.addressStreet2,
+          schema.locations.addressCity,
+          schema.locations.addressState,
+          schema.locations.addressCountry,
+          aoOrg.id,
+          aoOrg.name,
+          aoOrg.logoUrl,
+        );
+
+      return instances.map((instance) => ({
+        ...instance,
+        fullAddress: getFullAddress(instance),
+      }));
     }),
   locationWorkout: protectedProcedure
     .input(
@@ -370,7 +475,7 @@ export const mapLocationRouter = os.router({
           },
         })
         .from(schema.locations)
-        .innerJoin(
+        .leftJoin(
           schema.events,
           and(
             eq(schema.locations.id, schema.events.locationId),
@@ -404,12 +509,7 @@ export const mapLocationRouter = os.router({
             eq(schema.eventTypes.isActive, true),
           ),
         )
-        .where(
-          and(
-            eq(schema.locations.id, input.locationId),
-            eq(schema.events.isActive, true),
-          ),
-        )
+        .where(eq(schema.locations.id, input.locationId))
         .groupBy(
           schema.locations.id,
           schema.events.id,
@@ -418,7 +518,10 @@ export const mapLocationRouter = os.router({
         );
 
       const location = results[0]?.location;
-      const events = results.map((r) => r.event);
+      const events = results
+        .map((r) => r.event)
+        .filter((e) => e.id != null)
+        .map((e) => ({ ...e, id: e.id!, name: e.name! }));
 
       // Return a message instead of throwing so the client can show a friendly
       // "deleted/unavailable" panel without crashing into an error state.

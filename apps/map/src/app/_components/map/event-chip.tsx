@@ -9,7 +9,9 @@ import { useCallback } from "react";
 import type { DayOfWeek } from "@acme/shared/app/enums";
 import { cn } from "@acme/ui";
 
+import type { MapStatus } from "~/utils/types";
 import { getWhenFromWorkout } from "~/utils/get-when-from-workout";
+import { getSelectedChipBg } from "~/utils/map-status-colors";
 import { setView } from "~/utils/set-view";
 import { setSelectedItem } from "~/utils/store/selected-item";
 import BootSvgComponent from "../SVGs/boot-camp";
@@ -20,6 +22,7 @@ export const EventChip = (props: {
   variant?: "interactive" | "non-interactive";
   size?: "small" | "medium" | "large";
   selected?: boolean;
+  mapStatus?: MapStatus;
   onClick?: (e?: React.MouseEvent<HTMLButtonElement>) => void;
   event: {
     name?: string;
@@ -104,8 +107,7 @@ export const EventChip = (props: {
         "px-2 shadow",
         "cursor-pointer",
         { "pointer-events-none bg-muted": !isInteractive },
-        { "bg-red-600": isInteractive && selected },
-        { "bg-muted": isInteractive && !selected },
+        isInteractive && selected && getSelectedChipBg(props.mapStatus ?? null),
         { "gap-1 py-[1px]": size === "small" },
         { "gap-1 py-[2px]": size === "medium" },
         { "gap-2 py-[3px]": size === "large" },
@@ -116,7 +118,7 @@ export const EventChip = (props: {
       <div
         className={cn("flex flex-1 gap-2 text-foreground", {
           "text-base": size === "large",
-          "text-background": selected && isInteractive,
+          "text-background": (selected ?? !!props.mapStatus) && isInteractive,
           "justify-start": size === "small",
           "justify-center": size !== "small",
         })}
@@ -135,19 +137,31 @@ export const EventChip = (props: {
           <BootSvgComponent
             height={iconSize}
             width={iconSize}
-            fill={selected && isInteractive ? "background" : undefined}
+            fill={
+              (selected ?? !!props.mapStatus) && isInteractive
+                ? "background"
+                : undefined
+            }
           />
         ) : event.eventTypes.some((et) => et.name === "Ruck") ? (
           <RuckSvgComponent
             height={iconSize}
             width={iconSize}
-            fill={selected && isInteractive ? "background" : undefined}
+            fill={
+              (selected ?? !!props.mapStatus) && isInteractive
+                ? "background"
+                : undefined
+            }
           />
         ) : event.eventTypes.some((et) => et.name === "Run") ? (
           <RunSvgComponent
             height={iconSize}
             width={iconSize}
-            fill={selected && isInteractive ? "background" : undefined}
+            fill={
+              (selected ?? !!props.mapStatus) && isInteractive
+                ? "background"
+                : undefined
+            }
           />
         ) : null}
       </div>

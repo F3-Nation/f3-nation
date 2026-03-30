@@ -4,10 +4,11 @@ import type { ReactNode } from "react";
 import { createContext, useContext, useMemo } from "react";
 
 import { DEFAULT_CENTER } from "@acme/shared/app/constants";
+import type { DayOfWeek } from "@acme/shared/app/enums";
 import { RERENDER_LOGS } from "@acme/shared/common/constants";
 
-import type { SparseF3Marker } from "~/utils/types";
 import { groupMarkersByAo } from "~/utils/group-markers-by-ao";
+import type { MapStatus, SparseF3Marker } from "~/utils/types";
 import { orpc, useQuery } from "~/orpc/react";
 import { filterData } from "~/utils/filtered-data";
 import { filterStore } from "~/utils/store/filter";
@@ -40,11 +41,66 @@ const FilteredMapResultsContext = createContext<{
   allLocationMarkersWithLatLngAndFilterData: undefined,
 });
 
+const DAYS_OF_WEEK: DayOfWeek[] = [
+  "sunday",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+];
+
+function dateToDayOfWeek(dateStr: string): DayOfWeek {
+  const d = new Date(dateStr + "T00:00:00");
+  return DAYS_OF_WEEK[d.getUTCDay()] ?? "sunday";
+}
+
+function computeMapStatus(
+  event: { startDate: string | null; endDate: string | null; id: number },
+  instanceLookup: Map<
+    number,
+    { seriesException: string | null; startDate: string }[]
+  >,
+): MapStatus {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const thirtyDaysOut = new Date(now);
+  thirtyDaysOut.setDate(thirtyDaysOut.getDate() + 30);
+
+  if (event.endDate) {
+    const end = new Date(event.endDate + "T00:00:00");
+    const started = event.startDate
+      ? new Date(event.startDate + "T00:00:00") <= now
+      : true;
+    if (started && end >= now && end <= thirtyDaysOut) return "closing";
+  }
+
+  const instances = instanceLookup.get(event.id) ?? [];
+  if (instances.some((i) => i.seriesException === "closed")) return "closing";
+
+  if (event.startDate) {
+    const start = new Date(event.startDate + "T00:00:00");
+    if (start > now && start <= thirtyDaysOut) return "deviation";
+  }
+
+  if (instances.some((i) => i.seriesException === "different-time"))
+    return "deviation";
+
+  return null;
+}
+
 export const FilteredMapResultsProvider = (params: { children: ReactNode }) => {
   RERENDER_LOGS && console.log("FilteredMapResultsProvider rerender");
   const nearbyLocationCenter = mapStore.use.nearbyLocationCenter();
   const { data: mapEventAndLocationData } = useQuery(
     orpc.map.location.eventsAndLocations.queryOptions({
+      input: undefined,
+    }),
+  );
+
+  const { data: upcomingInstancesData } = useQuery(
+    orpc.map.location.upcomingInstances.queryOptions({
       input: undefined,
     }),
   );
@@ -57,6 +113,27 @@ export const FilteredMapResultsProvider = (params: { children: ReactNode }) => {
   const allLocationMarkersWithLatLngAndFilterData = useMemo(() => {
     if (!mapEventAndLocationData) return undefined;
 
+    const instancesBySeriesId = new Map<
+      number,
+      { seriesException: string | null; startDate: string }[]
+    >();
+    const standaloneInstances: NonNullable<typeof upcomingInstancesData> = [];
+
+    if (upcomingInstancesData) {
+      for (const instance of upcomingInstancesData) {
+        if (instance.seriesId != null) {
+          const list = instancesBySeriesId.get(instance.seriesId) ?? [];
+          list.push({
+            seriesException: instance.seriesException,
+            startDate: instance.startDate,
+          });
+          instancesBySeriesId.set(instance.seriesId, list);
+        } else {
+          standaloneInstances.push(instance);
+        }
+      }
+    }
+
     const allLocationMarkerFilterData = mapEventAndLocationData.map(
       (location) => {
         return {
@@ -67,7 +144,7 @@ export const FilteredMapResultsProvider = (params: { children: ReactNode }) => {
           lon: location[4],
           fullAddress: location[5],
           events: location[6].map((event) => {
-            return {
+            const eventObj = {
               id: event[0],
               name: event[1],
               dayOfWeek: event[2],
@@ -75,36 +152,65 @@ export const FilteredMapResultsProvider = (params: { children: ReactNode }) => {
               eventTypes: event[4],
               aoName: event[5],
               aoLogo: event[6],
+              startDate: event[5],
+              endDate: event[6],
+            };
+            return {
+              ...eventObj,
+              mapStatus: computeMapStatus(eventObj, instancesBySeriesId),
             };
           }),
         };
       },
     );
 
-    const locationIdToLatLng = allLocationMarkerFilterData.reduce(
-      (acc, location) => {
-        acc[location.id] = location;
-        return acc;
-      },
-      {} as Record<
-        number,
-        {
-          lat: number | null;
-          lon: number | null;
-          fullAddress: string | null;
-        }
-      >,
-    );
+    const locationMap = new Map<
+      number,
+      (typeof allLocationMarkerFilterData)[number]
+    >();
+    for (const loc of allLocationMarkerFilterData) {
+      locationMap.set(loc.id, loc);
+    }
 
-    return allLocationMarkerFilterData.map((location) => {
-      return {
-        ...location,
-        lat: locationIdToLatLng[location.id]?.lat ?? null,
-        lon: locationIdToLatLng[location.id]?.lon ?? null,
-        fullAddress: locationIdToLatLng[location.id]?.fullAddress ?? null,
+    for (const instance of standaloneInstances) {
+      if (
+        instance.locationId == null ||
+        instance.lat == null ||
+        instance.lon == null
+      )
+        continue;
+      const dayOfWeek = dateToDayOfWeek(instance.startDate);
+      const instanceEvent = {
+        id: -instance.id,
+        name: instance.name,
+        dayOfWeek: dayOfWeek,
+        startTime: instance.startTime,
+        eventTypes: instance.eventTypes,
+        startDate: instance.startDate,
+        endDate: null,
+        mapStatus: "highlight" as MapStatus,
       };
-    });
-  }, [mapEventAndLocationData]);
+
+      const existing = locationMap.get(instance.locationId);
+      if (existing) {
+        existing.events.push(instanceEvent);
+      } else {
+        const newLocation = {
+          id: instance.locationId,
+          aoName: instance.aoName ?? "",
+          logo: instance.aoLogo,
+          lat: instance.lat,
+          lon: instance.lon,
+          fullAddress: instance.fullAddress,
+          events: [instanceEvent],
+        };
+        locationMap.set(instance.locationId, newLocation);
+        allLocationMarkerFilterData.push(newLocation);
+      }
+    }
+
+    return allLocationMarkerFilterData;
+  }, [mapEventAndLocationData, upcomingInstancesData]);
 
   /**
    * Filter the location markers by the filters

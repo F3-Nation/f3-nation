@@ -423,6 +423,8 @@ export const LowBandwidthF3Marker = z.tuple([
       z.array(z.object({ id: z.number(), name: z.string() })), // event types
       z.string().nullable(), // ao org name
       z.string().nullable(), // ao org logo
+      z.string(), // event start date
+      z.string().nullable(), // event end date
     ])
     .array(),
 ]);

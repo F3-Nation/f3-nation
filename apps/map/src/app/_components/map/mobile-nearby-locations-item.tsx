@@ -11,12 +11,14 @@ import type { LocationMarkerWithDistance } from "./filtered-map-results-provider
 import { useSearchResultSize } from "~/utils/hooks/use-search-result-size";
 import { setView } from "~/utils/set-view";
 import { searchStore } from "~/utils/store/search";
+
 import {
   selectedItemStore,
   setSelectedItem,
 } from "~/utils/store/selected-item";
 import { ImageWithFallback } from "@acme/ui/image-with-fallback";
 import { EventChip } from "./event-chip";
+import { getDominantStatus, getSelectedBorder } from "~/utils/map-status-colors";
 
 export const MobileNearbyLocationsItem = (props: {
   searchResult: LocationMarkerWithDistance;
@@ -28,6 +30,8 @@ export const MobileNearbyLocationsItem = (props: {
   const locationId = selectedItemStore.use.locationId();
   const { searchResult } = props;
   const isSelected = searchResult.id === locationId;
+
+  const dominantStatus = getDominantStatus(searchResult.events);
 
   const name = searchResult.events
     .map((event) => event.name)
@@ -45,7 +49,9 @@ export const MobileNearbyLocationsItem = (props: {
         "p-2",
         "h-32",
         "border-2 border-foreground/10",
-        { "border-red-500": isSelected },
+        isSelected &&
+          ((dominantStatus && getSelectedBorder(dominantStatus)) ??
+            "border-red-500"),
       )}
       onClick={() => {
         searchBarRef.current?.blur();
@@ -97,6 +103,7 @@ export const MobileNearbyLocationsItem = (props: {
                   key={event.id}
                   selected={false}
                   size="small"
+                  mapStatus={event.mapStatus}
                   event={event}
                   location={searchResult}
                 />

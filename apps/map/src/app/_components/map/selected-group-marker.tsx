@@ -10,6 +10,11 @@ import type { SparseF3Marker } from "~/utils/types";
 import { groupMarkerClick } from "~/utils/actions/group-marker-click";
 import { isTouchDevice } from "~/utils/is-touch-device";
 import {
+  getSelectedBg,
+  getStatusBase,
+  STATUS_BASE_DEFAULT,
+} from "~/utils/map-status-colors";
+import {
   selectedItemStore,
   setSelectedItem,
 } from "~/utils/store/selected-item";
@@ -80,18 +85,19 @@ export const MemoSelectedGroupMarker = memo(
                     void groupMarkerClick({ locationId: id, eventId });
                   }}
                   className={cn(
-                    "flex-1 cursor-pointer border-b-2 border-t-2 border-foreground bg-foreground py-2 text-center text-background",
-                    "border-l-2 border-r-2",
+                    "flex-1 cursor-pointer py-2 text-center",
+                    "border-b-2 border-l-2 border-r-2 border-t-2",
                     `google-eventid-${event.id}`,
+                    (event.mapStatus && getStatusBase(event.mapStatus)) ??
+                      STATUS_BASE_DEFAULT,
                     {
                       "rounded-r-full": isEnd,
                       "rounded-l-full": isStart,
-                      "border-red-600 font-bold dark:bg-red-400":
-                        selectedIndex === markerIdx,
-                      "bg-red-600": true,
-                      //   (!!panel || alwaysShowFillInsteadOfOutline) &&
-                      //  (  selectedIndex === markerIdx || selectedIndex === -1 ),
                     },
+                    selectedIndex === markerIdx && [
+                      getSelectedBg(event.mapStatus),
+                      "font-bold",
+                    ],
                   )}
                 >
                   {dayText}
