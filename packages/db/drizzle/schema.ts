@@ -126,6 +126,13 @@ export const eventInstances = pgTable(
       "btree",
       table.orgId.asc().nullsLast().op("int4_ops"),
     ),
+    index("idx_event_instances_start_date").using(
+      "btree",
+      table.startDate.asc().nullsLast().op("date_ops"),
+    ),
+    index("idx_event_instances_start_date_active")
+      .using("btree", table.startDate.asc().nullsLast().op("date_ops"))
+      .where(sql`is_active`),
     foreignKey({
       columns: [table.locationId],
       foreignColumns: [locations.id],
@@ -217,6 +224,11 @@ export const slackUsers = pgTable(
       .notNull(),
   },
   (table) => [
+    index("idx_slack_users_user_team_id").using(
+      "btree",
+      table.userId.asc().nullsLast(),
+      table.slackTeamId.asc().nullsLast(),
+    ),
     foreignKey({
       columns: [table.userId],
       foreignColumns: [users.id],
@@ -790,6 +802,10 @@ export const attendanceXAttendanceTypes = pgTable(
     attendanceTypeId: integer("attendance_type_id").notNull(),
   },
   (table) => [
+    index("idx_attendance_x_types_type_id").using(
+      "btree",
+      table.attendanceTypeId.asc().nullsLast().op("int4_ops"),
+    ),
     foreignKey({
       columns: [table.attendanceId],
       foreignColumns: [attendance.id],
