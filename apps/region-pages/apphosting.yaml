@@ -25,7 +25,7 @@ env:
 
   # Cloud SQL Connector settings (set WAREHOUSE_DB_CONNECTION_MODE=connector to use)
   - variable: WAREHOUSE_DB_CONNECTION_MODE
-    value: direct
+    value: connector
 
   - variable: CLOUD_SQL_WAREHOUSE_CONNECTION_NAME
     secret: cloud-sql-warehouse-connection-name
