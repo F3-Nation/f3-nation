@@ -3,7 +3,7 @@ import { kebabCase } from 'lodash';
 
 import { db } from '../drizzle/db';
 import { regions as regionsSchema } from '../drizzle/schema';
-import { db as f3DataWarehouseDb } from '../drizzle/f3-data-warehouse/db';
+import { getDb as getF3DataWarehouseDb } from '../drizzle/f3-data-warehouse/db';
 import { orgs as orgsSchema } from '../drizzle/f3-data-warehouse/schema';
 import { currentIngestedAt, isFresh } from './seed-state';
 
@@ -141,6 +141,7 @@ function transformInstagramUrl(instagram: string | null): string | null {
 }
 
 async function* fetchRegions(): AsyncGenerator<Region> {
+  const f3DataWarehouseDb = await getF3DataWarehouseDb();
   const regions = await f3DataWarehouseDb
     .select({
       id: orgsSchema.id,

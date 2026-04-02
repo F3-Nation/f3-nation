@@ -5,12 +5,13 @@ import {
   regions as regionsSchema,
   workouts as workoutsSchema,
 } from '../drizzle/schema';
-import { db as f3DataWarehouseDb } from '../drizzle/f3-data-warehouse/db';
+import { getDb as getF3DataWarehouseDb } from '../drizzle/f3-data-warehouse/db';
 import { orgs as orgsSchema } from '../drizzle/f3-data-warehouse/schema';
 
 export async function pruneRegions() {
   console.debug('🔄 pruning regions no longer in the warehouse...');
 
+  const f3DataWarehouseDb = await getF3DataWarehouseDb();
   const activeWarehouseRegions = await f3DataWarehouseDb
     .select({
       id: orgsSchema.id,

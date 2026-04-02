@@ -36,6 +36,7 @@
   },
   "dependencies": {
     "dotenv": "^16.4.7",
+    "@google-cloud/cloud-sql-connector": "^1.4.1",
     "lodash": "^4.17.21",
     "next": "15.1.9",
     "react": "^19.0.0",

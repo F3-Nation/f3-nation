@@ -23,6 +23,30 @@ env:
       - BUILD
       - RUNTIME
 
+  # Cloud SQL Connector settings (set WAREHOUSE_DB_CONNECTION_MODE=connector to use)
+  - variable: WAREHOUSE_DB_CONNECTION_MODE
+    value: direct
+
+  - variable: CLOUD_SQL_WAREHOUSE_CONNECTION_NAME
+    secret: cloud-sql-warehouse-connection-name
+    availability:
+      - RUNTIME
+
+  - variable: WAREHOUSE_DB_USER
+    secret: warehouse-db-user
+    availability:
+      - RUNTIME
+
+  - variable: WAREHOUSE_DB_PASSWORD
+    secret: warehouse-db-password
+    availability:
+      - RUNTIME
+
+  - variable: WAREHOUSE_DB_NAME
+    secret: warehouse-db-name
+    availability:
+      - RUNTIME
+
   # Grant access to secrets in Cloud Secret Manager.
   # See https://firebase.google.com/docs/app-hosting/configure#secret-parameters
   # - variable: MY_SECRET

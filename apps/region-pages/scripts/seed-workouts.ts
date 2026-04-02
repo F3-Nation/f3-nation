@@ -5,7 +5,7 @@ import {
   regions as regionsSchema,
   workouts as workoutsSchema,
 } from '../drizzle/schema';
-import { db as f3DataWarehouseDb } from '../drizzle/f3-data-warehouse/db';
+import { getDb as getF3DataWarehouseDb } from '../drizzle/f3-data-warehouse/db';
 import {
   orgs as orgsSchema,
   events as eventsSchema,
@@ -185,6 +185,7 @@ type FetchBatchArgs = {
 };
 
 async function fetchWorkoutsBatch(args: FetchBatchArgs): Promise<BatchResult> {
+  const f3DataWarehouseDb = await getF3DataWarehouseDb();
   const conditions = [eq(eventsSchema.isActive, true)];
   if (args.updatedAfter) {
     conditions.push(gte(eventsSchema.updated, args.updatedAfter));
