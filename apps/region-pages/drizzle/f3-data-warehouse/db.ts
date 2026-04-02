@@ -37,7 +37,8 @@ async function createCloudSqlPool(): Promise<Pool> {
     ? (process.env.CLOUD_SQL_WAREHOUSE_IP_TYPE as IpAddressTypes)
     : IpAddressTypesValues.PUBLIC;
 
-  connector = new Connector();  const clientOpts = await connector.getOptions({
+  connector = new Connector();
+  const clientOpts = await connector.getOptions({
     instanceConnectionName,
     ipType: ipAddressType,
   });
