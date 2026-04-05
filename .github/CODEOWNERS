@@ -1,7 +1,7 @@
 # Default reviewers for all pull requests
 # ------------------------------------------
 # @dnishiyama    — Original author of the F3 Nation map app and API
-# @pstaylor-patrick — Monorepo/infra expertise; built admin tooling
+# @pstaylor-patrick — Monorepo/infra expertise
 # @evanpetzoldt  — Creator of the F3 Nation Slack bot; F3 Nation IT lead
 # @taterhead247  — F3 Nation IT Weasel Shaker; ensures product aligns with F3's mission and values
 * @dnishiyama @pstaylor-patrick @evanpetzoldt @taterhead247
@@ -10,5 +10,3 @@
 # @dnishiyama built the map app from scratch
 /apps/map/** @dnishiyama
 
-# @pstaylor-patrick built the admin app and manages Firebase deployments
-/apps/admin/** @pstaylor-patrick
