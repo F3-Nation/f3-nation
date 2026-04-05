@@ -6,6 +6,7 @@ import {
   authAccounts,
   authSessions,
   authVerificationTokens,
+  emailMfaCodes,
   eventInstances,
   eventInstancesXEventTypes,
   events,
@@ -15,6 +16,10 @@ import {
   eventTagsXEventInstances,
   eventTypes,
   locations,
+  oauthAccessTokens,
+  oauthAuthorizationCodes,
+  oauthClients,
+  oauthRefreshTokens,
   orgs,
   orgsXSlackSpaces,
   permissions,
@@ -60,6 +65,15 @@ export const schema = {
   orgsXSlackSpaces,
   updateRequests,
   users,
+};
+
+/** Auth schema tables (auth.*) — kept separate to avoid name collisions */
+export const authSchema = {
+  emailMfaCodes,
+  oauthAccessTokens,
+  oauthAuthorizationCodes,
+  oauthClients,
+  oauthRefreshTokens,
 };
 
 export * from "drizzle-orm";

@@ -3,7 +3,7 @@
 ## Project Structure & Module Organization
 
 - Use Node >=20.19 (see `.nvmrc`), pnpm 8.15.1, and Turborepo for workspace orchestration.
-- The `apps/map` directory contains the Next.js 15 map UI (port 3000); `apps/admin` contains database utilities, seeds, and migration helpers.
+- The `apps/map` directory contains the Next.js 15 map UI (port 3000).
 - Shared code is organized in `packages/`: `api` (tRPC routers), `auth` (auth helpers), `db` (Drizzle schema/migrations), `ui` (shared components), `validators` (Zod schemas), and `shared` (utilities).
 - Configuration files are in `tooling/`; pnpm patches go in `patches/`; Turbo generators live in `turbo/`.
 
@@ -16,7 +16,7 @@
 - Code quality: always run `pnpm lint` (or `pnpm lint --filter apps/map`) and `pnpm format:fix` to ensure your code passes all lint and formatting checks. Also run `pnpm typecheck` to validate types.
 - Testing:
   - Run all tests with `pnpm test` (via the Turbo pipeline).
-  - Run targeted tests: `pnpm -C apps/map test`, `pnpm -C apps/map test:e2e`, or `pnpm -C apps/admin test`.
+  - Run targeted tests: `pnpm -C apps/map test`, `pnpm -C apps/map test:e2e`.
   - Database helpers: `pnpm db:pull`, `pnpm db:push`, and `pnpm reset-test-db`.
 
 ## Coding Style & Naming Conventions
@@ -50,4 +50,4 @@
 ## Security & Environment
 
 - Store all secrets in a root `.env` file. Always use `with-env` helpers to load environment variables and never commit `.env` files to the repo.
-- Scope Sentry/analytics keys per environment and rotate if leaked. Run production DB changes only through scripts in `apps/admin` and `packages/db`.
+- Scope Sentry/analytics keys per environment and rotate if leaked. Run production DB changes only through scripts in `packages/db`.
