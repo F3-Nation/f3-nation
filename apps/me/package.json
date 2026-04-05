@@ -54,7 +54,10 @@
       "@acme/eslint-config/react"
     ],
     "ignorePatterns": [
-      "next-env.d.ts"
+      "next-env.d.ts",
+      "coverage/**",
+      "vitest.config.ts",
+      "vitest.setup.ts"
     ]
   }
 }
