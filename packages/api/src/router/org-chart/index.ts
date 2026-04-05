@@ -285,6 +285,15 @@ export const orgChartRouter = {
             }),
           )
           .describe("Leadership positions for this organization"),
+        roles: z
+          .array(
+            z.object({
+              title: z.string().describe("Role title"),
+              f3Name: z.string().nullable().describe("User F3 name"),
+              avatarUrl: z.string().nullable().describe("User avatar URL"),
+            }),
+          )
+          .describe("Leadership roles for this organization"),
       }),
     )
     .handler(async ({ context: ctx, input }) => {
