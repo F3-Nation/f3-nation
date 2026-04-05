@@ -118,7 +118,6 @@ API Data hierarchy
 ⁃ specific logic here
 ⁃ Maps
 ⁃ Near me
-⁃ Region pages
 
 Public (get and lists and counts)
 ⁃ Orgs
