@@ -4,7 +4,7 @@ Thank you for your interest in contributing to the F3 Region Pages project! This
 
 ## Prerequisites
 
-- [Node.js](https://nodejs.org/) version 20.18.2 (as specified in `.nvmrc`)
+- [Node.js](https://nodejs.org/) version 24.14.1 (as specified in `.nvmrc`)
 - [nvm](https://github.com/nvm-sh/nvm) (Node Version Manager)
 - [npm](https://www.npmjs.com/) (Node Package Manager)
 - [Docker](https://www.docker.com/) (for local database setup)
@@ -21,7 +21,7 @@ Thank you for your interest in contributing to the F3 Region Pages project! This
 2. **Set up Node.js environment**
 
    ```bash
-   nvm install     # Installs the version specified in .nvmrc (20.18.2)
+   nvm install     # Installs the version specified in .nvmrc (24.14.1)
    nvm use         # Switches to the project's Node.js version
    ```
 
