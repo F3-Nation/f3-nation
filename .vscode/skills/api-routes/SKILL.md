@@ -1,3 +1,8 @@
+---
+name: api-routes
+description: "Creating or modifying oRPC API routers in packages/api/src/. USE FOR: new endpoints, router patterns, permission checks, pagination. DO NOT USE FOR: frontend components, database schema changes."
+---
+
 # Skill: Creating & Modifying oRPC API Routes
 
 ## When to Use
@@ -7,6 +12,7 @@ Use this skill when adding new API endpoints, modifying existing routers, or wor
 ## Architecture
 
 This project uses **oRPC** (`@orpc/server`), NOT tRPC. Key differences:
+
 - Import from `@orpc/server`, never from `@trpc/*`
 - Routes defined via `os.prefix(API_PREFIX_V1).router({ ... })`
 - Procedures use `.handler()` instead of `.query()` / `.mutation()`

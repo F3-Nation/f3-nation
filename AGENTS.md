@@ -6,7 +6,7 @@
 
 ## Project Overview
 
-F3 Nation is a volunteer-run fitness community. This monorepo powers the public-facing map application, admin tools, and backend APIs. The codebase is maintained by amateur, volunteer developers who rely heavily on AI tooling. Code quality gates (lint, format, typecheck, test) are enforced in CI and must pass before merge.
+F3 Nation is a volunteer-run fitness and leadership community. This monorepo powers the public-facing map application, admin tools, and backend APIs. The codebase is maintained by amateur, volunteer developers who rely heavily on AI tooling. Code quality gates (lint, format, typecheck, test) are enforced in CI and must pass before merge.
 
 ## Project Structure & Module Organization
 
@@ -14,8 +14,6 @@ F3 Nation is a volunteer-run fitness community. This monorepo powers the public-
 - **Apps** (`apps/`):
   - `apps/map` — Next.js 15 App Router, the public map UI (port 3000). Standalone output for Docker.
   - `apps/api` — Next.js API host exposing oRPC routes (port 3001). Has OpenAPI/Swagger docs at `/docs`.
-  - `apps/auth` — Auth-related app configuration.
-  - `apps/me` — User profile app (in development).
 - **Packages** (`packages/`):
   - `@acme/api` — oRPC routers (NOT tRPC). Organized by domain: user, event, org, location, attendance, etc.
   - `@acme/auth` — NextAuth v5 config. Email/OTP/Credentials providers. Custom Drizzle adapter. Cross-subdomain cookies.
@@ -32,7 +30,7 @@ F3 Nation is a volunteer-run fitness community. This monorepo powers the public-
 
 Understanding the domain is critical for working in this codebase:
 
-- **Org Hierarchy**: Nation → Sector → Region → AO (workout location). Permissions cascade up this tree.
+- **Org Hierarchy**: Nation → Sector → Region → AO. Permissions cascade up this tree.
 - **Events**: Recurring workouts with `events` (template) and `eventInstances` (single occurrence). Events have types, tags, and cadence.
 - **Users & Roles**: Users have roles scoped to orgs (`rolesXUsersXOrg`). Roles: `user`, `editor`, `admin`. Admin at a Region level implies admin for all AOs under it.
 - **Attendance**: Tracks who attended which event instances. Multiple attendance types supported.
@@ -51,27 +49,27 @@ Understanding the domain is critical for working in this codebase:
 
 ## Build, Test, and Development Commands
 
-| Command | Purpose |
-|---------|---------|
-| `pnpm install` | Install all dependencies |
-| `pnpm dev` | Start all apps in watch mode (parallel) |
-| `pnpm dev --filter f3-nation-map` | Start only the map app |
-| `pnpm build` | Build all workspaces (Turbo-cached) |
-| `pnpm lint` | ESLint across monorepo |
-| `pnpm lint:fix` | Auto-fix lint issues |
-| `pnpm format` | Check Prettier formatting |
-| `pnpm format:fix` | Auto-format all files |
-| `pnpm typecheck` | TypeScript type checking |
-| `pnpm test` | Run all Vitest tests |
-| `pnpm -C apps/map test` | Run map app tests only |
-| `pnpm -C apps/map test:e2e` | Playwright e2e tests |
-| `pnpm db:push` | Sync Drizzle schema → DB |
-| `pnpm db:pull` | Introspect DB → schema |
-| `pnpm db:generate` | Generate migration files |
-| `pnpm db:migrate` | Run pending migrations |
-| `pnpm db:seed` | Seed database |
-| `pnpm reset-test-db` | Reset test database |
-| `pnpm ci:local` | Full CI locally: format → lint → typecheck → build → test |
+| Command                           | Purpose                                                   |
+| --------------------------------- | --------------------------------------------------------- |
+| `pnpm install`                    | Install all dependencies                                  |
+| `pnpm dev`                        | Start all apps in watch mode (parallel)                   |
+| `pnpm dev --filter f3-nation-map` | Start only the map app                                    |
+| `pnpm build`                      | Build all workspaces (Turbo-cached)                       |
+| `pnpm lint`                       | ESLint across monorepo                                    |
+| `pnpm lint:fix`                   | Auto-fix lint issues                                      |
+| `pnpm format`                     | Check Prettier formatting                                 |
+| `pnpm format:fix`                 | Auto-format all files                                     |
+| `pnpm typecheck`                  | TypeScript type checking                                  |
+| `pnpm test`                       | Run all Vitest tests                                      |
+| `pnpm -C apps/map test`           | Run map app tests only                                    |
+| `pnpm -C apps/map test:e2e`       | Playwright e2e tests                                      |
+| `pnpm db:push`                    | Sync Drizzle schema → DB                                  |
+| `pnpm db:pull`                    | Introspect DB → schema                                    |
+| `pnpm db:generate`                | Generate migration files                                  |
+| `pnpm db:migrate`                 | Run pending migrations                                    |
+| `pnpm db:seed`                    | Seed database                                             |
+| `pnpm reset-test-db`              | Reset test database                                       |
+| `pnpm ci:local`                   | Full CI locally: format → lint → typecheck → build → test |
 
 **Environment**: A populated root `.env` file is required. Use `with-env` helpers to load it. Never commit `.env`.
 
@@ -122,7 +120,7 @@ Understanding the domain is critical for working in this codebase:
   - Include a clear TL;DR summary, related issue(s), and testing instructions.
   - Add screenshots/recordings for UI changes.
   - Highlight new migrations, environment variables, or breaking changes.
-  - Never include secrets — use Slack or Doppler.
+  - Never include secrets.
 - Before opening a PR: `pnpm lint && pnpm format && pnpm typecheck` must pass.
 
 ## Security & Environment
@@ -139,8 +137,10 @@ When using AI to generate or modify code in this repo:
 
 1. **Always verify output**: Run `pnpm lint && pnpm format && pnpm typecheck` before committing AI-generated code.
 2. **Respect the architecture**: Use oRPC (not tRPC), Drizzle (not Prisma), shadcn/ui components (not custom UI from scratch).
-3. **Test what you generate**: Add or update tests for any new logic. Run `pnpm test` to verify.
-4. **Don't invent patterns**: Follow existing patterns in nearby files. When unsure, look at similar routers/components.
-5. **Schema changes need migrations**: Never modify DB schema without generating a migration (`pnpm db:generate`).
-6. **Permissions matter**: New API endpoints must use the appropriate auth procedure and check org-level permissions.
-7. **Keep packages focused**: Don't add app-specific logic to shared packages. Don't add shared logic only one app uses.
+3. **Environment variables**: Access via `@t3-oss/env-nextjs` (see `apps/*/src/env.ts`), never raw `process.env` in app code.
+4. **Test what you generate**: Add or update tests for any new logic. Run `pnpm test` to verify.
+5. **Don't invent patterns**: Follow existing patterns in nearby files. When unsure, look at similar routers/components.
+6. **Schema changes need migrations**: Never modify DB schema without generating a migration (`pnpm db:generate`).
+7. **Permissions matter**: New API endpoints must use the appropriate auth procedure and check org-level permissions.
+8. **Keep packages focused**: Don't add app-specific logic to shared packages. Don't add shared logic only one app uses.
+9. **Don't add dependencies without discussion**: Prefer existing packages in the monorepo before introducing new ones.

@@ -1,3 +1,8 @@
+---
+name: database-schema
+description: "Modifying Drizzle ORM database schema, creating migrations, seeding data, or working in packages/db/. USE FOR: table definitions, migrations, Zod validator generation from schema. DO NOT USE FOR: API routes, frontend components."
+---
+
 # Skill: Database Schema Changes (Drizzle ORM)
 
 ## When to Use
@@ -63,11 +68,13 @@ export const MyTableInsertSchema = createInsertSchema(myTable);
 export const MyTableSelectSchema = createSelectSchema(myTable);
 
 // Extend with business logic
-export const CreateMyTableSchema = MyTableInsertSchema
-  .omit({ id: true, createdAt: true, updatedAt: true })
-  .extend({
-    // additional validations
-  });
+export const CreateMyTableSchema = MyTableInsertSchema.omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  // additional validations
+});
 ```
 
 ## Seeding Data
@@ -80,15 +87,15 @@ pnpm with-env pnpm -F db tsx ./src/seed/my-seed.ts
 
 ## Key Tables Reference
 
-| Table | Purpose |
-|-------|---------|
-| `users` | User accounts |
-| `orgs` | Organizations (Nation/Sector/Region/AO hierarchy) |
-| `events` | Event templates (recurring workouts) |
-| `eventInstances` | Single occurrences of events |
-| `locations` | Physical locations with lat/lng |
-| `rolesXUsersXOrg` | User role assignments scoped to orgs |
-| `attendance` | Attendance tracking |
+| Table             | Purpose                                           |
+| ----------------- | ------------------------------------------------- |
+| `users`           | User accounts                                     |
+| `orgs`            | Organizations (Nation/Sector/Region/AO hierarchy) |
+| `events`          | Event templates (recurring workouts)              |
+| `eventInstances`  | Single occurrences of events                      |
+| `locations`       | Physical locations with lat/lng                   |
+| `rolesXUsersXOrg` | User role assignments scoped to orgs              |
+| `attendance`      | Attendance tracking                               |
 
 ## Checklist
 

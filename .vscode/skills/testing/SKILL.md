@@ -1,3 +1,8 @@
+---
+name: testing
+description: "Writing or modifying tests anywhere in the monorepo. USE FOR: Vitest unit/integration tests, Playwright E2E tests, test database setup, mocking patterns. DO NOT USE FOR: production application code."
+---
+
 # Skill: Writing Tests
 
 ## When to Use
@@ -111,14 +116,14 @@ Run E2E: `pnpm -C apps/map test:e2e`
 
 ## Running Tests
 
-| Command | Scope |
-|---------|-------|
-| `pnpm test` | All tests across monorepo |
-| `pnpm -C apps/map test` | Map app unit tests |
-| `pnpm -C apps/api test` | API app tests |
-| `pnpm -C packages/api test` | API package tests |
-| `pnpm -C apps/map test:e2e` | Playwright E2E |
-| `pnpm test -- --coverage` | With coverage reports |
+| Command                     | Scope                     |
+| --------------------------- | ------------------------- |
+| `pnpm test`                 | All tests across monorepo |
+| `pnpm -C apps/map test`     | Map app unit tests        |
+| `pnpm -C apps/api test`     | API app tests             |
+| `pnpm -C packages/api test` | API package tests         |
+| `pnpm -C apps/map test:e2e` | Playwright E2E            |
+| `pnpm test -- --coverage`   | With coverage reports     |
 
 ## Key Principles
 

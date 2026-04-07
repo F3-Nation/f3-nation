@@ -1,3 +1,8 @@
+---
+name: frontend-components
+description: "Creating or modifying React components and pages in apps/map/. USE FOR: Next.js pages, shadcn/ui components, Tailwind styling, client vs server components. DO NOT USE FOR: API routes, database schema."
+---
+
 # Skill: Frontend Components & Pages (apps/map)
 
 ## When to Use

@@ -18,29 +18,29 @@
 
 ### AI Excels At
 
-| Task | Notes |
-|------|-------|
-| **Boilerplate generation** | New oRPC routers, Zod schemas, React components, test files — AI can scaffold these in seconds if given the right patterns |
-| **Code completion in context** | Filling in function bodies, completing Tailwind classes, writing type signatures |
-| **Understanding existing code** | "Explain this permission check" / "What does this Drizzle query do?" |
-| **Writing tests** | Generating unit tests from existing functions, suggesting edge cases |
-| **Refactoring** | Renaming, extracting components, converting callbacks to async/await |
-| **Debugging** | Analyzing error messages, suggesting fixes for type errors, tracing data flow |
-| **Documentation** | Generating JSDoc, README sections, API docs from code |
-| **SQL/Drizzle queries** | Complex JOINs, aggregations, migration scripts |
-| **Regex and validation** | Writing and explaining Zod schemas, regex patterns |
+| Task                            | Notes                                                                                                                      |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| **Boilerplate generation**      | New oRPC routers, Zod schemas, React components, test files — AI can scaffold these in seconds if given the right patterns |
+| **Code completion in context**  | Filling in function bodies, completing Tailwind classes, writing type signatures                                           |
+| **Understanding existing code** | "Explain this permission check" / "What does this Drizzle query do?"                                                       |
+| **Writing tests**               | Generating unit tests from existing functions, suggesting edge cases                                                       |
+| **Refactoring**                 | Renaming, extracting components, converting callbacks to async/await                                                       |
+| **Debugging**                   | Analyzing error messages, suggesting fixes for type errors, tracing data flow                                              |
+| **Documentation**               | Generating JSDoc, README sections, API docs from code                                                                      |
+| **SQL/Drizzle queries**         | Complex JOINs, aggregations, migration scripts                                                                             |
+| **Regex and validation**        | Writing and explaining Zod schemas, regex patterns                                                                         |
 
 ### AI Struggles With
 
-| Task | Mitigation |
-|------|------------|
-| **Inventing architecture** | Don't let AI choose between oRPC vs tRPC, or design the org hierarchy. We've made those choices — teach AI our patterns via AGENTS.md |
-| **Permission logic** | AI doesn't intuitively understand our org hierarchy (Nation → Sector → Region → AO). Always verify permission checks manually |
-| **Cross-package consistency** | AI may not know a validator already exists in `@acme/validators`. Always search first |
-| **Migration safety** | AI can generate Drizzle schema changes but won't know if a column drop destroys production data. Review migrations manually |
-| **Business domain knowledge** | AI doesn't know what a "Q" or "PAX" or "AO" means in F3 context. The AGENTS.md domain section helps but isn't exhaustive |
-| **Environment-specific config** | Auth cookies, Sentry keys, Doppler secrets — AI guesses wrong here. Always verify |
-| **Multi-step workflows** | Anything spanning multiple PRs or requiring coordination across packages needs human orchestration |
+| Task                            | Mitigation                                                                                                                            |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| **Inventing architecture**      | Don't let AI choose between oRPC vs tRPC, or design the org hierarchy. We've made those choices — teach AI our patterns via AGENTS.md |
+| **Permission logic**            | AI doesn't intuitively understand our org hierarchy (Nation → Sector → Region → AO). Always verify permission checks manually         |
+| **Cross-package consistency**   | AI may not know a validator already exists in `@acme/validators`. Always search first                                                 |
+| **Migration safety**            | AI can generate Drizzle schema changes but won't know if a column drop destroys production data. Review migrations manually           |
+| **Business domain knowledge**   | AI doesn't know what a "Q" or "PAX" or "AO" means in F3 context. The AGENTS.md domain section helps but isn't exhaustive              |
+| **Environment-specific config** | Auth cookies, Sentry keys, Doppler secrets — AI guesses wrong here. Always verify                                                     |
+| **Multi-step workflows**        | Anything spanning multiple PRs or requiring coordination across packages needs human orchestration                                    |
 
 ### Rules of Thumb
 
@@ -55,31 +55,25 @@
 
 We maintain config files that teach AI tools about our codebase. Here's what each file does and which tools read it:
 
-| File | Purpose | Read By |
-|------|---------|---------|
-| `AGENTS.md` | Full repo architecture, conventions, domain model, commands | Copilot Agent, Claude (CLAUDE.md equivalent), any tool that reads repo root |
-| `.github/copilot-instructions.md` | Quick-reference conventions for Copilot | GitHub Copilot (Chat, Edits, Agent mode) |
-| `.cursorrules` | Conventions formatted for Cursor | Cursor AI |
-| `.vscode/skills/*/SKILL.md` | Task-specific deep-dive guides | Copilot Agent (auto-loaded when relevant) |
+| File                        | Purpose                                                                             | Read By                                                                                           |
+| --------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `AGENTS.md`                 | **Single source of truth** — full architecture, conventions, domain model, commands | Copilot, Claude, Cursor, Windsurf, and most AI coding tools (see [agents.md](https://agents.md/)) |
+| `.vscode/skills/*/SKILL.md` | Task-specific deep-dive guides                                                      | Copilot Agent (auto-loaded when relevant)                                                         |
 
 ### Skill Files
 
 Skills are specialized instructions that activate for specific tasks:
 
-| Skill | Location | When It Activates |
-|-------|----------|-------------------|
-| API Routes | `.vscode/skills/api-routes/SKILL.md` | Creating/modifying oRPC routers |
-| Database Schema | `.vscode/skills/database-schema/SKILL.md` | Drizzle schema changes, migrations |
+| Skill               | Location                                      | When It Activates                   |
+| ------------------- | --------------------------------------------- | ----------------------------------- |
+| API Routes          | `.vscode/skills/api-routes/SKILL.md`          | Creating/modifying oRPC routers     |
+| Database Schema     | `.vscode/skills/database-schema/SKILL.md`     | Drizzle schema changes, migrations  |
 | Frontend Components | `.vscode/skills/frontend-components/SKILL.md` | React components, pages in apps/map |
-| Testing | `.vscode/skills/testing/SKILL.md` | Writing Vitest or Playwright tests |
+| Testing             | `.vscode/skills/testing/SKILL.md`             | Writing Vitest or Playwright tests  |
 
 ### Keeping Config Files in Sync
 
-The `AGENTS.md` is the **single source of truth**. Other files (`copilot-instructions.md`, `.cursorrules`) are derived summaries. When conventions change:
-
-1. Update `AGENTS.md` first
-2. Update the other files to match
-3. Consider adding a skill file if a new domain/pattern emerges
+`AGENTS.md` is the **single source of truth**. It's an open standard supported by Copilot, Claude, Cursor, Windsurf, and dozens of other AI tools. You only need to update one file when conventions change. Consider adding a skill file if a new domain/pattern emerges.
 
 ---
 
@@ -163,6 +157,7 @@ echo 'npx lint-staged' > .husky/pre-commit
 ```
 
 Add to `package.json`:
+
 ```json
 {
   "lint-staged": {
@@ -176,29 +171,36 @@ Add to `package.json`:
 
 #### 2. PR Review Checklist for AI-Generated Code
 
-Add to your PR process — a reviewer should check:
+The rules in the "AI-Specific Guidelines" section of `AGENTS.md` are enforced by AI tools automatically. For human reviewers, the main things to verify are:
 
-- [ ] No tRPC imports (should be oRPC)
-- [ ] No Prisma imports (should be Drizzle)
-- [ ] No raw `process.env` access (should use `@t3-oss/env-nextjs`)
-- [ ] Permission checks present on new API endpoints
-- [ ] New DB schema changes have generated migrations
+- [ ] AI followed the patterns in `AGENTS.md` (correct packages, env access, permissions)
 - [ ] Tests added or updated
-- [ ] No new packages added without team discussion
+- [ ] Migrations generated if schema changed
+- [ ] No new dependencies added without team discussion
 
 #### 3. AI-Assisted PR Reviews
 
-GitHub Copilot can review PRs. Enable it in your repo settings:
-- Settings → Copilot → Pull Request Reviews → Enable
+GitHub Copilot can review PRs. On any pull request, select **Copilot** from the **Reviewers** dropdown.
+
 - It catches type issues, security concerns, and pattern violations
 - It's a supplement to human review, not a replacement
+- For automatic reviews on every PR, see [Configuring automatic code review](https://docs.github.com/en/copilot/how-tos/agents/copilot-code-review/automatic-code-review)
 
 #### 4. Branch Protection
 
-Ensure `dev` and `main` branches require:
-- CI passing
-- At least 1 approval from CODEOWNERS
-- No direct pushes
+**Current state** (verified via GitHub rulesets API):
+
+| Branch    | Protected? | Rules                                                                           |
+| --------- | ---------- | ------------------------------------------------------------------------------- |
+| `dev`     | Yes        | PRs required, 1 approval, CODEOWNER review, squash-only, no deletion/force-push |
+| `staging` | **No**     | No protection — direct pushes allowed                                           |
+| `main`    | **No**     | No protection — direct pushes allowed                                           |
+
+**Gaps to address:**
+
+- [ ] Add `staging` and `main` to the same ruleset (or create new ones) with at least the same rules as `dev`
+- [ ] Add required status checks (CI passing) to all three branches — currently no branch enforces CI before merge
+- [ ] Consider enabling "dismiss stale reviews on push" (currently off on `dev`)
 
 ---
 
@@ -210,13 +212,13 @@ Documentation that's generated from or lives alongside source code stays current
 
 ### What to Automate
 
-| Documentation | How | Where |
-|--------------|-----|-------|
-| **API docs** | Already automated — OpenAPI/Swagger at `apps/api/docs` route, generated from oRPC schemas | Self-updating |
-| **AGENTS.md** | Manual but critical — update when conventions change | Repo root |
-| **Changelog** | Use `release-it` (already configured in `tooling/release-it/`) | Auto-generated |
-| **Type docs** | TypeScript types ARE the documentation — keep them explicit | In source |
-| **Component catalog** | Consider Storybook for `@acme/ui` (future) | N/A yet |
+| Documentation         | How                                                                                       | Where          |
+| --------------------- | ----------------------------------------------------------------------------------------- | -------------- |
+| **API docs**          | Already automated — OpenAPI/Swagger at `apps/api/docs` route, generated from oRPC schemas | Self-updating  |
+| **AGENTS.md**         | Manual but critical — update when conventions change                                      | Repo root      |
+| **Changelog**         | Use `release-it` (already configured in `tooling/release-it/`)                            | Auto-generated |
+| **Type docs**         | TypeScript types ARE the documentation — keep them explicit                               | In source      |
+| **Component catalog** | Consider Storybook for `@acme/ui` (future)                                                | N/A yet        |
 
 ### What NOT to Automate
 
@@ -235,11 +237,13 @@ Make it part of the PR process: if a PR changes conventions (new package, new pa
 ### GitHub Copilot (VS Code)
 
 **Setup:**
+
 - Install GitHub Copilot + Copilot Chat extensions
-- The `.github/copilot-instructions.md` file is auto-loaded
+- Copilot reads `AGENTS.md` automatically
 - Skills in `.vscode/skills/` activate contextually in agent mode
 
 **Best Practices:**
+
 - Use **Agent mode** (`@workspace`) for multi-file tasks — it reads AGENTS.md and skills automatically
 - Use **Inline Chat** (Ctrl+I) for single-function edits
 - Use **Chat** for questions about the codebase
@@ -249,10 +253,11 @@ Make it part of the PR process: if a PR changes conventions (new package, new pa
 ### Claude (Claude Code / claude.ai)
 
 **Setup:**
-- `AGENTS.md` is the Claude equivalent of `CLAUDE.md` — Claude reads it automatically
-- For Claude Code (terminal), it reads AGENTS.md from the repo root
+
+- Claude reads `AGENTS.md` automatically (both Claude Code and claude.ai Projects)
 
 **Best Practices:**
+
 - Paste relevant file contents when asking about specific code
 - Use Projects feature to upload AGENTS.md as project knowledge
 - Claude Opus is strongest at complex reasoning — use it for architecture questions, tricky type issues, and permission logic
@@ -261,14 +266,14 @@ Make it part of the PR process: if a PR changes conventions (new package, new pa
 ### Cursor
 
 **Setup:**
-- `.cursorrules` is auto-loaded by Cursor
-- Also reads `AGENTS.md` when using @ references
+
+- Cursor reads `AGENTS.md` automatically
 
 **Best Practices:**
+
 - Use `@codebase` to search the full repo
 - Use `@file` to reference specific files
 - Cursor Composer mode is good for multi-file edits
-- Use `.cursorrules` to prevent common mistakes (oRPC not tRPC, etc.)
 
 ### General Tips (All Tools)
 
@@ -285,7 +290,7 @@ Make it part of the PR process: if a PR changes conventions (new package, new pa
 For each team member:
 
 - [ ] Install your preferred AI tool (Copilot, Claude, Cursor)
-- [ ] Verify `.github/copilot-instructions.md` or `.cursorrules` is loading (check AI's first response for awareness of oRPC, Drizzle, etc.)
+- [ ] Verify AGENTS.md is being read (ask your AI tool about the project — it should know about oRPC, Drizzle, the org hierarchy, etc.)
 - [ ] Try the feature development workflow on a small task
 - [ ] Run `pnpm ci:local` to verify the quality pipeline works on your machine
 - [ ] Read through the AGENTS.md file to understand what AI "knows" about our repo
@@ -310,13 +315,11 @@ For each team member:
 
 Files created/modified in this initiative:
 
-| File | Status | Purpose |
-|------|--------|---------|
-| `AGENTS.md` | **Updated** | Comprehensive repo guide for all AI tools |
-| `.github/copilot-instructions.md` | **Updated** | Quick-ref for GitHub Copilot |
-| `.cursorrules` | **New** | Conventions for Cursor AI |
-| `.vscode/skills/api-routes/SKILL.md` | **New** | Skill: oRPC router development |
-| `.vscode/skills/database-schema/SKILL.md` | **New** | Skill: Drizzle schema + migrations |
-| `.vscode/skills/frontend-components/SKILL.md` | **New** | Skill: React/Next.js components |
-| `.vscode/skills/testing/SKILL.md` | **New** | Skill: Vitest + Playwright tests |
-| `docs/AI_GUIDE.md` | **New** | This document — team guidance |
+| File                                          | Status      | Purpose                                 |
+| --------------------------------------------- | ----------- | --------------------------------------- |
+| `AGENTS.md`                                   | **Updated** | Single source of truth for all AI tools |
+| `.vscode/skills/api-routes/SKILL.md`          | **New**     | Skill: oRPC router development          |
+| `.vscode/skills/database-schema/SKILL.md`     | **New**     | Skill: Drizzle schema + migrations      |
+| `.vscode/skills/frontend-components/SKILL.md` | **New**     | Skill: React/Next.js components         |
+| `.vscode/skills/testing/SKILL.md`             | **New**     | Skill: Vitest + Playwright tests        |
+| `docs/AI_GUIDE.md`                            | **New**     | This document — team guidance           |
