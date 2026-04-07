@@ -5,7 +5,7 @@
   "engines": {
     "node": ">=20.19.0 <21"
   },
-  "packageManager": "pnpm@8.15.1",
+  "packageManager": "pnpm@10.33.0+sha512.10568bb4a6afb58c9eb3630da90cc9516417abebd3fabbe6739f0ae795728da1491e9db5a544c76ad8eb7570f5c4bb3d6c637b2cb41bfdcdb47fa823c8649319",
   "scripts": {
     "build": "turbo build",
     "clean": "rm -rf .turbo node_modules",
@@ -44,9 +44,16 @@
     "typescript": "^5.3.3"
   },
   "prettier": "@acme/prettier-config",
-  "resolutions": {
-    "axios": ">=1.7.4",
-    "braces": ">=3.0.3",
-    "cross-spawn": ">=7.0.5"
+  "pnpm": {
+    "overrides": {
+      "axios": ">=1.7.4",
+      "braces": ">=3.0.3",
+      "cross-spawn": ">=7.0.5"
+    },
+    "onlyBuiltDependencies": [
+      "@sentry/cli",
+      "esbuild",
+      "sharp"
+    ]
   }
 }
