@@ -50,14 +50,45 @@ If there are errors, offer to dig deeper into specific log entries by their `ins
 
 ### Examples
 
+**Basic queries (default app is `auth`, default env is `staging`):**
+
 - **`/logs`** — 20 most recent auth staging entries
+- **`/logs prod`** — 20 most recent auth prod entries
+- **`/logs errors`** — Auth staging errors only
+- **`/logs warnings 1h`** — Auth staging warnings from the last hour
+
+**Specifying an app:**
+
 - **`/logs api`** — 20 most recent api staging entries
 - **`/logs map prod`** — 20 most recent map prod entries
 - **`/logs auth prod errors 1h`** — Auth prod errors from the last hour
+
+**Adjusting volume and time range:**
+
 - **`/logs api errors 50 30m`** — 50 api staging errors from the last 30 minutes
-- **`/logs map httpRequest.status>=500`** — Map staging 5xx errors
+- **`/logs 100 2h`** — 100 auth staging entries from the last 2 hours
+- **`/logs map prod 10 7d`** — 10 map prod entries from the last week
+
+**Custom gcloud filters (advanced):**
+
+- **`/logs httpRequest.status>=500`** — Auth staging 5xx errors
+- **`/logs api prod httpRequest.status>=400`** — Api prod 4xx+ errors
+- **`/logs map httpRequest.requestMethod=POST`** — Map staging POST requests
+
+**Supported time units:** `s` (seconds), `m` (minutes), `h` (hours), `d` (days), `w` (weeks)
+
+## Tested Configurations
+
+The following app + environment combinations have been verified working:
+
+| App    | Staging | Prod | Notes |
+| ------ | ------- | ---- | ----- |
+| `auth` | ✅      | ✅   | Primary use case — originally built for this app |
+| `api`  | ✅      | ✅   | GCP project `f3-api-472214`, service names differ per env |
+| `map`  | ✅      | ✅   | GCP project `pin-mastery`, Cloud Run service is `f3-2` / `f3-2-staging` |
 
 ## Adding a New App
 
 1. Add two lines to `apps.conf` (staging + prod) with the format: `APP:ENV:GCP_PROJECT:SERVICE_NAME:REGION`
-2. Update the table above
+2. Update the registered apps table and tested configurations table above
+3. Test with `/logs <app>` and `/logs <app> prod` to verify both environments work
