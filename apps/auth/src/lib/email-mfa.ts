@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { and, eq, gt, isNull, sql } from "@acme/db";
 import { emailMfaCodes, users } from "@acme/db/schema/schema";
 
+import { constantTimeEqual } from "~/lib/crypto-utils";
 import { db } from "~/lib/db";
 import { env } from "~/env";
 
@@ -126,7 +127,7 @@ export async function verifyEmailCode(
 
   const expectedHash = hashCode(code);
 
-  if (mfaCode.codeHash !== expectedHash) {
+  if (!constantTimeEqual(mfaCode.codeHash, expectedHash)) {
     // Increment attempt count
     await db
       .update(emailMfaCodes)

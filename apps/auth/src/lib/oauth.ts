@@ -9,8 +9,12 @@ import {
 } from "@acme/db/schema/schema";
 import { importJWK, jwtVerify } from "jose";
 
+import { constantTimeEqual } from "~/lib/crypto-utils";
 import { db } from "~/lib/db";
 import { getJWKS, signAccessToken } from "~/lib/jwt";
+
+// Re-export so any external consumers still find it here
+export { constantTimeEqual };
 
 function generateOpaqueToken(): string {
   return crypto.randomBytes(32).toString("base64url");
@@ -18,13 +22,6 @@ function generateOpaqueToken(): string {
 
 function hashSecret(secret: string): string {
   return crypto.createHash("sha256").update(secret).digest("hex");
-}
-
-function constantTimeEqual(a: string, b: string): boolean {
-  const bufA = Buffer.from(a);
-  const bufB = Buffer.from(b);
-  if (bufA.length !== bufB.length) return false;
-  return crypto.timingSafeEqual(bufA, bufB);
 }
 
 // ---------------------------------------------------------------------------
@@ -44,7 +41,13 @@ export function validateRedirectUri(
   client: typeof oauthClients.$inferSelect,
   redirectUri: string,
 ): boolean {
-  const uris = JSON.parse(client.redirectUris) as string[];
+  let uris: unknown;
+  try {
+    uris = JSON.parse(client.redirectUris);
+  } catch {
+    return false;
+  }
+  if (!Array.isArray(uris)) return false;
   return uris.includes(redirectUri);
 }
 
@@ -93,12 +96,11 @@ export async function exchangeAuthorizationCode(params: {
   redirectUri: string;
   codeVerifier?: string;
 }) {
-  // Find the code
+  // Atomically consume the code (DELETE + RETURNING prevents TOCTOU races)
   const [authCode] = await db
-    .select()
-    .from(oauthAuthorizationCodes)
+    .delete(oauthAuthorizationCodes)
     .where(eq(oauthAuthorizationCodes.code, params.code))
-    .limit(1);
+    .returning();
 
   if (!authCode) return { error: "invalid_grant" as const };
   if (new Date(authCode.expiresAt) < new Date())
@@ -133,11 +135,6 @@ export async function exchangeAuthorizationCode(params: {
     if (computedChallenge !== authCode.codeChallenge)
       return { error: "invalid_grant" as const };
   }
-
-  // Delete auth code (one-time use)
-  await db
-    .delete(oauthAuthorizationCodes)
-    .where(eq(oauthAuthorizationCodes.code, params.code));
 
   // Look up user email for JWT claims
   const [user] = await db

@@ -36,23 +36,17 @@ export async function POST(request: NextRequest) {
       await sendEmailCode(email);
       return NextResponse.json({ sent: true });
     } catch (err: unknown) {
-      let errorMessage = "Failed to send code";
-      let errorStack: string | undefined = undefined;
-      // Type guard for Error
-      if (err instanceof Error) {
-        errorMessage = err.message;
-        errorStack = err.stack;
-      }
-      // Log error as JSON for GCP
+      // Log the real error for GCP observability
       console.error(
         JSON.stringify({
-          error: errorMessage,
-          stack: errorStack,
+          error: err instanceof Error ? err.message : "Unknown error",
+          stack: err instanceof Error ? err.stack : undefined,
         }),
       );
+      // Return a generic message to avoid leaking internal details
       return NextResponse.json(
         {
-          error: errorMessage,
+          error: "Failed to send verification code. Please try again.",
         },
         { status: 500 },
       );
