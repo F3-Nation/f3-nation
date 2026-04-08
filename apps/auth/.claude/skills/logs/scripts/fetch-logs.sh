@@ -42,7 +42,7 @@ for arg in "$@"; do
       ;;
     *)
       # Use regex guards to avoid greedy glob matches on custom filters
-      if [[ "$arg" =~ ^[0-9]+[mhd]$ ]]; then
+      if [[ "$arg" =~ ^[0-9]+[smhdw]$ ]]; then
         FRESHNESS="$arg"
       elif [[ "$arg" =~ ^[0-9]+$ ]]; then
         LIMIT="$arg"
