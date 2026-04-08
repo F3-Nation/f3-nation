@@ -1,6 +1,6 @@
 {
   "name": "f3-nation",
-  "version": "3.9.1",
+  "version": "4.0.0",
   "private": true,
   "engines": {
     "node": ">=24.14.1 <25"
@@ -46,7 +46,9 @@
   },
   "prettier": "@acme/prettier-config",
   "pnpm": {
-    "onlyBuiltDependencies": ["lefthook"]
+    "onlyBuiltDependencies": [
+      "lefthook"
+    ]
   },
   "resolutions": {
     "axios": ">=1.7.4",
