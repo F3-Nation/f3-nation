@@ -8,6 +8,7 @@ export const GET = async () => {
     url: "/docs/openapi.json",
     baseServerURL: baseUrl,
     pageTitle: "F3 Nation API Reference",
+    favicon: "/favicon.ico",
   })();
 
   return response;
