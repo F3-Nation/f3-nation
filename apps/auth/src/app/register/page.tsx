@@ -11,6 +11,18 @@ interface Region {
   name: string;
 }
 
+function formatPhoneNumber(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 10);
+  if (digits.length === 0) return "";
+  if (digits.length <= 3) return `(${digits}`;
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
+function stripPhoneFormatting(value: string): string {
+  return value.replace(/\D/g, "");
+}
+
 export default function RegisterPage() {
   return (
     <Suspense>
@@ -96,9 +108,9 @@ function RegisterForm() {
         firstName,
         lastName,
         homeRegionId: homeRegionId || undefined,
-        phone: phone || undefined,
+        phone: stripPhoneFormatting(phone) || undefined,
         emergencyContact: emergencyContact || undefined,
-        emergencyPhone: emergencyPhone || undefined,
+        emergencyPhone: stripPhoneFormatting(emergencyPhone) || undefined,
         emergencyNotes: emergencyNotes || undefined,
       }),
     });
@@ -281,7 +293,7 @@ function RegisterForm() {
               id="phone"
               type="tel"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              onChange={(e) => setPhone(formatPhoneNumber(e.target.value))}
               placeholder="(555) 123-4567"
               className={inputClass}
             />
@@ -326,7 +338,9 @@ function RegisterForm() {
                   id="emergencyPhone"
                   type="tel"
                   value={emergencyPhone}
-                  onChange={(e) => setEmergencyPhone(e.target.value)}
+                  onChange={(e) =>
+                    setEmergencyPhone(formatPhoneNumber(e.target.value))
+                  }
                   placeholder="(555) 987-6543"
                   className={inputClass}
                 />
