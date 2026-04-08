@@ -1,0 +1,8 @@
+{
+  "name": "F3 Auth",
+  "short_name": "F3 Auth",
+  "icons": [],
+  "theme_color": "#ffffff",
+  "background_color": "#ffffff",
+  "display": "standalone"
+}

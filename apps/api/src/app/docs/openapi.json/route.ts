@@ -3,6 +3,7 @@ import { ZodToJsonSchemaConverter } from "@orpc/zod";
 
 import { router } from "@acme/api";
 import { Client, Header } from "@acme/shared/common/enums";
+import packageJson from "../../../../package.json";
 
 // OpenAPI types for spec manipulation
 interface OpenAPIParameter {
@@ -55,7 +56,7 @@ export async function GET(request: Request) {
   const spec = (await generator.generate(router, {
     info: {
       title: "F3 Nation API",
-      version: "1.0.0",
+      version: packageJson.version,
       description: `# Authentication
 
 All API endpoints require authentication via a Bearer token passed in the Authorization header.
