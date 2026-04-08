@@ -17,6 +17,10 @@ stacked or part of a series)
 - #3 short description
 -->
 
+> **PR Title Format:** `<type>(<optional scope>): <short description>`
+> Valid types: `feat` · `fix` · `docs` · `style` · `refactor` · `perf` · `test` · `build` · `ci` · `chore` · `revert`
+> Example: `feat(map): add dark mode toggle`
+
 ### 👋 TL;DR
 
 <!-- keep it simple, a sentence or two at most -->
@@ -49,6 +53,19 @@ in common language is better than nothing
 -->
 
 (coming soon)
+
+### 📋 Checklist
+
+- [ ] PR title follows the [Conventional Commits](https://www.conventionalcommits.org/) format (checked automatically by CI)
+- [ ] All commits follow the Conventional Commits format
+- [ ] `pnpm lint` passes with no errors
+- [ ] `pnpm format` passes with no errors
+- [ ] `pnpm typecheck` passes with no errors
+- [ ] Tests pass (`pnpm test`)
+- [ ] New migrations are documented in this PR description (if applicable)
+- [ ] New environment variables are documented in this PR description (if applicable)
+- [ ] Screenshots or screen recordings included for UI changes (if applicable)
+- [ ] No secrets or credentials are included in this PR
 
 ### 🥜 GIF
 

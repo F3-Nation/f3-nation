@@ -37,7 +37,40 @@
 
 ## Commit & Pull Request Guidelines
 
-- Write concise, imperative commit subjects (e.g., `Add admin db reset script`) with no trailing punctuation.
+### Conventional Commits (enforced)
+
+All commits and PR titles **must** follow the [Conventional Commits](https://www.conventionalcommits.org/) specification.
+CI will automatically reject any PR whose title or commits do not comply.
+
+**Format:** `<type>(<optional scope>): <short description>`
+
+| Type       | When to use                                              |
+| ---------- | -------------------------------------------------------- |
+| `feat`     | A new feature                                            |
+| `fix`      | A bug fix                                                |
+| `docs`     | Documentation changes only                               |
+| `style`    | Formatting, whitespace — no logic change                 |
+| `refactor` | Code change that is neither a fix nor a feature          |
+| `perf`     | A code change that improves performance                  |
+| `test`     | Adding or fixing tests                                   |
+| `build`    | Changes to build system or external dependencies         |
+| `ci`       | Changes to CI/CD configuration                           |
+| `chore`    | Other changes that don't modify src or test files        |
+| `revert`   | Reverts a previous commit                                |
+
+**Examples:**
+- `feat(map): add dark mode toggle`
+- `fix(api): resolve race condition in event router`
+- `chore: upgrade pnpm to 9.x`
+- `docs: update README with setup instructions`
+
+**Breaking changes:** append `!` after the type/scope, e.g. `feat(api)!: change authentication flow`, and include `BREAKING CHANGE:` in the commit body.
+
+Husky will enforce the format locally on every `git commit`. Run `pnpm install` after cloning to activate the hooks.
+
+### Pull Request requirements
+
+- PR title must follow the Conventional Commits format (validated automatically by CI).
 - Every pull request should:
 
   - Include a clear summary, any related issue(s), commands run, and impact to DB/env.

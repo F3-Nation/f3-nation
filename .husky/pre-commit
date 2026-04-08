@@ -1,0 +1,1 @@
+pnpm lint:fix && pnpm format:fix && git add -u

@@ -33,12 +33,16 @@
     "with-env": "dotenv -e .env --",
     "doppler": "pnpm exec ./tooling/scripts/doppler.sh",
     "db:update-db": "pnpm -F db update-db",
-    "release": "pnpm -F release-it release"
+    "release": "pnpm -F release-it release",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@acme/prettier-config": "workspace:^0.1.0",
     "@acme/release-it": "workspace:*",
+    "@commitlint/cli": "^20.5.0",
+    "@commitlint/config-conventional": "^20.5.0",
     "@turbo/gen": "^1.12.3",
+    "husky": "^9.1.7",
     "prettier": "^3.2.5",
     "turbo": "^1.12.3",
     "typescript": "^5.3.3"
