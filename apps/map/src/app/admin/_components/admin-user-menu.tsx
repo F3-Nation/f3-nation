@@ -68,7 +68,7 @@ export const AdminUserMenu = () => {
                     user: "bg-green-100 text-green-700 border-green-200",
                   } as const;
                   const roleStyle =
-                    roleStyles[role.roleName as keyof typeof roleStyles] ??
+                    roleStyles[role.roleName] ??
                     "bg-muted text-muted-foreground border-muted";
                   return (
                     <span
