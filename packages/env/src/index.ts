@@ -35,6 +35,7 @@ export const env = createEnv({
   },
   client: {
     NEXT_PUBLIC_API_URL: z.string().min(1),
+    NEXT_PUBLIC_AUTH_URL: z.string().url().optional(),
     NEXT_PUBLIC_MAP_URL: z.string().min(1),
     NEXT_PUBLIC_CHANNEL: z.enum([
       "local",
@@ -47,6 +48,7 @@ export const env = createEnv({
   },
   experimental__runtimeEnv: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+    NEXT_PUBLIC_AUTH_URL: process.env.NEXT_PUBLIC_AUTH_URL,
     NEXT_PUBLIC_MAP_URL: process.env.NEXT_PUBLIC_MAP_URL,
     NEXT_PUBLIC_CHANNEL: process.env.NEXT_PUBLIC_CHANNEL,
   },
