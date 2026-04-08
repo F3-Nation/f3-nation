@@ -17,6 +17,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONF_FILE="$SCRIPT_DIR/../apps.conf"
 
+if ! command -v gcloud >/dev/null 2>&1; then
+  echo "Error: gcloud CLI not found. Install it from https://cloud.google.com/sdk/docs/install" >&2
+  exit 1
+fi
+
 if [ ! -f "$CONF_FILE" ]; then
   echo "Error: apps.conf not found at $CONF_FILE" >&2
   exit 1
@@ -86,7 +91,11 @@ APP="${APP:-auth}"
 app_config "$APP" "$ENV"
 
 # --- build filter ---
-FILTER="resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${SERVICE}\"${SEVERITY_FILTER}${CUSTOM_FILTERS[*]:-}"
+CUSTOM_FILTER_STR=""
+for cf in "${CUSTOM_FILTERS[@]+"${CUSTOM_FILTERS[@]}"}"; do
+  CUSTOM_FILTER_STR+="$cf"
+done
+FILTER="resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${SERVICE}\"${SEVERITY_FILTER}${CUSTOM_FILTER_STR}"
 
 # --- print metadata to stderr for the skill to read ---
 echo "app=$APP" >&2
