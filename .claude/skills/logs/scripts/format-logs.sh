@@ -8,6 +8,11 @@ set -euo pipefail
 #
 # Usage: cat logs.json | format-logs.sh
 
+if ! command -v jq >/dev/null 2>&1; then
+  echo "Error: jq is required but not found. Install it from https://jqlang.github.io/jq/download/" >&2
+  exit 1
+fi
+
 INPUT=$(cat)
 
 if [ -z "$INPUT" ] || [ "$INPUT" = "[]" ]; then
