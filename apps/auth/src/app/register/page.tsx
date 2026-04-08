@@ -221,14 +221,17 @@ function RegisterForm() {
               onFocus={() => setRegionDropdownOpen(true)}
               onBlur={() => {
                 setTimeout(() => {
-                  if (!regionSelectedRef.current && !homeRegionId) {
-                    setRegionSearch("");
-                  }
-                  if (!regionSelectedRef.current && homeRegionId) {
-                    // Restore the selected region name if user didn't change selection
-                    const selected = regions.find((r) => r.id === homeRegionId);
-                    if (selected) {
-                      setRegionSearch(selected.name);
+                  if (!regionSelectedRef.current) {
+                    if (homeRegionId) {
+                      // Restore the selected region name if user didn't change selection
+                      const selected = regions.find(
+                        (r) => r.id === homeRegionId,
+                      );
+                      if (selected) {
+                        setRegionSearch(selected.name);
+                      }
+                    } else {
+                      setRegionSearch("");
                     }
                   }
                   regionSelectedRef.current = false;
