@@ -33,7 +33,7 @@ echo "$INPUT" | jq -r '.[] | [
     ((.httpRequest.requestMethod // "—") + " " + ((.httpRequest.requestUrl // "—") | split("?")[0]))
   else
     ((.textPayload // .jsonPayload.message // "—") | .[0:80])
-  end),
+  end | gsub("\\|"; "\\|")),
   (.httpRequest.status // "—" | tostring),
   (.httpRequest.latency // "—" | tostring),
   (.httpRequest.remoteIp // "—")

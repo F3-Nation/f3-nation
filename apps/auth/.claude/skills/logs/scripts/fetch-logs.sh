@@ -16,7 +16,6 @@ set -euo pipefail
 ENV="staging"
 LIMIT=20
 SEVERITY_FILTER=""
-TIME_FILTER=""
 FRESHNESS="1d"
 CUSTOM_FILTERS=()
 
@@ -43,18 +42,8 @@ for arg in "$@"; do
       ;;
     *)
       # Use regex guards to avoid greedy glob matches on custom filters
-      if [[ "$arg" =~ ^[0-9]+m$ ]]; then
-        minutes="${arg%m}"
-        FRESHNESS="${minutes}m"
-        TIME_FILTER=" AND timestamp>=\"$(date -u -v-${minutes}M '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date -u -d "${minutes} minutes ago" '+%Y-%m-%dT%H:%M:%SZ')\""
-      elif [[ "$arg" =~ ^[0-9]+h$ ]]; then
-        hours="${arg%h}"
-        FRESHNESS="${hours}h"
-        TIME_FILTER=" AND timestamp>=\"$(date -u -v-${hours}H '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date -u -d "${hours} hours ago" '+%Y-%m-%dT%H:%M:%SZ')\""
-      elif [[ "$arg" =~ ^[0-9]+d$ ]]; then
-        days="${arg%d}"
-        FRESHNESS="${days}d"
-        TIME_FILTER=" AND timestamp>=\"$(date -u -v-${days}d '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date -u -d "${days} days ago" '+%Y-%m-%dT%H:%M:%SZ')\""
+      if [[ "$arg" =~ ^[0-9]+[mhd]$ ]]; then
+        FRESHNESS="$arg"
       elif [[ "$arg" =~ ^[0-9]+$ ]]; then
         LIMIT="$arg"
       else
@@ -67,7 +56,7 @@ done
 PROJECT=$(project_for_env "$ENV")
 
 # --- build filter ---
-FILTER="resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"f3-auth\"${SEVERITY_FILTER}${TIME_FILTER}${CUSTOM_FILTERS[*]:-}"
+FILTER="resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"f3-auth\"${SEVERITY_FILTER}${CUSTOM_FILTERS[*]:-}"
 
 # --- print metadata to stderr for the skill to read ---
 echo "env=$ENV" >&2
