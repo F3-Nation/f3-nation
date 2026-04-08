@@ -1,9 +1,7 @@
 ---
 name: logs
 description: Query Cloud Run logs for any monorepo app. Use when the user wants to check service logs, errors, or request patterns in staging or prod.
-metadata:
-  version: "3.0.0"
-  argument-hint: "[app] [prod|staging] [errors|warnings] [count] [timerange]"
+argument-hint: "[app] [prod|staging] [errors|warnings] [count] [timerange]"
 ---
 
 # Cloud Run Logs
