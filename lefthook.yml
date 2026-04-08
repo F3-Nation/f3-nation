@@ -7,7 +7,9 @@ pre-commit:
       stage_fixed: true
 
     - name: eslint
-      run: pnpm lint:fix
+      glob: "**/*.{ts,tsx,js,jsx,mjs,cjs}"
+      run: pnpm exec eslint --fix {staged_files}
+      stage_fixed: true
 
     - name: typecheck
       run: pnpm typecheck
