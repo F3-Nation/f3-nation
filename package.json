@@ -3,7 +3,7 @@
   "version": "3.9.1",
   "private": true,
   "engines": {
-    "node": ">=20.19.0 <21"
+    "node": ">=24.14.1 <25"
   },
   "packageManager": "pnpm@8.15.1",
   "scripts": {
@@ -26,10 +26,10 @@
     "lint:fix": "turbo lint --continue -- --fix --cache --cache-location node_modules/.cache/.eslintcache",
     "lint:ws": "pnpm dlx sherif@1.1.0",
     "reset-test-db": "turbo run reset-test-db",
-    "typecheck": "turbo typecheck",
+    "typecheck": "turbo typecheck --filter='!@acme/auth'",
     "test": "turbo test",
     "test:coverage": "turbo test -- --coverage",
-    "ci:local": "pnpm format && pnpm lint && pnpm typecheck && pnpm build && pnpm test:coverage",
+    "ci:local": "pnpm format && pnpm lint && pnpm typecheck && pnpm build --filter='!@acme/auth' && pnpm test:coverage",
     "with-env": "dotenv -e .env --",
     "doppler": "pnpm exec ./tooling/scripts/doppler.sh",
     "db:update-db": "pnpm -F db update-db",

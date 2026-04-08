@@ -29,6 +29,7 @@
     "@orpc/experimental-ratelimit": "^1.13.2",
     "@orpc/server": "^1.8.8",
     "google-auth-library": "^10.3.0",
+    "jose": "^6.2.1",
     "lodash": "^4.17.21",
     "superjson": "2.2.1",
     "zod": "^3.25.8"

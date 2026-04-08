@@ -1,0 +1,18 @@
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+
+import { revokeToken } from "~/lib/oauth";
+
+export async function POST(request: NextRequest) {
+  const formData = await request.formData();
+  const token = formData.get("token") as string | null;
+
+  if (!token) {
+    return NextResponse.json({ error: "invalid_request" }, { status: 400 });
+  }
+
+  await revokeToken(token);
+
+  // RFC 7009: always return 200 regardless of whether token existed
+  return NextResponse.json({ revoked: true });
+}
