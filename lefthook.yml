@@ -1,0 +1,15 @@
+pre-commit:
+  parallel: true
+  jobs:
+    - name: prettier
+      glob: "**/*.{ts,tsx,js,jsx,mjs,cjs,json,css,md,yml,yaml}"
+      run: pnpm exec prettier --write --cache --cache-location node_modules/.cache/.prettiercache {staged_files}
+      stage_fixed: true
+
+    - name: eslint
+      glob: "**/*.{ts,tsx,js,jsx,mjs,cjs}"
+      run: pnpm exec eslint --fix {staged_files}
+      stage_fixed: true
+
+    - name: typecheck
+      run: pnpm typecheck
