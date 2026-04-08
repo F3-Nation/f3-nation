@@ -1,6 +1,7 @@
 import { MemoryRatelimiter } from "@orpc/experimental-ratelimit/memory";
 import { ORPCError, os } from "@orpc/server";
 import type { RequestHeadersPluginContext } from "@orpc/server/plugins";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 
 import type { Session } from "@acme/auth";
 import { auth } from "@acme/auth";
@@ -44,6 +45,20 @@ const getDevMockSession = (): Session => ({
 // For true distributed rate limiting, use Redis/Upstash instead.
 const RATE_LIMIT_WINDOW_MS = 60000; // 60 seconds
 const RATE_LIMIT_MAX_REQUESTS = isDevelopmentNodeEnv ? 10000 : 200;
+
+// Keep expiry checks anchored to one canonical DB clock source to avoid
+// app-server clock skew and cross-check inconsistencies.
+const DB_NOW = sql`timezone('utc'::text, now())`;
+
+// The auth server's base URL (e.g. https://auth.f3nation.com).
+// Read from process.env to avoid t3-env client/server type mismatch.
+const authIssuer = process.env.NEXT_PUBLIC_AUTH_URL ?? null;
+
+// Cached JWKS fetcher for f3-nation-auth JWT verification.
+// jose caches the key set automatically after the first fetch.
+const authJwks = authIssuer
+  ? createRemoteJWKSet(new URL(`${authIssuer}/.well-known/jwks.json`))
+  : null;
 
 const limiter = new MemoryRatelimiter({
   maxRequests: RATE_LIMIT_MAX_REQUESTS,
@@ -173,7 +188,7 @@ export const apiKeyProcedure = withSessionAndDb.use(
           isNull(schema.apiKeys.revokedAt),
           or(
             isNull(schema.apiKeys.expiresAt),
-            gt(schema.apiKeys.expiresAt, sql`timezone('utc'::text, now())`),
+            gt(schema.apiKeys.expiresAt, DB_NOW),
           ),
         ),
       )
@@ -199,33 +214,40 @@ export const getSession = async ({ context }: { context: BaseContext }) => {
     if (session) return session;
   }
 
-  // If there is no session, check for Bearer token ("api key") and attempt to build a replica session
+  // Extract bearer token from Authorization header
   const authHeader =
     context.reqHeaders?.get(Header.Authorization) ??
     context.reqHeaders?.get(Header.Authorization.toLowerCase());
 
-  const appClient = context.reqHeaders?.get(Header.Client);
-
-  let apiKey: string | null = null;
-  if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
-    apiKey = authHeader.slice(7).trim();
+  let bearerToken: string | null = null;
+  if (authHeader?.toLowerCase().startsWith("bearer ")) {
+    bearerToken = authHeader.slice(7).trim();
   }
 
-  // No session or API key provided
-  if (!apiKey) {
-    // In dev mode, return a mock session so endpoints work without an API key
+  // No session or bearer token provided
+  if (!bearerToken) {
     if (isDevelopmentNodeEnv) return getDevMockSession();
     return null;
   }
 
-  // API key provided but no client header
-  if (apiKey && !appClient) {
+  // -----------------------------------------------------------------------
+  // Try f3-nation-auth JWT (RS256, verified via remote JWKS)
+  // -----------------------------------------------------------------------
+  session = await getSessionFromJWT(bearerToken);
+  if (session) return session;
+
+  // -----------------------------------------------------------------------
+  // Try API key auth (Scalar, scripts, custom apps)
+  // -----------------------------------------------------------------------
+  const appClient = context.reqHeaders?.get(Header.Client);
+
+  if (!appClient) {
     throw new ORPCError("UNAUTHORIZED", {
-      message: "You must provide a client header when using an API key",
+      message:
+        "Invalid or expired bearer token. Or, if using API Key auth, ensure the 'client' header is set.",
     });
   }
 
-  // Get the api key info and associated owner and orgs
   const [apiKeyRecord] = await db
     .select({
       apiKeyId: schema.apiKeys.id,
@@ -241,26 +263,24 @@ export const getSession = async ({ context }: { context: BaseContext }) => {
     .innerJoin(schema.users, eq(schema.users.id, schema.apiKeys.ownerId))
     .where(
       and(
-        eq(schema.apiKeys.key, apiKey),
+        eq(schema.apiKeys.key, bearerToken),
         isNull(schema.apiKeys.revokedAt),
         or(
           isNull(schema.apiKeys.expiresAt),
-          gt(schema.apiKeys.expiresAt, sql`timezone('utc'::text, now())`),
+          gt(schema.apiKeys.expiresAt, DB_NOW),
         ),
       ),
     );
 
   if (!apiKeyRecord) {
-    if (apiKey) {
-      console.log(
-        "getSession",
-        JSON.stringify({
-          apiKey: apiKey ? `${apiKey.slice(0, 4)}...${apiKey.slice(-4)}` : null,
-          appClient,
-          message: "API key not found in database or invalid",
-        }),
-      );
-    }
+    console.log(
+      "getSession",
+      JSON.stringify({
+        apiKey: `${bearerToken.slice(0, 4)}...${bearerToken.slice(-4)}`,
+        appClient,
+        message: "API key not found in database or invalid",
+      }),
+    );
     return null;
   }
 
@@ -310,3 +330,71 @@ export const getSession = async ({ context }: { context: BaseContext }) => {
   };
   return session;
 };
+
+/**
+ * Resolve a session from an f3-nation-auth RS256 JWT access token.
+ * Verifies the token signature via remote JWKS, then fetches the user's
+ * roles from roles_x_users_x_org.
+ * Returns null if JWKS is not configured, or the token is invalid/expired.
+ */
+async function getSessionFromJWT(token: string): Promise<Session | null> {
+  if (!authJwks) return null;
+
+  let payload;
+  try {
+    const result = await jwtVerify(token, authJwks, {
+      issuer: authIssuer ?? undefined,
+      algorithms: ["RS256"],
+    });
+    payload = result.payload;
+  } catch {
+    return null;
+  }
+
+  const userId = Number(payload.sub);
+  if (!userId) return null;
+
+  // Look up the user to get their current email and f3Name
+  const [user] = await db
+    .select({
+      id: schema.users.id,
+      email: schema.users.email,
+      f3Name: schema.users.f3Name,
+    })
+    .from(schema.users)
+    .where(eq(schema.users.id, userId))
+    .limit(1);
+
+  if (!user) return null;
+
+  // Fetch user roles (same pattern as PR #184's getSessionFromOAuthToken)
+  const userRoles = await db
+    .select({
+      orgId: schema.orgs.id,
+      orgName: schema.orgs.name,
+      roleName: schema.roles.name,
+    })
+    .from(schema.rolesXUsersXOrg)
+    .innerJoin(schema.orgs, eq(schema.orgs.id, schema.rolesXUsersXOrg.orgId))
+    .innerJoin(schema.roles, eq(schema.roles.id, schema.rolesXUsersXOrg.roleId))
+    .where(eq(schema.rolesXUsersXOrg.userId, userId));
+
+  const roles = userRoles.map((r) => ({
+    orgId: r.orgId,
+    orgName: r.orgName,
+    roleName: r.roleName,
+  }));
+
+  return {
+    id: user.id,
+    email: user.email,
+    roles,
+    user: {
+      id: user.id.toString(),
+      email: user.email,
+      name: user.f3Name ?? undefined,
+      roles,
+    },
+    expires: new Date((payload.exp ?? 0) * 1000).toISOString(),
+  };
+}

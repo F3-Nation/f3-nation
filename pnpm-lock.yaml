@@ -8,6 +8,9 @@ overrides:
   axios: '>=1.7.4'
   braces: '>=3.0.3'
   cross-spawn: '>=7.0.5'
+  typescript: 5.3.3
+  prettier: 3.2.5
+  '@vis.gl/react-google-maps': 1.5.2
 
 importers:
 
@@ -21,16 +24,19 @@ importers:
         version: link:tooling/release-it
       '@turbo/gen':
         specifier: ^1.12.3
-        version: 1.13.4(@types/node@20.19.39)(typescript@5.9.3)
+        version: 1.13.4(@types/node@20.19.39)(typescript@5.3.3)
+      lefthook:
+        specifier: ^2.1.5
+        version: 2.1.5
       prettier:
-        specifier: ^3.2.5
-        version: 3.8.1
+        specifier: 3.2.5
+        version: 3.2.5
       turbo:
         specifier: ^1.12.3
         version: 1.13.4
       typescript:
-        specifier: ^5.3.3
-        version: 5.9.3
+        specifier: 5.3.3
+        version: 5.3.3
 
   apps/api:
     dependencies:
@@ -84,7 +90,7 @@ importers:
         version: 9.47.1(@opentelemetry/context-async-hooks@1.30.1(@opentelemetry/api@1.9.1))(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@1.30.1(@opentelemetry/api@1.9.1))(next@15.5.14(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(webpack@5.105.4)
       '@t3-oss/env-nextjs':
         specifier: ^0.9.2
-        version: 0.9.2(typescript@5.9.3)(zod@3.25.76)
+        version: 0.9.2(typescript@5.3.3)(zod@3.25.76)
       '@tanstack/react-query':
         specifier: 5.90.12
         version: 5.90.12(react@18.3.1)
@@ -92,8 +98,8 @@ importers:
         specifier: ^5.91.1
         version: 5.96.2(@tanstack/react-query@5.90.12(react@18.3.1))(react@18.3.1)
       '@vis.gl/react-google-maps':
-        specifier: ^1.5.2
-        version: 1.8.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        specifier: 1.5.2
+        version: 1.5.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       axios:
         specifier: '>=1.7.4'
         version: 1.14.0
@@ -237,23 +243,123 @@ importers:
         specifier: ^24.0.0
         version: 24.1.3
       prettier:
-        specifier: ^3.2.5
-        version: 3.8.1
+        specifier: 3.2.5
+        version: 3.2.5
       tailwindcss:
         specifier: ^3.4.1
         version: 3.4.19(tsx@4.21.0)
       typescript:
-        specifier: ^5.3.3
-        version: 5.9.3
+        specifier: 5.3.3
+        version: 5.3.3
       vite-tsconfig-paths:
         specifier: ^4.3.2
-        version: 4.3.2(typescript@5.9.3)(vite@5.4.21(@types/node@20.19.39)(terser@5.46.1))
+        version: 4.3.2(typescript@5.3.3)(vite@5.4.21(@types/node@20.19.39)(terser@5.46.1))
       vitest:
         specifier: ^1.5.0
         version: 1.6.1(@types/node@20.19.39)(jsdom@24.1.3)(terser@5.46.1)
       vitest-canvas-mock:
         specifier: ^0.3.3
         version: 0.3.3(vitest@1.6.1(@types/node@20.19.39)(jsdom@24.1.3)(terser@5.46.1))
+
+  apps/auth:
+    dependencies:
+      '@acme/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@acme/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@auth/core':
+        specifier: 0.37.2
+        version: 0.37.2(nodemailer@6.10.1)
+      '@t3-oss/env-nextjs':
+        specifier: ^0.9.2
+        version: 0.9.2(typescript@5.3.3)(zod@3.25.76)
+      drizzle-orm:
+        specifier: ^0.39.3
+        version: 0.39.3(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(pg@8.20.0)(postgres@3.4.9)
+      jose:
+        specifier: ^6.2.1
+        version: 6.2.2
+      next:
+        specifier: ^15.3.6
+        version: 15.5.14(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      next-auth:
+        specifier: 5.0.0-beta.25
+        version: 5.0.0-beta.25(next@15.5.14(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(nodemailer@6.10.1)(react@18.3.1)
+      next-themes:
+        specifier: ^0.4.4
+        version: 0.4.6(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      nodemailer:
+        specifier: ^6.10.0
+        version: 6.10.1
+      pg:
+        specifier: ^8.11.3
+        version: 8.20.0
+      postgres:
+        specifier: ^3.4.3
+        version: 3.4.9
+      react:
+        specifier: 18.3.1
+        version: 18.3.1
+      react-dom:
+        specifier: 18.3.1
+        version: 18.3.1(react@18.3.1)
+      zod:
+        specifier: ^3.25.8
+        version: 3.25.76
+    devDependencies:
+      '@acme/eslint-config':
+        specifier: workspace:*
+        version: link:../../tooling/eslint
+      '@acme/prettier-config':
+        specifier: workspace:*
+        version: link:../../tooling/prettier
+      '@acme/tailwind-config':
+        specifier: workspace:*
+        version: link:../../tooling/tailwind
+      '@acme/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      '@types/node':
+        specifier: ^20.11.13
+        version: 20.19.39
+      '@types/nodemailer':
+        specifier: ^6.4.17
+        version: 6.4.23
+      '@types/pg':
+        specifier: ^8.10.9
+        version: 8.20.0
+      '@types/react':
+        specifier: ^18.3.1
+        version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.3.1
+        version: 18.3.7(@types/react@18.3.28)
+      autoprefixer:
+        specifier: ^10.4.17
+        version: 10.4.27(postcss@8.5.8)
+      dotenv-cli:
+        specifier: ^7.3.0
+        version: 7.4.4
+      eslint:
+        specifier: ^8.56.0
+        version: 8.57.1
+      postcss:
+        specifier: ^8.4.35
+        version: 8.5.8
+      prettier:
+        specifier: 3.2.5
+        version: 3.2.5
+      tailwindcss:
+        specifier: ^3.4.1
+        version: 3.4.19(tsx@4.21.0)
+      tsx:
+        specifier: ^4.7.1
+        version: 4.21.0
+      typescript:
+        specifier: 5.3.3
+        version: 5.3.3
 
   apps/map:
     dependencies:
@@ -307,7 +413,7 @@ importers:
         version: 9.47.1(@opentelemetry/context-async-hooks@1.30.1(@opentelemetry/api@1.9.1))(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@1.30.1(@opentelemetry/api@1.9.1))(next@15.5.14(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(webpack@5.105.4)
       '@t3-oss/env-nextjs':
         specifier: ^0.9.2
-        version: 0.9.2(typescript@5.9.3)(zod@3.25.76)
+        version: 0.9.2(typescript@5.3.3)(zod@3.25.76)
       '@tanstack/react-query':
         specifier: 5.90.12
         version: 5.90.12(react@18.3.1)
@@ -315,8 +421,8 @@ importers:
         specifier: ^5.91.1
         version: 5.96.2(@tanstack/react-query@5.90.12(react@18.3.1))(react@18.3.1)
       '@vis.gl/react-google-maps':
-        specifier: ^1.5.2
-        version: 1.8.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        specifier: 1.5.2
+        version: 1.5.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       axios:
         specifier: '>=1.7.4'
         version: 1.14.0
@@ -463,17 +569,17 @@ importers:
         specifier: ^24.0.0
         version: 24.1.3
       prettier:
-        specifier: ^3.2.5
-        version: 3.8.1
+        specifier: 3.2.5
+        version: 3.2.5
       tailwindcss:
         specifier: ^3.4.1
         version: 3.4.19(tsx@4.21.0)
       typescript:
-        specifier: ^5.3.3
-        version: 5.9.3
+        specifier: 5.3.3
+        version: 5.3.3
       vite-tsconfig-paths:
         specifier: ^4.3.2
-        version: 4.3.2(typescript@5.9.3)(vite@5.4.21(@types/node@20.19.39)(terser@5.46.1))
+        version: 4.3.2(typescript@5.3.3)(vite@5.4.21(@types/node@20.19.39)(terser@5.46.1))
       vitest:
         specifier: ^1.5.0
         version: 1.6.1(@types/node@20.19.39)(jsdom@24.1.3)(terser@5.46.1)
@@ -513,6 +619,9 @@ importers:
       google-auth-library:
         specifier: ^10.3.0
         version: 10.6.2
+      jose:
+        specifier: ^6.2.1
+        version: 6.2.2
       lodash:
         specifier: ^4.17.21
         version: 4.18.1
@@ -536,11 +645,11 @@ importers:
         specifier: ^8.56.0
         version: 8.57.1
       prettier:
-        specifier: ^3.2.5
-        version: 3.8.1
+        specifier: 3.2.5
+        version: 3.2.5
       typescript:
-        specifier: ^5.3.3
-        version: 5.9.3
+        specifier: 5.3.3
+        version: 5.3.3
 
   packages/auth:
     dependencies:
@@ -597,14 +706,14 @@ importers:
         specifier: ^8.56.0
         version: 8.57.1
       prettier:
-        specifier: ^3.2.5
-        version: 3.8.1
+        specifier: 3.2.5
+        version: 3.2.5
       tsx:
         specifier: ^4.7.1
         version: 4.21.0
       typescript:
-        specifier: ^5.3.3
-        version: 5.9.3
+        specifier: 5.3.3
+        version: 5.3.3
 
   packages/db:
     dependencies:
@@ -619,7 +728,7 @@ importers:
         version: 7.4.4
       drizzle-orm:
         specifier: ^0.39.3
-        version: 0.39.3(@opentelemetry/api@1.9.1)(@types/pg@8.6.1)(pg@8.20.0)(postgres@3.4.9)
+        version: 0.39.3(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(pg@8.20.0)(postgres@3.4.9)
       esbuild-register:
         specifier: ^3.5.0
         version: 3.6.0(esbuild@0.27.7)
@@ -649,17 +758,17 @@ importers:
         specifier: ^8.56.0
         version: 8.57.1
       prettier:
-        specifier: ^3.2.5
-        version: 3.8.1
+        specifier: 3.2.5
+        version: 3.2.5
       typescript:
-        specifier: ^5.3.3
-        version: 5.9.3
+        specifier: 5.3.3
+        version: 5.3.3
 
   packages/env:
     dependencies:
       '@t3-oss/env-nextjs':
         specifier: ^0.9.2
-        version: 0.9.2(typescript@5.9.3)(zod@3.25.76)
+        version: 0.9.2(typescript@5.3.3)(zod@3.25.76)
       dotenv:
         specifier: ^16.3.2
         version: 16.6.1
@@ -680,14 +789,14 @@ importers:
         specifier: ^8.56.0
         version: 8.57.1
       prettier:
-        specifier: ^3.2.5
-        version: 3.8.1
+        specifier: 3.2.5
+        version: 3.2.5
       tsx:
         specifier: ^4.7.1
         version: 4.21.0
       typescript:
-        specifier: ^5.3.3
-        version: 5.9.3
+        specifier: 5.3.3
+        version: 5.3.3
 
   packages/mail:
     dependencies:
@@ -714,11 +823,11 @@ importers:
         specifier: ^8.56.0
         version: 8.57.1
       prettier:
-        specifier: ^3.2.5
-        version: 3.8.1
+        specifier: 3.2.5
+        version: 3.2.5
       typescript:
-        specifier: ^5.3.3
-        version: 5.9.3
+        specifier: 5.3.3
+        version: 5.3.3
 
   packages/shared:
     devDependencies:
@@ -738,8 +847,29 @@ importers:
         specifier: ^8.56.0
         version: 8.57.1
       typescript:
-        specifier: ^5.3.3
-        version: 5.9.3
+        specifier: 5.3.3
+        version: 5.3.3
+
+  packages/sso:
+    devDependencies:
+      '@acme/eslint-config':
+        specifier: workspace:*
+        version: link:../../tooling/eslint
+      '@acme/prettier-config':
+        specifier: workspace:*
+        version: link:../../tooling/prettier
+      '@acme/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      eslint:
+        specifier: ^8.56.0
+        version: 8.57.1
+      prettier:
+        specifier: 3.2.5
+        version: 3.2.5
+      typescript:
+        specifier: 5.3.3
+        version: 5.3.3
 
   packages/ui:
     dependencies:
@@ -843,8 +973,8 @@ importers:
         specifier: ^0.557.0
         version: 0.557.0(react@18.3.1)
       next-themes:
-        specifier: ^0.2.1
-        version: 0.2.1(next@15.5.14(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        specifier: ^0.4.4
+        version: 0.4.6(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react-day-picker:
         specifier: ^8.10.0
         version: 8.10.1(date-fns@3.6.0)(react@18.3.1)
@@ -886,8 +1016,8 @@ importers:
         specifier: ^8.56.0
         version: 8.57.1
       prettier:
-        specifier: ^3.2.5
-        version: 3.8.1
+        specifier: 3.2.5
+        version: 3.2.5
       react:
         specifier: 18.3.1
         version: 18.3.1
@@ -895,8 +1025,8 @@ importers:
         specifier: ^3.4.1
         version: 3.4.19(tsx@4.21.0)
       typescript:
-        specifier: ^5.3.3
-        version: 5.9.3
+        specifier: 5.3.3
+        version: 5.3.3
       zod:
         specifier: ^3.25.8
         version: 3.25.76
@@ -911,7 +1041,7 @@ importers:
         version: link:../shared
       drizzle-zod:
         specifier: ^0.6.1
-        version: 0.6.1(drizzle-orm@0.39.3(@opentelemetry/api@1.9.1)(@types/pg@8.6.1)(pg@8.20.0)(postgres@3.4.9))(zod@3.25.76)
+        version: 0.6.1(drizzle-orm@0.39.3(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(pg@8.20.0)(postgres@3.4.9))(zod@3.25.76)
       zod:
         specifier: ^3.25.8
         version: 3.25.76
@@ -929,11 +1059,11 @@ importers:
         specifier: ^8.56.0
         version: 8.57.1
       prettier:
-        specifier: ^3.2.5
-        version: 3.8.1
+        specifier: 3.2.5
+        version: 3.2.5
       typescript:
-        specifier: ^5.3.3
-        version: 5.9.3
+        specifier: 5.3.3
+        version: 5.3.3
 
   tooling/eslint:
     dependencies:
@@ -942,16 +1072,16 @@ importers:
         version: 14.2.35
       '@typescript-eslint/eslint-plugin':
         specifier: ^7.0.1
-        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)(typescript@5.9.3)
+        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.3.3))(eslint@8.57.1)(typescript@5.3.3)
       '@typescript-eslint/parser':
         specifier: ^7.0.1
-        version: 7.18.0(eslint@8.57.1)(typescript@5.9.3)
+        version: 7.18.0(eslint@8.57.1)(typescript@5.3.3)
       eslint-config-turbo:
         specifier: ^1.12.3
         version: 1.13.4(eslint@8.57.1)
       eslint-plugin-import:
         specifier: ^2.29.1
-        version: 2.32.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)
+        version: 2.32.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.3.3))(eslint@8.57.1)
       eslint-plugin-jsx-a11y:
         specifier: ^6.8.0
         version: 6.10.2(eslint@8.57.1)
@@ -975,11 +1105,11 @@ importers:
         specifier: ^8.56.0
         version: 8.57.1
       prettier:
-        specifier: ^3.2.5
-        version: 3.8.1
+        specifier: 3.2.5
+        version: 3.2.5
       typescript:
-        specifier: ^5.3.3
-        version: 5.9.3
+        specifier: 5.3.3
+        version: 5.3.3
 
   tooling/github: {}
 
@@ -987,20 +1117,20 @@ importers:
     dependencies:
       '@ianvs/prettier-plugin-sort-imports':
         specifier: ^4.1.1
-        version: 4.7.1(prettier@3.8.1)
+        version: 4.7.1(prettier@3.2.5)
       prettier:
-        specifier: ^3.2.5
-        version: 3.8.1
+        specifier: 3.2.5
+        version: 3.2.5
       prettier-plugin-tailwindcss:
         specifier: ^0.5.11
-        version: 0.5.14(@ianvs/prettier-plugin-sort-imports@4.7.1(prettier@3.8.1))(prettier@3.8.1)
+        version: 0.5.14(@ianvs/prettier-plugin-sort-imports@4.7.1(prettier@3.2.5))(prettier@3.2.5)
     devDependencies:
       '@acme/tsconfig':
         specifier: workspace:^0.1.0
         version: link:../typescript
       typescript:
-        specifier: ^5.3.3
-        version: 5.9.3
+        specifier: 5.3.3
+        version: 5.3.3
 
   tooling/release-it:
     devDependencies:
@@ -1012,10 +1142,10 @@ importers:
         version: link:../typescript
       '@release-it/bumper':
         specifier: ^7.0.1
-        version: 7.0.5(release-it@18.1.2(@types/node@20.19.39)(typescript@5.9.3))
+        version: 7.0.5(release-it@18.1.2(@types/node@20.19.39)(typescript@5.3.3))
       release-it:
         specifier: ^18.1.2
-        version: 18.1.2(@types/node@20.19.39)(typescript@5.9.3)
+        version: 18.1.2(@types/node@20.19.39)(typescript@5.3.3)
 
   tooling/scripts:
     devDependencies:
@@ -1047,14 +1177,14 @@ importers:
         specifier: ^8.56.0
         version: 8.57.1
       prettier:
-        specifier: ^3.2.5
-        version: 3.8.1
+        specifier: 3.2.5
+        version: 3.2.5
       tsx:
         specifier: ^4.7.1
         version: 4.21.0
       typescript:
-        specifier: ^5.3.3
-        version: 5.9.3
+        specifier: 5.3.3
+        version: 5.3.3
 
   tooling/tailwind:
     dependencies:
@@ -1084,11 +1214,11 @@ importers:
         specifier: ^8.56.0
         version: 8.57.1
       prettier:
-        specifier: ^3.2.5
-        version: 3.8.1
+        specifier: 3.2.5
+        version: 3.2.5
       typescript:
-        specifier: ^5.3.3
-        version: 5.9.3
+        specifier: 5.3.3
+        version: 5.3.3
 
   tooling/typescript: {}
 
@@ -1883,9 +2013,6 @@ packages:
   '@formkit/auto-animate@0.8.4':
     resolution: {integrity: sha512-DHHC01EJ1p70Q0z/ZFRBIY8NDnmfKccQoyoM84Tgb6omLMat6jivCdf272Y8k3nf4Lzdin/Y4R9q8uFtU0GbnA==}
 
-  '@googlemaps/js-api-loader@2.0.2':
-    resolution: {integrity: sha512-bKVuTqatS8Jven5aFqVB7rCHF1VFEzpzyi0ruzO0GUR+A7m9oMqMgtnmpANj7kMYEvvhty8Fk7TnJ1MKjWHu+Q==}
-
   '@hookform/resolvers@3.10.0':
     resolution: {integrity: sha512-79Dv+3mDF7i+2ajj7SkypSKHhl1cbln1OGavqrsF7p6mbUv11xpqpacPsGDCTRvCSjEEIez2ef1NveSVL3b0Ag==}
     peerDependencies:
@@ -1910,7 +2037,7 @@ packages:
       '@prettier/plugin-oxc': ^0.0.4 || ^0.1.0
       '@vue/compiler-sfc': 2.7.x || 3.x
       content-tag: ^4.0.0
-      prettier: 2 || 3 || ^4.0.0-0
+      prettier: 3.2.5
       prettier-plugin-ember-template-tag: ^2.1.0
     peerDependenciesMeta:
       '@prettier/plugin-oxc':
@@ -3929,7 +4056,7 @@ packages:
   '@t3-oss/env-core@0.9.2':
     resolution: {integrity: sha512-KgWXljUTHgO3o7GMZQPAD5+P+HqpauMNNHowlm7V2b9IeMitSUpNKwG6xQrup/xARWHTdxRVIl0mSI4wCevQhQ==}
     peerDependencies:
-      typescript: '>=5.0.0'
+      typescript: 5.3.3
       zod: ^3.0.0
     peerDependenciesMeta:
       typescript:
@@ -3938,7 +4065,7 @@ packages:
   '@t3-oss/env-nextjs@0.9.2':
     resolution: {integrity: sha512-dklHrgKLESStNVB67Jdbu6osxDYA+xNKaPBRerlnkEvzbCccSKMvZENx6EZebJuR4snqB3/yRykNMn/bdIAyiQ==}
     peerDependencies:
-      typescript: '>=5.0.0'
+      typescript: 5.3.3
       zod: ^3.0.0
     peerDependenciesMeta:
       typescript:
@@ -4113,6 +4240,9 @@ packages:
   '@types/pg-pool@2.0.6':
     resolution: {integrity: sha512-TaAUE5rq2VQYxab5Ts7WZhKNmuN78Q6PiFonTDdpbx8a1H0M1vhy3rhiMjl+e2iHmogyMw7jZF4FrE6eJUy5HQ==}
 
+  '@types/pg@8.20.0':
+    resolution: {integrity: sha512-bEPFOaMAHTEP1EzpvHTbmwR8UsFyHSKsRisLIHVMXnpNefSbGA1bD6CVy+qKjGSqmZqNqBDV2azOBo8TgkcVow==}
+
   '@types/pg@8.6.1':
     resolution: {integrity: sha512-1Kc4oAGzAl7uqUStZCDvaLFqZrW9qWSjXOmBfdgyBP5La7Us6Mg4GBvRlSoaZMhQF/zSj1C8CtKMBkoiT8eL8w==}
 
@@ -4210,8 +4340,8 @@ packages:
   '@ungap/structured-clone@1.3.0':
     resolution: {integrity: sha512-WmoN8qaIAo7WTYWbAZuG8PYEhn5fkz7dZrqTBZ7dtt//lL2Gwms1IcnQ5yHqjDfX8Ft5j4YzDM23f87zBfDe9g==}
 
-  '@vis.gl/react-google-maps@1.8.2':
-    resolution: {integrity: sha512-s9OPwGyMBobip6W1dgEtzwKs3jIg0DP9zvGJRbjDEGB4PgrWl1d5VDQXoCFFEdt1/47SR9RVvSqv/LKfh5cnvw==}
+  '@vis.gl/react-google-maps@1.5.2':
+    resolution: {integrity: sha512-0Ypmde7M73GgV4TgcaUTNKXsbcXWToPVuawMNrVg7htXmhpEfLARHwhtmP6N1da3od195ZKC8ShXzC6Vm+zYHQ==}
     peerDependencies:
       react: '>=16.8.0 || ^19.0 || ^19.0.0-rc'
       react-dom: '>=16.8.0 || ^19.0 || ^19.0.0-rc'
@@ -4777,7 +4907,7 @@ packages:
     resolution: {integrity: sha512-itvL5h8RETACmOTFc4UfIyB2RfEHi71Ax6E/PivVxq9NseKbOWpeyHEOIbmAw1rs8Ak0VursQNww7lf7YtUwzg==}
     engines: {node: '>=14'}
     peerDependencies:
-      typescript: '>=4.9.5'
+      typescript: 5.3.3
     peerDependenciesMeta:
       typescript:
         optional: true
@@ -6078,6 +6208,9 @@ packages:
   jose@5.10.0:
     resolution: {integrity: sha512-s+3Al/p9g32Iq+oqXxkW//7jk2Vig6FF1CFqzVXoTUXt2qz89YWbL+OwS17NFYEvxC35n0FKeGO2LGYSxeM2Gg==}
 
+  jose@6.2.2:
+    resolution: {integrity: sha512-d7kPDd34KO/YnzaDOlikGpOurfF0ByC2sEV4cANCtdqLlTfBlw2p14O/5d/zv40gJPbIQxfES3nSx1/oYNyuZQ==}
+
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
 
@@ -6165,6 +6298,60 @@ packages:
   latest-version@9.0.0:
     resolution: {integrity: sha512-7W0vV3rqv5tokqkBAFV1LbR7HPOWzXQDpDgEuib/aJ1jsZZx6x3c2mBI+TJhJzOhkGeaLbCKEHXEXLfirtG2JA==}
     engines: {node: '>=18'}
+
+  lefthook-darwin-arm64@2.1.5:
+    resolution: {integrity: sha512-VITTaw8PxxyE26gkZ8UcwIa5ZrWnKNRGLeeSrqri40cQdXvLTEoMq2tjjw7eiL9UcB0waRReDdzydevy9GOPUQ==}
+    cpu: [arm64]
+    os: [darwin]
+
+  lefthook-darwin-x64@2.1.5:
+    resolution: {integrity: sha512-AvtjYiW0BSGHBGrdvL313seUymrW9FxI+6JJwJ+ZSaa2sH81etrTB0wAwlH1L9VfFwK9+gWvatZBvLfF3L4fPw==}
+    cpu: [x64]
+    os: [darwin]
+
+  lefthook-freebsd-arm64@2.1.5:
+    resolution: {integrity: sha512-mXjJwe8jKGWGiBYUxfQY1ab3Nn5NhafqT9q3KJz8m5joGGQj4JD0cbWxF1nVBLBWsDGbWZRZunTCMGcIScT2bQ==}
+    cpu: [arm64]
+    os: [freebsd]
+
+  lefthook-freebsd-x64@2.1.5:
+    resolution: {integrity: sha512-exD69dCjc1K45BxatDPGoH4NmEvgLKPm4kJLOWn1fTeHRKZwWiFPwnjknEoG2OemlCDHmCU++5X40kMEG0WBlA==}
+    cpu: [x64]
+    os: [freebsd]
+
+  lefthook-linux-arm64@2.1.5:
+    resolution: {integrity: sha512-57TDKC5ewWpsCLZQKIJMHumFEObYKVundmPpiWhX491hINRZYYOL/26yrnVnNcidThRzTiTC+HLcuplLcaXtbA==}
+    cpu: [arm64]
+    os: [linux]
+
+  lefthook-linux-x64@2.1.5:
+    resolution: {integrity: sha512-bqK3LrAB5l5YaCaoHk6qRWlITrGWzP4FbwRxA31elbxjd0wgNWZ2Sn3zEfSEcxz442g7/PPkEwqqsTx0kSFzpg==}
+    cpu: [x64]
+    os: [linux]
+
+  lefthook-openbsd-arm64@2.1.5:
+    resolution: {integrity: sha512-5aSwK7vV3A6t0w9PnxCMiVjQlcvopBP50BtmnnLnNJyAYHnFbZ0Baq5M0WkE9IsUkWSux0fe6fd0jDkuG711MA==}
+    cpu: [arm64]
+    os: [openbsd]
+
+  lefthook-openbsd-x64@2.1.5:
+    resolution: {integrity: sha512-Y+pPdDuENJ8qWnUgL02xxhpjblc0WnwXvWGfqnl3WZrAgHzQpwx3G6469RID/wlNVdHYAlw3a8UkFSMYsTzXvA==}
+    cpu: [x64]
+    os: [openbsd]
+
+  lefthook-windows-arm64@2.1.5:
+    resolution: {integrity: sha512-2PlcFBjTzJaMufw0c28kfhB/0zmaRCU0TRPPsil/HU2YNOExod4upPGLk9qjgsOmb2YVWFz6zq6u7+D1yqmzTQ==}
+    cpu: [arm64]
+    os: [win32]
+
+  lefthook-windows-x64@2.1.5:
+    resolution: {integrity: sha512-yiAh8qxml6uqy10jDxOdN9fOQpyLxBFY1fgCEAhn7sVJYmJKRhjqSBwZX6LG5MQjzr29KStrIdw7TR3lf3rT7Q==}
+    cpu: [x64]
+    os: [win32]
+
+  lefthook@2.1.5:
+    resolution: {integrity: sha512-yB9IFWurFllusbPZqvG0EavTmpNXPya2MuO7Li7YT78xAj3uCQ3AgmW9TVUbTTsSMhsegbiAMRpwfEk2TP1P0A==}
+    hasBin: true
 
   levn@0.4.1:
     resolution: {integrity: sha512-+bT2uH4E5LGE7h/n3evcS/sQlJXCpIp6ym8OWJ5eV6+67Dsql/LaaT7qJBAt2rzfoa/5QBGBhxDix1dMt2kQKQ==}
@@ -6435,12 +6622,11 @@ packages:
       react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
-  next-themes@0.2.1:
-    resolution: {integrity: sha512-B+AKNfYNIzh0vqQQKqQItTS8evEouKD7H5Hj3kmuPERwddR2TxvDSFZuTj6T7Jfn1oyeUyJMydPl1Bkxkh0W7A==}
+  next-themes@0.4.6:
+    resolution: {integrity: sha512-pZvgD5L0IEvX5/9GWyHMf3m8BKiVQwsCMHfoFosXtXBMnaS0ZnIJ9ST4b4NqLVKDEm8QBxoNNGNaBv2JNF6XNA==}
     peerDependencies:
-      next: '*'
-      react: '*'
-      react-dom: '*'
+      react: ^16.8 || ^17 || ^18 || ^19 || ^19.0.0-rc
+      react-dom: ^16.8 || ^17 || ^18 || ^19 || ^19.0.0-rc
 
   next@15.5.14:
     resolution: {integrity: sha512-M6S+4JyRjmKic2Ssm7jHUPkE6YUJ6lv4507jprsSZLulubz0ihO2E+S4zmQK3JZ2ov81JrugukKU4Tz0ivgqqQ==}
@@ -6880,7 +7066,7 @@ packages:
       '@shopify/prettier-plugin-liquid': '*'
       '@trivago/prettier-plugin-sort-imports': '*'
       '@zackad/prettier-plugin-twig-melody': '*'
-      prettier: ^3.0
+      prettier: 3.2.5
       prettier-plugin-astro: '*'
       prettier-plugin-css-order: '*'
       prettier-plugin-import-sort: '*'
@@ -6923,8 +7109,8 @@ packages:
       prettier-plugin-svelte:
         optional: true
 
-  prettier@3.8.1:
-    resolution: {integrity: sha512-UOnG6LftzbdaHZcKoPFtOcCKztrQ57WkHDeRD9t/PTQtmT0NHSeWWepj6pS0z/N7+08BHFDQVUrfmfMRcZwbMg==}
+  prettier@3.2.5:
+    resolution: {integrity: sha512-3/GWa9aOC0YeD7LUfvOG2NiDyhOWRvt1k+rcKhOuYnMY24iiCphgneUfJDyFXd6rZCAnuLBv6UeAULtrhT/F4A==}
     engines: {node: '>=14'}
     hasBin: true
 
@@ -7651,7 +7837,7 @@ packages:
     resolution: {integrity: sha512-i3eMG77UTMD0hZhgRS562pv83RC6ukSAC2GMNWc+9dieh/+jDM5u5YG+NHX6VNDRHQcHwmsTHctP9LhbC3WxVw==}
     engines: {node: '>=16'}
     peerDependencies:
-      typescript: '>=4.2.0'
+      typescript: 5.3.3
 
   ts-interface-checker@0.1.13:
     resolution: {integrity: sha512-Y/arvbn+rrz3JCKl9C4kVNfTfSm2/mEp5FSz5EsZSANGPSlQrpRI5M4PKF+mJnE52jOO90PnPSc3Ur3bTQw0gA==}
@@ -7663,7 +7849,7 @@ packages:
       '@swc/core': '>=1.2.50'
       '@swc/wasm': '>=1.2.50'
       '@types/node': '*'
-      typescript: '>=2.7'
+      typescript: 5.3.3
     peerDependenciesMeta:
       '@swc/core':
         optional: true
@@ -7675,7 +7861,7 @@ packages:
     engines: {node: ^18 || >=20}
     hasBin: true
     peerDependencies:
-      typescript: ^5.0.0
+      typescript: 5.3.3
     peerDependenciesMeta:
       typescript:
         optional: true
@@ -7776,8 +7962,8 @@ packages:
     resolution: {integrity: sha512-3KS2b+kL7fsuk/eJZ7EQdnEmQoaho/r6KUef7hxvltNA5DR8NAUM+8wJMbJyZ4G9/7i3v5zPBIMN5aybAh2/Jg==}
     engines: {node: '>= 0.4'}
 
-  typescript@5.9.3:
-    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
+  typescript@5.3.3:
+    resolution: {integrity: sha512-pXWcraxM0uxAS+tN0AG/BF2TyqmHO014Z070UsJ+pFvYuRSq8KH8DmWpnbXe0pEPDHXZV3FcAbJkijJ5oNEnWw==}
     engines: {node: '>=14.17'}
     hasBin: true
 
@@ -8717,10 +8903,6 @@ snapshots:
 
   '@formkit/auto-animate@0.8.4': {}
 
-  '@googlemaps/js-api-loader@2.0.2':
-    dependencies:
-      '@types/google.maps': 3.58.1
-
   '@hookform/resolvers@3.10.0(react-hook-form@7.72.1(react@18.3.1))':
     dependencies:
       react-hook-form: 7.72.1(react@18.3.1)
@@ -8737,13 +8919,13 @@ snapshots:
 
   '@humanwhocodes/object-schema@2.0.3': {}
 
-  '@ianvs/prettier-plugin-sort-imports@4.7.1(prettier@3.8.1)':
+  '@ianvs/prettier-plugin-sort-imports@4.7.1(prettier@3.2.5)':
     dependencies:
       '@babel/generator': 7.29.1
       '@babel/parser': 7.29.2
       '@babel/traverse': 7.29.0
       '@babel/types': 7.29.0
-      prettier: 3.8.1
+      prettier: 3.2.5
       semver: 7.7.4
     transitivePeerDependencies:
       - supports-color
@@ -10513,7 +10695,7 @@ snapshots:
       '@react-hook/throttle': 2.2.0(react@18.3.1)
       react: 18.3.1
 
-  '@release-it/bumper@7.0.5(release-it@18.1.2(@types/node@20.19.39)(typescript@5.9.3))':
+  '@release-it/bumper@7.0.5(release-it@18.1.2(@types/node@20.19.39)(typescript@5.3.3))':
     dependencies:
       '@iarna/toml': 3.0.0
       cheerio: 1.2.0
@@ -10522,7 +10704,7 @@ snapshots:
       ini: 5.0.0
       js-yaml: 4.1.1
       lodash-es: 4.18.1
-      release-it: 18.1.2(@types/node@20.19.39)(typescript@5.9.3)
+      release-it: 18.1.2(@types/node@20.19.39)(typescript@5.3.3)
       semver: 7.7.4
 
   '@rolldown/pluginutils@1.0.0-beta.27': {}
@@ -10862,18 +11044,18 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
-  '@t3-oss/env-core@0.9.2(typescript@5.9.3)(zod@3.25.76)':
+  '@t3-oss/env-core@0.9.2(typescript@5.3.3)(zod@3.25.76)':
     dependencies:
       zod: 3.25.76
     optionalDependencies:
-      typescript: 5.9.3
+      typescript: 5.3.3
 
-  '@t3-oss/env-nextjs@0.9.2(typescript@5.9.3)(zod@3.25.76)':
+  '@t3-oss/env-nextjs@0.9.2(typescript@5.3.3)(zod@3.25.76)':
     dependencies:
-      '@t3-oss/env-core': 0.9.2(typescript@5.9.3)(zod@3.25.76)
+      '@t3-oss/env-core': 0.9.2(typescript@5.3.3)(zod@3.25.76)
       zod: 3.25.76
     optionalDependencies:
-      typescript: 5.9.3
+      typescript: 5.3.3
 
   '@tanstack/query-core@5.90.12': {}
 
@@ -10946,7 +11128,7 @@ snapshots:
 
   '@tsconfig/node16@1.0.4': {}
 
-  '@turbo/gen@1.13.4(@types/node@20.19.39)(typescript@5.9.3)':
+  '@turbo/gen@1.13.4(@types/node@20.19.39)(typescript@5.3.3)':
     dependencies:
       '@turbo/workspaces': 1.13.4(@types/node@20.19.39)
       chalk: 2.4.2
@@ -10956,7 +11138,7 @@ snapshots:
       minimatch: 9.0.9
       node-plop: 0.26.3
       proxy-agent: 6.5.0
-      ts-node: 10.9.2(@types/node@20.19.39)(typescript@5.9.3)
+      ts-node: 10.9.2(@types/node@20.19.39)(typescript@5.3.3)
       update-check: 1.5.4
       validate-npm-package-name: 5.0.1
     transitivePeerDependencies:
@@ -11095,7 +11277,13 @@ snapshots:
 
   '@types/pg-pool@2.0.6':
     dependencies:
-      '@types/pg': 8.6.1
+      '@types/pg': 8.20.0
+
+  '@types/pg@8.20.0':
+    dependencies:
+      '@types/node': 20.19.39
+      pg-protocol: 1.13.0
+      pg-types: 2.2.0
 
   '@types/pg@8.6.1':
     dependencies:
@@ -11137,34 +11325,34 @@ snapshots:
   '@types/trusted-types@2.0.7':
     optional: true
 
-  '@typescript-eslint/eslint-plugin@7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)(typescript@5.9.3)':
+  '@typescript-eslint/eslint-plugin@7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.3.3))(eslint@8.57.1)(typescript@5.3.3)':
     dependencies:
       '@eslint-community/regexpp': 4.12.2
-      '@typescript-eslint/parser': 7.18.0(eslint@8.57.1)(typescript@5.9.3)
+      '@typescript-eslint/parser': 7.18.0(eslint@8.57.1)(typescript@5.3.3)
       '@typescript-eslint/scope-manager': 7.18.0
-      '@typescript-eslint/type-utils': 7.18.0(eslint@8.57.1)(typescript@5.9.3)
-      '@typescript-eslint/utils': 7.18.0(eslint@8.57.1)(typescript@5.9.3)
+      '@typescript-eslint/type-utils': 7.18.0(eslint@8.57.1)(typescript@5.3.3)
+      '@typescript-eslint/utils': 7.18.0(eslint@8.57.1)(typescript@5.3.3)
       '@typescript-eslint/visitor-keys': 7.18.0
       eslint: 8.57.1
       graphemer: 1.4.0
       ignore: 5.3.2
       natural-compare: 1.4.0
-      ts-api-utils: 1.4.3(typescript@5.9.3)
+      ts-api-utils: 1.4.3(typescript@5.3.3)
     optionalDependencies:
-      typescript: 5.9.3
+      typescript: 5.3.3
     transitivePeerDependencies:
       - supports-color
 
-  '@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3)':
+  '@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.3.3)':
     dependencies:
       '@typescript-eslint/scope-manager': 7.18.0
       '@typescript-eslint/types': 7.18.0
-      '@typescript-eslint/typescript-estree': 7.18.0(typescript@5.9.3)
+      '@typescript-eslint/typescript-estree': 7.18.0(typescript@5.3.3)
       '@typescript-eslint/visitor-keys': 7.18.0
       debug: 4.4.3
       eslint: 8.57.1
     optionalDependencies:
-      typescript: 5.9.3
+      typescript: 5.3.3
     transitivePeerDependencies:
       - supports-color
 
@@ -11173,21 +11361,21 @@ snapshots:
       '@typescript-eslint/types': 7.18.0
       '@typescript-eslint/visitor-keys': 7.18.0
 
-  '@typescript-eslint/type-utils@7.18.0(eslint@8.57.1)(typescript@5.9.3)':
+  '@typescript-eslint/type-utils@7.18.0(eslint@8.57.1)(typescript@5.3.3)':
     dependencies:
-      '@typescript-eslint/typescript-estree': 7.18.0(typescript@5.9.3)
-      '@typescript-eslint/utils': 7.18.0(eslint@8.57.1)(typescript@5.9.3)
+      '@typescript-eslint/typescript-estree': 7.18.0(typescript@5.3.3)
+      '@typescript-eslint/utils': 7.18.0(eslint@8.57.1)(typescript@5.3.3)
       debug: 4.4.3
       eslint: 8.57.1
-      ts-api-utils: 1.4.3(typescript@5.9.3)
+      ts-api-utils: 1.4.3(typescript@5.3.3)
     optionalDependencies:
-      typescript: 5.9.3
+      typescript: 5.3.3
     transitivePeerDependencies:
       - supports-color
 
   '@typescript-eslint/types@7.18.0': {}
 
-  '@typescript-eslint/typescript-estree@7.18.0(typescript@5.9.3)':
+  '@typescript-eslint/typescript-estree@7.18.0(typescript@5.3.3)':
     dependencies:
       '@typescript-eslint/types': 7.18.0
       '@typescript-eslint/visitor-keys': 7.18.0
@@ -11196,18 +11384,18 @@ snapshots:
       is-glob: 4.0.3
       minimatch: 9.0.9
       semver: 7.7.4
-      ts-api-utils: 1.4.3(typescript@5.9.3)
+      ts-api-utils: 1.4.3(typescript@5.3.3)
     optionalDependencies:
-      typescript: 5.9.3
+      typescript: 5.3.3
     transitivePeerDependencies:
       - supports-color
 
-  '@typescript-eslint/utils@7.18.0(eslint@8.57.1)(typescript@5.9.3)':
+  '@typescript-eslint/utils@7.18.0(eslint@8.57.1)(typescript@5.3.3)':
     dependencies:
       '@eslint-community/eslint-utils': 4.9.1(eslint@8.57.1)
       '@typescript-eslint/scope-manager': 7.18.0
       '@typescript-eslint/types': 7.18.0
-      '@typescript-eslint/typescript-estree': 7.18.0(typescript@5.9.3)
+      '@typescript-eslint/typescript-estree': 7.18.0(typescript@5.3.3)
       eslint: 8.57.1
     transitivePeerDependencies:
       - supports-color
@@ -11220,9 +11408,8 @@ snapshots:
 
   '@ungap/structured-clone@1.3.0': {}
 
-  '@vis.gl/react-google-maps@1.8.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+  '@vis.gl/react-google-maps@1.5.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
-      '@googlemaps/js-api-loader': 2.0.2
       '@types/google.maps': 3.58.1
       fast-deep-equal: 3.1.3
       react: 18.3.1
@@ -11889,14 +12076,14 @@ snapshots:
 
   core-js@2.6.12: {}
 
-  cosmiconfig@9.0.0(typescript@5.9.3):
+  cosmiconfig@9.0.0(typescript@5.3.3):
     dependencies:
       env-paths: 2.2.1
       import-fresh: 3.3.1
       js-yaml: 4.1.1
       parse-json: 5.2.0
     optionalDependencies:
-      typescript: 5.9.3
+      typescript: 5.3.3
 
   create-require@1.1.1: {}
 
@@ -12118,16 +12305,16 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  drizzle-orm@0.39.3(@opentelemetry/api@1.9.1)(@types/pg@8.6.1)(pg@8.20.0)(postgres@3.4.9):
+  drizzle-orm@0.39.3(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(pg@8.20.0)(postgres@3.4.9):
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
-      '@types/pg': 8.6.1
+      '@types/pg': 8.20.0
       pg: 8.20.0
       postgres: 3.4.9
 
-  drizzle-zod@0.6.1(drizzle-orm@0.39.3(@opentelemetry/api@1.9.1)(@types/pg@8.6.1)(pg@8.20.0)(postgres@3.4.9))(zod@3.25.76):
+  drizzle-zod@0.6.1(drizzle-orm@0.39.3(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(pg@8.20.0)(postgres@3.4.9))(zod@3.25.76):
     dependencies:
-      drizzle-orm: 0.39.3(@opentelemetry/api@1.9.1)(@types/pg@8.6.1)(pg@8.20.0)(postgres@3.4.9)
+      drizzle-orm: 0.39.3(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(pg@8.20.0)(postgres@3.4.9)
       zod: 3.25.76
 
   dunder-proto@1.0.1:
@@ -12431,17 +12618,17 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-module-utils@2.12.1(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(eslint-import-resolver-node@0.3.10)(eslint@8.57.1):
+  eslint-module-utils@2.12.1(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.3.3))(eslint-import-resolver-node@0.3.10)(eslint@8.57.1):
     dependencies:
       debug: 3.2.7
     optionalDependencies:
-      '@typescript-eslint/parser': 7.18.0(eslint@8.57.1)(typescript@5.9.3)
+      '@typescript-eslint/parser': 7.18.0(eslint@8.57.1)(typescript@5.3.3)
       eslint: 8.57.1
       eslint-import-resolver-node: 0.3.10
     transitivePeerDependencies:
       - supports-color
 
-  eslint-plugin-import@2.32.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1):
+  eslint-plugin-import@2.32.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.3.3))(eslint@8.57.1):
     dependencies:
       '@rtsao/scc': 1.1.0
       array-includes: 3.1.9
@@ -12452,7 +12639,7 @@ snapshots:
       doctrine: 2.1.0
       eslint: 8.57.1
       eslint-import-resolver-node: 0.3.10
-      eslint-module-utils: 2.12.1(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(eslint-import-resolver-node@0.3.10)(eslint@8.57.1)
+      eslint-module-utils: 2.12.1(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.3.3))(eslint-import-resolver-node@0.3.10)(eslint@8.57.1)
       hasown: 2.0.2
       is-core-module: 2.16.1
       is-glob: 4.0.3
@@ -12464,7 +12651,7 @@ snapshots:
       string.prototype.trimend: 1.0.9
       tsconfig-paths: 3.15.0
     optionalDependencies:
-      '@typescript-eslint/parser': 7.18.0(eslint@8.57.1)(typescript@5.9.3)
+      '@typescript-eslint/parser': 7.18.0(eslint@8.57.1)(typescript@5.3.3)
     transitivePeerDependencies:
       - eslint-import-resolver-typescript
       - eslint-import-resolver-webpack
@@ -13407,6 +13594,8 @@ snapshots:
 
   jose@5.10.0: {}
 
+  jose@6.2.2: {}
+
   js-tokens@4.0.0: {}
 
   js-tokens@9.0.1: {}
@@ -13508,6 +13697,49 @@ snapshots:
   latest-version@9.0.0:
     dependencies:
       package-json: 10.0.1
+
+  lefthook-darwin-arm64@2.1.5:
+    optional: true
+
+  lefthook-darwin-x64@2.1.5:
+    optional: true
+
+  lefthook-freebsd-arm64@2.1.5:
+    optional: true
+
+  lefthook-freebsd-x64@2.1.5:
+    optional: true
+
+  lefthook-linux-arm64@2.1.5:
+    optional: true
+
+  lefthook-linux-x64@2.1.5:
+    optional: true
+
+  lefthook-openbsd-arm64@2.1.5:
+    optional: true
+
+  lefthook-openbsd-x64@2.1.5:
+    optional: true
+
+  lefthook-windows-arm64@2.1.5:
+    optional: true
+
+  lefthook-windows-x64@2.1.5:
+    optional: true
+
+  lefthook@2.1.5:
+    optionalDependencies:
+      lefthook-darwin-arm64: 2.1.5
+      lefthook-darwin-x64: 2.1.5
+      lefthook-freebsd-arm64: 2.1.5
+      lefthook-freebsd-x64: 2.1.5
+      lefthook-linux-arm64: 2.1.5
+      lefthook-linux-x64: 2.1.5
+      lefthook-openbsd-arm64: 2.1.5
+      lefthook-openbsd-x64: 2.1.5
+      lefthook-windows-arm64: 2.1.5
+      lefthook-windows-x64: 2.1.5
 
   levn@0.4.1:
     dependencies:
@@ -13731,9 +13963,8 @@ snapshots:
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
-  next-themes@0.2.1(next@15.5.14(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
+  next-themes@0.4.6(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:
-      next: 15.5.14(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
@@ -14194,13 +14425,13 @@ snapshots:
 
   prelude-ls@1.2.1: {}
 
-  prettier-plugin-tailwindcss@0.5.14(@ianvs/prettier-plugin-sort-imports@4.7.1(prettier@3.8.1))(prettier@3.8.1):
+  prettier-plugin-tailwindcss@0.5.14(@ianvs/prettier-plugin-sort-imports@4.7.1(prettier@3.2.5))(prettier@3.2.5):
     dependencies:
-      prettier: 3.8.1
+      prettier: 3.2.5
     optionalDependencies:
-      '@ianvs/prettier-plugin-sort-imports': 4.7.1(prettier@3.8.1)
+      '@ianvs/prettier-plugin-sort-imports': 4.7.1(prettier@3.2.5)
 
-  prettier@3.8.1: {}
+  prettier@3.2.5: {}
 
   pretty-format@27.5.1:
     dependencies:
@@ -14437,14 +14668,14 @@ snapshots:
     dependencies:
       rc: 1.2.8
 
-  release-it@18.1.2(@types/node@20.19.39)(typescript@5.9.3):
+  release-it@18.1.2(@types/node@20.19.39)(typescript@5.3.3):
     dependencies:
       '@iarna/toml': 2.2.5
       '@octokit/rest': 21.0.2
       async-retry: 1.3.3
       chalk: 5.4.1
       ci-info: 4.4.0
-      cosmiconfig: 9.0.0(typescript@5.9.3)
+      cosmiconfig: 9.0.0(typescript@5.3.3)
       execa: 9.5.2
       git-url-parse: 16.0.0
       globby: 14.0.2
@@ -15057,13 +15288,13 @@ snapshots:
     dependencies:
       punycode: 2.3.1
 
-  ts-api-utils@1.4.3(typescript@5.9.3):
+  ts-api-utils@1.4.3(typescript@5.3.3):
     dependencies:
-      typescript: 5.9.3
+      typescript: 5.3.3
 
   ts-interface-checker@0.1.13: {}
 
-  ts-node@10.9.2(@types/node@20.19.39)(typescript@5.9.3):
+  ts-node@10.9.2(@types/node@20.19.39)(typescript@5.3.3):
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
       '@tsconfig/node10': 1.0.12
@@ -15077,13 +15308,13 @@ snapshots:
       create-require: 1.1.1
       diff: 4.0.4
       make-error: 1.3.6
-      typescript: 5.9.3
+      typescript: 5.3.3
       v8-compile-cache-lib: 3.0.1
       yn: 3.1.1
 
-  tsconfck@3.1.6(typescript@5.9.3):
+  tsconfck@3.1.6(typescript@5.3.3):
     optionalDependencies:
-      typescript: 5.9.3
+      typescript: 5.3.3
 
   tsconfig-paths@3.15.0:
     dependencies:
@@ -15183,7 +15414,7 @@ snapshots:
       possible-typed-array-names: 1.1.0
       reflect.getprototypeof: 1.0.10
 
-  typescript@5.9.3: {}
+  typescript@5.3.3: {}
 
   ufo@1.6.3: {}
 
@@ -15317,11 +15548,11 @@ snapshots:
       - supports-color
       - terser
 
-  vite-tsconfig-paths@4.3.2(typescript@5.9.3)(vite@5.4.21(@types/node@20.19.39)(terser@5.46.1)):
+  vite-tsconfig-paths@4.3.2(typescript@5.3.3)(vite@5.4.21(@types/node@20.19.39)(terser@5.46.1)):
     dependencies:
       debug: 4.4.3
       globrex: 0.1.2
-      tsconfck: 3.1.6(typescript@5.9.3)
+      tsconfck: 3.1.6(typescript@5.3.3)
     optionalDependencies:
       vite: 5.4.21(@types/node@20.19.39)(terser@5.46.1)
     transitivePeerDependencies:

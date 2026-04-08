@@ -10,6 +10,36 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: "4.0.0",
+    date: "2026-04-08",
+    title: "Auth, Node 24, Pre-commit Hooks",
+    sections: [
+      {
+        title: "Node 24",
+        items: ["Upgraded repo from Node 20 to Node 24"],
+      },
+      {
+        title: "Pre-commit Hooks",
+        items: [
+          "Added Lefthook that will check lint, format, and typecheck before commits.",
+        ],
+      },
+      {
+        title: "API",
+        items: [
+          "Feature: Added favicon",
+          "Feature: Tied version shown on /docs to package.json instead of hardcoding it",
+        ],
+      },
+      {
+        title: "Auth",
+        items: [
+          "Feature: Migrated Auth into the mono repo. This is a phased approach. It will run as auth2.f3nation.com. We can now move apps over. Once all apps moved, we can decommission the stand alone auth and convert this to auth.f3nation.com.",
+        ],
+      },
+    ],
+  },
+  {
     version: "3.9.1",
     date: "2026-03-26",
     title: "Map Updates & Admin Portal Improvements",
