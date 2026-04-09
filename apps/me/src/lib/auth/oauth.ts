@@ -1,5 +1,5 @@
-import { AuthClient } from "f3-nation-auth-sdk";
-import type { AuthClientConfig } from "f3-nation-auth-sdk";
+import { AuthClient } from "@acme/sso";
+import type { AuthClientConfig, OauthClient } from "@acme/sso";
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name];
@@ -9,12 +9,10 @@ function getRequiredEnv(name: string): string {
 
 function buildAuthConfig(): AuthClientConfig {
   return {
-    client: {
-      CLIENT_ID: getRequiredEnv("OAUTH_CLIENT_ID"),
-      CLIENT_SECRET: getRequiredEnv("OAUTH_CLIENT_SECRET"),
-      REDIRECT_URI: getRequiredEnv("OAUTH_REDIRECT_URI"),
-      AUTH_SERVER_URL: getRequiredEnv("AUTH_PROVIDER_URL"),
-    },
+    clientId: getRequiredEnv("OAUTH_CLIENT_ID"),
+    clientSecret: getRequiredEnv("OAUTH_CLIENT_SECRET"),
+    redirectUri: getRequiredEnv("OAUTH_REDIRECT_URI"),
+    authServerUrl: getRequiredEnv("AUTH_PROVIDER_URL"),
   };
 }
 
@@ -26,7 +24,7 @@ function getAuthClient(): AuthClient {
   return _authClient;
 }
 
-export function getOAuthConfig() {
+export function getOAuthConfig(): OauthClient {
   return getAuthClient().getOAuthConfig();
 }
 
@@ -40,13 +38,13 @@ export async function exchangeCodeForToken(params: {
   const body = new URLSearchParams({
     grant_type: "authorization_code",
     code: params.code,
-    redirect_uri: config.REDIRECT_URI,
-    client_id: config.CLIENT_ID,
+    redirect_uri: config.redirectUri,
+    client_id: config.clientId,
     client_secret: clientSecret,
     code_verifier: params.codeVerifier,
   });
 
-  const response = await fetch(`${config.AUTH_SERVER_URL}/api/oauth/token`, {
+  const response = await fetch(`${config.authServerUrl}/api/oauth/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body,
@@ -70,7 +68,7 @@ export async function exchangeCodeForToken(params: {
 export async function getUserInfo(
   accessToken: string,
 ): Promise<{ sub: string; email: string; name?: string }> {
-  const authServerUrl = getAuthClient().getOAuthConfig().AUTH_SERVER_URL;
+  const authServerUrl = getAuthClient().getOAuthConfig().authServerUrl;
   if (!authServerUrl) {
     throw new Error("AUTH_PROVIDER_URL is not configured");
   }

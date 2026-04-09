@@ -12,7 +12,7 @@ import { protectedProcedure } from "../../shared";
  */
 function extractBearerToken(headers?: Headers): string | null {
   const auth = headers?.get(Header.Authorization as string);
-  if (auth && auth.toLowerCase().startsWith("bearer ")) {
+  if (auth?.toLowerCase().startsWith("bearer ")) {
     return auth.slice(7).trim();
   }
   return null;

@@ -16,21 +16,21 @@ export async function GET(request: NextRequest) {
   const codeChallenge = createHash("sha256")
     .update(codeVerifier)
     .digest("base64url");
-  const { CLIENT_ID, AUTH_SERVER_URL, REDIRECT_URI } = getOAuthConfig();
+  const { clientId, authServerUrl, redirectUri } = getOAuthConfig();
 
   const state = Buffer.from(
     JSON.stringify({
       csrfToken,
-      clientId: CLIENT_ID,
+      clientId,
       returnTo: safeReturnTo,
       timestamp: Date.now(),
     }),
   ).toString("base64url");
 
-  const authorizeUrl = new URL(`${AUTH_SERVER_URL}/api/oauth/authorize`);
+  const authorizeUrl = new URL(`${authServerUrl}/api/oauth/authorize`);
   authorizeUrl.searchParams.set("response_type", "code");
-  authorizeUrl.searchParams.set("client_id", CLIENT_ID);
-  authorizeUrl.searchParams.set("redirect_uri", REDIRECT_URI);
+  authorizeUrl.searchParams.set("client_id", clientId);
+  authorizeUrl.searchParams.set("redirect_uri", redirectUri);
   authorizeUrl.searchParams.set("scope", "openid profile email");
   authorizeUrl.searchParams.set("state", state);
   authorizeUrl.searchParams.set("code_challenge", codeChallenge);
