@@ -92,6 +92,23 @@ chore(repo): configure turborepo remote caching
   - Never include secrets; share them using Slack or Doppler scripts, not via git.
 - Before opening a pull request, ensure both `pnpm lint` and `pnpm format` pass with no errors or changes required.
 
+## Regression Test Plan Maintenance
+
+The monorepo regression test plan lives at `docs/regression-test-plan.md`. It is the source of truth for cross-app regression verification and is designed to be delegated to app owners.
+
+**When to update the test plan:** Any change that affects app behavior, API contracts, database schemas, auth flows, shared packages, or dependencies must include a corresponding update to `docs/regression-test-plan.md`. This includes:
+
+- New features or endpoints (add test cases to the relevant app section)
+- Dependency upgrades that affect runtime behavior (update the CI gates or manual smoke tests)
+- Database migrations or schema changes (update the migration safety checklist)
+- Auth or session changes (update the Auth app section)
+- Shared package changes (update the cross-package compatibility section)
+- New apps added to the monorepo (add a new app section with automated + manual checks)
+
+**How to update:** Add, modify, or remove checklist items in the relevant app section. Keep test cases specific and actionable — each item should be something a human or automated tool can verify in under 5 minutes. Mark items that can be automated with `[automated]` and items requiring human verification with `[manual]`.
+
+**Why this matters:** This convention ensures the test plan stays current as the codebase evolves. Every AI coding agent (Claude Code, Codex, Copilot, etc.) reading this file will see this instruction and update the test plan as part of their work — creating a self-reinforcing documentation loop.
+
 ## Security & Environment
 
 - Store all secrets in a root `.env` file. Always use `with-env` helpers to load environment variables and never commit `.env` files to the repo.
