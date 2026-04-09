@@ -8,6 +8,7 @@ import { oauthClients } from "@acme/db/schema/schema";
 import { auth } from "~/lib/auth";
 import { db } from "~/lib/db";
 import { revokeAllUserTokens } from "~/lib/oauth";
+import { env } from "~/env";
 
 /**
  * Collect every origin that appears in the redirect_uris of active
@@ -53,19 +54,21 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const postLogoutRedirectUri = searchParams.get("post_logout_redirect_uri");
 
+  const publicUrl = env.NEXT_PUBLIC_AUTH_URL;
+
   // Validate the redirect target against registered client origins.
   const allowedOrigins = await getAllowedOrigins();
-  const requestOrigin = new URL(request.url).origin;
+  const requestOrigin = new URL(publicUrl).origin;
   allowedOrigins.add(requestOrigin); // always allow same-origin
 
   let redirectUrl: URL;
   try {
-    const candidate = new URL(postLogoutRedirectUri ?? "/login", request.url);
+    const candidate = new URL(postLogoutRedirectUri ?? "/login", publicUrl);
     redirectUrl = allowedOrigins.has(candidate.origin)
       ? candidate
-      : new URL("/login", request.url);
+      : new URL("/login", publicUrl);
   } catch {
-    redirectUrl = new URL("/login", request.url);
+    redirectUrl = new URL("/login", publicUrl);
   }
 
   // Revoke tokens if user is authenticated
