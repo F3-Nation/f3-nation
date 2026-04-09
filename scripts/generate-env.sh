@@ -74,9 +74,13 @@ SECRET_AUTH_SECRET=$(pull_secret "auth-secret")
 SECRET_AUTH_JWT_PRIVATE_KEY=$(pull_secret "auth-jwt-private-key")
 SECRET_API_KEY=$(pull_secret "api-key")
 SECRET_SENDGRID_API_KEY=$(pull_secret "sendgrid-api-key")
+SECRET_GOOGLE_MAPS_API_KEY=$(pull_secret "google-maps-api-key")
+SECRET_GOOGLE_LOGO_BUCKET_PRIVATE_KEY=$(pull_secret "google-logo-bucket-private-key")
+SECRET_GOOGLE_LOGO_BUCKET_CLIENT_EMAIL=$(pull_secret "google-logo-bucket-client-email")
+SECRET_GOOGLE_LOGO_BUCKET_BUCKET_NAME=$(pull_secret "google-logo-bucket-bucket-name")
 
 # Log what we got
-for name in DATABASE_USER DATABASE_PASSWORD DATABASE_NAME AUTH_SECRET AUTH_JWT_PRIVATE_KEY API_KEY SENDGRID_API_KEY; do
+for name in DATABASE_USER DATABASE_PASSWORD DATABASE_NAME AUTH_SECRET AUTH_JWT_PRIVATE_KEY API_KEY SENDGRID_API_KEY GOOGLE_MAPS_API_KEY GOOGLE_LOGO_BUCKET_PRIVATE_KEY GOOGLE_LOGO_BUCKET_CLIENT_EMAIL GOOGLE_LOGO_BUCKET_BUCKET_NAME; do
   var="SECRET_$name"
   if [[ -n "${!var:-}" ]]; then
     echo "  OK: $name"
@@ -118,6 +122,12 @@ NEXT_PUBLIC_MAP_URL=http://localhost:3000
 NEXT_PUBLIC_AUTH_URL=http://localhost:3004
 NEXT_PUBLIC_CHANNEL=local
 
+# -- Google Maps API key (from GCP Secret Manager) --
+# Note: In production, this key is set directly in Vercel's environment variables.
+# We mirror it in GCP Secret Manager so this script can pull it automatically,
+# keeping the local dev setup as frictionless as possible.
+NEXT_PUBLIC_GOOGLE_API_KEY=${SECRET_GOOGLE_MAPS_API_KEY:-}
+
 # -- Email --
 EMAIL_FROM=noreply@f3nation.com
 EMAIL_ADMIN_DESTINATIONS=dev@f3nation.com
@@ -154,12 +164,20 @@ ENVEOF
     echo "# AUTH_JWT_PRIVATE_KEY=  (not found in GCP)"
   fi
 
-  cat << 'ENVEOF2'
+  # Handle GCS private key separately (may contain newlines)
+  gcs_key="${SECRET_GOOGLE_LOGO_BUCKET_PRIVATE_KEY:-}"
+  echo ""
+  echo "# -- Google Cloud Storage (from GCP Secret Manager) --"
+  if [[ -n "$gcs_key" ]]; then
+    escaped_gcs_key=$(printf '%s' "$gcs_key" | awk '{printf "%s\\n", $0}' | sed 's/\\n$//')
+    echo "GOOGLE_LOGO_BUCKET_PRIVATE_KEY=\"$escaped_gcs_key\""
+  else
+    echo "# GOOGLE_LOGO_BUCKET_PRIVATE_KEY=  (not found in GCP)"
+  fi
+  echo "GOOGLE_LOGO_BUCKET_CLIENT_EMAIL=${SECRET_GOOGLE_LOGO_BUCKET_CLIENT_EMAIL:-}"
+  echo "GOOGLE_LOGO_BUCKET_BUCKET_NAME=${SECRET_GOOGLE_LOGO_BUCKET_BUCKET_NAME:-}"
 
-# -- Google Cloud Storage (set manually if needed for logo uploads) --
-# GOOGLE_LOGO_BUCKET_PRIVATE_KEY=
-# GOOGLE_LOGO_BUCKET_CLIENT_EMAIL=
-# GOOGLE_LOGO_BUCKET_BUCKET_NAME=
+  cat << 'ENVEOF2'
 
 # -- Auth app URLs --
 NEXTAUTH_URL=http://localhost:3004
