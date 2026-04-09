@@ -7,9 +7,11 @@ export default {
       'always',
       [
         // apps
+        'map',
+
+        // apps & packages (exist in both apps/ and packages/)
         'api',
         'auth',
-        'map',
 
         // packages
         'db',

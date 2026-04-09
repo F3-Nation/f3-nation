@@ -33,18 +33,27 @@
     "with-env": "dotenv -e .env --",
     "doppler": "pnpm exec ./tooling/scripts/doppler.sh",
     "db:update-db": "pnpm -F db update-db",
-    "release": "pnpm -F release-it release"
+    "release": "pnpm -F release-it release",
+    "commit": "cz"
   },
   "devDependencies": {
     "@acme/prettier-config": "workspace:^0.1.0",
     "@acme/release-it": "workspace:*",
     "@commitlint/cli": "20.5.0",
     "@commitlint/config-conventional": "20.5.0",
+    "@commitlint/cz-commitlint": "^20.5.1",
     "@turbo/gen": "^1.12.3",
+    "commitizen": "^4.3.1",
+    "inquirer": "^9.3.8",
     "lefthook": "^2.1.5",
     "prettier": "^3.2.5",
     "turbo": "^1.12.3",
     "typescript": "^5.3.3"
+  },
+  "config": {
+    "commitizen": {
+      "path": "@commitlint/cz-commitlint"
+    }
   },
   "prettier": "@acme/prettier-config",
   "pnpm": {

@@ -55,7 +55,8 @@ Scopes are defined in `commitlint.config.mjs` and map to monorepo packages:
 
 | Category | Scopes |
 |----------|--------|
-| Apps | `api`, `auth`, `map` |
+| Apps | `map` |
+| Apps & Packages | `api`, `auth` (exist in both `apps/` and `packages/`) |
 | Packages | `db`, `env`, `mail`, `shared`, `sso`, `ui`, `validators` |
 | Tooling | `eslint`, `prettier`, `tsconfig`, `scripts`, `github` |
 | Cross-cutting | `deps`, `ci`, `repo`, `release` |
