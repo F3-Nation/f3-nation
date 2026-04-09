@@ -22,28 +22,50 @@ pnpm install
 
 ## 2. Authenticate with Google Cloud
 
-You need access to the **f3-authentication-staging** GCP project. Ask a team lead to grant you the `Secret Manager Secret Accessor` role.
+You need access to these GCP projects:
+
+| Project                       | What's in it                                            | Who to ask          |
+| ----------------------------- | ------------------------------------------------------- | ------------------- |
+| **f3-authentication-staging** | DB creds, API keys, auth JWT, GCS logo bucket, SendGrid | Team lead           |
+| **f3-me-app-staging**         | Me app OAuth client, session secret, GCS avatar creds   | tackle@f3nation.com |
+
+Ask for the **Secret Manager Secret Accessor** role on each project.
 
 ```bash
 gcloud auth login
 gcloud auth application-default login   # needed by Cloud SQL Auth Proxy
 ```
 
+**Important:** Set the ADC quota project so the Cloud SQL proxy uses the right billing project:
+
+```bash
+gcloud auth application-default set-quota-project f3-authentication-staging
+```
+
+> **Switching workspaces:** If you also work on other GCP projects (e.g., joinfold), the ADC quota project is global. When switching back to f3-nation, re-run the command above and restart the Cloud SQL proxy (`kill $(lsof -ti :5433)` — launchd restarts it automatically).
+
 ## 3. Populate secrets
 
-Secrets live in GCP Secret Manager, not in the repo. The fastest way to get a working `.env` is the automated script:
+Secrets live in GCP Secret Manager, not in the repo. The fastest way to get working env files is the automated script:
 
 ```bash
 pnpm env:generate
 ```
 
-This pulls staging secrets from GCP, constructs a complete `.env` at the repo root, and symlinks it into each app directory (`apps/api/.env.local`, `apps/map/.env.local`, `apps/auth/.env.local`). Preview what it would do without writing files:
+This does two things:
+
+1. Pulls shared secrets from `f3-authentication-staging`, writes a root `.env`, and symlinks it into `apps/api/.env.local`, `apps/map/.env.local`, `apps/auth/.env.local`
+2. Pulls me-specific secrets from `f3-me-app-staging` and writes a standalone `apps/me/.env.local` (no symlink — the me app uses different env vars)
+
+Preview what it would do without writing files:
 
 ```bash
 pnpm env:generate:dry-run
 ```
 
-> **Safety:** The script only pulls from the `f3-authentication-staging` project — never production. All local dev defaults use staging database, staging APIs, and localhost URLs.
+> **Safety:** The script only pulls from staging projects — never production. All local dev defaults use staging database, staging APIs, and localhost URLs.
+
+> **Me app note:** If you don't have access to `f3-me-app-staging`, the script will skip generating `apps/me/.env.local` and print a warning. The other apps will still work fine.
 
 If you need to customize a specific app's env (e.g., point one app at a different API), break the symlink by replacing `apps/<app>/.env.local` with a regular file.
 
@@ -88,6 +110,21 @@ DATABASE_URL=postgresql://<DATABASE_USER>:<DATABASE_PASSWORD>@localhost:5433/<DA
 ```
 
 See `.env.example` at the repo root for a complete template with placeholder values.
+
+**Me app secrets** (from `f3-me-app-staging`, written to `apps/me/.env.local`):
+
+| GCP Secret Name (project: `f3-me-app-staging`) | `.env.local` Variable  | Local Dev Value                           |
+| ---------------------------------------------- | ---------------------- | ----------------------------------------- |
+| `oauth-client-secret`                          | `OAUTH_CLIENT_SECRET`  | Secret for the `f3-me-local` OAuth client |
+| `session-secret`                               | `SESSION_SECRET`       | 64-char hex for signing session cookies   |
+| `f3-api-key`                                   | `F3_API_KEY`           | API key for calling F3 Nation API         |
+| `gcs-credentials`                              | `GCS_CREDENTIALS`      | Base64-encoded GCS service account JSON   |
+| _(hardcoded)_                                  | `OAUTH_CLIENT_ID`      | `f3-me-local`                             |
+| _(hardcoded)_                                  | `OAUTH_REDIRECT_URI`   | `http://localhost:3003/api/auth/callback` |
+| _(hardcoded)_                                  | `AUTH_PROVIDER_URL`    | `http://localhost:3004`                   |
+| _(hardcoded)_                                  | `F3_API_BASE_URL`      | `http://localhost:3001/v1`                |
+| _(hardcoded)_                                  | `GCS_BUCKET`           | `f3-public-images-staging`                |
+| _(hardcoded)_                                  | `NEXT_PUBLIC_SITE_URL` | `http://localhost:3003`                   |
 
 </details>
 
