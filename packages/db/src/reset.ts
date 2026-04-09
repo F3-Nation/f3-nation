@@ -42,7 +42,7 @@ export const reset = async () => {
     const [result] = await db.select().from(alembicVersion);
     version_num = result?.versionNum;
     console.log("Alembic version", version_num);
-  } catch (e) {
+  } catch {
     console.log("Alembic version not found");
   }
 

@@ -254,7 +254,7 @@ export function MDPGDrizzleAdapter(
         if (!token) throw new Error("No verification token found.");
 
         return { ...token, expires: new Date(token.expires) };
-      } catch (err) {
+      } catch {
         throw new Error("No verification token found.");
       }
     },

@@ -423,7 +423,9 @@ export const mapLocationRouter = os.router({
       const locationWithEvents = {
         ...location,
         // Need to handle empty string values for parent and region logos
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
         parentLogo: !location.parentLogo ? null : location.parentLogo,
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
         regionLogo: !location.regionLogo ? null : location.regionLogo,
         lat: location.lat,
         lon: location.lon,

@@ -194,11 +194,12 @@ async function getOrgCount(params: {
 }): Promise<number> {
   const { db, where } = params;
 
-  const [result] = await db
+  // TS6.0: aliasedTable complex conditional types require explicit annotation
+  const [result] = (await db
     .select({ count: countDistinct(org.id) })
     .from(org)
     .leftJoin(parentOrg, eq(org.parentId, parentOrg.id))
-    .where(where);
+    .where(where)) as { count: number }[];
 
   return result?.count ?? 0;
 }
@@ -933,13 +934,11 @@ export const orgRouter = {
 
       for (const row of orgsQuery) {
         const orgId = row.orgs.id;
-        if (!orgMap[orgId]) {
-          orgMap[orgId] = {
-            orgs: row.orgs,
-            roles_x_users_x_org: row.roles_x_users_x_org,
-            roles: [],
-          };
-        }
+        orgMap[orgId] ??= {
+          orgs: row.orgs,
+          roles_x_users_x_org: row.roles_x_users_x_org,
+          roles: [],
+        };
         if (row.roles?.name) {
           orgMap[orgId]?.roles.push(row.roles.name);
         }

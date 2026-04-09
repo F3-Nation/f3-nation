@@ -73,6 +73,7 @@ export const SelectedItem = (props: {
           <div className="flex flex-shrink-0 flex-col items-center">
             <ImageWithFallback
               src={
+                // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
                 selectedLocation.parentLogo
                   ? selectedLocation.parentLogo
                   : "/f3_logo.png"

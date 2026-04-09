@@ -2,6 +2,7 @@
   "name": "f3-nation",
   "version": "4.0.0",
   "private": true,
+  "type": "module",
   "engines": {
     "node": ">=24.14.1 <25"
   },
@@ -42,7 +43,7 @@
     "lefthook": "^2.1.5",
     "prettier": "^3.2.5",
     "turbo": "^1.12.3",
-    "typescript": "^5.3.3"
+    "typescript": "catalog:"
   },
   "prettier": "@acme/prettier-config",
   "pnpm": {
@@ -50,9 +51,16 @@
       "axios": ">=1.7.4",
       "braces": ">=3.0.3",
       "cross-spawn": ">=7.0.5",
-      "typescript": "5.3.3",
       "prettier": "3.2.5",
       "@vis.gl/react-google-maps": "1.5.2"
+    },
+    "peerDependencyRules": {
+      "allowedVersions": {
+        "eslint-plugin-import>eslint": "10",
+        "eslint-plugin-react>eslint": "10",
+        "eslint-plugin-react-hooks>eslint": "10",
+        "eslint-plugin-jsx-a11y>eslint": "10"
+      }
     },
     "onlyBuiltDependencies": [
       "@sentry/cli",

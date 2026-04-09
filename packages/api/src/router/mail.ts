@@ -1,3 +1,5 @@
+// data comes from z.record(z.unknown()) — String() casts are intentional
+/* eslint-disable @typescript-eslint/no-base-to-string */
 import { z } from "zod";
 
 import { env } from "@acme/env";

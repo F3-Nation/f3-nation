@@ -26,19 +26,10 @@
     "@acme/prettier-config": "workspace:*",
     "@acme/shared": "workspace:*",
     "@acme/tsconfig": "workspace:*",
-    "eslint": "^8.56.0",
+    "eslint": "catalog:",
     "prettier": "^3.2.5",
     "tsx": "^4.7.1",
-    "typescript": "^5.3.3"
-  },
-  "eslintConfig": {
-    "root": true,
-    "extends": [
-      "@acme/eslint-config/base"
-    ],
-    "ignorePatterns": [
-      "**/*.js"
-    ]
+    "typescript": "catalog:"
   },
   "prettier": "@acme/prettier-config"
 }

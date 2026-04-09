@@ -249,7 +249,7 @@ export default function AdminManageAccessModal({
       setEmailPopoverOpen(false);
     } else {
       // Find the selected user (should match exactEmailMatch)
-      if (exactEmailMatch && exactEmailMatch.email === value) {
+      if (exactEmailMatch?.email === value) {
         form.setValue("email", exactEmailMatch.email);
         form.setValue("id", exactEmailMatch.id);
         setIsCreatingNew(false);

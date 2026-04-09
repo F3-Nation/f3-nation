@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { HEADER_HEIGHT } from "node_modules/@acme/shared/src/app/constants";
+import { HEADER_HEIGHT } from "@acme/shared/app/constants";
 
 import { cn } from "@acme/ui";
 

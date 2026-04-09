@@ -248,6 +248,7 @@ declare module "@tanstack/table-core" {
 
 // https://stackoverflow.com/questions/71099924/cannot-find-module-file-name-png-or-its-corresponding-type-declarations-type
 declare global {
+  declare module "*.css" {}
   declare module "*.png" {
     const content: string;
     export default content;

@@ -93,9 +93,9 @@ export function sleep(milliseconds: number) {
 export const removeProtocol = (url: string) => url.replace(/(^\w+:|^)\/\//, "");
 
 export const isUpperCase = (str: string | undefined) =>
-  str && str === str.toUpperCase();
+  str === str?.toUpperCase();
 export const isLowerCase = (str: string | undefined) =>
-  str && str === str.toLowerCase();
+  str === str?.toLowerCase();
 
 const MODIFIERS = ["-", "_", " ", "."];
 

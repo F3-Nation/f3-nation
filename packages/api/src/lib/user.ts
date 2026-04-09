@@ -48,8 +48,8 @@ export const buildUserSelect = ({
   includeListFields = false,
   homeRegionOrg,
 }: BuildUserSelectParams) => {
-  const columns = getTableColumns(schema.users);
-  type Columns = typeof columns;
+  const _columns = getTableColumns(schema.users);
+  type Columns = typeof _columns;
 
   // Base select fields (non-PII)
   let select: Pick<Columns, "id" | "status" | "created"> & {

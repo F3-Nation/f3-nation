@@ -230,12 +230,8 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
   };
 
   // Ensure components.parameters exists
-  if (!spec.components) {
-    spec.components = {};
-  }
-  if (!spec.components.parameters) {
-    spec.components.parameters = {};
-  }
+  spec.components ??= {};
+  spec.components.parameters ??= {};
   spec.components.parameters.ClientHeader = clientHeaderParam;
 
   // Add the Client header parameter reference to all operations
@@ -254,9 +250,7 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
       for (const method of httpMethods) {
         const operation = pathItem[method];
         if (operation) {
-          if (!operation.parameters) {
-            operation.parameters = [];
-          }
+          operation.parameters ??= [];
           // Add reference to the Client header parameter
           operation.parameters.unshift({
             $ref: "#/components/parameters/ClientHeader",

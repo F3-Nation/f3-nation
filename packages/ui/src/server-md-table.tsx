@@ -318,6 +318,7 @@ export const MDTable = <T extends { id: string | number }>(
                 Download CSV
               </button>
             ) : null}
+            {/* eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing */}
             {filterComponent ? filterComponent : null}
           </div>
           <div className="ml-2">
