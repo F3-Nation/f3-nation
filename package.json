@@ -38,6 +38,8 @@
   "devDependencies": {
     "@acme/prettier-config": "workspace:^0.1.0",
     "@acme/release-it": "workspace:*",
+    "@commitlint/cli": "20.5.0",
+    "@commitlint/config-conventional": "20.5.0",
     "@turbo/gen": "^1.12.3",
     "lefthook": "^2.1.5",
     "prettier": "^3.2.5",
