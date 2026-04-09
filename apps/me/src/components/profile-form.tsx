@@ -1,6 +1,5 @@
 "use client";
 
-import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -18,143 +17,25 @@ import { RegionSelect } from "@/components/region-select";
 import { UserSelect } from "@/components/user-select";
 import { RoleList } from "@/components/role-list";
 import { PositionList } from "@/components/position-list";
-import { useSaveRegister } from "@/lib/save-context";
-import type { UserProfile, UserMeta, Region } from "@/lib/types";
+import { useProfileForm } from "@/hooks/useProfileForm";
+import type { UserProfile, Region } from "@/lib/types";
 
 interface ProfileFormProps {
   user: UserProfile;
   regions: Region[];
 }
 
-function parseMeta(meta: string | Record<string, unknown> | null): UserMeta {
-  if (!meta) return {};
-  if (typeof meta === "object") return meta as UserMeta;
-  try {
-    return JSON.parse(meta) as UserMeta;
-  } catch {
-    return {};
-  }
-}
-
 export function ProfileForm({ user, regions }: ProfileFormProps) {
-  const meta = parseMeta(user.meta);
   const { toast } = useToast();
-
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
-    f3Name: user.f3Name ?? "",
-    firstName: user.firstName ?? "",
-    lastName: user.lastName ?? "",
-    phone: user.phone ?? "",
-    homeRegionId: user.homeRegionId,
-    avatarUrl: user.avatarUrl,
-    emergencyContact: user.emergencyContact ?? "",
-    emergencyPhone: user.emergencyPhone ?? "",
-    emergencyNotes: user.emergencyNotes ?? "",
-    f3_name_origin: meta.f3_name_origin ?? "",
-    my_f3_why: meta.my_f3_why ?? "",
-    user_emergency_info_dr_sharing:
-      meta.user_emergency_info_dr_sharing ?? false,
-    start_date_override: meta.start_date_override ?? "",
-    brought_by: (meta.brought_by as number | null) ?? null,
+  const {
+    form,
+    isFieldDirty,
+    dirtyClass: dc,
+    updateField,
+  } = useProfileForm({
+    user,
+    toast,
   });
-
-  const [initialForm, setInitialForm] = useState(() => ({ ...form }));
-
-  const isFieldDirty = useCallback(
-    (key: keyof typeof form) => form[key] !== initialForm[key],
-    [form, initialForm],
-  );
-
-  const isDirty = useMemo(
-    () =>
-      (Object.keys(form) as (keyof typeof form)[]).some(
-        (key) => key !== "avatarUrl" && form[key] !== initialForm[key],
-      ),
-    [form, initialForm],
-  );
-
-  // Returns a class string to visually mark dirty fields.
-  // Always reserves space for the bar (pl-2 + left border) so fields don't shift.
-  const dc = (key: keyof typeof form) =>
-    isFieldDirty(key)
-      ? " pl-2 border-l-[3px] border-l-amber-500"
-      : " pl-2 border-l-[3px] border-l-transparent";
-
-  const updateField = useCallback(
-    <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => {
-      setForm((prev) => ({ ...prev, [key]: value }));
-    },
-    [],
-  );
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      // Only send fields that changed
-      const payload: Record<string, unknown> = {};
-      if (isFieldDirty("f3Name")) payload.f3Name = form.f3Name;
-      if (isFieldDirty("firstName")) payload.firstName = form.firstName || null;
-      if (isFieldDirty("lastName")) payload.lastName = form.lastName;
-      if (isFieldDirty("phone")) payload.phone = form.phone || null;
-      if (isFieldDirty("homeRegionId"))
-        payload.homeRegionId = form.homeRegionId;
-      if (isFieldDirty("emergencyContact"))
-        payload.emergencyContact = form.emergencyContact || null;
-      if (isFieldDirty("emergencyPhone"))
-        payload.emergencyPhone = form.emergencyPhone || null;
-      if (isFieldDirty("emergencyNotes"))
-        payload.emergencyNotes = form.emergencyNotes || null;
-      if (isFieldDirty("f3_name_origin"))
-        payload.f3_name_origin = form.f3_name_origin || "";
-      if (isFieldDirty("my_f3_why")) payload.my_f3_why = form.my_f3_why || "";
-      if (isFieldDirty("user_emergency_info_dr_sharing"))
-        payload.user_emergency_info_dr_sharing =
-          form.user_emergency_info_dr_sharing;
-      if (isFieldDirty("start_date_override"))
-        payload.start_date_override = form.start_date_override || "";
-      if (isFieldDirty("brought_by")) payload.brought_by = form.brought_by;
-
-      const res = await fetch("/api/profile", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        const err = (await res.json().catch(() => ({}))) as {
-          error?: string;
-        };
-        throw new Error(err.error ?? "Failed to save profile");
-      }
-
-      // Reset dirty tracking so indicators clear
-      setInitialForm({ ...form });
-
-      toast({
-        title: "Profile saved",
-        description: "Your changes have been saved successfully.",
-      });
-    } catch (err) {
-      toast({
-        title: "Save failed",
-        description: err instanceof Error ? err.message : "Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // Keep a stable ref to handleSave for the context registration
-  const saveRef = useRef(handleSave);
-  saveRef.current = handleSave;
-
-  // Register save state with the navbar
-  const { register } = useSaveRegister();
-  useEffect(() => {
-    register({ isDirty, saving, onSave: () => void saveRef.current() });
-  }, [isDirty, saving, register]);
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-4 pb-12">

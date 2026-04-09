@@ -2,14 +2,10 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { randomBytes, randomUUID, createHash } from "crypto";
 import { getOAuthConfig } from "@/lib/auth/oauth";
-
-function isValidReturnTo(path: string): boolean {
-  return path.startsWith("/") && !path.startsWith("//");
-}
+import { safeReturnTo } from "@/lib/auth/validation";
 
 export async function GET(request: NextRequest) {
-  const returnTo = request.nextUrl.searchParams.get("returnTo") ?? "/profile";
-  const safeReturnTo = isValidReturnTo(returnTo) ? returnTo : "/profile";
+  const returnTo = safeReturnTo(request.nextUrl.searchParams.get("returnTo"));
 
   const csrfToken = randomUUID();
   const codeVerifier = randomBytes(32).toString("base64url");
@@ -22,7 +18,7 @@ export async function GET(request: NextRequest) {
     JSON.stringify({
       csrfToken,
       clientId,
-      returnTo: safeReturnTo,
+      returnTo,
       timestamp: Date.now(),
     }),
   ).toString("base64url");

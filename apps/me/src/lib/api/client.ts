@@ -34,18 +34,6 @@ async function getHeaders(): Promise<HeadersInit> {
   return headers;
 }
 
-/**
- * Build headers for the email lookup call during OAuth callback.
- * Does NOT include X-User-Id since we don't have it yet.
- */
-function getBaseHeaders(): HeadersInit {
-  return {
-    Authorization: `Bearer ${requireEnv("F3_API_KEY")}`,
-    Client: "f3-me",
-    "Content-Type": "application/json",
-  };
-}
-
 function apiUrl(path: string): string {
   return `${requireEnv("F3_API_BASE_URL")}${path}`;
 }
@@ -166,23 +154,4 @@ export async function getUsers(
   }
   const data = (await res.json()) as { users: UserListItem[] };
   return data.users;
-}
-
-/**
- * Look up a user's numeric ID by email address.
- * Used during OAuth callback before the session cookie exists.
- * Uses getBaseHeaders() (no X-User-Id needed).
- */
-export async function lookupUserByEmail(email: string): Promise<number> {
-  const params = new URLSearchParams({ email });
-  const res = await fetch(apiUrl(`/me/lookup-by-email?${params.toString()}`), {
-    headers: getBaseHeaders(),
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`API error ${res.status}: ${text}`);
-  }
-  const data = (await res.json()) as { userId: number };
-  return data.userId;
 }

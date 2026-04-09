@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { SESSION_COOKIE_NAME } from "@/lib/auth/constants";
+import { verifySessionValue } from "@/lib/auth/session";
 
 const PUBLIC_PATHS = ["/", "/api/auth/login", "/api/auth/callback"];
 
@@ -26,9 +27,13 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check for session cookie
+  // Verify session cookie signature (not just existence)
   const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME);
-  if (!sessionCookie?.value) {
+  const session = sessionCookie?.value
+    ? verifySessionValue(sessionCookie.value)
+    : null;
+
+  if (!session) {
     const url = new URL("/", request.url);
     url.searchParams.set("redirect", pathname);
     return NextResponse.redirect(url);

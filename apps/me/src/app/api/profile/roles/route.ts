@@ -1,30 +1,30 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { requireAuth } from "@/lib/auth/server";
 import { deleteMyRole } from "@/lib/api/client";
+
+const deleteRoleSchema = z
+  .object({
+    orgId: z.number().int().positive(),
+    roleId: z.number().int().positive(),
+  })
+  .strict();
 
 export async function DELETE(request: NextRequest) {
   try {
     await requireAuth();
 
-    const body = (await request.json()) as {
-      orgId: number;
-      roleId: number;
-    };
-
-    if (
-      body.orgId == null ||
-      typeof body.orgId !== "number" ||
-      body.roleId == null ||
-      typeof body.roleId !== "number"
-    ) {
+    const raw: unknown = await request.json();
+    const parsed = deleteRoleSchema.safeParse(raw);
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "orgId and roleId are required" },
+        { error: "orgId and roleId are required (positive integers)" },
         { status: 400 },
       );
     }
 
-    const result = await deleteMyRole(body.orgId, body.roleId);
+    const result = await deleteMyRole(parsed.data.orgId, parsed.data.roleId);
     return NextResponse.json(result);
   } catch (err) {
     console.error("Failed to remove role:", err);

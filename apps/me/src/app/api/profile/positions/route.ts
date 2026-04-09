@@ -1,30 +1,33 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { requireAuth } from "@/lib/auth/server";
 import { deleteMyPosition } from "@/lib/api/client";
+
+const deletePositionSchema = z
+  .object({
+    orgId: z.number().int().positive(),
+    positionId: z.number().int().positive(),
+  })
+  .strict();
 
 export async function DELETE(request: NextRequest) {
   try {
     await requireAuth();
 
-    const body = (await request.json()) as {
-      orgId: number;
-      positionId: number;
-    };
-
-    if (
-      body.orgId == null ||
-      typeof body.orgId !== "number" ||
-      body.positionId == null ||
-      typeof body.positionId !== "number"
-    ) {
+    const raw: unknown = await request.json();
+    const parsed = deletePositionSchema.safeParse(raw);
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "orgId and positionId are required" },
+        { error: "orgId and positionId are required (positive integers)" },
         { status: 400 },
       );
     }
 
-    const result = await deleteMyPosition(body.orgId, body.positionId);
+    const result = await deleteMyPosition(
+      parsed.data.orgId,
+      parsed.data.positionId,
+    );
     return NextResponse.json(result);
   } catch (err) {
     console.error("Failed to remove position:", err);

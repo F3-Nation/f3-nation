@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useDropdownSelect } from "@/hooks/useDropdownSelect";
+import { useRegionFilter } from "@/hooks/useRegionFilter";
 import type { Region } from "@/lib/types";
 
 interface RegionSelectProps {
@@ -12,21 +13,13 @@ interface RegionSelectProps {
 }
 
 export function RegionSelect({ regions, value, onChange }: RegionSelectProps) {
-  const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
-
-  const selectedRegion = useMemo(
-    () => regions.find((r) => r.id === value),
-    [regions, value],
-  );
-
-  const filteredRegions = useMemo(() => {
-    // Show active regions + the currently selected region (even if inactive)
-    const base = regions.filter((r) => r.isActive || r.id === value);
-    if (!search) return base;
-    const lower = search.toLowerCase();
-    return base.filter((r) => r.name.toLowerCase().includes(lower));
-  }, [regions, search, value]);
+  const { open, search, toggle, close, setSearch, selectAndClose } =
+    useDropdownSelect();
+  const { selectedRegion, filteredRegions } = useRegionFilter({
+    regions,
+    selectedId: value,
+    search,
+  });
 
   return (
     <div className="relative">
@@ -34,7 +27,7 @@ export function RegionSelect({ regions, value, onChange }: RegionSelectProps) {
         variant="outline"
         type="button"
         className="w-full justify-between text-left font-normal"
-        onClick={() => setOpen(!open)}
+        onClick={toggle}
       >
         <span className={selectedRegion ? "" : "text-muted-foreground"}>
           {selectedRegion?.name ?? "Select a region..."}
@@ -75,8 +68,7 @@ export function RegionSelect({ regions, value, onChange }: RegionSelectProps) {
                 className="relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm text-muted-foreground outline-none hover:bg-accent"
                 onClick={() => {
                   onChange(null);
-                  setOpen(false);
-                  setSearch("");
+                  selectAndClose();
                 }}
               >
                 Clear selection
@@ -98,8 +90,7 @@ export function RegionSelect({ regions, value, onChange }: RegionSelectProps) {
                   onClick={() => {
                     if (!region.isActive) return;
                     onChange(region.id);
-                    setOpen(false);
-                    setSearch("");
+                    selectAndClose();
                   }}
                 >
                   {region.name}
@@ -118,13 +109,7 @@ export function RegionSelect({ regions, value, onChange }: RegionSelectProps) {
       {/* Click-away handler */}
       {open && (
         // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
-        <div
-          className="fixed inset-0 z-40"
-          onClick={() => {
-            setOpen(false);
-            setSearch("");
-          }}
-        />
+        <div className="fixed inset-0 z-40" onClick={close} />
       )}
     </div>
   );

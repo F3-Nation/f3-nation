@@ -47,9 +47,23 @@ export function verifySessionValue(cookie: string): SessionPayload | null {
   }
 
   try {
-    const payload = JSON.parse(
+    const raw: unknown = JSON.parse(
       Buffer.from(json, "base64url").toString("utf-8"),
-    ) as SessionPayload;
+    );
+
+    // Runtime shape validation (defense-in-depth for security-critical code)
+    if (
+      typeof raw !== "object" ||
+      raw === null ||
+      typeof (raw as Record<string, unknown>).sub !== "string" ||
+      typeof (raw as Record<string, unknown>).email !== "string" ||
+      typeof (raw as Record<string, unknown>).userId !== "number" ||
+      typeof (raw as Record<string, unknown>).iat !== "number"
+    ) {
+      return null;
+    }
+
+    const payload = raw as SessionPayload;
 
     const age = Math.floor(Date.now() / 1000) - payload.iat;
     if (age > SESSION_COOKIE_MAX_AGE) return null;

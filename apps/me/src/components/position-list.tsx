@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast";
+import { useRemovableList, compositeKey } from "@/hooks/useRemovableList";
 import type { UserPosition } from "@/lib/types";
 
 interface PositionListProps {
@@ -12,45 +12,25 @@ interface PositionListProps {
 export function PositionList({
   positions: initialPositions,
 }: PositionListProps) {
-  const [positions, setPositions] = useState(initialPositions);
-  const [removing, setRemoving] = useState<string | null>(null);
   const { toast } = useToast();
-
-  const handleRemove = async (orgId: number, positionId: number) => {
-    const key = `${orgId}-${positionId}`;
-    setRemoving(key);
-
-    try {
-      const res = await fetch("/api/profile/positions", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId, positionId }),
-      });
-
-      if (!res.ok) {
-        const err = (await res.json().catch(() => ({}))) as {
-          error?: string;
-        };
-        throw new Error(err.error ?? "Failed to remove position");
-      }
-
-      setPositions((prev) =>
-        prev.filter((p) => !(p.orgId === orgId && p.positionId === positionId)),
-      );
-      toast({
-        title: "Position removed",
-        description: "Your position assignment has been removed.",
-      });
-    } catch (err) {
-      toast({
-        title: "Failed to remove position",
-        description: err instanceof Error ? err.message : "Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setRemoving(null);
-    }
-  };
+  const {
+    items: positions,
+    removing,
+    handleRemove,
+  } = useRemovableList({
+    initialItems: initialPositions,
+    getKey: (p) => compositeKey(p.orgId, p.positionId),
+    endpoint: "/api/profile/positions",
+    buildDeleteBody: (p) => ({ orgId: p.orgId, positionId: p.positionId }),
+    shouldKeep: (item, removed) =>
+      !(item.orgId === removed.orgId && item.positionId === removed.positionId),
+    toast,
+    successMessage: () => ({
+      title: "Position removed",
+      description: "Your position assignment has been removed.",
+    }),
+    failureTitle: "Failed to remove position",
+  });
 
   if (positions.length === 0) {
     return (
@@ -62,7 +42,7 @@ export function PositionList({
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2">
         {positions.map((pos) => {
-          const key = `${pos.orgId}-${pos.positionId}`;
+          const key = compositeKey(pos.orgId, pos.positionId);
           return (
             <Badge
               key={key}
@@ -76,7 +56,7 @@ export function PositionList({
                 type="button"
                 className="ml-1 rounded-full p-0.5 hover:bg-foreground/10 disabled:opacity-50"
                 disabled={removing === key}
-                onClick={() => handleRemove(pos.orgId, pos.positionId)}
+                onClick={() => handleRemove(pos)}
                 aria-label={`Remove ${pos.positionName} position from ${pos.orgName}`}
               >
                 {removing === key ? (
