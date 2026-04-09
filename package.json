@@ -31,7 +31,6 @@
     "test:coverage": "turbo test -- --coverage",
     "ci:local": "pnpm format && pnpm lint && pnpm typecheck && pnpm build --filter='!@acme/auth' && pnpm test:coverage",
     "with-env": "dotenv -e .env --",
-    "doppler": "pnpm exec ./tooling/scripts/doppler.sh",
     "db:update-db": "pnpm -F db update-db",
     "release": "pnpm -F release-it release"
   },
