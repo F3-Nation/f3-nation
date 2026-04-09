@@ -39,4 +39,10 @@ export default {
     ],
     'scope-empty': [2, 'never'],
   },
+  prompt: {
+    settings: {
+      enableMultipleScopes: true,
+      scopeEnumSeparator: ',',
+    },
+  },
 };
