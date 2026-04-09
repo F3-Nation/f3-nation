@@ -31,24 +31,26 @@ gcloud auth application-default login   # needed by Cloud SQL Auth Proxy
 
 ## 3. Populate secrets
 
-Secrets live in GCP Secret Manager, not in the repo. Pull them into a local `.env`:
+Secrets live in GCP Secret Manager, not in the repo. The fastest way to get a working `.env` is the automated script:
 
 ```bash
-# Fetch all staging secrets and write them to .env
-PROJECT="f3-authentication-staging"
-SECRETS=$(gcloud secrets list --project="$PROJECT" --format="value(name)")
-
-: > .env   # truncate or create .env
-
-for secret in $SECRETS; do
-  VALUE=$(gcloud secrets versions access latest --secret="$secret" --project="$PROJECT" 2>/dev/null)
-  echo "$secret=$VALUE" >> .env
-done
-
-echo "Wrote $(wc -l < .env | tr -d ' ') secrets to .env"
+pnpm env:generate
 ```
 
-Then map those secret names to the env vars the app expects. The canonical mapping is:
+This pulls staging secrets from GCP, constructs a complete `.env` at the repo root, and symlinks it into each app directory (`apps/api/.env.local`, `apps/map/.env.local`, `apps/auth/.env.local`). Preview what it would do without writing files:
+
+```bash
+pnpm env:generate:dry-run
+```
+
+> **Safety:** The script only pulls from the `f3-authentication-staging` project — never production. All local dev defaults use staging database, staging APIs, and localhost URLs.
+
+If you need to customize a specific app's env (e.g., point one app at a different API), break the symlink by replacing `apps/<app>/.env.local` with a regular file.
+
+<details>
+<summary>Manual setup (if the script doesn't work)</summary>
+
+Pull secrets manually and map them to env vars. The canonical mapping is:
 
 | GCP Secret Name                   | `.env` Variable(s)                    | Notes                                                                     |
 | --------------------------------- | ------------------------------------- | ------------------------------------------------------------------------- |
@@ -85,6 +87,8 @@ DATABASE_URL=postgresql://<DATABASE_USER>:<DATABASE_PASSWORD>@localhost:5432/<DA
 ```
 
 See `.env.example` at the repo root for a complete template with placeholder values.
+
+</details>
 
 ## 4. Start the Cloud SQL Auth Proxy
 

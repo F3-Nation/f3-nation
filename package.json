@@ -11,6 +11,8 @@
     "clean": "rm -rf .turbo node_modules",
     "clean:workspaces": "turbo clean && pnpm clean",
     "db:proxy": "cloud-sql-proxy f3data:us-central1:f3data-nonprod --port 5432",
+    "env:generate": "bash scripts/generate-env.sh",
+    "env:generate:dry-run": "bash scripts/generate-env.sh --dry-run",
     "db:pull": "pnpm -F db pull",
     "db:push": "pnpm -F db push",
     "db:studio": "pnpm -F db studio",
