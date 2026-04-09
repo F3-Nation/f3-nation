@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-- Use Node >=24.14 (see `.nvmrc`), pnpm 8.15.1, and Turborepo for workspace orchestration.
+- Use Node >=24.14 (see `.nvmrc`), pnpm 10, and Turborepo for workspace orchestration.
 - The `apps/map` directory contains the Next.js 15 map UI (port 3000).
 - Shared code is organized in `packages/`: `api` (tRPC routers), `auth` (auth helpers), `db` (Drizzle schema/migrations), `ui` (shared components), `validators` (Zod schemas), and `shared` (utilities).
 - Configuration files are in `tooling/`; pnpm patches go in `patches/`; Turbo generators live in `turbo/`.
@@ -39,7 +39,6 @@
 
 - Write concise, imperative commit subjects (e.g., `Add admin db reset script`) with no trailing punctuation.
 - Every pull request should:
-
   - Include a clear summary, any related issue(s), commands run, and impact to DB/env.
   - Add screenshots or screen recordings for UI changes in `apps/map`.
   - Highlight any new migrations or environment variables.

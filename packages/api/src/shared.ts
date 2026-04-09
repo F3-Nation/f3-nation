@@ -220,7 +220,7 @@ export const getSession = async ({ context }: { context: BaseContext }) => {
     context.reqHeaders?.get(Header.Authorization.toLowerCase());
 
   let bearerToken: string | null = null;
-  if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
+  if (authHeader?.toLowerCase().startsWith("bearer ")) {
     bearerToken = authHeader.slice(7).trim();
   }
 

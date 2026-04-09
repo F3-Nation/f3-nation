@@ -132,13 +132,13 @@ const UserStatusFilter = ({
                   key={status}
                   value={status}
                   onSelect={() => {
-                    onStatusSelect(status as UserStatus);
+                    onStatusSelect(status);
                   }}
                 >
                   <Check
                     className={cn(
                       "mr-2 h-4 w-4",
-                      selectedStatuses.includes(status as UserStatus)
+                      selectedStatuses.includes(status)
                         ? "opacity-100"
                         : "opacity-0",
                     )}
@@ -383,7 +383,7 @@ const columns: TableOptions<
         inactive: "Inactive",
       } as const;
 
-      const status = row.original.status as UserStatus;
+      const status = row.original.status;
       return (
         <div className="flex items-center justify-start">
           <span

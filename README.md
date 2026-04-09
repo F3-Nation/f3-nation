@@ -102,10 +102,10 @@ The monorepo leverages Turbo's caching system:
    git clone https://github.com/F3-Nation/f3-nation.git && cd f3-nation
    ```
 
-2. **Install PNPM globally** (if not already installed):
+2. **Enable Corepack** (ships with Node.js 16+, manages package manager versions):
 
    ```bash
-   npm install -g pnpm
+   corepack enable
    ```
 
 3. **Install dependencies**:
