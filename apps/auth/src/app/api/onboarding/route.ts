@@ -7,6 +7,33 @@ import { users } from "@acme/db/schema/schema";
 import { auth } from "~/lib/auth";
 import { db } from "~/lib/db";
 
+export async function GET() {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const userId = Number(session.user.id);
+  const [user] = await db
+    .select({
+      f3Name: users.f3Name,
+      firstName: users.firstName,
+      lastName: users.lastName,
+    })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  const isExistingUser = !!(user?.f3Name ?? user?.firstName ?? user?.lastName);
+
+  return NextResponse.json({
+    f3Name: user?.f3Name ?? "",
+    firstName: user?.firstName ?? "",
+    lastName: user?.lastName ?? "",
+    isExistingUser,
+  });
+}
+
 export async function POST(request: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
