@@ -13,6 +13,7 @@ import {
   validateScopes,
 } from "~/lib/oauth";
 import { rateLimit } from "~/lib/rate-limit";
+import { env } from "~/env";
 
 export async function GET(request: NextRequest) {
   const ip = request.headers.get("x-forwarded-for") ?? "unknown";
@@ -21,7 +22,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
-  const { searchParams } = new URL(request.url);
+  const publicUrl = env.NEXT_PUBLIC_AUTH_URL;
+  const reqUrl = new URL(request.url);
+  const { searchParams } = reqUrl;
   const responseType = searchParams.get("response_type");
   const clientId = searchParams.get("client_id");
   const redirectUri = searchParams.get("redirect_uri");
@@ -70,8 +73,8 @@ export async function GET(request: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
     // Redirect to login with callback to this authorize URL
-    const callbackUrl = request.url;
-    const loginUrl = new URL("/login/email", request.url);
+    const callbackUrl = `${publicUrl}${reqUrl.pathname}${reqUrl.search}`;
+    const loginUrl = new URL("/login/email", publicUrl);
     loginUrl.searchParams.set("callbackUrl", callbackUrl);
     return NextResponse.redirect(loginUrl);
   }
@@ -87,8 +90,8 @@ export async function GET(request: NextRequest) {
 
   const meta = (dbUser?.meta ?? {}) as Record<string, unknown>;
   if (!meta.onboarding_completed) {
-    const callbackUrl = request.url;
-    const onboardingUrl = new URL("/onboarding", request.url);
+    const callbackUrl = `${publicUrl}${reqUrl.pathname}${reqUrl.search}`;
+    const onboardingUrl = new URL("/onboarding", publicUrl);
     onboardingUrl.searchParams.set("callbackUrl", callbackUrl);
     return NextResponse.redirect(onboardingUrl);
   }
