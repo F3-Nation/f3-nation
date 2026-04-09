@@ -83,7 +83,7 @@ Pull secrets manually and map them to env vars. The canonical mapping is:
 Construct `DATABASE_URL` from the individual fields:
 
 ```
-DATABASE_URL=postgresql://<DATABASE_USER>:<DATABASE_PASSWORD>@localhost:5432/<DATABASE_NAME>
+DATABASE_URL=postgresql://<DATABASE_USER>:<DATABASE_PASSWORD>@localhost:5433/<DATABASE_NAME>
 ```
 
 See `.env.example` at the repo root for a complete template with placeholder values.
@@ -92,14 +92,14 @@ See `.env.example` at the repo root for a complete template with placeholder val
 
 ## 4. Start the Cloud SQL Auth Proxy
 
-The staging database is a Cloud SQL instance. Locally, you connect through the proxy which authenticates via your `gcloud` credentials and exposes the DB on `localhost:5432`.
+The staging database is a Cloud SQL instance. Locally, you connect through the proxy which authenticates via your `gcloud` credentials and exposes the DB on `localhost:5433`.
 
 ### Quick start (manual)
 
 Run in a dedicated terminal tab — it needs to stay running while you develop:
 
 ```bash
-cloud-sql-proxy f3data:us-central1:f3data-nonprod --port 5432
+cloud-sql-proxy f3data:us-central1:f3data-nonprod --port 5433
 ```
 
 ### Run as a background service (recommended)
@@ -198,7 +198,7 @@ systemctl --user status cloud-sql-proxy
 
 | Environment                  | Connection method                                       | DATABASE_HOST                                 |
 | ---------------------------- | ------------------------------------------------------- | --------------------------------------------- |
-| **Local dev**                | Cloud SQL Auth Proxy on localhost:5432                  | `localhost`                                   |
+| **Local dev**                | Cloud SQL Auth Proxy on localhost:5433                  | `localhost`                                   |
 | **Cloud Run (staging/prod)** | Built-in Cloud SQL sidecar (`--add-cloudsql-instances`) | `/cloudsql/f3data:us-central1:f3data-nonprod` |
 
 ## 5. Run database migrations
@@ -240,12 +240,12 @@ This starts all apps in parallel via Turborepo:
 
 Run `pnpm db:migrate` — you have pending migrations.
 
-### `connection refused` on port 5432
+### `connection refused` on port 5433
 
 The Cloud SQL Auth Proxy isn't running. Start it:
 
 ```bash
-cloud-sql-proxy f3data:us-central1:f3data-nonprod --port 5432
+cloud-sql-proxy f3data:us-central1:f3data-nonprod --port 5433
 ```
 
 ### `permission denied` accessing GCP secrets

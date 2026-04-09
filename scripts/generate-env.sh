@@ -20,7 +20,7 @@ set -euo pipefail
 #   3. Symlinks .env.local into each app directory
 #
 # The generated .env uses:
-#   - Staging database via Cloud SQL Auth Proxy (localhost:5432)
+#   - Staging database via Cloud SQL Auth Proxy (localhost:5433)
 #   - Staging API/Auth URLs for any cross-service calls
 #   - Local dev server URLs for NEXT_PUBLIC_* vars
 # =============================================================================
@@ -51,7 +51,7 @@ SECRET_MAP=(
 STATIC_VARS=(
   "NODE_ENV=development"
   ""
-  "# -- Database (via Cloud SQL Auth Proxy on localhost:5432) --"
+  "# -- Database (via Cloud SQL Auth Proxy on localhost:5433) --"
   "# DATABASE_URL is constructed from the secrets above"
   ""
   "# -- Local dev server URLs --"
@@ -134,9 +134,9 @@ DB_USER="${SECRETS[DATABASE_USER]:-postgres}"
 DB_PASS="${SECRETS[DATABASE_PASSWORD]:-}"
 DB_NAME="${SECRETS[DATABASE_NAME]:-f3data}"
 
-# Cloud SQL Proxy connects on localhost:5432
-DATABASE_URL="postgresql://${DB_USER}:${DB_PASS}@localhost:5432/${DB_NAME}"
-TEST_DATABASE_URL="postgresql://${DB_USER}:${DB_PASS}@localhost:5432/${DB_NAME}_test"
+# Cloud SQL Proxy connects on localhost:5433
+DATABASE_URL="postgresql://${DB_USER}:${DB_PASS}@localhost:5433/${DB_NAME}"
+TEST_DATABASE_URL="postgresql://${DB_USER}:${DB_PASS}@localhost:5433/${DB_NAME}_test"
 
 # SendGrid SMTP from API key
 SENDGRID_KEY="${SECRETS[SENDGRID_API_KEY]:-}"

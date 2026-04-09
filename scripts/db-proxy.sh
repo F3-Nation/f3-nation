@@ -10,7 +10,7 @@ set -euo pipefail
 # Auto-installs gcloud CLI and cloud-sql-proxy if missing.
 # =============================================================================
 
-PORT="${1:-5432}"
+PORT="${1:-5433}"
 INSTANCE="f3data:us-central1:f3data-nonprod"
 
 # --- Auto-install gcloud CLI if missing --------------------------------------
