@@ -15,7 +15,12 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { eq } from "drizzle-orm";
 import postgres from "postgres";
 
-import { oauthClients } from "@acme/db/schema/schema";
+import * as _schema from "@acme/db/schema/schema";
+
+// CJS/ESM interop: when loaded as CJS, named exports are under .default
+const { oauthClients } = (
+  "default" in _schema ? _schema.default : _schema
+) as typeof _schema;
 
 // ---------------------------------------------------------------------------
 // CLI helpers
@@ -81,6 +86,7 @@ async function main() {
   }
 
   const databaseHost = process.env.DATABASE_HOST;
+  const databasePort = parseInt(process.env.DATABASE_PORT ?? "5432", 10);
   const databaseUser = process.env.DATABASE_USER;
   const databasePassword = process.env.DATABASE_PASSWORD;
   const databaseName = process.env.DATABASE_NAME;
@@ -101,7 +107,7 @@ async function main() {
 
   const sql = postgres({
     host: databaseHost,
-    port: 5432,
+    port: databasePort,
     user: databaseUser,
     password: databasePassword,
     database: databaseName,

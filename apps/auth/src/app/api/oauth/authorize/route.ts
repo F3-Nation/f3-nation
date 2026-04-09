@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
   if (!session?.user?.id) {
     // Redirect to login with callback to this authorize URL
     const callbackUrl = request.url;
-    const loginUrl = new URL("/login", request.url);
+    const loginUrl = new URL("/login/email", request.url);
     loginUrl.searchParams.set("callbackUrl", callbackUrl);
     return NextResponse.redirect(loginUrl);
   }
