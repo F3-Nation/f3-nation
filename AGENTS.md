@@ -1,7 +1,5 @@
 # Repository Guidelines
 
-arbitrary change made again
-
 ## Project Structure & Module Organization
 
 - Use Node >=24.14 (see `.nvmrc`), pnpm 10, and Turborepo for workspace orchestration.
