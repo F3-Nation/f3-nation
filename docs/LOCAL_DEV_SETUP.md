@@ -71,11 +71,105 @@ The remaining env vars are local defaults (URLs, ports, etc.) — see `.env.exam
 
 The staging database is a Cloud SQL instance. Locally, you connect through the proxy which authenticates via your `gcloud` credentials and exposes the DB on `localhost:5432`.
 
+### Quick start (manual)
+
+Run in a dedicated terminal tab — it needs to stay running while you develop:
+
 ```bash
 cloud-sql-proxy f3data:us-central1:f3data-nonprod --port 5432
 ```
 
-> **Tip:** Run this in a dedicated terminal tab — it needs to stay running while you develop.
+### Run as a background service (recommended)
+
+Setting up the proxy as a persistent service means it starts automatically on login and you never have to think about it.
+
+Adapted from [F3-Nation/database-helpers](https://github.com/F3-Nation/database-helpers#3-run-the-proxy-as-a-background-service).
+
+#### macOS (launchd)
+
+Create a plist file:
+
+```bash
+mkdir -p ~/Library/LaunchAgents
+cat > ~/Library/LaunchAgents/com.google.cloud-sql-proxy.plist << 'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.google.cloud-sql-proxy</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/cloud-sql-proxy</string>
+    <string>f3data:us-central1:f3data-nonprod?port=5432</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/tmp/cloud-sql-proxy.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/cloud-sql-proxy.err</string>
+</dict>
+</plist>
+PLIST
+```
+
+> **Note:** If you installed via direct download instead of Homebrew, change the path to `/usr/local/bin/cloud-sql-proxy`. Intel Macs using Homebrew should use `/usr/local/bin/cloud-sql-proxy`.
+
+Load and start the service:
+
+```bash
+launchctl load ~/Library/LaunchAgents/com.google.cloud-sql-proxy.plist
+```
+
+Verify it's running:
+
+```bash
+launchctl list | grep cloud-sql-proxy
+lsof -i :5432   # should show cloud-sql-proxy listening
+```
+
+To stop or unload:
+
+```bash
+launchctl unload ~/Library/LaunchAgents/com.google.cloud-sql-proxy.plist
+```
+
+#### Linux / WSL (systemd)
+
+Create a user service:
+
+```bash
+mkdir -p ~/.config/systemd/user
+cat > ~/.config/systemd/user/cloud-sql-proxy.service << 'EOF'
+[Unit]
+Description=Cloud SQL Auth Proxy
+
+[Service]
+ExecStart=/usr/local/bin/cloud-sql-proxy \
+  "f3data:us-central1:f3data-nonprod?port=5432"
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
+EOF
+```
+
+Enable and start:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now cloud-sql-proxy
+```
+
+Check status:
+
+```bash
+systemctl --user status cloud-sql-proxy
+```
 
 ### How it works in each environment
 
