@@ -13,17 +13,13 @@ import { revokeAllUserTokens } from "~/lib/oauth";
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const postLogoutRedirectUri =
   const postLogoutRedirectUri = searchParams.get("post_logout_redirect_uri");
 
   // Build a safe redirect URL — only allow same-origin redirects.
   const requestOrigin = new URL(request.url).origin;
   let redirectUrl: URL;
   try {
-    const candidate = new URL(
-      postLogoutRedirectUri ?? "/login",
-      request.url,
-    );
+    const candidate = new URL(postLogoutRedirectUri ?? "/login", request.url);
     redirectUrl =
       candidate.origin === requestOrigin
         ? candidate
