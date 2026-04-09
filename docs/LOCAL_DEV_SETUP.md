@@ -8,7 +8,7 @@ Step-by-step guide for new contributors to get the F3 Nation monorepo running lo
 | ---------------------- | ------------------------------------------------------------ | --------------------------- |
 | Node.js (see `.nvmrc`) | `nvm install`                                                | `node -v`                   |
 | pnpm v10+              | `corepack enable && corepack prepare pnpm@latest --activate` | `pnpm -v`                   |
-| Google Cloud CLI       | `brew install google-cloud-sdk`                              | `gcloud -v`                 |
+| Google Cloud CLI       | `brew install google-cloud-sdk`                              | `gcloud version`            |
 | Cloud SQL Auth Proxy   | `brew install cloud-sql-proxy`                               | `cloud-sql-proxy --version` |
 
 ## 1. Clone and install
@@ -34,30 +34,49 @@ gcloud auth application-default login   # needed by Cloud SQL Auth Proxy
 Secrets live in GCP Secret Manager, not in the repo. Pull them into a local `.env`:
 
 ```bash
-# One-liner: fetch all staging secrets and write .env
-# (requires jq: brew install jq)
-
+# Fetch all staging secrets and write them to .env
 PROJECT="f3-authentication-staging"
 SECRETS=$(gcloud secrets list --project="$PROJECT" --format="value(name)")
 
+: > .env   # truncate or create .env
+
 for secret in $SECRETS; do
   VALUE=$(gcloud secrets versions access latest --secret="$secret" --project="$PROJECT" 2>/dev/null)
-  echo "$secret=$VALUE"
+  echo "$secret=$VALUE" >> .env
 done
+
+echo "Wrote $(wc -l < .env | tr -d ' ') secrets to .env"
 ```
 
 Then map those secret names to the env vars the app expects. The canonical mapping is:
 
-| GCP Secret Name        | `.env` Variable(s)                            | Notes                                                                |
-| ---------------------- | --------------------------------------------- | -------------------------------------------------------------------- |
-| `database-host`        | `DATABASE_HOST`                               | Use `localhost` for local dev (proxy handles the connection)         |
-| `database-user`        | `DATABASE_USER`                               | Also used in `DATABASE_URL`                                          |
-| `database-password`    | `DATABASE_PASSWORD`                           | Also used in `DATABASE_URL`                                          |
-| `database-name`        | `DATABASE_NAME`                               | Also used in `DATABASE_URL`                                          |
-| `auth-secret`          | `AUTH_SECRET`, `NEXTAUTH_SECRET`              | Same value for both                                                  |
-| `auth-jwt-private-key` | `AUTH_JWT_PRIVATE_KEY`                        | RSA PEM key; single-line with `\n` escapes, wrapped in double quotes |
-| `api-key`              | `API_KEY`                                     |                                                                      |
-| `sendgrid-api-key`     | `SENDGRID_API_KEY`, `TWILIO_SENDGRID_API_KEY` | Same value for both                                                  |
+| GCP Secret Name                   | `.env` Variable(s)                    | Notes                                                                     |
+| --------------------------------- | ------------------------------------- | ------------------------------------------------------------------------- |
+| `database-host`                   | `DATABASE_HOST`                       | Use `localhost` for local dev (proxy handles the connection)              |
+| `database-user`                   | `DATABASE_USER`                       | Also used in `DATABASE_URL`                                               |
+| `database-password`               | `DATABASE_PASSWORD`                   | Also used in `DATABASE_URL`                                               |
+| `database-name`                   | `DATABASE_NAME`                       | Also used in `DATABASE_URL`                                               |
+| `auth-secret`                     | `AUTH_SECRET`                         | Required in production; optional in dev                                   |
+| `auth-jwt-private-key`            | `AUTH_JWT_PRIVATE_KEY`                | RSA PEM key; single-line with `\n` escapes, wrapped in double quotes      |
+| `api-key`                         | `API_KEY`                             |                                                                           |
+| `super-admin-api-key`             | `SUPER_ADMIN_API_KEY`                 |                                                                           |
+| `sendgrid-api-key`                | `EMAIL_SERVER`                        | SMTP connection string (e.g. `smtp://apikey:<key>@smtp.sendgrid.net:587`) |
+| _(set manually)_                  | `EMAIL_FROM`                          | Sender address (e.g. `noreply@f3nation.com`)                              |
+| _(set manually)_                  | `EMAIL_ADMIN_DESTINATIONS`            | Comma-separated admin email addresses                                     |
+| `google-logo-bucket-private-key`  | `GOOGLE_LOGO_BUCKET_PRIVATE_KEY`      | GCS service account private key                                           |
+| `google-logo-bucket-client-email` | `GOOGLE_LOGO_BUCKET_CLIENT_EMAIL`     | GCS service account email                                                 |
+| `google-logo-bucket-bucket-name`  | `GOOGLE_LOGO_BUCKET_BUCKET_NAME`      | GCS bucket name for logos                                                 |
+| _(same as DATABASE_URL)_          | `TEST_DATABASE_URL`                   | Connection string for test database                                       |
+| _(set manually)_                  | `NOTIFY_WEBHOOK_URLS_COMMA_SEPARATED` | Optional; comma-separated webhook URLs for notifications                  |
+
+**Client-side variables** (set these directly in `.env`):
+
+| Variable               | Example value           | Notes                                                     |
+| ---------------------- | ----------------------- | --------------------------------------------------------- |
+| `NEXT_PUBLIC_API_URL`  | `http://localhost:3001` | URL of the API app                                        |
+| `NEXT_PUBLIC_MAP_URL`  | `http://localhost:3000` | URL of the Map app                                        |
+| `NEXT_PUBLIC_AUTH_URL` | `http://localhost:3004` | Optional; URL of the Auth app                             |
+| `NEXT_PUBLIC_CHANNEL`  | `local`                 | One of: `local`, `ci`, `branch`, `dev`, `staging`, `prod` |
 
 Construct `DATABASE_URL` from the individual fields:
 
@@ -65,7 +84,7 @@ Construct `DATABASE_URL` from the individual fields:
 DATABASE_URL=postgresql://<DATABASE_USER>:<DATABASE_PASSWORD>@localhost:5432/<DATABASE_NAME>
 ```
 
-The remaining env vars are local defaults (URLs, ports, etc.) — see `.env.example` or ask a team member for a working `.env`.
+See `.env.example` at the repo root for a complete template with placeholder values.
 
 ## 4. Start the Cloud SQL Auth Proxy
 
@@ -202,12 +221,13 @@ Other useful database commands:
 pnpm dev
 ```
 
-This starts all three apps in parallel via Turborepo:
+This starts all apps in parallel via Turborepo:
 
 | App  | URL                   | Port |
 | ---- | --------------------- | ---- |
 | Map  | http://localhost:3000 | 3000 |
 | API  | http://localhost:3001 | 3001 |
+| Me   | http://localhost:3003 | 3003 |
 | Auth | http://localhost:3004 | 3004 |
 
 ## Troubleshooting
