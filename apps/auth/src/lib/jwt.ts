@@ -8,7 +8,9 @@ let _jwks: { keys: JWK[] } | null = null;
 
 async function getPrivateKey(): Promise<CryptoKey> {
   if (!_privateKey) {
-    _privateKey = await importPKCS8(env.AUTH_JWT_PRIVATE_KEY, "RS256");
+    _privateKey = await importPKCS8(env.AUTH_JWT_PRIVATE_KEY, "RS256", {
+      extractable: true,
+    });
   }
   return _privateKey;
 }
