@@ -152,7 +152,7 @@ Verify it's running:
 
 ```bash
 launchctl list | grep cloud-sql-proxy
-lsof -i :5432   # should show cloud-sql-proxy listening
+lsof -i :5433   # should show cloud-sql-proxy listening
 ```
 
 To stop or unload:
@@ -257,6 +257,6 @@ Ask a team lead to grant your Google account the `Secret Manager Secret Accessor
 Another process is using the port. Find and kill it:
 
 ```bash
-lsof -ti:5432 | xargs kill   # for the proxy
+lsof -ti:5433 | xargs kill   # for the proxy
 lsof -ti:3000 | xargs kill   # for the map app
 ```

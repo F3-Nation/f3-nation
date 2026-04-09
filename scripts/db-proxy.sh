@@ -5,7 +5,7 @@ set -euo pipefail
 # db-proxy.sh — Start Cloud SQL Auth Proxy with auto-install
 # =============================================================================
 # Usage: bash scripts/db-proxy.sh [--port PORT]
-# Default port: 5432
+# Default port: 5433
 #
 # Auto-installs gcloud CLI and cloud-sql-proxy if missing.
 # =============================================================================
@@ -67,8 +67,8 @@ if ! command -v cloud-sql-proxy &>/dev/null; then
       exit 1
     fi
     echo "Downloading from $URL..."
-    curl -o /usr/local/bin/cloud-sql-proxy "$URL" 2>/dev/null
-    chmod +x /usr/local/bin/cloud-sql-proxy
+    sudo curl -o /usr/local/bin/cloud-sql-proxy "$URL" 2>/dev/null
+    sudo chmod +x /usr/local/bin/cloud-sql-proxy
   else
     echo "Error: Cannot auto-install cloud-sql-proxy on this platform."
     echo ""
@@ -112,7 +112,7 @@ if lsof -i :"$PORT" &>/dev/null 2>&1; then
     exit 0
   else
     echo "Kill it with: kill $PID"
-    echo "Or use a different port: pnpm db:proxy -- 5433"
+    echo "Or use a different port: pnpm db:proxy -- 5434"
     exit 1
   fi
 fi
