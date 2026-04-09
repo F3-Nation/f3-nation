@@ -29,7 +29,31 @@ function OnboardingForm() {
 
   useEffect(() => {
     if (!session?.user) return;
+    if (!session?.user?.id) return;
     fetch("/api/onboarding")
+      .then((res) => {
+        if (!res.ok) return;
+        return res.json();
+      })
+      .then(
+        (data?: {
+          f3Name?: string;
+          firstName?: string;
+          lastName?: string;
+          isExistingUser?: boolean;
+        }) => {
+          if (!data) return;
+          if (data.f3Name) setF3Name(data.f3Name);
+          if (data.firstName) setFirstName(data.firstName);
+          if (data.lastName) setLastName(data.lastName);
+          if (data.isExistingUser) setIsExistingUser(true);
+        },
+      )
+      .catch(() => {
+        // Ignore — fields will just be empty
+      })
+      .finally(() => setPrefilling(false));
+  }, [session?.user?.id]);
       .then((res) => res.json())
       .then(
         (data: {

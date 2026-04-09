@@ -14,7 +14,23 @@ import { revokeAllUserTokens } from "~/lib/oauth";
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const postLogoutRedirectUri =
-    searchParams.get("post_logout_redirect_uri") ?? "/login";
+  const postLogoutRedirectUri = searchParams.get("post_logout_redirect_uri");
+
+  // Build a safe redirect URL — only allow same-origin redirects.
+  const requestOrigin = new URL(request.url).origin;
+  let redirectUrl: URL;
+  try {
+    const candidate = new URL(
+      postLogoutRedirectUri ?? "/login",
+      request.url,
+    );
+    redirectUrl =
+      candidate.origin === requestOrigin
+        ? candidate
+        : new URL("/login", request.url);
+  } catch {
+    redirectUrl = new URL("/login", request.url);
+  }
 
   // Revoke tokens if user is authenticated
   const session = await auth();
@@ -37,5 +53,5 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return NextResponse.redirect(postLogoutRedirectUri);
+  return NextResponse.redirect(redirectUrl);
 }
