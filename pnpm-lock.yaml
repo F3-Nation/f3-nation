@@ -29,7 +29,7 @@ importers:
         specifier: 20.5.0
         version: 20.5.0
       '@commitlint/cz-commitlint':
-        specifier: ^20.5.1
+        specifier: 20.5.1
         version: 20.5.1(@types/node@20.19.39)(commitizen@4.3.1(@types/node@20.19.39)(typescript@5.3.3))(inquirer@9.3.8(@types/node@20.19.39))(typescript@5.3.3)
       '@turbo/gen':
         specifier: ^1.12.3
