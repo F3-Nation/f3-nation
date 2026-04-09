@@ -6,6 +6,7 @@ import {
   SESSION_COOKIE_MAX_AGE,
   SESSION_COOKIE_NAME,
 } from "@/lib/auth/constants";
+import { safeReturnTo } from "@/lib/auth/validation";
 
 interface StatePayload {
   csrfToken: string;
@@ -63,7 +64,8 @@ export async function GET(request: NextRequest) {
     return errorRedirect(baseUrl, "csrf_mismatch");
   }
 
-  const returnTo = state.returnTo || "/profile";
+  // Re-validate returnTo from state (defense-in-depth against tampered state)
+  const returnTo = safeReturnTo(state.returnTo);
 
   // Validate PKCE code verifier cookie
   const codeVerifier = request.cookies.get("oauth_code_verifier")?.value;

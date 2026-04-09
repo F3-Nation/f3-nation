@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast";
+import { useRemovableList, compositeKey } from "@/hooks/useRemovableList";
 import type { UserRole } from "@/lib/types";
 
 interface RoleListProps {
@@ -10,47 +10,25 @@ interface RoleListProps {
 }
 
 export function RoleList({ roles: initialRoles }: RoleListProps) {
-  const [roles, setRoles] = useState(initialRoles);
-  const [removing, setRemoving] = useState<string | null>(null);
   const { toast } = useToast();
-
-  const handleRemove = async (role: UserRole) => {
-    const key = `${role.orgId}-${role.roleId}`;
-    setRemoving(key);
-
-    try {
-      const res = await fetch("/api/profile/roles", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: role.orgId, roleId: role.roleId }),
-      });
-
-      if (!res.ok) {
-        const err = (await res.json().catch(() => ({}))) as {
-          error?: string;
-        };
-        throw new Error(err.error ?? "Failed to remove role");
-      }
-
-      setRoles((prev) =>
-        prev.filter(
-          (r) => !(r.orgId === role.orgId && r.roleId === role.roleId),
-        ),
-      );
-      toast({
-        title: "Role removed",
-        description: `Removed ${role.roleName} role.`,
-      });
-    } catch (err) {
-      toast({
-        title: "Failed to remove role",
-        description: err instanceof Error ? err.message : "Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setRemoving(null);
-    }
-  };
+  const {
+    items: roles,
+    removing,
+    handleRemove,
+  } = useRemovableList({
+    initialItems: initialRoles,
+    getKey: (r) => compositeKey(r.orgId, r.roleId),
+    endpoint: "/api/profile/roles",
+    buildDeleteBody: (r) => ({ orgId: r.orgId, roleId: r.roleId }),
+    shouldKeep: (item, removed) =>
+      !(item.orgId === removed.orgId && item.roleId === removed.roleId),
+    toast,
+    successMessage: (r) => ({
+      title: "Role removed",
+      description: `Removed ${r.roleName} role.`,
+    }),
+    failureTitle: "Failed to remove role",
+  });
 
   if (roles.length === 0) {
     return <p className="text-sm text-muted-foreground">No roles assigned.</p>;
@@ -60,7 +38,7 @@ export function RoleList({ roles: initialRoles }: RoleListProps) {
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2">
         {roles.map((role) => {
-          const key = `${role.orgId}-${role.roleId}`;
+          const key = compositeKey(role.orgId, role.roleId);
           return (
             <Badge
               key={key}

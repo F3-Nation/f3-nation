@@ -1,9 +1,10 @@
 "use client";
 
-import { useRef, useState, useCallback } from "react";
+import { useRef } from "react";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
+import { useAvatarUpload } from "@/hooks/useAvatarUpload";
 
 interface AvatarUploadProps {
   currentUrl: string | null;
@@ -16,87 +17,31 @@ export function AvatarUpload({
   fallbackName,
   onUploaded,
 }: AvatarUploadProps) {
-  const [uploading, setUploading] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(currentUrl);
-  const [dragOver, setDragOver] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const {
+    uploading,
+    previewUrl,
+    dragOver,
+    setDragOver,
+    handleDrop,
+    handleFileChange,
+  } = useAvatarUpload({ currentUrl, onUploaded, toast });
 
-  const handleUpload = useCallback(
-    async (file: File) => {
-      if (file.size > 5 * 1024 * 1024) {
-        toast({
-          title: "File too large",
-          description: "Maximum file size is 5MB.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-        toast({
-          title: "Invalid file type",
-          description: "Please upload a JPEG, PNG, or WebP image.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      setUploading(true);
-
-      try {
-        const formData = new FormData();
-        formData.append("file", file);
-
-        const res = await fetch("/api/profile/avatar", {
-          method: "POST",
-          body: formData,
-        });
-
-        if (!res.ok) {
-          const err = (await res.json().catch(() => ({}))) as {
-            error?: string;
-          };
-          throw new Error(err.error ?? "Upload failed");
-        }
-
-        const data = (await res.json()) as { avatarUrl: string };
-        setPreviewUrl(data.avatarUrl);
-        onUploaded(data.avatarUrl);
-        toast({
-          title: "Avatar updated",
-          description: "Your avatar has been saved.",
-        });
-      } catch (err) {
-        toast({
-          title: "Upload failed",
-          description: err instanceof Error ? err.message : "Please try again.",
-          variant: "destructive",
-        });
-      } finally {
-        setUploading(false);
-      }
-    },
-    [onUploaded, toast],
-  );
+  const openFilePicker = () => inputRef.current?.click();
 
   return (
     <div className="flex items-center gap-4">
       <button
         type="button"
         className={`relative cursor-pointer rounded-full ${dragOver ? "ring-2 ring-primary ring-offset-2" : ""}`}
-        onClick={() => inputRef.current?.click()}
+        onClick={openFilePicker}
         onDragOver={(e) => {
           e.preventDefault();
           setDragOver(true);
         }}
         onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDragOver(false);
-          const file = e.dataTransfer.files[0];
-          if (file) void handleUpload(file);
-        }}
+        onDrop={handleDrop}
       >
         <Avatar
           src={previewUrl}
@@ -114,7 +59,7 @@ export function AvatarUpload({
         <Button
           variant="outline"
           size="sm"
-          onClick={() => inputRef.current?.click()}
+          onClick={openFilePicker}
           disabled={uploading}
         >
           {uploading ? "Uploading..." : "Change avatar"}
@@ -128,10 +73,7 @@ export function AvatarUpload({
         type="file"
         accept="image/jpeg,image/png,image/webp"
         className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) void handleUpload(file);
-        }}
+        onChange={handleFileChange}
       />
     </div>
   );

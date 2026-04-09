@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth/server";
 import { getUsers } from "@/lib/api/client";
 
+const MAX_RESULTS = 500;
+
 export async function GET(request: NextRequest) {
   try {
     await requireAuth();
@@ -17,7 +19,9 @@ export async function GET(request: NextRequest) {
     }
 
     const users = await getUsers(parsed);
-    return NextResponse.json({ users });
+
+    // Cap results to prevent unbounded response payloads at scale
+    return NextResponse.json({ users: users.slice(0, MAX_RESULTS) });
   } catch (err) {
     console.error("Failed to fetch users:", err);
     if (err instanceof Error && err.message.includes("NEXT_REDIRECT"))

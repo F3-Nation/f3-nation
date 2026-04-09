@@ -1,4 +1,5 @@
 import * as React from "react";
+import Image from "next/image";
 import { cn, getFallbackAvatar } from "@/lib/utils";
 
 interface AvatarProps extends React.HTMLAttributes<HTMLSpanElement> {
@@ -12,6 +13,12 @@ const sizeClasses = {
   sm: "h-8 w-8",
   md: "h-12 w-12",
   lg: "h-20 w-20",
+};
+
+const sizePx = {
+  sm: 32,
+  md: 48,
+  lg: 80,
 };
 
 function Avatar({
@@ -29,6 +36,7 @@ function Avatar({
   }, [src]);
 
   const showFallback = !src || imgError;
+  const px = sizePx[size];
 
   return (
     <span
@@ -40,17 +48,21 @@ function Avatar({
       {...props}
     >
       {showFallback ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+        // Fallback is a data URI SVG — use unoptimized since it's inline
+        <Image
           src={getFallbackAvatar(fallback)}
           alt={alt}
+          width={px}
+          height={px}
           className="aspect-square h-full w-full"
+          unoptimized
         />
       ) : (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+        <Image
           src={src}
           alt={alt}
+          width={px}
+          height={px}
           className="aspect-square h-full w-full object-cover"
           onError={() => setImgError(true)}
         />

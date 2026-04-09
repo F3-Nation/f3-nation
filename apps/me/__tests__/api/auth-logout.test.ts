@@ -4,6 +4,11 @@ describe("Auth /logout route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
+    // The logout route imports getOAuthConfig which requires these env vars
+    vi.stubEnv("OAUTH_CLIENT_ID", "test-client-id");
+    vi.stubEnv("OAUTH_CLIENT_SECRET", "test-client-secret");
+    vi.stubEnv("OAUTH_REDIRECT_URI", "http://localhost:3003/api/auth/callback");
+    vi.stubEnv("AUTH_PROVIDER_URL", "http://localhost:3002");
   });
 
   it("clears session cookie and returns ok", async () => {

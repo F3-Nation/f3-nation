@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useDropdownSelect } from "@/hooks/useDropdownSelect";
+import { useUserSearch, displayName } from "@/hooks/useUserSearch";
 import type { UserListItem } from "@/lib/types";
 
 interface UserSelectProps {
@@ -11,117 +13,18 @@ interface UserSelectProps {
   onChange: (userId: number | null) => void;
 }
 
-function displayName(u: UserListItem): string {
-  const parts: string[] = [];
-  if (u.f3Name) parts.push(u.f3Name);
-  const real = [u.firstName, u.lastName].filter(Boolean).join(" ");
-  if (real) parts.push(`(${real})`);
-  if (u.homeRegionName) parts.push(`— ${u.homeRegionName}`);
-  return parts.join(" ") || `User #${u.id}`;
-}
-
-function matchesSearch(u: UserListItem, term: string): boolean {
-  const lower = term.toLowerCase();
-  return (
-    (u.f3Name?.toLowerCase().includes(lower) ?? false) ||
-    (u.firstName?.toLowerCase().includes(lower) ?? false) ||
-    (u.lastName?.toLowerCase().includes(lower) ?? false) ||
-    (u.homeRegionName?.toLowerCase().includes(lower) ?? false)
-  );
-}
-
 export function UserSelect({ value, homeRegionId, onChange }: UserSelectProps) {
-  const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const [users, setUsers] = useState<UserListItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [showAllRegions, setShowAllRegions] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<UserListItem | null>(null);
+  const { open, search, toggle, close, setSearch, selectAndClose } =
+    useDropdownSelect();
+  const {
+    filteredUsers,
+    loading,
+    selectedUser,
+    isRegionScoped,
+    setSelectedUser,
+    handleExpandAll,
+  } = useUserSearch({ value, homeRegionId, open, search });
   const dropdownRef = useRef<HTMLDivElement>(null);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    if (!open) return;
-    function handleClick(e: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(e.target as Node)
-      ) {
-        setOpen(false);
-        setSearch("");
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [open]);
-
-  const fetchUsers = useCallback(
-    async (regionId?: number | null) => {
-      setLoading(true);
-      try {
-        const params = new URLSearchParams();
-        if (regionId) {
-          params.set("homeRegionId", String(regionId));
-        }
-        const qs = params.toString();
-        const res = await fetch(`/api/users${qs ? `?${qs}` : ""}`);
-        if (!res.ok) throw new Error("Failed to fetch users");
-        const data = (await res.json()) as { users: UserListItem[] };
-        setUsers(data.users);
-
-        // Resolve selected user display if we have a value
-        if (value && !selectedUser) {
-          const found = data.users.find((u) => u.id === value);
-          if (found) setSelectedUser(found);
-        }
-      } catch (err) {
-        console.error("Failed to load users:", err);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [value, selectedUser],
-  );
-
-  // Load users when dropdown opens
-  useEffect(() => {
-    if (!open) return;
-    if (users.length > 0) return; // Already loaded
-    const regionIdToFetch =
-      showAllRegions || !homeRegionId ? undefined : homeRegionId;
-    void fetchUsers(regionIdToFetch);
-  }, [open, showAllRegions, homeRegionId, users.length, fetchUsers]);
-
-  // If we have a value but no selectedUser, try to resolve it
-  useEffect(() => {
-    if (value && !selectedUser) {
-      // We need to fetch to resolve the display name of the selected user
-      void (async () => {
-        try {
-          const res = await fetch("/api/users");
-          if (!res.ok) return;
-          const data = (await res.json()) as { users: UserListItem[] };
-          const found = data.users.find((u) => u.id === value);
-          if (found) setSelectedUser(found);
-        } catch {
-          // Silently fail — display will fallback
-        }
-      })();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
-
-  const handleExpandAll = () => {
-    setShowAllRegions(true);
-    setUsers([]); // Clear so the load effect refetches
-  };
-
-  const filteredUsers = useMemo(() => {
-    if (!search) return users;
-    return users.filter((u) => matchesSearch(u, search));
-  }, [users, search]);
-
-  const isRegionScoped = !showAllRegions && !!homeRegionId;
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -129,7 +32,7 @@ export function UserSelect({ value, homeRegionId, onChange }: UserSelectProps) {
         variant="outline"
         type="button"
         className="w-full justify-between text-left font-normal"
-        onClick={() => setOpen(!open)}
+        onClick={toggle}
       >
         <span
           className={`truncate ${value && selectedUser ? "" : "text-muted-foreground"}`}
@@ -179,8 +82,7 @@ export function UserSelect({ value, homeRegionId, onChange }: UserSelectProps) {
                     onClick={() => {
                       onChange(null);
                       setSelectedUser(null);
-                      setOpen(false);
-                      setSearch("");
+                      selectAndClose();
                     }}
                   >
                     Clear selection
@@ -191,7 +93,7 @@ export function UserSelect({ value, homeRegionId, onChange }: UserSelectProps) {
                     No users found.
                   </p>
                 ) : (
-                  filteredUsers.map((user) => (
+                  filteredUsers.map((user: UserListItem) => (
                     <button
                       key={user.id}
                       type="button"
@@ -201,8 +103,7 @@ export function UserSelect({ value, homeRegionId, onChange }: UserSelectProps) {
                       onClick={() => {
                         onChange(user.id);
                         setSelectedUser(user);
-                        setOpen(false);
-                        setSearch("");
+                        selectAndClose();
                       }}
                     >
                       <span className="truncate">
@@ -229,6 +130,12 @@ export function UserSelect({ value, homeRegionId, onChange }: UserSelectProps) {
             )}
           </div>
         </div>
+      )}
+
+      {/* Click-away handler */}
+      {open && (
+        // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
+        <div className="fixed inset-0 z-40" onClick={close} />
       )}
     </div>
   );
