@@ -28,6 +28,7 @@ export default {
         'tsconfig',
         'scripts',
         'github',
+        'tailwind',
 
         // cross-cutting
         'deps',
