@@ -24,7 +24,7 @@ export async function GET() {
     .where(eq(users.id, userId))
     .limit(1);
 
-  const isExistingUser = !!(user?.f3Name || user?.firstName || user?.lastName);
+  const isExistingUser = !!(user?.f3Name ?? user?.firstName ?? user?.lastName);
 
   return NextResponse.json({
     f3Name: user?.f3Name ?? "",
