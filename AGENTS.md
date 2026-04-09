@@ -1,5 +1,7 @@
 # Repository Guidelines
 
+arbitrary change made again
+
 ## Project Structure & Module Organization
 
 - Use Node >=24.14 (see `.nvmrc`), pnpm 10, and Turborepo for workspace orchestration.
@@ -58,7 +60,7 @@ Scopes are defined in `commitlint.config.mjs` and map to monorepo packages:
 | Apps | `map` |
 | Apps & Packages | `api`, `auth` (exist in both `apps/` and `packages/`) |
 | Packages | `db`, `env`, `mail`, `shared`, `sso`, `ui`, `validators` |
-| Tooling | `eslint`, `prettier`, `tsconfig`, `scripts`, `github` |
+| Tooling | `eslint`, `prettier`, `tsconfig`, `scripts`, `github`, `tailwind` |
 | Cross-cutting | `deps`, `ci`, `repo`, `release` |
 
 **Choosing a scope:**
