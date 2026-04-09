@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { exchangeCodeForToken, getUserInfo } from "@/lib/auth/oauth";
 import { createSessionValue } from "@/lib/auth/session";
-import { lookupUserByEmail } from "@/lib/api/client";
 import {
   SESSION_COOKIE_MAX_AGE,
   SESSION_COOKIE_NAME,
@@ -76,17 +75,17 @@ export async function GET(request: NextRequest) {
   let accessToken: string;
   try {
     const tokens = await exchangeCodeForToken({ code, codeVerifier });
-    accessToken = (tokens.access_token ?? tokens.accessToken) as string;
-    if (!accessToken) {
+    if (!tokens.accessToken) {
       return errorRedirect(baseUrl, "token_exchange_failed", returnTo);
     }
+    accessToken = tokens.accessToken;
   } catch (err) {
     console.error("Token exchange failed", err);
     return errorRedirect(baseUrl, "token_exchange_failed", returnTo);
   }
 
-  // Fetch user info
-  let userInfo: { sub: string; email: string; name?: string };
+  // Fetch user info — sub is the numeric user ID
+  let userInfo: { sub: number; email?: string; name?: string };
   try {
     userInfo = await getUserInfo(accessToken);
   } catch (err) {
@@ -94,21 +93,16 @@ export async function GET(request: NextRequest) {
     return errorRedirect(baseUrl, "userinfo_failed", returnTo);
   }
 
-  // Look up the numeric user ID by email
-  let userId: number;
-  try {
-    userId = await lookupUserByEmail(userInfo.email);
-  } catch (err) {
-    console.error("Failed to look up user by email", err);
+  if (!userInfo.email) {
     return errorRedirect(baseUrl, "user_not_found", returnTo);
   }
 
   // Create HMAC session cookie
   const sessionValue = createSessionValue({
-    sub: userInfo.sub,
+    sub: String(userInfo.sub),
     email: userInfo.email,
     name: userInfo.name,
-    userId,
+    userId: userInfo.sub,
   });
 
   const response = NextResponse.redirect(new URL(returnTo, baseUrl).toString());
