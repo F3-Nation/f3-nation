@@ -125,7 +125,7 @@ cat > ~/Library/LaunchAgents/com.google.cloud-sql-proxy.plist << 'PLIST'
   <key>ProgramArguments</key>
   <array>
     <string>/opt/homebrew/bin/cloud-sql-proxy</string>
-    <string>f3data:us-central1:f3data-nonprod?port=5432</string>
+    <string>f3data:us-central1:f3data-nonprod?port=5433</string>
   </array>
   <key>RunAtLoad</key>
   <true/>
@@ -173,7 +173,7 @@ Description=Cloud SQL Auth Proxy
 
 [Service]
 ExecStart=/usr/local/bin/cloud-sql-proxy \
-  "f3data:us-central1:f3data-nonprod?port=5432"
+  "f3data:us-central1:f3data-nonprod?port=5433"
 Restart=on-failure
 
 [Install]
