@@ -20,7 +20,7 @@ function OnboardingForm() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [loading, setLoading] = useState(false);
-  const [prefilling, setPrefilling] = useState(true);
+  const [prefilling, setPrefilling] = useState(false);
   const [isExistingUser, setIsExistingUser] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
@@ -28,8 +28,8 @@ function OnboardingForm() {
   const callbackUrl = searchParams.get("callbackUrl") ?? "/";
 
   useEffect(() => {
-    if (!session?.user) return;
     if (!session?.user?.id) return;
+    setPrefilling(true);
     fetch("/api/onboarding")
       .then((res) => {
         if (!res.ok) return;
