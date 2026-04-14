@@ -1,0 +1,42 @@
+{
+  "name": "@acme/reconciler",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "F3 redirect platform reconciler Cloud Run job (R5 / F3R5_009 scaffold).",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf .turbo node_modules dist",
+    "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
+    "lint": "eslint .",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest --run"
+  },
+  "dependencies": {
+    "@acme/redirect-platform-db": "workspace:*",
+    "drizzle-orm": "^0.39.3",
+    "postgres": "^3.4.3"
+  },
+  "devDependencies": {
+    "@acme/eslint-config": "workspace:^0.2.0",
+    "@acme/prettier-config": "workspace:^0.1.0",
+    "@acme/tsconfig": "workspace:^0.1.0",
+    "@types/node": "^20.11.13",
+    "eslint": "^8.56.0",
+    "prettier": "^3.2.5",
+    "typescript": "^5.3.3",
+    "vitest": "^1.5.0"
+  },
+  "eslintConfig": {
+    "root": true,
+    "extends": [
+      "@acme/eslint-config/base"
+    ],
+    "ignorePatterns": [
+      "dist",
+      "vitest.config.mts"
+    ]
+  },
+  "prettier": "@acme/prettier-config"
+}

@@ -1,0 +1,19 @@
+{
+  "extends": "../../tooling/typescript/base.json",
+  "compilerOptions": {
+    // Pure Node.js app: override the base (which is shared across Next.js
+    // apps and therefore includes DOM libs) to a Node-only `lib` + `types`,
+    // and use `nodenext` module/moduleResolution so `tsc` emits real Node
+    // ESM for the `start` script (build target is a Cloud Run Job, not a
+    // bundled Next.js app).
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "rootDir": ".",
+    "noEmit": true,
+    "tsBuildInfoFile": "node_modules/.cache/tsbuildinfo.json"
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}
