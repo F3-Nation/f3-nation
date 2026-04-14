@@ -1,15 +1,29 @@
 /**
- * Reconciler cycle dispatcher — F3R5_010 (operations 1–4).
+ * Reconciler cycle dispatcher — F3R5_010 (ops 1–4) + F3R5_011 (ops 5–8).
  *
  * Invoked once per Cloud Run job execution under a singleton lease with
  * the heartbeat runner. This function is the top-level fan-out into the
- * four transient-state operations defined in R5 Decision 6. Operations
- * 5–8 will be added by F3R5_011.
+ * eight operations defined in R5 Decision 6.
+ *
+ * Operation routing (by trigger state):
+ *
+ *   Op 1 — awaiting_dns_challenge
+ *   Op 2 — provisioning_cert
+ *   Op 3 — awaiting_probe
+ *   Op 4 — awaiting_cutover
+ *   Op 5 — active            (reduced-cadence heartbeat reprobe + cert renewal)
+ *   Op 6 — tombstoned        (GCP cleanup)
+ *   Op 7 — quarantined && released_at < now()
+ *   Op 8 — periodic           (every ~1h, report-only drift detection)
  *
  * Each operation is idempotent and short-transaction: GCP API calls
  * happen OUTSIDE any DB transaction, every state transition is a
  * state-guarded UPDATE, and the reconciler never holds a DB connection
  * open across a remote call.
+ *
+ * The lease heartbeat wraps the entire cycle; between each op we check
+ * `heartbeat.isLost()` and exit cleanly so a reclaimed lease doesn't
+ * cause overlapping work.
  */
 
 import { randomUUID } from "node:crypto";
@@ -23,14 +37,20 @@ import type { CertManagerClient } from "./gcp/cert-manager-client.js";
 import type { HeartbeatStatus, Lease } from "./lease.js";
 import type { Logger } from "./logging.js";
 import {
+  createInMemoryDriftDetectionStore,
   loadPostCutoverConfig,
   loadSniProbeConfig,
+  runActiveHealth,
   runCertProvisioning,
   runDnsChallengeValidation,
+  runDriftDetection,
   runPostCutoverVerification,
+  runQuarantineRelease,
   runSniProbeOperation,
+  runTombstoneCleanup,
 } from "./operations/index.js";
 import type {
+  DriftDetectionStore,
   OperationContext,
   PostCutoverConfig,
   SniProbeOpConfig,
@@ -52,7 +72,19 @@ export interface ProcessTransientStatesOverrides {
   sniProbeConfig?: SniProbeOpConfig;
   postCutoverConfig?: PostCutoverConfig;
   reconcilerRunId?: string;
+  /**
+   * Shared drift-detection throttle store. Persists across cycles within
+   * a single reconciler process (default: in-memory singleton). Tests can
+   * inject a stub to control op 8 gating.
+   */
+  driftDetectionStore?: DriftDetectionStore;
 }
+
+// Process-local singleton — persists across reconciler cycles for the
+// lifetime of the Cloud Run revision. A revision restart causes at most
+// one extra op 8 run, which is acceptable (op 8 is report-only).
+const defaultDriftDetectionStore: DriftDetectionStore =
+  createInMemoryDriftDetectionStore();
 
 export async function processTransientStates(
   input: ProcessTransientStatesInput,
@@ -115,10 +147,35 @@ export async function processTransientStates(
   logger.info("running op 4 — post-cutover DNS verification");
   await runPostCutoverVerification(ctx, postCutoverConfig);
 
-  // TODO(F3R5_011): op 5 — Active health re-probe
-  // TODO(F3R5_011): op 6 — Tombstone cleanup
-  // TODO(F3R5_011): op 7 — Quarantine expiry with drift check
-  // TODO(F3R5_011): op 8 — Periodic drift detection
+  if (heartbeat.isLost()) {
+    logger.warn("reconciler cycle aborted before op 5: lease lost");
+    return;
+  }
+  logger.info("running op 5 — active health re-probe");
+  await runActiveHealth(ctx, sniProbeConfig);
+
+  if (heartbeat.isLost()) {
+    logger.warn("reconciler cycle aborted before op 6: lease lost");
+    return;
+  }
+  logger.info("running op 6 — tombstone cleanup");
+  await runTombstoneCleanup(ctx);
+
+  if (heartbeat.isLost()) {
+    logger.warn("reconciler cycle aborted before op 7: lease lost");
+    return;
+  }
+  logger.info("running op 7 — quarantine release (with drift check)");
+  await runQuarantineRelease(ctx);
+
+  if (heartbeat.isLost()) {
+    logger.warn("reconciler cycle aborted before op 8: lease lost");
+    return;
+  }
+  logger.info("running op 8 — periodic drift detection");
+  const driftStore =
+    overrides.driftDetectionStore ?? defaultDriftDetectionStore;
+  await runDriftDetection(ctx, { store: driftStore });
 
   logger.info("reconciler cycle completed");
 }
