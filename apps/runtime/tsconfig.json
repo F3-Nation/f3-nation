@@ -1,0 +1,15 @@
+{
+  "extends": "../../tooling/typescript/base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "dom", "dom.iterable"],
+    "jsx": "preserve",
+    "baseUrl": ".",
+    "paths": {
+      "~/*": ["./src/*"]
+    },
+    "plugins": [{ "name": "next" }],
+    "strictNullChecks": true
+  },
+  "include": [".", ".next/types/**/*.ts", "next-env.d.ts"],
+  "exclude": ["node_modules", ".next", "vitest.config.ts"]
+}
