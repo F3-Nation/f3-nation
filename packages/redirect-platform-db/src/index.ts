@@ -27,3 +27,9 @@ export type {
   RegionCustomDomain,
   RegionCustomDomainEvent,
 } from "./schema";
+
+export { createRedirectPlatformDb } from "./client";
+export type {
+  CreateRedirectPlatformDbOptions,
+  RedirectPlatformDb,
+} from "./client";
