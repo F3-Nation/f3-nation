@@ -844,6 +844,37 @@ importers:
         specifier: 5.3.3
         version: 5.3.3
 
+  packages/redirect-platform-db:
+    dependencies:
+      drizzle-orm:
+        specifier: ^0.39.3
+        version: 0.39.3(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(pg@8.20.0)(postgres@3.4.9)
+      postgres:
+        specifier: ^3.4.3
+        version: 3.4.9
+    devDependencies:
+      '@acme/eslint-config':
+        specifier: workspace:*
+        version: link:../../tooling/eslint
+      '@acme/prettier-config':
+        specifier: workspace:*
+        version: link:../../tooling/prettier
+      '@acme/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      drizzle-kit:
+        specifier: ^0.30.2
+        version: 0.30.6
+      eslint:
+        specifier: ^8.56.0
+        version: 8.57.1
+      prettier:
+        specifier: 3.2.5
+        version: 3.2.5
+      typescript:
+        specifier: 5.3.3
+        version: 5.3.3
+
   packages/shared:
     devDependencies:
       '@acme/eslint-config':
@@ -14906,7 +14937,7 @@ snapshots:
       ky: 1.14.3
       registry-auth-token: 5.1.1
       registry-url: 6.0.1
-      semver: 7.6.3
+      semver: 7.7.4
 
   param-case@2.1.1:
     dependencies:
