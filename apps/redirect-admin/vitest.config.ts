@@ -7,6 +7,13 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.test.{ts,tsx}", "__tests__/**/*.test.{ts,tsx}"],
+    // F3R5_013: stubs `env()` during unit tests so modules that call
+    // `env().options.gcpProjectId` (cert-manager-client) don't crash
+    // with EnvValidationError. The env loader tests use `loadEnv(src)`
+    // directly and don't depend on `process.env`, so they're unaffected.
+    env: {
+      SKIP_ENV_VALIDATION: "1",
+    },
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],
