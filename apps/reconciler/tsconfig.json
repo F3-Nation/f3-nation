@@ -2,12 +2,17 @@
   "extends": "../../tooling/typescript/base.json",
   "compilerOptions": {
     // Pure Node.js app: override the base (which is shared across Next.js
-    // apps and therefore includes DOM libs) to a Node-only `lib` + `types`,
-    // and use `nodenext` module/moduleResolution so `tsc` emits real Node
-    // ESM for the `start` script (build target is a Cloud Run Job, not a
-    // bundled Next.js app).
-    "module": "nodenext",
-    "moduleResolution": "nodenext",
+    // apps and therefore includes DOM libs) to a Node-only `lib` + `types`.
+    //
+    // Module resolution notes: we inherit `moduleResolution: Bundler` from
+    // the shared base so drizzle-orm and @acme/redirect-platform-db resolve
+    // in a single mode. Earlier we tried `nodenext` here and it created
+    // dual-resolution of drizzle-orm's internal classes, which broke
+    // structural typing across package boundaries. `Bundler` matches the
+    // rest of the monorepo; Node's ESM loader still resolves correctly at
+    // runtime because every local import uses an explicit `.js` suffix.
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
     "lib": ["ES2022"],
     "types": ["node"],
     "rootDir": ".",
