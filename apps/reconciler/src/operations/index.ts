@@ -43,6 +43,23 @@ export type {
   QuarantineReleaseConfig,
 } from "./quarantine-release.js";
 export {
+  runDriftDetection,
+  isDueForDriftDetection,
+  createInMemoryDriftDetectionStore,
+  extractUuidFromResourceName,
+  shortNameFromResourcePath,
+  missingResourcesForRow,
+  stateExpectsDnsAuth,
+  stateExpectsCert,
+  stateExpectsCme,
+  DEFAULT_DRIFT_DETECTION_INTERVAL_MS,
+} from "./drift-detection.js";
+export type {
+  DriftDetectionConfig,
+  DriftDetectionStore,
+  MissingResourceSummary,
+} from "./drift-detection.js";
+export {
   deterministicResourceName,
   stateGuardedUpdate,
   appendDomainEvent,
