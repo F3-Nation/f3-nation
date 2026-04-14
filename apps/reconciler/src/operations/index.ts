@@ -29,6 +29,11 @@ export type {
   CertRenewalEscalationLevel,
 } from "./active-health.js";
 export {
+  runTombstoneCleanup,
+  reconcileOneTombstoneCleanup,
+  QUARANTINE_PERIOD_MS,
+} from "./tombstone-cleanup.js";
+export {
   deterministicResourceName,
   stateGuardedUpdate,
   appendDomainEvent,
