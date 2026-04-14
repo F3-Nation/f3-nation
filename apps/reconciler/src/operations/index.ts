@@ -15,6 +15,20 @@ export {
 } from "./post-cutover-verification.js";
 export type { PostCutoverConfig } from "./post-cutover-verification.js";
 export {
+  runActiveHealth,
+  reconcileOneActiveHealth,
+  parseCertExpiry,
+  computeNextEscalationLevel,
+  isDueForReprobe,
+  readActiveHealthBlob,
+  ACTIVE_HEALTH_REPROBE_INTERVAL_MS,
+  CONSECUTIVE_FAILURE_THRESHOLD,
+} from "./active-health.js";
+export type {
+  ActiveHealthErrorBlob,
+  CertRenewalEscalationLevel,
+} from "./active-health.js";
+export {
   deterministicResourceName,
   stateGuardedUpdate,
   appendDomainEvent,
