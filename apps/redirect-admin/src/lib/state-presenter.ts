@@ -25,13 +25,64 @@ export type LifecycleState =
   | "quarantined"
   | "released";
 
+/**
+ * Structured drift payload written to `region_custom_domains.reconciler_error`
+ * by the reconciler (Decision 6).
+ *
+ * `recoverable_from` is the target lifecycle state the admin UI's
+ * "Retry reconciliation" button should set the row to on acknowledged
+ * retry. The plan's JSON example shows a single string, but earlier
+ * type definitions in this repo wrote it as a string array. We accept
+ * both and normalize to string in `normalizeRecoverableFrom` below.
+ */
 export interface ReconcilerError {
   drift_kind?: string;
   resource_type?: string;
   resource_name?: string;
-  recoverable_from?: string[];
+  observed_spec?: unknown;
+  expected_spec?: unknown;
+  recoverable_from?: string | string[];
   detected_at?: string;
   reconciler_run_id?: string;
+  details?: unknown;
+}
+
+/** Canonical lifecycle states that `degraded` may recover into. */
+export type RecoverableTargetState =
+  | "awaiting_dns_challenge"
+  | "provisioning_cert"
+  | "awaiting_probe"
+  | "quarantined";
+
+const RECOVERABLE_TARGETS: readonly RecoverableTargetState[] = [
+  "awaiting_dns_challenge",
+  "provisioning_cert",
+  "awaiting_probe",
+  "quarantined",
+];
+
+/**
+ * Pick the lifecycle target the reconciler recorded for a degraded row.
+ * Accepts either the string form (per plan JSON) or a string array
+ * (earlier draft). Returns null when no recoverable target is present.
+ *
+ * Decision 6 treats `recoverable_from = 'active'` as a cert-renewal
+ * failure that recovers via `awaiting_probe`, so we normalize that edge
+ * case here — the UI should never show a button that re-enters `active`
+ * directly.
+ */
+export function normalizeRecoverableFrom(
+  error: ReconcilerError | null | undefined,
+): RecoverableTargetState | null {
+  if (!error) return null;
+  const raw = Array.isArray(error.recoverable_from)
+    ? error.recoverable_from[0]
+    : error.recoverable_from;
+  if (!raw) return null;
+  if (raw === "active") return "awaiting_probe";
+  return RECOVERABLE_TARGETS.includes(raw as RecoverableTargetState)
+    ? (raw as RecoverableTargetState)
+    : null;
 }
 
 export type PresenterVariant = "info" | "warning" | "error" | "success";
@@ -135,9 +186,51 @@ export function presentLifecycleState(
       const driftKind = error?.drift_kind ?? "unknown";
       const resource =
         error?.resource_name ?? error?.resource_type ?? "a GCP resource";
+      // F3R5_013: surface the recovery target in the label so operators
+      // can tell at a glance what the "Retry reconciliation" button will
+      // transition the row into. Matches Decision 6's recoverable_from
+      // field.
+      const recovery = normalizeRecoverableFrom(error);
+      // Special case: orphan-resource drift originates from the
+      // `quarantined → released` transition (Decision 6 op 7) and its
+      // recovery target is `quarantined` — i.e. re-run the release check
+      // after a human cleaned up the orphan.
+      const isOrphanResource = driftKind === "orphan_resource";
+      let label: string;
+      if (isOrphanResource) {
+        label = "Degraded — quarantine orphan resource";
+      } else if (recovery === "awaiting_dns_challenge") {
+        // Plan directly maps cert-renewal / DNS failures here.
+        // Distinguish cert-renewal (recoverable_from='active' normalized)
+        // from original DNS challenge failure by inspecting the raw
+        // payload before normalization.
+        const raw = Array.isArray(error?.recoverable_from)
+          ? error?.recoverable_from[0]
+          : error?.recoverable_from;
+        label =
+          raw === "active"
+            ? "Degraded — cert renewal failed"
+            : "Degraded — awaiting DNS re-verification";
+      } else if (recovery === "provisioning_cert") {
+        label = "Degraded — cert provisioning failed";
+      } else if (recovery === "awaiting_probe") {
+        // Special case: the normalization step above collapses
+        // `recoverable_from = 'active'` into the probe target, which is
+        // the cert-renewal path. Distinguish those two cases by looking
+        // at the raw payload again.
+        const raw = Array.isArray(error?.recoverable_from)
+          ? error?.recoverable_from[0]
+          : error?.recoverable_from;
+        label =
+          raw === "active"
+            ? "Degraded — cert renewal failed"
+            : "Degraded — probe failed, retry available";
+      } else {
+        label = "Degraded — Attention Needed";
+      }
       return {
         state,
-        label: "Degraded — Attention Needed",
+        label,
         description: `The reconciler detected drift on ${resource} (${driftKind}). Redirects may still be serving from the edge cache; follow the recovery steps to restore parity.`,
         variant: "error",
         actionable: {

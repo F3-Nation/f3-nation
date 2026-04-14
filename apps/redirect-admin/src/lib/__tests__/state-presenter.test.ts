@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 
-import { presentLifecycleState } from "../state-presenter";
+import {
+  normalizeRecoverableFrom,
+  presentLifecycleState,
+} from "../state-presenter";
 import type { LifecycleState } from "../state-presenter";
 
 describe("presentLifecycleState", () => {
@@ -73,6 +76,77 @@ describe("presentLifecycleState", () => {
     const p = presentLifecycleState("pending");
     expect(p.variant).toBe("info");
     expect(p.actionable).toBeUndefined();
+  });
+
+  // -------------------------------------------------------------------------
+  // F3R5_013: degraded-state recovery variants
+  // -------------------------------------------------------------------------
+
+  it("degraded + recoverable_from=awaiting_dns_challenge uses DNS re-verification label", () => {
+    const p = presentLifecycleState("degraded", {
+      drift_kind: "spec_mismatch",
+      recoverable_from: "awaiting_dns_challenge",
+    });
+    expect(p.label).toBe("Degraded — awaiting DNS re-verification");
+    expect(p.variant).toBe("error");
+  });
+
+  it("degraded + recoverable_from=provisioning_cert uses cert provisioning failed label", () => {
+    const p = presentLifecycleState("degraded", {
+      drift_kind: "spec_mismatch",
+      recoverable_from: "provisioning_cert",
+    });
+    expect(p.label).toBe("Degraded — cert provisioning failed");
+  });
+
+  it("degraded + recoverable_from=awaiting_probe uses probe failed label", () => {
+    const p = presentLifecycleState("degraded", {
+      recoverable_from: "awaiting_probe",
+    });
+    expect(p.label).toBe("Degraded — probe failed, retry available");
+  });
+
+  it("degraded + recoverable_from=active uses cert renewal failed label", () => {
+    const p = presentLifecycleState("degraded", {
+      recoverable_from: "active",
+    });
+    expect(p.label).toBe("Degraded — cert renewal failed");
+  });
+
+  it("degraded + orphan_resource drift uses quarantine orphan label", () => {
+    const p = presentLifecycleState("degraded", {
+      drift_kind: "orphan_resource",
+      recoverable_from: "quarantined",
+    });
+    expect(p.label).toBe("Degraded — quarantine orphan resource");
+  });
+
+  it("normalizeRecoverableFrom accepts a string", () => {
+    expect(
+      normalizeRecoverableFrom({ recoverable_from: "awaiting_dns_challenge" }),
+    ).toBe("awaiting_dns_challenge");
+  });
+
+  it("normalizeRecoverableFrom accepts an array", () => {
+    expect(
+      normalizeRecoverableFrom({
+        recoverable_from: ["provisioning_cert", "awaiting_probe"],
+      }),
+    ).toBe("provisioning_cert");
+  });
+
+  it("normalizeRecoverableFrom folds `active` → awaiting_probe", () => {
+    expect(normalizeRecoverableFrom({ recoverable_from: "active" })).toBe(
+      "awaiting_probe",
+    );
+  });
+
+  it("normalizeRecoverableFrom returns null for unknown or missing", () => {
+    expect(normalizeRecoverableFrom(null)).toBe(null);
+    expect(normalizeRecoverableFrom({ recoverable_from: "garbage" })).toBe(
+      null,
+    );
+    expect(normalizeRecoverableFrom({})).toBe(null);
   });
 
   it("returns stable label wording for snapshot stability", () => {
