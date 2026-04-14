@@ -1,4 +1,8 @@
 import Link from "next/link";
+import { and, eq, inArray } from "drizzle-orm";
+
+import { regionCustomDomains } from "@acme/redirect-platform-db";
+import type { RegionCustomDomain } from "@acme/redirect-platform-db";
 
 import { getSessionUser } from "@/lib/auth/server";
 import { getSupabaseDb } from "@/lib/supabase-client";
@@ -6,7 +10,11 @@ import { getRedirectAdminDb } from "@/lib/db-client";
 import { loadLandingData } from "@/lib/services/landing-data";
 
 interface PageProps {
-  searchParams: Promise<{ error?: string; redirect?: string }>;
+  searchParams: Promise<{
+    error?: string;
+    redirect?: string;
+    flash?: string;
+  }>;
 }
 
 export default async function HomePage({ searchParams }: PageProps) {
@@ -40,6 +48,31 @@ export default async function HomePage({ searchParams }: PageProps) {
   const { db: redirectAdminDb } = getRedirectAdminDb();
   const data = await loadLandingData(supabase, redirectAdminDb, user.userId);
 
+  // Decision 6 surface: fetch all `degraded` domains the user owns
+  // across all their verified orgs. The landing page flags them with a
+  // "Needs attention" badge that links to the domain detail page.
+  const verifiedOrgIds = data.rows
+    .filter((r) => r.status.kind === "verified")
+    .map((r) => r.orgId);
+  let degradedDomains: RegionCustomDomain[] = [];
+  if (verifiedOrgIds.length > 0) {
+    degradedDomains = (await redirectAdminDb
+      .select()
+      .from(regionCustomDomains)
+      .where(
+        and(
+          inArray(regionCustomDomains.orgId, verifiedOrgIds),
+          eq(regionCustomDomains.lifecycleState, "degraded"),
+        ),
+      )) as RegionCustomDomain[];
+  }
+  const degradedByOrgId = new Map<number, RegionCustomDomain[]>();
+  for (const d of degradedDomains) {
+    const list = degradedByOrgId.get(d.orgId) ?? [];
+    list.push(d);
+    degradedByOrgId.set(d.orgId, list);
+  }
+
   if (data.rows.length === 0) {
     return (
       <div className="rounded-lg border bg-card p-8">
@@ -54,6 +87,7 @@ export default async function HomePage({ searchParams }: PageProps) {
 
   return (
     <div className="space-y-6">
+      {params.flash ? <FlashBanner flash={params.flash} /> : null}
       <div>
         <h2 className="text-xl font-semibold">Your orgs</h2>
         <p className="text-sm text-muted-foreground">
@@ -76,6 +110,25 @@ export default async function HomePage({ searchParams }: PageProps) {
               </div>
               <OrgStatus row={row} />
             </div>
+            {(degradedByOrgId.get(row.orgId) ?? []).map((d) => (
+              <div
+                key={d.id}
+                className="mt-3 flex items-center justify-between gap-3 rounded border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-900"
+              >
+                <div>
+                  <span className="rounded bg-red-900 px-2 py-0.5 text-[10px] uppercase text-white">
+                    Needs attention
+                  </span>{" "}
+                  {d.hostname} is degraded.
+                </div>
+                <Link
+                  href={`/domains/${d.id}`}
+                  className="underline hover:no-underline"
+                >
+                  View recovery →
+                </Link>
+              </div>
+            ))}
           </li>
         ))}
       </ul>
@@ -86,6 +139,25 @@ export default async function HomePage({ searchParams }: PageProps) {
       </div>
     </div>
   );
+}
+
+function FlashBanner({ flash }: { flash: string }) {
+  switch (flash) {
+    case "already_verified":
+      return (
+        <div className="rounded border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-900">
+          That binding is already verified — nothing to do.
+        </div>
+      );
+    case "verified":
+      return (
+        <div className="rounded border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-900">
+          Binding verified. You can now register custom domains for this org.
+        </div>
+      );
+    default:
+      return null;
+  }
 }
 
 function OrgStatus({
@@ -101,16 +173,21 @@ function OrgStatus({
         </span>
       );
     case "unverified":
-      // F3R5_012 stub. F3R5_013 swaps this for the full Decision 9
-      // verification evidence UI that reads
-      // `org_region_bindings.bind_time_validator_snapshot`.
       return (
-        <span
-          className="rounded bg-yellow-100 px-3 py-1 text-xs text-yellow-900"
-          title={`verification_state=${row.status.binding.verificationState}`}
-        >
-          Pending verification (F3R5_013 coming soon)
-        </span>
+        <div className="flex items-center gap-3 text-sm">
+          <span
+            className="rounded bg-yellow-100 px-3 py-1 text-xs text-yellow-900"
+            title={`verification_state=${row.status.binding.verificationState}`}
+          >
+            Pending verification
+          </span>
+          <Link
+            href={`/bindings/${row.orgId}/verify`}
+            className="text-primary hover:underline"
+          >
+            Verify binding →
+          </Link>
+        </div>
       );
     case "verified":
       return (
