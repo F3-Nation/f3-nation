@@ -1,0 +1,307 @@
+name: R5 Build & Push Images
+
+# Builds and pushes Docker images for the three R5 apps (runtime, reconciler,
+# redirect-admin) to the shared Artifact Registry repo in the `f3-redirects`
+# GCP project. Authenticates via Workload Identity Federation — no long-lived
+# service-account keys are stored in GitHub secrets.
+#
+# See .github/workflows/r5-build-push-images-README.md for setup.
+
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: "Which app(s) to build"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - runtime
+          - reconciler
+          - redirect-admin
+      target_ref:
+        description: "Git ref to build (branch, tag, or SHA). Defaults to the ref the workflow is dispatched on."
+        required: false
+        default: ""
+        type: string
+      push:
+        description: "Push the built image to Artifact Registry"
+        required: false
+        default: true
+        type: boolean
+
+  push:
+    branches:
+      - feat/r5-runtime
+      - feat/r5-reconciler-ops-5-8
+      - feat/r5-redirect-admin
+      - feat/r5-admin-verification
+      - dev
+    paths:
+      - "apps/runtime/**"
+      - "apps/reconciler/**"
+      - "apps/redirect-admin/**"
+      - "packages/redirect-platform-db/**"
+      - ".github/workflows/r5-build-push-images.yml"
+
+concurrency:
+  group: r5-build-push-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GCP_PROJECT: f3-redirects
+  GCP_REGION: us-central1
+  AR_REPO: f3-redirect-platform
+  AR_HOST: us-central1-docker.pkg.dev
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
+jobs:
+  detect-changes:
+    name: Detect changed apps
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      has_any: ${{ steps.matrix.outputs.has_any }}
+      target_ref: ${{ steps.resolve-ref.outputs.ref }}
+      target_sha: ${{ steps.matrix.outputs.sha }}
+    steps:
+      - name: Resolve target ref
+        id: resolve-ref
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.target_ref }}" ]]; then
+            echo "ref=${{ inputs.target_ref }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=${{ github.ref }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout target ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.resolve-ref.outputs.ref }}
+          fetch-depth: 2
+
+      - name: Detect app changes (push events)
+        id: changes
+        if: github.event_name == 'push'
+        uses: dorny/paths-filter@v3
+        with:
+          base: ${{ github.event.before }}
+          filters: |
+            runtime:
+              - 'apps/runtime/**'
+              - 'packages/redirect-platform-db/**'
+            reconciler:
+              - 'apps/reconciler/**'
+              - 'packages/redirect-platform-db/**'
+            redirect-admin:
+              - 'apps/redirect-admin/**'
+              - 'packages/redirect-platform-db/**'
+
+      - name: Build matrix
+        id: matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          apps=()
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            case "${{ inputs.app }}" in
+              all)
+                apps=(runtime reconciler redirect-admin)
+                ;;
+              runtime|reconciler|redirect-admin)
+                apps=("${{ inputs.app }}")
+                ;;
+              *)
+                echo "Unknown app input: ${{ inputs.app }}" >&2
+                exit 1
+                ;;
+            esac
+          else
+            [[ "${{ steps.changes.outputs.runtime }}" == "true" ]] && apps+=("runtime")
+            [[ "${{ steps.changes.outputs.reconciler }}" == "true" ]] && apps+=("reconciler")
+            [[ "${{ steps.changes.outputs.redirect-admin }}" == "true" ]] && apps+=("redirect-admin")
+          fi
+
+          if [[ ${#apps[@]} -eq 0 ]]; then
+            echo "matrix={\"app\":[]}" >> "$GITHUB_OUTPUT"
+            echo "has_any=false" >> "$GITHUB_OUTPUT"
+          else
+            printf -v joined '"%s",' "${apps[@]}"
+            joined="${joined%,}"
+            echo "matrix={\"app\":[${joined}]}" >> "$GITHUB_OUTPUT"
+            echo "has_any=true" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  build-push:
+    name: Build & push ${{ matrix.app }}
+    needs: detect-changes
+    if: needs.detect-changes.outputs.has_any == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.detect-changes.outputs.matrix) }}
+    steps:
+      - name: Checkout target ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.detect-changes.outputs.target_ref }}
+
+      - name: Record target SHA
+        id: sha
+        shell: bash
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Authenticate to GCP (Workload Identity Federation)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_CI_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.AR_HOST }} --quiet
+
+      - name: Compute image tags
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="${AR_HOST}/${GCP_PROJECT}/${AR_REPO}/${{ matrix.app }}"
+          sha="${{ steps.sha.outputs.sha }}"
+          {
+            echo "image_sha=${base}:${sha}"
+            echo "image_latest=${base}:latest"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Resolve push flag
+        id: push
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "push=${{ inputs.push }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "push=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          platforms: linux/amd64
+          push: ${{ steps.push.outputs.push == 'true' }}
+          tags: |
+            ${{ steps.meta.outputs.image_sha }}
+            ${{ steps.meta.outputs.image_latest }}
+          cache-from: type=gha,scope=r5-${{ matrix.app }}
+          cache-to: type=gha,scope=r5-${{ matrix.app }},mode=max
+          provenance: false
+
+      - name: Write step summary
+        shell: bash
+        run: |
+          {
+            echo "### R5 image: \`${{ matrix.app }}\`"
+            echo
+            echo "- **SHA tag:** \`${{ steps.meta.outputs.image_sha }}\`"
+            echo "- **Latest tag:** \`${{ steps.meta.outputs.image_latest }}\`"
+            echo "- **Git SHA:** \`${{ steps.sha.outputs.sha }}\`"
+            echo "- **Pushed:** \`${{ steps.push.outputs.push }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  notify-deploy-ready:
+    name: Notify deploy ready
+    needs: [detect-changes, build-push]
+    if: always() && needs.detect-changes.outputs.has_any == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build summary
+        id: summary
+        shell: bash
+        env:
+          MATRIX_JSON: ${{ needs.detect-changes.outputs.matrix }}
+          TARGET_SHA: ${{ needs.detect-changes.outputs.target_sha }}
+          BUILD_RESULT: ${{ needs.build-push.result }}
+        run: |
+          set -euo pipefail
+
+          apps="$(echo "${MATRIX_JSON}" | jq -r '.app[]')"
+
+          {
+            echo "## R5 images ready to deploy"
+            echo
+            echo "**Build status:** \`${BUILD_RESULT}\`"
+            echo "**Git SHA:** \`${TARGET_SHA}\`"
+            echo
+            echo "**Images pushed:**"
+            while IFS= read -r a; do
+              [[ -z "$a" ]] && continue
+              echo "- \`us-central1-docker.pkg.dev/f3-redirects/f3-redirect-platform/${a}:${TARGET_SHA}\`"
+            done <<< "$apps"
+            echo
+            echo "**Deploy command:**"
+            echo
+            echo '```bash'
+            echo "cd f3-redirect/infra/terraform/cloud-run"
+            echo "terraform apply \\"
+            echo "  -var=\"runtime_image_tag=${TARGET_SHA}\" \\"
+            echo "  -var=\"reconciler_image_tag=${TARGET_SHA}\" \\"
+            echo "  -var=\"redirect_admin_image_tag=${TARGET_SHA}\""
+            echo '```'
+          } > summary.md
+
+          cat summary.md >> "$GITHUB_STEP_SUMMARY"
+
+          {
+            echo 'body<<SUMMARY_EOF'
+            cat summary.md
+            echo 'SUMMARY_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Find PR for branch
+        id: find-pr
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const ref = (context.ref || '').replace('refs/heads/', '');
+            if (!ref) {
+              core.setOutput('number', '');
+              return;
+            }
+            const { data: prs } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              head: `${context.repo.owner}:${ref}`,
+            });
+            core.setOutput('number', prs.length ? String(prs[0].number) : '');
+
+      - name: Comment on PR
+        if: steps.find-pr.outputs.number != ''
+        uses: actions/github-script@v7
+        env:
+          COMMENT_BODY: ${{ steps.summary.outputs.body }}
+          PR_NUMBER: ${{ steps.find-pr.outputs.number }}
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: Number(process.env.PR_NUMBER),
+              body: process.env.COMMENT_BODY,
+            });
