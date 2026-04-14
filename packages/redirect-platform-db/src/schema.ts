@@ -2,12 +2,14 @@ import { sql } from "drizzle-orm";
 import {
   check,
   foreignKey,
+  index,
   integer,
   jsonb,
   pgEnum,
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
@@ -67,12 +69,16 @@ export const lifecycleState = pgEnum("lifecycle_state", [
 // reconciler_leases — singleton lease (Decision 6 / 7)
 // ---------------------------------------------------------------------------
 
-export const reconcilerLeases = pgTable("reconciler_leases", {
-  leaseKey: varchar("lease_key").primaryKey().notNull(),
-  heldBy: varchar("held_by").notNull(),
-  acquiredAt: timestamp("acquired_at", { mode: "string" }).notNull(),
-  expiresAt: timestamp("expires_at", { mode: "string" }).notNull(),
-});
+export const reconcilerLeases = pgTable(
+  "reconciler_leases",
+  {
+    leaseKey: varchar("lease_key").primaryKey().notNull(),
+    heldBy: varchar("held_by").notNull(),
+    acquiredAt: timestamp("acquired_at", { mode: "string" }).notNull(),
+    expiresAt: timestamp("expires_at", { mode: "string" }).notNull(),
+  },
+  (table) => [index("idx_leases_expires_at").on(table.expiresAt)],
+);
 
 // ---------------------------------------------------------------------------
 // org_region_bindings — authoritative org → region mapping (Decision 7)
@@ -219,6 +225,19 @@ export const regionCustomDomains = pgTable(
       foreignColumns: [orgRegionBindings.orgId],
       name: "region_custom_domains_org_id_fkey",
     }).onDelete("restrict"),
+    uniqueIndex("uniq_locked_hostname")
+      .on(table.hostname)
+      .where(sql`lifecycle_state != 'released'`),
+    index("idx_rcd_org_id").on(table.orgId),
+    index("idx_rcd_lifecycle").on(table.lifecycleState),
+    index("idx_rcd_reconcile")
+      .on(table.lastReconciledAt)
+      .where(
+        sql`lifecycle_state IN ('awaiting_dns_challenge', 'validating', 'provisioning_cert', 'awaiting_probe', 'awaiting_cutover', 'degraded', 'tombstoned', 'quarantined')`,
+      ),
+    index("idx_rcd_active_hostname")
+      .on(table.hostname)
+      .where(sql`lifecycle_state = 'active'`),
   ],
 );
 
@@ -249,6 +268,7 @@ export const regionCustomDomainEvents = pgTable(
       foreignColumns: [regionCustomDomains.id],
       name: "region_custom_domain_events_domain_id_fkey",
     }).onDelete("restrict"),
+    index("idx_rcde_domain_id").on(table.domainId, table.createdAt.desc()),
   ],
 );
 
