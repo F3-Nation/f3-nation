@@ -34,6 +34,15 @@ export {
   QUARANTINE_PERIOD_MS,
 } from "./tombstone-cleanup.js";
 export {
+  runQuarantineRelease,
+  reconcileOneQuarantineRelease,
+  runQuarantineDriftCheck,
+} from "./quarantine-release.js";
+export type {
+  DriftCheckResult,
+  QuarantineReleaseConfig,
+} from "./quarantine-release.js";
+export {
   deterministicResourceName,
   stateGuardedUpdate,
   appendDomainEvent,
