@@ -16,17 +16,33 @@ function certManagerStub(): CertManagerClient {
   return {
     dnsAuthorizationResourcePath: (id) => `dns-${id}`,
     certificateResourcePath: (id) => `cert-${id}`,
+    certificateMapEntryResourcePath: (id) => `cme-${id}`,
     async getDnsAuthorization() {
       return null;
     },
     async getCertificate() {
       throw new Error("not used");
     },
+    async getCertificateView() {
+      return null;
+    },
     async createCertificate() {},
+    async deleteCertificate() {},
     async getCertificateMapEntry() {
       return null;
     },
     async createCertificateMapEntry() {},
+    async deleteCertificateMapEntry() {},
+    async deleteDnsAuthorization() {},
+    async listDnsAuthorizations() {
+      return [];
+    },
+    async listCertificates() {
+      return [];
+    },
+    async listCertificateMapEntries() {
+      return [];
+    },
   };
 }
 

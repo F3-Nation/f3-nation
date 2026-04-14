@@ -14,15 +14,24 @@ import {
 function makeUpstream(
   overrides: Partial<UpstreamCertManagerClient> = {},
 ): UpstreamCertManagerClient {
-  const unimplemented = async () => {
+  const unimplemented = async (): Promise<[unknown]> => {
+    throw new Error("not mocked");
+  };
+  const unimplementedList = async (): Promise<[unknown[]]> => {
     throw new Error("not mocked");
   };
   return {
     getDnsAuthorization: unimplemented,
     getCertificate: unimplemented,
     createCertificate: unimplemented,
+    deleteCertificate: unimplemented,
     getCertificateMapEntry: unimplemented,
     createCertificateMapEntry: unimplemented,
+    deleteCertificateMapEntry: unimplemented,
+    deleteDnsAuthorization: unimplemented,
+    listDnsAuthorizations: unimplementedList,
+    listCertificates: unimplementedList,
+    listCertificateMapEntries: unimplementedList,
     ...overrides,
   };
 }

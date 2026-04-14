@@ -22,13 +22,21 @@ function certManagerStub(
       `projects/test/locations/global/dnsAuthorizations/${id}`,
     certificateResourcePath: (id: string) =>
       `projects/test/locations/global/certificates/${id}`,
+    certificateMapEntryResourcePath: (id: string) =>
+      `projects/test/locations/global/certificateMaps/redirect-platform-cert-map/certificateMapEntries/${id}`,
     async getDnsAuthorization() {
       return null;
     },
     async getCertificate() {
       throw new NotFoundError("Certificate", "unset");
     },
+    async getCertificateView() {
+      return null;
+    },
     async createCertificate() {
+      // no-op
+    },
+    async deleteCertificate() {
       // no-op
     },
     async getCertificateMapEntry() {
@@ -36,6 +44,21 @@ function certManagerStub(
     },
     async createCertificateMapEntry() {
       // no-op
+    },
+    async deleteCertificateMapEntry() {
+      // no-op
+    },
+    async deleteDnsAuthorization() {
+      // no-op
+    },
+    async listDnsAuthorizations() {
+      return [];
+    },
+    async listCertificates() {
+      return [];
+    },
+    async listCertificateMapEntries() {
+      return [];
     },
   };
   return { ...base, ...overrides };

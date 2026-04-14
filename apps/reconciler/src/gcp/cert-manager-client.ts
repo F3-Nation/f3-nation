@@ -6,9 +6,15 @@
  *
  *   - `getDnsAuthorization(id)` → DnsAuthorization | null
  *   - `createCertificate({...})` → void  (await LRO to settle name only)
- *   - `getCertificate(id)` → Certificate
- *   - `getCertificateMapEntry(id)` → CertificateMapEntry
+ *   - `getCertificate(id)` → Certificate  (throws NotFoundError on 404)
+ *   - `getCertificateView(id)` → Certificate | null  (null on 404, for ops 6/7)
+ *   - `getCertificateMapEntry(id)` → CertificateMapEntry | null
  *   - `createCertificateMapEntry({...})` → void
+ *   - `deleteDnsAuthorization(id)` / `deleteCertificate(id)` /
+ *     `deleteCertificateMapEntry(id)` → void  (idempotent: NOT_FOUND = success)
+ *   - `listDnsAuthorizations()` / `listCertificates()` /
+ *     `listCertificateMapEntries()` → full-project enumeration for op 8
+ *     (periodic drift detection)
  *
  * All calls go through `mapGcpError` so callers branch via typed errors
  * (NotFoundError / AlreadyExistsError / PermissionDeniedError) instead of
@@ -112,15 +118,38 @@ export interface CreateCertificateMapEntryInput {
 export interface CertManagerClient {
   getDnsAuthorization(id: string): Promise<DnsAuthorizationView | null>;
   getCertificate(id: string): Promise<CertificateView>;
+  /**
+   * Null-returning sibling of `getCertificate` for ops 6 and 7 where
+   * NOT_FOUND is the expected success condition of a DELETE or a
+   * quarantine drift check. Throws on PERMISSION_DENIED or other errors.
+   */
+  getCertificateView(id: string): Promise<CertificateView | null>;
   createCertificate(input: CreateCertificateInput): Promise<void>;
+  /** Idempotent: NOT_FOUND is treated as success (returns void, no error). */
+  deleteCertificate(id: string): Promise<void>;
   getCertificateMapEntry(id: string): Promise<CertificateMapEntryView | null>;
   createCertificateMapEntry(
     input: CreateCertificateMapEntryInput,
   ): Promise<void>;
+  /** Idempotent: NOT_FOUND is treated as success (returns void, no error). */
+  deleteCertificateMapEntry(id: string): Promise<void>;
+  /** Idempotent: NOT_FOUND is treated as success (returns void, no error). */
+  deleteDnsAuthorization(id: string): Promise<void>;
+  /** List every DnsAuthorization in the project (op 8 drift detection). */
+  listDnsAuthorizations(): Promise<DnsAuthorizationView[]>;
+  /** List every Certificate in the project (op 8 drift detection). */
+  listCertificates(): Promise<CertificateView[]>;
+  /**
+   * List every CertificateMapEntry under the configured cert map
+   * (op 8 drift detection).
+   */
+  listCertificateMapEntries(): Promise<CertificateMapEntryView[]>;
   /** Return the full resource path for a DnsAuthorization id. */
   dnsAuthorizationResourcePath(id: string): string;
   /** Return the full resource path for a Certificate id. */
   certificateResourcePath(id: string): string;
+  /** Return the full resource path for a CertificateMapEntry id. */
+  certificateMapEntryResourcePath(id: string): string;
 }
 
 // ---------------------------------------------------------------------------
@@ -223,12 +252,18 @@ export interface UpstreamCertManagerClient {
     certificateId: string;
     certificate: unknown;
   }): Promise<[unknown]>;
+  deleteCertificate(req: { name: string }): Promise<[unknown]>;
   getCertificateMapEntry(req: { name: string }): Promise<[unknown]>;
   createCertificateMapEntry(req: {
     parent: string;
     certificateMapEntryId: string;
     certificateMapEntry: unknown;
   }): Promise<[unknown]>;
+  deleteCertificateMapEntry(req: { name: string }): Promise<[unknown]>;
+  deleteDnsAuthorization(req: { name: string }): Promise<[unknown]>;
+  listDnsAuthorizations(req: { parent: string }): Promise<[unknown[]]>;
+  listCertificates(req: { parent: string }): Promise<[unknown[]]>;
+  listCertificateMapEntries(req: { parent: string }): Promise<[unknown[]]>;
 }
 
 export function createCertManagerClient(
@@ -261,6 +296,7 @@ export function createCertManagerClient(
   return {
     dnsAuthorizationResourcePath,
     certificateResourcePath,
+    certificateMapEntryResourcePath,
 
     async getDnsAuthorization(id) {
       const name = dnsAuthorizationResourcePath(id);
@@ -283,6 +319,21 @@ export function createCertManagerClient(
         const [raw] = await client.getCertificate({ name });
         return projectCertificate(raw);
       });
+    },
+
+    async getCertificateView(id) {
+      const name = certificateResourcePath(id);
+      try {
+        return await mapGcpError("Certificate", name, async () => {
+          const [raw] = await client.getCertificate({ name });
+          return projectCertificate(raw);
+        });
+      } catch (err) {
+        if (err instanceof NotFoundError) {
+          return null;
+        }
+        throw err;
+      }
     },
 
     async createCertificate(input) {
@@ -330,6 +381,82 @@ export function createCertManagerClient(
         });
         await waitForLro(op);
       });
+    },
+
+    async deleteCertificate(id) {
+      const name = certificateResourcePath(id);
+      try {
+        await mapGcpError("Certificate", name, async () => {
+          const [op] = await client.deleteCertificate({ name });
+          await waitForLro(op);
+        });
+      } catch (err) {
+        if (err instanceof NotFoundError) {
+          return;
+        }
+        throw err;
+      }
+    },
+
+    async deleteCertificateMapEntry(id) {
+      const name = certificateMapEntryResourcePath(id);
+      try {
+        await mapGcpError("CertificateMapEntry", name, async () => {
+          const [op] = await client.deleteCertificateMapEntry({ name });
+          await waitForLro(op);
+        });
+      } catch (err) {
+        if (err instanceof NotFoundError) {
+          return;
+        }
+        throw err;
+      }
+    },
+
+    async deleteDnsAuthorization(id) {
+      const name = dnsAuthorizationResourcePath(id);
+      try {
+        await mapGcpError("DnsAuthorization", name, async () => {
+          const [op] = await client.deleteDnsAuthorization({ name });
+          await waitForLro(op);
+        });
+      } catch (err) {
+        if (err instanceof NotFoundError) {
+          return;
+        }
+        throw err;
+      }
+    },
+
+    async listDnsAuthorizations() {
+      return mapGcpError(
+        "DnsAuthorization",
+        `${parent}/dnsAuthorizations`,
+        async () => {
+          const [raw] = await client.listDnsAuthorizations({ parent });
+          return raw.map(projectDnsAuthorization);
+        },
+      );
+    },
+
+    async listCertificates() {
+      return mapGcpError("Certificate", `${parent}/certificates`, async () => {
+        const [raw] = await client.listCertificates({ parent });
+        return raw.map(projectCertificate);
+      });
+    },
+
+    async listCertificateMapEntries() {
+      return mapGcpError(
+        "CertificateMapEntry",
+        `${certMapParent}/certificateMapEntries`,
+        async () => {
+          const [raw] = await client.listCertificateMapEntries({
+            parent: certMapParent,
+          });
+          return raw.map(projectCertificateMapEntry);
+        },
+      );
     },
   };
 }
