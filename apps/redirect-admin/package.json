@@ -1,0 +1,67 @@
+{
+  "name": "@acme/redirect-admin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "F3 redirect platform self-serve admin UI (R5 / F3R5_012).",
+  "scripts": {
+    "dev": "next dev --port 3006",
+    "build": "next build",
+    "start": "next start --port 3006",
+    "lint": "eslint . --max-warnings 0",
+    "format:check": "prettier --check .",
+    "format": "prettier --write .",
+    "test": "vitest --run",
+    "test:watch": "vitest -w",
+    "test:coverage": "vitest --run --coverage",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@acme/db": "workspace:*",
+    "@acme/redirect-platform-db": "workspace:*",
+    "@acme/sso": "workspace:*",
+    "@google-cloud/certificate-manager": "^2.1.1",
+    "clsx": "^2.1.0",
+    "drizzle-orm": "^0.39.3",
+    "next": "^15.3.6",
+    "postgres": "^3.4.3",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "server-only": "^0.0.1",
+    "tailwind-merge": "^2.2.1",
+    "zod": "^3.25.8"
+  },
+  "devDependencies": {
+    "@acme/eslint-config": "workspace:^0.2.0",
+    "@acme/prettier-config": "workspace:^0.1.0",
+    "@testing-library/jest-dom": "^6.4.2",
+    "@types/node": "^20.11.13",
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.2.1",
+    "@vitest/coverage-v8": "^1.5.0",
+    "autoprefixer": "^10.4.17",
+    "eslint": "^8.56.0",
+    "postcss": "^8.4.35",
+    "prettier": "^3.2.5",
+    "tailwindcss": "^3.4.1",
+    "tailwindcss-animate": "^1.0.7",
+    "typescript": "^5.3.3",
+    "vitest": "^1.5.0"
+  },
+  "eslintConfig": {
+    "root": true,
+    "extends": [
+      "@acme/eslint-config/base",
+      "@acme/eslint-config/nextjs",
+      "@acme/eslint-config/react"
+    ],
+    "ignorePatterns": [
+      "next-env.d.ts",
+      "coverage/**",
+      "vitest.config.ts",
+      "vitest.setup.ts"
+    ]
+  },
+  "prettier": "@acme/prettier-config"
+}
