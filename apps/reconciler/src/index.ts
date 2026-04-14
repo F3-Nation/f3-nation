@@ -10,6 +10,7 @@
 import { randomUUID } from "node:crypto";
 
 import { ConfigError, loadConfig } from "./config.js";
+import type { ReconcilerConfig } from "./config.js";
 import { createReconcilerDb } from "./db/client.js";
 import {
   LEASE_KEY_DOMAIN_RECONCILER,
@@ -23,7 +24,7 @@ import { createLogger } from "./logging.js";
 import { processTransientStates } from "./process.js";
 
 async function main(): Promise<void> {
-  let config;
+  let config: ReconcilerConfig;
   try {
     config = loadConfig();
   } catch (err) {
@@ -87,6 +88,7 @@ async function main(): Promise<void> {
             lease,
             logger,
             heartbeat,
+            region: config.region,
           });
         },
       );
