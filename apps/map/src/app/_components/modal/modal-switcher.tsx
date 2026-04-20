@@ -17,6 +17,7 @@ import AdminEventTypesModal from "./admin-event-types-modal";
 import AdminLocationsModal from "./admin-locations-modal";
 import AdminManageAccessModal from "./admin-manage-access-modal";
 import AdminNationsModal from "./admin-nations-modal";
+import AdminPositionsModal from "./admin-positions-modal";
 import AdminRegionsModal from "./admin-regions-modal";
 import AdminRequestsModal from "./admin-requests-modal";
 import AdminSectorsModal from "./admin-sectors-modal";
@@ -109,6 +110,12 @@ export const ModalSwitcher = () => {
       );
     case ModalType.ADMIN_AOS:
       return <AdminAOsModal data={data as DataType[ModalType.ADMIN_AOS]} />;
+    case ModalType.ADMIN_POSITIONS:
+      return (
+        <AdminPositionsModal
+          data={data as DataType[ModalType.ADMIN_POSITIONS]}
+        />
+      );
     case ModalType.ADMIN_DELETE_CONFIRMATION:
       return (
         <AdminDeleteModal

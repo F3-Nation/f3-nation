@@ -1,13 +1,28 @@
 import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 
-import { and, asc, eq, inArray, isNull, or, schema, sql } from "@acme/db";
 import {
+  and,
+  asc,
+  count,
+  eq,
+  ilike,
+  inArray,
+  isNull,
+  or,
+  schema,
+  sql,
+} from "@acme/db";
+import {
+  AddPositionAssignmentSchema,
+  GetAllPositionAssignmentsSchema,
   PositionInsertSchema,
   UpdatePositionAssignmentsSchema,
 } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
+import { getDescendantOrgIds } from "../get-descendant-org-ids";
+import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { editorProcedure, protectedProcedure } from "../shared";
 
 export const positionRouter = {
@@ -45,6 +60,30 @@ export const positionRouter = {
             .boolean()
             .optional()
             .describe("Filter by active status. Defaults to true"),
+          /** Only return positions for orgs the user can manage */
+          onlyMine: z.coerce
+            .boolean()
+            .optional()
+            .describe(
+              "If true, only return positions in organizations where the requester has editor or admin role.",
+            ),
+          /** Search by position name, description, or org name */
+          searchTerm: z
+            .string()
+            .optional()
+            .describe(
+              "Search positions by name, description, or org name. Case-insensitive partial matching.",
+            ),
+          /** Zero-based page index for pagination */
+          pageIndex: z.coerce
+            .number()
+            .optional()
+            .describe("Zero-based page index for pagination."),
+          /** Number of positions per page */
+          pageSize: z.coerce
+            .number()
+            .optional()
+            .describe("Number of positions per page. Defaults to 20."),
         })
         .optional()
         .describe(
@@ -71,6 +110,10 @@ export const positionRouter = {
                 .nullable()
                 .describe("Position description"),
               orgId: z.number().nullable().describe("Organization ID"),
+              orgName: z
+                .string()
+                .nullable()
+                .describe("Organization name (null for national positions)"),
               orgType: z
                 .enum(["ao", "region", "area", "sector", "nation"])
                 .nullable()
@@ -83,9 +126,26 @@ export const positionRouter = {
             }),
           )
           .describe("List of positions"),
+        totalCount: z
+          .number()
+          .describe("Total number of positions matching the filters"),
       }),
     )
     .handler(async ({ context: ctx, input }) => {
+      let editableOrgIds: number[] = [];
+      let isNationAdmin = false;
+
+      if (input?.onlyMine) {
+        const result = await getEditableOrgIdsForUser(ctx);
+        isNationAdmin = result.isNationAdmin;
+
+        if (!isNationAdmin && result.editableOrgs.length > 0) {
+          const editableIds = result.editableOrgs.map((o) => o.id);
+          const descendantIds = await getDescendantOrgIds(ctx.db, editableIds);
+          editableOrgIds = [...new Set([...editableIds, ...descendantIds])];
+        }
+      }
+
       const where = and(
         input?.isActive !== undefined
           ? eq(schema.positions.isActive, input.isActive)
@@ -104,21 +164,59 @@ export const positionRouter = {
               isNull(schema.positions.orgType),
             )
           : undefined,
+        input?.onlyMine && !isNationAdmin && editableOrgIds.length > 0
+          ? or(
+              inArray(schema.positions.orgId, editableOrgIds),
+              isNull(schema.positions.orgId),
+            )
+          : undefined,
+        input?.searchTerm
+          ? or(
+              ilike(schema.positions.name, `%${input.searchTerm}%`),
+              ilike(schema.positions.description, `%${input.searchTerm}%`),
+              ilike(schema.orgs.name, `%${input.searchTerm}%`),
+            )
+          : undefined,
       );
 
-      const positions = await ctx.db
-        .select()
+      const baseQuery = ctx.db
+        .select({
+          id: schema.positions.id,
+          name: schema.positions.name,
+          description: schema.positions.description,
+          orgId: schema.positions.orgId,
+          orgName: schema.orgs.name,
+          orgType: schema.positions.orgType,
+          isActive: schema.positions.isActive,
+          created: schema.positions.created,
+          updated: schema.positions.updated,
+        })
         .from(schema.positions)
+        .leftJoin(schema.orgs, eq(schema.positions.orgId, schema.orgs.id))
         .where(where)
         .orderBy(
-          // Global positions first, then alphabetically
           asc(
             sql`CASE WHEN ${schema.positions.orgId} IS NULL THEN 0 ELSE 1 END`,
           ),
           asc(schema.positions.name),
         );
 
-      return { positions };
+      const usePagination =
+        input?.pageIndex !== undefined && input?.pageSize !== undefined;
+      const limit = input?.pageSize ?? 20;
+      const offset = (input?.pageIndex ?? 0) * limit;
+
+      const positions = usePagination
+        ? await baseQuery.limit(limit).offset(offset)
+        : await baseQuery;
+
+      const [countResult] = await ctx.db
+        .select({ total: count() })
+        .from(schema.positions)
+        .leftJoin(schema.orgs, eq(schema.positions.orgId, schema.orgs.id))
+        .where(where);
+
+      return { positions, totalCount: countResult?.total ?? 0 };
     }),
 
   /**
@@ -287,9 +385,22 @@ export const positionRouter = {
               updated: z
                 .string()
                 .describe("Date the position was last updated"),
-              userIds: z
-                .array(z.number())
-                .describe("User IDs assigned to the position"),
+              users: z
+                .array(
+                  z.object({
+                    id: z.number().describe("User ID"),
+                    f3Name: z.string().nullable().describe("User's F3 name"),
+                    firstName: z
+                      .string()
+                      .nullable()
+                      .describe("User's first name"),
+                    lastName: z
+                      .string()
+                      .nullable()
+                      .describe("User's last name"),
+                  }),
+                )
+                .describe("Users assigned to the position"),
             }),
           )
           .describe("List of positions"),
@@ -329,13 +440,20 @@ export const positionRouter = {
           asc(schema.positions.name),
         );
 
-      // Get assignments for this org
+      // Get assignments for this org with user details
       const assignments = await ctx.db
         .select({
           positionId: schema.positionsXOrgsXUsers.positionId,
           userId: schema.positionsXOrgsXUsers.userId,
+          f3Name: schema.users.f3Name,
+          firstName: schema.users.firstName,
+          lastName: schema.users.lastName,
         })
         .from(schema.positionsXOrgsXUsers)
+        .innerJoin(
+          schema.users,
+          eq(schema.positionsXOrgsXUsers.userId, schema.users.id),
+        )
         .where(eq(schema.positionsXOrgsXUsers.orgId, input.orgId));
 
       // Group assignments by position
@@ -344,16 +462,29 @@ export const positionRouter = {
           if (!acc[a.positionId]) {
             acc[a.positionId] = [];
           }
-          acc[a.positionId]!.push(a.userId);
+          acc[a.positionId]!.push({
+            id: a.userId,
+            f3Name: a.f3Name,
+            firstName: a.firstName,
+            lastName: a.lastName,
+          });
           return acc;
         },
-        {} as Record<number, number[]>,
+        {} as Record<
+          number,
+          {
+            id: number;
+            f3Name: string | null;
+            firstName: string | null;
+            lastName: string | null;
+          }[]
+        >,
       );
 
       // Combine positions with their assignments
       const positionsWithAssignments = positions.map((p) => ({
         ...p,
-        userIds: assignmentsByPosition[p.id] ?? [],
+        users: assignmentsByPosition[p.id] ?? [],
       }));
 
       return { positions: positionsWithAssignments };
@@ -518,6 +649,7 @@ export const positionRouter = {
   /**
    * Update position assignments for an org.
    * Replaces all existing assignments for the specified org.
+   * @deprecated Kept for backward compatibility. The admin UI should not use this endpoint.
    */
   updateAssignments: editorProcedure
     .input(UpdatePositionAssignmentsSchema)
@@ -527,7 +659,8 @@ export const positionRouter = {
       tags: ["position"],
       summary: "Update position assignments",
       description:
-        "Replace all position assignments for an org with new assignments",
+        "Deprecated: Use individual assignment endpoints instead. Replace all position assignments for an org with new assignments. Kept for backward compatibility.",
+      deprecated: true,
     })
     .output(
       z.object({
@@ -594,6 +727,50 @@ export const positionRouter = {
       }
 
       return { success: true, assignmentCount: newAssignments.length };
+    }),
+
+  addAssignment: editorProcedure
+    .input(AddPositionAssignmentSchema)
+    .route({
+      method: "POST",
+      path: "/assignments",
+      tags: ["position"],
+      summary: "Add a single position assignment",
+      description:
+        "Assign a user to a position at an org. Idempotent — returns success if the assignment already exists.",
+    })
+    .output(
+      z.object({
+        success: z
+          .boolean()
+          .describe("Whether the operation completed successfully"),
+      }),
+    )
+    .handler(async ({ context: ctx, input }) => {
+      const roleCheckResult = await checkHasRoleOnOrg({
+        orgId: input.orgId,
+        session: ctx.session,
+        db: ctx.db,
+        roleName: "editor",
+      });
+
+      if (!roleCheckResult.success) {
+        throw new ORPCError("UNAUTHORIZED", {
+          message:
+            "You are not authorized to manage position assignments for this org",
+        });
+      }
+
+      await ctx.db
+        .insert(schema.positionsXOrgsXUsers)
+        .values({
+          positionId: input.positionId,
+          orgId: input.orgId,
+          userId: input.userId,
+        })
+        .onConflictDoNothing();
+
+      return { success: true };
     }),
 
   /**
@@ -718,6 +895,101 @@ export const positionRouter = {
               : eq(schema.users.status, "active"),
           ),
         )
+        .orderBy(asc(schema.orgs.name), asc(schema.positions.name));
+
+      return { assignments };
+    }),
+
+  getAllAssignments: protectedProcedure
+    .input(GetAllPositionAssignmentsSchema)
+    .route({
+      method: "GET",
+      path: "/assignments/all",
+      tags: ["position"],
+      summary: "Get all position assignments",
+      description:
+        "Get all position assignments with display data, scoped to the caller's editable orgs. Supports optional filters by orgId, positionId, userId, and includeInactive.",
+    })
+    .output(
+      z.object({
+        assignments: z.array(
+          z.object({
+            positionId: z.number().describe("Position ID"),
+            orgId: z.number().describe("Organization ID"),
+            userId: z.number().describe("User ID"),
+            positionName: z.string().describe("Position name"),
+            orgName: z.string().describe("Organization name"),
+            f3Name: z.string().nullable().describe("User's F3 name"),
+            firstName: z.string().nullable().describe("User's first name"),
+            lastName: z.string().nullable().describe("User's last name"),
+          }),
+        ),
+      }),
+    )
+    .handler(async ({ context: ctx, input }) => {
+      const { editableOrgs, isNationAdmin } =
+        await getEditableOrgIdsForUser(ctx);
+
+      if (!isNationAdmin && editableOrgs.length === 0) {
+        return { assignments: [] };
+      }
+
+      const conditions = [];
+
+      // Scope to editable orgs (unless nation admin)
+      if (!isNationAdmin) {
+        const editableOrgIds = editableOrgs.map((o) => o.id);
+        const descendantOrgIds = await getDescendantOrgIds(
+          ctx.db,
+          editableOrgIds,
+        );
+        const allOrgIds = [
+          ...new Set([...editableOrgIds, ...descendantOrgIds]),
+        ];
+        conditions.push(inArray(schema.positionsXOrgsXUsers.orgId, allOrgIds));
+      }
+
+      if (input.orgId !== undefined) {
+        conditions.push(eq(schema.positionsXOrgsXUsers.orgId, input.orgId));
+      }
+      if (input.positionId !== undefined) {
+        conditions.push(
+          eq(schema.positionsXOrgsXUsers.positionId, input.positionId),
+        );
+      }
+      if (input.userId !== undefined) {
+        conditions.push(eq(schema.positionsXOrgsXUsers.userId, input.userId));
+      }
+      if (!input.includeInactive) {
+        conditions.push(eq(schema.positions.isActive, true));
+        conditions.push(eq(schema.orgs.isActive, true));
+      }
+
+      const assignments = await ctx.db
+        .select({
+          positionId: schema.positionsXOrgsXUsers.positionId,
+          orgId: schema.positionsXOrgsXUsers.orgId,
+          userId: schema.positionsXOrgsXUsers.userId,
+          positionName: schema.positions.name,
+          orgName: schema.orgs.name,
+          f3Name: schema.users.f3Name,
+          firstName: schema.users.firstName,
+          lastName: schema.users.lastName,
+        })
+        .from(schema.positionsXOrgsXUsers)
+        .innerJoin(
+          schema.positions,
+          eq(schema.positionsXOrgsXUsers.positionId, schema.positions.id),
+        )
+        .innerJoin(
+          schema.orgs,
+          eq(schema.positionsXOrgsXUsers.orgId, schema.orgs.id),
+        )
+        .innerJoin(
+          schema.users,
+          eq(schema.positionsXOrgsXUsers.userId, schema.users.id),
+        )
+        .where(and(...conditions))
         .orderBy(asc(schema.orgs.name), asc(schema.positions.name));
 
       return { assignments };

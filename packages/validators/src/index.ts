@@ -516,6 +516,7 @@ export type PositionAssignmentInsertType = z.infer<
 
 /**
  * Schema for bulk updating position assignments for an org
+ * @deprecated Use AddPositionAssignmentSchema for individual inserts instead
  */
 export const UpdatePositionAssignmentsSchema = z.object({
   /** The org (AO or region) the assignments are for */
@@ -527,4 +528,25 @@ export const UpdatePositionAssignmentsSchema = z.object({
       userIds: z.array(z.number()),
     }),
   ),
+});
+
+export const AddPositionAssignmentSchema = z.object({
+  positionId: z.coerce.number().describe("The ID of the position to assign"),
+  orgId: z.coerce
+    .number()
+    .describe("The ID of the organization for the assignment"),
+  userId: z.coerce
+    .number()
+    .describe("The ID of the user to assign to the position"),
+});
+
+export const GetAllPositionAssignmentsSchema = z.object({
+  orgId: z.coerce.number().optional().describe("Filter by organization ID"),
+  positionId: z.coerce.number().optional().describe("Filter by position ID"),
+  userId: z.coerce.number().optional().describe("Filter by user ID"),
+  includeInactive: z.coerce
+    .boolean()
+    .optional()
+    .default(false)
+    .describe("Include assignments for inactive positions, orgs, or users"),
 });
