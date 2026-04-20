@@ -7,6 +7,7 @@ export default {
       'always',
       [
         // apps
+        'admin',
         'map',
         'me',
 
