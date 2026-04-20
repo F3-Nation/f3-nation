@@ -97,26 +97,6 @@ export const EventInsertSchema = createInsertSchema(events, {
     orgId: true,
   });
 
-const socialUrlSchema = z.union([
-  z.literal(""),
-  z
-    .string()
-    .trim()
-    .superRefine((val, ctx) => {
-      const hasProtocol =
-        val.startsWith("http://") || val.startsWith("https://");
-      const isValid = z.string().url().safeParse(val).success;
-      if (!isValid) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: hasProtocol
-            ? "Invalid URL format"
-            : "URL must start with http:// or https://",
-        });
-      }
-    }),
-]);
-
 export const EventSelectSchema = createSelectSchema(events);
 
 export const CreateEventSchema = EventInsertSchema.omit({
@@ -126,16 +106,159 @@ export const CreateEventSchema = EventInsertSchema.omit({
 });
 export type EventInsertType = z.infer<typeof CreateEventSchema>;
 
+export const websiteUrlSchema = z
+  .string()
+  .trim()
+  .transform((v) => v || null)
+  .refine(
+    (value) => {
+      if (value === null) return true;
+
+      try {
+        const url = new URL(value);
+        const { hostname } = url;
+
+        return (
+          (value.startsWith("http://") || value.startsWith("https://")) &&
+          /\.[a-zA-Z]{2,}$/.test(hostname) &&
+          !hostname.startsWith(".")
+        );
+      } catch {
+        return false;
+      }
+    },
+    {
+      message: "Please enter a valid URL (e.g. https://www.example.com)",
+    },
+  );
+
+const normalizeOptionalUrl = (value: string) => {
+  const trimmed = value.trim();
+  return trimmed === "" ? null : trimmed;
+};
+
+const hasHttpProtocol = (value: string) =>
+  value.startsWith("http://") || value.startsWith("https://");
+
+export const facebookUrlSchema = z
+  .string()
+  .transform(normalizeOptionalUrl)
+  .refine(
+    (value) => {
+      if (value === null) return true;
+
+      try {
+        if (!hasHttpProtocol(value)) return false;
+
+        const url = new URL(value);
+        const host = url.hostname.toLowerCase();
+        const path = url.pathname.replace(/\/+$/, "");
+
+        const isFacebookHost =
+          host === "facebook.com" ||
+          host === "www.facebook.com" ||
+          host === "m.facebook.com";
+
+        if (!isFacebookHost) return false;
+        if (path.startsWith("/share")) return false;
+        if (path.startsWith("/sharer")) return false;
+
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    {
+      message:
+        "Please enter a valid Facebook URL (e.g. https://www.facebook.com/f3nation)",
+    },
+  );
+
+export const instagramUrlSchema = z
+  .string()
+  .transform(normalizeOptionalUrl)
+  .refine(
+    (value) => {
+      if (value === null) return true;
+
+      try {
+        if (!hasHttpProtocol(value)) return false;
+
+        const url = new URL(value);
+        const host = url.hostname.toLowerCase();
+        const path = url.pathname.replace(/\/+$/, "");
+
+        const isInstagramHost =
+          host === "instagram.com" || host === "www.instagram.com";
+
+        if (!isInstagramHost) return false;
+
+        if (
+          path.startsWith("/reel") ||
+          path.startsWith("/p/") ||
+          path.startsWith("/explore") ||
+          path.startsWith("/stories")
+        ) {
+          return false;
+        }
+
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    {
+      message:
+        "Please enter a valid Instagram URL (e.g. https://www.instagram.com/f3nation)",
+    },
+  );
+
+export const twitterUrlSchema = z
+  .string()
+  .transform(normalizeOptionalUrl)
+  .refine(
+    (value) => {
+      if (value === null) return true;
+
+      try {
+        if (!hasHttpProtocol(value)) return false;
+
+        const url = new URL(value);
+        const host = url.hostname.toLowerCase();
+        const path = url.pathname.replace(/\/+$/, "");
+
+        const isTwitterHost =
+          host === "twitter.com" ||
+          host === "www.twitter.com" ||
+          host === "x.com" ||
+          host === "www.x.com";
+
+        if (!isTwitterHost) return false;
+        if (path.startsWith("/intent") || path.includes("/status/")) {
+          return false;
+        }
+
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    {
+      message:
+        "Please enter a valid X/Twitter URL (e.g. https://x.com/f3nation)",
+    },
+  );
+
 // NATION SCHEMA
 export const NationInsertSchema = createInsertSchema(orgs, {
   name: (s: z.ZodString) => s.min(1, { message: "Name is required" }),
   email: (s: z.ZodString) =>
     s.email({ message: "Invalid email format" }).or(z.literal("")).nullable(),
   description: (s: z.ZodString) => s.nullable(),
-  website: socialUrlSchema.nullable(),
-  twitter: socialUrlSchema.nullable(),
-  facebook: socialUrlSchema.nullable(),
-  instagram: socialUrlSchema.nullable(),
+  website: websiteUrlSchema.nullable(),
+  twitter: twitterUrlSchema.nullable(),
+  facebook: facebookUrlSchema.nullable(),
+  instagram: instagramUrlSchema.nullable(),
   parentId: z.null({ message: "Must not have a parent" }).optional(),
 }).omit({ orgType: true });
 export const NationSelectSchema = createSelectSchema(orgs);
@@ -149,10 +272,10 @@ export const SectorInsertSchema = createInsertSchema(orgs, {
   email: (s: z.ZodString) =>
     s.email({ message: "Invalid email format" }).or(z.literal("")).nullable(),
   description: (s: z.ZodString) => s.nullable(),
-  website: socialUrlSchema.nullable(),
-  twitter: socialUrlSchema.nullable(),
-  facebook: socialUrlSchema.nullable(),
-  instagram: socialUrlSchema.nullable(),
+  website: websiteUrlSchema.nullable(),
+  twitter: twitterUrlSchema.nullable(),
+  facebook: facebookUrlSchema.nullable(),
+  instagram: instagramUrlSchema.nullable(),
 }).omit({ orgType: true });
 export const SectorSelectSchema = createSelectSchema(orgs);
 
@@ -165,10 +288,10 @@ export const AreaInsertSchema = createInsertSchema(orgs, {
   email: (s: z.ZodString) =>
     s.email({ message: "Invalid email format" }).or(z.literal("")).nullable(),
   description: (s: z.ZodString) => s.nullable(),
-  website: socialUrlSchema.nullable(),
-  twitter: socialUrlSchema.nullable(),
-  facebook: socialUrlSchema.nullable(),
-  instagram: socialUrlSchema.nullable(),
+  website: websiteUrlSchema.nullable(),
+  twitter: twitterUrlSchema.nullable(),
+  facebook: facebookUrlSchema.nullable(),
+  instagram: instagramUrlSchema.nullable(),
 }).omit({ orgType: true });
 export const AreaSelectSchema = createSelectSchema(orgs);
 
@@ -181,10 +304,10 @@ export const RegionInsertSchema = createInsertSchema(orgs, {
   email: (s: z.ZodString) =>
     s.email({ message: "Invalid email format" }).or(z.literal("")).nullable(),
   description: (s: z.ZodString) => s.nullable(),
-  website: socialUrlSchema.nullable(),
-  twitter: socialUrlSchema.nullable(),
-  facebook: socialUrlSchema.nullable(),
-  instagram: socialUrlSchema.nullable(),
+  website: websiteUrlSchema.nullable(),
+  twitter: twitterUrlSchema.nullable(),
+  facebook: facebookUrlSchema.nullable(),
+  instagram: instagramUrlSchema.nullable(),
 }).omit({ orgType: true });
 export const RegionSelectSchema = createSelectSchema(orgs);
 
@@ -197,10 +320,10 @@ export const AOInsertSchema = createInsertSchema(orgs, {
   email: (s: z.ZodString) =>
     s.email({ message: "Invalid email format" }).or(z.literal("")).nullable(),
   description: (s: z.ZodString) => s.nullable(),
-  website: socialUrlSchema.nullable(),
-  twitter: socialUrlSchema.nullable(),
-  facebook: socialUrlSchema.nullable(),
-  instagram: socialUrlSchema.nullable(),
+  website: websiteUrlSchema.nullable(),
+  twitter: twitterUrlSchema.nullable(),
+  facebook: facebookUrlSchema.nullable(),
+  instagram: instagramUrlSchema.nullable(),
 }).omit({ orgType: true });
 export const AOSelectSchema = createSelectSchema(orgs);
 
@@ -214,10 +337,10 @@ export const OrgInsertSchema = createInsertSchema(orgs, {
   description: (s: z.ZodString) => s.nullable(),
   email: (s: z.ZodString) =>
     s.email({ message: "Invalid email format" }).or(z.literal("")).nullable(),
-  website: socialUrlSchema.nullable(),
-  twitter: socialUrlSchema.nullable(),
-  facebook: socialUrlSchema.nullable(),
-  instagram: socialUrlSchema.nullable(),
+  website: websiteUrlSchema.nullable(),
+  twitter: twitterUrlSchema.nullable(),
+  facebook: facebookUrlSchema.nullable(),
+  instagram: instagramUrlSchema.nullable(),
 });
 export const OrgSelectSchema = createSelectSchema(orgs);
 
