@@ -21,7 +21,7 @@ export const DesktopNearbyLocations = ({
 }: ComponentProps<"div">) => {
   RERENDER_LOGS && console.log("DrawerSearchResults rerender");
   const filters = filterStore.useBoundStore();
-  const { locationOrderedLocationMarkers, nearbyLocationCenter } =
+  const { aoGroupedLocationMarkers, nearbyLocationCenter } =
     useFilteredMapResults();
   const nearbyLocationScrollRef = useRef<HTMLDivElement>(null);
   const center = mapStore.use.center();
@@ -74,20 +74,20 @@ export const DesktopNearbyLocations = ({
           className="flex flex-col justify-center divide-y divide-solid"
           data-testid={TestId.NEARBY_LOCATIONS}
         >
-          {!locationOrderedLocationMarkers ? (
+          {!aoGroupedLocationMarkers ? (
             Array.from({ length: 6 }).map((_, index) => (
               <DesktopNearbyLocationItemSkeleton key={index} />
             ))
-          ) : locationOrderedLocationMarkers.length === 0 ? (
+          ) : aoGroupedLocationMarkers.length === 0 ? (
             <div className="py-4 text-center text-sm text-muted-foreground">
               No locations found{" "}
               {isAnyFilterActive(filters) ? "matching your filters" : ""}
             </div>
           ) : (
-            locationOrderedLocationMarkers
+            aoGroupedLocationMarkers
               .slice(0, 20)
               .map((result) => (
-                <NearbyLocationItem key={result.id} item={result} />
+                <NearbyLocationItem key={result.aoId} item={result} />
               ))
           )}
         </div>
