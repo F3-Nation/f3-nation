@@ -93,26 +93,31 @@ export const TextSearchResultsProvider = ({
     setF3RegionResults(_f3RegionResults);
 
     const _f3Results = [
-      ...(filteredLocationMarkers
-        ?.filter((data) =>
-          data.aoName?.toLowerCase().includes(text.toLowerCase()),
-        )
-        .map((data) => {
+      ...(filteredLocationMarkers?.flatMap((location) => {
+        const matchingAoNames = new Set<string>();
+        for (const event of location.events) {
+          if (event.aoName?.toLowerCase().includes(text.toLowerCase())) {
+            matchingAoNames.add(event.aoName);
+          }
+        }
+        return Array.from(matchingAoNames).map((aoName) => {
+          const aoEvent = location.events.find((e) => e.aoName === aoName);
           const searchResult: F3LocationMapSearchResult = {
             type: "location",
-            header: data.aoName ?? "",
+            header: aoName,
             destination: {
-              id: data.id,
-              lat: data.lat ?? 0,
-              lng: data.lon ?? 0,
-              logo: data.logo ?? "",
-              item: { eventId: null, locationId: data.id },
+              id: location.id,
+              lat: location.lat ?? 0,
+              lng: location.lon ?? 0,
+              logo: aoEvent?.aoLogo ?? location.logo ?? "",
+              item: { eventId: null, locationId: location.id },
               placeId: null,
-              regionName: locationIdToRegionNameLookup?.[data.id] ?? null,
+              regionName: locationIdToRegionNameLookup?.[location.id] ?? null,
             },
           };
           return searchResult;
-        }) ?? []),
+        });
+      }) ?? []),
       ...(filteredLocationMarkers
         ?.flatMap((location) =>
           location.events
@@ -126,12 +131,11 @@ export const TextSearchResultsProvider = ({
           const searchResult: F3LocationMapSearchResult = {
             type: "location",
             header: event.name,
-            // description: location.locationDescription ?? "",
             destination: {
               id: event.id,
               lat: location.lat ?? 0,
               lng: location.lon ?? 0,
-              logo: location.logo ?? "",
+              logo: event.aoLogo ?? location.logo ?? "",
               item: { eventId: event.id, locationId: location.id },
               placeId: null,
               regionName: eventIdToRegionNameLookup?.[event.id] ?? null,

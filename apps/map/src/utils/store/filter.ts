@@ -43,10 +43,8 @@ export const initialFilterState = {
   dayTh: false,
   dayF: false,
   daySa: false,
-  Bootcamp: false,
-  Ruck: false,
-  Swim: false,
-  Run: false,
+  /** National event type IDs; empty means no type filter (show all). */
+  nationalEventTypeIds: [] as number[],
   beforeAfterDirection: "before" as "before" | "after",
   beforeAfterTime: TimeSelection.none,
   position: { latitude: 0, longitude: 0 },
@@ -65,8 +63,15 @@ export const filterStore = new ZustandStore({
 });
 
 export const isAnyFilterActive = (filters: FiltersType) => {
-  const { am: _am, pm: _pm, beforeAfterTime, ...otherFilters } = filters;
+  const {
+    am: _am,
+    pm: _pm,
+    beforeAfterTime,
+    nationalEventTypeIds,
+    ...otherFilters
+  } = filters;
   return (
+    (nationalEventTypeIds?.length ?? 0) > 0 ||
     Object.values(otherFilters).some((value) => value === true) ||
     beforeAfterTime !== TimeSelection.none
   );

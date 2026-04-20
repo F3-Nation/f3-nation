@@ -25,6 +25,7 @@ export enum ModalType {
   ADMIN_AOS = "ADMIN_AOS",
   ADMIN_API_KEYS = "ADMIN_API_KEYS",
   ADMIN_EVENT_TYPES = "ADMIN_EVENT_TYPES",
+  ADMIN_POSITIONS = "ADMIN_POSITIONS",
   ADMIN_DELETE_CONFIRMATION = "ADMIN_DELETE_CONFIRMATION",
   DELETE_CONFIRMATION = "DELETE_CONFIRMATION",
   ADMIN_DELETE_REQUEST = "ADMIN_DELETE_REQUEST",
@@ -45,6 +46,7 @@ export enum DeleteType {
   REGION = "REGION",
   SECTOR = "SECTOR",
   NATION = "NATION",
+  POSITION = "POSITION",
 }
 
 export const eventDefaults = {
@@ -216,6 +218,9 @@ export interface DataType {
   };
   [ModalType.MAP_HELP]: null;
   [ModalType.ADMIN_EVENT_TYPES]: {
+    id?: number | null;
+  };
+  [ModalType.ADMIN_POSITIONS]: {
     id?: number | null;
   };
   [ModalType.SIGN_IN]: {

@@ -22,6 +22,8 @@ export interface SparseF3Marker {
     dayOfWeek: DayOfWeek | null;
     startTime: string | null;
     eventTypes: { id: number; name: string }[];
+    aoName: string | null;
+    aoLogo: string | null;
   }[];
 }
 

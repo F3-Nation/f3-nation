@@ -5,6 +5,7 @@ import type { TableOptions } from "@tanstack/react-table";
 import { useCallback, useMemo, useState } from "react";
 
 import type { IsActiveStatus } from "@acme/shared/app/enums";
+import type { SortingSchema } from "@acme/validators";
 import { Button } from "@acme/ui/button";
 import {
   DropdownMenu,
@@ -33,6 +34,7 @@ export const AreasTable = () => {
   ]);
   const [onlyMine, setOnlyMine] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [sorting, setSorting] = useState<SortingSchema>([]);
 
   const { data: sectorsData } = useQuery(
     orpc.org.all.queryOptions({
@@ -62,6 +64,7 @@ export const AreasTable = () => {
         onlyMine: onlyMine || undefined,
         searchTerm: searchTerm || undefined,
         parentOrgIds: parentOrgIds.length > 0 ? parentOrgIds : undefined,
+        sorting,
       },
     }),
   );
@@ -123,6 +126,8 @@ export const AreasTable = () => {
       totalCount={areasData?.total}
       pagination={pagination}
       setPagination={setPagination}
+      sorting={sorting}
+      setSorting={setSorting}
       searchTerm={searchTerm}
       setSearchTerm={setSearchTerm}
       filterComponent={
@@ -185,12 +190,14 @@ const columns: TableOptions<
     cell: (cell) => <Cell {...cell} />,
   },
   {
+    id: "parentOrgName",
     accessorKey: "sector",
     meta: { name: "Sector" },
     header: Header,
     cell: (cell) => <Cell {...cell} />,
   },
   {
+    id: "status",
     accessorKey: "isActive",
     meta: { name: "Status" },
     header: Header,
@@ -245,6 +252,7 @@ const columns: TableOptions<
   {
     id: "id",
     enableHiding: false,
+    enableSorting: false,
     cell: ({ row }) => {
       return (
         <DropdownMenu>

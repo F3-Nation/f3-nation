@@ -142,11 +142,7 @@ export default function AdminAOsModal({
                 await crupdateAO
                   .mutateAsync({ ...data, orgType: "ao" })
                   .then(() => {
-                    void invalidateQueries(
-                      orpc.org.all.queryOptions({
-                        input: { orgTypes: ["ao"] },
-                      }),
-                    );
+                    void invalidateQueries("org");
                     closeModal();
                     toast.success("Successfully updated ao");
                     router.refresh();

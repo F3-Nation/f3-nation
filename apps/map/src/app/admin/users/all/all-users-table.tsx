@@ -34,6 +34,7 @@ import type { RouterOutputs } from "~/orpc/types";
 import { useDebounce } from "~/utils/hooks/use-debounce";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
 import { OrgFilter } from "../org-filter";
+import type { SortingSchema } from "@acme/validators";
 
 type Org = RouterOutputs["org"]["all"]["orgs"][number];
 
@@ -163,6 +164,7 @@ export const AllUsersTable = () => {
   const [selectedHomeRegions, setSelectedHomeRegions] = useState<Org[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
+  const [sorting, setSorting] = useState<SortingSchema>([]);
   const { pagination, setPagination } = usePagination({
     pageSize: 20,
   });
@@ -216,6 +218,7 @@ export const AllUsersTable = () => {
 
   const activeFilterCount =
     selectedOrgs.length +
+    selectedHomeRegions.length +
     (selectedStatuses.length !== 1 || selectedStatuses[0] !== "active"
       ? selectedStatuses.length
       : 0) +
@@ -231,6 +234,7 @@ export const AllUsersTable = () => {
         pageIndex: pagination.pageIndex,
         orgIds: selectedOrgs.map((org) => org.id),
         homeRegionIds: selectedHomeRegions.map((region) => region.id),
+        sorting: sorting,
       },
     }),
   );
@@ -307,6 +311,8 @@ export const AllUsersTable = () => {
         }
         cellClassName="p-1"
         columns={columns}
+        sorting={sorting}
+        setSorting={setSorting}
         pagination={pagination}
         totalCount={data?.totalCount}
         setPagination={setPagination}
