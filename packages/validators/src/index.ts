@@ -29,7 +29,14 @@ export const CrupdateUserSchema = UserInsertSchema.extend({
       orgId: z.number(),
       roleName: z.enum(["user", "editor", "admin"]),
     })
-    .array(),
+    .array()
+    .refine(
+      (roles) => {
+        const orgIds = roles.map((r) => r.orgId);
+        return new Set(orgIds).size === orgIds.length;
+      },
+      { message: "A user can only have one role per organization" },
+    ),
   f3Name: z.string().optional(),
   email: z
     .string()
