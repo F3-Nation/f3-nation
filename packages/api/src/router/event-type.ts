@@ -13,6 +13,7 @@ import {
   isNull,
   or,
   schema,
+  sql,
 } from "@acme/db";
 import { EventCategory, IsActiveStatus } from "@acme/shared/app/enums";
 import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
@@ -132,7 +133,7 @@ export const eventTypeRouter = {
           case "name":
             return direction(schema.eventTypes.name);
           case "description":
-            return direction(schema.eventTypes.description);
+            return direction(sql`NULLIF(${schema.eventTypes.description}, '')`);
           case "eventCategory":
             return direction(schema.eventTypes.eventCategory);
           case "specificOrgName":
