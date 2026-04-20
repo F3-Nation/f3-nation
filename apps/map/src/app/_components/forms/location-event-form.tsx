@@ -24,7 +24,7 @@ import { mapStore } from "~/utils/store/map";
 import { DebouncedImage } from "../debounced-image";
 import { CountrySelect } from "../modal/country-select";
 import { ControlledTimeInput } from "../time-input";
-import { VirtualizedCombobox } from "../virtualized-combobox";
+import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 
 export const UpdateLocationSchema = RequestInsertSchema.extend({
   badImage: z.boolean().default(false),

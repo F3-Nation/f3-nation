@@ -8,7 +8,7 @@ import { filterStore } from "~/utils/store/filter";
 import { mapStore } from "~/utils/store/map";
 import { searchStore } from "~/utils/store/search";
 import { closePanel, setSelectedItem } from "~/utils/store/selected-item";
-import { ImageWithFallback } from "../image-with-fallback";
+import { ImageWithFallback } from "@acme/ui/image-with-fallback";
 
 export const onClickF3RegionRow = (result: F3RegionMapSearchResult) => {
   searchStore.setState({ shouldShowResults: false });

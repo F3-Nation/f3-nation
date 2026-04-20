@@ -7,6 +7,7 @@ export default {
       'always',
       [
         // apps
+        'admin',
         'map',
 
         // apps & packages (exist in both apps/ and packages/)

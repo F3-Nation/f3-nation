@@ -1,0 +1,20 @@
+"use client";
+
+import { VersionInfo } from "~/app/_components/version-info";
+import { AuthContent } from "../components/auth-components";
+
+export const SignIn = () => {
+  return (
+    <div className="flex max-w-md flex-col gap-4 mx-auto">
+      <div className="flex flex-col items-center">
+        <h2 className="mt-2 text-center text-3xl font-semibold">
+          Sign in to F3 Nation Admin
+        </h2>
+      </div>
+      <AuthContent callbackUrl={"/"} withWrapper={true} />
+      <div className="my-4 flex w-full justify-center">
+        <VersionInfo />
+      </div>
+    </div>
+  );
+};
