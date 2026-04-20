@@ -93,9 +93,9 @@ export const mailRouter = {
             description: String(data.description ?? "Test Description"),
           });
         } else if (template === Templates.mapChangeRequest) {
-          const baseUrl = env.NEXT_PUBLIC_MAP_URL?.endsWith("/")
-            ? env.NEXT_PUBLIC_MAP_URL.slice(0, -1)
-            : env.NEXT_PUBLIC_MAP_URL ?? "";
+          const adminBaseUrl = env.NEXT_PUBLIC_ADMIN_URL?.endsWith("/")
+            ? env.NEXT_PUBLIC_ADMIN_URL.slice(0, -1)
+            : env.NEXT_PUBLIC_ADMIN_URL ?? "";
 
           await mail.sendTemplateMessages(Templates.mapChangeRequest, {
             to,
@@ -103,9 +103,7 @@ export const mailRouter = {
             workoutName: String(data.workoutName ?? "Test Workout"),
             requestType: String(data.requestType ?? "Update"),
             submittedBy: String(data.submittedBy ?? "Test User"),
-            requestsUrl: String(
-              data.requestsUrl ?? `${baseUrl}/admin/requests`,
-            ),
+            requestsUrl: String(data.requestsUrl ?? `${adminBaseUrl}/requests`),
             noAdminsNotice: Boolean(data.noAdminsNotice),
             recipientRole: data.recipientRole
               ? String(data.recipientRole)
@@ -167,16 +165,16 @@ export const mailRouter = {
           description: String(data.description ?? "Test Description"),
         });
       } else if (template === Templates.mapChangeRequest) {
-        const baseUrl = env.NEXT_PUBLIC_MAP_URL?.endsWith("/")
-          ? env.NEXT_PUBLIC_MAP_URL.slice(0, -1)
-          : env.NEXT_PUBLIC_MAP_URL ?? "";
+        const adminBaseUrl = env.NEXT_PUBLIC_ADMIN_URL?.endsWith("/")
+          ? env.NEXT_PUBLIC_ADMIN_URL?.slice(0, -1)
+          : env.NEXT_PUBLIC_ADMIN_URL ?? "";
 
         html = mail.getTemplate(Templates.mapChangeRequest, {
           regionName: String(data.regionName ?? "Test Region"),
           workoutName: String(data.workoutName ?? "Test Workout"),
           requestType: String(data.requestType ?? "Update"),
           submittedBy: String(data.submittedBy ?? "Test User"),
-          requestsUrl: String(data.requestsUrl ?? `${baseUrl}/admin/requests`),
+          requestsUrl: String(data.requestsUrl ?? `${adminBaseUrl}/requests`),
           noAdminsNotice: Boolean(data.noAdminsNotice),
           recipientRole: data.recipientRole
             ? String(data.recipientRole)
