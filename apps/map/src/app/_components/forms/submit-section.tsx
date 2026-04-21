@@ -10,6 +10,7 @@ import { Spinner } from "@acme/ui/spinner";
 import { toast } from "@acme/ui/toast";
 
 import { invalidateQueries, orpc, useMutation, useQuery } from "~/orpc/react";
+import type { RouterOutputs } from "~/orpc/types";
 import { closeModal } from "~/utils/store/modal";
 import { DevLoadTestData } from "../forms/dev-debug-component";
 import { handleSubmissionError } from "../modal/utils/handle-submission-error";
@@ -48,6 +49,8 @@ interface PermissionMessageProps {
   isReview?: boolean;
 }
 
+type CanEditRegionsResult = RouterOutputs["request"]["canEditRegions"];
+
 // ==================== Custom Hooks ====================
 
 /**
@@ -69,13 +72,13 @@ function useRegionPermissions(params: {
     }),
   );
 
-  const canEdit = useMemo(
-    () =>
-      Array.isArray(canEditRegion) && canEditRegion.length > 0
-        ? canEditRegion.every((result) => result.success)
-        : false,
-    [canEditRegion],
-  );
+  const permissionResults: CanEditRegionsResult["results"] =
+    canEditRegion?.results ?? [];
+
+  const canEdit =
+    permissionResults.length > 0
+      ? permissionResults.every((result) => result.success)
+      : false;
 
   return { canEdit };
 }

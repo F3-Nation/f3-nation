@@ -46,9 +46,7 @@ export function RegionAOEventSelector<
         <AOSelector<_T>
           label={aoLabel}
           fieldName={aoFieldName}
-          regionFieldName={
-            regionFieldName as "originalRegionId" | "newRegionId"
-          }
+          regionFieldName={regionFieldName}
         />
         <EventSelector<_T>
           label={eventLabel}

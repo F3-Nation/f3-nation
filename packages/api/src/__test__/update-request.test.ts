@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type * as aoHandlers from "../lib/ao-handlers";
+import type * as eventHandlers from "../lib/event-handlers";
+import type * as locationHandlers from "../lib/location-handlers";
 
 import {
   handleCreateEvent,
@@ -40,35 +43,61 @@ vi.mock("@acme/db", () => ({
 }));
 
 // Mock the handler dependencies
-const mockInsertLocation = vi.fn();
-const mockUpdateLocation = vi.fn();
-const mockCreateAO = vi.fn();
-const mockUpdateAO = vi.fn();
-const mockInsertEvent = vi.fn();
-const mockUpdateEvent = vi.fn();
-const mockUpdateEventTypes = vi.fn();
+const mockInsertLocation = vi.fn<
+  Parameters<typeof locationHandlers.insertLocation>,
+  ReturnType<typeof locationHandlers.insertLocation>
+>();
+const mockUpdateLocation = vi.fn<
+  Parameters<typeof locationHandlers.updateLocation>,
+  ReturnType<typeof locationHandlers.updateLocation>
+>();
+const mockCreateAO = vi.fn<
+  Parameters<typeof aoHandlers.createAO>,
+  ReturnType<typeof aoHandlers.createAO>
+>();
+const mockUpdateAO = vi.fn<
+  Parameters<typeof aoHandlers.updateAO>,
+  ReturnType<typeof aoHandlers.updateAO>
+>();
+const mockInsertEvent = vi.fn<
+  Parameters<typeof eventHandlers.insertEvent>,
+  ReturnType<typeof eventHandlers.insertEvent>
+>();
+const mockUpdateEvent = vi.fn<
+  Parameters<typeof eventHandlers.updateEvent>,
+  ReturnType<typeof eventHandlers.updateEvent>
+>();
+const mockUpdateEventTypes = vi.fn<
+  Parameters<typeof eventHandlers.updateEventTypes>,
+  ReturnType<typeof eventHandlers.updateEventTypes>
+>();
+
+type InsertLocationResult = Awaited<
+  ReturnType<typeof locationHandlers.insertLocation>
+>;
+type InsertEventResult = Awaited<ReturnType<typeof eventHandlers.insertEvent>>;
 
 vi.mock("../lib/location-handlers", () => ({
-  insertLocation: (...args: unknown[]) => mockInsertLocation(...args),
-  updateLocation: (...args: unknown[]) => mockUpdateLocation(...args),
+  insertLocation: mockInsertLocation,
+  updateLocation: mockUpdateLocation,
 }));
 
 vi.mock("../lib/ao-handlers", () => ({
-  createAO: (...args: unknown[]) => mockCreateAO(...args),
-  updateAO: (...args: unknown[]) => mockUpdateAO(...args),
+  createAO: mockCreateAO,
+  updateAO: mockUpdateAO,
 }));
 
 vi.mock("../lib/event-handlers", () => ({
-  insertEvent: (...args: unknown[]) => mockInsertEvent(...args),
-  updateEvent: (...args: unknown[]) => mockUpdateEvent(...args),
-  updateEventTypes: (...args: unknown[]) => mockUpdateEventTypes(...args),
+  insertEvent: mockInsertEvent,
+  updateEvent: mockUpdateEvent,
+  updateEventTypes: mockUpdateEventTypes,
 }));
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockInsertLocation.mockResolvedValue({ id: 100 });
+  mockInsertLocation.mockResolvedValue({ id: 100 } as InsertLocationResult);
   mockCreateAO.mockResolvedValue(200);
-  mockInsertEvent.mockResolvedValue({ id: 300 });
+  mockInsertEvent.mockResolvedValue({ id: 300 } as InsertEventResult);
   mockUpdateEventTypes.mockResolvedValue(undefined);
 });
 
@@ -132,7 +161,10 @@ describe("handleCreateLocationAndEvent - creates a new AO with location and even
 
     const result = await recordUpdateRequest({
       ctx,
-      updateRequest: request,
+      updateRequest: {
+        ...request,
+        eventDayOfWeek: "monday",
+      },
       status: "approved",
     });
 
@@ -199,7 +231,10 @@ describe("handleCreateEvent - adds event to an existing AO and location", () => 
 
     const result = await recordUpdateRequest({
       ctx,
-      updateRequest: request,
+      updateRequest: {
+        ...request,
+        eventDayOfWeek: "monday",
+      },
       status: "approved",
     });
 
@@ -409,7 +444,10 @@ describe("handleMoveAOToDifferentRegion - moves an AO to a different region", ()
 
     const result = await recordUpdateRequest({
       ctx,
-      updateRequest: request,
+      updateRequest: {
+        ...request,
+        eventDayOfWeek: "monday",
+      },
       status: "approved",
     });
 
@@ -449,7 +487,10 @@ describe("handleMoveAOToDifferentLocation - moves an AO to a different location"
 
     const result = await recordUpdateRequest({
       ctx,
-      updateRequest: request,
+      updateRequest: {
+        ...request,
+        eventDayOfWeek: "monday",
+      },
       status: "approved",
     });
 
@@ -507,7 +548,10 @@ describe("handleMoveAOToNewLocation - moves an AO to a new location", () => {
 
     const result = await recordUpdateRequest({
       ctx,
-      updateRequest: request,
+      updateRequest: {
+        ...request,
+        eventDayOfWeek: "monday",
+      },
       status: "approved",
     });
 
@@ -558,7 +602,10 @@ describe("handleMoveEventToDifferentAO - moves an event to a different AO", () =
 
     const result = await recordUpdateRequest({
       ctx,
-      updateRequest: request,
+      updateRequest: {
+        ...request,
+        eventDayOfWeek: "monday",
+      },
       status: "approved",
     });
 
@@ -622,7 +669,10 @@ describe("handleDeleteEvent - soft deletes an event", () => {
 
     const result = await recordUpdateRequest({
       ctx,
-      updateRequest: deleteRequest,
+      updateRequest: {
+        ...deleteRequest,
+        eventDayOfWeek: "monday",
+      },
       status: "approved",
     });
 
@@ -675,7 +725,10 @@ describe("handleDeleteAO - soft deletes an AO and its events", () => {
 
     const result = await recordUpdateRequest({
       ctx,
-      updateRequest: deleteRequest,
+      updateRequest: {
+        ...deleteRequest,
+        eventDayOfWeek: "monday",
+      },
       status: "approved",
     });
 
@@ -720,7 +773,9 @@ describe("rejectSubmission - rejects a pending update request", () => {
     );
 
     // Simulate rejecting the request by calling db.update
-    await mockDb.update({}).set({ status: "rejected" }).where({});
+    mockDb._mocks.mockUpdate({});
+    mockDb._mocks.mockSet({ status: "rejected" });
+    await mockDb._mocks.mockWhere({});
 
     // Verify db.update was called to set status to rejected
     expect(mockDb._mocks.mockUpdate).toHaveBeenCalledTimes(1);

@@ -41,7 +41,7 @@ export const ControlledTimeInput = <T extends FieldValues>({
               onChange={(e) => {
                 const timeValue = e.target.value;
                 // Convert "05:30" -> "0530" before storing in form
-                if (timeValue && timeValue.includes(":")) {
+                if (timeValue.includes(":")) {
                   const [h, m] = timeValue.split(":");
                   field.onChange(
                     (h?.padStart(2, "0") ?? "") + (m?.padStart(2, "0") ?? ""),
