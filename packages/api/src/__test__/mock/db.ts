@@ -25,33 +25,35 @@ export const createMockDb = () => {
     };
   });
 
-  const mockValues = vi.fn().mockImplementation((data: Record<string, unknown>) => {
-    // Store the data in our mock database
-    const id = (data.id as string) || `generated-${Date.now()}`;
-    const record = {
-      ...data,
-      id,
-      created: new Date().toISOString(),
-    };
+  const mockValues = vi
+    .fn()
+    .mockImplementation((data: Record<string, unknown>) => {
+      // Store the data in our mock database
+      const id = (data.id as string) || `generated-${Date.now()}`;
+      const record = {
+        ...data,
+        id,
+        created: new Date().toISOString(),
+      };
 
-    // Check if record exists (for upsert)
-    const existingRecord = mockDatabase.get(id);
-    if (existingRecord) {
-      // Update existing record
-      Object.assign(existingRecord, record);
-      mockDatabase.set(id, existingRecord);
-    } else {
-      // Insert new record
-      mockDatabase.set(id, record);
-    }
+      // Check if record exists (for upsert)
+      const existingRecord = mockDatabase.get(id);
+      if (existingRecord) {
+        // Update existing record
+        Object.assign(existingRecord, record);
+        mockDatabase.set(id, existingRecord);
+      } else {
+        // Insert new record
+        mockDatabase.set(id, record);
+      }
 
-    return {
-      onConflictDoUpdate: mockOnConflictDoUpdate.mockImplementation(() => ({
-        returning: vi.fn().mockResolvedValue([mockDatabase.get(id)]),
-      })),
-      returning: mockReturning.mockResolvedValue([mockDatabase.get(id)]),
-    };
-  });
+      return {
+        onConflictDoUpdate: mockOnConflictDoUpdate.mockImplementation(() => ({
+          returning: vi.fn().mockResolvedValue([mockDatabase.get(id)]),
+        })),
+        returning: mockReturning.mockResolvedValue([mockDatabase.get(id)]),
+      };
+    });
 
   const mockInsert = vi.fn().mockReturnValue({
     values: mockValues,
@@ -109,4 +111,3 @@ export const clearMockDatabase = () => {
  * Gets the current state of the mock database.
  */
 export const getMockDatabase = () => mockDatabase;
-
