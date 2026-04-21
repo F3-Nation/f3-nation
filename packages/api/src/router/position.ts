@@ -459,9 +459,7 @@ export const positionRouter = {
       // Group assignments by position
       const assignmentsByPosition = assignments.reduce(
         (acc, a) => {
-          if (!acc[a.positionId]) {
-            acc[a.positionId] = [];
-          }
+          acc[a.positionId] ??= [];
           acc[a.positionId]!.push({
             id: a.userId,
             f3Name: a.f3Name,

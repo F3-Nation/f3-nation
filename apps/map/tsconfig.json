@@ -6,6 +6,7 @@
     "paths": {
       "~/*": ["./src/*"]
     },
+    // Required for .css module type declarations (tooling/typescript/type-extensions.d.ts)
     "allowArbitraryExtensions": true,
     "plugins": [{ "name": "next" }],
     "tsBuildInfoFile": "node_modules/.cache/tsbuildinfo.json",

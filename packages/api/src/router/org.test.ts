@@ -466,7 +466,7 @@ describe("Org Router", () => {
 
       // Create future instances (should be soft-deleted)
       const futureInstanceIds: number[] = [];
-      for (const date of ["2026-04-06", "2026-04-13", "2026-04-20"]) {
+      for (const date of ["2030-01-06", "2030-01-13", "2030-01-20"]) {
         const [inst] = await db
           .insert(schema.eventInstances)
           .values({
@@ -510,7 +510,7 @@ describe("Org Router", () => {
         .where(
           and(
             eq(schema.eventInstances.orgId, ao.id),
-            gte(schema.eventInstances.startDate, "2026-03-25"),
+            gte(schema.eventInstances.startDate, "2029-12-31"),
           ),
         );
       expect(futureInstances.length).toBeGreaterThanOrEqual(3);

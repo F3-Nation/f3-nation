@@ -1533,7 +1533,7 @@ describe("Event Router", () => {
             locationId: location.id,
             startTime: "0530",
             endTime: "0615",
-            startDate: "2026-04-07",
+            startDate: "2030-01-07",
             isActive: true,
             highlight: false,
             seriesId: seriesEvent.id,

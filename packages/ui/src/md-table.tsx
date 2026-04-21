@@ -226,8 +226,7 @@ export const MDTable = <T,>(params: MDTableProps<T>) => {
               Download CSV
             </button>
           ) : null}
-          {/* eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing */}
-          {filterComponent ? filterComponent : null}
+          {filterComponent ?? null}
         </div>
         <div className="ml-2">
           <DropdownMenu>
