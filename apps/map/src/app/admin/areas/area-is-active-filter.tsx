@@ -48,13 +48,13 @@ export const AreaIsActiveFilter = ({
                   key={status}
                   value={status}
                   onSelect={() => {
-                    onStatusSelect(status as IsActiveStatus);
+                    onStatusSelect(status);
                   }}
                 >
                   <Check
                     className={cn(
                       "mr-2 h-4 w-4",
-                      selectedStatuses.includes(status as IsActiveStatus)
+                      selectedStatuses.includes(status)
                         ? "opacity-100"
                         : "opacity-0",
                     )}

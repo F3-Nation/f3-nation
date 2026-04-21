@@ -23,6 +23,7 @@ import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
+import { notifyMapDataChange } from "../lib/webhook-events";
 import { adminProcedure, editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
@@ -31,13 +32,39 @@ export const locationRouter = {
     .input(
       z
         .object({
-          searchTerm: z.string().optional(),
-          pageIndex: z.coerce.number().optional(),
-          pageSize: z.coerce.number().optional(),
-          sorting: parseSorting(),
-          statuses: arrayOrSingle(z.enum(IsActiveStatus)).optional(),
-          regionIds: arrayOrSingle(z.coerce.number()).optional(),
-          onlyMine: z.coerce.boolean().optional(),
+          searchTerm: z
+            .string()
+            .optional()
+            .describe(
+              "Search locations by name or description. Case-insensitive partial matching.",
+            ),
+          pageIndex: z.coerce
+            .number()
+            .optional()
+            .describe("Zero-based page index for pagination. Defaults to 0."),
+          pageSize: z.coerce
+            .number()
+            .optional()
+            .describe("Number of locations per page. Defaults to 10."),
+          sorting: parseSorting().describe(
+            "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: id, locationName, regionName, isActive, latitude, longitude, addressStreet, addressCity, addressState, addressZip, created.",
+          ),
+          statuses: arrayOrSingle(z.enum(IsActiveStatus))
+            .optional()
+            .describe(
+              "Filter locations by status. Matches locations with ANY of the given statuses (active, inactive).",
+            ),
+          regionIds: arrayOrSingle(z.coerce.number())
+            .optional()
+            .describe(
+              "Filter locations by region ID(s). Returns locations in ANY of the specified regions.",
+            ),
+          onlyMine: z.coerce
+            .boolean()
+            .optional()
+            .describe(
+              "If true, only return locations in organizations where the requester has editor or admin role.",
+            ),
         })
         .optional(),
     )
@@ -49,6 +76,50 @@ export const locationRouter = {
       description:
         "Get a paginated list of workout locations with optional filtering and sorting",
     })
+    .output(
+      z.object({
+        locations: z.array(
+          z.object({
+            id: z.number().describe("Location ID"),
+            locationName: z.string().describe("Location name"),
+            regionId: z.number().nullable().describe("Region ID"),
+            regionName: z.string().nullable().describe("Region name"),
+            description: z.string().nullable().describe("Location description"),
+            isActive: z.boolean().describe("Whether the location is active"),
+            latitude: z.number().nullable().describe("Location latitude"),
+            longitude: z.number().nullable().describe("Location longitude"),
+            email: z.string().nullable().describe("Location email"),
+            addressStreet: z
+              .string()
+              .nullable()
+              .describe("Location address street"),
+            addressStreet2: z
+              .string()
+              .nullable()
+              .describe("Location address street 2"),
+            addressCity: z
+              .string()
+              .nullable()
+              .describe("Location address city"),
+            addressState: z
+              .string()
+              .nullable()
+              .describe("Location address state"),
+            addressZip: z.string().nullable().describe("Location address zip"),
+            addressCountry: z
+              .string()
+              .nullable()
+              .describe("Location address country"),
+            meta: z
+              .record(z.unknown())
+              .nullable()
+              .describe("Location metadata"),
+            created: z.string().describe("Location creation date"),
+          }),
+        ),
+        totalCount: z.number().describe("Total number of locations"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const regionOrg = aliasedTable(schema.orgs, "region_org");
       const limit = input?.pageSize ?? 10;
@@ -106,7 +177,7 @@ export const locationRouter = {
         input?.sorting,
         {
           id: schema.locations.id,
-          name: schema.locations.name,
+          locationName: schema.locations.name,
           regionName: regionOrg.name,
           isActive: schema.locations.isActive,
           latitude: schema.locations.latitude,
@@ -161,14 +232,64 @@ export const locationRouter = {
     }),
 
   byId: protectedProcedure
-    .input(z.object({ id: z.coerce.number() }))
+    .input(
+      z.object({
+        id: z.coerce.number().describe("The unique identifier of the location"),
+      }),
+    )
     .route({
       method: "GET",
       path: "/id/{id}",
       tags: ["location"],
       summary: "Get location by ID",
-      description: "Retrieve detailed information about a specific location",
+      description:
+        "Retrieve detailed information about a specific location including its address, coordinates, and metadata",
     })
+    .output(
+      z.object({
+        location: z
+          .object({
+            id: z.number().describe("Location ID"),
+            locationName: z.string().describe("Location name"),
+            description: z.string().nullable().describe("Location description"),
+            isActive: z.boolean().describe("Whether the location is active"),
+            created: z.string().describe("Location creation date"),
+            orgId: z.number().describe("Organization ID"),
+            regionId: z.number().nullable().describe("Region ID"),
+            regionName: z.string().nullable().describe("Region name"),
+            email: z.string().nullable().describe("Location email"),
+            latitude: z.number().nullable().describe("Location latitude"),
+            longitude: z.number().nullable().describe("Location longitude"),
+            addressStreet: z
+              .string()
+              .nullable()
+              .describe("Location address street"),
+            addressStreet2: z
+              .string()
+              .nullable()
+              .describe("Location address street 2"),
+            addressCity: z
+              .string()
+              .nullable()
+              .describe("Location address city"),
+            addressState: z
+              .string()
+              .nullable()
+              .describe("Location address state"),
+            addressZip: z.string().nullable().describe("Location address zip"),
+            addressCountry: z
+              .string()
+              .nullable()
+              .describe("Location address country"),
+            meta: z
+              .record(z.unknown())
+              .nullable()
+              .describe("Location metadata"),
+          })
+          .nullable()
+          .describe("The location"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const regionOrg = aliasedTable(schema.orgs, "region_org");
       const [location] = await ctx.db
@@ -205,8 +326,53 @@ export const locationRouter = {
       path: "/",
       tags: ["location"],
       summary: "Create or update location",
-      description: "Create a new location or update an existing one",
+      description:
+        "Create a new location or update an existing one. Requires editor role for the location's organization. If id is provided, updates the existing location; otherwise creates a new one.",
     })
+    .output(
+      z.object({
+        location: z
+          .object({
+            id: z.number().describe("Location ID"),
+            orgId: z.number().describe("Organization ID"),
+            name: z.string().describe("Location name"),
+            description: z.string().nullable().describe("Location description"),
+            isActive: z.boolean().describe("Whether the location is active"),
+            latitude: z.number().nullable().describe("Location latitude"),
+            longitude: z.number().nullable().describe("Location longitude"),
+            addressStreet: z
+              .string()
+              .nullable()
+              .describe("Location address street"),
+            addressStreet2: z
+              .string()
+              .nullable()
+              .describe("Location address street 2"),
+            addressCity: z
+              .string()
+              .nullable()
+              .describe("Location address city"),
+            addressState: z
+              .string()
+              .nullable()
+              .describe("Location address state"),
+            addressZip: z.string().nullable().describe("Location address zip"),
+            email: z.string().nullable().describe("Location email"),
+            addressCountry: z
+              .string()
+              .nullable()
+              .describe("Location address country"),
+            meta: z
+              .record(z.unknown())
+              .nullable()
+              .describe("Location metadata"),
+            created: z.string().describe("Location creation date"),
+            updated: z.string().describe("Location last updated date"),
+          })
+          .nullable()
+          .describe("The location"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const [existingLocation] = input.id
         ? await ctx.db
@@ -245,17 +411,40 @@ export const locationRouter = {
           set: locationToCrupdate,
         })
         .returning();
+
+      // Notify webhooks and invalidate cache about the location change
+      if (result) {
+        notifyMapDataChange({
+          type: input.id ? "location.updated" : "location.created",
+          locationId: result.id,
+        });
+      }
+
       return { location: result ?? null };
     }),
   delete: adminProcedure
-    .input(z.object({ id: z.number() }))
+    .input(
+      z.object({
+        id: z.coerce
+          .number()
+          .describe("The unique identifier of the location to delete"),
+      }),
+    )
     .route({
       method: "DELETE",
       path: "/delete/{id}",
       tags: ["location"],
       summary: "Delete location",
-      description: "Soft delete a location by marking it as inactive",
+      description:
+        "Soft delete a location by marking it as inactive. Requires admin role for the location's organization.",
     })
+    .output(
+      z.object({
+        locationId: z.coerce
+          .number()
+          .describe("The unique identifier of the location that was deleted"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const [location] = await ctx.db
         .select()
@@ -289,18 +478,40 @@ export const locationRouter = {
           ),
         );
 
+      // Notify webhooks and invalidate cache about the location deletion
+      notifyMapDataChange({ type: "location.deleted", locationId: input.id });
+
       return { locationId: input.id };
     }),
 
   inBoundingBox: protectedProcedure
     .input(
       z.object({
-        minLat: z.coerce.number(),
-        maxLat: z.coerce.number(),
-        minLng: z.coerce.number(),
-        maxLng: z.coerce.number(),
-        since: z.string().datetime().optional(),
-        isActive: z.coerce.boolean().optional(),
+        minLat: z.coerce
+          .number()
+          .describe("Minimum latitude of the bounding box"),
+        maxLat: z.coerce
+          .number()
+          .describe("Maximum latitude of the bounding box"),
+        minLng: z.coerce
+          .number()
+          .describe("Minimum longitude of the bounding box"),
+        maxLng: z.coerce
+          .number()
+          .describe("Maximum longitude of the bounding box"),
+        since: z
+          .string()
+          .datetime()
+          .optional()
+          .describe(
+            "ISO 8601 datetime. Only return locations created after this time.",
+          ),
+        isActive: z.coerce
+          .boolean()
+          .optional()
+          .describe(
+            "Filter locations by status. If not specified, returns all statuses.",
+          ),
       }),
     )
     .route({
@@ -309,8 +520,71 @@ export const locationRouter = {
       tags: ["location"],
       summary: "Get locations in bounding box",
       description:
-        "Retrieve locations within a geographic bounding box, optionally filtered by creation date",
+        "Retrieve locations within a geographic bounding box, optionally filtered by creation date and status. Useful for map viewport queries.",
     })
+    .output(
+      z.object({
+        locations: z.array(
+          z.object({
+            id: z.number().describe("Location ID"),
+            locationName: z.string().describe("Location name"),
+            regionId: z.number().nullable().describe("Region ID"),
+            regionName: z.string().nullable().describe("Region name"),
+            description: z.string().nullable().describe("Location description"),
+            isActive: z.boolean().describe("Whether the location is active"),
+            latitude: z.number().nullable().describe("Location latitude"),
+            longitude: z.number().nullable().describe("Location longitude"),
+            email: z.string().nullable().describe("Location email"),
+            addressStreet: z
+              .string()
+              .nullable()
+              .describe("Location address street"),
+            addressStreet2: z
+              .string()
+              .nullable()
+              .describe("Location address street 2"),
+            addressCity: z
+              .string()
+              .nullable()
+              .describe("Location address city"),
+            addressState: z
+              .string()
+              .nullable()
+              .describe("Location address state"),
+            addressZip: z.string().nullable().describe("Location address zip"),
+            addressCountry: z
+              .string()
+              .nullable()
+              .describe("Location address country"),
+            meta: z
+              .record(z.unknown())
+              .nullable()
+              .describe("Location metadata"),
+            created: z.string().describe("Location creation date"),
+          }),
+        ),
+        count: z.number().describe("Total number of locations"),
+        boundingBox: z
+          .object({
+            minLat: z.number().describe("Minimum latitude of the bounding box"),
+            maxLat: z.number().describe("Maximum latitude of the bounding box"),
+            minLng: z
+              .number()
+              .describe("Minimum longitude of the bounding box"),
+            maxLng: z
+              .number()
+              .describe("Maximum longitude of the bounding box"),
+          })
+          .describe("Bounding box"),
+        since: z
+          .string()
+          .datetime()
+          .nullable()
+          .describe(
+            "ISO 8601 datetime. Only return locations created after this time.",
+          ),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const regionOrg = aliasedTable(schema.orgs, "region_org");
 

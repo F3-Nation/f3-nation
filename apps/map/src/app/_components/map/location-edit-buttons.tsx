@@ -112,9 +112,9 @@ export const LocationEditButtons = ({
                     eventId,
                     aoId,
                     meta: {
-                      newRegionId: workoutInfo?.location.regionId ?? undefined,
+                      newRegionId: workoutInfo?.location?.regionId ?? undefined,
                       newAoId:
-                        workoutInfo?.location.events[0]?.aoId ?? undefined,
+                        workoutInfo?.location?.events[0]?.aoId ?? undefined,
                     },
                   });
                 }}
@@ -136,9 +136,9 @@ export const LocationEditButtons = ({
                     eventId,
                     aoId,
                     meta: {
-                      newRegionId: workoutInfo?.location.regionId ?? undefined,
+                      newRegionId: workoutInfo?.location?.regionId ?? undefined,
                       newAoId:
-                        workoutInfo?.location.events[0]?.aoId ?? undefined,
+                        workoutInfo?.location?.events[0]?.aoId ?? undefined,
                     },
                   });
                 }}
@@ -237,7 +237,7 @@ export const LocationEditButtons = ({
                 eventId,
                 aoId,
                 meta: {
-                  newRegionId: workoutInfo?.location.regionId ?? undefined,
+                  newRegionId: workoutInfo?.location?.regionId ?? undefined,
                 },
               });
             }}

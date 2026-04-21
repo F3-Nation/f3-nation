@@ -1,9 +1,9 @@
 "use client";
 
-import type { SortingState, TableOptions } from "@tanstack/react-table";
-import { useState } from "react";
-import { Check, Filter, X } from "lucide-react";
 import { DotsHorizontalIcon } from "@radix-ui/react-icons";
+import type { SortingState, TableOptions } from "@tanstack/react-table";
+import { Check, Filter, X } from "lucide-react";
+import { useState } from "react";
 
 import { IsActiveStatus } from "@acme/shared/app/enums";
 import { dayOfWeekToShortDayOfWeek } from "@acme/shared/app/functions";
@@ -27,11 +27,13 @@ import { MDTable, usePagination } from "@acme/ui/md-table";
 import { Popover, PopoverContent, PopoverTrigger } from "@acme/ui/popover";
 import { Cell, Header } from "@acme/ui/table";
 
-import type { RouterOutputs } from "~/orpc/types";
 import { orpc, useQuery } from "~/orpc/react";
+import type { RouterOutputs } from "~/orpc/types";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
 import { AOSFilter } from "../_components/ao-filter";
+import { MobileFilterSheet } from "../_components/mobile-filter-sheet";
 import { RegionFilter } from "../_components/region-filter";
+import { ResetFilter } from "../_components/reset-filter";
 
 type Org = RouterOutputs["org"]["all"]["orgs"][number];
 
@@ -46,7 +48,7 @@ export const WorkoutsTable = () => {
   const [onlyMine, setOnlyMine] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const { data: workouts } = useQuery(
-    orpc.event.all.queryOptions({
+    orpc.map.event.all.queryOptions({
       input: {
         pageIndex: pagination.pageIndex,
         pageSize: pagination.pageSize,
@@ -59,6 +61,34 @@ export const WorkoutsTable = () => {
       },
     }),
   );
+
+  const handleResetFilters = () => {
+    setSelectedStatuses(["active"]);
+    setSelectedAos([]);
+    setSelectedRegions([]);
+    setOnlyMine(true);
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+  };
+
+  const activeFilterCount =
+    selectedStatuses.length +
+    selectedAos.length +
+    selectedRegions.length +
+    (onlyMine ? 1 : 0);
+
+  const handleAoSelect = (ao: Org) => {
+    const newAos = selectedAos.some((a) => a.id === ao.id)
+      ? selectedAos.filter((a) => a.id !== ao.id)
+      : [...selectedAos, ao];
+    setSelectedAos(newAos);
+  };
+
+  const handleRegionSelect = (region: Org) => {
+    const newRegions = selectedRegions.some((r) => r.id === region.id)
+      ? selectedRegions.filter((r) => r.id !== region.id)
+      : [...selectedRegions, region];
+    setSelectedRegions(newRegions);
+  };
 
   return (
     <MDTable
@@ -78,39 +108,59 @@ export const WorkoutsTable = () => {
       setSorting={setSorting}
       filterComponent={
         <>
-          <FilterComponent
-            selectedStatuses={selectedStatuses}
-            setSelectedStatuses={setSelectedStatuses}
-            onlyMine={onlyMine}
-            setOnlyMine={setOnlyMine}
-          />
-          <AOSFilter
-            onAoSelect={(ao) => {
-              const newAos = selectedAos.some((a) => a.id === ao.id)
-                ? selectedAos.filter((a) => a.id !== ao.id)
-                : [...selectedAos, ao];
-              setSelectedAos(newAos);
-            }}
-            selectedAos={selectedAos}
-          />
-          <RegionFilter
-            onRegionSelect={(region) => {
-              const newRegions = selectedRegions.some((r) => r.id === region.id)
-                ? selectedRegions.filter((r) => r.id !== region.id)
-                : [...selectedRegions, region];
-              setSelectedRegions(newRegions);
-            }}
-            selectedRegions={selectedRegions}
-          />
+          {/* Desktop: inline filters */}
+          <div className="hidden items-center gap-2 md:flex">
+            <FilterComponent
+              selectedStatuses={selectedStatuses}
+              setSelectedStatuses={setSelectedStatuses}
+              onlyMine={onlyMine}
+              setOnlyMine={setOnlyMine}
+            />
+            <AOSFilter onAoSelect={handleAoSelect} selectedAos={selectedAos} />
+            <RegionFilter
+              onRegionSelect={handleRegionSelect}
+              selectedRegions={selectedRegions}
+            />
+            <ResetFilter onClick={handleResetFilters} />
+          </div>
+          {/* Mobile: sheet-based filters */}
+          <MobileFilterSheet
+            activeFilterCount={activeFilterCount}
+            onReset={handleResetFilters}
+          >
+            <div>
+              <p className="mb-1 text-sm font-medium">Status</p>
+              <FilterComponent
+                selectedStatuses={selectedStatuses}
+                setSelectedStatuses={setSelectedStatuses}
+                onlyMine={onlyMine}
+                setOnlyMine={setOnlyMine}
+              />
+            </div>
+            <div>
+              <p className="mb-1 text-sm font-medium">AO</p>
+              <AOSFilter
+                onAoSelect={handleAoSelect}
+                selectedAos={selectedAos}
+              />
+            </div>
+            <div>
+              <p className="mb-1 text-sm font-medium">Region</p>
+              <RegionFilter
+                onRegionSelect={handleRegionSelect}
+                selectedRegions={selectedRegions}
+              />
+            </div>
+          </MobileFilterSheet>
         </>
       }
     />
   );
 };
 
-const columns: TableOptions<
-  RouterOutputs["event"]["all"]["events"][number]
->["columns"] = [
+type WorkoutEvent = RouterOutputs["map"]["event"]["all"]["events"][number];
+
+const columns: TableOptions<WorkoutEvent>["columns"] = [
   {
     accessorKey: "name",
     meta: { name: "Event Name" },
@@ -123,20 +173,25 @@ const columns: TableOptions<
     header: Header,
     cell: (cell) => (
       <Cell {...cell}>
-        {cell.row.original.regions
-          .map((region) => region.regionName)
-          .join(", ")}
+        {Array.isArray(cell.row.original.regions)
+          ? cell.row.original.regions
+              .map((region) => region.regionName ?? "")
+              .filter(Boolean)
+              .join(", ")
+          : ""}
       </Cell>
     ),
   },
   {
-    accessorKey: "ao",
+    accessorKey: "parent",
     meta: { name: "AO" },
     header: Header,
     cell: (cell) => (
       <Cell {...cell}>
         {/* {cell.row.original.parents.map((ao) => ao.aoName).join(", ")} */}
-        {cell.row.original.parent}
+        {typeof cell.row.original.parent === "string"
+          ? cell.row.original.parent
+          : ""}
       </Cell>
     ),
   },
@@ -168,6 +223,26 @@ const columns: TableOptions<
             }`}
           >
             {row.original.isActive ? "Active" : "Inactive"}
+          </span>
+        </div>
+      );
+    },
+  },
+  {
+    accessorKey: "isPrivate",
+    meta: { name: "Visibility" },
+    header: Header,
+    cell: ({ row }) => {
+      return (
+        <div className="flex items-center justify-start">
+          <span
+            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${
+              row.original.isPrivate
+                ? "border-amber-200 bg-amber-100 text-amber-700"
+                : "border-blue-200 bg-blue-100 text-blue-700"
+            }`}
+          >
+            {row.original.isPrivate ? "Private" : "Public"}
           </span>
         </div>
       );

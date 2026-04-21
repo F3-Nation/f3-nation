@@ -19,7 +19,15 @@ export const env = createEnv({
     NEXT_PUBLIC_GIT_COMMIT_HASH: z.string().optional(),
     NEXT_PUBLIC_GIT_BRANCH: z.string().optional(),
     NEXT_PUBLIC_GA_MEASUREMENT_ID: z.string().optional(),
-    NEXT_PUBLIC_MAP_API_KEY: z.string().min(1),
+    // Required in non-development environments, optional in development
+    NEXT_PUBLIC_MAP_API_KEY: z
+      .string()
+      .min(1)
+      .optional()
+      .refine(
+        (val) => process.env.NODE_ENV === "development" || val !== undefined,
+        { message: "Required in non-development environments" },
+      ),
   },
   /**
    * Specify your server-side environment variables schema here.

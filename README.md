@@ -1,6 +1,6 @@
-# F3 Nation - PMPM Turbo Monorepo
+# F3 Nation - PNPM Turbo Monorepo
 
-This is a monorepo built with PNPM workspaces and Turbo for managing multiple applications and shared packages.
+This is a monorepo that is built with PNPM workspaces and Turbo for managing multiple applications and shared packages.
 
 ## Monorepo Fundamentals
 
@@ -22,7 +22,7 @@ Each application in the `apps/` directory is a self-contained project:
 - **Shared code access**: Can import from shared packages in the monorepo
 - **Port configuration**: Each app typically runs on its own port
 
-### Using Filter Flags with PMPM Commands
+### Using Filter Flags with PNPM Commands
 
 PNPM provides powerful filtering capabilities to target specific workspaces:
 
@@ -102,10 +102,10 @@ The monorepo leverages Turbo's caching system:
    git clone https://github.com/F3-Nation/f3-nation.git && cd f3-nation
    ```
 
-2. **Install PNPM globally** (if not already installed):
+2. **Enable Corepack** (ships with Node.js 16+, manages package manager versions):
 
    ```bash
-   npm install -g pnpm
+   corepack enable
    ```
 
 3. **Install dependencies**:
@@ -121,7 +121,6 @@ The monorepo leverages Turbo's caching system:
    - **Important**: Environment variables are application-specific. Place the `.env` file in the appropriate application directory, not the monorepo root
    - For the map app: place in `apps/map/.env`
    - See [F3 Nation Map README](apps/map/README.md) for app-specific setup details
-   - For PaxMiner data admin tooling, see [Admin README](apps/admin/README.md)
 
 5. **Start development**:
 
@@ -140,7 +139,6 @@ The monorepo leverages Turbo's caching system:
 | Application          | Directory     | Port | Description                                                                                        |
 | -------------------- | ------------- | ---- | -------------------------------------------------------------------------------------------------- |
 | **F3 Nation Map**    | `apps/map/`   | 3000 | Interactive map application for F3 Nation locations and events - [README](apps/map/README.md)      |
-| **Admin (PaxMiner)** | `apps/admin/` | -    | PaxMiner MySQL admin scripts for backups, migrations, and seeding - [README](apps/admin/README.md) |
 
 ### Future Applications (Planned)
 

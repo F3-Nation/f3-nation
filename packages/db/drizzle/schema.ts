@@ -9,6 +9,7 @@ import {
   integer,
   json,
   pgEnum,
+  pgSchema,
   pgTable,
   primaryKey,
   real,
@@ -28,6 +29,7 @@ import {
   OrgType,
   RegionRole,
   RequestType,
+  SeriesException,
   UpdateRequestStatus,
   UserRole,
   UserStatus,
@@ -47,6 +49,7 @@ export const userRole = pgEnum("user_role", UserRole);
 export const dayOfWeek = pgEnum("day_of_week", DayOfWeek);
 export const eventCadence = pgEnum("event_cadence", EventCadence);
 export const eventCategory = pgEnum("event_category", EventCategory);
+export const seriesException = pgEnum("series_exception", SeriesException);
 export const orgType = pgEnum("org_type", OrgType);
 export const regionRole = pgEnum("region_role", RegionRole);
 export const updateRequestStatus = pgEnum(
@@ -101,6 +104,7 @@ export const eventInstances = pgTable(
     preblastTs: doublePrecision("preblast_ts"),
     backblastTs: doublePrecision("backblast_ts"),
     isPrivate: boolean("is_private").default(false).notNull(),
+    seriesException: seriesException("series_exception"),
     meta: json(),
     created: timestamp({ mode: "string" })
       .default(sql`timezone('utc'::text, now())`)
@@ -122,6 +126,13 @@ export const eventInstances = pgTable(
       "btree",
       table.orgId.asc().nullsLast().op("int4_ops"),
     ),
+    index("idx_event_instances_start_date").using(
+      "btree",
+      table.startDate.asc().nullsLast().op("date_ops"),
+    ),
+    index("idx_event_instances_start_date_active")
+      .using("btree", table.startDate.asc().nullsLast().op("date_ops"))
+      .where(sql`is_active`),
     foreignKey({
       columns: [table.locationId],
       foreignColumns: [locations.id],
@@ -213,6 +224,11 @@ export const slackUsers = pgTable(
       .notNull(),
   },
   (table) => [
+    index("idx_slack_users_user_team_id").using(
+      "btree",
+      table.userId.asc().nullsLast(),
+      table.slackTeamId.asc().nullsLast(),
+    ),
     foreignKey({
       columns: [table.userId],
       foreignColumns: [users.id],
@@ -786,6 +802,10 @@ export const attendanceXAttendanceTypes = pgTable(
     attendanceTypeId: integer("attendance_type_id").notNull(),
   },
   (table) => [
+    index("idx_attendance_x_types_type_id").using(
+      "btree",
+      table.attendanceTypeId.asc().nullsLast().op("int4_ops"),
+    ),
     foreignKey({
       columns: [table.attendanceId],
       foreignColumns: [attendance.id],
@@ -1083,3 +1103,90 @@ export const rolesXApiKeysXOrg = pgTable(
     }),
   ],
 );
+
+// ---------------------------------------------------------------------------
+// Auth schema — OAuth 2.0 / OIDC tables owned by apps/auth
+// ---------------------------------------------------------------------------
+
+export const authProviderSchema = pgSchema("auth");
+
+export const oauthClients = authProviderSchema.table("oauth_clients", {
+  id: text().primaryKey().notNull(),
+  name: text().notNull(),
+  clientSecretHash: text("client_secret_hash").notNull(),
+  redirectUris: text("redirect_uris").notNull(), // JSON array
+  allowedOrigin: text("allowed_origin").notNull(),
+  scopes: text().default("openid profile email"),
+  createdAt: timestamp("created_at", { mode: "string" })
+    .default(sql`timezone('utc'::text, now())`)
+    .notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+});
+
+export const oauthAuthorizationCodes = authProviderSchema.table(
+  "oauth_authorization_codes",
+  {
+    code: text().primaryKey().notNull(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => oauthClients.id),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    redirectUri: text("redirect_uri").notNull(),
+    scopes: text(),
+    codeChallenge: text("code_challenge"),
+    codeChallengeMethod: text("code_challenge_method"),
+    expiresAt: timestamp("expires_at", { mode: "string" }).notNull(),
+    createdAt: timestamp("created_at", { mode: "string" })
+      .default(sql`timezone('utc'::text, now())`)
+      .notNull(),
+  },
+);
+
+export const oauthAccessTokens = authProviderSchema.table(
+  "oauth_access_tokens",
+  {
+    token: text().primaryKey().notNull(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => oauthClients.id),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    scopes: text(),
+    expiresAt: timestamp("expires_at", { mode: "string" }).notNull(),
+    createdAt: timestamp("created_at", { mode: "string" })
+      .default(sql`timezone('utc'::text, now())`)
+      .notNull(),
+  },
+);
+
+export const oauthRefreshTokens = authProviderSchema.table(
+  "oauth_refresh_tokens",
+  {
+    token: text().primaryKey().notNull(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => oauthClients.id),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    expiresAt: timestamp("expires_at", { mode: "string" }).notNull(),
+    createdAt: timestamp("created_at", { mode: "string" })
+      .default(sql`timezone('utc'::text, now())`)
+      .notNull(),
+  },
+);
+
+export const emailMfaCodes = authProviderSchema.table("email_mfa_codes", {
+  id: text().primaryKey().notNull(), // UUID
+  email: text().notNull(),
+  codeHash: text("code_hash").notNull(),
+  expiresAt: timestamp("expires_at", { mode: "string" }).notNull(),
+  consumedAt: timestamp("consumed_at", { mode: "string" }),
+  attemptCount: integer("attempt_count").default(0).notNull(),
+  createdAt: timestamp("created_at", { mode: "string" })
+    .default(sql`timezone('utc'::text, now())`)
+    .notNull(),
+});

@@ -27,7 +27,7 @@ export enum ModalType {
   INFO = "INFO",
   SETTINGS = "SETTINGS",
   ADMIN_USERS = "ADMIN_USERS",
-  ADMIN_GRANT_ACCESS = "ADMIN_GRANT_ACCESS",
+  ADMIN_MANAGE_ACCESS = "ADMIN_MANAGE_ACCESS",
   ADMIN_REQUESTS = "ADMIN_REQUESTS",
   ADMIN_EVENTS = "ADMIN_EVENTS",
   ADMIN_LOCATIONS = "ADMIN_LOCATIONS",
@@ -38,6 +38,7 @@ export enum ModalType {
   ADMIN_AOS = "ADMIN_AOS",
   ADMIN_API_KEYS = "ADMIN_API_KEYS",
   ADMIN_EVENT_TYPES = "ADMIN_EVENT_TYPES",
+  ADMIN_POSITIONS = "ADMIN_POSITIONS",
   ADMIN_DELETE_CONFIRMATION = "ADMIN_DELETE_CONFIRMATION",
   DELETE_CONFIRMATION = "DELETE_CONFIRMATION",
   QR_CODE = "QR_CODE",
@@ -68,6 +69,7 @@ export enum DeleteType {
   REGION = "REGION",
   SECTOR = "SECTOR",
   NATION = "NATION",
+  POSITION = "POSITION",
 }
 
 export const eventDefaults = {
@@ -174,17 +176,36 @@ export interface DataType {
   [ModalType.INFO]: null;
   [ModalType.USER_LOCATION_INFO]: null;
   [ModalType.SETTINGS]: null;
-  [ModalType.ADMIN_USERS]: { id?: number | null };
-  [ModalType.ADMIN_GRANT_ACCESS]: { userId?: number } | null;
-  [ModalType.ADMIN_REQUESTS]: null;
-  [ModalType.ADMIN_EVENTS]: { id?: number | null };
-  [ModalType.ADMIN_EVENT_TYPES]: { id?: number | null };
-  [ModalType.ADMIN_LOCATIONS]: { id?: number | null };
-  [ModalType.ADMIN_NATIONS]: { id?: number | null };
-  [ModalType.ADMIN_SECTORS]: { id?: number | null };
-  [ModalType.ADMIN_AREAS]: { id?: number | null };
-  [ModalType.ADMIN_REGIONS]: { id?: number | null };
-  [ModalType.ADMIN_AOS]: { id?: number | null };
+  [ModalType.ADMIN_USERS]: {
+    id?: number | null;
+  };
+  [ModalType.ADMIN_MANAGE_ACCESS]: {
+    userId?: number;
+  } | null;
+  [ModalType.ADMIN_REQUESTS]: {
+    id: string;
+  };
+  [ModalType.ADMIN_EVENTS]: {
+    id?: number | null;
+  };
+  [ModalType.ADMIN_LOCATIONS]: {
+    id?: number | null;
+  };
+  [ModalType.ADMIN_NATIONS]: {
+    id?: number | null;
+  };
+  [ModalType.ADMIN_SECTORS]: {
+    id?: number | null;
+  };
+  [ModalType.ADMIN_AREAS]: {
+    id?: number | null;
+  };
+  [ModalType.ADMIN_REGIONS]: {
+    id?: number | null;
+  };
+  [ModalType.ADMIN_AOS]: {
+    id?: number | null;
+  };
   [ModalType.ADMIN_API_KEYS]: null;
   [ModalType.ADMIN_DELETE_CONFIRMATION]: { id: number; type: DeleteType };
   [ModalType.DELETE_CONFIRMATION]: { type: DeleteType; onConfirm: () => void };
@@ -201,6 +222,12 @@ export interface DataType {
     alt: string;
   };
   [ModalType.MAP_HELP]: null;
+  [ModalType.ADMIN_EVENT_TYPES]: {
+    id?: number | null;
+  };
+  [ModalType.ADMIN_POSITIONS]: {
+    id?: number | null;
+  };
   [ModalType.SIGN_IN]: {
     callbackUrl?: string;
     message?: string;

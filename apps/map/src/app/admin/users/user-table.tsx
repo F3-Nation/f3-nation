@@ -129,13 +129,13 @@ const UserStatusFilter = ({
                   key={status}
                   value={status}
                   onSelect={() => {
-                    onStatusSelect(status as UserStatus);
+                    onStatusSelect(status);
                   }}
                 >
                   <Check
                     className={cn(
                       "mr-2 h-4 w-4",
-                      selectedStatuses.includes(status as UserStatus)
+                      selectedStatuses.includes(status)
                         ? "opacity-100"
                         : "opacity-0",
                     )}

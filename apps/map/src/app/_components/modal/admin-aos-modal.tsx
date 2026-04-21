@@ -2,7 +2,9 @@
 
 import gte from "lodash/gte";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Controller } from "react-hook-form";
+import { z } from "zod";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
 import { safeParseInt } from "@acme/shared/common/functions";
@@ -38,6 +40,8 @@ import { AOInsertSchema } from "@acme/validators";
 
 import { env } from "~/env";
 import { invalidateQueries, orpc, useMutation, useQuery } from "~/orpc/react";
+import { scaleAndCropImage } from "~/utils/image/scale-and-crop-image";
+import { uploadLogo } from "~/utils/image/upload-logo";
 import type { DataType } from "~/utils/store/modal";
 import {
   DeleteType,
@@ -45,6 +49,7 @@ import {
   closeModal,
   openModal,
 } from "~/utils/store/modal";
+import { DebouncedImage } from "../debounced-image";
 import { VirtualizedCombobox } from "../virtualized-combobox";
 
 export default function AdminAOsModal({
@@ -65,7 +70,29 @@ export default function AdminAOsModal({
   const router = useRouter();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const form = useForm({ schema: AOInsertSchema });
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const form = useForm({
+    schema: AOInsertSchema.extend({
+      badImage: z.boolean().default(false),
+    }),
+    defaultValues: {
+      id: ao?.id ?? undefined,
+      name: ao?.name ?? "",
+      parentId: ao?.parentId ?? -1,
+      defaultLocationId: ao?.defaultLocationId ?? null,
+      isActive: ao?.isActive ?? true,
+      description: ao?.description ?? "",
+      logoUrl: ao?.logoUrl ?? null,
+      website: ao?.website ?? null,
+      email: ao?.email ?? null,
+      twitter: ao?.twitter ?? null,
+      facebook: ao?.facebook ?? null,
+      instagram: ao?.instagram ?? null,
+      lastAnnualReview: ao?.lastAnnualReview ?? null,
+      meta: ao?.meta ?? null,
+      badImage: false,
+    },
+  });
 
   useEffect(() => {
     form.reset({
@@ -87,13 +114,19 @@ export default function AdminAOsModal({
     });
   }, [form, ao]);
 
+  const formAoId = form.watch("id");
+
+  const formId = useMemo(() => crypto.randomUUID(), []);
+
   const crupdateAO = useMutation(orpc.org.crupdate.mutationOptions());
 
   return (
     <Dialog open={true} onOpenChange={() => closeModal()}>
       <DialogContent
         style={{ zIndex: Z_INDEX.HOW_TO_JOIN_MODAL }}
-        className={cn(`max-w-[90%] rounded-lg lg:max-w-[600px]`)}
+        className={cn(
+          `max-w-[95%] rounded-lg sm:max-w-[90%] lg:max-w-[600px] max-h-[90vh] overflow-y-auto`,
+        )}
       >
         <DialogHeader>
           <DialogTitle className="text-center">
@@ -109,11 +142,7 @@ export default function AdminAOsModal({
                 await crupdateAO
                   .mutateAsync({ ...data, orgType: "ao" })
                   .then(() => {
-                    void invalidateQueries(
-                      orpc.org.all.queryOptions({
-                        input: { orgTypes: ["ao"] },
-                      }),
-                    );
+                    void invalidateQueries("org");
                     closeModal();
                     toast.success("Successfully updated ao");
                     router.refresh();
@@ -138,7 +167,7 @@ export default function AdminAOsModal({
             className="space-y-4"
           >
             <div className="flex flex-wrap">
-              <div className="mb-4 w-1/2 px-2">
+              <div className="mb-4 w-full px-2 sm:w-1/2">
                 <FormField
                   control={form.control}
                   name="id"
@@ -153,7 +182,7 @@ export default function AdminAOsModal({
                   )}
                 />
               </div>
-              <div className="mb-4 w-1/2 px-2">
+              <div className="mb-4 w-full px-2 sm:w-1/2">
                 <FormField
                   control={form.control}
                   name="name"
@@ -172,12 +201,12 @@ export default function AdminAOsModal({
                   )}
                 />
               </div>
-              <div className="mb-4 w-1/2 px-2">
+              <div className="mb-4 w-full px-2 sm:w-1/2">
                 <FormField
                   control={form.control}
                   name="parentId"
                   render={({ field }) => (
-                    <FormItem key={`region-${field.value}`}>
+                    <FormItem key={`region-${String(field.value ?? "new")}`}>
                       <FormLabel>Region</FormLabel>
                       <VirtualizedCombobox
                         value={field.value?.toString()}
@@ -205,7 +234,7 @@ export default function AdminAOsModal({
                   )}
                 />
               </div>
-              <div className="mb-4 w-1/2 px-2">
+              <div className="mb-4 w-full px-2 sm:w-1/2">
                 <FormField
                   control={form.control}
                   name="website"
@@ -224,7 +253,7 @@ export default function AdminAOsModal({
                   )}
                 />
               </div>
-              <div className="mb-4 w-1/2 px-2">
+              <div className="mb-4 w-full px-2 sm:w-1/2">
                 <FormField
                   control={form.control}
                   name="email"
@@ -243,7 +272,7 @@ export default function AdminAOsModal({
                   )}
                 />
               </div>
-              <div className="mb-4 w-1/2 px-2">
+              <div className="mb-4 w-full px-2 sm:w-1/2">
                 <FormField
                   control={form.control}
                   name="twitter"
@@ -262,7 +291,7 @@ export default function AdminAOsModal({
                   )}
                 />
               </div>
-              <div className="mb-4 w-1/2 px-2">
+              <div className="mb-4 w-full px-2 sm:w-1/2">
                 <FormField
                   control={form.control}
                   name="facebook"
@@ -281,7 +310,7 @@ export default function AdminAOsModal({
                   )}
                 />
               </div>
-              <div className="mb-4 w-1/2 px-2">
+              <div className="mb-4 w-full px-2 sm:w-1/2">
                 <FormField
                   control={form.control}
                   name="instagram"
@@ -300,7 +329,7 @@ export default function AdminAOsModal({
                   )}
                 />
               </div>
-              <div className="mb-4 w-1/2 px-2">
+              <div className="mb-4 w-full px-2 sm:w-1/2">
                 <FormField
                   control={form.control}
                   name="lastAnnualReview"
@@ -320,7 +349,7 @@ export default function AdminAOsModal({
                   )}
                 />
               </div>
-              <div className="mb-4 w-1/2 px-2">
+              <div className="mb-4 w-full px-2 sm:w-1/2">
                 <FormField
                   control={form.control}
                   name="isActive"
@@ -349,6 +378,85 @@ export default function AdminAOsModal({
                   )}
                 />
               </div>
+              <div className="mb-4 w-full px-2 sm:w-1/2">
+                <div className="mb-3 text-sm font-medium text-black">Logo</div>
+                <Controller
+                  control={form.control}
+                  name="logoUrl"
+                  render={({ field: { onChange, value } }) => {
+                    return (
+                      <div className="flex flex-col items-center gap-2">
+                        <Input
+                          type="file"
+                          accept="image/*"
+                          onChange={async (e) => {
+                            if (!formAoId) return;
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+
+                            setIsUploadingLogo(true);
+                            try {
+                              const blob640 = await scaleAndCropImage(
+                                file,
+                                640,
+                                640,
+                              );
+                              if (!blob640) return;
+                              const url640 = await uploadLogo({
+                                file: blob640,
+                                orgId: formAoId,
+                                requestId: formId,
+                              });
+                              onChange(url640);
+                              const blob64 = await scaleAndCropImage(
+                                file,
+                                64,
+                                64,
+                              );
+                              if (blob64) {
+                                void uploadLogo({
+                                  file: blob64,
+                                  orgId: formAoId,
+                                  requestId: formId,
+                                  size: 64,
+                                });
+                              }
+                            } finally {
+                              setIsUploadingLogo(false);
+                            }
+                          }}
+                          disabled={
+                            typeof formAoId !== "number" ||
+                            formAoId <= -1 ||
+                            isUploadingLogo
+                          }
+                        />
+                        {isUploadingLogo ? (
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Spinner className="size-4" /> Uploading...
+                          </div>
+                        ) : (
+                          value && (
+                            <DebouncedImage
+                              src={value}
+                              alt="AO Logo"
+                              onImageFail={() =>
+                                form.setValue("badImage", true)
+                              }
+                              onImageSuccess={() =>
+                                form.setValue("badImage", false)
+                              }
+                            />
+                          )
+                        )}
+                      </div>
+                    );
+                  }}
+                />
+                <p className="text-xs text-destructive">
+                  {/* {form.formState.errors.aoLogo?.message} */}
+                </p>
+              </div>
               <div className="mb-4 w-full px-2">
                 <FormField
                   control={form.control}
@@ -369,7 +477,7 @@ export default function AdminAOsModal({
                 />
               </div>
               <div className="mb-4 flex w-full flex-col px-2">
-                <div className="flex space-x-4 pt-4">
+                <div className="flex flex-col space-y-2 pt-4 sm:flex-row sm:space-x-4 sm:space-y-0">
                   <Button
                     type="button"
                     variant="outline"

@@ -8,11 +8,11 @@ import { AreasTable } from "./areas-table";
 
 const AreasPage = async () => {
   return (
-    <Layout>
+    <Layout title="Areas">
       <div className="flex w-full  flex-col">
         <div className="flex flex-row items-center justify-between">
-          <h1 className="text-2xl font-bold">Areas</h1>
-          <div className="flex flex-row items-center justify-start gap-2">
+          <h1 className="hidden text-2xl font-bold lg:block">Areas</h1>
+          <div className="ml-auto flex flex-row items-center justify-start gap-2">
             <AddAreaButton />
           </div>
         </div>

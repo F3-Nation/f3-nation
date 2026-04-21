@@ -12,7 +12,8 @@ import {
   schema,
 } from "@acme/db";
 import type { OrgType, UserRole } from "@acme/shared/app/enums";
-import { UpdateRequestStatus } from "@acme/shared/app/enums";
+import { DayOfWeek } from "@acme/shared/app/enums";
+import { RequestType, UpdateRequestStatus } from "@acme/shared/app/enums";
 import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
 import {
   CreateAOAndLocationAndEventSchema,
@@ -61,12 +62,34 @@ export const requestRouter = {
     .input(
       z
         .object({
-          pageIndex: z.coerce.number().optional(),
-          pageSize: z.coerce.number().optional(),
-          sorting: parseSorting(),
-          searchTerm: z.string().optional(),
-          onlyMine: z.coerce.boolean().optional(),
-          statuses: arrayOrSingle(z.enum(UpdateRequestStatus)).optional(),
+          pageIndex: z.coerce
+            .number()
+            .optional()
+            .describe("Zero-based page index for pagination. Defaults to 0."),
+          pageSize: z.coerce
+            .number()
+            .optional()
+            .describe("Number of requests per page. Defaults to 10."),
+          sorting: parseSorting().describe(
+            "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: id, status, requestType, regionName, aoName, workoutName, dayOfWeek, startTime, endTime, description, locationAddress, submittedBy, created.",
+          ),
+          searchTerm: z
+            .string()
+            .optional()
+            .describe(
+              "Search requests by submitter name, event name, description, location info, or AO name.",
+            ),
+          onlyMine: z.coerce
+            .boolean()
+            .optional()
+            .describe(
+              "If true, only return requests from regions where the requester has editor or admin role.",
+            ),
+          statuses: arrayOrSingle(z.enum(UpdateRequestStatus))
+            .optional()
+            .describe(
+              "Filter requests by status. Matches requests with ANY of the given statuses (pending, approved, rejected, reverted).",
+            ),
         })
         .optional(),
     )
@@ -78,6 +101,148 @@ export const requestRouter = {
       description:
         "Get a paginated list of map change requests with optional filtering and sorting",
     })
+    .output(
+      z.object({
+        requests: z
+          .array(
+            z.object({
+              id: z.string().describe("The unique identifier of the request"),
+              submittedBy: z.string().describe("The email of the submitter"),
+              submitterValidated: z
+                .boolean()
+                .nullable()
+                .describe("Whether the submitter is validated"),
+              oldWorkoutName: z
+                .string()
+                .nullable()
+                .describe("The name of the old workout"),
+              newWorkoutName: z
+                .string()
+                .nullable()
+                .describe("The name of the new workout"),
+              oldRegionName: z
+                .string()
+                .nullable()
+                .describe("The name of the old region"),
+              newRegionName: z
+                .string()
+                .nullable()
+                .describe("The name of the new region"),
+              oldAoName: z
+                .string()
+                .nullable()
+                .describe("The name of the old ao"),
+              newAoName: z
+                .string()
+                .nullable()
+                .describe("The name of the new ao"),
+              oldDayOfWeek: z
+                .string()
+                .nullable()
+                .describe("The day of the week of the old workout"),
+              newDayOfWeek: z
+                .string()
+                .nullable()
+                .describe("The day of the week of the new workout"),
+              oldStartTime: z
+                .string()
+                .nullable()
+                .describe("The start time of the old workout"),
+              newStartTime: z
+                .string()
+                .nullable()
+                .describe("The start time of the new workout"),
+              oldEndTime: z
+                .string()
+                .nullable()
+                .describe("The end time of the old workout"),
+              newEndTime: z
+                .string()
+                .nullable()
+                .describe("The end time of the new workout"),
+              oldDescription: z
+                .string()
+                .nullable()
+                .describe("The description of the old workout"),
+              newDescription: z
+                .string()
+                .nullable()
+                .describe("The description of the new workout"),
+              oldLocationAddress: z
+                .string()
+                .nullable()
+                .describe("The address of the old location"),
+              newLocationAddress: z
+                .string()
+                .nullable()
+                .describe("The address of the new location"),
+              oldLocationAddress2: z
+                .string()
+                .nullable()
+                .describe("The address 2 of the old location"),
+              newLocationAddress2: z
+                .string()
+                .nullable()
+                .describe("The address 2 of the new location"),
+              oldLocationCity: z
+                .string()
+                .nullable()
+                .describe("The city of the old location"),
+              newLocationCity: z
+                .string()
+                .nullable()
+                .describe("The city of the new location"),
+              oldLocationState: z
+                .string()
+                .nullable()
+                .describe("The state of the old location"),
+              newLocationState: z
+                .string()
+                .nullable()
+                .describe("The state of the new location"),
+              oldLocationCountry: z
+                .string()
+                .nullable()
+                .describe("The country of the old location"),
+              newLocationCountry: z
+                .string()
+                .nullable()
+                .describe("The country of the new location"),
+              oldLocationZipCode: z
+                .string()
+                .nullable()
+                .describe("The zip code of the old location"),
+              newLocationZipCode: z
+                .string()
+                .nullable()
+                .describe("The zip code of the new location"),
+              oldLocationLat: z
+                .number()
+                .nullable()
+                .describe("The latitude of the old location"),
+              newLocationLat: z
+                .number()
+                .nullable()
+                .describe("The latitude of the new location"),
+              oldLocationLng: z
+                .number()
+                .nullable()
+                .describe("The longitude of the old location"),
+              newLocationLng: z
+                .number()
+                .nullable()
+                .describe("The longitude of the new location"),
+              created: z.string().describe("The date the request was created"),
+              status: z
+                .enum(UpdateRequestStatus)
+                .describe("The status of the request"),
+              requestType: z.string().describe("The type of the request"),
+            }),
+          )
+          .describe("List of requests"),
+        totalCount: z.number().describe("The total number of requests"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const onlyMine = input?.onlyMine ?? false;
       const oldAoOrg = aliasedTable(schema.orgs, "old_ao_org");
@@ -232,15 +397,117 @@ export const requestRouter = {
       return { requests, totalCount: totalCount?.count ?? 0 };
     }),
   byId: editorProcedure
-    .input(z.object({ id: z.string() }))
+    .input(
+      z.object({
+        id: z.string().describe("The unique identifier of the request"),
+      }),
+    )
     .route({
       method: "GET",
       path: "/id/{id}",
       tags: ["request"],
       summary: "Get request by ID",
       description:
-        "Retrieve detailed information about a specific map change request",
+        "Retrieve detailed information about a specific map change request including the proposed changes and current status",
     })
+    .output(
+      z.object({
+        request: z
+          .object({
+            id: z.string().describe("Request ID"),
+            token: z.string().describe("Request token"),
+            regionId: z.number().describe("Region ID"),
+            eventId: z.number().nullable().describe("Event ID"),
+            eventTypeIds: z
+              .array(z.number())
+              .nullable()
+              .describe("Event type IDs"),
+            eventTag: z.string().nullable().describe("Event tag"),
+            eventSeriesId: z.number().nullable().describe("Event series ID"),
+            eventIsSeries: z
+              .boolean()
+              .nullable()
+              .describe("Whether the event is a series"),
+            eventIsActive: z
+              .boolean()
+              .nullable()
+              .describe("Whether the event is active"),
+            eventHighlight: z
+              .boolean()
+              .nullable()
+              .describe("Whether the event is highlighted"),
+            eventStartDate: z.string().nullable().describe("Event start date"),
+            eventEndDate: z.string().nullable().describe("Event end date"),
+            eventStartTime: z.string().nullable().describe("Event start time"),
+            eventEndTime: z.string().nullable().describe("Event end time"),
+            eventDayOfWeek: z
+              .enum(DayOfWeek)
+              .nullable()
+              .describe("Event day of week"),
+            eventName: z.string().nullable().describe("Event name"),
+            eventDescription: z
+              .string()
+              .nullable()
+              .describe("Event description"),
+            eventRecurrencePattern: z
+              .string()
+              .nullable()
+              .describe("Event recurrence pattern"),
+            eventRecurrenceInterval: z
+              .number()
+              .nullable()
+              .describe("Event recurrence interval"),
+            eventIndexWithinInterval: z
+              .number()
+              .nullable()
+              .describe("Event index within interval"),
+            eventMeta: z.any().nullable().describe("Event metadata"),
+            eventContactEmail: z
+              .string()
+              .nullable()
+              .describe("Event contact email"),
+            locationName: z.string().nullable().describe("Location name"),
+            locationDescription: z
+              .string()
+              .nullable()
+              .describe("Location description"),
+            locationAddress: z.string().nullable().describe("Location address"),
+            locationAddress2: z
+              .string()
+              .nullable()
+              .describe("Location address line 2"),
+            locationCity: z.string().nullable().describe("Location city"),
+            locationState: z.string().nullable().describe("Location state"),
+            locationZip: z.string().nullable().describe("Location zip code"),
+            locationCountry: z.string().nullable().describe("Location country"),
+            locationLat: z.number().nullable().describe("Location latitude"),
+            locationLng: z.number().nullable().describe("Location longitude"),
+            locationId: z.number().nullable().describe("Location ID"),
+            locationContactEmail: z
+              .string()
+              .nullable()
+              .describe("Location contact email"),
+            aoId: z.number().nullable().describe("AO ID"),
+            aoName: z.string().nullable().describe("AO name"),
+            aoLogo: z.string().nullable().describe("AO logo URL"),
+            aoWebsite: z.string().nullable().describe("AO website URL"),
+            submittedBy: z.string().describe("Submitter email"),
+            submitterValidated: z
+              .boolean()
+              .nullable()
+              .describe("Whether the submitter is validated"),
+            reviewedBy: z.string().nullable().describe("Reviewer email"),
+            reviewedAt: z.string().nullable().describe("Review date"),
+            status: z.enum(UpdateRequestStatus).describe("Request status"),
+            meta: z.any().nullable().describe("Request metadata"),
+            created: z.string().describe("Date the request was created"),
+            updated: z.string().describe("Date the request was last updated"),
+            requestType: z.enum(RequestType).describe("Request type"),
+          })
+          .nullable()
+          .describe("The request"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const [request] = await ctx.db
         .select()
@@ -258,6 +525,11 @@ export const requestRouter = {
       description:
         "Check if there is a pending delete request for a specific event",
     })
+    .output(
+      z.object({
+        canDelete: z.boolean().describe("Whether the event can be deleted"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const [request] = await ctx.db
         .select()
@@ -325,6 +597,16 @@ export const requestRouter = {
       summary: "Submit create ao and location and event request",
       description: "Submit a request to create an ao, location, and event",
     })
+    .output(
+      z.object({
+        status: z
+          .enum(UpdateRequestStatus)
+          .describe("The status of the request"),
+        updateRequest: z.object({
+          id: z.string().describe("Request ID"),
+        }),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const handler = handleCreateLocationAndEvent;
       return await handleRequest({ ctx, input, handler });
@@ -338,6 +620,39 @@ export const requestRouter = {
       summary: "Submit create event request",
       description: "Submit a request to create an event",
     })
+    .output(
+      z.object({
+        status: z
+          .enum(UpdateRequestStatus)
+          .describe("The status of the request"),
+        updateRequest: z.object({
+          id: z.string().optional().describe("Request ID"),
+          regionId: z.number().optional().describe("Region ID"),
+          eventId: z.number().nullable().optional().describe("Event ID"),
+          submittedBy: z.string().optional().describe("Submitter email"),
+          reviewedBy: z
+            .string()
+            .nullable()
+            .optional()
+            .describe("Reviewer email"),
+          reviewedAt: z.string().nullable().optional().describe("Review date"),
+          status: z
+            .enum(UpdateRequestStatus)
+            .optional()
+            .describe("Request status"),
+          meta: z.any().nullable().optional().describe("Request metadata"),
+          created: z
+            .string()
+            .optional()
+            .describe("Date the request was created"),
+          updated: z
+            .string()
+            .optional()
+            .describe("Date the request was last updated"),
+          requestType: z.enum(RequestType).optional().describe("Request type"),
+        }),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const handler = handleCreateEvent;
       return await handleRequest({ ctx, input, handler });
@@ -411,6 +726,13 @@ export const requestRouter = {
       summary: "Reject request",
       description: "Reject a pending map change request",
     })
+    .output(
+      z.object({
+        status: z
+          .enum(UpdateRequestStatus)
+          .describe("The status of the request"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const [updateRequest] = await ctx.db
         .select()
@@ -438,6 +760,10 @@ export const requestRouter = {
         .update(schema.updateRequests)
         .set({ status: "rejected" })
         .where(eq(schema.updateRequests.id, input.id));
+
+      return {
+        status: "rejected",
+      };
     }),
 };
 
@@ -506,13 +832,22 @@ const notifyPendingRequest = async ({
   }
 };
 
-interface HandleRequestInput<T extends UpdateRequestData & CheckRequestInput> {
+type HandleableRequestInput = CheckRequestInput & {
+  requestType: UpdateRequestData["requestType"];
+  submittedBy: string;
+  reviewedBy?: string | null;
+  meta?: Record<string, unknown> | null;
+  eventMeta?: Record<string, unknown> | null;
+  eventDayOfWeek?: string | null;
+};
+
+interface HandleRequestInput<T extends HandleableRequestInput> {
   ctx: Context;
   input: T;
   handler: (ctx: Context, input: T) => Promise<unknown>;
 }
 
-const handleRequest = async <T extends UpdateRequestData & CheckRequestInput>({
+const handleRequest = async <T extends HandleableRequestInput>({
   ctx,
   input,
   handler,
@@ -521,11 +856,15 @@ const handleRequest = async <T extends UpdateRequestData & CheckRequestInput>({
   updateRequest: { id: string };
 }> => {
   const { permissions } = await checkRequest({ input, ctx });
+  const updateRequestData = {
+    ...input,
+  } as Pick<UpdateRequestData, "requestType" | "submittedBy"> &
+    Record<string, unknown>;
   if (permissions.success) {
     await handler(ctx, input);
     const updateRequest = await recordUpdateRequest({
       ctx,
-      updateRequest: input,
+      updateRequest: updateRequestData,
       status: "approved",
     });
     const result = { status: "approved" as const, updateRequest };
@@ -533,7 +872,7 @@ const handleRequest = async <T extends UpdateRequestData & CheckRequestInput>({
   } else {
     const updateRequest = await recordUpdateRequest({
       ctx,
-      updateRequest: input,
+      updateRequest: updateRequestData,
       status: "pending",
     });
     const result = { status: "pending" as const, updateRequest };

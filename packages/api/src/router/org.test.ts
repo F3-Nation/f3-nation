@@ -6,8 +6,19 @@
  * - Test database to be seeded with test data
  */
 
+import { vi } from "vitest";
+
+// Use vi.hoisted to ensure mockLimit is available when vi.mock runs (mocks are hoisted)
+const mockLimit = vi.hoisted(() => vi.fn());
+
+vi.mock("@orpc/experimental-ratelimit/memory", () => ({
+  MemoryRatelimiter: vi.fn().mockImplementation(() => ({
+    limit: mockLimit,
+  })),
+}));
+
 import { eq, schema } from "@acme/db";
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
   cleanup,
   createAdminSession,
@@ -25,6 +36,13 @@ describe("Org Router", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset rate limiter to allow requests
+    mockLimit.mockResolvedValue({
+      success: true,
+      limit: 10,
+      remaining: 9,
+      reset: Date.now() + 60000,
+    });
   });
 
   afterAll(async () => {
@@ -52,26 +70,71 @@ describe("Org Router", () => {
       expect(Array.isArray(result.orgs)).toBe(true);
     });
 
-    it("should paginate results correctly", async () => {
+    it("should paginate without overlapping org ids between pages", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const prefix = `PaginateTest-${uniqueId()}`;
+      const insertedIds: number[] = [];
+      for (let i = 0; i < 3; i++) {
+        const [org] = await db
+          .insert(schema.orgs)
+          .values({
+            name: `${prefix} Region ${i}`,
+            orgType: "region",
+            parentId: f3Nation.id,
+            isActive: true,
+          })
+          .returning();
+        if (org) {
+          createdOrgIds.push(org.id);
+          insertedIds.push(org.id);
+        }
+      }
+
       const client = createTestClient();
+
+      // Use searchTerm to scope queries to only our test orgs
+      const all = await client.org.all({
+        orgTypes: ["region"],
+        searchTerm: prefix,
+        pageIndex: 0,
+        pageSize: 100,
+      });
+
+      expect(all.total).toBeGreaterThanOrEqual(3);
+
       const page1 = await client.org.all({
         orgTypes: ["region"],
+        searchTerm: prefix,
         pageIndex: 0,
         pageSize: 2,
       });
 
+      expect(page1.orgs.length).toBe(2);
+      expect(page1.total).toBe(all.total);
+
       const page2 = await client.org.all({
         orgTypes: ["region"],
+        searchTerm: prefix,
         pageIndex: 1,
         pageSize: 2,
       });
 
-      expect(page1.orgs.length).toBeLessThanOrEqual(2);
-      expect(page2.orgs.length).toBeLessThanOrEqual(2);
+      expect(page1.total).toBe(3);
+      expect(page1.orgs).toHaveLength(2);
+      expect(page2.orgs).toHaveLength(1);
 
-      // Results should be different if there are more than 2 orgs
-      if (page1.total > 2 && page1.orgs.length > 0 && page2.orgs.length > 0) {
-        expect(page1.orgs[0]?.id).not.toBe(page2.orgs[0]?.id);
+      const page1Ids = new Set(page1.orgs.map((o) => o.id));
+      const page2Ids = new Set(page2.orgs.map((o) => o.id));
+      // Consecutive pages must be disjoint — same org must not appear twice
+      expect([...page2Ids].every((id) => !page1Ids.has(id))).toBe(true);
+
+      const seen = new Set([...page1Ids, ...page2Ids]);
+      expect(seen.size).toBe(insertedIds.length);
+      for (const id of insertedIds) {
+        expect(seen.has(id)).toBe(true);
       }
     });
 
@@ -153,6 +216,11 @@ describe("Org Router", () => {
         parentId: f3Nation.id,
         isActive: true,
         email: "test@example.com",
+        description: null,
+        website: null,
+        twitter: null,
+        facebook: null,
+        instagram: null,
       });
 
       expect(result).toHaveProperty("org");
@@ -177,6 +245,11 @@ describe("Org Router", () => {
           orgType: "region",
           isActive: true,
           email: "test@example.com",
+          description: null,
+          website: null,
+          twitter: null,
+          facebook: null,
+          instagram: null,
         }),
       ).rejects.toThrow("Parent ID or ID is required");
     });
@@ -213,6 +286,11 @@ describe("Org Router", () => {
         parentId: f3Nation.id,
         isActive: true,
         email: "test@example.com",
+        description: null,
+        website: null,
+        twitter: null,
+        facebook: null,
+        instagram: null,
       });
 
       expect(result.org?.id).toBe(testOrg.id);
@@ -238,6 +316,11 @@ describe("Org Router", () => {
           parentId: f3Nation.id,
           isActive: true,
           email: "test@example.com",
+          description: null,
+          website: null,
+          twitter: null,
+          facebook: null,
+          instagram: null,
         }),
       ).rejects.toThrow();
     });

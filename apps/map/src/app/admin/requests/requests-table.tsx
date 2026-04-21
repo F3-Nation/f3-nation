@@ -5,6 +5,7 @@ import dayjs from "dayjs";
 import { Check, Filter, X } from "lucide-react";
 import { useState } from "react";
 
+import type { RequestType } from "@acme/shared/app/enums";
 import { UpdateRequestStatus } from "@acme/shared/app/enums";
 import { getFullAddress, requestTypeToTitle } from "@acme/shared/app/functions";
 import { ZustandStore } from "@acme/shared/common/classes";
@@ -21,6 +22,8 @@ import { MDTable } from "@acme/ui/md-table";
 import { Popover, PopoverContent, PopoverTrigger } from "@acme/ui/popover";
 import { Cell, Header } from "@acme/ui/table";
 import { toast } from "@acme/ui/toast";
+
+import { MobileFilterSheet } from "../_components/mobile-filter-sheet";
 
 import { orpc, useQuery } from "~/orpc/react";
 import type { RouterOutputs } from "~/orpc/types";
@@ -90,14 +93,14 @@ export const RequestsTable = () => {
       totalCount={requests?.totalCount}
       columns={columns}
       onRowClick={async (row) => {
-        const request = await vanillaApi.request.byId({ id: row.original.id });
-        if (!request) {
+        const response = await vanillaApi.request.byId({ id: row.original.id });
+        if (!response?.request) {
           toast.error("Request not found");
           return;
         }
         void openRequestModal({
-          type: row.original.requestType,
-          review: { request },
+          type: row.original.requestType as RequestType,
+          review: { request: response.request },
         });
       }}
       rowClassName={(row) =>
@@ -150,7 +153,7 @@ const columns: TableOptions<
     meta: { name: "Request Type" },
     header: Header,
     cell: ({ row }) => {
-      const title = requestTypeToTitle(row.original.requestType);
+      const title = requestTypeToTitle(row.original.requestType as RequestType);
       return (
         <div className="flex items-center justify-start gap-1">
           <p>{title}</p>
@@ -286,10 +289,142 @@ const CircleBadge = () => {
 };
 
 const FilterComponent = () => {
+  const statuses = requestTableStore.use.statuses();
+  const onlyMine = requestTableStore.use.onlyMine();
+
+  const activeFilterCount = statuses.length + (onlyMine ? 1 : 0);
+
+  const handleReset = () => {
+    requestTableStore.setState({
+      statuses: ["pending"],
+      onlyMine: true,
+    });
+  };
+
   return (
-    <div className="flex gap-2">
-      <StatusFilter />
-    </div>
+    <>
+      {/* Desktop: inline filters */}
+      <div className="hidden gap-2 md:flex">
+        <StatusFilter />
+      </div>
+      {/* Mobile: sheet-based filters */}
+      <MobileFilterSheet
+        activeFilterCount={activeFilterCount}
+        onReset={handleReset}
+      >
+        <div>
+          <p className="mb-2 text-sm font-medium">Active Filters</p>
+          <div className="flex flex-wrap gap-1">
+            {statuses.includes("pending") && (
+              <Badge
+                className="flex items-center gap-1 rounded-full border-transparent bg-yellow-100 px-2 py-1 text-yellow-700 hover:bg-yellow-200"
+                onClick={() => {
+                  requestTableStore.setState({
+                    statuses: statuses.filter((s) => s !== "pending"),
+                  });
+                }}
+              >
+                Pending
+                <X className="h-3.5 w-3.5 cursor-pointer" />
+              </Badge>
+            )}
+            {statuses.includes("rejected") && (
+              <Badge
+                className="flex items-center gap-1 rounded-full border-transparent bg-red-100 px-2 py-1 text-red-700 hover:bg-red-200"
+                onClick={() => {
+                  requestTableStore.setState({
+                    statuses: statuses.filter((s) => s !== "rejected"),
+                  });
+                }}
+              >
+                Rejected
+                <X className="h-3.5 w-3.5 cursor-pointer" />
+              </Badge>
+            )}
+            {statuses.includes("approved") && (
+              <Badge
+                className="flex items-center gap-1 rounded-full border-transparent bg-green-100 px-2 py-1 text-green-700 hover:bg-green-200"
+                onClick={() => {
+                  requestTableStore.setState({
+                    statuses: statuses.filter((s) => s !== "approved"),
+                  });
+                }}
+              >
+                Approved
+                <X className="h-3.5 w-3.5 cursor-pointer" />
+              </Badge>
+            )}
+            {onlyMine && (
+              <Badge
+                className="flex items-center gap-1 rounded-full border-transparent bg-blue-100 px-2 py-1 text-blue-700 hover:bg-blue-200"
+                onClick={() => {
+                  requestTableStore.setState({ onlyMine: false });
+                }}
+              >
+                Only Mine
+                <X className="h-3.5 w-3.5 cursor-pointer" />
+              </Badge>
+            )}
+            {activeFilterCount === 0 && (
+              <span className="text-sm text-muted-foreground">
+                No active filters
+              </span>
+            )}
+          </div>
+        </div>
+        <div>
+          <p className="mb-2 text-sm font-medium">Toggle Filters</p>
+          <StatusFilterOptions />
+        </div>
+      </MobileFilterSheet>
+    </>
+  );
+};
+
+const StatusFilterOptions = () => {
+  const statuses = requestTableStore.use.statuses();
+  const onlyMine = requestTableStore.use.onlyMine();
+
+  return (
+    <Command>
+      <CommandInput placeholder="Search statuses..." />
+      <CommandEmpty>No statuses found.</CommandEmpty>
+      <CommandGroup>
+        {UpdateRequestStatus.map((status) => (
+          <CommandItem
+            key={status}
+            value={status}
+            onSelect={() => {
+              const newStatuses = statuses.includes(status)
+                ? statuses.filter((s) => s !== status)
+                : [...statuses, status];
+              requestTableStore.setState({ statuses: newStatuses });
+            }}
+          >
+            <Check
+              className={cn(
+                "mr-2 h-4 w-4",
+                statuses.includes(status) ? "opacity-100" : "opacity-0",
+              )}
+            />
+            {status.charAt(0).toUpperCase() + status.slice(1)}
+          </CommandItem>
+        ))}
+        <CommandItem
+          onSelect={() => {
+            requestTableStore.setState({ onlyMine: !onlyMine });
+          }}
+        >
+          <Check
+            className={cn(
+              "mr-2 h-4 w-4",
+              onlyMine ? "opacity-100" : "opacity-0",
+            )}
+          />
+          Only Mine
+        </CommandItem>
+      </CommandGroup>
+    </Command>
   );
 };
 
@@ -369,45 +504,7 @@ const StatusFilter = () => {
           </button>
         </PopoverTrigger>
         <PopoverContent className="w-full p-0">
-          <Command>
-            <CommandInput placeholder="Search statuses..." />
-            <CommandEmpty>No statuses found.</CommandEmpty>
-            <CommandGroup>
-              {UpdateRequestStatus.map((status) => (
-                <CommandItem
-                  key={status}
-                  value={status}
-                  onSelect={() => {
-                    const newStatuses = statuses.includes(status)
-                      ? statuses.filter((s) => s !== status)
-                      : [...statuses, status];
-                    requestTableStore.setState({ statuses: newStatuses });
-                  }}
-                >
-                  <Check
-                    className={cn(
-                      "mr-2 h-4 w-4",
-                      statuses.includes(status) ? "opacity-100" : "opacity-0",
-                    )}
-                  />
-                  {status.charAt(0).toUpperCase() + status.slice(1)}
-                </CommandItem>
-              ))}
-              <CommandItem
-                onSelect={() => {
-                  requestTableStore.setState({ onlyMine: !onlyMine });
-                }}
-              >
-                <Check
-                  className={cn(
-                    "mr-2 h-4 w-4",
-                    onlyMine ? "opacity-100" : "opacity-0",
-                  )}
-                />
-                Only Mine
-              </CommandItem>
-            </CommandGroup>
-          </Command>
+          <StatusFilterOptions />
         </PopoverContent>
       </Popover>
     </div>

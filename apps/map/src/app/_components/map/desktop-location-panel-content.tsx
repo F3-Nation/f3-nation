@@ -31,11 +31,11 @@ export const DesktopLocationPanelContent = () => {
   );
 
   // Get AO name and selected event name
-  const aoName = locationData?.location.parentName ?? "AO";
-  const selectedEvent = locationData?.location.events.find(
+  const aoName = locationData?.location?.parentName ?? "AO";
+  const selectedEvent = locationData?.location?.events.find(
     (event) => event.id === panelEventId,
   );
-  const modalAOIds = locationData?.location.events.map((e) => e.aoId);
+  const modalAOIds = locationData?.location?.events.map((e) => e.aoId);
   const aoId = selectedEvent?.aoId ?? modalAOIds?.[0] ?? null;
   const eventName = selectedEvent?.name ?? "Workout";
 
@@ -73,7 +73,7 @@ export const DesktopLocationPanelContent = () => {
             aoId={aoId}
             eventName={eventName}
             timeDisplay={timeDisplay}
-            eventCount={locationData?.location.events.length ?? 0}
+            eventCount={locationData?.location?.events.length ?? 0}
           />
         </div>
       )}

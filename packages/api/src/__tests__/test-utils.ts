@@ -21,7 +21,7 @@ import { router } from "../index";
  */
 export const createTestClient = () => {
   return createRouterClient(router, {
-    context: async () => ({
+    context: () => ({
       reqHeaders: new Headers({
         [Header.Client]: Client.ORPC,
       }),
@@ -34,6 +34,23 @@ export const createTestClient = () => {
  */
 export const uniqueId = () =>
   `test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+/**
+ * Ensures required roles (editor, admin) exist in the roles table.
+ * Many tests depend on these roles being present for role assignment to work.
+ */
+export const getOrCreateRoles = async () => {
+  const existing = await db.select().from(schema.roles);
+  const existingNames = new Set(existing.map((r) => r.name));
+
+  for (const roleName of ["editor", "admin"] as const) {
+    if (!existingNames.has(roleName)) {
+      await db
+        .insert(schema.roles)
+        .values({ name: roleName, description: `${roleName} role` });
+    }
+  }
+};
 
 /**
  * Gets or creates the F3 Nation org (required for admin operations)
@@ -136,7 +153,7 @@ export const createNoPermissionSession = (): Session => {
  */
 export const mockAuthWithSession = async (session: Session | null) => {
   const { auth } = await import("@acme/auth");
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
   vi.mocked(auth as any).mockResolvedValue(session);
 };
 

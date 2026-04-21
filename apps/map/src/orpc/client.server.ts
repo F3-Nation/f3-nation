@@ -19,10 +19,17 @@ import { env } from "~/env";
  * @see https://orpc.dev/docs/best-practices/optimize-ssr
  */
 globalThis.$client = createRouterClient(router, {
-  context: async () => ({
-    reqHeaders: new Headers({
+  context: async () => {
+    const headers = new Headers({
       [Header.Client]: Client.ORPC_SSG,
-      [Header.Authorization]: `Bearer ${env.NEXT_PUBLIC_MAP_API_KEY}`,
-    }),
-  }),
+    });
+    // Only set Authorization header if API key is configured (not required locally)
+    if (env.NEXT_PUBLIC_MAP_API_KEY) {
+      headers.set(
+        Header.Authorization,
+        `Bearer ${env.NEXT_PUBLIC_MAP_API_KEY}`,
+      );
+    }
+    return { reqHeaders: headers };
+  },
 });

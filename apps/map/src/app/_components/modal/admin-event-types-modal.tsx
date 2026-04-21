@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { z } from "zod";
 
-import { Z_INDEX } from "@acme/shared/app/constants";
+import { EVENT_CATEGORY_OPTIONS, Z_INDEX } from "@acme/shared/app/constants";
 import { safeParseInt } from "@acme/shared/common/functions";
 import { cn } from "@acme/ui";
 import { Button } from "@acme/ui/button";
@@ -64,7 +64,7 @@ export default function AdminEventTypesModal({
   );
   const eventType = eventTypeResponse?.eventType;
   const { data: regions } = useQuery(
-    orpc.org.all.queryOptions({ input: { orgTypes: ["region"] } }),
+    orpc.org.accessible.queryOptions({ input: { orgTypes: ["region"] } }),
   );
   const sortedRegions = useMemo(() => {
     return regions?.orgs.sort((a, b) => {
@@ -74,8 +74,9 @@ export default function AdminEventTypesModal({
   const router = useRouter();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+
   const form = useForm({
-    schema: EventTypeInsertForm,
+    schema: EventTypeInsertSchema,
   });
 
   useEffect(() => {
@@ -83,26 +84,29 @@ export default function AdminEventTypesModal({
       id: eventType?.id,
       name: eventType?.name ?? "",
       description: eventType?.description ?? "",
-      specificOrgId: eventType?.specificOrgId ?? null,
+      specificOrgId: eventType?.specificOrgId ?? undefined,
       eventCategory: eventType?.eventCategory ?? undefined,
     });
   }, [form, eventType]);
 
+  const isEditing = !!eventType?.id;
+  const actionText = isEditing ? "update" : "add";
+  const actionTextPast = isEditing ? "updated" : "added";
+
   const crupdateEventType = useMutation(
     orpc.eventType.crupdate.mutationOptions({
       onSuccess: async () => {
-        await invalidateQueries({
-          predicate: (query) => query.queryKey[0] === "eventType",
-        });
+        await invalidateQueries("eventType");
         closeModal();
-        toast.success("Successfully updated event type");
+        toast.success(`Successfully ${actionTextPast} event type`);
         router.refresh();
       },
       onError: (err) => {
         toast.error(
           err instanceof ORPCError && err?.code === "UNAUTHORIZED"
-            ? "You must be logged in to update events"
-            : "Failed to update event",
+            ? err.message ??
+                `You are not authorized to ${actionText} this Event Type`
+            : `Failed to ${actionText} event type`,
         );
       },
     }),
@@ -123,7 +127,7 @@ export default function AdminEventTypesModal({
         ...data,
       });
     } catch (error) {
-      toast.error("Failed to update event");
+      // Error is already handled by mutation's onError callback
       console.error(error);
     } finally {
       setIsSubmitting(false);
@@ -134,7 +138,9 @@ export default function AdminEventTypesModal({
     <Dialog open={true} onOpenChange={() => closeModal()}>
       <DialogContent
         style={{ zIndex: Z_INDEX.HOW_TO_JOIN_MODAL }}
-        className={cn(`max-w-[90%] rounded-lg lg:max-w-[600px]`)}
+        className={cn(
+          `max-w-[95%] rounded-lg sm:max-w-[90%] lg:max-w-[600px] max-h-[90vh] overflow-y-auto`,
+        )}
       >
         <DialogHeader>
           <DialogTitle className="text-center">
@@ -144,7 +150,7 @@ export default function AdminEventTypesModal({
 
         <Form {...form}>
           <div className="flex flex-wrap">
-            <div className="mb-4 w-1/2 px-2">
+            <div className="mb-4 w-full px-2 md:w-1/2">
               <FormField
                 control={form.control}
                 name="id"
@@ -159,7 +165,7 @@ export default function AdminEventTypesModal({
                 )}
               />
             </div>
-            <div className="mb-4 w-1/2 px-2">
+            <div className="mb-4 w-full px-2 md:w-1/2">
               <FormField
                 control={form.control}
                 name="name"
@@ -178,24 +184,20 @@ export default function AdminEventTypesModal({
                 )}
               />
             </div>
-            <div className="mb-4 w-1/2 px-2">
+            <div className="mb-4 w-full px-2 md:w-1/2">
               <ControlledSelect
                 control={form.control}
                 label="Event Category"
                 name="eventCategory"
-                options={[
-                  { label: "1st F", value: "first_f" },
-                  { label: "2nd F", value: "second_f" },
-                  { label: "3rd F", value: "third_f" },
-                ]}
+                options={[...EVENT_CATEGORY_OPTIONS]}
               />
             </div>
-            <div className="mb-4 w-1/2 px-2">
+            <div className="mb-4 w-full px-2 md:w-1/2">
               <FormField
                 control={form.control}
                 name="specificOrgId"
                 render={({ field }) => (
-                  <FormItem key={`region-${field.value}`}>
+                  <FormItem key={`region-${String(field.value ?? "new")}`}>
                     <FormLabel>Specific Org</FormLabel>
                     <VirtualizedCombobox
                       value={field.value?.toString()}
@@ -222,6 +224,7 @@ export default function AdminEventTypesModal({
                         }
                       }}
                       isMulti={false}
+                      hideClearButton
                     />
                     <FormMessage />
                   </FormItem>
@@ -242,7 +245,7 @@ export default function AdminEventTypesModal({
               />
             </div>
             <div className="mb-4 w-full px-2">
-              <div className="mb-4 flex space-x-4 pt-4">
+              <div className="mb-4 flex flex-col space-y-2 pt-4 sm:flex-row sm:space-x-4 sm:space-y-0">
                 <Button
                   type="button"
                   variant="outline"
@@ -257,7 +260,7 @@ export default function AdminEventTypesModal({
                   onClick={() => {
                     void form.handleSubmit(onSubmit, (errors) => {
                       console.log(errors);
-                      toast.error("Failed to update event type");
+                      toast.error(`Failed to ${actionText} event type`);
                     })();
                   }}
                 >

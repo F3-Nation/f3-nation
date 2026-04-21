@@ -26,11 +26,15 @@ import { MDTable, usePagination } from "@acme/ui/md-table";
 import { Popover, PopoverContent, PopoverTrigger } from "@acme/ui/popover";
 import { Cell, Header } from "@acme/ui/table";
 
+import { onlyUnique } from "@acme/shared/common/functions";
+import { MobileFilterSheet } from "../../_components/mobile-filter-sheet";
+import { ResetFilter } from "../../_components/reset-filter";
 import { orpc } from "~/orpc/react";
 import type { RouterOutputs } from "~/orpc/types";
 import { useDebounce } from "~/utils/hooks/use-debounce";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
 import { OrgFilter } from "../org-filter";
+import type { SortingSchema } from "@acme/validators";
 
 type Org = RouterOutputs["org"]["all"]["orgs"][number];
 
@@ -129,13 +133,13 @@ const UserStatusFilter = ({
                   key={status}
                   value={status}
                   onSelect={() => {
-                    onStatusSelect(status as UserStatus);
+                    onStatusSelect(status);
                   }}
                 >
                   <Check
                     className={cn(
                       "mr-2 h-4 w-4",
-                      selectedStatuses.includes(status as UserStatus)
+                      selectedStatuses.includes(status)
                         ? "opacity-100"
                         : "opacity-0",
                     )}
@@ -155,13 +159,12 @@ export const AllUsersTable = () => {
   const [selectedStatuses, setSelectedStatuses] = useState<UserStatus[]>([
     "active",
   ]);
-  const [selectedRoles, setSelectedRoles] = useState<UserRole[]>([
-    "admin",
-    "editor",
-  ]);
+  const [selectedRoles, setSelectedRoles] = useState<UserRole[]>([]);
   const [selectedOrgs, setSelectedOrgs] = useState<Org[]>([]);
+  const [selectedHomeRegions, setSelectedHomeRegions] = useState<Org[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
+  const [sorting, setSorting] = useState<SortingSchema>([]);
   const { pagination, setPagination } = usePagination({
     pageSize: 20,
   });
@@ -196,6 +199,31 @@ export const AllUsersTable = () => {
     });
   }, []);
 
+  const handleHomeRegionSelect = useCallback((homeRegion: Org) => {
+    setSelectedHomeRegions((prev) => {
+      if (prev.includes(homeRegion)) {
+        return prev.filter((h) => h !== homeRegion);
+      } else {
+        return [...prev, homeRegion];
+      }
+    });
+  }, []);
+
+  const handleResetFilters = useCallback(() => {
+    setSelectedOrgs([]);
+    setSelectedHomeRegions([]);
+    setSelectedStatuses(["active"]);
+    setSelectedRoles([]);
+  }, []);
+
+  const activeFilterCount =
+    selectedOrgs.length +
+    selectedHomeRegions.length +
+    (selectedStatuses.length !== 1 || selectedStatuses[0] !== "active"
+      ? selectedStatuses.length
+      : 0) +
+    selectedRoles.length;
+
   const { data } = useQuery(
     orpc.user.all.queryOptions({
       input: {
@@ -205,6 +233,8 @@ export const AllUsersTable = () => {
         pageSize: pagination.pageSize,
         pageIndex: pagination.pageIndex,
         orgIds: selectedOrgs.map((org) => org.id),
+        homeRegionIds: selectedHomeRegions.map((region) => region.id),
+        sorting: sorting,
       },
     }),
   );
@@ -217,22 +247,72 @@ export const AllUsersTable = () => {
         setSearchTerm={setSearchTerm}
         filterComponent={
           <>
-            <OrgFilter
-              onOrgSelect={handleOrgSelect}
-              selectedOrgs={selectedOrgs}
-            />
-            <UserStatusFilter
-              onStatusSelect={handleStatusSelect}
-              selectedStatuses={selectedStatuses}
-            />
-            <UserRoleFilter
-              onRoleSelect={handleRoleSelect}
-              selectedRoles={selectedRoles}
-            />
+            {/* Desktop: inline filters */}
+            <div className="hidden items-center gap-2 md:flex">
+              <OrgFilter
+                onOrgSelect={handleOrgSelect}
+                selectedOrgs={selectedOrgs}
+                label="Org"
+              />
+              <OrgFilter
+                onOrgSelect={handleHomeRegionSelect}
+                selectedOrgs={selectedHomeRegions}
+                label="Home Region"
+                orgTypes={["region"]}
+              />
+              <UserStatusFilter
+                onStatusSelect={handleStatusSelect}
+                selectedStatuses={selectedStatuses}
+              />
+              <UserRoleFilter
+                onRoleSelect={handleRoleSelect}
+                selectedRoles={selectedRoles ?? []}
+              />
+              <ResetFilter onClick={handleResetFilters} />
+            </div>
+            {/* Mobile: sheet-based filters */}
+            <MobileFilterSheet
+              activeFilterCount={activeFilterCount}
+              onReset={handleResetFilters}
+            >
+              <div>
+                <p className="mb-1 text-sm font-medium">Organization</p>
+                <OrgFilter
+                  onOrgSelect={handleOrgSelect}
+                  selectedOrgs={selectedOrgs}
+                  label="Org"
+                />
+              </div>
+              <div>
+                <p className="mb-1 text-sm font-medium">Home Region</p>
+                <OrgFilter
+                  onOrgSelect={handleHomeRegionSelect}
+                  selectedOrgs={selectedHomeRegions}
+                  label="Home Region"
+                  orgTypes={["region"]}
+                />
+              </div>
+              <div>
+                <p className="mb-1 text-sm font-medium">Status</p>
+                <UserStatusFilter
+                  onStatusSelect={handleStatusSelect}
+                  selectedStatuses={selectedStatuses}
+                />
+              </div>
+              <div>
+                <p className="mb-1 text-sm font-medium">Role</p>
+                <UserRoleFilter
+                  onRoleSelect={handleRoleSelect}
+                  selectedRoles={selectedRoles ?? []}
+                />
+              </div>
+            </MobileFilterSheet>
           </>
         }
         cellClassName="p-1"
         columns={columns}
+        sorting={sorting}
+        setSorting={setSorting}
         pagination={pagination}
         totalCount={data?.totalCount}
         setPagination={setPagination}
@@ -314,7 +394,7 @@ const columns: TableOptions<
         inactive: "Inactive",
       } as const;
 
-      const status = row.original.status as UserStatus;
+      const status = row.original.status;
       return (
         <div className="flex items-center justify-start">
           <span
@@ -327,6 +407,18 @@ const columns: TableOptions<
     },
   },
   {
+    accessorKey: "homeRegion",
+    meta: { name: "Home Region" },
+    header: Header,
+    cell: ({ row }) => (
+      <Cell>
+        {row.original.homeRegion
+          ? `${row.original.homeRegion.homeRegionName}`
+          : ""}
+      </Cell>
+    ),
+  },
+  {
     accessorKey: "regions",
     meta: { name: "Regions" },
     header: Header,
@@ -334,6 +426,7 @@ const columns: TableOptions<
       <Cell {...cell}>
         {cell.row.original.roles
           .map((role: { orgName: string }) => role.orgName)
+          .filter(onlyUnique)
           .join(", ")}
       </Cell>
     ),
@@ -361,12 +454,12 @@ const columns: TableOptions<
             <DropdownMenuItem
               onClick={(e) => {
                 e.stopPropagation();
-                openModal(ModalType.ADMIN_GRANT_ACCESS, {
+                openModal(ModalType.ADMIN_MANAGE_ACCESS, {
                   userId: Number(row.original.id),
                 });
               }}
             >
-              <div>Grant Access</div>
+              <div>Manage Access</div>
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={(e) => {

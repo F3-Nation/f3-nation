@@ -29,7 +29,18 @@ This is the F3 Nation Map application, an interactive map for F3 Nation location
    - Unzip and rename to `.env`
    - Place the `.env` file in this directory (`apps/map/.env`)
 
-4. **Start development server**:
+4. **Database setup** - Add the service account API key:
+
+   Insert a row into the `api_keys` table in your database:
+
+   ```sql
+   INSERT INTO api_keys (key, name, description, owner_id)
+   VALUES ('f3_map_service_account', 'F3 Map Service Account', 'Provides Public Access', 1);
+   ```
+
+   This key enables unauthenticated access to the public map interface.
+
+5. **Start development server**:
 
    ```bash
    # From the monorepo root, start only the map app

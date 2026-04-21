@@ -32,22 +32,23 @@ export const WorkoutDetailsModal = ({
       enabled: locationId >= 0,
     }),
   );
+  const location = results?.location;
   const modalEventId =
-    results?.location.events.find((e) => e.id === selectedEventId)?.id ??
-    results?.location.events[0]?.id ??
+    location?.events.find((e) => e.id === selectedEventId)?.id ??
+    location?.events[0]?.id ??
     null;
-  const modalAOIds = results?.location.events.map((e) => e.aoId);
+  const modalAOIds = results?.location?.events.map((e) => e.aoId);
 
   const width = useWindowWidth();
   const isLarge = width > Number(BreakPoints.LG);
   const isMedium = width > Number(BreakPoints.MD);
 
   // Get selected event details for edit buttons
-  const selectedEvent = results?.location.events.find(
+  const selectedEvent = results?.location?.events.find(
     (event) => event.id === modalEventId,
   );
   const eventName = selectedEvent?.name ?? "Workout";
-  const aoName = results?.location.parentName ?? "AO";
+  const aoName = results?.location?.parentName ?? "AO";
   const aoId = selectedEvent?.aoId ?? modalAOIds?.[0] ?? null;
   console.log("aoId", aoId, modalAOIds, results);
 
@@ -77,7 +78,7 @@ export const WorkoutDetailsModal = ({
               aoName={aoName}
               eventName={eventName}
               timeDisplay={timeDisplay}
-              eventCount={results?.location.events.length ?? 0}
+              eventCount={results?.location?.events.length ?? 0}
             />
           </div>
         )}

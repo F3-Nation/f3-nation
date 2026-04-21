@@ -1,5 +1,5 @@
 {
-  "id": "ed9842c7-06d1-4296-8f66-384f67c20203",
+  "id": "c64f4d41-4497-4b87-8c0d-e9f999fd4e48",
   "prevId": "ed85c598-c813-41a4-8050-0a3f600b082a",
   "version": "7",
   "dialect": "postgresql",
@@ -898,6 +898,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
+        },
+        "series_exception": {
+          "name": "series_exception",
+          "type": "series_exception",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
         },
         "meta": {
           "name": "meta",
@@ -3029,7 +3036,7 @@
           "name": "event_name",
           "type": "varchar",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "event_description": {
           "name": "event_description",
@@ -3474,19 +3481,19 @@
       "name": "request_type",
       "schema": "public",
       "values": [
-        "create_ao_and_location_and_event",
+        "create_location",
         "create_event",
-        "edit_event",
-        "edit_ao_and_location",
-        "move_ao_to_different_region",
-        "move_ao_to_new_location",
-        "move_ao_to_different_location",
-        "move_event_to_different_ao",
-        "move_event_to_new_location",
-        "move_event_to_new_ao",
-        "delete_event",
-        "delete_ao",
-        "edit"
+        "edit",
+        "delete_event"
+      ]
+    },
+    "public.series_exception": {
+      "name": "series_exception",
+      "schema": "public",
+      "values": [
+        "closed",
+        "different-time",
+        "miscellaneous"
       ]
     },
     "public.update_request_status": {

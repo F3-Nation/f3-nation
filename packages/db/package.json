@@ -31,7 +31,7 @@
     "@acme/env": "workspace:*",
     "@acme/shared": "workspace:*",
     "dotenv-cli": "^7.3.0",
-    "drizzle-orm": "^0.38.4",
+    "drizzle-orm": "^0.39.3",
     "esbuild-register": "^3.5.0",
     "pg": "^8.11.3",
     "postgres": "^3.4.3"

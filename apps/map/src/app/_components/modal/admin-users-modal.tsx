@@ -1,12 +1,14 @@
 "use client";
 
+import { UserPlus } from "lucide-react";
 import { useSession } from "next-auth/react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { z } from "zod";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
+import type { UserRole } from "@acme/shared/app/enums";
+import { safeParseInt } from "@acme/shared/common/functions";
 import { cn } from "@acme/ui";
 import { Button } from "@acme/ui/button";
 import {
@@ -36,6 +38,7 @@ import { toast } from "@acme/ui/toast";
 import { CrupdateUserSchema } from "@acme/validators";
 
 import gte from "lodash/gte";
+import { VirtualizedCombobox } from "~/app/_components/virtualized-combobox";
 import {
   ORPCError,
   invalidateQueries,
@@ -43,8 +46,8 @@ import {
   useMutation,
   useQuery,
 } from "~/orpc/react";
-import type { DataType, ModalType } from "~/utils/store/modal";
-import { closeModal } from "~/utils/store/modal";
+import type { DataType } from "~/utils/store/modal";
+import { ModalType, closeModal, openModal } from "~/utils/store/modal";
 
 export default function UserModal({
   data,
@@ -65,6 +68,52 @@ export default function UserModal({
   const user = userResponse?.user;
   const hasPiiAccess = userResponse?.includePii ?? false;
   const router = useRouter();
+  const { data: regions } = useQuery(
+    orpc.org.all.queryOptions({ input: { orgTypes: ["region"] } }),
+  );
+
+  // Get orgs where user has admin role (required to manage access)
+  const { data: accessibleOrgsData } = useQuery(
+    orpc.org.accessible.queryOptions({
+      input: {
+        orgTypes: ["region", "area", "sector", "nation"],
+      },
+    }),
+  );
+
+  // Filter to only orgs where user is admin (or all orgs if nation admin - roles will be empty)
+  const orgs = useMemo(() => {
+    if (!accessibleOrgsData?.orgs) return { orgs: [] };
+    const adminOrgs = accessibleOrgsData.orgs.filter(
+      (org) =>
+        // Nation admins get empty roles array but can manage all orgs
+        org.roles.length === 0 ||
+        org.roles.includes("admin") ||
+        org.roles.includes("editor"),
+    );
+    return { orgs: adminOrgs };
+  }, [accessibleOrgsData]);
+
+  const isAdmin = useMemo(() => {
+    return session?.roles?.some((r) => r.roleName === "admin") ?? false;
+  }, [session?.roles]);
+
+  const canEditUser = useMemo(() => {
+    if (!user?.id) return true;
+    if (session?.id === user.id) return true;
+    if (user.homeRegionId == null) return isAdmin;
+
+    const accessibleOrgIds = new Set((orgs?.orgs ?? []).map((org) => org.id));
+    return accessibleOrgIds.has(user.homeRegionId);
+  }, [user?.id, user?.homeRegionId, orgs?.orgs, session?.id, isAdmin]);
+
+  const isHomeRegionDisabled = useMemo(() => {
+    if (session?.id === user?.id) return false;
+    if (user?.homeRegionId == null) return !isAdmin;
+
+    const accessibleOrgIds = new Set((orgs?.orgs ?? []).map((org) => org.id));
+    return !accessibleOrgIds.has(user.homeRegionId);
+  }, [session?.id, user?.id, user?.homeRegionId, orgs?.orgs, isAdmin]);
 
   const form = useForm({
     schema: CrupdateUserSchema.extend({
@@ -77,31 +126,31 @@ export default function UserModal({
       lastName: user?.lastName ?? "",
       email: user?.email ?? "",
       roles: user?.roles ?? [],
+      homeRegionId: user?.homeRegionId ?? null,
       status: user?.status ?? "active",
     },
   });
 
   useEffect(() => {
-    if (user) {
-      form.reset({
-        id: user.id ?? undefined,
-        f3Name: user?.f3Name ?? "",
-        firstName: user?.firstName ?? "",
-        lastName: user?.lastName ?? "",
-        email: user?.email ?? "",
-        roles: user?.roles,
-        status: user?.status ?? "active",
-        phone: user?.phone ?? "",
-      });
-    }
+    if (!user) return;
+
+    form.reset({
+      id: user.id ?? undefined,
+      f3Name: user?.f3Name ?? "",
+      firstName: user?.firstName ?? "",
+      lastName: user?.lastName ?? "",
+      email: user?.email ?? "",
+      roles: user?.roles,
+      homeRegionId: user?.homeRegionId ?? null,
+      status: user?.status ?? "active",
+      phone: user?.phone ?? "",
+    });
   }, [form, user]);
 
   const crupdateUser = useMutation(
     orpc.user.crupdate.mutationOptions({
       onSuccess: async (data) => {
-        await invalidateQueries({
-          predicate: (query) => query.queryKey[0] === "user",
-        });
+        await invalidateQueries("user");
         const { roles } = data;
         if (session?.id === data.id && data.roles?.length > 0) {
           await update({ ...session, roles });
@@ -132,7 +181,7 @@ export default function UserModal({
       >
         <DialogHeader>
           <DialogTitle className="text-center">
-            {user?.id ? "Edit" : "Add"} User
+            {!canEditUser ? "View" : user?.id ? "Edit" : "Add"} User
           </DialogTitle>
         </DialogHeader>
 
@@ -196,6 +245,7 @@ export default function UserModal({
                       <FormControl>
                         <Input
                           placeholder="F3 Name"
+                          disabled={!canEditUser}
                           {...field}
                           value={field.value ?? ""}
                         />
@@ -216,6 +266,7 @@ export default function UserModal({
                       <FormControl>
                         <Input
                           placeholder="First Name"
+                          disabled={!canEditUser}
                           {...field}
                           value={field.value ?? ""}
                         />
@@ -235,6 +286,7 @@ export default function UserModal({
                       <FormControl>
                         <Input
                           placeholder="Last Name"
+                          disabled={!canEditUser}
                           {...field}
                           value={field.value ?? ""}
                         />
@@ -258,6 +310,7 @@ export default function UserModal({
                             <Input
                               placeholder="Email"
                               type="email"
+                              disabled={!canEditUser}
                               {...field}
                               value={field.value ?? ""}
                             />
@@ -278,6 +331,7 @@ export default function UserModal({
                           <FormControl>
                             <Input
                               placeholder="Phone"
+                              disabled={!canEditUser}
                               {...field}
                               value={field.value ?? ""}
                             />
@@ -301,6 +355,7 @@ export default function UserModal({
                         onValueChange={field.onChange}
                         defaultValue={field.value}
                         value={field.value}
+                        disabled={!canEditUser}
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -318,16 +373,63 @@ export default function UserModal({
                 />
               </div>
 
-              <div className="mb-4 w-full px-2">
-                <div className="text-sm">
-                  <p className="font-medium">Roles</p>
-                  <div className="text-muted-foreground">
-                    To assign roles to new or existing users, go through the{" "}
-                    <Link href="/admin/users/mine">my users</Link> page.
-                  </div>
-                </div>
+              <div className="mb-4 w-1/2 px-2">
+                <FormField
+                  control={form.control}
+                  name="homeRegionId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Home Region</FormLabel>
+                      <FormControl>
+                        {isHomeRegionDisabled ? (
+                          <div className="flex h-9 w-full items-center rounded-md border border-input bg-muted px-3 text-sm text-muted-foreground">
+                            {user?.homeRegion?.homeRegionName}
+                          </div>
+                        ) : (
+                          <VirtualizedCombobox
+                            value={
+                              field.value === null || field.value === undefined
+                                ? undefined
+                                : String(field.value)
+                            }
+                            options={
+                              regions?.orgs.map((region) => ({
+                                value: region.id.toString(),
+                                label: region.name,
+                              })) ?? []
+                            }
+                            searchPlaceholder="Select a home region"
+                            onSelect={(value) => {
+                              if (Array.isArray(value)) {
+                                field.onChange(null);
+                                return;
+                              }
+
+                              const parsedValue = safeParseInt(value);
+                              if (parsedValue === undefined) {
+                                toast.error("Invalid home region");
+                                return;
+                              }
+
+                              field.onChange(parsedValue);
+                            }}
+                            isMulti={false}
+                          />
+                        )}
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
+
               <div className="mb-4 w-full px-2">
+                {!canEditUser && (
+                  <p className="pb-2 text-center text-sm text-muted-foreground">
+                    You do not have permission to edit this user. You can only
+                    modify users whose home region you manage.
+                  </p>
+                )}
                 <div className="flex space-x-4 pt-4">
                   <Button
                     type="button"
@@ -335,13 +437,81 @@ export default function UserModal({
                     onClick={() => closeModal()}
                     className="w-full"
                   >
-                    Cancel
+                    {canEditUser ? "Cancel" : "Close"}
                   </Button>
-                  <Button type="submit" className="w-full">
-                    Save Changes
-                  </Button>
+                  {canEditUser && (
+                    <Button type="submit" className="w-full">
+                      Save Changes
+                    </Button>
+                  )}
                 </div>
               </div>
+              {user?.id && (
+                <>
+                  <div className="w-full border-t border-border" />
+                  <div className="mb-4 w-full px-2">
+                    <div className="flex flex-col gap-2 pt-4">
+                      {user.roles && user.roles.length > 0 && (
+                        <div className="flex flex-col gap-2">
+                          <p className="text-sm font-medium text-foreground">
+                            Current Roles
+                          </p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            {user.roles.map(
+                              (role: {
+                                orgId: number;
+                                orgName: string;
+                                roleName: UserRole;
+                              }) => {
+                                const roleStyles = {
+                                  admin:
+                                    "bg-purple-100 text-purple-700 border-purple-200",
+                                  editor:
+                                    "bg-blue-100 text-blue-700 border-blue-200",
+                                  user: "bg-green-100 text-green-700 border-green-200",
+                                } as const;
+
+                                const roleLabels = {
+                                  admin: "Admin",
+                                  editor: "Editor",
+                                  user: "User",
+                                } as const;
+
+                                return (
+                                  <span
+                                    key={`${role.orgId}-${role.roleName}`}
+                                    className={`inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium ${
+                                      roleStyles[role.roleName]
+                                    }`}
+                                  >
+                                    {role.orgName} ({roleLabels[role.roleName]})
+                                  </span>
+                                );
+                              },
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          openModal(ModalType.ADMIN_MANAGE_ACCESS, {
+                            userId: Number(user.id),
+                          });
+                        }}
+                        className="w-full"
+                      >
+                        <UserPlus className="mr-2 h-4 w-4" />
+                        Manage Access
+                      </Button>
+                      <p className="text-xs text-muted-foreground text-center">
+                        Progress here will be lost
+                      </p>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </form>
         </Form>

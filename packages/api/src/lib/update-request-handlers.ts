@@ -1,5 +1,5 @@
 import type { schema as dbSchema } from "@acme/db";
-import type { UpdateRequestMeta } from "@acme/shared/app/types";
+import type { EventMeta, UpdateRequestMeta } from "@acme/shared/app/types";
 import type {
   CreateAOAndLocationAndEventType,
   CreateEventType,
@@ -28,12 +28,13 @@ import { insertLocation, updateLocation } from "./location-handlers";
  */
 export const recordUpdateRequest = async (params: {
   ctx: Context;
-  updateRequest: UpdateRequestData;
+  updateRequest: Pick<UpdateRequestData, "requestType" | "submittedBy"> &
+    Record<string, unknown>;
   status: "approved" | "pending" | "rejected";
 }): Promise<typeof dbSchema.updateRequests.$inferSelect> => {
   const reviewedAt = new Date().toISOString();
 
-  const req = params.updateRequest as Record<string, unknown>;
+  const req: Record<string, unknown> = { ...params.updateRequest };
 
   const meta: UpdateRequestMeta =
     "meta" in req && req.meta ? (req.meta as UpdateRequestMeta) : {};
@@ -90,7 +91,7 @@ export const recordUpdateRequest = async (params: {
 
   const updateRequestInsertData: typeof dbSchema.updateRequests.$inferInsert = {
     ...parsedRequestInsertData,
-    eventMeta: params.updateRequest.eventMeta,
+    eventMeta: params.updateRequest.eventMeta as EventMeta | undefined,
   };
 
   // Separate the id from the rest of the data for the update clause

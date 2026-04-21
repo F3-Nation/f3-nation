@@ -6,8 +6,19 @@
  * - Test database to be seeded with test data
  */
 
+import { vi } from "vitest";
+
+// Use vi.hoisted to ensure mockLimit is available when vi.mock runs (mocks are hoisted)
+const mockLimit = vi.hoisted(() => vi.fn());
+
+vi.mock("@orpc/experimental-ratelimit/memory", () => ({
+  MemoryRatelimiter: vi.fn().mockImplementation(() => ({
+    limit: mockLimit,
+  })),
+}));
+
 import { eq, schema } from "@acme/db";
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
   cleanup,
   createAdminSession,
@@ -25,6 +36,13 @@ describe("Event Type Router", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset rate limiter to allow requests
+    mockLimit.mockResolvedValue({
+      success: true,
+      limit: 10,
+      remaining: 9,
+      reset: Date.now() + 60000,
+    });
   });
 
   afterAll(async () => {
@@ -76,6 +94,91 @@ describe("Event Type Router", () => {
       }
     });
 
+    it("should return only active national event types when nationalOnly is true", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const nationOrg = await getOrCreateF3NationOrg();
+      const nationalName = `NAT_FILTER_${uniqueId()}`;
+      const nationalNameB = `NAT_FILTER_B_${uniqueId()}`;
+
+      const [inactiveNational] = await db
+        .insert(schema.eventTypes)
+        .values({
+          name: `NAT_INACTIVE_${uniqueId()}`,
+          eventCategory: "first_f",
+          isActive: false,
+          specificOrgId: null,
+        })
+        .returning();
+      if (inactiveNational) createdEventTypeIds.push(inactiveNational.id);
+
+      const [orgSpecific] = await db
+        .insert(schema.eventTypes)
+        .values({
+          name: `ORG_SPEC_${uniqueId()}`,
+          eventCategory: "first_f",
+          isActive: true,
+          specificOrgId: nationOrg.id,
+        })
+        .returning();
+      if (orgSpecific) createdEventTypeIds.push(orgSpecific.id);
+
+      const [nationalA] = await db
+        .insert(schema.eventTypes)
+        .values({
+          name: nationalNameB,
+          eventCategory: "first_f",
+          isActive: true,
+          specificOrgId: null,
+        })
+        .returning();
+      if (nationalA) createdEventTypeIds.push(nationalA.id);
+
+      const [nationalB] = await db
+        .insert(schema.eventTypes)
+        .values({
+          name: nationalName,
+          eventCategory: "first_f",
+          isActive: true,
+          specificOrgId: null,
+        })
+        .returning();
+      if (nationalB) createdEventTypeIds.push(nationalB.id);
+
+      const client = createTestClient();
+      const result = await client.eventType.all({
+        nationalOnly: true,
+        statuses: ["active"],
+        sorting: [{ id: "name", desc: false }],
+      });
+
+      const ids = result.eventTypes.map((r) => r.id);
+      expect(ids).toContain(nationalA?.id);
+      expect(ids).toContain(nationalB?.id);
+      expect(ids).not.toContain(inactiveNational?.id);
+      expect(ids).not.toContain(orgSpecific?.id);
+
+      const names = result.eventTypes.map((r) => r.name);
+      const sorted = [...names].sort((a, b) => a.localeCompare(b));
+      expect(names).toEqual(sorted);
+    });
+
+    it("should reject nationalOnly combined with orgIds", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const nationOrg = await getOrCreateF3NationOrg();
+      const client = createTestClient();
+
+      await expect(
+        client.eventType.all({
+          nationalOnly: true,
+          orgIds: [nationOrg.id],
+        }),
+      ).rejects.toThrow();
+    });
+
     it("should search by name", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
@@ -120,6 +223,121 @@ describe("Event Type Router", () => {
 
       expect(result).toHaveProperty("eventTypes");
       expect(Array.isArray(result.eventTypes)).toBe(true);
+    });
+
+    it("should return correct event types when filtering by regionId", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+      const client = createTestClient();
+
+      // Create two test regions
+      const [region1] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Test Region 1 ${uniqueId()}`,
+          orgType: "region",
+          parentId: f3Nation.id,
+          isActive: true,
+        })
+        .returning();
+
+      const [region2] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Test Region 2 ${uniqueId()}`,
+          orgType: "region",
+          parentId: f3Nation.id,
+          isActive: true,
+        })
+        .returning();
+
+      if (!region1 || !region2) {
+        throw new Error("Failed to create test regions");
+      }
+
+      // Create event types for region1
+      const [region1EventType] = await db
+        .insert(schema.eventTypes)
+        .values({
+          name: `Region 1 Event Type ${uniqueId()}`,
+          eventCategory: "first_f",
+          specificOrgId: region1.id,
+          isActive: true,
+        })
+        .returning();
+
+      // Create event types for region2
+      const [region2EventType] = await db
+        .insert(schema.eventTypes)
+        .values({
+          name: `Region 2 Event Type ${uniqueId()}`,
+          eventCategory: "first_f",
+          specificOrgId: region2.id,
+          isActive: true,
+        })
+        .returning();
+
+      // Create Nation event type (no specificOrgId)
+      const [nationEventType] = await db
+        .insert(schema.eventTypes)
+        .values({
+          name: `Nation Event Type ${uniqueId()}`,
+          eventCategory: "first_f",
+          specificOrgId: null,
+          isActive: true,
+        })
+        .returning();
+
+      if (region1EventType) {
+        createdEventTypeIds.push(region1EventType.id);
+      }
+      if (region2EventType) {
+        createdEventTypeIds.push(region2EventType.id);
+      }
+      if (nationEventType) {
+        createdEventTypeIds.push(nationEventType.id);
+      }
+
+      // Test: Filtering by region1 should return region1's event types + Nation event types
+      const result = await client.eventType.all({
+        orgIds: [region1.id],
+        pageIndex: 0,
+        pageSize: 100,
+      });
+
+      expect(result).toHaveProperty("eventTypes");
+      expect(Array.isArray(result.eventTypes)).toBe(true);
+
+      // Should include region1's event type
+      if (region1EventType) {
+        const foundRegion1Type = result.eventTypes.some(
+          (et) => et.id === region1EventType.id,
+        );
+        expect(foundRegion1Type).toBe(true);
+      }
+
+      // Should include Nation event type
+      if (nationEventType) {
+        const foundNationType = result.eventTypes.some(
+          (et) => et.id === nationEventType.id,
+        );
+        expect(foundNationType).toBe(true);
+      }
+
+      // Should NOT include region2's event type
+      if (region2EventType) {
+        const foundRegion2Type = result.eventTypes.some(
+          (et) => et.id === region2EventType.id,
+        );
+        expect(foundRegion2Type).toBe(false);
+      }
+
+      // Cleanup regions
+      try {
+        await cleanup.org(region1.id);
+        await cleanup.org(region2.id);
+      } catch {
+        // Ignore cleanup errors
+      }
     });
   });
 
@@ -218,9 +436,9 @@ describe("Event Type Router", () => {
 
       expect(result).toHaveProperty("eventType");
       expect(Array.isArray(result.eventType)).toBe(true);
-      expect(result.eventType.length).toBeGreaterThan(0);
+      expect(result.eventType?.length).toBeGreaterThan(0);
 
-      const created = result.eventType[0];
+      const created = result.eventType?.[0];
       if (created) {
         expect(created.name).toBe(eventTypeName);
         createdEventTypeIds.push(created.id);
@@ -245,7 +463,7 @@ describe("Event Type Router", () => {
       expect(result).toHaveProperty("eventType");
       expect(Array.isArray(result.eventType)).toBe(true);
 
-      const created = result.eventType[0];
+      const created = result.eventType?.[0];
       if (created) {
         expect(created.name).toBe(eventTypeName);
         expect(created.specificOrgId).toBe(f3Nation.id);
@@ -284,7 +502,7 @@ describe("Event Type Router", () => {
       });
 
       expect(result).toHaveProperty("eventType");
-      const updated = result.eventType[0];
+      const updated = result.eventType?.[0];
       expect(updated?.id).toBe(testEventType.id);
       expect(updated?.name).toBe(updatedName);
     });

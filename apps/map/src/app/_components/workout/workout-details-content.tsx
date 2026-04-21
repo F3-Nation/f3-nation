@@ -12,9 +12,11 @@ import { getWhenFromWorkout } from "~/utils/get-when-from-workout";
 import { useUpdateEventSearchParams } from "~/utils/hooks/use-update-event-search-params";
 import { ModalType, openModal } from "~/utils/store/modal";
 import textLink from "~/utils/text-link";
+import { ContactLinks } from "../contact-links";
 import { ImageWithFallback } from "../image-with-fallback";
 import { EventChip } from "../map/event-chip";
 import { WorkoutDetailsSkeleton } from "../modal/workout-details-skeleton";
+import { DeletedWorkoutWarning } from "./deleted-workout-warning";
 
 export interface WorkoutDetailsContentProps {
   locationId: number;
@@ -36,16 +38,16 @@ export const WorkoutDetailsContent = ({
 
   const selectedEventId = useMemo(() => {
     if (providedEventId) return providedEventId;
-    return results?.location.events?.[0]?.id ?? null;
+    return results?.location?.events?.[0]?.id ?? null;
   }, [providedEventId, results]);
 
   const event = useMemo(
     () =>
       // Dont provide a fallback. This is indicative of worse problems
-      results?.location.events.find((event) => event.id === selectedEventId),
+      results?.location?.events?.find((event) => event.id === selectedEventId),
     [selectedEventId, results],
   );
-  const location = useMemo(() => results?.location, [results]);
+  const location = useMemo(() => results?.location ?? null, [results]);
 
   // Update the search params when the panel is open
   useUpdateEventSearchParams(location?.id ?? null, selectedEventId);
@@ -62,6 +64,31 @@ export const WorkoutDetailsContent = ({
     await navigator.clipboard.writeText(url);
     toast.success("Link copied to clipboard");
   }, [event?.id, location?.id]);
+
+  const aoContact = useMemo(
+    () =>
+      location
+        ? {
+            website: location.parentWebsite,
+            email: location.parentEmail,
+            twitter: location.parentTwitter,
+            facebook: location.parentFacebook,
+            instagram: location.parentInstagram,
+          }
+        : null,
+    [location],
+  );
+
+  const hasAoContact = useMemo(
+    () =>
+      aoContact &&
+      (aoContact.website ??
+        aoContact.email ??
+        aoContact.twitter ??
+        aoContact.facebook ??
+        aoContact.instagram),
+    [aoContact],
+  );
 
   const workoutFields = useMemo(
     () =>
@@ -97,26 +124,31 @@ export const WorkoutDetailsContent = ({
               ) : null,
             ].filter(isTruthy),
             When: event ? getWhenFromWorkout(event) : "",
-            Website: location.parentWebsite ? (
-              <Link
-                href={location.parentWebsite}
-                target="_blank"
-                className="underline"
-              >
-                {location.parentWebsite}
-              </Link>
-            ) : null,
+            Contact:
+              hasAoContact && aoContact ? (
+                <ContactLinks contact={aoContact} iconSize="sm" />
+              ) : null,
             Notes: event?.description ? textLink(event.description) : null,
           }
         : {},
-    [event, location],
+    [event, location, aoContact, hasAoContact],
   );
 
-  const hasMultipleWorkouts = (results?.location.events.length ?? 0) > 1;
+  const hasMultipleWorkouts = (results?.location?.events.length ?? 0) > 1;
   const shouldShowAOSection = hasMultipleWorkouts && event?.aoName;
 
-  if (!location || !event || isLoading) {
+  if (isLoading) {
     return <WorkoutDetailsSkeleton />;
+  }
+  if (!location) {
+    return (
+      <DeletedWorkoutWarning
+        text={results?.message ?? "Location not found or unavailable."}
+      />
+    );
+  }
+  if (!event) {
+    return <DeletedWorkoutWarning text="Event is unavailable." />;
   }
 
   return (
@@ -128,20 +160,21 @@ export const WorkoutDetailsContent = ({
             onClick={() =>
               openModal(ModalType.FULL_IMAGE, {
                 title: `${location.parentName} logo`,
-                src: location.parentLogo ?? "/f3_logo.png",
+                src:
+                  location.parentLogo ?? location.regionLogo ?? "/f3_logo.png",
                 fallbackSrc: "/f3_logo.png",
-                alt: location.parentLogo ?? "F3 logo",
+                alt: `Logo for ${location.parentName ?? "F3"}`,
               })
             }
           >
             <ImageWithFallback
-              key={location.parentLogo}
-              src={location.parentLogo ?? "/f3_logo.png"}
+              key={location.parentLogo ?? location.regionLogo}
+              src={location.parentLogo ?? location.regionLogo ?? "/f3_logo.png"}
               fallbackSrc="/f3_logo.png"
               loading="lazy"
               width={64}
               height={64}
-              alt={location.parentLogo ?? "F3 logo"}
+              alt={`Logo for ${location.parentName ?? "F3"}`}
               className="rounded-lg bg-black"
             />
           </button>
@@ -154,33 +187,32 @@ export const WorkoutDetailsContent = ({
       <div>
         {hasMultipleWorkouts ? (
           <span className="text-sm">
-            There are {results?.location.events.length} workouts at this
-            location
+            There are {location?.events.length} workouts at this location
           </span>
         ) : (
           <div className="h-1" />
         )}
         <div className="flex flex-row flex-wrap gap-1">
-          {results?.location.events.map((event) => (
+          {location?.events.map((event) => (
             <EventChip
               key={event.id}
               selected={selectedEventId === event.id}
               event={{
                 id: event.id,
                 name: event.name,
-                locationId: results.location.id,
+                locationId: location?.id ?? 0,
                 dayOfWeek: event.dayOfWeek,
                 startTime: event.startTime,
                 endTime: event.endTime,
                 eventTypes: event.eventTypes,
               }}
               location={{
-                lat: results.location.lat,
-                lon: results.location.lon,
-                id: results.location.id,
+                lat: location?.lat ?? null,
+                lon: location?.lon ?? null,
+                id: location?.id ?? 0,
               }}
               size={chipSize}
-              hideName={results.location.events.length === 1}
+              hideName={(location?.events.length ?? 0) === 1}
             />
           ))}
         </div>

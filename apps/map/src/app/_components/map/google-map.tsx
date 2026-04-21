@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect, useState } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useWindowSize } from "@react-hook/window-size";
 import { APIProvider, ControlPosition, Map } from "@vis.gl/react-google-maps";
 
@@ -94,6 +94,42 @@ const ProvidedGoogleMapComponent = memo(
 
     const [width, height] = useWindowSize();
 
+    // Memoize zoom control position to prevent object recreation
+    // Keep this memoized as Map component might optimize on prop changes
+    const zoomControlOptions = useMemo(
+      () => ({
+        position: isMobileWidth
+          ? ControlPosition.RIGHT_TOP
+          : ControlPosition.RIGHT_BOTTOM,
+      }),
+      [isMobileWidth],
+    );
+
+    // Memoize onClick handler to prevent function recreation
+    const handleMapClick = useCallback(
+      (
+        e: Parameters<
+          NonNullable<React.ComponentProps<typeof Map>["onClick"]>
+        >[0],
+      ) => {
+        console.log("map on click", e);
+        // @vis.gl/react-google-maps wraps the event in e.detail
+        const latLng = e.detail?.latLng;
+        if (appStore.get("mode") === "edit" && latLng) {
+          mapStore.setState({ updateLocation: latLng });
+        } else {
+          setSelectedItem({
+            locationId: null,
+            eventId: null,
+            showPanel: false,
+          });
+          closePanel();
+        }
+      },
+      [], // Stable dependencies - appStore and functions don't change
+    );
+
+    // Client-side mounting to prevent SSR mismatch
     // We have to manage mounting the map otherwise there is a mismatch in rendered size
     // Causing it to render as a blank screen. Not sure why "use client" isn't working
     const [isMounted, setIsMounted] = useState(false);
@@ -107,7 +143,7 @@ const ProvidedGoogleMapComponent = memo(
     return (
       <div
         style={{
-          height: height,
+          height,
           width:
             width >= Number(BreakPoints.LG) ? width - SIDEBAR_WIDTH : width,
         }}
@@ -125,29 +161,11 @@ const ProvidedGoogleMapComponent = memo(
           mapTypeControl={false}
           fullscreenControl={false}
           zoomControl={true}
-          zoomControlOptions={{
-            position: isMobileWidth
-              ? ControlPosition.RIGHT_TOP
-              : ControlPosition.RIGHT_BOTTOM,
-          }}
+          zoomControlOptions={zoomControlOptions}
           cameraControl={false}
           disableDoubleClickZoom
           isFractionalZoomEnabled={fractionalZoom}
-          // styles={[ { featureType: "all", elementType: "all", stylers: [{ visibility: "off" }], }, ]}
-          onClick={(e) => {
-            console.log("map on click", e);
-            if (appStore.get("mode") === "edit" && e.detail.latLng) {
-              const latLng = e.detail.latLng;
-              mapStore.setState({ updateLocation: latLng });
-            } else {
-              setSelectedItem({
-                locationId: null,
-                eventId: null,
-                showPanel: false,
-              });
-              closePanel();
-            }
-          }}
+          onClick={handleMapClick}
           clickableIcons={false}
         >
           <UrlUpdater />

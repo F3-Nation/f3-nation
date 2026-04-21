@@ -4,10 +4,31 @@
  * The ping router is a simple health check that doesn't require authentication.
  */
 
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// Use vi.hoisted to ensure mockLimit is available when vi.mock runs (mocks are hoisted)
+const mockLimit = vi.hoisted(() => vi.fn());
+
+vi.mock("@orpc/experimental-ratelimit/memory", () => ({
+  MemoryRatelimiter: vi.fn().mockImplementation(() => ({
+    limit: mockLimit,
+  })),
+}));
+
 import { createTestClient } from "../__tests__/test-utils";
 
 describe("Ping Router", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Reset rate limiter to allow requests
+    mockLimit.mockResolvedValue({
+      success: true,
+      limit: 10,
+      remaining: 9,
+      reset: Date.now() + 60000,
+    });
+  });
+
   it("should return alive status and timestamp", async () => {
     const client = createTestClient();
     const result = await client.ping();

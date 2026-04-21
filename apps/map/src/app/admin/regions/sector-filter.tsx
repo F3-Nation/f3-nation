@@ -49,7 +49,7 @@ export const SectorFilter = ({
           <Command>
             <CommandInput placeholder="Search statuses..." />
             <CommandEmpty>No statuses found.</CommandEmpty>
-            <CommandGroup>
+            <CommandGroup className="max-h-96 overflow-y-auto">
               {sectors?.orgs.map((sector) => (
                 <CommandItem
                   key={sector.id}

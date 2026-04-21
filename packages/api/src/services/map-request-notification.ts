@@ -6,7 +6,7 @@ import { schema } from "@acme/db";
 import { env } from "@acme/env";
 import { requestTypeToTitle } from "@acme/shared/app/functions";
 
-import { mail, Templates } from "../mail";
+import { mail, Templates } from "@acme/mail";
 
 /**
  * Interface for the notification parameters
@@ -216,11 +216,11 @@ export const notifyMapChangeRequest = async ({
   }
 
   // Prepare email parameters
-  const baseUrl = env.NEXT_PUBLIC_API_URL?.endsWith("/")
-    ? env.NEXT_PUBLIC_API_URL.slice(0, -1)
-    : env.NEXT_PUBLIC_API_URL ?? "";
+  const mapBaseUrl = env.NEXT_PUBLIC_MAP_URL?.endsWith("/")
+    ? env.NEXT_PUBLIC_MAP_URL.slice(0, -1)
+    : env.NEXT_PUBLIC_MAP_URL ?? "";
 
-  const requestsUrl = `${baseUrl}/admin/requests`;
+  const requestsUrl = `${mapBaseUrl}/admin/requests`;
   const title = requestTypeToTitle(request.requestType);
 
   // Send emails
@@ -238,16 +238,22 @@ export const notifyMapChangeRequest = async ({
         recipientOrg: recipient.orgName ?? "Unknown",
       });
 
-      console.log("notifyMapChangeRequest: Email sent", {
-        recipient: recipient.email,
-        requestId,
-      });
+      console.log(
+        "notifyMapChangeRequest: Email sent",
+        JSON.stringify({
+          recipient: recipient.email,
+          requestId,
+        }),
+      );
     } catch (error) {
-      console.error("notifyMapChangeRequest: Error sending email", {
-        error,
-        recipient: recipient.email,
-        requestId,
-      });
+      console.error(
+        "notifyMapChangeRequest: Error sending email",
+        JSON.stringify({
+          error,
+          recipient: recipient.email,
+          requestId,
+        }),
+      );
     }
   });
 

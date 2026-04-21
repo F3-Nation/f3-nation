@@ -1,5 +1,3 @@
-import { useCallback } from "react";
-import Link from "next/link";
 import {
   ArrowRight,
   Eye,
@@ -17,6 +15,8 @@ import {
 } from "lucide-react";
 import { signIn } from "next-auth/react";
 import { useTheme } from "next-themes";
+import Link from "next/link";
+import { useCallback } from "react";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
 import { isDevelopment, isProd } from "@acme/shared/common/constants";
@@ -30,7 +30,6 @@ import {
 } from "@acme/ui/dialog";
 import { toast } from "@acme/ui/toast";
 
-import { orpc } from "~/orpc/react";
 import { useAuth } from "~/utils/hooks/use-auth";
 import { appStore } from "~/utils/store/app";
 import { mapStore } from "~/utils/store/map";
@@ -317,14 +316,23 @@ export default function SettingsModal() {
                   "flex w-full flex-row items-center justify-center gap-1 rounded-md bg-card p-2 text-foreground shadow-sm hover:bg-accent",
                 )}
                 onClick={() => {
-                  void orpc.org.revalidate
-                    .call()
-                    .then(() => {
+                  void fetch("/api/revalidate", { method: "POST" })
+                    .then(async (response) => {
+                      if (!response.ok) {
+                        const json = (await response.json()) as {
+                          error: string;
+                        };
+                        throw new Error(json.error ?? "Failed to revalidate");
+                      }
                       toast.success("Nation revalidated");
                     })
                     .catch((error: unknown) => {
                       console.log("RevalidateNation", { error });
-                      toast.error("Failed to revalidate Nation");
+                      toast.error(
+                        error instanceof Error
+                          ? error.message
+                          : "Failed to revalidate Nation",
+                      );
                     });
                 }}
               >
@@ -364,7 +372,9 @@ export default function SettingsModal() {
               <span className="text-xs">Help</span>
             </button>
           </div>
-          <VersionInfo className="text-center text-xs text-foreground/60" />
+          <div className="flex justify-center">
+            <VersionInfo className="text-xs text-foreground/60" />
+          </div>
         </div>
       </DialogContent>
     </Dialog>

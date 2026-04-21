@@ -66,9 +66,7 @@ export const ApiKeysTable = () => {
   const revokeKey = useMutation(
     orpc.apiKey.revoke.mutationOptions({
       onSuccess: async (_result, variables) => {
-        await invalidateQueries({
-          predicate: (query) => query.queryKey[0] === "apiKey",
-        });
+        await invalidateQueries("apiKey");
         toast.success(
           variables?.revoke === false
             ? "API key reactivated"
@@ -84,9 +82,7 @@ export const ApiKeysTable = () => {
   const purgeKey = useMutation(
     orpc.apiKey.purge.mutationOptions({
       onSuccess: async () => {
-        await invalidateQueries({
-          predicate: (query) => query.queryKey[0] === "apiKey",
-        });
+        await invalidateQueries("apiKey");
         toast.success("API key deleted");
       },
       onError: () => {
@@ -127,12 +123,18 @@ export const ApiKeysTable = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
-                  <TableHead>Key</TableHead>
-                  <TableHead>Owner</TableHead>
-                  <TableHead>Org scope</TableHead>
+                  <TableHead className="hidden sm:table-cell">Key</TableHead>
+                  <TableHead className="hidden md:table-cell">Owner</TableHead>
+                  <TableHead className="hidden lg:table-cell">
+                    Org scope
+                  </TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Last used</TableHead>
-                  <TableHead>Created</TableHead>
+                  <TableHead className="hidden md:table-cell">
+                    Last used
+                  </TableHead>
+                  <TableHead className="hidden sm:table-cell">
+                    Created
+                  </TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -153,12 +155,12 @@ export const ApiKeysTable = () => {
                           ) : null}
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden sm:table-cell">
                         <div className="flex flex-wrap items-center gap-2 font-mono text-sm">
                           <span>{displayKey}</span>
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden md:table-cell">
                         <div className="flex flex-col">
                           <span>{row.ownerName ?? "Unassigned"}</span>
                           <span className="text-xs text-muted-foreground">
@@ -166,7 +168,7 @@ export const ApiKeysTable = () => {
                           </span>
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden lg:table-cell">
                         <div className="flex flex-wrap items-center gap-2">
                           {row.roles && row.roles.length > 0 ? (
                             row.roles.map((role, index) => {
@@ -205,8 +207,12 @@ export const ApiKeysTable = () => {
                           {status.charAt(0).toUpperCase() + status.slice(1)}
                         </Badge>
                       </TableCell>
-                      <TableCell>{formatDateTime(row.lastUsedAt)}</TableCell>
-                      <TableCell>{formatDateTime(row.created)}</TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        {formatDateTime(row.lastUsedAt)}
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell">
+                        {formatDateTime(row.created)}
+                      </TableCell>
                       <TableCell className="text-right">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>

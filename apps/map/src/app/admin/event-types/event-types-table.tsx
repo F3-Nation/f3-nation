@@ -20,10 +20,12 @@ import type { RouterOutputs } from "~/orpc/types";
 import { orpc, useQuery } from "~/orpc/react";
 import { useDebounce } from "~/utils/hooks/use-debounce";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
+import { MobileFilterSheet } from "../_components/mobile-filter-sheet";
+import { ResetFilter } from "../_components/reset-filter";
 import { EventTypeIsActiveFilter } from "./event-type-is-active-filter";
 import { OrgFilter } from "./org-filter";
 
-type Org = RouterOutputs["org"]["all"]["orgs"][number];
+type Org = RouterOutputs["org"]["accessible"]["orgs"][number];
 
 export const EventTypesTable = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -37,28 +39,40 @@ export const EventTypesTable = () => {
     pageSize: 20,
   });
 
-  const { data: eventTypes } = useQuery(
-    orpc.eventType.all.queryOptions({
+  // Get user's accessible orgs (all orgs if nation admin, otherwise assigned orgs)
+  const { data: accessibleOrgs } = useQuery(orpc.org.accessible.queryOptions());
+
+  // Use selectedOrgs if manually selected, otherwise use user's accessible orgIds
+  const orgIdsToUse =
+    selectedOrgs.length > 0
+      ? selectedOrgs.map((org) => org.id)
+      : accessibleOrgs?.orgs.map((org) => org.id) ?? [];
+
+  const { data: eventTypes } = useQuery({
+    ...orpc.eventType.all.queryOptions({
       input: {
-        orgIds: selectedOrgs.map((org) => org.id),
+        orgIds: orgIdsToUse,
         statuses: selectedStatuses,
         searchTerm: debouncedSearchTerm,
         pageSize: pagination.pageSize,
         pageIndex: pagination.pageIndex,
-        ignoreNationEventTypes: true,
+        ignoreNationEventTypes: false,
         sorting: sorting,
       },
     }),
-  );
+    // Wait for accessibleOrgs to load before running query
+    enabled: accessibleOrgs !== undefined,
+  });
 
   const handleOrgSelect = (org: Org) => {
     setSelectedOrgs((prev) => {
-      if (prev.includes(org)) {
-        return prev.filter((s) => s !== org);
+      if (prev.some((s) => s.id === org.id)) {
+        return prev.filter((s) => s.id !== org.id);
       } else {
         return [...prev, org];
       }
     });
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
   };
 
   const handleStatusSelect = (status: IsActiveStatus) => {
@@ -69,7 +83,18 @@ export const EventTypesTable = () => {
         return [...prev, status];
       }
     });
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
   };
+
+  const handleResetFilters = () => {
+    setSelectedStatuses(["active"]);
+    setSelectedOrgs([]);
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+  };
+
+  const activeFilterCount =
+    (selectedStatuses.length > 0 ? selectedStatuses.length : 0) +
+    selectedOrgs.length;
 
   return (
     <MDTable
@@ -89,14 +114,38 @@ export const EventTypesTable = () => {
       }}
       filterComponent={
         <>
-          <EventTypeIsActiveFilter
-            onStatusSelect={handleStatusSelect}
-            selectedStatuses={selectedStatuses}
-          />
-          <OrgFilter
-            onOrgSelect={handleOrgSelect}
-            selectedOrgs={selectedOrgs}
-          />
+          {/* Desktop: inline filters */}
+          <div className="hidden items-center gap-2 md:flex">
+            <EventTypeIsActiveFilter
+              onStatusSelect={handleStatusSelect}
+              selectedStatuses={selectedStatuses}
+            />
+            <OrgFilter
+              onOrgSelect={handleOrgSelect}
+              selectedOrgs={selectedOrgs}
+            />
+            <ResetFilter onClick={handleResetFilters} />
+          </div>
+          {/* Mobile: sheet-based filters */}
+          <MobileFilterSheet
+            activeFilterCount={activeFilterCount}
+            onReset={handleResetFilters}
+          >
+            <div>
+              <p className="mb-1 text-sm font-medium">Status</p>
+              <EventTypeIsActiveFilter
+                onStatusSelect={handleStatusSelect}
+                selectedStatuses={selectedStatuses}
+              />
+            </div>
+            <div>
+              <p className="mb-1 text-sm font-medium">Organization</p>
+              <OrgFilter
+                onOrgSelect={handleOrgSelect}
+                selectedOrgs={selectedOrgs}
+              />
+            </div>
+          </MobileFilterSheet>
         </>
       }
     />

@@ -21,7 +21,7 @@ const _EVENT_TAGS = [
   { name: EventTags.Convergence, color: "Orange" },
 ];
 
-const _GRAVITY_FORMS_TIME_FORMAT = "hh:mm a" as const;
+const _GRAVITY_FORMS_TIME_FORMAT = "hh:mm a";
 dayjs.extend(customParseFormat);
 
 if (!("DATABASE_URL" in env))

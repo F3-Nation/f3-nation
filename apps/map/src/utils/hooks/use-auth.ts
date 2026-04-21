@@ -1,21 +1,15 @@
-import { useMemo } from "react";
+import { isNationAdminFromSession } from "@acme/shared/app/role-checks";
 import { useSession } from "next-auth/react";
+import { useMemo } from "react";
 
 export const useAuth = () => {
   const { data: session, status } = useSession();
   const { isNationAdmin, isEditorOrAdmin, isAdmin } = useMemo(() => {
     if (!session)
       return { isNationAdmin: false, isEditorOrAdmin: false, isAdmin: false };
-    let isNationAdmin = false;
     let isEditorOrAdmin = false;
     let isAdmin = false;
     session.roles?.forEach((role) => {
-      if (
-        ["admin", "editor"].includes(role.roleName) &&
-        role.orgName.toLowerCase().includes("f3 nation")
-      ) {
-        isNationAdmin = true;
-      }
       if (["admin", "editor"].includes(role.roleName)) {
         isEditorOrAdmin = true;
       }
@@ -23,7 +17,11 @@ export const useAuth = () => {
         isAdmin = true;
       }
     });
-    return { isNationAdmin, isEditorOrAdmin, isAdmin };
+    return {
+      isNationAdmin: isNationAdminFromSession(session),
+      isEditorOrAdmin,
+      isAdmin,
+    };
   }, [session]);
 
   return { session, isNationAdmin, isEditorOrAdmin, isAdmin, status };

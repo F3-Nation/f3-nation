@@ -1,12 +1,12 @@
 {
   "name": "f3-nation-api",
-  "version": "3.1.2",
+  "version": "4.1.0",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "pnpm with-env next build",
     "clean": "rm -rf .turbo node_modules .next",
-    "dev": "TZ=UTC pnpm with-env next dev",
+    "dev": "TZ=UTC pnpm with-env next dev -p 3001",
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
     "lint": "dotenv -v SKIP_ENV_VALIDATION=1 next lint",
     "start": "pnpm with-env next start",
@@ -21,7 +21,7 @@
     "with-env": "dotenv -e ../../.env --"
   },
   "dependencies": {
-    "@acme/api": "workspace:^0.1.0",
+    "@acme/api": "workspace:^0.2.0",
     "@acme/auth": "workspace:^0.1.0",
     "@acme/db": "workspace:^0.1.0",
     "@acme/env": "workspace:^0.1.0",
@@ -103,6 +103,9 @@
       "@acme/eslint-config/base",
       "@acme/eslint-config/nextjs",
       "@acme/eslint-config/react"
+    ],
+    "ignorePatterns": [
+      "vitest.config.ts"
     ]
   },
   "prettier": "@acme/prettier-config"

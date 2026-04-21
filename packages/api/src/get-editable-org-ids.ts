@@ -106,10 +106,13 @@ export const getEditableOrgIdsForUser = async (
       return found === idx;
     });
 
-  console.log("getEditableOrgIdsForUser", {
-    editableOrgs,
-    editableOrgsCount: editableOrgs.length,
-  });
+  console.log(
+    "getEditableOrgIdsForUser",
+    JSON.stringify({
+      editableOrgs,
+      editableOrgsCount: editableOrgs.length,
+    }),
+  );
 
   return {
     editableOrgs,

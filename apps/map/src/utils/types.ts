@@ -22,14 +22,17 @@ export interface SparseF3Marker {
     dayOfWeek: DayOfWeek | null;
     startTime: string | null;
     eventTypes: { id: number; name: string }[];
+    aoName: string | null;
+    aoLogo: string | null;
   }[];
 }
 
-export type LocationMarkerEventWithLatLon =
-  F3Marker["location"]["events"][number] & {
-    lat: number;
-    lon: number;
-  };
+export type LocationMarkerEventWithLatLon = NonNullable<
+  F3Marker["location"]
+>["events"][number] & {
+  lat: number;
+  lon: number;
+};
 
 // export type F3MapSearchResultItem =
 //   RouterOutputs["location"]["getAllLocationMarkers"][number]["events"][number] & {
@@ -111,4 +114,9 @@ export const isF3RegionMapSearchResult = (
 
 export type UpdateRequestTableItem =
   RouterOutputs["request"]["all"]["requests"][number];
-export type UpdateRequestById = NonNullable<RouterOutputs["request"]["byId"]>;
+export type UpdateRequestByIdResponse = NonNullable<
+  RouterOutputs["request"]["byId"]
+>;
+export type UpdateRequestById = NonNullable<
+  UpdateRequestByIdResponse["request"]
+>;

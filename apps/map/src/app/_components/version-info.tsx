@@ -1,5 +1,6 @@
 import type { HTMLAttributes } from "react";
 import { useState } from "react";
+import Link from "next/link";
 
 import { cn } from "@acme/ui";
 
@@ -16,20 +17,28 @@ export const VersionInfo = (props: HTMLAttributes<HTMLButtonElement>) => {
     : "";
 
   return (
-    <button
-      {...rest}
-      onClick={() => {
-        setClicks(clicks + 1);
-        if (clicks > 10) {
-          mapStore.setState({
-            showDebug: true,
-          });
-        }
-      }}
-      className={cn("cursor-default text-gray-300", className)}
-    >
-      v{packageJson.version} ({channel}
-      {commitHashString})
-    </button>
+    <span className={cn("inline-flex items-center gap-1", className)}>
+      <Link
+        href="/changelog"
+        className="cursor-pointer text-blue-600 underline underline-offset-2 hover:text-blue-800"
+      >
+        v{packageJson.version}
+      </Link>
+      <button
+        {...rest}
+        onClick={() => {
+          setClicks(clicks + 1);
+          if (clicks > 10) {
+            mapStore.setState({
+              showDebug: true,
+            });
+          }
+        }}
+        className="cursor-default"
+      >
+        ({channel}
+        {commitHashString})
+      </button>
+    </span>
   );
 };

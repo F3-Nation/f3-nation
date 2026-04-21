@@ -17,7 +17,11 @@
   "plugins": {
     "@release-it/bumper": {
       "in": "../../package.json",
-      "out": ["../../package.json", "../../apps/nextjs/package.json"]
+      "out": [
+        "../../package.json",
+        "../../apps/map/package.json",
+        "../../apps/api/package.json"
+      ]
     }
   }
 }

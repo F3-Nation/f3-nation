@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export const F3_NATION_ORG_ID = 1;
+
 export enum SnapPoint {
   "pt-0.95" = 0.95,
   // "pt-0.5" = 0.5,
@@ -203,8 +205,16 @@ export const routes = {
       __path: "/admin/workouts",
       __auth: "editor",
     },
+    positions: {
+      __path: "/admin/positions",
+      __auth: "editor",
+    },
+    emailTest: {
+      __path: "/admin/email-test",
+      __auth: "admin",
+    },
     noAccess: {
-      __path: "/no-access",
+      __path: "/admin/no-access",
       __auth: "none",
     },
   },
@@ -264,8 +274,8 @@ export enum Permissions {
   EDIT = "edit",
 }
 
-export const START_END_TIME_DB_FORMAT = "HHmm" as const;
-export const START_END_TIME_DISPLAY_FORMAT = "h:mmA" as const;
+export const START_END_TIME_DB_FORMAT = "HHmm";
+export const START_END_TIME_DISPLAY_FORMAT = "h:mmA";
 
 export const COUNTRIES = [
   { name: "Afghanistan", code: "AF" },
@@ -480,8 +490,17 @@ export const TEST_ADMIN_USER_ID = 2;
 export const TEST_EDITOR_ROLE_ID = 1;
 export const TEST_ADMIN_ROLE_ID = 2;
 
-export const API_PREFIX_V1 = "/v1" as const;
-export const MAP_API_PREFIX = "/map" as const;
+export const EVENT_CATEGORY_OPTIONS = [
+  { label: "1st F", value: "first_f" },
+  { label: "2nd F", value: "second_f" },
+  { label: "3rd F", value: "third_f" },
+] as const;
+
+export const EVENT_CATEGORY_LABEL_MAP: Record<string, string> =
+  Object.fromEntries(EVENT_CATEGORY_OPTIONS.map((o) => [o.value, o.label]));
+
+export const API_PREFIX_V1 = "/v1";
+export const MAP_API_PREFIX = "/map";
 
 export enum ApiKeyTags {
   API = "api",

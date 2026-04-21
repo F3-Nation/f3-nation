@@ -39,7 +39,7 @@ export const UpdatePane = () => {
 
     void openRequestModal({
       type: "create_ao_and_location_and_event",
-      meta: { originalRegionId: workoutInfo?.location.regionId ?? undefined },
+      meta: { originalRegionId: workoutInfo?.location?.regionId ?? undefined },
     });
   };
 
@@ -53,9 +53,9 @@ export const UpdatePane = () => {
     void openRequestModal({
       type: "move_ao_to_new_location",
       meta: {
-        originalRegionId: workoutInfo?.location.regionId ?? undefined,
-        originalAoId: workoutInfo?.location.events[0]?.aoId ?? undefined,
-        originalLocationId: workoutInfo?.location.id ?? undefined,
+        originalRegionId: workoutInfo?.location?.regionId ?? undefined,
+        originalAoId: workoutInfo?.location?.events[0]?.aoId ?? undefined,
+        originalLocationId: workoutInfo?.location?.id ?? undefined,
       },
     });
   };
@@ -70,9 +70,9 @@ export const UpdatePane = () => {
     void openRequestModal({
       type: "move_event_to_new_location",
       meta: {
-        originalRegionId: workoutInfo?.location.regionId ?? undefined,
-        originalAoId: workoutInfo?.location.events[0]?.aoId ?? undefined,
-        originalLocationId: workoutInfo?.location.id ?? undefined,
+        originalRegionId: workoutInfo?.location?.regionId ?? undefined,
+        originalAoId: workoutInfo?.location?.events[0]?.aoId ?? undefined,
+        originalLocationId: workoutInfo?.location?.id ?? undefined,
       },
     });
   };

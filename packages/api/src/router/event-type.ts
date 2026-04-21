@@ -13,8 +13,9 @@ import {
   isNull,
   or,
   schema,
+  sql,
 } from "@acme/db";
-import { IsActiveStatus } from "@acme/shared/app/enums";
+import { EventCategory, IsActiveStatus } from "@acme/shared/app/enums";
 import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
 import { EventTypeInsertSchema } from "@acme/validators";
 
@@ -26,18 +27,60 @@ export const eventTypeRouter = {
   /**
    * By default this gets all the event types available for the orgIds (meaning that general, nation-wide event types are included)
    * To get only the event types for a specific org, set ignoreNationEventTypes to true
+   * Use nationalOnly to return only nation-wide types (specific_org_id is null); cannot be combined with orgIds
    */
   all: protectedProcedure
     .input(
       z
         .object({
-          orgIds: arrayOrSingle(z.coerce.number()).optional(),
-          statuses: arrayOrSingle(z.enum(IsActiveStatus)).optional(),
-          pageIndex: z.coerce.number().optional(),
-          pageSize: z.coerce.number().optional(),
-          searchTerm: z.string().optional(),
-          sorting: parseSorting(),
-          ignoreNationEventTypes: z.coerce.boolean().optional(),
+          orgIds: arrayOrSingle(z.coerce.number())
+            .optional()
+            .describe(
+              "Filter event types by organization ID(s). Returns types in ANY of the specified orgs. Defaults to nation-wide types.",
+            ),
+          statuses: arrayOrSingle(z.enum(IsActiveStatus))
+            .optional()
+            .describe(
+              "Filter event types by status. Matches event types with ANY of the given statuses (active, inactive).",
+            ),
+          pageIndex: z.coerce
+            .number()
+            .optional()
+            .describe("Zero-based page index for pagination. Defaults to 0."),
+          pageSize: z.coerce
+            .number()
+            .optional()
+            .describe("Number of event types per page. Defaults to 10."),
+          searchTerm: z
+            .string()
+            .optional()
+            .describe(
+              "Search event types by name or description. Case-insensitive partial matching.",
+            ),
+          sorting: parseSorting().describe(
+            "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: name, description, eventCategory, specificOrgName, count, created.",
+          ),
+          ignoreNationEventTypes: z.coerce
+            .boolean()
+            .optional()
+            .describe(
+              "If true, only return event types specific to the requested orgs. If false (default), include nation-wide types.",
+            ),
+          nationalOnly: z.coerce
+            .boolean()
+            .optional()
+            .describe(
+              "If true, return only nation-wide event types (specific_org_id is null). Cannot be combined with orgIds.",
+            ),
+        })
+        .superRefine((data, ctx) => {
+          if (data.nationalOnly && data.orgIds?.length) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: "nationalOnly cannot be combined with orgIds",
+              path: ["nationalOnly"],
+            });
+          }
         })
         .optional(),
     )
@@ -49,6 +92,35 @@ export const eventTypeRouter = {
       description:
         "Get a paginated list of event types with optional filtering by organization",
     })
+    .output(
+      z.object({
+        eventTypes: z.array(
+          z.object({
+            id: z.number().describe("Event type ID"),
+            name: z.string().describe("Event type name"),
+            description: z
+              .string()
+              .nullable()
+              .describe("Event type description"),
+            eventCategory: z.enum(EventCategory).describe("Event category"),
+            acronym: z.string().nullable().describe("Event type acronym"),
+            specificOrgId: z
+              .number()
+              .nullable()
+              .describe("Specific organization ID"),
+            specificOrgName: z
+              .string()
+              .nullable()
+              .describe("Specific organ ization name"),
+            isActive: z.boolean().describe("Whether the event type is active"),
+            count: z
+              .number()
+              .describe("Number of events using this event type"),
+          }),
+        ),
+        totalCount: z.number().describe("Total number of event types"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const limit = input?.pageSize ?? 10;
       const offset = (input?.pageIndex ?? 0) * limit;
@@ -61,7 +133,7 @@ export const eventTypeRouter = {
           case "name":
             return direction(schema.eventTypes.name);
           case "description":
-            return direction(schema.eventTypes.description);
+            return direction(sql`NULLIF(${schema.eventTypes.description}, '')`);
           case "eventCategory":
             return direction(schema.eventTypes.eventCategory);
           case "specificOrgName":
@@ -80,10 +152,23 @@ export const eventTypeRouter = {
         name: schema.eventTypes.name,
         description: schema.eventTypes.description,
         eventCategory: schema.eventTypes.eventCategory,
+        acronym: schema.eventTypes.acronym,
         specificOrgId: schema.eventTypes.specificOrgId,
         specificOrgName: schema.orgs.name,
+        isActive: schema.eventTypes.isActive,
         count: count(schema.eventsXEventTypes.eventTypeId),
       };
+
+      const orgScopeFilter = input?.nationalOnly
+        ? isNull(schema.eventTypes.specificOrgId)
+        : input?.orgIds?.length
+          ? or(
+              inArray(schema.eventTypes.specificOrgId, input.orgIds),
+              input?.ignoreNationEventTypes
+                ? undefined
+                : isNull(schema.eventTypes.specificOrgId),
+            )
+          : undefined;
 
       const where = and(
         input?.searchTerm
@@ -92,14 +177,7 @@ export const eventTypeRouter = {
               ilike(schema.eventTypes.description, `%${input?.searchTerm}%`),
             )
           : undefined,
-        input?.orgIds?.length
-          ? or(
-              inArray(schema.eventTypes.specificOrgId, input?.orgIds),
-              input?.ignoreNationEventTypes
-                ? undefined
-                : isNull(schema.eventTypes.specificOrgId),
-            )
-          : undefined,
+        orgScopeFilter,
         !input?.statuses?.length ||
           input.statuses.length === IsActiveStatus.length
           ? undefined
@@ -143,8 +221,15 @@ export const eventTypeRouter = {
   byOrgId: protectedProcedure
     .input(
       z.object({
-        orgId: z.coerce.number(),
-        isActive: z.coerce.boolean().optional(),
+        orgId: z.coerce
+          .number()
+          .describe("The organization ID to fetch event types for"),
+        isActive: z
+          .boolean()
+          .optional()
+          .describe(
+            "Filter event types by status. If not specified, defaults to active only.",
+          ),
       }),
     )
     .route({
@@ -154,6 +239,27 @@ export const eventTypeRouter = {
       summary: "Get event types by organization",
       description: "Retrieve all event types for a specific organization",
     })
+    .output(
+      z.object({
+        eventTypes: z.array(
+          z.object({
+            id: z.number().describe("Event type ID"),
+            name: z.string().describe("Event type name"),
+            description: z
+              .string()
+              .nullable()
+              .describe("Event type description"),
+            eventCategory: z.enum(EventCategory).describe("Event category"),
+            acronym: z.string().nullable().describe("Event type acronym"),
+            specificOrgId: z
+              .number()
+              .nullable()
+              .describe("Specific organization ID"),
+            isActive: z.boolean().describe("Whether the event type is active"),
+          }),
+        ),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const eventTypes = await ctx.db
         .select()
@@ -170,14 +276,47 @@ export const eventTypeRouter = {
       return { eventTypes: eventTypes ?? null };
     }),
   byId: protectedProcedure
-    .input(z.object({ id: z.coerce.number() }))
+    .input(
+      z.object({
+        id: z.coerce
+          .number()
+          .describe("The unique identifier of the event type"),
+      }),
+    )
     .route({
       method: "GET",
       path: "/id/{id}",
       tags: ["event-type"],
       summary: "Get event type by ID",
-      description: "Retrieve detailed information about a specific event type",
+      description:
+        "Retrieve detailed information about a specific event type including its category and usage count",
     })
+    .output(
+      z.object({
+        eventType: z
+          .object({
+            id: z.number().describe("Event type ID"),
+            name: z.string().describe("Event type name"),
+            description: z
+              .string()
+              .nullable()
+              .describe("Event type description"),
+            eventCategory: z.enum(EventCategory).describe("Event category"),
+            acronym: z.string().nullable().describe("Event type acronym"),
+            specificOrgId: z
+              .number()
+              .nullable()
+              .describe("Specific organization ID"),
+            isActive: z.boolean().describe("Whether the event type is active"),
+            created: z.string().describe("Date the event type was created"),
+            updated: z
+              .string()
+              .describe("Date the event type was last updated"),
+          })
+          .nullable()
+          .describe("The event type"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const [result] = await ctx.db
         .select()
@@ -199,8 +338,39 @@ export const eventTypeRouter = {
       path: "/",
       tags: ["event-type"],
       summary: "Create or update event type",
-      description: "Create a new event type or update an existing one",
+      description:
+        "Create a new event type or update an existing one. Can be created at nation level (for all orgs) or scoped to a specific organization. Requires appropriate permissions.",
     })
+    .output(
+      z.object({
+        eventType: z
+          .array(
+            z.object({
+              id: z.number().describe("Event type ID"),
+              name: z.string().describe("Event type name"),
+              description: z
+                .string()
+                .nullable()
+                .describe("Event type description"),
+              eventCategory: z.enum(EventCategory).describe("Event category"),
+              acronym: z.string().nullable().describe("Event type acronym"),
+              specificOrgId: z
+                .number()
+                .nullable()
+                .describe("Specific organization ID"),
+              isActive: z
+                .boolean()
+                .describe("Whether the event type is active"),
+              created: z.string().describe("Date the event type was created"),
+              updated: z
+                .string()
+                .describe("Date the event type was last updated"),
+            }),
+          )
+          .nullable()
+          .describe("The created or updated event type"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const [existingEventType] = input.id
         ? await ctx.db
@@ -220,16 +390,16 @@ export const eventTypeRouter = {
         });
       }
 
-      const orgIdForPermissionCheck = existingEventType?.specificOrgId
-        ? // If this is editting a specific org's event type, then they need those permissinos
-          existingEventType.specificOrgId
+      // Determine which org to check permissions against
+      // If setting specificOrgId to null (nation-wide), always require nation permission
+      const isSettingToNationWide = !input.specificOrgId;
+      const orgIdForPermissionCheck = isSettingToNationWide
+        ? nationOrg.id
         : existingEventType
-          ? // If this is a new event type for the nation, then they need to be an editor for the nation org
-            nationOrg.id
-          : // If this is a new event type in a specific org then they need to be an editor of that org
-            input.specificOrgId ??
-            // Otherwise they need to be an editor of the nation
-            nationOrg.id;
+          ? // Updating existing: need permission on the existing org (or nation if already nation-wide)
+            existingEventType.specificOrgId ?? nationOrg.id
+          : // Creating new: need permission on the target org (fallback to nation for type safety)
+            input.specificOrgId ?? nationOrg.id;
 
       const roleCheckResult = await checkHasRoleOnOrg({
         orgId: orgIdForPermissionCheck,
@@ -239,9 +409,12 @@ export const eventTypeRouter = {
       });
 
       if (!roleCheckResult.success) {
-        throw new ORPCError("UNAUTHORIZED", {
-          message: "You are not authorized to update this Event Type",
-        });
+        // Provide a more helpful error message when trying to create/update to nation-wide without permission
+        const message = isSettingToNationWide
+          ? "You must select a Specific Org. Only nation admins can create event types for all of F3 Nation."
+          : `You are not authorized to ${input.id ? "update" : "add"} this Event Type`;
+
+        throw new ORPCError("UNAUTHORIZED", { message });
       }
       const eventTypeData: InferInsertModel<typeof schema.eventTypes> = {
         ...input,
@@ -259,14 +432,28 @@ export const eventTypeRouter = {
       return { eventType: result ?? null };
     }),
   delete: editorProcedure
-    .input(z.object({ id: z.number() }))
+    .input(
+      z.object({
+        id: z.coerce
+          .number()
+          .describe("The unique identifier of the event type to delete"),
+      }),
+    )
     .route({
       method: "DELETE",
       path: "/id/{id}",
       tags: ["event-type"],
       summary: "Delete event type",
-      description: "Soft delete an event type by marking it as inactive",
+      description:
+        "Soft delete an event type by marking it as inactive. Also removes all associations with events.",
     })
+    .output(
+      z.object({
+        eventTypeId: z.coerce
+          .number()
+          .describe("The unique identifier of the event type that was deleted"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const [existingEventType] = await ctx.db
         .select()
@@ -304,5 +491,7 @@ export const eventTypeRouter = {
         .update(schema.eventTypes)
         .set({ isActive: false })
         .where(eq(schema.eventTypes.id, input.id));
+
+      return { eventTypeId: input.id };
     }),
 };

@@ -67,7 +67,7 @@ export const AODetailsForm = <_T extends AODetailsFormValues>() => {
                       if (!blob640) return;
                       const url640 = await uploadLogo({
                         file: blob640,
-                        regionId: formOriginalRegionId ?? 0,
+                        orgId: formOriginalRegionId ?? 0,
                         requestId: formId,
                       });
                       onChange(url640);
@@ -75,7 +75,7 @@ export const AODetailsForm = <_T extends AODetailsFormValues>() => {
                       if (blob64) {
                         void uploadLogo({
                           file: blob64,
-                          regionId: formOriginalRegionId ?? 0,
+                          orgId: formOriginalRegionId ?? 0,
                           requestId: formId ?? "",
                           size: 64,
                         });

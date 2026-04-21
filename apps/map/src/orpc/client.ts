@@ -34,6 +34,13 @@ const link = new RPCLink({
   },
   interceptors: [
     onError((error: unknown) => {
+      // Don't log expected abort errors
+      if (
+        error instanceof Error &&
+        (error.name === "AbortError" || error.message.includes("aborted"))
+      ) {
+        return;
+      }
       console.error(error);
     }),
   ],
