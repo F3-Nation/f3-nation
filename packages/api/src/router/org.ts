@@ -306,10 +306,13 @@ export const orgRouter = {
           id: org.id,
           name: org.name,
           parentOrgName: parentOrg.name,
+          aoCount: org.aoCount,
+          lastAnnualReview: org.lastAnnualReview,
           status: org.isActive,
           created: org.created,
         },
         "id",
+        new Set(["parentOrgName", "lastAnnualReview"] as const),
       );
 
       const total = await getOrgCount({ db: ctx.db, where });

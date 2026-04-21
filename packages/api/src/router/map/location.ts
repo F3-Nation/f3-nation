@@ -133,7 +133,11 @@ export const mapLocationRouter = os.router({
           }
 
           if (event?.id != undefined) {
-            acc[location.id]?.events.push(omit(event, "locationId"));
+            acc[location.id]?.events.push({
+              ...omit(event, "locationId"),
+              aoName: location.name ?? null,
+              aoLogo: location.logo,
+            });
           }
 
           return acc;
@@ -147,10 +151,13 @@ export const mapLocationRouter = os.router({
             lat: number;
             lon: number;
             fullAddress: string | null;
-            events: Omit<
+            events: (Omit<
               NonNullable<(typeof locationsAndEvents)[number]["events"]>,
               "locationId"
-            >[];
+            > & {
+              aoName: string | null;
+              aoLogo: string | null;
+            })[];
           }
         >,
       );
@@ -176,6 +183,8 @@ export const mapLocationRouter = os.router({
             event.dayOfWeek,
             event.startTime,
             event.eventTypes,
+            event.aoName,
+            event.aoLogo,
           ]),
       ]);
 

@@ -59,16 +59,11 @@ export const filterData = <
       const includeThisLocationMarkerOnAmPm =
         (!filters.am || startIsAM) && (!filters.pm || !startIsAM);
 
-      // Check if at least one of the selected type filters matches the station's type
+      const selectedTypeIds = filters.nationalEventTypeIds;
+      const typeFilterActive = selectedTypeIds.length > 0;
       const includeThisLocationMarkerOnType =
-        (!filters.Bootcamp ||
-          event.eventTypes.some((type) => type.name === "Bootcamp")) &&
-        (!filters.Run ||
-          event.eventTypes.some((type) => type.name === "Run")) &&
-        (!filters.Ruck ||
-          event.eventTypes.some((type) => type.name === "Ruck")) &&
-        (!filters.Swim ||
-          event.eventTypes.some((type) => type.name === "Swimming"));
+        !typeFilterActive ||
+        event.eventTypes.some((type) => selectedTypeIds.includes(type.id));
 
       // // Check if the after time filter matches the station's end time
       let includeThisLocationMarkerOnTime = true;

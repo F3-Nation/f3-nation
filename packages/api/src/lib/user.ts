@@ -300,20 +300,24 @@ export const buildUserListQuery = async ({
       : undefined,
   );
 
+  const homeRegion = aliasedTable(schema.orgs, "homeRegion");
+
   const sortedColumns = getSortingColumns(
     input?.sorting,
     {
       id: schema.users.id,
       name: schema.users.firstName,
       f3Name: schema.users.f3Name,
-      roles: schema.roles.name,
+      roles: sql`MIN(${schema.roles.name})`,
       status: schema.users.status,
+      homeRegion: homeRegion.name,
       email: schema.users.email,
-      phone: schema.users.phone,
-      regions: schema.orgs.name,
+      phone: sql`NULLIF(${schema.users.phone}, '')`,
+      regions: sql`MIN(${schema.orgs.name})`,
       created: schema.users.created,
     },
     "id",
+    new Set(["homeRegion", "regions", "roles"] as const),
   );
 
   const userIdsQuery = ctx.db
@@ -332,8 +336,6 @@ export const buildUserListQuery = async ({
     .from(userIdsQuery.as("distinct_users"));
 
   const userCount = countResult[0];
-
-  const homeRegion = aliasedTable(schema.orgs, "homeRegion");
   const select = buildUserSelect({
     includePii,
     includeListFields: true, // Include list-specific fields

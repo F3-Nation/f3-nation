@@ -295,16 +295,20 @@ export const mapEventRouter = {
       const sortedColumns = input?.sorting?.map((sorting) => {
         const direction = sorting.desc ? desc : asc;
         switch (sorting.id) {
+          case "name":
+            return direction(schema.events.name);
           case "regions":
             return direction(regionOrg.name);
           case "parent":
-            return direction(parentOrg.name);
+            return direction(sql`NULLIF(${parentOrg.name}, '')`);
           case "status":
             return direction(schema.events.isActive);
           case "dayOfWeek":
             return direction(schema.events.dayOfWeek);
           case "created":
             return direction(schema.events.created);
+          case "location":
+            return direction(schema.locations.name);
           default:
             return direction(schema.events.id);
         }

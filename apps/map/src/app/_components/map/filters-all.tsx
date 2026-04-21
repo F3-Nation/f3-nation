@@ -1,7 +1,7 @@
 "use client";
 
 import type { ComponentProps } from "react";
-import Image from "next/image"; // Next.js Image component for optimized image rendering.
+import { useMemo } from "react";
 
 import { X } from "lucide-react";
 
@@ -9,19 +9,36 @@ import { SHORT_DAY_ORDER } from "@acme/shared/app/constants";
 import { RERENDER_LOGS } from "@acme/shared/common/constants";
 import { cn } from "@acme/ui";
 import { Button } from "@acme/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@acme/ui/select";
 import { useTheme } from "@acme/ui/theme";
 
+import { VirtualizedCombobox } from "~/app/_components/virtualized-combobox";
+import { orpc, useQuery } from "~/orpc/react";
 import type { FiltersType } from "~/utils/store/filter";
 import {
   filterStore,
   initialFilterState,
   TimeSelection,
 } from "~/utils/store/filter";
-import BootSvgComponent from "../SVGs/boot-camp";
-import RuckSvgComponent from "../SVGs/ruck";
-import RunSvgComponent from "../SVGs/run";
 
-// Defining items for the filter options with their names and corresponding SVG components or image paths.
+const TIME_OPTIONS = Object.values(TimeSelection)
+  .filter((v) => v !== TimeSelection.none)
+  .map((value) => {
+    const match = /^(\d{1,2})(am|pm)$/.exec(value);
+    return {
+      value,
+      label:
+        match?.[1] && match[2]
+          ? `${match[1]} ${match[2].toUpperCase()}`
+          : value,
+    };
+  });
 
 // The main component for the map drawer.
 export const FiltersAll = (props: ComponentProps<"div">) => {
@@ -30,6 +47,28 @@ export const FiltersAll = (props: ComponentProps<"div">) => {
   const filters = filterStore.useBoundStore();
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
+
+  const { data: nationalEventTypesResult, isLoading } = useQuery(
+    orpc.eventType.all.queryOptions({
+      input: {
+        nationalOnly: true,
+        statuses: ["active"],
+        sorting: [{ id: "name", desc: false }],
+      },
+    }),
+  );
+  const nationalEventTypes = nationalEventTypesResult?.eventTypes;
+
+  const eventTypeOptions = useMemo(
+    () =>
+      nationalEventTypes?.map((et) => ({
+        value: String(et.id),
+        label: et.name,
+      })) ?? [],
+    [nationalEventTypes],
+  );
+
+  const selectedIds = filters.nationalEventTypeIds;
 
   // Function to toggle the state of a filter when clicked.
   const handleFilterClick = (
@@ -45,46 +84,9 @@ export const FiltersAll = (props: ComponentProps<"div">) => {
     }
   };
 
-  const handleTypeClick = (
-    filterName: "Bootcamp" | "Ruck" | "Run" | "Swim",
-    newState?: boolean,
-  ) => {
-    filterStore.setState((s) => ({
-      Bootcamp: false,
-      Ruck: false,
-      Run: false,
-      Swim: false,
-      [filterName]: newState ?? !s[filterName],
-    }));
-  };
-
   const handleResetFilters = () => {
     filterStore.setState(initialFilterState);
   };
-
-  const workoutItems = [
-    {
-      name: "Bootcamp" as const,
-      img: BootSvgComponent,
-      onClick: () => {
-        handleTypeClick("Bootcamp");
-      },
-    },
-    {
-      name: "Ruck" as const,
-      img: RuckSvgComponent,
-      onClick: () => {
-        handleTypeClick("Ruck");
-      },
-    },
-    {
-      name: "Run" as const,
-      img: RunSvgComponent,
-      onClick: () => {
-        handleTypeClick("Run");
-      },
-    },
-  ];
 
   return (
     <div
@@ -130,100 +132,82 @@ export const FiltersAll = (props: ComponentProps<"div">) => {
         </div>
         <div>
           <h2 className="mb-2 text-lg font-semibold">Time of Workout</h2>
-          <div className="flex flex-col space-y-2">
-            <div className="flex items-center gap-4">
-              <select
+          <div className="flex items-center gap-4">
+            <Select
+              value={filters.beforeAfterDirection}
+              onValueChange={(v) =>
+                filterStore.setState({
+                  beforeAfterDirection: v as "before" | "after",
+                })
+              }
+            >
+              <SelectTrigger data-vaul-no-drag className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="before">On or before</SelectItem>
+                <SelectItem value="after">On or after</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select
+              value={filters.beforeAfterTime}
+              onValueChange={(v) =>
+                filterStore.setState({
+                  beforeAfterTime: v as TimeSelection,
+                })
+              }
+            >
+              <SelectTrigger
                 data-vaul-no-drag
-                className="w-40 rounded border border-gray-300 px-2 py-1"
-                value={filters.beforeAfterDirection}
-                onChange={(e) => {
-                  filterStore.setState({
-                    beforeAfterDirection: e.target.value as "before" | "after",
-                  });
-                }}
+                className={cn(
+                  "w-40",
+                  filters.beforeAfterTime !== TimeSelection.none &&
+                    "border-blue-500 bg-blue-100",
+                )}
               >
-                <option value="before">On or before</option>
-                <option value="after">On or after</option>
-              </select>
-              <select
-                data-vaul-no-drag
-                className={cn("w-40 rounded border border-gray-300 px-2 py-1", {
-                  "border-blue-500 bg-blue-100":
-                    filters.beforeAfterTime !== TimeSelection.none,
-                })}
-                value={filters.beforeAfterTime}
-                onChange={(e) => {
-                  filterStore.setState({
-                    beforeAfterTime: e.target.value as TimeSelection,
-                  });
-                }}
-              >
-                <option value={TimeSelection.none}>--</option>
-                <option value={TimeSelection["12am"]}>12 AM</option>
-                <option value={TimeSelection["1am"]}>1 AM</option>
-                <option value={TimeSelection["2am"]}>2 AM</option>
-                <option value={TimeSelection["3am"]}>3 AM</option>
-                <option value={TimeSelection["4am"]}>4 AM</option>
-                <option value={TimeSelection["5am"]}>5 AM</option>
-                <option value={TimeSelection["6am"]}>6 AM</option>
-                <option value={TimeSelection["7am"]}>7 AM</option>
-                <option value={TimeSelection["8am"]}>8 AM</option>
-                <option value={TimeSelection["9am"]}>9 AM</option>
-                <option value={TimeSelection["10am"]}>10 AM</option>
-                <option value={TimeSelection["11am"]}>11 AM</option>
-                <option value={TimeSelection["12pm"]}>12 PM</option>
-                <option value={TimeSelection["1pm"]}>1 PM</option>
-                <option value={TimeSelection["2pm"]}>2 PM</option>
-                <option value={TimeSelection["3pm"]}>3 PM</option>
-                <option value={TimeSelection["4pm"]}>4 PM</option>
-                <option value={TimeSelection["5pm"]}>5 PM</option>
-                <option value={TimeSelection["6pm"]}>6 PM</option>
-                <option value={TimeSelection["7pm"]}>7 PM</option>
-                <option value={TimeSelection["8pm"]}>8 PM</option>
-                <option value={TimeSelection["9pm"]}>9 PM</option>
-                <option value={TimeSelection["10pm"]}>10 PM</option>
-                <option value={TimeSelection["11pm"]}>11 PM</option>
-              </select>
-            </div>
+                <SelectValue placeholder="--" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={TimeSelection.none}>--</SelectItem>
+                {TIME_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
         <div>
           <h2 className="mb-2 text-lg font-semibold">Type of Workout</h2>
-          <div className="grid grid-cols-4">
-            {workoutItems.map((item, index) => (
-              <button
-                key={index}
-                className="flex flex-col items-center space-y-2"
-                onClick={item.onClick ?? (() => handleFilterClick(item.name))}
-              >
-                <div
-                  className={`rounded-lg border p-4 ${
-                    filters[item.name]
-                      ? isDark
-                        ? "border-blue-500 bg-blue-900"
-                        : "border-blue-500 bg-blue-100"
-                      : "border-gray-300 bg-background"
-                  }`}
-                >
-                  <div className="flex h-6 w-6 items-center justify-center">
-                    {typeof item.img === "string" ? (
-                      <Image
-                        className="max-h-full w-auto object-contain"
-                        src={item.img}
-                        alt={item.name}
-                      />
-                    ) : (
-                      <item.img
-                        className="h-full w-full"
-                        fill={filters[item.name] ? "#3B82F6" : "#6B7280"}
-                      />
-                    )}
-                  </div>
-                </div>
-                <p className="text-sm text-foreground">{item.name}</p>
-              </button>
-            ))}
+          <div className="w-full max-w-sm" data-vaul-no-drag>
+            <VirtualizedCombobox
+              disabled={isLoading}
+              isMulti
+              options={eventTypeOptions}
+              popoverContentAlign="start"
+              searchPlaceholder="All types"
+              value={selectedIds.map(String)}
+              className={cn(
+                "w-full",
+                selectedIds.length > 0 &&
+                  (isDark
+                    ? "border-blue-500 bg-blue-950"
+                    : "border-blue-500 bg-blue-100"),
+              )}
+              onSelect={(item) => {
+                const ids = Array.isArray(item)
+                  ? item.map((id) => Number(id))
+                  : [Number(item)];
+                filterStore.setState({ nationalEventTypeIds: ids });
+              }}
+            />
           </div>
+          {nationalEventTypes?.length === 0 && !isLoading ? (
+            <p className="mt-2 text-sm text-muted-foreground">
+              No national event types found.
+            </p>
+          ) : null}
         </div>
         <div className="mt-4 flex flex-row items-center justify-center gap-4">
           <Button

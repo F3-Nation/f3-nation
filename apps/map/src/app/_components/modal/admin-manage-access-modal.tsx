@@ -366,6 +366,11 @@ export default function AdminManageAccessModal({
                   );
                   return;
                 }
+                const orgIds = data.roles?.map((r) => r.orgId) ?? [];
+                if (new Set(orgIds).size !== orgIds.length) {
+                  toast.error("A user can only have one role per organization");
+                  return;
+                }
                 // When updating an existing user (has id), email is not required
                 // The API will handle PII restrictions and won't update email if not provided
                 // For new users, email is required by the schema
@@ -710,6 +715,13 @@ export default function AdminManageAccessModal({
                               );
                             }
 
+                            const assignedOrgIds = new Set(
+                              ((field.value as RoleEntry[]) ?? [])
+                                .filter((_, i) => i !== index)
+                                .map((r) => r.orgId)
+                                .filter((id): id is number => id != null),
+                            );
+
                             return (
                               <div
                                 key={index}
@@ -744,10 +756,14 @@ export default function AdminManageAccessModal({
                                 <VirtualizedCombobox
                                   value={roleEntry.orgId.toString()}
                                   options={
-                                    orgs?.orgs.map((org) => ({
-                                      value: org.id.toString(),
-                                      label: `${org.name} (${org.orgType})`,
-                                    })) ?? []
+                                    orgs?.orgs
+                                      .filter(
+                                        (org) => !assignedOrgIds.has(org.id),
+                                      )
+                                      .map((org) => ({
+                                        value: org.id.toString(),
+                                        label: `${org.name} (${org.orgType})`,
+                                      })) ?? []
                                   }
                                   searchPlaceholder="Select an organization"
                                   disabled={isLoadingOrgs}

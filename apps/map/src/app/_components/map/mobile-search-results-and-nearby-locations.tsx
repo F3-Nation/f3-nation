@@ -24,7 +24,7 @@ export const MobileSearchResultsAndNearbyLocations = () => {
   const shouldShowResults = searchStore.use.shouldShowResults();
   const text = searchStore.use.text();
   const { combinedResults } = useTextSearchResults();
-  const { locationOrderedLocationMarkers } = useFilteredMapResults();
+  const { aoGroupedLocationMarkers } = useFilteredMapResults();
   const checkboxContainerRef = useRef<HTMLDivElement>(null);
   const [showResults, setShowResults] = useState({
     location: true,
@@ -126,9 +126,11 @@ export const MobileSearchResultsAndNearbyLocations = () => {
             )}
         </>
       ) : (
-        locationOrderedLocationMarkers
+        aoGroupedLocationMarkers
           ?.slice(0, 15)
-          .map((result) => <NearbyLocationItem key={result.id} item={result} />)
+          .map((result) => (
+            <NearbyLocationItem key={result.aoId} item={result} />
+          ))
       )}
     </div>
   );

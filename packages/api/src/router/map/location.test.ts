@@ -353,6 +353,168 @@ describe("Map Location Router", () => {
       }
     });
 
+    describe("AO grouping", () => {
+      it("should include per-event AO name when multiple AOs share a location", async () => {
+        const session = await createAdminSession();
+        await mockAuthWithSession(session);
+
+        const region = await createTestRegion();
+        if (!region) throw new Error("Failed to create test region");
+
+        // Create two AOs with known names under the same region
+        const redFoxName = `Red Fox ${uniqueId()}`;
+        const ppName = `Pavement Pounders ${uniqueId()}`;
+
+        const [redFoxAo] = await db
+          .insert(schema.orgs)
+          .values({
+            name: redFoxName,
+            orgType: "ao",
+            parentId: region.id,
+            isActive: true,
+          })
+          .returning();
+        if (!redFoxAo) throw new Error("Failed to create Red Fox AO");
+        createdOrgIds.push(redFoxAo.id);
+
+        const [ppAo] = await db
+          .insert(schema.orgs)
+          .values({
+            name: ppName,
+            orgType: "ao",
+            parentId: region.id,
+            isActive: true,
+          })
+          .returning();
+        if (!ppAo) throw new Error("Failed to create Pavement Pounders AO");
+        createdOrgIds.push(ppAo.id);
+
+        // Both AOs share the same location
+        const location = await createTestLocation(region.id);
+        if (!location) throw new Error("Failed to create test location");
+
+        const [rfEvent] = await db
+          .insert(schema.events)
+          .values({
+            name: `RF Event ${uniqueId()}`,
+            orgId: redFoxAo.id,
+            locationId: location.id,
+            dayOfWeek: "saturday",
+            startTime: "0700",
+            isActive: true,
+            highlight: false,
+            startDate: "2026-01-01",
+            isPrivate: false,
+          })
+          .returning();
+        if (rfEvent) createdEventIds.push(rfEvent.id);
+
+        const [ppEvent] = await db
+          .insert(schema.events)
+          .values({
+            name: `PP Event ${uniqueId()}`,
+            orgId: ppAo.id,
+            locationId: location.id,
+            dayOfWeek: "friday",
+            startTime: "0530",
+            isActive: true,
+            highlight: false,
+            startDate: "2026-01-01",
+            isPrivate: false,
+          })
+          .returning();
+        if (ppEvent) createdEventIds.push(ppEvent.id);
+
+        const client = createTestClient();
+        const result = await client.map.location.eventsAndLocations();
+
+        const locationData = result.find(
+          (loc: [number, ...unknown[]]) => loc[0] === location.id,
+        );
+        expect(locationData).toBeDefined();
+
+        // Events are at tuple index 6
+        const events = locationData![6] as unknown[][];
+        expect(events.length).toBe(2);
+
+        // Event tuple index 5 is aoName
+        const aoNames = events.map((e) => e[5] as string);
+        expect(aoNames).toContain(redFoxName);
+        expect(aoNames).toContain(ppName);
+      });
+
+      it("should group multiple events under the same AO name", async () => {
+        const session = await createAdminSession();
+        await mockAuthWithSession(session);
+
+        const region = await createTestRegion();
+        if (!region) throw new Error("Failed to create test region");
+
+        const aoName = `Single AO ${uniqueId()}`;
+        const [ao] = await db
+          .insert(schema.orgs)
+          .values({
+            name: aoName,
+            orgType: "ao",
+            parentId: region.id,
+            isActive: true,
+          })
+          .returning();
+        if (!ao) throw new Error("Failed to create test AO");
+        createdOrgIds.push(ao.id);
+
+        const location = await createTestLocation(region.id);
+        if (!location) throw new Error("Failed to create test location");
+
+        const [event1] = await db
+          .insert(schema.events)
+          .values({
+            name: `Event A ${uniqueId()}`,
+            orgId: ao.id,
+            locationId: location.id,
+            dayOfWeek: "monday",
+            startTime: "0530",
+            isActive: true,
+            highlight: false,
+            startDate: "2026-01-01",
+            isPrivate: false,
+          })
+          .returning();
+        if (event1) createdEventIds.push(event1.id);
+
+        const [event2] = await db
+          .insert(schema.events)
+          .values({
+            name: `Event B ${uniqueId()}`,
+            orgId: ao.id,
+            locationId: location.id,
+            dayOfWeek: "wednesday",
+            startTime: "0600",
+            isActive: true,
+            highlight: false,
+            startDate: "2026-01-01",
+            isPrivate: false,
+          })
+          .returning();
+        if (event2) createdEventIds.push(event2.id);
+
+        const client = createTestClient();
+        const result = await client.map.location.eventsAndLocations();
+
+        const locationData = result.find(
+          (loc: [number, ...unknown[]]) => loc[0] === location.id,
+        );
+        expect(locationData).toBeDefined();
+
+        const events = locationData![6] as unknown[][];
+        expect(events.length).toBe(2);
+
+        // Both events should carry the same AO name (tuple index 5)
+        const aoNames = events.map((e) => e[5] as string);
+        expect(aoNames).toEqual([aoName, aoName]);
+      });
+    });
+
     it("should only show active public events on the map", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
