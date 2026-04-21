@@ -17,7 +17,7 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   })),
 }));
 
-import { eq, schema } from "@acme/db";
+import { and, eq, gte, schema } from "@acme/db";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
   cleanup,
@@ -399,6 +399,137 @@ describe("Org Router", () => {
           id: f3Nation.id,
         }),
       ).rejects.toThrow();
+    });
+
+    it("should cascade soft delete series and future instances when deleting an AO", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      // Create region → AO hierarchy
+      const [region] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `CascadeRegion ${uniqueId()}`,
+          orgType: "region",
+          parentId: f3Nation.id,
+          isActive: true,
+        })
+        .returning();
+      if (!region) return;
+      createdOrgIds.push(region.id);
+
+      const [ao] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `CascadeAO ${uniqueId()}`,
+          orgType: "ao",
+          parentId: region.id,
+          isActive: true,
+        })
+        .returning();
+      if (!ao) return;
+      createdOrgIds.push(ao.id);
+
+      // Create a recurring series (event with recurrence pattern)
+      const [series] = await db
+        .insert(schema.events)
+        .values({
+          name: `CascadeSeries ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: null,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          recurrencePattern: "weekly",
+          recurrenceInterval: 1,
+          startDate: "2026-01-01",
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      if (!series) return;
+
+      // Create a past instance (should NOT be soft-deleted)
+      const [pastInstance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: series.name,
+          orgId: ao.id,
+          seriesId: series.id,
+          startDate: "2025-01-06",
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+
+      // Create future instances (should be soft-deleted)
+      const futureInstanceIds: number[] = [];
+      for (const date of ["2026-04-06", "2026-04-13", "2026-04-20"]) {
+        const [inst] = await db
+          .insert(schema.eventInstances)
+          .values({
+            name: series.name,
+            orgId: ao.id,
+            seriesId: series.id,
+            startDate: date,
+            isActive: true,
+            highlight: false,
+            isPrivate: false,
+          })
+          .returning();
+        if (inst) futureInstanceIds.push(inst.id);
+      }
+
+      expect(futureInstanceIds).toHaveLength(3);
+
+      // Delete the AO via the router
+      const client = createTestClient();
+      const result = await client.org.delete({ id: ao.id });
+      expect(result.orgId).toBe(ao.id);
+
+      // Assert the AO itself is inactive
+      const [deletedAo] = await db
+        .select()
+        .from(schema.orgs)
+        .where(eq(schema.orgs.id, ao.id));
+      expect(deletedAo?.isActive).toBe(false);
+
+      // Assert the series is soft-deleted
+      const [deletedSeries] = await db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.id, series.id));
+      expect(deletedSeries?.isActive).toBe(false);
+
+      // Assert future instances are soft-deleted
+      const futureInstances = await db
+        .select()
+        .from(schema.eventInstances)
+        .where(
+          and(
+            eq(schema.eventInstances.orgId, ao.id),
+            gte(schema.eventInstances.startDate, "2026-03-25"),
+          ),
+        );
+      expect(futureInstances.length).toBeGreaterThanOrEqual(3);
+      expect(futureInstances.every((i) => i.isActive === false)).toBe(true);
+
+      // Assert past instance is NOT soft-deleted
+      if (pastInstance) {
+        const [past] = await db
+          .select()
+          .from(schema.eventInstances)
+          .where(eq(schema.eventInstances.id, pastInstance.id));
+        expect(past?.isActive).toBe(true);
+      }
+
+      // Cleanup: hard-delete test event instances, series, and orgs
+      await db
+        .delete(schema.eventInstances)
+        .where(eq(schema.eventInstances.orgId, ao.id));
+      await db.delete(schema.events).where(eq(schema.events.id, series.id));
     });
   });
 });
