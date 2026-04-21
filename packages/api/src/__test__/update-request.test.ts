@@ -43,34 +43,44 @@ vi.mock("@acme/db", () => ({
 }));
 
 // Mock the handler dependencies
-const mockInsertLocation = vi.fn<
-  Parameters<typeof locationHandlers.insertLocation>,
-  ReturnType<typeof locationHandlers.insertLocation>
->();
-const mockUpdateLocation = vi.fn<
-  Parameters<typeof locationHandlers.updateLocation>,
-  ReturnType<typeof locationHandlers.updateLocation>
->();
-const mockCreateAO = vi.fn<
-  Parameters<typeof aoHandlers.createAO>,
-  ReturnType<typeof aoHandlers.createAO>
->();
-const mockUpdateAO = vi.fn<
-  Parameters<typeof aoHandlers.updateAO>,
-  ReturnType<typeof aoHandlers.updateAO>
->();
-const mockInsertEvent = vi.fn<
-  Parameters<typeof eventHandlers.insertEvent>,
-  ReturnType<typeof eventHandlers.insertEvent>
->();
-const mockUpdateEvent = vi.fn<
-  Parameters<typeof eventHandlers.updateEvent>,
-  ReturnType<typeof eventHandlers.updateEvent>
->();
-const mockUpdateEventTypes = vi.fn<
-  Parameters<typeof eventHandlers.updateEventTypes>,
-  ReturnType<typeof eventHandlers.updateEventTypes>
->();
+const {
+  mockInsertLocation,
+  mockUpdateLocation,
+  mockCreateAO,
+  mockUpdateAO,
+  mockInsertEvent,
+  mockUpdateEvent,
+  mockUpdateEventTypes,
+} = vi.hoisted(() => ({
+  mockInsertLocation: vi.fn<
+    Parameters<typeof locationHandlers.insertLocation>,
+    ReturnType<typeof locationHandlers.insertLocation>
+  >(),
+  mockUpdateLocation: vi.fn<
+    Parameters<typeof locationHandlers.updateLocation>,
+    ReturnType<typeof locationHandlers.updateLocation>
+  >(),
+  mockCreateAO: vi.fn<
+    Parameters<typeof aoHandlers.createAO>,
+    ReturnType<typeof aoHandlers.createAO>
+  >(),
+  mockUpdateAO: vi.fn<
+    Parameters<typeof aoHandlers.updateAO>,
+    ReturnType<typeof aoHandlers.updateAO>
+  >(),
+  mockInsertEvent: vi.fn<
+    Parameters<typeof eventHandlers.insertEvent>,
+    ReturnType<typeof eventHandlers.insertEvent>
+  >(),
+  mockUpdateEvent: vi.fn<
+    Parameters<typeof eventHandlers.updateEvent>,
+    ReturnType<typeof eventHandlers.updateEvent>
+  >(),
+  mockUpdateEventTypes: vi.fn<
+    Parameters<typeof eventHandlers.updateEventTypes>,
+    ReturnType<typeof eventHandlers.updateEventTypes>
+  >(),
+}));
 
 type InsertLocationResult = Awaited<
   ReturnType<typeof locationHandlers.insertLocation>
@@ -163,19 +173,22 @@ describe("handleCreateLocationAndEvent - creates a new AO with location and even
       ctx,
       updateRequest: {
         ...request,
-        eventDayOfWeek: "monday",
       },
       status: "approved",
     });
 
-    expect(result).toEqual(
+    const { created, reviewedAt, ...stableResult } = result;
+    expect(created).toBeDefined();
+    expect(reviewedAt).toBeDefined();
+
+    expect(stableResult).toEqual(
       expect.objectContaining({
         id: "test-request-id",
+        aoId: undefined,
         requestType: "create_ao_and_location_and_event",
         submittedBy: "test@example.com",
-        isReview: false,
-        badImage: false,
-        originalRegionId: 1,
+        eventMeta: undefined,
+        eventId: undefined,
         eventName: "Morning Beatdown",
         eventDayOfWeek: "monday",
         eventStartTime: "0530",
@@ -185,6 +198,7 @@ describe("handleCreateLocationAndEvent - creates a new AO with location and even
         aoName: "The Forge",
         aoLogo: null,
         aoWebsite: null,
+        locationId: undefined,
         locationLat: 35.2271,
         locationLng: -80.8431,
         locationAddress: "123 Main St",
@@ -238,15 +252,18 @@ describe("handleCreateEvent - adds event to an existing AO and location", () => 
       status: "approved",
     });
 
-    expect(result).toEqual(
+    const { created, reviewedAt, ...stableResult } = result;
+
+    expect(created).toBeDefined();
+    expect(reviewedAt).toBeDefined();
+
+    expect(stableResult).toEqual(
       expect.objectContaining({
         id: "test-request-id",
         requestType: "create_event",
         submittedBy: "test@example.com",
-        isReview: false,
-        originalRegionId: 1,
-        originalAoId: 1,
-        originalLocationId: 1,
+        eventId: undefined,
+        eventMeta: undefined,
         eventName: "Morning Beatdown",
         eventDayOfWeek: "monday",
         eventStartTime: "0530",
@@ -277,26 +294,35 @@ describe("handleEditEvent - modifies an existing event", () => {
 
     const createResult = await recordUpdateRequest({
       ctx,
-      updateRequest: createRequest,
+      updateRequest: {
+        ...createRequest,
+        eventDayOfWeek: "monday",
+      },
       status: "approved",
     });
 
-    expect(createResult).toEqual(
+    const { created, reviewedAt, ...stableResult } = createResult;
+    expect(created).toBeDefined();
+    expect(reviewedAt).toBeDefined();
+
+    expect(stableResult).toEqual(
       expect.objectContaining({
         status: "approved",
         id: "test-request-id",
+        aoId: 1,
+        eventId: undefined,
+        eventMeta: undefined,
+        eventTypeIds: [1],
+        eventDayOfWeek: "monday",
         requestType: "create_event",
         submittedBy: "test@example.com",
-        isReview: false,
-        originalRegionId: 1,
-        originalAoId: 1,
-        originalLocationId: 1,
         eventName: "Morning Beatdown",
-        eventDayOfWeek: "monday",
+        locationId: 1,
         eventStartTime: "0530",
+        regionId: 1,
         eventEndTime: "0615",
-        eventTypeIds: [1],
         eventDescription: "A great workout",
+        meta: { originalRegionId: 1, originalAoId: 1, originalLocationId: 1 },
       }),
     );
 
@@ -352,20 +378,34 @@ describe("handleEditAOAndLocation - modifies an existing AO and location", () =>
 
     const createResult = await recordUpdateRequest({
       ctx,
-      updateRequest: createRequest,
+      updateRequest: { ...createRequest, eventDayOfWeek: "monday" },
       status: "approved",
     });
 
-    expect(createResult).toEqual(
+    const { created, reviewedAt, ...stableResult } = createResult;
+    expect(created).toBeDefined();
+    expect(reviewedAt).toBeDefined();
+
+    expect(stableResult).toEqual(
       expect.objectContaining({
         status: "approved",
         id: "test-request-id",
+        eventDayOfWeek: "monday",
+        aoLogo: null,
+        aoWebsite: null,
+        aoId: undefined,
+        aoName: "The Forge",
         requestType: "create_ao_and_location_and_event",
         submittedBy: "test@example.com",
-        isReview: false,
-        badImage: false,
-        originalRegionId: 1,
-        aoName: "The Forge",
+        eventId: undefined,
+        eventName: "Morning Beatdown",
+        eventStartTime: "0530",
+        eventEndTime: "0615",
+        eventTypeIds: [1, 2],
+        eventDescription: "A great workout",
+        eventMeta: undefined,
+        locationId: undefined,
+        locationAddress2: null,
         locationLat: 35.2271,
         locationLng: -80.8431,
         locationAddress: "123 Main St",
@@ -373,6 +413,9 @@ describe("handleEditAOAndLocation - modifies an existing AO and location", () =>
         locationState: "NC",
         locationZip: "28202",
         locationCountry: "United States",
+        locationDescription: "Near the park",
+        regionId: 1,
+        meta: { originalRegionId: 1 },
       }),
     );
 
@@ -407,7 +450,10 @@ describe("handleEditAOAndLocation - modifies an existing AO and location", () =>
 
     const editResult = await recordUpdateRequest({
       ctx,
-      updateRequest: editRequest,
+      updateRequest: {
+        ...editRequest,
+        eventDayOfWeek: "monday",
+      },
       status: "approved",
     });
 
@@ -451,18 +497,22 @@ describe("handleMoveAOToDifferentRegion - moves an AO to a different region", ()
       status: "approved",
     });
 
-    expect(result).toEqual(
+    const { created, reviewedAt, ...stableResult } = result;
+    expect(created).toBeDefined();
+    expect(reviewedAt).toBeDefined();
+
+    expect(stableResult).toEqual(
       expect.objectContaining({
         id: "test-request-id",
+        eventId: undefined,
+        eventMeta: undefined,
+        eventDayOfWeek: "monday",
         status: "approved",
         requestType: "move_ao_to_different_region",
         submittedBy: "test@example.com",
-        isReview: false,
-        originalRegionId: 1,
-        originalAoId: 1,
-        newRegionId: 2,
         regionId: 2,
         aoId: 1,
+        locationId: undefined,
         meta: {
           originalAoId: 1,
           originalRegionId: 1,
@@ -494,17 +544,19 @@ describe("handleMoveAOToDifferentLocation - moves an AO to a different location"
       status: "approved",
     });
 
-    expect(result).toEqual(
+    const { created, reviewedAt, ...stableResult } = result;
+    expect(created).toBeDefined();
+    expect(reviewedAt).toBeDefined();
+
+    expect(stableResult).toEqual(
       expect.objectContaining({
         id: "test-request-id",
+        eventId: undefined,
+        eventMeta: undefined,
+        eventDayOfWeek: "monday",
         status: "approved",
         requestType: "move_ao_to_different_location",
         submittedBy: "test@example.com",
-        isReview: false,
-        originalRegionId: 1,
-        originalAoId: 1,
-        originalLocationId: 1,
-        newLocationId: 2,
         regionId: 1,
         aoId: 1,
         locationId: 2,
@@ -555,16 +607,18 @@ describe("handleMoveAOToNewLocation - moves an AO to a new location", () => {
       status: "approved",
     });
 
-    expect(result).toEqual(
+    const { created, reviewedAt, ...stableResult } = result;
+    expect(created).toBeDefined();
+    expect(reviewedAt).toBeDefined();
+
+    expect(stableResult).toEqual(
       expect.objectContaining({
         id: "test-request-id",
+        eventId: undefined,
+        eventMeta: undefined,
         status: "approved",
         requestType: "move_ao_to_new_location",
         submittedBy: "test@example.com",
-        isReview: false,
-        originalRegionId: 1,
-        originalAoId: 1,
-        originalLocationId: 1,
         locationLat: 35.3,
         locationLng: -80.9,
         locationAddress: "456 New St",
@@ -609,22 +663,22 @@ describe("handleMoveEventToDifferentAO - moves an event to a different AO", () =
       status: "approved",
     });
 
-    expect(result).toEqual(
+    const { created, reviewedAt, ...stableResult } = result;
+    expect(created).toBeDefined();
+    expect(reviewedAt).toBeDefined();
+
+    expect(stableResult).toEqual(
       expect.objectContaining({
         id: "test-request-id",
         status: "approved",
         requestType: "move_event_to_different_ao",
         submittedBy: "test@example.com",
-        isReview: false,
-        originalRegionId: 1,
-        originalEventId: 1,
-        originalAoId: 1,
         regionId: 1,
         aoId: 2,
         locationId: 2,
         eventId: 1,
-        newAoId: 2,
-        newLocationId: 2,
+        eventDayOfWeek: "monday",
+        eventMeta: undefined,
         meta: {
           originalAoId: 1,
           originalRegionId: 1,
@@ -676,15 +730,16 @@ describe("handleDeleteEvent - soft deletes an event", () => {
       status: "approved",
     });
 
-    expect(result).toEqual(
+    const { created, reviewedAt, ...stableResult } = result;
+    expect(created).toBeDefined();
+    expect(reviewedAt).toBeDefined();
+
+    expect(stableResult).toEqual(
       expect.objectContaining({
         id: "test-request-id",
         status: "approved",
         requestType: "delete_event",
         submittedBy: "test@example.com",
-        isReview: false,
-        originalRegionId: 1,
-        originalEventId: 1,
         regionId: 1,
         eventId: 1,
         meta: {
@@ -732,15 +787,16 @@ describe("handleDeleteAO - soft deletes an AO and its events", () => {
       status: "approved",
     });
 
-    expect(result).toEqual(
+    const { created, reviewedAt, ...stableResult } = result;
+    expect(created).toBeDefined();
+    expect(reviewedAt).toBeDefined();
+
+    expect(stableResult).toEqual(
       expect.objectContaining({
         id: "test-request-id",
         status: "approved",
         requestType: "delete_ao",
         submittedBy: "test@example.com",
-        isReview: false,
-        originalRegionId: 1,
-        originalAoId: 1,
         regionId: 1,
         aoId: 1,
         meta: {
