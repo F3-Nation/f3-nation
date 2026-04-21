@@ -437,8 +437,8 @@ describe("Map Location Router", () => {
         const events = locationData![6] as unknown[][];
         expect(events.length).toBe(2);
 
-        // Event tuple index 5 is aoName
-        const aoNames = events.map((e) => e[5] as string);
+        // Event tuple index 7 is aoName
+        const aoNames = events.map((e) => e[7] as string);
         expect(aoNames).toContain(redFoxName);
         expect(aoNames).toContain(ppName);
       });
@@ -510,7 +510,7 @@ describe("Map Location Router", () => {
         expect(events.length).toBe(2);
 
         // Both events should carry the same AO name (tuple index 5)
-        const aoNames = events.map((e) => e[5] as string);
+        const aoNames = events.map((e) => e[7] as string);
         expect(aoNames).toEqual([aoName, aoName]);
       });
     });
