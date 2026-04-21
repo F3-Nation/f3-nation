@@ -4,7 +4,11 @@ import { z } from "zod";
 import { isProductionNodeEnv, vercelInfo } from "@acme/shared/common/constants";
 
 // Don't override DATABASE_URL if it's already set by vercelInfo
-if (!isProductionNodeEnv && !vercelInfo) {
+if (
+  !isProductionNodeEnv &&
+  !vercelInfo &&
+  typeof process.argv !== "undefined"
+) {
   const args = process.argv;
   const urlFlagIndex = args.indexOf("--url");
   if (urlFlagIndex !== -1 && args[urlFlagIndex + 1]) {

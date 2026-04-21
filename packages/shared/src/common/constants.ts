@@ -32,7 +32,7 @@ function getDatabaseUrl(baseUrl: string, gitCommitRef: string): string {
   );
 }
 
-if (!isProductionNodeEnv) {
+if (!isProductionNodeEnv && typeof process.argv !== "undefined") {
   const args = process.argv;
   const previewBranchDbInitFlagIndex = args.indexOf("--preview-branch-db-init");
   if (
