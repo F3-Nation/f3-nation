@@ -10,6 +10,25 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: "4.2.0",
+    date: "2026-04-21",
+    title: "Map Improvements & Positions",
+    sections: [
+      {
+        title: "Map",
+        items: [
+          "Nearby list now groups workouts by AO, so each AO appears as its own row even when multiple AOs share the same location.",
+        ],
+      },
+      {
+        title: "Admin Portal",
+        items: [
+          "Added Positions management, including a dedicated Positions page and assignment tools for managing roles by organization.",
+        ],
+      },
+    ],
+  },
+  {
     version: "4.0.0",
     date: "2026-04-08",
     title: "Auth, Node 24, Pre-commit Hooks",
