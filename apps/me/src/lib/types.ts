@@ -1,11 +1,11 @@
 /** User profile as returned by the /me/profile endpoint */
 export interface UserProfile {
   id: number;
-  f3Name: string;
+  f3Name: string | null;
   firstName: string | null;
-  lastName: string;
+  lastName: string | null;
   email: string;
-  emailVerified: boolean | null;
+  emailVerified: string | null;
   phone: string | null;
   homeRegionId: number | null;
   avatarUrl: string | null;
@@ -47,7 +47,6 @@ export interface UserMeta {
 export interface Region {
   id: number;
   name: string;
-  orgType: string;
   isActive: boolean;
 }
 

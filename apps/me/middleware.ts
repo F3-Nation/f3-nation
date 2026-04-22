@@ -1,11 +1,17 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { SESSION_COOKIE_NAME } from "@/lib/auth/constants";
-import { verifySessionValue } from "@/lib/auth/session";
+import {
+  ACCESS_TOKEN_COOKIE_NAME,
+  ACCESS_TOKEN_DEFAULT_MAX_AGE,
+  REFRESH_TOKEN_COOKIE_NAME,
+  REFRESH_TOKEN_MAX_AGE,
+} from "@/lib/auth/constants";
+import { refreshToken } from "@/lib/auth/oauth";
+import { isAccessTokenExpired } from "@/lib/auth/tokens";
 
 const PUBLIC_PATHS = ["/", "/api/auth/login", "/api/auth/callback"];
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Allow public paths
@@ -27,19 +33,67 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Verify session cookie signature (not just existence)
-  const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME);
-  const session = sessionCookie?.value
-    ? verifySessionValue(sessionCookie.value)
-    : null;
+  const accessToken = request.cookies.get(ACCESS_TOKEN_COOKIE_NAME)?.value;
+  const refreshTokenCookie = request.cookies.get(
+    REFRESH_TOKEN_COOKIE_NAME,
+  )?.value;
 
-  if (!session) {
-    const url = new URL("/", request.url);
-    url.searchParams.set("redirect", pathname);
-    return NextResponse.redirect(url);
+  if (accessToken && !isAccessTokenExpired(accessToken)) {
+    return NextResponse.next();
   }
 
-  return NextResponse.next();
+  if (refreshTokenCookie) {
+    try {
+      const tokens = await refreshToken({ refreshToken: refreshTokenCookie });
+      if (tokens.accessToken) {
+        const response = NextResponse.next();
+        response.cookies.set(ACCESS_TOKEN_COOKIE_NAME, tokens.accessToken, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          path: "/",
+          maxAge: tokens.expiresIn ?? ACCESS_TOKEN_DEFAULT_MAX_AGE,
+        });
+
+        if (tokens.refreshToken) {
+          response.cookies.set(REFRESH_TOKEN_COOKIE_NAME, tokens.refreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "lax",
+            path: "/",
+            maxAge: REFRESH_TOKEN_MAX_AGE,
+          });
+        }
+
+        return response;
+      }
+    } catch {
+      // Fall through to clearing cookies + redirect.
+    }
+  }
+
+  const redirectUrl = new URL("/", request.url);
+  if (!pathname.startsWith("/api/")) {
+    redirectUrl.searchParams.set("redirect", pathname);
+  }
+
+  const response = NextResponse.redirect(redirectUrl);
+  response.cookies.set(ACCESS_TOKEN_COOKIE_NAME, "", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 0,
+  });
+  response.cookies.set(REFRESH_TOKEN_COOKIE_NAME, "", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 0,
+  });
+
+  return response;
 }
 
 export const config = {

@@ -1,28 +1,22 @@
 {
+  "extends": "../../tooling/typescript/base.json",
   "compilerOptions": {
-    "target": "ES2017",
-    "lib": ["dom", "dom.iterable", "esnext"],
-    "allowJs": true,
-    "skipLibCheck": true,
-    "strict": true,
-    "noEmit": true,
-    "esModuleInterop": true,
-    "module": "esnext",
-    "moduleResolution": "bundler",
-    "resolveJsonModule": true,
-    "isolatedModules": true,
+    "lib": ["ES2022", "dom", "dom.iterable"],
     "jsx": "preserve",
-    "incremental": true,
-    "types": ["node", "react", "react-dom"],
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ],
+    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
-    }
+    },
+    "plugins": [{ "name": "next" }],
+    "tsBuildInfoFile": "node_modules/.cache/tsbuildinfo.json",
+    "strictNullChecks": true
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", "scripts", "vitest.config.ts", "vitest.setup.ts"]
+  "include": [".", ".next/types/**/*.ts"],
+  "exclude": [
+    "node_modules",
+    "scripts",
+    "vitest.config.ts",
+    "vitest.setup.ts",
+    ".next"
+  ]
 }

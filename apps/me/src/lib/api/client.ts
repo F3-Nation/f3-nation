@@ -1,8 +1,12 @@
 import "server-only";
+import { cache } from "react";
 import { cookies } from "next/headers";
-import type { UserProfile, Region, UserListItem } from "@/lib/types";
-import { SESSION_COOKIE_NAME } from "@/lib/auth/constants";
-import { verifySessionValue } from "@/lib/auth/session";
+import { createORPCClient } from "@orpc/client";
+import { RPCLink } from "@orpc/client/fetch";
+import type { RouterClient } from "@orpc/server";
+import type { router } from "@acme/api";
+import { Client, Header } from "@acme/shared/common/enums";
+import { ACCESS_TOKEN_COOKIE_NAME } from "@/lib/auth/constants";
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -11,147 +15,84 @@ function requireEnv(name: string): string {
 }
 
 /**
- * Build headers for API calls. Includes X-User-Id from the session cookie
- * so the API knows which user the request is for.
+ * Per-request cached oRPC client factory.
+ *
+ * Reads the authenticated user's OAuth access token from cookies and creates
+ * a typed oRPC client pointed at F3_API_BASE_URL. The React cache() ensures
+ * at most one client is created per server request.
  */
-async function getHeaders(): Promise<HeadersInit> {
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${requireEnv("F3_API_KEY")}`,
-    Client: "f3-me",
-    "Content-Type": "application/json",
-  };
+export const getApiClient = cache(
+  async (): Promise<RouterClient<typeof router>> => {
+    const cookieStore = await cookies();
+    const accessToken = cookieStore.get(ACCESS_TOKEN_COOKIE_NAME)?.value;
+    if (!accessToken) throw new Error("Missing access token");
 
-  // Read userId from the session cookie and pass as X-User-Id
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-  if (sessionCookie) {
-    const session = verifySessionValue(sessionCookie);
-    if (session?.userId) {
-      headers["X-User-Id"] = String(session.userId);
-    }
-  }
+    const link = new RPCLink({
+      url: requireEnv("F3_API_BASE_URL"),
+      fetch: (input, init) => {
+        input.headers.set(Header.Client, Client.ORPC);
+        input.headers.set(Header.Authorization, `Bearer ${accessToken}`);
+        return fetch(input, init);
+      },
+    });
 
-  return headers;
-}
-
-function apiUrl(path: string): string {
-  return `${requireEnv("F3_API_BASE_URL")}${path}`;
-}
+    return createORPCClient<RouterClient<typeof router>>(link);
+  },
+);
 
 /**
  * Get the authenticated user's full profile (user fields + roles + positions).
- * Calls GET /me/profile on the F3 API.
  */
-export async function getMyProfile(): Promise<UserProfile> {
-  const res = await fetch(apiUrl("/me/profile"), {
-    headers: await getHeaders(),
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`API error ${res.status}: ${text}`);
-  }
-  const data = (await res.json()) as { user: UserProfile };
-  return data.user;
+export async function getMyProfile() {
+  const client = await getApiClient();
+  const result = await client.me.profile();
+  return result.user;
 }
 
 /**
  * Update the authenticated user's profile.
- * Calls PATCH /me/profile on the F3 API.
  */
 export async function updateMyProfile(
-  body: Record<string, unknown>,
-): Promise<UserProfile> {
-  const res = await fetch(apiUrl("/me/profile"), {
-    method: "PATCH",
-    headers: await getHeaders(),
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`API error ${res.status}: ${text}`);
-  }
-  const data = (await res.json()) as { user: UserProfile };
-  return data.user;
+  body: Parameters<RouterClient<typeof router>["me"]["updateProfile"]>[0],
+) {
+  const client = await getApiClient();
+  const result = await client.me.updateProfile(body);
+  return result.user;
 }
 
 /**
  * List all regions (active and inactive) for the region dropdown.
- * Calls GET /me/regions on the F3 API.
  */
-export async function getRegions(): Promise<Region[]> {
-  const res = await fetch(apiUrl("/me/regions"), {
-    headers: await getHeaders(),
-    next: { revalidate: 3600 }, // Cache for 1 hour
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`API error ${res.status}: ${text}`);
-  }
-  const data = (await res.json()) as { orgs: Region[] };
-  return data.orgs;
+export async function getRegions() {
+  const client = await getApiClient();
+  const result = await client.me.regions();
+  return result.orgs;
 }
 
 /**
  * Remove the authenticated user from a position assignment.
- * Calls DELETE /me/positions on the F3 API.
  */
-export async function deleteMyPosition(
-  orgId: number,
-  positionId: number,
-): Promise<{ success: boolean; found: boolean }> {
-  const res = await fetch(apiUrl("/me/positions"), {
-    method: "DELETE",
-    headers: await getHeaders(),
-    body: JSON.stringify({ orgId, positionId }),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`API error ${res.status}: ${text}`);
-  }
-  return (await res.json()) as { success: boolean; found: boolean };
+export async function deleteMyPosition(orgId: number, positionId: number) {
+  const client = await getApiClient();
+  return client.me.deletePosition({ orgId, positionId });
 }
 
 /**
  * Remove the authenticated user from a role assignment.
- * Calls DELETE /me/roles on the F3 API.
  */
-export async function deleteMyRole(
-  orgId: number,
-  roleId: number,
-): Promise<{ success: boolean; found: boolean }> {
-  const res = await fetch(apiUrl("/me/roles"), {
-    method: "DELETE",
-    headers: await getHeaders(),
-    body: JSON.stringify({ orgId, roleId }),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`API error ${res.status}: ${text}`);
-  }
-  return (await res.json()) as { success: boolean; found: boolean };
+export async function deleteMyRole(orgId: number, roleId: number) {
+  const client = await getApiClient();
+  return client.me.deleteRole({ orgId, roleId });
 }
 
 /**
  * List users for the "Who Brought You?" dropdown.
  * Optionally filter by homeRegionId.
  */
-export async function getUsers(
-  homeRegionId?: number | null,
-): Promise<UserListItem[]> {
-  const params = new URLSearchParams();
-  if (homeRegionId) {
-    params.set("homeRegionId", String(homeRegionId));
-  }
-  const qs = params.toString();
-  const res = await fetch(apiUrl(`/me/users${qs ? `?${qs}` : ""}`), {
-    headers: await getHeaders(),
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`API error ${res.status}: ${text}`);
-  }
-  const data = (await res.json()) as { users: UserListItem[] };
-  return data.users;
+export async function getUsers(homeRegionId?: number | null) {
+  const client = await getApiClient();
+  const result = await client.me.users(
+    homeRegionId ? { homeRegionId } : undefined,
+  );
+  return result.users;
 }

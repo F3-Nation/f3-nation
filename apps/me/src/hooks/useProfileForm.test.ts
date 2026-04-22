@@ -54,7 +54,7 @@ function makeUser(overrides: Partial<UserProfile> = {}): UserProfile {
     firstName: "Patrick",
     lastName: "Smith",
     email: "dredd@f3nation.com",
-    emailVerified: true,
+    emailVerified: null,
     phone: "555-1234",
     homeRegionId: 10,
     avatarUrl: "https://example.com/avatar.jpg",

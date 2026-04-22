@@ -33,8 +33,6 @@ REGION="us-east1"
 # Only genuinely sensitive values go here.
 declare -A SECRET_MAP=(
   [OAUTH_CLIENT_SECRET]="oauth-client-secret"
-  [SESSION_SECRET]="session-secret"
-  [F3_API_KEY]="f3-api-key"
   [GCS_CREDENTIALS]="gcs-credentials"
 )
 

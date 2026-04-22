@@ -31,7 +31,6 @@ export const env = createEnv({
     TEST_DATABASE_URL: z.string().min(1),
     API_KEY: z.string().min(1),
     SUPER_ADMIN_API_KEY: z.string().min(1),
-    ME_BFF_API_KEY: z.string().min(1).optional(),
     NOTIFY_WEBHOOK_URLS_COMMA_SEPARATED: z.string().optional(),
   },
   client: {

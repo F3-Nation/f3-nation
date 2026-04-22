@@ -1,8 +1,8 @@
 "use client";
 
 import { useRef } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@acme/ui/button";
+import { Input } from "@acme/ui/input";
 import { useDropdownSelect } from "@/hooks/useDropdownSelect";
 import { useUserSearch, displayName } from "@/hooks/useUserSearch";
 import type { UserListItem } from "@/lib/types";

@@ -17,15 +17,36 @@ F3 Nation users need a way to manage their own profile information without requi
 
 ## Tech Stack
 
-| Layer         | Choice                             |
-| ------------- | ---------------------------------- |
-| Framework     | Next.js 15 (App Router)            |
-| Styling       | TailwindCSS + shadcn/ui            |
-| Auth          | F3 SSO (f3-nation-auth-sdk)        |
-| API Backend   | F3 Nation API (api.f3nation.com)   |
-| Image Storage | Google Cloud Storage               |
-| Hosting       | GCP Cloud Run (via GitHub Actions) |
-| Node          | 20.x                               |
+| Layer         | Choice                               |
+| ------------- | ------------------------------------ |
+| Framework     | Next.js 15 (App Router)              |
+| Styling       | TailwindCSS + shadcn/ui              |
+| Auth          | F3 SSO (`@acme/sso`) + token cookies |
+| API Backend   | F3 Nation API (api.f3nation.com)     |
+| Image Storage | Google Cloud Storage                 |
+| Hosting       | GCP Cloud Run (via GitHub Actions)   |
+| Node          | 24.x                                 |
+
+## Auth Architecture
+
+F3 Me uses [`@acme/sso`](../../packages/sso/README.md) for OAuth and OpenID Connect interactions with the F3 auth provider. The shared package is responsible for:
+
+- Building the authorization URL
+- Exchanging the authorization code for tokens
+- Refreshing access tokens with the refresh token
+- Fetching user info from the userinfo endpoint
+
+F3 Me stores the OAuth access token and refresh token in `httpOnly` cookies and uses the access token directly when calling the F3 API.
+
+Current auth flow:
+
+1. `/api/auth/login` generates CSRF + PKCE values, stores short-lived OAuth cookies, and redirects using `@acme/sso`.
+2. `/api/auth/callback` validates state and PKCE, exchanges the code via `@acme/sso`, validates the user via `userinfo`, and stores `access_token` and `refresh_token` cookies.
+3. Middleware refreshes the access token when needed using the refresh token.
+4. Server-side routes call the F3 API with `Authorization: Bearer <access_token>`.
+5. `/api/auth/logout` revokes the refresh token, clears auth cookies, and sends the browser through provider logout.
+
+This is aligned with the generic `@acme/sso` integration model: the shared package handles OAuth, while the app owns cookie storage and request/session plumbing.
 
 ## Project Structure
 
@@ -63,7 +84,7 @@ apps/me/
 
 ### Prerequisites
 
-- Node.js 20.x (`nvm use` if you have nvm)
+- Node.js 24.x (`nvm use` if you have nvm)
 - pnpm (managed by the monorepo root)
 - OAuth clients registered in the F3 auth provider (see [OAuth Client Registration](#oauth-client-registration) below)
 - Admin F3 API key with edit permissions
@@ -100,8 +121,6 @@ Open [https://localhost:3003](https://localhost:3003). Accept the self-signed ce
 | `OAUTH_CLIENT_SECRET`  | OAuth client secret                     | (from auth provider)                       |
 | `OAUTH_REDIRECT_URI`   | OAuth callback URL                      | `https://localhost:3003/api/auth/callback` |
 | `AUTH_PROVIDER_URL`    | F3 SSO base URL                         | `https://auth.f3nation.com`                |
-| `SESSION_SECRET`       | HMAC key for session cookies            | (random 64-char hex)                       |
-| `F3_API_KEY`           | F3 Nation API key (admin/edit)          | (from team)                                |
 | `F3_API_BASE_URL`      | F3 API base URL                         | `https://staging.api.f3nation.com`         |
 | `GCS_BUCKET`           | GCS bucket for avatars                  | `f3-public-images-staging`                 |
 | `GCS_CREDENTIALS`      | Base64-encoded GCS service account JSON | (from GCP)                                 |
@@ -122,7 +141,7 @@ pnpm test:coverage
 
 Tests are located in `__tests__/` and cover:
 
-- Session signing/verification
+- Token parsing/expiry helpers
 - API client functions
 - Profile API route handlers (GET, PATCH)
 - Avatar upload validation
@@ -419,12 +438,14 @@ This requires access to the auth provider admin. The project owner handles this.
 
 ## Security Notes
 
-- The F3 API key (`F3_API_KEY`) is **never** exposed to the client. All API calls happen server-side.
-- Profile updates are authorized using the authenticated session (resolved by email); users can only edit their own profile.
+- `@acme/sso` is used for OAuth operations only; Next.js responses, redirects, and cookie/session handling remain app-owned.
+- The app stores `access_token` and `refresh_token` in `httpOnly` cookies and never exposes them to client-side JavaScript.
+- Middleware refreshes expired access tokens using the refresh token before protected requests continue.
+- Profile updates are authorized using the authenticated user's OAuth access token; users can only edit their own profile.
 - File uploads are validated for type (jpeg/png/webp/gif) and size (max 5MB).
 - `meta` field updates merge with existing data — unknown keys are preserved.
 - Position removal preserves all other users' assignments.
-- Session cookies are `httpOnly`, `secure` in production, `sameSite: "lax"`.
+- Auth cookies are `httpOnly`, `secure` in production, `sameSite: "lax"`.
 
 ## License
 

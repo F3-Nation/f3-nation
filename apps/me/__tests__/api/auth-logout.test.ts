@@ -1,17 +1,28 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+const mockCookieStore = {
+  get: vi.fn().mockReturnValue({ value: "refresh-token-value" }),
+};
+
+vi.mock("next/headers", () => ({
+  cookies: vi.fn().mockResolvedValue(mockCookieStore),
+}));
+
+vi.mock("@/lib/auth/oauth", () => ({
+  getOAuthConfig: vi.fn(() => ({ authServerUrl: "http://localhost:3002" })),
+  revokeToken: vi.fn().mockResolvedValue(undefined),
+}));
+
+import { revokeToken } from "@/lib/auth/oauth";
+
 describe("Auth /logout route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
-    // The logout route imports getOAuthConfig which requires these env vars
-    vi.stubEnv("OAUTH_CLIENT_ID", "test-client-id");
-    vi.stubEnv("OAUTH_CLIENT_SECRET", "test-client-secret");
-    vi.stubEnv("OAUTH_REDIRECT_URI", "http://localhost:3003/api/auth/callback");
-    vi.stubEnv("AUTH_PROVIDER_URL", "http://localhost:3002");
+    mockCookieStore.get.mockReturnValue({ value: "refresh-token-value" });
   });
 
-  it("clears session cookie and returns ok", async () => {
+  it("clears auth cookies and returns ok", async () => {
     const { POST } = await import("@/app/api/auth/logout/route");
     const response = await POST();
     const data = (await response.json()) as { ok: boolean };
@@ -21,8 +32,16 @@ describe("Auth /logout route", () => {
 
     // Verify the session cookie is cleared (maxAge: 0)
     const setCookieHeader = response.headers.get("set-cookie");
-    expect(setCookieHeader).toContain("__session=");
+    expect(setCookieHeader).toContain("access_token=");
+    expect(setCookieHeader).toContain("refresh_token=");
     expect(setCookieHeader).toContain("Max-Age=0");
+  });
+
+  it("revokes the refresh token before clearing cookies", async () => {
+    const { POST } = await import("@/app/api/auth/logout/route");
+    await POST();
+
+    expect(revokeToken).toHaveBeenCalledWith("refresh-token-value");
   });
 
   it("sets httpOnly on the cleared cookie", async () => {
@@ -39,5 +58,15 @@ describe("Auth /logout route", () => {
 
     const setCookieHeader = response.headers.get("set-cookie");
     expect(setCookieHeader).toContain("SameSite=lax");
+  });
+
+  it("still logs out when no refresh token cookie exists", async () => {
+    mockCookieStore.get.mockReturnValue(undefined);
+
+    const { POST } = await import("@/app/api/auth/logout/route");
+    const response = await POST();
+
+    expect(response.status).toBe(200);
+    expect(revokeToken).not.toHaveBeenCalled();
   });
 });

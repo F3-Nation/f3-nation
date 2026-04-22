@@ -8,7 +8,7 @@ F3 Me is a Next.js 15 App Router application that provides self-service profile 
 
 ### Key Architectural Decisions
 
-1. **Server-side API key**: A single admin API key (`F3_API_KEY`) is stored server-side. The server validates user identity via SSO session before making API calls. Users never see the key.
+1. **User-scoped OAuth tokens**: The app stores `access_token` and `refresh_token` in `httpOnly` cookies and calls the F3 API as the authenticated user.
 2. **No direct database access**: All data operations go through the F3 Nation API (`api.f3nation.com`). There is no database in this app.
 3. **Meta field merging**: The `meta` field in the user profile is a JSON string. When updating, parse existing meta, merge editable keys, preserve all unknown keys, and re-serialize.
 4. **Position removal safety**: When removing a user from a position, fetch the full org position list, remove only the user's ID, and PUT back the complete list to preserve other users.
@@ -38,7 +38,7 @@ src/
     ├── auth/
     │   ├── constants.ts    — Cookie names, TTLs
     │   ├── oauth.ts        — AuthClient wrapper (f3-nation-auth-sdk)
-    │   ├── session.ts      — HMAC sign/verify for session cookies
+    │   ├── tokens.ts       — Access token parsing/expiry helpers
     │   ├── server.ts       — getSessionUser(), requireAuth()
     │   └── AuthProvider.tsx — Client-side auth context
     ├── api/client.ts       — Server-side F3 API client
@@ -50,7 +50,7 @@ src/
 ## API Reference
 
 - **Base URL**: `https://api.f3nation.com` (prod), `https://staging.api.f3nation.com` (staging)
-- **Headers**: `Authorization: Bearer {F3_API_KEY}`, `Client: f3-me`
+- **Headers**: `Authorization: Bearer {access_token}`, `Client: f3-me`
 - **Rate limit**: 200 req/60s
 
 ### User Endpoints
@@ -73,8 +73,8 @@ OAuth 2.0 Authorization Code + PKCE via `https://auth.f3nation.com`:
 
 1. `/api/auth/login` → Set CSRF + code_verifier cookies → Redirect to auth provider
 2. Auth provider authenticates user (email → 6-digit code)
-3. Redirect to `/api/auth/callback` → Validate CSRF → Exchange code for token → Fetch userinfo → Create `__session` cookie
-4. `__session` cookie: HMAC-SHA256 signed, 10-day TTL, httpOnly
+3. Redirect to `/api/auth/callback` → Validate CSRF → Exchange code for tokens → Fetch userinfo → Store `access_token` + `refresh_token` cookies
+4. Middleware refreshes the access token using the refresh token for protected requests
 
 ## Editable Fields
 

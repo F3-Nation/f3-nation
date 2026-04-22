@@ -19,7 +19,6 @@ const mockSession = {
   sub: "42",
   email: "test@f3.com",
   userId: 42,
-  iat: Date.now(),
 };
 
 const mockUser = {
@@ -28,7 +27,7 @@ const mockUser = {
   firstName: "Joe",
   lastName: "Smith",
   email: "test@f3.com",
-  emailVerified: true,
+  emailVerified: null,
   phone: null,
   homeRegionId: 1,
   avatarUrl: null,
@@ -270,7 +269,7 @@ describe("Profile API route", () => {
       vi.mocked(requireAuth).mockResolvedValue(mockSession);
       vi.mocked(updateMyProfile).mockResolvedValue({
         ...mockUser,
-        meta: '{"f3_name_origin":"new origin","my_f3_why":"because"}',
+        meta: { f3_name_origin: "new origin", my_f3_why: "because" },
       });
 
       const { PATCH } = await import("@/app/api/profile/route");
@@ -295,7 +294,7 @@ describe("Profile API route", () => {
       vi.mocked(updateMyProfile).mockResolvedValue({
         ...mockUser,
         f3Name: "Judge",
-        meta: '{"f3_name_origin":"from the movie"}',
+        meta: { f3_name_origin: "from the movie" },
       });
 
       const { PATCH } = await import("@/app/api/profile/route");

@@ -3,67 +3,8 @@ import { z } from "zod";
 
 import { and, asc, eq, schema, sql } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
-import { Header } from "@acme/shared/common/enums";
 
 import { protectedProcedure } from "../../shared";
-
-/**
- * Extract the raw bearer token from the Authorization header.
- */
-function extractBearerToken(headers?: Headers): string | null {
-  const auth = headers?.get(Header.Authorization as string);
-  if (auth?.toLowerCase().startsWith("bearer ")) {
-    return auth.slice(7).trim();
-  }
-  return null;
-}
-
-/**
- * Scoped procedure for /me endpoints that need to act on behalf of
- * a specific user.
- *
- * - BFF requests (bearer token matches ME_BFF_API_KEY env var): MUST
- *   include X-User-Id header. The BFF reads the signed session cookie
- *   and forwards the userId.
- * - All other callers (Scalar, mobile, direct API key): use the
- *   session identity from the API key. X-User-Id is ignored.
- *
- * The bearer token is compared against a server-side secret, so
- * this cannot be spoofed via headers.
- */
-const meProtectedProcedure = protectedProcedure.use(({ context, next }) => {
-  const reqHeaders = (context as unknown as { reqHeaders?: Headers })
-    .reqHeaders;
-
-  // Only the BFF bearer token is trusted to set X-User-Id
-  const bffKey = process.env.ME_BFF_API_KEY;
-  const bearerToken = extractBearerToken(reqHeaders);
-  const isBff = bffKey && bearerToken === bffKey;
-
-  if (isBff) {
-    const userIdHeader = reqHeaders?.get(Header.UserId as string);
-    if (!userIdHeader) {
-      throw new ORPCError("UNAUTHORIZED", {
-        message: "X-User-Id header is required for /me endpoints",
-      });
-    }
-    const overrideId = Number(userIdHeader);
-    if (!Number.isInteger(overrideId) || overrideId <= 0) {
-      throw new ORPCError("UNAUTHORIZED", {
-        message: "X-User-Id header must be a positive integer",
-      });
-    }
-    return next({
-      context: {
-        ...context,
-        session: { ...context.session!, id: overrideId },
-      },
-    });
-  }
-
-  // Non-BFF callers: use their own session identity
-  return next({ context });
-});
 
 /**
  * /me router — self-service endpoints for authenticated users.
@@ -209,7 +150,7 @@ export const meRouter = {
   /**
    * Get the authenticated user's own profile with PII, roles, and positions.
    */
-  profile: meProtectedProcedure
+  profile: protectedProcedure
     .route({
       method: "GET",
       path: "/profile",
@@ -227,7 +168,7 @@ export const meRouter = {
    * Update the authenticated user's own profile.
    * Only whitelisted fields can be changed. Roles cannot be self-assigned.
    */
-  updateProfile: meProtectedProcedure
+  updateProfile: protectedProcedure
     .input(profileUpdateSchema)
     .route({
       method: "PATCH",
@@ -327,7 +268,7 @@ export const meRouter = {
   /**
    * Remove the authenticated user from a specific position assignment.
    */
-  deletePosition: meProtectedProcedure
+  deletePosition: protectedProcedure
     .input(
       z
         .object({
@@ -374,7 +315,7 @@ export const meRouter = {
   /**
    * Remove the authenticated user from a specific role at an org.
    */
-  deleteRole: meProtectedProcedure
+  deleteRole: protectedProcedure
     .input(
       z
         .object({

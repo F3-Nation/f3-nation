@@ -1,16 +1,10 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { exchangeCodeForToken, getUserInfo } from "@/lib/auth/oauth";
-import { createSessionValue } from "@/lib/auth/session";
-import {
-  SESSION_COOKIE_MAX_AGE,
-  SESSION_COOKIE_NAME,
-} from "@/lib/auth/constants";
 import { safeReturnTo } from "@/lib/auth/validation";
 
 interface StatePayload {
   csrfToken: string;
-  clientId: string;
   returnTo: string;
   timestamp: number;
 }
@@ -75,12 +69,17 @@ export async function GET(request: NextRequest) {
 
   // Exchange code for tokens
   let accessToken: string;
+  let refreshTokenValue: string | undefined;
+  let expiresIn: number | undefined;
   try {
     const tokens = await exchangeCodeForToken({ code, codeVerifier });
     if (!tokens.accessToken) {
       return errorRedirect(baseUrl, "token_exchange_failed", returnTo);
     }
     accessToken = tokens.accessToken;
+    refreshTokenValue = tokens.refreshToken;
+    expiresIn =
+      typeof tokens.expiresIn === "number" ? tokens.expiresIn : undefined;
   } catch (err) {
     console.error("Token exchange failed", err);
     return errorRedirect(baseUrl, "token_exchange_failed", returnTo);
@@ -99,23 +98,27 @@ export async function GET(request: NextRequest) {
     return errorRedirect(baseUrl, "user_not_found", returnTo);
   }
 
-  // Create HMAC session cookie
-  const sessionValue = createSessionValue({
-    sub: String(userInfo.sub),
-    email: userInfo.email,
-    name: userInfo.name,
-    userId: userInfo.sub,
-  });
-
   const response = NextResponse.redirect(new URL(returnTo, baseUrl).toString());
+  const accessTokenMaxAge = expiresIn ?? 60 * 60;
+  const refreshTokenMaxAge = 30 * 24 * 60 * 60;
 
-  response.cookies.set(SESSION_COOKIE_NAME, sessionValue, {
+  response.cookies.set("access_token", accessToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
-    maxAge: SESSION_COOKIE_MAX_AGE,
+    maxAge: accessTokenMaxAge,
   });
+
+  if (refreshTokenValue) {
+    response.cookies.set("refresh_token", refreshTokenValue, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: refreshTokenMaxAge,
+    });
+  }
 
   // Clear OAuth flow cookies
   const clearCookieOpts = {

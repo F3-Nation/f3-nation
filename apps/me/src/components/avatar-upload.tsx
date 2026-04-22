@@ -1,8 +1,8 @@
 "use client";
 
 import { useRef } from "react";
+import { Button } from "@acme/ui/button";
 import { Avatar } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { useAvatarUpload } from "@/hooks/useAvatarUpload";
 

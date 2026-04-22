@@ -21,7 +21,6 @@ const mockSession = {
   sub: "42",
   email: "test@f3.com",
   userId: 42,
-  iat: Date.now(),
 };
 
 function createMockRequest(formData: FormData) {
@@ -130,7 +129,7 @@ describe("Avatar API route", () => {
       firstName: null,
       lastName: "Smith",
       email: "test@f3.com",
-      emailVerified: true,
+      emailVerified: null,
       phone: null,
       homeRegionId: null,
       avatarUrl:
@@ -174,7 +173,7 @@ describe("Avatar API route", () => {
       firstName: null,
       lastName: "Smith",
       email: "test@f3.com",
-      emailVerified: true,
+      emailVerified: null,
       phone: null,
       homeRegionId: null,
       avatarUrl:
@@ -226,7 +225,7 @@ describe("Avatar API route", () => {
       firstName: null,
       lastName: "Smith",
       email: "test@f3.com",
-      emailVerified: true,
+      emailVerified: null,
       phone: null,
       homeRegionId: null,
       avatarUrl:
@@ -270,7 +269,7 @@ describe("Avatar API route", () => {
       firstName: null,
       lastName: "Smith",
       email: "test@f3.com",
-      emailVerified: true,
+      emailVerified: null,
       phone: null,
       homeRegionId: null,
       avatarUrl:
@@ -315,7 +314,7 @@ describe("Avatar API route", () => {
       firstName: null,
       lastName: "Jones",
       email: "ice@f3.com",
-      emailVerified: true,
+      emailVerified: null,
       phone: null,
       homeRegionId: null,
       avatarUrl:

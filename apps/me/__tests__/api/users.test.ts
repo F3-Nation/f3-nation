@@ -16,7 +16,6 @@ const mockSession = {
   sub: "42",
   email: "test@f3.com",
   userId: 42,
-  iat: Date.now(),
 };
 
 describe("Users API route", () => {

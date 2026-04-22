@@ -1,16 +1,16 @@
 "use client";
 
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
+import { Input } from "@acme/ui/input";
+import { Textarea } from "@acme/ui/textarea";
+import { Label } from "@acme/ui/label";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
-import { Switch } from "@/components/ui/switch";
+} from "@acme/ui/card";
+import { Switch } from "@acme/ui/switch";
 import { useToast } from "@/components/ui/toast";
 import { AvatarUpload } from "@/components/avatar-upload";
 import { RegionSelect } from "@/components/region-select";

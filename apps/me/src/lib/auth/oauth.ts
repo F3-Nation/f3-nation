@@ -33,6 +33,15 @@ export function getOAuthConfig(): OauthClient {
   return getAuthClient().getOAuthConfig();
 }
 
+export function getAuthorizationUrl(params: {
+  scope?: string;
+  state?: string;
+  codeChallenge?: string;
+  codeChallengeMethod?: string;
+}): string {
+  return getAuthClient().getAuthorizationUrl(params);
+}
+
 export async function exchangeCodeForToken(params: {
   code: string;
   codeVerifier: string;
@@ -45,4 +54,14 @@ export async function exchangeCodeForToken(params: {
 
 export async function getUserInfo(accessToken: string): Promise<AuthUser> {
   return getAuthClient().getUserInfo(accessToken);
+}
+
+export async function refreshToken(params: {
+  refreshToken: string;
+}): Promise<AuthTokens> {
+  return getAuthClient().refreshToken({ refreshToken: params.refreshToken });
+}
+
+export async function revokeToken(token: string): Promise<void> {
+  return getAuthClient().revokeToken(token);
 }

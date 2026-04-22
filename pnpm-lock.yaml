@@ -107,7 +107,7 @@ importers:
         version: 3.1.1(react@18.3.1)
       '@scalar/nextjs-api-reference':
         specifier: ^0.9.5
-        version: 0.9.26(next@15.5.14(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)
+        version: 0.9.26(next@15.5.14(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)
       '@sentry/nextjs':
         specifier: ^9.15.0
         version: 9.47.1(@opentelemetry/context-async-hooks@1.30.1(@opentelemetry/api@1.9.1))(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@1.30.1(@opentelemetry/api@1.9.1))(next@15.5.14(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(webpack@5.105.4)
@@ -373,7 +373,7 @@ importers:
         version: 7.4.4
       eslint:
         specifier: 'catalog:'
-        version: 10.2.0(jiti@1.21.7)
+        version: 10.2.0(jiti@2.6.1)
       postcss:
         specifier: ^8.4.35
         version: 8.5.8
@@ -621,12 +621,27 @@ importers:
 
   apps/me:
     dependencies:
+      '@acme/api':
+        specifier: workspace:^0.2.0
+        version: link:../../packages/api
+      '@acme/shared':
+        specifier: workspace:^0.1.0
+        version: link:../../packages/shared
       '@acme/sso':
         specifier: workspace:*
         version: link:../../packages/sso
+      '@acme/ui':
+        specifier: workspace:^0.1.0
+        version: link:../../packages/ui
       '@google-cloud/storage':
         specifier: ^7.14.0
         version: 7.19.0
+      '@orpc/client':
+        specifier: ^1.8.8
+        version: 1.13.13(@opentelemetry/api@1.9.1)
+      '@orpc/server':
+        specifier: ^1.8.8
+        version: 1.13.13(@opentelemetry/api@1.9.1)(ws@8.20.0)
       clsx:
         specifier: ^2.1.0
         version: 2.1.1
@@ -655,6 +670,9 @@ importers:
       '@acme/eslint-config':
         specifier: workspace:^0.2.0
         version: link:../../tooling/eslint
+      '@acme/tsconfig':
+        specifier: workspace:^0.1.0
+        version: link:../../tooling/typescript
       '@testing-library/jest-dom':
         specifier: ^6.4.2
         version: 6.9.1
@@ -9632,11 +9650,6 @@ snapshots:
   '@esbuild/win32-x64@0.27.7':
     optional: true
 
-  '@eslint-community/eslint-utils@4.9.1(eslint@10.2.0(jiti@1.21.7))':
-    dependencies:
-      eslint: 10.2.0(jiti@1.21.7)
-      eslint-visitor-keys: 3.4.3
-
   '@eslint-community/eslint-utils@4.9.1(eslint@10.2.0(jiti@2.6.1))':
     dependencies:
       eslint: 10.2.0(jiti@2.6.1)
@@ -11645,7 +11658,7 @@ snapshots:
 
   '@scalar/helpers@0.2.18': {}
 
-  '@scalar/nextjs-api-reference@0.9.26(next@15.5.14(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)':
+  '@scalar/nextjs-api-reference@0.9.26(next@15.5.14(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)':
     dependencies:
       '@scalar/core': 0.3.45
       next: 15.5.14(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -13690,43 +13703,6 @@ snapshots:
   eslint-visitor-keys@3.4.3: {}
 
   eslint-visitor-keys@5.0.1: {}
-
-  eslint@10.2.0(jiti@1.21.7):
-    dependencies:
-      '@eslint-community/eslint-utils': 4.9.1(eslint@10.2.0(jiti@1.21.7))
-      '@eslint-community/regexpp': 4.12.2
-      '@eslint/config-array': 0.23.5
-      '@eslint/config-helpers': 0.5.5
-      '@eslint/core': 1.2.1
-      '@eslint/plugin-kit': 0.7.1
-      '@humanfs/node': 0.16.7
-      '@humanwhocodes/module-importer': 1.0.1
-      '@humanwhocodes/retry': 0.4.3
-      '@types/estree': 1.0.8
-      ajv: 6.14.0
-      cross-spawn: 7.0.6
-      debug: 4.4.3
-      escape-string-regexp: 4.0.0
-      eslint-scope: 9.1.2
-      eslint-visitor-keys: 5.0.1
-      espree: 11.2.0
-      esquery: 1.7.0
-      esutils: 2.0.3
-      fast-deep-equal: 3.1.3
-      file-entry-cache: 8.0.0
-      find-up: 5.0.0
-      glob-parent: 6.0.2
-      ignore: 5.3.2
-      imurmurhash: 0.1.4
-      is-glob: 4.0.3
-      json-stable-stringify-without-jsonify: 1.0.1
-      minimatch: 10.2.5
-      natural-compare: 1.4.0
-      optionator: 0.9.4
-    optionalDependencies:
-      jiti: 1.21.7
-    transitivePeerDependencies:
-      - supports-color
 
   eslint@10.2.0(jiti@2.6.1):
     dependencies:

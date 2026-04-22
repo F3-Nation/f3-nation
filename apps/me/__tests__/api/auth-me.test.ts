@@ -10,7 +10,6 @@ const mockSession = {
   sub: "42",
   email: "test@f3.com",
   userId: 42,
-  iat: Date.now(),
 };
 
 describe("Auth /me route", () => {

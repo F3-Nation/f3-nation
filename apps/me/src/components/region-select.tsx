@@ -1,7 +1,8 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@acme/ui/button";
+import { Input } from "@acme/ui/input";
+
 import { useDropdownSelect } from "@/hooks/useDropdownSelect";
 import { useRegionFilter } from "@/hooks/useRegionFilter";
 import type { Region } from "@/lib/types";

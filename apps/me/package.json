@@ -18,8 +18,13 @@
     "deploy:variables-secrets:prod": "/usr/bin/env bash scripts/cloud-run-env.sh --env prod"
   },
   "dependencies": {
+    "@acme/api": "workspace:^0.2.0",
+    "@acme/shared": "workspace:^0.1.0",
     "@acme/sso": "workspace:*",
+    "@acme/ui": "workspace:^0.1.0",
     "@google-cloud/storage": "^7.14.0",
+    "@orpc/client": "^1.8.8",
+    "@orpc/server": "^1.8.8",
     "clsx": "^2.1.0",
     "next": "^15.3.6",
     "react": "18.3.1",
@@ -31,6 +36,7 @@
   },
   "devDependencies": {
     "@acme/eslint-config": "workspace:^0.2.0",
+    "@acme/tsconfig": "workspace:^0.1.0",
     "@testing-library/jest-dom": "^6.4.2",
     "@types/node": "^20.11.13",
     "@types/react": "^18.3.1",

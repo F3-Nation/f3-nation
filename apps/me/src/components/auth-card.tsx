@@ -7,7 +7,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
+} from "@acme/ui/card";
 
 interface AuthCardProps {
   error?: string | null;

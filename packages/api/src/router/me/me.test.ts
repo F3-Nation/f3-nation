@@ -19,6 +19,8 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   })),
 }));
 
+import { auth } from "@acme/auth";
+import type { Session } from "@acme/auth";
 import { and, eq, schema } from "@acme/db";
 import { db } from "@acme/db/client";
 import { Client, Header } from "@acme/shared/common/enums";
@@ -26,35 +28,30 @@ import { createRouterClient } from "@orpc/server";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { router } from "../../index";
 
+/** Cast auth to its session-retrieval overload so vi.mocked types correctly. */
+const mockAuth = vi.mocked(auth as () => Promise<Session | null>);
+
+/** Build a minimal Session object for test mocking. */
+const makeTestSession = (
+  id: number,
+  email: string,
+  name = "TestPax",
+): Session =>
+  ({
+    id,
+    email,
+    user: { id: String(id), email, name, roles: [] },
+    roles: [],
+    expires: new Date(Date.now() + 86400000).toISOString(),
+  }) as unknown as Session;
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Fake BFF API key for tests — must match process.env.ME_BFF_API_KEY */
-const TEST_BFF_KEY = "test-bff-key-secret";
-process.env.ME_BFF_API_KEY = TEST_BFF_KEY;
-
 /**
- * Create a test client that simulates the BFF (apps/me).
- * Sends the trusted bearer token + X-User-Id header.
- */
-const createBffClient = (userId: number) => {
-  const headers: Record<string, string> = {
-    [Header.Client]: Client.ORPC,
-    [Header.Authorization]: `Bearer ${TEST_BFF_KEY}`,
-    "x-user-id": String(userId),
-  };
-  return createRouterClient(router, {
-    context: () =>
-      Promise.resolve({
-        reqHeaders: new Headers(headers),
-      }),
-  });
-};
-
-/**
- * Create a test client that simulates a direct API caller (Scalar, mobile).
- * No bearer token or a different one — X-User-Id will be ignored.
+ * Create a test client that simulates a direct API caller.
+ * Auth is provided via the mocked auth() function.
  */
 const createDirectClient = () => {
   const headers: Record<string, string> = {
@@ -180,6 +177,8 @@ describe("Me Router", () => {
       remaining: 199,
       reset: Date.now() + 60000,
     });
+    // Restore auth mock to the test user after clearAllMocks
+    mockAuth.mockResolvedValue(makeTestSession(testUserId, testUserEmail));
   });
 
   // -----------------------------------------------------------------------
@@ -187,7 +186,7 @@ describe("Me Router", () => {
   // -----------------------------------------------------------------------
   describe("profile", () => {
     it("should return the user's full profile with roles and positions", async () => {
-      const client = createBffClient(testUserId);
+      const client = createDirectClient();
       const result = await client.me.profile();
 
       expect(result.user).toBeDefined();
@@ -200,14 +199,11 @@ describe("Me Router", () => {
       expect(result.user.positions.length).toBeGreaterThanOrEqual(1);
     });
 
-    it("should override session.id with X-User-Id header", async () => {
-      const client = createBffClient(testUserId);
-      const result = await client.me.profile();
-      expect(result.user.id).toBe(testUserId);
-    });
-
     it("should throw NOT_FOUND for a non-existent user ID", async () => {
-      const client = createBffClient(999999);
+      mockAuth.mockResolvedValueOnce(
+        makeTestSession(999999, "ghost@example.com", "Ghost"),
+      );
+      const client = createDirectClient();
       await expect(client.me.profile()).rejects.toThrow();
     });
   });
@@ -217,7 +213,7 @@ describe("Me Router", () => {
   // -----------------------------------------------------------------------
   describe("updateProfile", () => {
     it("should update basic string fields", async () => {
-      const client = createBffClient(testUserId);
+      const client = createDirectClient();
       const result = await client.me.updateProfile({
         f3Name: "UpdatedPax",
         firstName: "Updated",
@@ -237,7 +233,7 @@ describe("Me Router", () => {
     });
 
     it("should update phone", async () => {
-      const client = createBffClient(testUserId);
+      const client = createDirectClient();
       const result = await client.me.updateProfile({ phone: "555-1234" });
       expect(result.user.phone).toBe("555-1234");
 
@@ -246,7 +242,7 @@ describe("Me Router", () => {
     });
 
     it("should update homeRegionId", async () => {
-      const client = createBffClient(testUserId);
+      const client = createDirectClient();
       const result = await client.me.updateProfile({
         homeRegionId: regionOrgId,
       });
@@ -254,7 +250,7 @@ describe("Me Router", () => {
     });
 
     it("should set homeRegionId to null", async () => {
-      const client = createBffClient(testUserId);
+      const client = createDirectClient();
       await client.me.updateProfile({ homeRegionId: null });
       const profile = await client.me.profile();
       expect(profile.user.homeRegionId).toBeNull();
@@ -264,7 +260,7 @@ describe("Me Router", () => {
     });
 
     it("should update emergency contact fields", async () => {
-      const client = createBffClient(testUserId);
+      const client = createDirectClient();
       const result = await client.me.updateProfile({
         emergencyContact: "Jane Doe",
         emergencyPhone: "555-9876",
@@ -284,7 +280,7 @@ describe("Me Router", () => {
     });
 
     it("should merge meta fields with existing meta", async () => {
-      const client = createBffClient(testUserId);
+      const client = createDirectClient();
 
       // Set initial meta
       await client.me.updateProfile({ meta: { f3_name_origin: "First post" } });
@@ -299,7 +295,7 @@ describe("Me Router", () => {
     });
 
     it("should update avatarUrl with a valid URL", async () => {
-      const client = createBffClient(testUserId);
+      const client = createDirectClient();
       const url = "https://storage.example.com/avatar.jpg";
       const result = await client.me.updateProfile({ avatarUrl: url });
       expect(result.user.avatarUrl).toBe(url);
@@ -309,14 +305,14 @@ describe("Me Router", () => {
     });
 
     it("should reject an invalid avatarUrl", async () => {
-      const client = createBffClient(testUserId);
+      const client = createDirectClient();
       await expect(
         client.me.updateProfile({ avatarUrl: "not-a-url" }),
       ).rejects.toThrow();
     });
 
     it("should reject unknown fields (strict schema)", async () => {
-      const client = createBffClient(testUserId);
+      const client = createDirectClient();
       await expect(
         client.me.updateProfile({
           // @ts-expect-error — testing runtime validation
@@ -326,7 +322,7 @@ describe("Me Router", () => {
     });
 
     it("should return the full profile after a no-op update", async () => {
-      const client = createBffClient(testUserId);
+      const client = createDirectClient();
       // Empty object — nothing to update, but should still return profile
       const result = await client.me.updateProfile({});
       expect(result.user.id).toBe(testUserId);
@@ -335,7 +331,10 @@ describe("Me Router", () => {
     });
 
     it("should throw NOT_FOUND when updating a non-existent user", async () => {
-      const client = createBffClient(999999);
+      mockAuth.mockResolvedValueOnce(
+        makeTestSession(999999, "ghost@example.com", "Ghost"),
+      );
+      const client = createDirectClient();
       await expect(
         client.me.updateProfile({ f3Name: "Ghost" }),
       ).rejects.toThrow();
@@ -383,7 +382,7 @@ describe("Me Router", () => {
   // -----------------------------------------------------------------------
   describe("deletePosition", () => {
     it("should remove a position assignment and return found:true", async () => {
-      const client = createBffClient(testUserId);
+      const client = createDirectClient();
 
       // First add a position to delete
       await db
@@ -418,7 +417,7 @@ describe("Me Router", () => {
     });
 
     it("should return found:false when assignment does not exist", async () => {
-      const client = createBffClient(testUserId);
+      const client = createDirectClient();
       const result = await client.me.deletePosition({
         positionId: 999999,
         orgId: regionOrgId,
@@ -429,14 +428,14 @@ describe("Me Router", () => {
     });
 
     it("should reject invalid positionId", async () => {
-      const client = createBffClient(testUserId);
+      const client = createDirectClient();
       await expect(
         client.me.deletePosition({ positionId: 0, orgId: regionOrgId }),
       ).rejects.toThrow();
     });
 
     it("should reject invalid orgId", async () => {
-      const client = createBffClient(testUserId);
+      const client = createDirectClient();
       await expect(
         client.me.deletePosition({ positionId, orgId: -1 }),
       ).rejects.toThrow();
@@ -448,7 +447,7 @@ describe("Me Router", () => {
   // -----------------------------------------------------------------------
   describe("deleteRole", () => {
     it("should remove a role assignment and return found:true", async () => {
-      const client = createBffClient(testUserId);
+      const client = createDirectClient();
 
       // Ensure the role assignment exists
       await db
@@ -483,7 +482,7 @@ describe("Me Router", () => {
     });
 
     it("should return found:false when role assignment does not exist", async () => {
-      const client = createBffClient(testUserId);
+      const client = createDirectClient();
       const result = await client.me.deleteRole({
         roleId: 999999,
         orgId: regionOrgId,
@@ -494,14 +493,14 @@ describe("Me Router", () => {
     });
 
     it("should reject invalid roleId", async () => {
-      const client = createBffClient(testUserId);
+      const client = createDirectClient();
       await expect(
         client.me.deleteRole({ roleId: 0, orgId: regionOrgId }),
       ).rejects.toThrow();
     });
 
     it("should reject invalid orgId", async () => {
-      const client = createBffClient(testUserId);
+      const client = createDirectClient();
       await expect(
         client.me.deleteRole({ roleId, orgId: -1 }),
       ).rejects.toThrow();
@@ -593,129 +592,6 @@ describe("Me Router", () => {
       await expect(
         client.me.lookupByEmail({ email: "not-an-email" }),
       ).rejects.toThrow();
-    });
-  });
-
-  // -----------------------------------------------------------------------
-  // meProtectedProcedure — X-User-Id + bearer token security
-  // -----------------------------------------------------------------------
-  describe("meProtectedProcedure (X-User-Id override)", () => {
-    it("should override session.id when BFF bearer token + X-User-Id are provided", async () => {
-      const client = createBffClient(testUserId);
-      const result = await client.me.profile();
-      expect(result.user.id).toBe(testUserId);
-    });
-
-    it("should throw UNAUTHORIZED when BFF key is used without X-User-Id", async () => {
-      // BFF key but no X-User-Id header
-      const headers: Record<string, string> = {
-        [Header.Client]: Client.ORPC,
-        [Header.Authorization]: `Bearer ${TEST_BFF_KEY}`,
-      };
-      const client = createRouterClient(router, {
-        context: () => Promise.resolve({ reqHeaders: new Headers(headers) }),
-      });
-      await expect(client.me.profile()).rejects.toThrow(
-        /X-User-Id header is required/,
-      );
-    });
-
-    it("should throw UNAUTHORIZED for BFF key + invalid X-User-Id (zero)", async () => {
-      const client = createBffClient(0);
-      await expect(client.me.profile()).rejects.toThrow(
-        /X-User-Id header must be a positive integer/,
-      );
-    });
-
-    it("should throw UNAUTHORIZED for BFF key + invalid X-User-Id (non-integer)", async () => {
-      const headers: Record<string, string> = {
-        [Header.Client]: Client.ORPC,
-        [Header.Authorization]: `Bearer ${TEST_BFF_KEY}`,
-        "x-user-id": "abc",
-      };
-      const client = createRouterClient(router, {
-        context: () => Promise.resolve({ reqHeaders: new Headers(headers) }),
-      });
-      await expect(client.me.profile()).rejects.toThrow(
-        /X-User-Id header must be a positive integer/,
-      );
-    });
-
-    it("should throw UNAUTHORIZED for BFF key + negative X-User-Id", async () => {
-      const headers: Record<string, string> = {
-        [Header.Client]: Client.ORPC,
-        [Header.Authorization]: `Bearer ${TEST_BFF_KEY}`,
-        "x-user-id": "-5",
-      };
-      const client = createRouterClient(router, {
-        context: () => Promise.resolve({ reqHeaders: new Headers(headers) }),
-      });
-      await expect(client.me.profile()).rejects.toThrow(
-        /X-User-Id header must be a positive integer/,
-      );
-    });
-
-    it("should throw UNAUTHORIZED for BFF key + decimal X-User-Id", async () => {
-      const headers: Record<string, string> = {
-        [Header.Client]: Client.ORPC,
-        [Header.Authorization]: `Bearer ${TEST_BFF_KEY}`,
-        "x-user-id": "3.14",
-      };
-      const client = createRouterClient(router, {
-        context: () => Promise.resolve({ reqHeaders: new Headers(headers) }),
-      });
-      await expect(client.me.profile()).rejects.toThrow(
-        /X-User-Id header must be a positive integer/,
-      );
-    });
-
-    it("should ignore X-User-Id when bearer token is NOT the BFF key", async () => {
-      // A different API key tries to set X-User-Id — should be ignored.
-      // Session falls through to default mock (id=1).
-      const headers: Record<string, string> = {
-        [Header.Client]: Client.ORPC,
-        [Header.Authorization]: "Bearer some-other-api-key",
-        "x-user-id": String(testUserId),
-      };
-      const client = createRouterClient(router, {
-        context: () => Promise.resolve({ reqHeaders: new Headers(headers) }),
-      });
-      // Uses session identity (mock session id=1), not the X-User-Id
-      try {
-        const result = await client.me.profile();
-        expect(result.user.id).toBe(1);
-      } catch (err) {
-        // User 1 may not exist in test DB
-        expect(String(err)).toContain("NOT_FOUND");
-      }
-    });
-
-    it("should ignore X-User-Id when no bearer token is provided", async () => {
-      // Direct caller sets X-User-Id but has no BFF key — ignored.
-      const headers: Record<string, string> = {
-        [Header.Client]: Client.ORPC,
-        "x-user-id": String(testUserId),
-      };
-      const client = createRouterClient(router, {
-        context: () => Promise.resolve({ reqHeaders: new Headers(headers) }),
-      });
-      try {
-        const result = await client.me.profile();
-        expect(result.user.id).toBe(1);
-      } catch (err) {
-        expect(String(err)).toContain("NOT_FOUND");
-      }
-    });
-
-    it("should use session identity for direct callers (no BFF key)", async () => {
-      // Direct client uses mock session (id=1)
-      const client = createDirectClient();
-      try {
-        const result = await client.me.profile();
-        expect(result.user.id).toBe(1);
-      } catch (err) {
-        expect(String(err)).toContain("NOT_FOUND");
-      }
     });
   });
 });
