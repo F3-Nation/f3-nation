@@ -30,6 +30,14 @@ import {
   uniqueId,
 } from "../__tests__/test-utils";
 
+/** Returns the YYYY-MM-DD date string for the nth upcoming Monday (UTC). n=1 is next Monday. */
+const nextFutureMonday = (n: number): string => {
+  const d = new Date();
+  const daysUntilNextMonday = (1 - d.getUTCDay() + 7) % 7 || 7;
+  d.setUTCDate(d.getUTCDate() + daysUntilNextMonday + (n - 1) * 7);
+  return d.toISOString().split("T")[0]!;
+};
+
 describe("Event Router", () => {
   // Track created entities for cleanup
   const createdEventIds: number[] = [];
@@ -1266,7 +1274,7 @@ describe("Event Router", () => {
             locationId: location.id,
             startTime: "0530",
             endTime: "0615",
-            startDate: "2026-04-07",
+            startDate: nextFutureMonday(2),
             isActive: true,
             highlight: false,
             seriesId: seriesEvent.id,
@@ -1368,7 +1376,7 @@ describe("Event Router", () => {
             locationId: location.id,
             startTime: "0530",
             endTime: "0615",
-            startDate: "2026-04-07",
+            startDate: nextFutureMonday(2),
             isActive: true,
             highlight: false,
             seriesId: seriesEvent.id,
@@ -1533,7 +1541,7 @@ describe("Event Router", () => {
             locationId: location.id,
             startTime: "0530",
             endTime: "0615",
-            startDate: "2026-04-07",
+            startDate: nextFutureMonday(2),
             isActive: true,
             highlight: false,
             seriesId: seriesEvent.id,
