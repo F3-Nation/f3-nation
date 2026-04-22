@@ -10,6 +10,36 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: "4.2.1",
+    date: "2026-04-22",
+    title: "Admin polish, map behavior & API hardening",
+    sections: [
+      {
+        title: "Map",
+        items: [
+          "Nearby list groups workouts by AO so each AO is its own row when several AOs share one location.",
+          "Event filters follow national event types with clearer handling across the map.",
+          "AOs can inherit a parent region logo when they do not have their own; legacy map filter types that are no longer supported were removed.",
+        ],
+      },
+      {
+        title: "Admin Portal",
+        items: [
+          "Positions management: dedicated Positions experience and tools to assign roles by organization.",
+          "Sortable admin tables; clearer URL validation and modal flows for links and social fields.",
+          "Simpler org-scoped cache invalidation after AO changes; assorted small portal fixes and better direct-assignment flows.",
+          "Annual review dates display correctly for admins in negative-offset timezones.",
+        ],
+      },
+      {
+        title: "API",
+        items: [
+          "Event instance handling cascades consistently through event and organization routes.",
+        ],
+      },
+    ],
+  },
+  {
     version: "4.0.0",
     date: "2026-04-08",
     title: "Auth, Node 24, Pre-commit Hooks",

@@ -30,6 +30,14 @@ import {
   uniqueId,
 } from "../__tests__/test-utils";
 
+/** Returns the YYYY-MM-DD date string for the nth upcoming Monday (UTC). n=1 is next Monday. */
+const nextFutureMonday = (n: number): string => {
+  const d = new Date();
+  const daysUntilNextMonday = (1 - d.getUTCDay() + 7) % 7 || 7;
+  d.setUTCDate(d.getUTCDate() + daysUntilNextMonday + (n - 1) * 7);
+  return d.toISOString().split("T")[0]!;
+};
+
 describe("Event Router", () => {
   // Track created entities for cleanup
   const createdEventIds: number[] = [];
@@ -1266,7 +1274,7 @@ describe("Event Router", () => {
             locationId: location.id,
             startTime: "0530",
             endTime: "0615",
-            startDate: "2026-04-07",
+            startDate: nextFutureMonday(2),
             isActive: true,
             highlight: false,
             seriesId: seriesEvent.id,
@@ -1336,6 +1344,10 @@ describe("Event Router", () => {
         const eventType = await createTestEventType();
         if (!eventType) return;
 
+        // Use dynamic dates so the series is always active relative to today
+        const seriesStartDate = nextFutureMonday(1);
+        const seriesEndDate = nextFutureMonday(12);
+
         // Create initial series on Mondays
         const [seriesEvent] = await db
           .insert(schema.events)
@@ -1346,8 +1358,8 @@ describe("Event Router", () => {
             dayOfWeek: "monday",
             startTime: "0530",
             endTime: "0615",
-            startDate: "2026-01-01",
-            endDate: "2026-03-31",
+            startDate: seriesStartDate,
+            endDate: seriesEndDate,
             recurrencePattern: "weekly",
             recurrenceInterval: 1,
             indexWithinInterval: null,
@@ -1368,7 +1380,7 @@ describe("Event Router", () => {
             locationId: location.id,
             startTime: "0530",
             endTime: "0615",
-            startDate: "2026-04-07",
+            startDate: nextFutureMonday(2),
             isActive: true,
             highlight: false,
             seriesId: seriesEvent.id,
@@ -1394,8 +1406,8 @@ describe("Event Router", () => {
           dayOfWeek: "tuesday", // Changed from Monday (structural)
           startTime: "0530",
           endTime: "0615",
-          startDate: "2026-01-01",
-          endDate: "2026-03-31",
+          startDate: seriesStartDate,
+          endDate: seriesEndDate,
           recurrencePattern: "weekly",
           recurrenceInterval: 1,
           indexWithinInterval: null,
@@ -1533,7 +1545,7 @@ describe("Event Router", () => {
             locationId: location.id,
             startTime: "0530",
             endTime: "0615",
-            startDate: "2026-04-07",
+            startDate: nextFutureMonday(2),
             isActive: true,
             highlight: false,
             seriesId: seriesEvent.id,

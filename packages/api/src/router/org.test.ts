@@ -29,7 +29,13 @@ import {
   mockAuthWithSession,
   uniqueId,
 } from "../__tests__/test-utils";
-
+/** Returns the YYYY-MM-DD date string for the nth upcoming Monday (UTC). n=1 is next Monday. */
+const nextFutureMonday = (n: number): string => {
+  const d = new Date();
+  const daysUntilNextMonday = (1 - d.getUTCDay() + 7) % 7 || 7;
+  d.setUTCDate(d.getUTCDate() + daysUntilNextMonday + (n - 1) * 7);
+  return d.toISOString().split("T")[0]!;
+};
 describe("Org Router", () => {
   // Track created orgs for cleanup
   const createdOrgIds: number[] = [];
@@ -466,7 +472,11 @@ describe("Org Router", () => {
 
       // Create future instances (should be soft-deleted)
       const futureInstanceIds: number[] = [];
-      for (const date of ["2026-04-06", "2026-04-13", "2026-04-20"]) {
+      for (const date of [
+        nextFutureMonday(2),
+        nextFutureMonday(3),
+        nextFutureMonday(4),
+      ]) {
         const [inst] = await db
           .insert(schema.eventInstances)
           .values({
@@ -510,7 +520,10 @@ describe("Org Router", () => {
         .where(
           and(
             eq(schema.eventInstances.orgId, ao.id),
-            gte(schema.eventInstances.startDate, "2026-03-25"),
+            gte(
+              schema.eventInstances.startDate,
+              new Date().toISOString().split("T")[0]!,
+            ),
           ),
         );
       expect(futureInstances.length).toBeGreaterThanOrEqual(3);
