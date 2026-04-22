@@ -45,7 +45,7 @@ After install, re-verify. If still missing, print the manual install instruction
 
 ---
 
-## Step 3 — Check GCP Authentication and Project Context
+## Step 3 — Check GCP Authentication
 
 ```bash
 gcloud auth print-identity-token 2>/dev/null
@@ -62,64 +62,19 @@ GCP authentication needed. Run these commands in your terminal:
 
 Wait for the user to confirm, then re-check.
 
-**Quota project check:**
-
-The ADC quota project must be set correctly for the Cloud SQL proxy and secret access to work. This is critical when switching between workspaces (e.g., f3-nation vs joinfold).
-
-```bash
-QUOTA_PROJECT=$(cat ~/.config/gcloud/application_default_credentials.json 2>/dev/null | node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));console.log(d.quota_project_id||'')" 2>/dev/null)
-```
-
-If `QUOTA_PROJECT` is not `f3-authentication-staging`, fix it:
-
-```bash
-gcloud auth application-default set-quota-project f3-authentication-staging
-```
-
-After changing the quota project, restart the Cloud SQL proxy (kill existing process; launchd or systemd will restart it automatically):
-
-```bash
-kill $(lsof -ti :5433) 2>/dev/null
-# Wait for launchd/systemd to restart it
-sleep 2
-lsof -i :5433  # verify new process is listening
-```
-
-**GCP project access verification:**
-
-The monorepo uses two GCP projects for secrets:
-
-| Project                     | Apps           | Secrets                                                           |
-| --------------------------- | -------------- | ----------------------------------------------------------------- |
-| `f3-authentication-staging` | api, map, auth | DB creds, API keys, auth JWT, GCS logo bucket, SendGrid           |
-| `f3-me-app-staging`         | me             | OAuth client secret, session secret, F3 API key, GCS avatar creds |
-
-Verify access to both:
-
-```bash
-gcloud secrets list --project=f3-authentication-staging --limit=1 2>/dev/null
-gcloud secrets list --project=f3-me-app-staging --limit=1 2>/dev/null
-```
-
-If the second fails, warn: "No access to f3-me-app-staging secrets. The me app .env.local won't be auto-generated. Ask a project owner (tackle@f3nation.com) for Secret Manager Secret Accessor role."
-
 ---
 
 ## Step 4 — Generate Environment
 
-Check if `.env` and me app env exist:
+Check if `.env` exists at the repo root:
 
 ```bash
-test -f .env && echo ".env EXISTS" || echo ".env MISSING"
-test -f apps/me/.env.local && echo "me .env.local EXISTS" || echo "me .env.local MISSING"
+test -f .env && echo "EXISTS" || echo "MISSING"
 ```
 
-**If either is missing or `reset` mode:** Run `pnpm env:generate` to pull staging secrets from GCP. This will:
+**If missing or `reset` mode:** Run `pnpm env:generate` to pull staging secrets from GCP and create `.env` with symlinks.
 
-- Create root `.env` from `f3-authentication-staging` secrets (shared by api, map, auth via symlinks)
-- Create `apps/me/.env.local` from `f3-me-app-staging` secrets (me app has its own OAuth client, session, and GCS config)
-
-**If both exist:** Validate required variables. The root `.env` should have: `DATABASE_URL`, `API_KEY`, `AUTH_SECRET`, `AUTH_JWT_PRIVATE_KEY`. The me `.env.local` should have: `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET`, `SESSION_SECRET`, `F3_API_KEY`, `F3_API_BASE_URL`.
+**If exists:** Validate it has the required variables by cross-referencing with `packages/env/src/index.ts`. Report any missing vars.
 
 ---
 
@@ -199,16 +154,10 @@ Prerequisites:
 GCP Auth:
   Identity:          ✓ (user@example.com)
   App Default:       ✓
-  ADC Quota Project: f3-authentication-staging ✓
-
-GCP Projects:
-  f3-authentication-staging:  ✓ (secrets accessible)
-  f3-me-app-staging:          ✓ (secrets accessible)
 
 Environment:
   .env:              ✓ (generated 2026-04-09)
   Symlinks:          api ✓  map ✓  auth ✓
-  me .env.local:     ✓ (generated 2026-04-09, from f3-me-app-staging)
 
 Database:
   Proxy:             ✓ running on :5433 (background daemon)
@@ -230,23 +179,18 @@ When called with `fix`, diagnose and auto-fix issues:
 
 1. Missing prerequisites → install them
 2. GCP auth expired → prompt re-auth
-3. ADC quota project wrong → `gcloud auth application-default set-quota-project f3-authentication-staging` + restart proxy
-4. `.env` missing or incomplete → regenerate via `pnpm env:generate`
-5. `apps/me/.env.local` missing → regenerate (requires `f3-me-app-staging` access)
-6. Proxy not running → start it (or install daemon)
-7. Port conflicts → identify and offer to kill conflicting processes
-8. Stale symlinks → recreate
+3. `.env` missing or incomplete → regenerate
+4. Proxy not running → start it (or install daemon)
+5. Port conflicts → identify and offer to kill conflicting processes
+6. Stale symlinks → recreate
 
 ---
 
 ## Error Handling
 
-| Condition                   | Action                                                                                              |
-| --------------------------- | --------------------------------------------------------------------------------------------------- |
-| No GCP access               | Print instructions to request access from team lead                                                 |
-| Wrong ADC quota project     | Run `gcloud auth application-default set-quota-project f3-authentication-staging` and restart proxy |
-| Proxy port conflict         | Identify process, offer to kill or suggest alternate port                                           |
-| DB connection reset         | Likely wrong ADC quota project — fix and restart proxy                                              |
-| DB connection failed        | Check proxy → check credentials → check DATABASE_URL                                                |
-| No f3-me-app-staging access | Warn, skip me .env.local generation, suggest requesting access from tackle@f3nation.com             |
-| App won't start             | Check port conflicts, missing env vars, pending migrations                                          |
+| Condition            | Action                                                     |
+| -------------------- | ---------------------------------------------------------- |
+| No GCP access        | Print instructions to request access from team lead        |
+| Proxy port conflict  | Identify process, offer to kill or suggest alternate port  |
+| DB connection failed | Check proxy → check credentials → check DATABASE_URL       |
+| App won't start      | Check port conflicts, missing env vars, pending migrations |
