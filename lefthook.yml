@@ -13,3 +13,8 @@ pre-commit:
 
     - name: typecheck
       run: pnpm typecheck
+
+commit-msg:
+  jobs:
+    - name: commitlint
+      run: pnpm exec commitlint --edit {1}

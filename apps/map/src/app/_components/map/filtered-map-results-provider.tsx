@@ -7,6 +7,7 @@ import { DEFAULT_CENTER } from "@acme/shared/app/constants";
 import { RERENDER_LOGS } from "@acme/shared/common/constants";
 
 import type { SparseF3Marker } from "~/utils/types";
+import { groupMarkersByAo } from "~/utils/group-markers-by-ao";
 import { orpc, useQuery } from "~/orpc/react";
 import { filterData } from "~/utils/filtered-data";
 import { filterStore } from "~/utils/store/filter";
@@ -16,10 +17,15 @@ export type LocationMarkerWithDistance = SparseF3Marker & {
   distance: number | null;
 };
 
+export type AoGroupedLocationMarker = LocationMarkerWithDistance & {
+  aoId: string;
+};
+
 const FilteredMapResultsContext = createContext<{
   nearbyLocationCenter: ReturnType<typeof mapStore.use.nearbyLocationCenter>;
   filteredLocationMarkers: SparseF3Marker[] | undefined;
   locationOrderedLocationMarkers: LocationMarkerWithDistance[] | undefined;
+  aoGroupedLocationMarkers: AoGroupedLocationMarker[] | undefined;
   allLocationMarkersWithLatLngAndFilterData: SparseF3Marker[] | undefined;
 }>({
   nearbyLocationCenter: {
@@ -30,6 +36,7 @@ const FilteredMapResultsContext = createContext<{
   },
   filteredLocationMarkers: undefined,
   locationOrderedLocationMarkers: undefined,
+  aoGroupedLocationMarkers: undefined,
   allLocationMarkersWithLatLngAndFilterData: undefined,
 });
 
@@ -66,6 +73,8 @@ export const FilteredMapResultsProvider = (params: { children: ReactNode }) => {
               dayOfWeek: event[2],
               startTime: event[3],
               eventTypes: event[4],
+              aoName: event[5],
+              aoLogo: event[6],
             };
           }),
         };
@@ -138,11 +147,17 @@ export const FilteredMapResultsProvider = (params: { children: ReactNode }) => {
     return sortedLocationMarkersWithDistances;
   }, [nearbyLocationCenter, filteredLocationMarkers]);
 
+  const aoGroupedLocationMarkers = useMemo(() => {
+    if (!locationOrderedLocationMarkers) return undefined;
+    return groupMarkersByAo(locationOrderedLocationMarkers);
+  }, [locationOrderedLocationMarkers]);
+
   return (
     <FilteredMapResultsContext.Provider
       value={{
         filteredLocationMarkers,
         locationOrderedLocationMarkers,
+        aoGroupedLocationMarkers,
         allLocationMarkersWithLatLngAndFilterData,
         nearbyLocationCenter,
       }}

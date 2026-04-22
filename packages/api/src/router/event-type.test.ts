@@ -94,6 +94,91 @@ describe("Event Type Router", () => {
       }
     });
 
+    it("should return only active national event types when nationalOnly is true", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const nationOrg = await getOrCreateF3NationOrg();
+      const nationalName = `NAT_FILTER_${uniqueId()}`;
+      const nationalNameB = `NAT_FILTER_B_${uniqueId()}`;
+
+      const [inactiveNational] = await db
+        .insert(schema.eventTypes)
+        .values({
+          name: `NAT_INACTIVE_${uniqueId()}`,
+          eventCategory: "first_f",
+          isActive: false,
+          specificOrgId: null,
+        })
+        .returning();
+      if (inactiveNational) createdEventTypeIds.push(inactiveNational.id);
+
+      const [orgSpecific] = await db
+        .insert(schema.eventTypes)
+        .values({
+          name: `ORG_SPEC_${uniqueId()}`,
+          eventCategory: "first_f",
+          isActive: true,
+          specificOrgId: nationOrg.id,
+        })
+        .returning();
+      if (orgSpecific) createdEventTypeIds.push(orgSpecific.id);
+
+      const [nationalA] = await db
+        .insert(schema.eventTypes)
+        .values({
+          name: nationalNameB,
+          eventCategory: "first_f",
+          isActive: true,
+          specificOrgId: null,
+        })
+        .returning();
+      if (nationalA) createdEventTypeIds.push(nationalA.id);
+
+      const [nationalB] = await db
+        .insert(schema.eventTypes)
+        .values({
+          name: nationalName,
+          eventCategory: "first_f",
+          isActive: true,
+          specificOrgId: null,
+        })
+        .returning();
+      if (nationalB) createdEventTypeIds.push(nationalB.id);
+
+      const client = createTestClient();
+      const result = await client.eventType.all({
+        nationalOnly: true,
+        statuses: ["active"],
+        sorting: [{ id: "name", desc: false }],
+      });
+
+      const ids = result.eventTypes.map((r) => r.id);
+      expect(ids).toContain(nationalA?.id);
+      expect(ids).toContain(nationalB?.id);
+      expect(ids).not.toContain(inactiveNational?.id);
+      expect(ids).not.toContain(orgSpecific?.id);
+
+      const names = result.eventTypes.map((r) => r.name);
+      const sorted = [...names].sort((a, b) => a.localeCompare(b));
+      expect(names).toEqual(sorted);
+    });
+
+    it("should reject nationalOnly combined with orgIds", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const nationOrg = await getOrCreateF3NationOrg();
+      const client = createTestClient();
+
+      await expect(
+        client.eventType.all({
+          nationalOnly: true,
+          orgIds: [nationOrg.id],
+        }),
+      ).rejects.toThrow();
+    });
+
     it("should search by name", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);

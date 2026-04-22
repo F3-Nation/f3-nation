@@ -474,14 +474,11 @@ describe("User Router - Grant Access", () => {
         }),
       ).resolves.toMatchObject({ id: user.id });
 
-      // Adding a role requires org admin
+      // Upgrading the role requires org admin
       await expect(
         editorClient.user.crupdate({
           id: user.id,
-          roles: [
-            { orgId: nationOrg.id, roleName: "editor" },
-            { orgId: nationOrg.id, roleName: "admin" },
-          ],
+          roles: [{ orgId: nationOrg.id, roleName: "admin" }],
         }),
       ).rejects.toThrow(ERRORS.MUST_BE_ADMIN_TO_GRANT_ROLES);
 

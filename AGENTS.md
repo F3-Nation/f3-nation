@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-- Use Node >=24.14 (see `.nvmrc`), pnpm 8.15.1, and Turborepo for workspace orchestration.
+- Use Node >=24.14 (see `.nvmrc`), pnpm 10, and Turborepo for workspace orchestration.
 - The `apps/map` directory contains the Next.js 15 map UI (port 3000).
 - Shared code is organized in `packages/`: `api` (tRPC routers), `auth` (auth helpers), `db` (Drizzle schema/migrations), `ui` (shared components), `validators` (Zod schemas), and `shared` (utilities).
 - Configuration files are in `tooling/`; pnpm patches go in `patches/`; Turbo generators live in `turbo/`.
@@ -35,16 +35,61 @@
 - Reset databases before any suite that mutates data (`pnpm reset-test-db` or `pnpm -C packages/db reset-test-db`).
 - Prefer fixtures in `apps/map/tests` or `packages/*/__mocks__` instead of live service calls.
 
-## Commit & Pull Request Guidelines
+## Commit Message Convention
 
-- Write concise, imperative commit subjects (e.g., `Add admin db reset script`) with no trailing punctuation.
+This repo enforces [Conventional Commits](https://www.conventionalcommits.org/) via commitlint + Lefthook. Every commit message **must** follow:
+
+```
+<type>(<scope>): <subject>
+```
+
+**Scope is required.** The Lefthook `commit-msg` hook will reject commits that omit it or use an unrecognized scope.
+
+### Types
+
+Use standard Conventional Commit types: `feat`, `fix`, `chore`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `revert`.
+
+### Scopes
+
+Scopes are defined in `commitlint.config.mjs` and map to monorepo packages:
+
+| Category | Scopes |
+|----------|--------|
+| Apps | `map` |
+| Apps & Packages | `api`, `auth` (exist in both `apps/` and `packages/`) |
+| Packages | `db`, `env`, `mail`, `shared`, `sso`, `ui`, `validators` |
+| Tooling | `eslint`, `prettier`, `tsconfig`, `scripts`, `github`, `tailwind` |
+| Cross-cutting | `deps`, `ci`, `repo`, `release` |
+
+**Choosing a scope:**
+- Use the app or package the change primarily affects (e.g., `fix(db): correct migration`)
+- For dependency updates: `chore(deps): bump next to 15.1`
+- For CI/GitHub Actions: `ci(ci): add deploy workflow`
+- For root config, monorepo tooling, or multi-package changes: `chore(repo): update turbo pipeline`
+- For release-related changes: `chore(release): v3.10.0`
+
+**When adding a new workspace**, add its scope to the array in `commitlint.config.mjs`.
+
+### Examples
+
+```
+feat(map): add workout detail modal
+fix(auth): handle expired refresh tokens
+chore(deps): bump drizzle-orm to 0.35
+refactor(api): extract pagination into shared helper
+test(validators): add edge cases for date parsing
+docs(repo): update AGENTS.md with commit conventions
+ci(ci): add preview deploy for map app
+chore(repo): configure turborepo remote caching
+```
+
+## Pull Request Guidelines
+
 - Every pull request should:
-
   - Include a clear summary, any related issue(s), commands run, and impact to DB/env.
   - Add screenshots or screen recordings for UI changes in `apps/map`.
   - Highlight any new migrations or environment variables.
   - Never include secrets; share them using Slack or Doppler scripts, not via git.
-
 - Before opening a pull request, ensure both `pnpm lint` and `pnpm format` pass with no errors or changes required.
 
 ## Security & Environment

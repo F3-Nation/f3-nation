@@ -203,6 +203,10 @@ export const routes = {
       __path: "/admin/workouts",
       __auth: "editor",
     },
+    positions: {
+      __path: "/admin/positions",
+      __auth: "editor",
+    },
     emailTest: {
       __path: "/admin/email-test",
       __auth: "admin",
@@ -268,8 +272,8 @@ export enum Permissions {
   EDIT = "edit",
 }
 
-export const START_END_TIME_DB_FORMAT = "HHmm" as const;
-export const START_END_TIME_DISPLAY_FORMAT = "h:mmA" as const;
+export const START_END_TIME_DB_FORMAT = "HHmm";
+export const START_END_TIME_DISPLAY_FORMAT = "h:mmA";
 
 export const COUNTRIES = [
   { name: "Afghanistan", code: "AF" },
@@ -491,8 +495,8 @@ export const EVENT_CATEGORY_OPTIONS = [
 export const EVENT_CATEGORY_LABEL_MAP: Record<string, string> =
   Object.fromEntries(EVENT_CATEGORY_OPTIONS.map((o) => [o.value, o.label]));
 
-export const API_PREFIX_V1 = "/v1" as const;
-export const MAP_API_PREFIX = "/map" as const;
+export const API_PREFIX_V1 = "/v1";
+export const MAP_API_PREFIX = "/map";
 
 export enum ApiKeyTags {
   API = "api",

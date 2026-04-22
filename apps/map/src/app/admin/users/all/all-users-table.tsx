@@ -34,6 +34,7 @@ import type { RouterOutputs } from "~/orpc/types";
 import { useDebounce } from "~/utils/hooks/use-debounce";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
 import { OrgFilter } from "../org-filter";
+import type { SortingSchema } from "@acme/validators";
 
 type Org = RouterOutputs["org"]["all"]["orgs"][number];
 
@@ -132,13 +133,13 @@ const UserStatusFilter = ({
                   key={status}
                   value={status}
                   onSelect={() => {
-                    onStatusSelect(status as UserStatus);
+                    onStatusSelect(status);
                   }}
                 >
                   <Check
                     className={cn(
                       "mr-2 h-4 w-4",
-                      selectedStatuses.includes(status as UserStatus)
+                      selectedStatuses.includes(status)
                         ? "opacity-100"
                         : "opacity-0",
                     )}
@@ -163,6 +164,7 @@ export const AllUsersTable = () => {
   const [selectedHomeRegions, setSelectedHomeRegions] = useState<Org[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
+  const [sorting, setSorting] = useState<SortingSchema>([]);
   const { pagination, setPagination } = usePagination({
     pageSize: 20,
   });
@@ -216,6 +218,7 @@ export const AllUsersTable = () => {
 
   const activeFilterCount =
     selectedOrgs.length +
+    selectedHomeRegions.length +
     (selectedStatuses.length !== 1 || selectedStatuses[0] !== "active"
       ? selectedStatuses.length
       : 0) +
@@ -231,6 +234,7 @@ export const AllUsersTable = () => {
         pageIndex: pagination.pageIndex,
         orgIds: selectedOrgs.map((org) => org.id),
         homeRegionIds: selectedHomeRegions.map((region) => region.id),
+        sorting: sorting,
       },
     }),
   );
@@ -307,6 +311,8 @@ export const AllUsersTable = () => {
         }
         cellClassName="p-1"
         columns={columns}
+        sorting={sorting}
+        setSorting={setSorting}
         pagination={pagination}
         totalCount={data?.totalCount}
         setPagination={setPagination}
@@ -388,7 +394,7 @@ const columns: TableOptions<
         inactive: "Inactive",
       } as const;
 
-      const status = row.original.status as UserStatus;
+      const status = row.original.status;
       return (
         <div className="flex items-center justify-start">
           <span

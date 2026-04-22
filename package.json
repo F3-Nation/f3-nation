@@ -1,15 +1,21 @@
 {
   "name": "f3-nation",
-  "version": "4.0.0",
+  "version": "4.2.1",
   "private": true,
   "engines": {
     "node": ">=24.14.1 <25"
   },
-  "packageManager": "pnpm@8.15.1",
+  "packageManager": "pnpm@10.33.0+sha512.10568bb4a6afb58c9eb3630da90cc9516417abebd3fabbe6739f0ae795728da1491e9db5a544c76ad8eb7570f5c4bb3d6c637b2cb41bfdcdb47fa823c8649319",
   "scripts": {
     "build": "turbo build",
     "clean": "rm -rf .turbo node_modules",
     "clean:workspaces": "turbo clean && pnpm clean",
+    "db:proxy": "bash scripts/db-proxy.sh",
+    "db:proxy:install": "bash scripts/db-proxy-install.sh install",
+    "db:proxy:uninstall": "bash scripts/db-proxy-install.sh uninstall",
+    "db:proxy:status": "bash scripts/db-proxy-install.sh status",
+    "env:generate": "bash scripts/generate-env.sh",
+    "env:generate:dry-run": "bash scripts/generate-env.sh --dry-run",
     "db:pull": "pnpm -F db pull",
     "db:push": "pnpm -F db push",
     "db:studio": "pnpm -F db studio",
@@ -33,26 +39,43 @@
     "with-env": "dotenv -e .env --",
     "doppler": "pnpm exec ./tooling/scripts/doppler.sh",
     "db:update-db": "pnpm -F db update-db",
-    "release": "pnpm -F release-it release"
+    "release": "pnpm -F release-it release",
+    "commit": "cz"
   },
   "devDependencies": {
     "@acme/prettier-config": "workspace:^0.1.0",
     "@acme/release-it": "workspace:*",
+    "@commitlint/cli": "20.5.0",
+    "@commitlint/config-conventional": "20.5.0",
+    "@commitlint/cz-commitlint": "20.5.1",
     "@turbo/gen": "^1.12.3",
+    "commitizen": "^4.3.1",
+    "inquirer": "^9.3.8",
     "lefthook": "^2.1.5",
     "prettier": "^3.2.5",
     "turbo": "^1.12.3",
     "typescript": "^5.3.3"
   },
+  "config": {
+    "commitizen": {
+      "path": "@commitlint/cz-commitlint"
+    }
+  },
   "prettier": "@acme/prettier-config",
   "pnpm": {
+    "overrides": {
+      "axios": ">=1.7.4",
+      "braces": ">=3.0.3",
+      "cross-spawn": ">=7.0.5",
+      "typescript": "5.3.3",
+      "prettier": "3.2.5",
+      "@vis.gl/react-google-maps": "1.5.2"
+    },
     "onlyBuiltDependencies": [
-      "lefthook"
+      "@sentry/cli",
+      "esbuild",
+      "lefthook",
+      "sharp"
     ]
-  },
-  "resolutions": {
-    "axios": ">=1.7.4",
-    "braces": ">=3.0.3",
-    "cross-spawn": ">=7.0.5"
   }
 }

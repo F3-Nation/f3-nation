@@ -1,17 +1,17 @@
-FROM --platform=linux/amd64 node:20-alpine AS builder
+FROM --platform=linux/amd64 node:24-alpine AS builder
 
 ENV NEXT_TELEMETRY_DISABLED 1
 ENV TURBO_TELEMETRY_DISABLED 1
 
 RUN apk add --no-cache libc6-compat openssl && apk update
 WORKDIR /app
-RUN yarn global add turbo@^1.12.3
+RUN npm install -g turbo@^1.12.3
 COPY . .
 
 # Prune the workspace to only include nextjs and its dependencies
 RUN turbo prune f3-nation-map --docker
 
-FROM --platform=linux/amd64 node:20-alpine AS installer
+FROM --platform=linux/amd64 node:24-alpine AS installer
 RUN apk add --no-cache libc6-compat openssl && apk update
 WORKDIR /app
 
@@ -19,14 +19,16 @@ ENV NODE_ENV production
 ENV CI true
 ENV SKIP_ENV_VALIDATION true
 
-RUN yarn global add turbo@^1.12.3 pnpm@8.15.1
+RUN npm install -g turbo@^1.12.3
+RUN corepack enable
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 
 # Copy the pruned workspace
 COPY .gitignore .gitignore
 COPY --from=builder /app/out/json/ .
 COPY --from=builder /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
 
-# Install dependencies
+# Install dependencies (pnpm version from root package.json "packageManager")
 RUN pnpm install --frozen-lockfile
 
 COPY --from=builder /app/out/full/ .
@@ -56,7 +58,7 @@ RUN doppler setup -p f3-map --token "$DOPPLER_TOKEN"
 RUN doppler secrets download --no-file --format env > /app/apps/map/.env
 RUN doppler run -- sh -c "pnpm turbo build --filter=f3-nation-map && pnpm -F db migrate"
 
-FROM --platform=linux/amd64 node:20-alpine AS runner
+FROM --platform=linux/amd64 node:24-alpine AS runner
 RUN apk add --no-cache libc6-compat openssl && apk update
 WORKDIR /app
 

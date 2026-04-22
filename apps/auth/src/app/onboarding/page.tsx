@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 
@@ -20,12 +20,42 @@ function OnboardingForm() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [prefilling, setPrefilling] = useState(false);
+  const [isExistingUser, setIsExistingUser] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") ?? "/";
 
-  if (!session?.user) {
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    setPrefilling(true);
+    fetch("/api/onboarding")
+      .then((res) => {
+        if (!res.ok) return;
+        return res.json();
+      })
+      .then(
+        (data?: {
+          f3Name?: string;
+          firstName?: string;
+          lastName?: string;
+          isExistingUser?: boolean;
+        }) => {
+          if (!data) return;
+          if (data.f3Name) setF3Name(data.f3Name);
+          if (data.firstName) setFirstName(data.firstName);
+          if (data.lastName) setLastName(data.lastName);
+          if (data.isExistingUser) setIsExistingUser(true);
+        },
+      )
+      .catch(() => {
+        // Ignore — fields will just be empty
+      })
+      .finally(() => setPrefilling(false));
+  }, [session?.user?.id]);
+
+  if (!session?.user || prefilling) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <p className="text-muted-foreground">Loading...</p>
@@ -71,9 +101,13 @@ function OnboardingForm() {
             height={96}
             priority
           />
-          <h1 className="text-3xl font-bold">Welcome to F3 Nation!</h1>
+          <h1 className="text-3xl font-bold">
+            {isExistingUser ? "Welcome Back!" : "Welcome to F3 Nation!"}
+          </h1>
           <p className="text-base text-muted-foreground">
-            Let&apos;s set up your profile before continuing
+            {isExistingUser
+              ? "Since this is your first time logging in with F3 Nation SSO, please take this opportunity to confirm your details."
+              : "Let\u2019s get you set up since this is your first time."}
           </p>
         </div>
 

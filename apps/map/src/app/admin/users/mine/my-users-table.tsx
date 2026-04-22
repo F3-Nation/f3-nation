@@ -34,6 +34,7 @@ import type { RouterOutputs } from "~/orpc/types";
 import { useDebounce } from "~/utils/hooks/use-debounce";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
 import { OrgFilter } from "../org-filter";
+import type { SortingSchema } from "@acme/validators";
 
 type Org = RouterOutputs["org"]["all"]["orgs"][number];
 
@@ -132,13 +133,13 @@ const UserStatusFilter = ({
                   key={status}
                   value={status}
                   onSelect={() => {
-                    onStatusSelect(status as UserStatus);
+                    onStatusSelect(status);
                   }}
                 >
                   <Check
                     className={cn(
                       "mr-2 h-4 w-4",
-                      selectedStatuses.includes(status as UserStatus)
+                      selectedStatuses.includes(status)
                         ? "opacity-100"
                         : "opacity-0",
                     )}
@@ -162,6 +163,7 @@ export const MyUsersTable = () => {
   const [selectedRoles, setSelectedRoles] = useState<UserRole[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedHomeRegions, setSelectedHomeRegions] = useState<Org[]>([]);
+  const [sorting, setSorting] = useState<SortingSchema>([]);
 
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
   const { pagination, setPagination } = usePagination({
@@ -218,6 +220,7 @@ export const MyUsersTable = () => {
         orgIds: adminAndEditorOrgIds,
         includePii: true,
         homeRegionIds: selectedHomeRegions.map((region) => region.id),
+        sorting: sorting,
       },
       enabled: adminAndEditorOrgIds.length > 0,
     }),
@@ -302,6 +305,8 @@ export const MyUsersTable = () => {
         }
         cellClassName="p-1"
         columns={columns}
+        sorting={sorting}
+        setSorting={setSorting}
         pagination={pagination}
         totalCount={data?.totalCount}
         setPagination={setPagination}
@@ -383,7 +388,7 @@ const columns: TableOptions<
         inactive: "Inactive",
       } as const;
 
-      const status = row.original.status as UserStatus;
+      const status = row.original.status;
       return (
         <div className="flex items-center justify-start">
           <span
