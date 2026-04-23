@@ -118,7 +118,7 @@ export const EventChip = (props: {
       <div
         className={cn("flex flex-1 gap-2 text-foreground", {
           "text-base": size === "large",
-          "text-background": (selected ?? !!props.mapStatus) && isInteractive,
+          "text-background": selected && isInteractive,
           "justify-start": size === "small",
           "justify-center": size !== "small",
         })}
@@ -137,31 +137,19 @@ export const EventChip = (props: {
           <BootSvgComponent
             height={iconSize}
             width={iconSize}
-            fill={
-              (selected ?? !!props.mapStatus) && isInteractive
-                ? "background"
-                : undefined
-            }
+            fill={selected && isInteractive ? "background" : undefined}
           />
         ) : event.eventTypes.some((et) => et.name === "Ruck") ? (
           <RuckSvgComponent
             height={iconSize}
             width={iconSize}
-            fill={
-              (selected ?? !!props.mapStatus) && isInteractive
-                ? "background"
-                : undefined
-            }
+            fill={selected && isInteractive ? "background" : undefined}
           />
         ) : event.eventTypes.some((et) => et.name === "Run") ? (
           <RunSvgComponent
             height={iconSize}
             width={iconSize}
-            fill={
-              (selected ?? !!props.mapStatus) && isInteractive
-                ? "background"
-                : undefined
-            }
+            fill={selected && isInteractive ? "background" : undefined}
           />
         ) : null}
       </div>

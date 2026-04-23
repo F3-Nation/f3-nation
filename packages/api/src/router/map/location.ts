@@ -206,6 +206,7 @@ export const mapLocationRouter = os.router({
     })
     .handler(async ({ context: ctx }) => {
       const aoOrg = aliasedTable(schema.orgs, "ao_org");
+      const seriesEvent = aliasedTable(schema.events, "series_event");
 
       const instances = await ctx.db
         .select({
@@ -250,6 +251,10 @@ export const mapLocationRouter = os.router({
         )
         .leftJoin(aoOrg, eq(schema.eventInstances.orgId, aoOrg.id))
         .leftJoin(
+          seriesEvent,
+          eq(seriesEvent.id, schema.eventInstances.seriesId),
+        )
+        .leftJoin(
           schema.eventInstancesXEventTypes,
           eq(
             schema.eventInstancesXEventTypes.eventInstanceId,
@@ -272,6 +277,10 @@ export const mapLocationRouter = os.router({
             or(
               isNotNull(schema.eventInstances.seriesException),
               isNull(schema.eventInstances.seriesId),
+              and(
+                isNotNull(schema.eventInstances.seriesId),
+                isNull(seriesEvent.locationId),
+              ),
             ),
           ),
         )

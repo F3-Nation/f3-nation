@@ -14,6 +14,7 @@ import { orpc, useQuery } from "~/orpc/react";
 import { filterData } from "~/utils/filtered-data";
 import { filterStore } from "~/utils/store/filter";
 import { mapStore } from "~/utils/store/map";
+import { DAYS_OF_WEEK } from "~/utils/days-of-week";
 
 export type LocationMarkerWithDistance = SparseF3Marker & {
   distance: number | null;
@@ -22,6 +23,97 @@ export type LocationMarkerWithDistance = SparseF3Marker & {
 export type AoGroupedLocationMarker = LocationMarkerWithDistance & {
   aoId: string;
 };
+
+interface UpcomingMapInstance {
+  id: number;
+  seriesId: number | null;
+  locationId: number | null;
+  startDate: string;
+  startTime: string | null;
+  seriesException: string | null;
+  name: string;
+  lat: number | null;
+  lon: number | null;
+  aoName: string | null;
+  aoLogo: string | null;
+  fullAddress: string | null;
+  eventTypes: { id: number; name: string }[];
+}
+
+export function createSyntheticEventFromInstance(
+  instance: UpcomingMapInstance,
+): SparseF3Marker["events"][number] {
+  return {
+    id: -instance.id,
+    name: instance.name,
+    dayOfWeek: dateToDayOfWeek(instance.startDate),
+    startTime: instance.startTime,
+    eventTypes: instance.eventTypes,
+    startDate: instance.startDate,
+    endDate: null,
+    aoName: instance.aoName ?? "",
+    aoLogo: instance.aoLogo,
+    mapStatus: "highlight",
+  };
+}
+
+export function mergeUpcomingInstancesIntoMarkers({
+  locationMarkers,
+  upcomingInstancesData,
+}: {
+  locationMarkers: SparseF3Marker[];
+  upcomingInstancesData: UpcomingMapInstance[] | undefined;
+}) {
+  const markersByLocationId = new Map<number, SparseF3Marker>();
+  const locationIdsBySeriesId = new Map<number, Set<number>>();
+
+  for (const marker of locationMarkers) {
+    markersByLocationId.set(marker.id, marker);
+    for (const event of marker.events) {
+      if (event.id < 0) continue;
+      let locs = locationIdsBySeriesId.get(event.id);
+      if (!locs) {
+        locs = new Set<number>();
+        locationIdsBySeriesId.set(event.id, locs);
+      }
+      locs.add(marker.id);
+    }
+  }
+
+  for (const instance of upcomingInstancesData ?? []) {
+    if (
+      instance.locationId == null ||
+      instance.lat == null ||
+      instance.lon == null
+    )
+      continue;
+    if (
+      instance.seriesId != null &&
+      locationIdsBySeriesId.get(instance.seriesId)?.has(instance.locationId)
+    )
+      continue;
+
+    const instanceEvent = createSyntheticEventFromInstance(instance);
+    const existing = markersByLocationId.get(instance.locationId);
+
+    if (existing) {
+      existing.events.push(instanceEvent);
+      continue;
+    }
+
+    const marker: SparseF3Marker = {
+      id: instance.locationId,
+      aoName: instance.aoName ?? "",
+      logo: instance.aoLogo,
+      lat: instance.lat,
+      lon: instance.lon,
+      fullAddress: instance.fullAddress,
+      events: [instanceEvent],
+    };
+    markersByLocationId.set(instance.locationId, marker);
+    locationMarkers.push(marker);
+  }
+}
 
 const FilteredMapResultsContext = createContext<{
   nearbyLocationCenter: ReturnType<typeof mapStore.use.nearbyLocationCenter>;
@@ -47,7 +139,7 @@ function dateToDayOfWeek(dateStr: string): DayOfWeek {
   return DAYS_OF_WEEK[d.getUTCDay()] ?? "sunday";
 }
 
-function computeMapStatus(
+function getMapEventStatus(
   event: { startDate: string | null; endDate: string | null; id: number },
   instanceLookup: Map<
     number,
@@ -119,8 +211,6 @@ export const FilteredMapResultsProvider = (params: { children: ReactNode }) => {
             startDate: instance.startDate,
           });
           instancesBySeriesId.set(instance.seriesId, list);
-        } else {
-          standaloneInstances.push(instance);
         }
       }
     }
@@ -148,7 +238,7 @@ export const FilteredMapResultsProvider = (params: { children: ReactNode }) => {
             };
             return {
               ...eventObj,
-              mapStatus: computeMapStatus(eventObj, instancesBySeriesId),
+              mapStatus: getMapEventStatus(eventObj, instancesBySeriesId),
             };
           }),
         };

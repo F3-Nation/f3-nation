@@ -594,4 +594,72 @@ describe("Map Location Router", () => {
       }
     });
   });
+
+  describe("upcomingInstances", () => {
+    it("should include a series-linked instance when the parent event has no location", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create test AO");
+
+      const instanceLocation = await createTestLocation(region.id);
+      if (!instanceLocation) throw new Error("Failed to create test location");
+
+      const [event] = await db
+        .insert(schema.events)
+        .values({
+          name: `Roving Series ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: null,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          isActive: true,
+          highlight: false,
+          startDate: "2026-01-01",
+          isPrivate: false,
+        })
+        .returning();
+
+      if (!event) throw new Error("Failed to create roving series event");
+      createdEventIds.push(event.id);
+
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const startDate = tomorrow.toISOString().slice(0, 10);
+
+      await db.insert(schema.eventInstances).values({
+        name: `Roving Instance ${uniqueId()}`,
+        orgId: ao.id,
+        seriesId: event.id,
+        locationId: instanceLocation.id,
+        startDate,
+        startTime: "0600",
+        endTime: "0700",
+        isActive: true,
+        highlight: false,
+        isPrivate: false,
+      });
+
+      const client = createTestClient();
+      const result = await client.map.location.upcomingInstances();
+
+      const rovingInstance = result.find(
+        (instance) => instance.seriesId === event.id,
+      );
+
+      expect(rovingInstance).toEqual(
+        expect.objectContaining({
+          seriesId: event.id,
+          locationId: instanceLocation.id,
+          lat: instanceLocation.latitude,
+          lon: instanceLocation.longitude,
+          aoName: ao.name,
+        }),
+      );
+    });
+  });
 });

@@ -117,7 +117,6 @@ export const WorkoutDetailsContent = ({
       let earliest: (typeof upcomingInstancesData)[number] | undefined;
       for (const i of upcomingInstancesData) {
         if (
-          i.seriesId == null &&
           i.locationId === loc.id &&
           (!earliest || i.startDate < earliest.startDate)
         ) {
@@ -142,9 +141,8 @@ export const WorkoutDetailsContent = ({
     const eventIds = new Set(results.location.events.map((e) => e.id));
     return upcomingInstancesData.filter(
       (instance) =>
-        (instance.seriesId != null && eventIds.has(instance.seriesId)) ||
-        (instance.seriesId == null &&
-          instance.locationId === results.location?.id),
+        instance.locationId === results.location?.id ||
+        (instance.seriesId != null && eventIds.has(instance.seriesId)),
     );
   }, [upcomingInstancesData, results?.location]);
 
