@@ -162,4 +162,47 @@ describe("mergeUpcomingInstancesIntoMarkers", () => {
       }),
     );
   });
+
+  it("adds a standalone instance (no seriesId) as a highlighted marker", () => {
+    const locationMarkers: SparseF3Marker[] = [];
+
+    mergeUpcomingInstancesIntoMarkers({
+      locationMarkers,
+      upcomingInstancesData: [
+        {
+          id: 99,
+          seriesId: null,
+          locationId: 20,
+          startDate: "2026-06-15",
+          startTime: "0700",
+          seriesException: null,
+          name: "Summer Convergence",
+          lat: 34.0,
+          lon: -81.0,
+          aoName: "Convergence AO",
+          aoLogo: "convergence.png",
+          fullAddress: "100 Stadium Dr",
+          eventTypes: [{ id: 3, name: "Convergence" }],
+        },
+      ],
+    });
+
+    expect(locationMarkers).toHaveLength(1);
+    expect(locationMarkers[0]).toEqual(
+      expect.objectContaining({
+        id: 20,
+        aoName: "Convergence AO",
+        logo: "convergence.png",
+        events: [
+          expect.objectContaining({
+            id: -99,
+            name: "Summer Convergence",
+            mapStatus: "highlight",
+            startTime: "0700",
+            aoName: "Convergence AO",
+          }),
+        ],
+      }),
+    );
+  });
 });

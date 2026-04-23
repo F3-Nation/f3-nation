@@ -95,6 +95,7 @@ const EventInstanceFormSchema = z
       .nullable()
       .optional(),
     isPrivate: z.boolean(),
+    highlight: z.boolean(),
   })
   .superRefine((data, ctx) => {
     if (
@@ -216,6 +217,7 @@ export default function AdminEventInstancesModal({
       seriesId: instance?.seriesId ?? null,
       seriesException: instance?.seriesException ?? null,
       isPrivate: instance?.isPrivate ?? false,
+      highlight: instance?.highlight ?? false,
     });
   }, [form, instance]);
 
@@ -271,6 +273,7 @@ export default function AdminEventInstancesModal({
         seriesId: formData.seriesId ?? null,
         seriesException: formData.seriesException ?? null,
         isPrivate: formData.isPrivate,
+        highlight: formData.seriesId ? false : formData.highlight,
       });
     } catch {
       // handled in onError
@@ -459,9 +462,8 @@ export default function AdminEventInstancesModal({
                 control={form.control}
                 name="locationId"
                 render={({ field }) => {
-                  const regionId = form.getValues("regionId");
                   const filteredLocations = locations?.locations.filter(
-                    (location) => location.regionId === regionId,
+                    (location) => location.regionId === formRegionId,
                   );
                   return (
                     <FormItem key={`location-${String(field.value ?? "none")}`}>
@@ -670,6 +672,28 @@ export default function AdminEventInstancesModal({
                     <FormLabel className="!mt-0 font-normal">Private</FormLabel>
                   </FormItem>
                 )}
+              />
+              <FormField
+                control={form.control}
+                name="highlight"
+                render={({ field }) => {
+                  const seriesId = form.watch("seriesId");
+                  const isStandalone = seriesId == null;
+                  return (
+                    <FormItem className="flex flex-row items-center gap-2 space-y-0">
+                      <FormControl>
+                        <Checkbox
+                          checked={isStandalone && field.value}
+                          disabled={!isStandalone}
+                          onCheckedChange={(v) => field.onChange(v === true)}
+                        />
+                      </FormControl>
+                      <FormLabel className="!mt-0 font-normal">
+                        Highlight on map
+                      </FormLabel>
+                    </FormItem>
+                  );
+                }}
               />
               <FormField
                 control={form.control}

@@ -16,7 +16,6 @@ import { cn } from "@acme/ui";
 import { toast } from "@acme/ui/toast";
 
 import { invalidateQueries, orpc, useQuery } from "~/orpc/react";
-import { DAYS_OF_WEEK } from "~/utils/days-of-week";
 import { getWhenFromWorkout } from "~/utils/get-when-from-workout";
 import { useUpdateEventSearchParams } from "~/utils/hooks/use-update-event-search-params";
 import { appStore } from "~/utils/store/app";
@@ -50,8 +49,6 @@ function getUpdateStatusColor(instance: {
 function formatUpdateText(instance: {
   startDate: string;
   startTime: string | null;
-  seriesException: string | null;
-  seriesId: number | null;
   name: string;
 }) {
   const date = dayjs(instance.startDate).format("M/D");
@@ -60,21 +57,9 @@ function formatUpdateText(instance: {
         START_END_TIME_DISPLAY_FORMAT,
       )
     : null;
-
-  if (instance.seriesException === "closed") {
-    return `${date} - Closed`;
-  }
-  if (instance.seriesException === "different-time") {
-    return time
-      ? `${date} - Different time: ${time}`
-      : `${date} - Different time`;
-  }
-  if (instance.seriesId == null) {
-    return time
-      ? `${date} - ${instance.name} at ${time}`
-      : `${date} - ${instance.name}`;
-  }
-  return `${date} - ${instance.name}`;
+  return time
+    ? `${date} - ${instance.name} at ${time}`
+    : `${date} - ${instance.name}`;
 }
 
 export interface WorkoutDetailsContentProps {
@@ -103,30 +88,28 @@ export const WorkoutDetailsContent = ({
     }),
   );
 
-  const selectedEventId = useMemo(() => {
-    if (providedEventId != null) return providedEventId;
-    const firstDbEventId = results?.location?.events?.[0]?.id ?? null;
-    if (firstDbEventId != null) return firstDbEventId;
-
-    const loc = results?.location;
-    if (
-      loc &&
-      (loc.events?.length ?? 0) === 0 &&
-      upcomingInstancesData?.length
-    ) {
-      let earliest: (typeof upcomingInstancesData)[number] | undefined;
-      for (const i of upcomingInstancesData) {
-        if (
-          i.locationId === loc.id &&
-          (!earliest || i.startDate < earliest.startDate)
-        ) {
-          earliest = i;
-        }
-      }
-      if (earliest) return -earliest.id;
+  const selectedSeriesId = useMemo(() => {
+    if (providedEventId != null && providedEventId > 0) return providedEventId;
+    if (providedEventId != null && providedEventId < 0) {
+      const instance = upcomingInstancesData?.find(
+        (i) => i.id === -providedEventId,
+      );
+      return instance?.seriesId ?? null;
     }
     return null;
-  }, [providedEventId, results, upcomingInstancesData]);
+  }, [providedEventId, upcomingInstancesData]);
+
+  const selectedEventId = useMemo(() => {
+    if (providedEventId) return providedEventId;
+    return results?.location?.events?.[0]?.id ?? null;
+  }, [providedEventId, results]);
+
+  const { data: parentEventResponse } = useQuery(
+    orpc.event.byId.queryOptions({
+      input: { id: selectedSeriesId ?? -1 },
+      enabled: (selectedSeriesId ?? 0) > 0,
+    }),
+  );
 
   const { data: canDeleteEventResponse } = useQuery(
     orpc.request.canDeleteEvent.queryOptions({
@@ -138,13 +121,13 @@ export const WorkoutDetailsContent = ({
 
   const locationUpdates = useMemo(() => {
     if (!upcomingInstancesData || !results?.location) return [];
-    const eventIds = new Set(results.location.events.map((e) => e.id));
     return upcomingInstancesData.filter(
       (instance) =>
-        instance.locationId === results.location?.id ||
-        (instance.seriesId != null && eventIds.has(instance.seriesId)),
+        (instance.locationId === results.location?.id &&
+          instance.seriesId == null) ||
+        (instance.seriesId != null && instance.seriesId === selectedSeriesId),
     );
-  }, [upcomingInstancesData, results?.location]);
+  }, [upcomingInstancesData, results?.location, selectedSeriesId]);
 
   const eventStatusMap = useMemo(() => {
     const map = new Map<number, "closing" | "deviation" | "highlight">();
@@ -162,46 +145,36 @@ export const WorkoutDetailsContent = ({
 
   const mode = appStore.use.mode();
 
-  const event = useMemo(() => {
-    // Dont provide a fallback. This is indicative of worse problems
-    const realEvent = results?.location?.events?.find(
+  const event = useMemo<
+    | NonNullable<NonNullable<typeof results>["location"]>["events"][number]
+    | undefined
+  >(() => {
+    const locationEvent = results?.location?.events?.find(
       (event) => event.id === selectedEventId,
     );
-    if (realEvent) return realEvent;
+    if (locationEvent) return locationEvent;
 
-    if (selectedEventId != null && selectedEventId < 0) {
-      const instanceId = -selectedEventId;
-      const instance = upcomingInstancesData?.find((i) => i.id === instanceId);
-      if (instance) {
-        const dayOfWeek = instance.startDate
-          ? DAYS_OF_WEEK[
-              new Date(instance.startDate + "T00:00:00").getUTCDay()
-            ] ?? null
-          : null;
-        return {
-          id: selectedEventId,
-          name: instance.name,
-          dayOfWeek,
-          startTime: instance.startTime,
-          endTime: instance.endTime,
-          startDate: instance.startDate,
-          endDate: null,
-          description: null,
-          highlight: true,
-          isActive: true,
-          isPrivate: false,
-          eventTypes: instance.eventTypes,
-          aoId: null,
-          aoName: instance.aoName,
-          aoLogo: instance.aoLogo,
-          aoWebsite: null,
-        } as unknown as NonNullable<
-          NonNullable<typeof results>["location"]
-        >["events"][number];
-      }
-    }
-    return undefined;
-  }, [selectedEventId, results, upcomingInstancesData]);
+    const parentEvent = parentEventResponse?.event;
+    if (!parentEvent) return undefined;
+
+    return {
+      id: parentEvent.id,
+      name: parentEvent.name,
+      description: parentEvent.description,
+      dayOfWeek: parentEvent.dayOfWeek,
+      startTime: parentEvent.startTime,
+      endTime: parentEvent.endTime,
+      eventTypes: parentEvent.eventTypes.map((type) => ({
+        id: type.eventTypeId,
+        name: type.eventTypeName,
+      })),
+      aoId: parentEvent.aos[0]?.aoId ?? null,
+      aoName: parentEvent.aos[0]?.aoName ?? null,
+      aoLogo: null,
+      aoWebsite: null,
+    } as NonNullable<NonNullable<typeof results>["location"]>["events"][number];
+  }, [selectedEventId, results, parentEventResponse]);
+
   const location = useMemo(() => results?.location ?? null, [results]);
 
   // Update the search params when the panel is open
@@ -350,7 +323,7 @@ export const WorkoutDetailsContent = ({
       />
     );
   }
-  if (!event) {
+  if (!event && locationUpdates.length === 0) {
     return <DeletedWorkoutWarning text="Event is unavailable." />;
   }
 
@@ -383,11 +356,11 @@ export const WorkoutDetailsContent = ({
           </button>
         </div>
         <div className="line-clamp-2 flex-1 text-left text-2xl font-bold leading-6 sm:text-4xl">
-          {event?.name ?? "Workout Information"}
+          {event?.name ?? location.parentName ?? "Workout Information"}
         </div>
       </div>
 
-      {mode === "edit" ? (
+      {mode === "edit" && selectedEventId != null && selectedEventId > 0 ? (
         <button
           className={cn(
             "-mt-2 flex w-fit flex-row items-center gap-2 rounded-sm bg-blue-600 px-2 text-white sm:mt-1",
@@ -461,29 +434,6 @@ export const WorkoutDetailsContent = ({
               hideName={(location?.events.length ?? 0) === 1}
             />
           ))}
-          {event && selectedEventId != null && selectedEventId < 0 && (
-            <EventChip
-              key={event.id}
-              selected={true}
-              mapStatus="highlight"
-              event={{
-                id: event.id,
-                name: event.name,
-                locationId: location?.id ?? 0,
-                dayOfWeek: event.dayOfWeek,
-                startTime: event.startTime,
-                endTime: event.endTime,
-                eventTypes: event.eventTypes,
-              }}
-              location={{
-                lat: location?.lat ?? null,
-                lon: location?.lon ?? null,
-                id: location?.id ?? 0,
-              }}
-              size={chipSize}
-              hideName={location?.events.length === 0}
-            />
-          )}
           {mode === "edit" ? (
             <button
               className={cn(
@@ -512,67 +462,70 @@ export const WorkoutDetailsContent = ({
         </div>
       </div>
 
-      <div className="mt-2 w-full">
-        <dl className="grid grid-cols-1 gap-x-4 gap-y-4 break-words sm:grid-cols-2">
-          {Object.keys(workoutFields)
-            .filter(
-              (field) => !!workoutFields[field as keyof typeof workoutFields],
-            )
-            .map((field) => {
-              return (
-                <div
-                  key={field}
-                  className={cn("col-span-2 sm:col-span-1", {
-                    "col-span-2 sm:col-span-2":
-                      // Since website is before notes
-                      isLongNotes && (field === "Notes" || field === "Website"),
-                  })}
-                >
-                  <dt className="text-sm font-medium text-muted-foreground">
-                    {field}
-                  </dt>
-                  <dd className="mt-1 whitespace-pre-line text-sm text-foreground">
-                    {workoutFields[field as keyof typeof workoutFields]}
-                  </dd>
-                </div>
-              );
-            })}
-
-          <div className="col-span-2 sm:col-span-2">
-            <dt className="text-sm font-medium text-muted-foreground">How</dt>
-            <dd className="mt-1 max-w-prose space-y-5 text-sm text-foreground">
-              All F3 events are free and open to all men. If this is your first
-              time, simply show up at the time and place and join us. Be
-              prepared to sweat! We look forward to meeting you.
-              <p className="mt-2">
-                <Link
-                  href="https://f3nation.com/about-f3"
-                  target="_blank"
-                  className="inline-flex items-center gap-1 text-blue-600 underline hover:text-blue-800 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
-                >
-                  FAQs and more about F3 Nation
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="lucide lucide-external-link"
+      {event && (
+        <div className="mt-2 w-full">
+          <dl className="grid grid-cols-1 gap-x-4 gap-y-4 break-words sm:grid-cols-2">
+            {Object.keys(workoutFields)
+              .filter(
+                (field) => !!workoutFields[field as keyof typeof workoutFields],
+              )
+              .map((field) => {
+                return (
+                  <div
+                    key={field}
+                    className={cn("col-span-2 sm:col-span-1", {
+                      "col-span-2 sm:col-span-2":
+                        // Since website is before notes
+                        isLongNotes &&
+                        (field === "Notes" || field === "Website"),
+                    })}
                   >
-                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                    <polyline points="15 3 21 3 21 9"></polyline>
-                    <line x1="10" y1="14" x2="21" y2="3"></line>
-                  </svg>
-                </Link>
-              </p>
-            </dd>
-          </div>
-        </dl>
-      </div>
+                    <dt className="text-sm font-medium text-muted-foreground">
+                      {field}
+                    </dt>
+                    <dd className="mt-1 whitespace-pre-line text-sm text-foreground">
+                      {workoutFields[field as keyof typeof workoutFields]}
+                    </dd>
+                  </div>
+                );
+              })}
+
+            <div className="col-span-2 sm:col-span-2">
+              <dt className="text-sm font-medium text-muted-foreground">How</dt>
+              <dd className="mt-1 max-w-prose space-y-5 text-sm text-foreground">
+                All F3 events are free and open to all men. If this is your
+                first time, simply show up at the time and place and join us. Be
+                prepared to sweat! We look forward to meeting you.
+                <p className="mt-2">
+                  <Link
+                    href="https://f3nation.com/about-f3"
+                    target="_blank"
+                    className="inline-flex items-center gap-1 text-blue-600 underline hover:text-blue-800 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
+                  >
+                    FAQs and more about F3 Nation
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="lucide lucide-external-link"
+                    >
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                      <polyline points="15 3 21 3 21 9"></polyline>
+                      <line x1="10" y1="14" x2="21" y2="3"></line>
+                    </svg>
+                  </Link>
+                </p>
+              </dd>
+            </div>
+          </dl>
+        </div>
+      )}
 
       <div className="mt-4 text-xl font-bold">Region Information</div>
       <div className="w-full [&_dd]:[overflow-wrap:anywhere]">
@@ -594,31 +547,33 @@ export const WorkoutDetailsContent = ({
         </dl>
       </div>
 
-      <div className="mt-6 flex justify-end">
-        <button
-          onClick={onCopyLink}
-          className="flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="lucide lucide-link"
+      {event && (
+        <div className="mt-6 flex justify-end">
+          <button
+            onClick={onCopyLink}
+            className="flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
           >
-            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
-            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
-          </svg>
-          <span>Copy Link to Event</span>
-        </button>
-      </div>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="lucide lucide-link"
+            >
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+            </svg>
+            <span>Copy Link to Event</span>
+          </button>
+        </div>
+      )}
 
-      {mode === "edit" ? (
+      {mode === "edit" && selectedEventId != null && selectedEventId > 0 ? (
         <div className="mt-4 flex flex-col gap-2">
           <button
             className="flex flex-row items-center justify-center gap-2 rounded-md bg-blue-600 px-2 py-1 text-white"

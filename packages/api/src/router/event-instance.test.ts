@@ -146,6 +146,7 @@ describe("Event Instance Router", () => {
     options?: {
       name?: string;
       startDate?: string;
+      highlight?: boolean;
       seriesException?: SeriesException;
     },
   ) => {
@@ -157,7 +158,7 @@ describe("Event Instance Router", () => {
         startDate:
           options?.startDate ?? new Date().toISOString().split("T")[0]!,
         isActive: true,
-        highlight: false,
+        highlight: options?.highlight ?? false,
         seriesException: options?.seriesException ?? null,
       })
       .returning();
@@ -512,6 +513,43 @@ describe("Event Instance Router", () => {
       expect(result.id).toBeDefined();
       expect(result.name).toBe(eventName);
       expect(result.orgId).toBe(ao.id);
+
+      if (result.id) {
+        createdEventInstanceIds.push(result.id);
+      }
+    });
+
+    it("should create a standalone event instance with highlight true", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      const client = createTestClient();
+      const eventName = `Convergence ${uniqueId()}`;
+      const startDate = new Date().toISOString().split("T")[0]!;
+
+      const result = await client.eventInstance.crupdate({
+        name: eventName,
+        orgId: ao.id,
+        startDate,
+        highlight: true,
+        isActive: true,
+      });
+
+      expect(result).toBeDefined();
+      expect(result.id).toBeDefined();
+      expect(result.name).toBe(eventName);
+      expect(result.highlight).toBe(true);
+
+      const fetched = await client.eventInstance.byId({ id: result.id });
+      expect(fetched).not.toBeNull();
+      expect(fetched?.highlight).toBe(true);
+      expect(fetched?.seriesId).toBeNull();
 
       if (result.id) {
         createdEventInstanceIds.push(result.id);
