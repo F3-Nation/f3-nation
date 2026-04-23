@@ -1,10 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { z } from "zod";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
+import { safeParseInt } from "@acme/shared/common/functions";
 import { cn } from "@acme/ui";
 import { Button } from "@acme/ui/button";
 import {
@@ -37,14 +38,15 @@ import {
   useMutation,
   useQuery,
 } from "~/orpc/react";
-import type { DataType } from "~/utils/store/modal";
 import { useAuth } from "~/utils/hooks/use-auth";
+import type { DataType } from "~/utils/store/modal";
 import {
   closeModal,
   DeleteType,
   ModalType,
   openModal,
 } from "~/utils/store/modal";
+import { VirtualizedCombobox } from "../virtualized-combobox";
 
 const ORG_TYPE_OPTIONS = [
   { label: "AO", value: "ao" },
@@ -53,6 +55,8 @@ const ORG_TYPE_OPTIONS = [
   { label: "Sector", value: "sector" },
   { label: "Nation", value: "nation" },
 ] as const;
+
+const NATIONAL_ORG_VALUE = "__national__";
 
 type PositionInsertFormType = z.infer<typeof PositionInsertSchema>;
 
@@ -81,17 +85,63 @@ export default function AdminPositionsModal({
   });
 
   useEffect(() => {
+    const defaultOrgId = position
+      ? position.orgId ?? undefined
+      : data.defaultOrgId === null
+        ? undefined
+        : data.defaultOrgId;
+
     form.reset({
       id: position?.id,
       name: position?.name ?? "",
       description: position?.description ?? "",
-      orgId: position?.orgId ?? undefined,
+      orgId: defaultOrgId,
       orgType: position?.orgType ?? undefined,
       isActive: position?.isActive ?? true,
     });
-  }, [form, position]);
+  }, [form, position, data.defaultOrgId]);
 
   const isEditing = !!position?.id;
+
+  const selectedOrgType = form.watch("orgType");
+  const selectedOrgId = form.watch("orgId");
+
+  const { data: editableOrgsResponse } = useQuery(
+    orpc.org.all.queryOptions({
+      input: {
+        orgTypes: selectedOrgType ? [selectedOrgType] : ["region"],
+        onlyMine: true,
+        pageSize: 1000,
+      },
+      enabled: !!selectedOrgType,
+    }),
+  );
+
+  useEffect(() => {
+    if (!selectedOrgType || selectedOrgId == null) return;
+    const orgs = editableOrgsResponse?.orgs ?? [];
+    const match = orgs.find((o) => o.id === selectedOrgId);
+    if (match && match.orgType !== selectedOrgType) {
+      form.setValue("orgId", null, { shouldDirty: true });
+    }
+  }, [selectedOrgType, selectedOrgId, editableOrgsResponse, form]);
+
+  const orgOptions = useMemo(() => {
+    const orgs = editableOrgsResponse?.orgs ?? [];
+    const options: { value: string; label: string }[] = orgs.map((org) => ({
+      value: org.id.toString(),
+      label: org.name,
+    }));
+
+    if (isNationAdmin && selectedOrgType === "nation") {
+      options.unshift({
+        value: NATIONAL_ORG_VALUE,
+        label: "National (no org)",
+      });
+    }
+
+    return options;
+  }, [editableOrgsResponse, isNationAdmin, selectedOrgType]);
   const actionText = isEditing ? "update" : "add";
   const actionTextPast = isEditing ? "updated" : "added";
 
@@ -114,12 +164,19 @@ export default function AdminPositionsModal({
     }),
   );
 
-  const onSubmit = async (data: PositionInsertFormType) => {
+  const onSubmit = async (values: PositionInsertFormType) => {
+    if (values.orgId == null && !isNationAdmin) {
+      toast.error(
+        "Only F3 Nation admins can create national positions. Pick an organization.",
+      );
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      await crupdatePosition.mutateAsync(data);
+      await crupdatePosition.mutateAsync(values);
     } catch (error) {
-      console.error(error);
+      console.error("crupdatePosition", { error });
     } finally {
       setIsSubmitting(false);
     }
@@ -193,6 +250,56 @@ export default function AdminPositionsModal({
                 name="orgType"
                 options={[...ORG_TYPE_OPTIONS]}
                 disabled={isReadOnly}
+              />
+            </div>
+            <div className="mb-3 w-full px-2 md:w-1/2">
+              <FormField
+                control={form.control}
+                name="orgId"
+                render={({ field }) => {
+                  const selectedValue =
+                    field.value == null
+                      ? isNationAdmin && selectedOrgType === "nation"
+                        ? NATIONAL_ORG_VALUE
+                        : undefined
+                      : field.value.toString();
+
+                  const placeholder = !selectedOrgType
+                    ? "Pick an org level first"
+                    : `Select a ${selectedOrgType}`;
+
+                  return (
+                    <FormItem
+                      key={`org-${selectedOrgType ?? "none"}-${String(
+                        field.value ?? "new",
+                      )}`}
+                    >
+                      <FormLabel>Organization</FormLabel>
+                      <VirtualizedCombobox
+                        value={selectedValue}
+                        options={orgOptions}
+                        searchPlaceholder={placeholder}
+                        disabled={isReadOnly || isEditing || !selectedOrgType}
+                        hideClearButton={!isNationAdmin}
+                        onSelect={(value) => {
+                          const next = Array.isArray(value) ? value[0] : value;
+                          if (next === NATIONAL_ORG_VALUE || next === "") {
+                            field.onChange(null);
+                            return;
+                          }
+                          const orgId = safeParseInt(next);
+                          if (orgId == null) {
+                            toast.error("Invalid organization");
+                            return;
+                          }
+                          field.onChange(orgId);
+                        }}
+                        isMulti={false}
+                      />
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
               />
             </div>
             <div className="mb-3 w-full px-2">

@@ -10,7 +10,7 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
-    version: "4.2.1",
+    version: "4.2.2",
     date: "2026-04-22",
     title: "Admin polish, map behavior & API hardening",
     sections: [
