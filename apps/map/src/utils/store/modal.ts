@@ -29,7 +29,6 @@ export enum DeleteType {
   AO = "AO",
   EVENT = "EVENT",
   EVENT_TYPE = "EVENT_TYPE",
-  EVENT_TAG = "EVENT_TAG",
   EVENT_INSTANCE = "EVENT_INSTANCE",
   REGION = "REGION",
   SECTOR = "SECTOR",

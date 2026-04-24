@@ -88,7 +88,6 @@ const EventInstanceFormSchema = z
     startTime: z.string().nullable().optional(),
     endTime: z.string().nullable().optional(),
     eventTypeId: z.number().optional(),
-    eventTagId: z.number().optional(),
     seriesId: z.number().nullable().optional(),
     seriesException: z
       .enum(["closed", "different-time", "miscellaneous"])
@@ -168,17 +167,6 @@ export default function AdminEventInstancesModal({
     }),
   );
 
-  const { data: eventTagsResponse } = useQuery(
-    orpc.eventTag.all.queryOptions({
-      input: {
-        pageSize: 200,
-        statuses: ["active"],
-        orgIds: formRegionId ? [formRegionId] : undefined,
-        sorting: [{ id: "name", desc: false }],
-      },
-    }),
-  );
-
   const { data: eventsResponse } = useQuery(
     orpc.event.all.queryOptions({
       input: {
@@ -190,12 +178,9 @@ export default function AdminEventInstancesModal({
   );
 
   const sortedEventTypes = eventTypes?.eventTypes ?? [];
-  const sortedEventTags = eventTagsResponse?.eventTags ?? [];
   const events = eventsResponse?.events ?? [];
 
   useEffect(() => {
-    console.log("instance", instance);
-
     form.reset({
       regionId: instance?.org?.parentId ?? undefined,
       orgId: instance?.orgId ?? 0,
@@ -213,7 +198,6 @@ export default function AdminEventInstancesModal({
           ? convertHHmmToHH_mm(instance.endTime)
           : null,
       eventTypeId: instance?.eventTypes?.[0]?.eventTypeId,
-      eventTagId: instance?.eventTags?.[0]?.eventTagId,
       seriesId: instance?.seriesId ?? null,
       seriesException: instance?.seriesException ?? null,
       isPrivate: instance?.isPrivate ?? false,
@@ -269,7 +253,6 @@ export default function AdminEventInstancesModal({
         startTime: startTime ? startTime : undefined,
         endTime: endTime ? endTime : undefined,
         ...(formData.eventTypeId ? { eventTypeId: formData.eventTypeId } : {}),
-        ...(formData.eventTagId ? { eventTagId: formData.eventTagId } : {}),
         seriesId: formData.seriesId ?? null,
         seriesException: formData.seriesException ?? null,
         isPrivate: formData.isPrivate,
@@ -332,7 +315,6 @@ export default function AdminEventInstancesModal({
                           form.setValue("orgId", 0);
                           form.setValue("locationId", null);
                           form.setValue("eventTypeId", undefined);
-                          form.setValue("eventTagId", undefined);
                           form.setValue("seriesId", null);
                         }}
                         isMulti={false}
@@ -555,40 +537,6 @@ export default function AdminEventInstancesModal({
               />
               <FormField
                 control={form.control}
-                name="eventTagId"
-                render={({ field }) => (
-                  <FormItem key={`eventTag-${String(field.value ?? "none")}`}>
-                    <FormLabel>Event tag (optional)</FormLabel>
-                    <Select
-                      value={
-                        field.value != null ? field.value.toString() : NONE
-                      }
-                      onValueChange={(value) => {
-                        field.onChange(
-                          value === NONE ? undefined : Number(value),
-                        );
-                      }}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Optional" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value={NONE}>None</SelectItem>
-                        {sortedEventTags.map((tag) => (
-                          <SelectItem key={tag.id} value={tag.id.toString()}>
-                            {tag.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
                 name="seriesId"
                 render={({ field }) => (
                   <FormItem key={`series-${String(field.value ?? "none")}`}>
@@ -753,9 +701,8 @@ export default function AdminEventInstancesModal({
                   type="button"
                   variant="outline"
                   onClick={() => {
-                    closeModal();
                     openModal(ModalType.ADMIN_DELETE_CONFIRMATION, {
-                      id: typeof data.id === "number" ? data.id : -1,
+                      id: data.id ?? -1,
                       type: DeleteType.EVENT_INSTANCE,
                     });
                   }}
