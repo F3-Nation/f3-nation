@@ -85,7 +85,7 @@ export const mapLocationRouter = os.router({
             eq(schema.events.locationId, schema.locations.id),
             eq(schema.events.isActive, true),
             eq(schema.events.isPrivate, false),
-            lte(schema.events.startDate, sql`CURRENT_DATE`),
+            lte(schema.events.startDate, sql`CURRENT_DATE + INTERVAL '6 days'`),
           ),
         )
         .leftJoin(aoOrg, eq(schema.events.orgId, aoOrg.id))
@@ -378,7 +378,7 @@ export const mapLocationRouter = os.router({
             eq(schema.locations.id, schema.events.locationId),
             eq(schema.events.isActive, true),
             eq(schema.events.isPrivate, false),
-            lte(schema.events.startDate, sql`CURRENT_DATE`),
+            lte(schema.events.startDate, sql`CURRENT_DATE + INTERVAL '6 days'`),
           ),
         )
         .leftJoin(parentOrg, eq(schema.events.orgId, parentOrg.id))
