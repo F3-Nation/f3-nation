@@ -249,6 +249,49 @@ describe("Event Router", () => {
       expect(result.events?.length).toBeLessThanOrEqual(50);
     });
 
+    it("should include events without a location (locationId null)", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      const [created] = await db
+        .insert(schema.events)
+        .values({
+          name: `Map No Location Event ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: null,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          isActive: true,
+          highlight: false,
+          startDate: "2026-01-01",
+          isPrivate: false,
+        })
+        .returning();
+
+      if (created) {
+        createdEventIds.push(created.id);
+      }
+
+      const client = createTestClient();
+      const result = await client.map.event.all({
+        pageIndex: 0,
+        pageSize: 50,
+        statuses: ["active"],
+      });
+
+      const rovingEvent = result.events?.find((e) => e.id === created?.id);
+      expect(rovingEvent).toBeDefined();
+      expect(rovingEvent?.locationId).toBeNull();
+      expect(rovingEvent?.locationName).toBeNull();
+      expect(rovingEvent?.location).toBeNull();
+    });
+
     it("should return response shape without pre-existing data", async () => {
       const client = createTestClient();
       const result = await client.map.event.all({

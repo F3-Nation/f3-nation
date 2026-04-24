@@ -62,6 +62,8 @@ import {
 import { ControlledTimeInput } from "../time-input";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 
+const NO_LOCATION = "__no_location__";
+
 const EventInsertForm = EventInsertSchema.extend({
   startTime: z.string().regex(/^\d{2}:\d{2}$/, {
     message: "Start time must be in 24hr format (HH:mm)",
@@ -346,6 +348,7 @@ export default function AdminWorkoutsModal({
                               // If the current location's parentId is not the selected AO, then we need to update the location
                               const locationId = form.getValues("locationId");
                               if (
+                                locationId != null &&
                                 !regionLocations?.find(
                                   (l) => l.id === locationId,
                                 )
@@ -399,14 +402,27 @@ export default function AdminWorkoutsModal({
                         >
                           <FormLabel>Location</FormLabel>
                           <Select
-                            value={field.value?.toString()}
+                            value={
+                              field.value != null
+                                ? field.value.toString()
+                                : NO_LOCATION
+                            }
                             onValueChange={(value) => {
-                              console.log("locationId onValueChange", value);
-                              field.onChange(Number(value));
+                              if (value === NO_LOCATION) {
+                                field.onChange(null);
+                                return;
+                              }
+
+                              const locationId = safeParseInt(value);
+                              if (locationId == null) {
+                                toast.error("Invalid location");
+                                return;
+                              }
+                              field.onChange(locationId);
 
                               const selectedLocation =
                                 locations?.locations.find(
-                                  (location) => location.id === Number(value),
+                                  (location) => location.id === locationId,
                                 );
                               if (selectedLocation?.regionId != null) {
                                 form.setValue(
@@ -415,12 +431,14 @@ export default function AdminWorkoutsModal({
                                 );
                               }
                             }}
-                            defaultValue={field.value?.toString()}
                           >
                             <SelectTrigger>
                               <SelectValue placeholder="Select a location" />
                             </SelectTrigger>
                             <SelectContent>
+                              <SelectItem value={NO_LOCATION}>
+                                No Location
+                              </SelectItem>
                               {filteredLocations
                                 ?.slice()
                                 .sort(

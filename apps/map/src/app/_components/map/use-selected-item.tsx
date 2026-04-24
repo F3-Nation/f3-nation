@@ -6,7 +6,7 @@ import { CLOSE_ZOOM } from "@acme/shared/app/constants";
 import { RERENDER_LOGS } from "@acme/shared/common/constants";
 
 import { orpc, useQuery } from "~/orpc/react";
-import { DAYS_OF_WEEK } from "~/utils/days-of-week";
+import { dateToDayOfWeek } from "~/utils/date-to-day-of-week";
 import { mapStore } from "~/utils/store/map";
 import { selectedItemStore } from "~/utils/store/selected-item";
 
@@ -90,15 +90,10 @@ export const useSelectedItem = () => {
       const instanceId = -eventId;
       const instance = upcomingInstancesData?.find((i) => i.id === instanceId);
       if (instance) {
-        const dayOfWeek = instance.startDate
-          ? DAYS_OF_WEEK[
-              new Date(instance.startDate + "T00:00:00").getUTCDay()
-            ] ?? null
-          : null;
         return {
           id: eventId,
           name: instance.name,
-          dayOfWeek,
+          dayOfWeek: dateToDayOfWeek(instance.startDate),
           startTime: instance.startTime,
           endTime: instance.endTime,
           description: null,

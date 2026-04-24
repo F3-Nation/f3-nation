@@ -74,7 +74,8 @@ export const EventInsertSchema = createInsertSchema(events, {
   locationId: (s: z.ZodNumber) =>
     s
       .min(1, { message: "Please select an location" })
-      .refine((value) => value !== -1, { message: "Invalid selection" }),
+      .refine((value) => value !== -1, { message: "Invalid selection" })
+      .nullable(),
   email: (s: z.ZodString) =>
     s.email({ message: "Invalid email format" }).or(z.literal("")),
   startTime: (s: z.ZodString) =>

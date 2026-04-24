@@ -4,17 +4,16 @@ import type { ReactNode } from "react";
 import { createContext, useContext, useMemo } from "react";
 
 import { DEFAULT_CENTER } from "@acme/shared/app/constants";
-import type { DayOfWeek } from "@acme/shared/app/enums";
 import { RERENDER_LOGS } from "@acme/shared/common/constants";
 
 import { groupMarkersByAo } from "~/utils/group-markers-by-ao";
 import { DAYS_OF_WEEK } from "~/utils/days-of-week";
 import type { MapStatus, SparseF3Marker } from "~/utils/types";
 import { orpc, useQuery } from "~/orpc/react";
+import { dateToDayOfWeek } from "~/utils/date-to-day-of-week";
 import { filterData } from "~/utils/filtered-data";
 import { filterStore } from "~/utils/store/filter";
 import { mapStore } from "~/utils/store/map";
-import { DAYS_OF_WEEK } from "~/utils/days-of-week";
 
 export type LocationMarkerWithDistance = SparseF3Marker & {
   distance: number | null;
@@ -43,6 +42,15 @@ interface UpcomingMapInstance {
 export function createSyntheticEventFromInstance(
   instance: UpcomingMapInstance,
 ): SparseF3Marker["events"][number] {
+  const mapStatus: MapStatus =
+    instance.seriesException === "closed"
+      ? "closed"
+      : instance.seriesException === "different-time"
+        ? "different-time"
+        : instance.seriesException
+          ? "miscellaneous"
+          : "event-instance";
+
   return {
     id: -instance.id,
     name: instance.name,
@@ -53,7 +61,7 @@ export function createSyntheticEventFromInstance(
     endDate: null,
     aoName: instance.aoName ?? "",
     aoLogo: instance.aoLogo,
-    mapStatus: "highlight",
+    mapStatus,
   };
 }
 
@@ -134,11 +142,6 @@ const FilteredMapResultsContext = createContext<{
   allLocationMarkersWithLatLngAndFilterData: undefined,
 });
 
-function dateToDayOfWeek(dateStr: string): DayOfWeek {
-  const d = new Date(dateStr + "T00:00:00");
-  return DAYS_OF_WEEK[d.getUTCDay()] ?? "sunday";
-}
-
 function getMapEventStatus(
   event: { startDate: string | null; endDate: string | null; id: number },
   instanceLookup: Map<
@@ -156,19 +159,25 @@ function getMapEventStatus(
     const started = event.startDate
       ? new Date(event.startDate + "T00:00:00") <= now
       : true;
-    if (started && end >= now && end <= thirtyDaysOut) return "closing";
+    if (started && end >= now && end <= thirtyDaysOut) return "closed";
   }
-
-  const instances = instanceLookup.get(event.id) ?? [];
-  if (instances.some((i) => i.seriesException === "closed")) return "closing";
 
   if (event.startDate) {
     const start = new Date(event.startDate + "T00:00:00");
-    if (start > now && start <= thirtyDaysOut) return "deviation";
+    if (start > now && start <= thirtyDaysOut) return "different-time";
   }
 
-  if (instances.some((i) => i.seriesException === "different-time"))
-    return "deviation";
+  const instances = instanceLookup.get(event.id) ?? [];
+  const nearest = instances.reduce<
+    { seriesException: string | null; startDate: string } | undefined
+  >((best, i) => (!best || i.startDate < best.startDate ? i : best), undefined);
+
+  if (nearest) {
+    if (nearest.seriesException === "closed") return "closed";
+    if (nearest.seriesException === "different-time") return "different-time";
+    if (nearest.seriesException) return "miscellaneous";
+    return "event-instance";
+  }
 
   return null;
 }

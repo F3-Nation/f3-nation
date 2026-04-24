@@ -43,7 +43,7 @@ const makeMarker = (
 };
 
 describe("mergeUpcomingInstancesIntoMarkers", () => {
-  it("adds a roving series instance when the parent event has no location marker", () => {
+  it("marks a roving series instance with miscellaneous status when it has no series exception", () => {
     const locationMarkers: SparseF3Marker[] = [];
 
     mergeUpcomingInstancesIntoMarkers({
@@ -76,7 +76,7 @@ describe("mergeUpcomingInstancesIntoMarkers", () => {
           expect.objectContaining({
             id: -42,
             name: "Roving AO",
-            mapStatus: "highlight",
+            mapStatus: "miscellaneous",
             aoName: "Roving AO",
           }),
         ],
@@ -163,7 +163,7 @@ describe("mergeUpcomingInstancesIntoMarkers", () => {
     );
   });
 
-  it("adds a standalone instance (no seriesId) as a highlighted marker", () => {
+  it("adds a standalone instance (no seriesId) with miscellaneous status", () => {
     const locationMarkers: SparseF3Marker[] = [];
 
     mergeUpcomingInstancesIntoMarkers({
@@ -197,7 +197,7 @@ describe("mergeUpcomingInstancesIntoMarkers", () => {
           expect.objectContaining({
             id: -99,
             name: "Summer Convergence",
-            mapStatus: "highlight",
+            mapStatus: "miscellaneous",
             startTime: "0700",
             aoName: "Convergence AO",
           }),

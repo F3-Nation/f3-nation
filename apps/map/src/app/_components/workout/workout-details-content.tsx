@@ -16,8 +16,11 @@ import { cn } from "@acme/ui";
 import { toast } from "@acme/ui/toast";
 
 import { invalidateQueries, orpc, useQuery } from "~/orpc/react";
+import type { RouterOutputs } from "~/orpc/types";
+import { dateToDayOfWeek } from "~/utils/date-to-day-of-week";
 import { getWhenFromWorkout } from "~/utils/get-when-from-workout";
 import { useUpdateEventSearchParams } from "~/utils/hooks/use-update-event-search-params";
+import { getStatusSolidBg } from "~/utils/map-status-colors";
 import { appStore } from "~/utils/store/app";
 import {
   DeleteType,
@@ -33,17 +36,25 @@ import { ImageWithFallback } from "@acme/ui/image-with-fallback";
 import { EventChip } from "../map/event-chip";
 import { WorkoutDetailsSkeleton } from "../modal/workout-details-skeleton";
 import { DeletedWorkoutWarning } from "./deleted-workout-warning";
+import type { MapStatus } from "~/utils/types";
+
+type WorkoutDetailsEvent = NonNullable<
+  NonNullable<
+    RouterOutputs["map"]["location"]["locationWorkout"]["location"]
+  >["events"][number]
+>;
+type UpcomingInstance =
+  RouterOutputs["map"]["location"]["upcomingInstances"][number];
 
 function getUpdateStatusColor(instance: {
   seriesException: string | null;
   seriesId: number | null;
 }) {
-  if (instance.seriesException === "closed")
-    return "bg-red-500 dark:bg-red-400";
+  if (instance.seriesException === "closed") return getStatusSolidBg("closed");
   if (instance.seriesException === "different-time")
-    return "bg-orange-400 dark:bg-orange-300";
-  if (instance.seriesId == null) return "bg-purple-500 dark:bg-purple-400";
-  return "bg-gray-400 dark:bg-gray-500";
+    return getStatusSolidBg("different-time");
+  if (instance.seriesException) return getStatusSolidBg("miscellaneous");
+  return getStatusSolidBg("event-instance");
 }
 
 function formatUpdateText(instance: {
@@ -60,6 +71,24 @@ function formatUpdateText(instance: {
   return time
     ? `${date} - ${instance.name} at ${time}`
     : `${date} - ${instance.name}`;
+}
+
+export function createWorkoutEventFromInstance(
+  instance: UpcomingInstance,
+): WorkoutDetailsEvent {
+  return {
+    id: -instance.id,
+    name: instance.name,
+    description: null,
+    dayOfWeek: dateToDayOfWeek(instance.startDate),
+    startTime: instance.startTime,
+    endTime: instance.endTime,
+    eventTypes: instance.eventTypes,
+    aoId: null,
+    aoLogo: instance.aoLogo,
+    aoWebsite: null,
+    aoName: instance.aoName,
+  };
 }
 
 export interface WorkoutDetailsContentProps {
@@ -89,20 +118,25 @@ export const WorkoutDetailsContent = ({
   );
 
   const selectedSeriesId = useMemo(() => {
-    if (providedEventId != null && providedEventId > 0) return providedEventId;
-    if (providedEventId != null && providedEventId < 0) {
-      const instance = upcomingInstancesData?.find(
-        (i) => i.id === -providedEventId,
-      );
-      return instance?.seriesId ?? null;
-    }
-    return null;
+    if (providedEventId == null) return null;
+    if (providedEventId > 0) return providedEventId;
+    return (
+      upcomingInstancesData?.find((i) => i.id === -providedEventId)?.seriesId ??
+      null
+    );
   }, [providedEventId, upcomingInstancesData]);
 
   const selectedEventId = useMemo(() => {
     if (providedEventId) return providedEventId;
     return results?.location?.events?.[0]?.id ?? null;
   }, [providedEventId, results]);
+
+  const selectedInstance = useMemo(() => {
+    if (selectedEventId == null || selectedEventId >= 0) return undefined;
+    return upcomingInstancesData?.find(
+      (instance) => instance.id === -selectedEventId,
+    );
+  }, [selectedEventId, upcomingInstancesData]);
 
   const { data: parentEventResponse } = useQuery(
     orpc.event.byId.queryOptions({
@@ -119,40 +153,104 @@ export const WorkoutDetailsContent = ({
   );
   const canDeleteEvent = canDeleteEventResponse?.canDelete;
 
-  const locationUpdates = useMemo(() => {
-    if (!upcomingInstancesData || !results?.location) return [];
+  const locationInstances = useMemo(() => {
+    const currentLocation = results?.location;
+    if (!upcomingInstancesData || !currentLocation) return [];
     return upcomingInstancesData.filter(
-      (instance) =>
-        (instance.locationId === results.location?.id &&
-          instance.seriesId == null) ||
-        (instance.seriesId != null && instance.seriesId === selectedSeriesId),
+      (instance) => instance.locationId === currentLocation.id,
     );
-  }, [upcomingInstancesData, results?.location, selectedSeriesId]);
+  }, [upcomingInstancesData, results?.location]);
+
+  const selectedEventUpdates = useMemo(() => {
+    if (selectedEventId == null || !upcomingInstancesData) return [];
+
+    const seriesId =
+      selectedEventId > 0
+        ? selectedEventId
+        : selectedInstance?.seriesId ?? null;
+
+    if (seriesId != null) {
+      return upcomingInstancesData.filter((i) => i.seriesId === seriesId);
+    }
+
+    return selectedInstance
+      ? upcomingInstancesData.filter((i) => i.id === selectedInstance.id)
+      : [];
+  }, [selectedEventId, upcomingInstancesData, selectedInstance]);
+
+  const baseEventIds = useMemo(
+    () => new Set((results?.location?.events ?? []).map((e) => e.id)),
+    [results?.location?.events],
+  );
 
   const eventStatusMap = useMemo(() => {
-    const map = new Map<number, "closing" | "deviation" | "highlight">();
-    for (const instance of locationUpdates) {
-      if (instance.seriesId == null) continue;
-      const current = map.get(instance.seriesId);
-      if (instance.seriesException === "closed" && current !== "closing") {
-        map.set(instance.seriesId, "closing");
-      } else if (instance.seriesException === "different-time" && !current) {
-        map.set(instance.seriesId, "deviation");
+    const map = new Map<number, MapStatus>();
+    const nearestDate = new Map<number, string>();
+    for (const instance of locationInstances) {
+      const isOrphan =
+        instance.seriesId == null || !baseEventIds.has(instance.seriesId);
+
+      if (isOrphan) {
+        const status: MapStatus =
+          instance.seriesException === "closed"
+            ? "closed"
+            : instance.seriesException === "different-time"
+              ? "different-time"
+              : instance.seriesException
+                ? "miscellaneous"
+                : "event-instance";
+        map.set(-instance.id, status);
+      } else {
+        const existing = nearestDate.get(instance.seriesId!);
+        if (!existing || instance.startDate < existing) {
+          nearestDate.set(instance.seriesId!, instance.startDate);
+          const status: MapStatus =
+            instance.seriesException === "closed"
+              ? "closed"
+              : instance.seriesException === "different-time"
+                ? "different-time"
+                : instance.seriesException
+                  ? "miscellaneous"
+                  : "event-instance";
+          map.set(instance.seriesId!, status);
+        }
       }
     }
     return map;
-  }, [locationUpdates]);
+  }, [locationInstances, baseEventIds]);
+
+  const instanceEvents = useMemo(
+    () =>
+      locationInstances
+        .filter(
+          (instance) =>
+            instance.seriesId == null || !baseEventIds.has(instance.seriesId),
+        )
+        .map((instance) => createWorkoutEventFromInstance(instance)),
+    [locationInstances, baseEventIds],
+  );
+
+  const displayedEvents = useMemo(() => {
+    const combined = [...(results?.location?.events ?? [])];
+
+    for (const instanceEvent of instanceEvents) {
+      if (
+        !combined.some((existingEvent) => existingEvent.id === instanceEvent.id)
+      ) {
+        combined.push(instanceEvent);
+      }
+    }
+
+    return combined;
+  }, [results, instanceEvents]);
 
   const mode = appStore.use.mode();
 
-  const event = useMemo<
-    | NonNullable<NonNullable<typeof results>["location"]>["events"][number]
-    | undefined
-  >(() => {
-    const locationEvent = results?.location?.events?.find(
+  const event = useMemo<WorkoutDetailsEvent | undefined>(() => {
+    const displayedEvent = displayedEvents.find(
       (event) => event.id === selectedEventId,
     );
-    if (locationEvent) return locationEvent;
+    if (displayedEvent) return displayedEvent;
 
     const parentEvent = parentEventResponse?.event;
     if (!parentEvent) return undefined;
@@ -172,8 +270,8 @@ export const WorkoutDetailsContent = ({
       aoName: parentEvent.aos[0]?.aoName ?? null,
       aoLogo: null,
       aoWebsite: null,
-    } as NonNullable<NonNullable<typeof results>["location"]>["events"][number];
-  }, [selectedEventId, results, parentEventResponse]);
+    };
+  }, [selectedEventId, displayedEvents, parentEventResponse]);
 
   const location = useMemo(() => results?.location ?? null, [results]);
 
@@ -323,7 +421,7 @@ export const WorkoutDetailsContent = ({
       />
     );
   }
-  if (!event && locationUpdates.length === 0) {
+  if (!event && location?.events.length === 0) {
     return <DeletedWorkoutWarning text="Event is unavailable." />;
   }
 
@@ -380,11 +478,11 @@ export const WorkoutDetailsContent = ({
         </button>
       ) : null}
 
-      {locationUpdates.length > 0 && (
+      {selectedEventUpdates.length > 0 && (
         <div className="mt-1">
           <div className="text-sm font-bold">Updates</div>
           <div className="mt-1 flex flex-col gap-1">
-            {locationUpdates.map((instance) => (
+            {selectedEventUpdates.map((instance) => (
               <div
                 key={instance.id}
                 className="flex items-center gap-2 text-sm"
@@ -403,15 +501,15 @@ export const WorkoutDetailsContent = ({
       )}
 
       <div>
-        {(location?.events.length ?? 0) > 1 ? (
+        {displayedEvents.length > 1 ? (
           <span className="text-sm">
-            There are {location?.events.length} workouts at this location
+            There are {displayedEvents.length} workouts at this location
           </span>
         ) : (
           <div className="h-1" />
         )}
         <div className="flex flex-row flex-wrap gap-1">
-          {location?.events.map((locEvent) => (
+          {displayedEvents.map((locEvent) => (
             <EventChip
               key={locEvent.id}
               selected={selectedEventId === locEvent.id}
@@ -431,7 +529,7 @@ export const WorkoutDetailsContent = ({
                 id: location?.id ?? 0,
               }}
               size={chipSize}
-              hideName={(location?.events.length ?? 0) === 1}
+              hideName={displayedEvents.length === 1}
             />
           ))}
           {mode === "edit" ? (

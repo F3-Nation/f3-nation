@@ -1,15 +1,10 @@
 import type { MapStatus } from "~/utils/types";
 
 interface StatusStyle {
-  border: string;
-  bg: string;
-  text: string;
-  darkBorder: string;
-  darkBg: string;
+  base: string;
+  solidBg: string;
   selectedBorder: string;
-  selectedDarkBorder: string;
-  selectedBg: string;
-  selectedDarkBg: string;
+  selected: string;
   chipBg: string;
   clusterBg: string;
   clusterMid: string;
@@ -17,46 +12,45 @@ interface StatusStyle {
 }
 
 const STATUS_STYLES: Record<NonNullable<MapStatus>, StatusStyle> = {
-  closing: {
-    border: "border-red-500",
-    bg: "bg-red-500",
-    text: "text-white",
-    darkBorder: "dark:border-red-400",
-    darkBg: "dark:bg-red-400",
-    selectedBorder: "!border-red-700",
-    selectedDarkBorder: "dark:!border-red-500",
-    selectedBg: "!bg-red-700",
-    selectedDarkBg: "dark:!bg-red-500",
-    chipBg: "bg-red-700",
-    clusterBg: "bg-red-500/30 dark:bg-red-400/30",
-    clusterMid: "bg-red-500/50 dark:bg-red-400/50",
-    clusterInner: "bg-red-500 dark:bg-red-400",
+  closed: {
+    base: "border-gray-500 bg-gray-500 text-white dark:border-gray-400 dark:bg-gray-400",
+    solidBg: "bg-gray-500 dark:bg-gray-400",
+    selectedBorder: "!border-gray-700 dark:!border-gray-500",
+    selected:
+      "!border-gray-700 !bg-gray-700 dark:!border-gray-500 dark:!bg-gray-500",
+    chipBg: "bg-gray-700",
+    clusterBg: "bg-gray-500/30 dark:bg-gray-400/30",
+    clusterMid: "bg-gray-500/50 dark:bg-gray-400/50",
+    clusterInner: "bg-gray-500 dark:bg-gray-400",
   },
-  deviation: {
-    border: "border-orange-400",
-    bg: "bg-orange-400",
-    text: "text-white",
-    darkBorder: "dark:border-orange-300",
-    darkBg: "dark:bg-orange-300",
-    selectedBorder: "!border-orange-500",
-    selectedDarkBorder: "dark:!border-orange-400",
-    selectedBg: "!bg-orange-500",
-    selectedDarkBg: "dark:!bg-orange-400",
+  "different-time": {
+    base: "border-orange-400 bg-orange-400 text-white dark:border-orange-300 dark:bg-orange-300",
+    solidBg: "bg-orange-400 dark:bg-orange-300",
+    selectedBorder: "!border-orange-500 dark:!border-orange-400",
+    selected:
+      "!border-orange-500 !bg-orange-500 dark:!border-orange-400 dark:!bg-orange-400",
     chipBg: "bg-orange-500",
     clusterBg: "bg-orange-400/30 dark:bg-orange-300/30",
     clusterMid: "bg-orange-400/50 dark:bg-orange-300/50",
     clusterInner: "bg-orange-400 dark:bg-orange-300",
   },
-  highlight: {
-    border: "border-purple-500",
-    bg: "bg-purple-500",
-    text: "text-white",
-    darkBorder: "dark:border-purple-400",
-    darkBg: "dark:bg-purple-400",
-    selectedBorder: "!border-purple-600",
-    selectedDarkBorder: "dark:!border-purple-500",
-    selectedBg: "!bg-purple-600",
-    selectedDarkBg: "dark:!bg-purple-500",
+  miscellaneous: {
+    base: "border-green-500 bg-green-500 text-white dark:border-green-400 dark:bg-green-400",
+    solidBg: "bg-green-500 dark:bg-green-400",
+    selectedBorder: "!border-green-600 dark:!border-green-500",
+    selected:
+      "!border-green-600 !bg-green-600 dark:!border-green-500 dark:!bg-green-500",
+    chipBg: "bg-green-600",
+    clusterBg: "bg-green-500/30 dark:bg-green-400/30",
+    clusterMid: "bg-green-500/50 dark:bg-green-400/50",
+    clusterInner: "bg-green-500 dark:bg-green-400",
+  },
+  "event-instance": {
+    base: "border-purple-500 bg-purple-500 text-white dark:border-purple-400 dark:bg-purple-400",
+    solidBg: "bg-purple-500 dark:bg-purple-400",
+    selectedBorder: "!border-purple-600 dark:!border-purple-500",
+    selected:
+      "!border-purple-600 !bg-purple-600 dark:!border-purple-500 dark:!bg-purple-500",
     chipBg: "bg-purple-600",
     clusterBg: "bg-purple-500/30 dark:bg-purple-400/30",
     clusterMid: "bg-purple-500/50 dark:bg-purple-400/50",
@@ -67,43 +61,42 @@ const STATUS_STYLES: Record<NonNullable<MapStatus>, StatusStyle> = {
 export const STATUS_BASE_DEFAULT =
   "border-foreground bg-foreground text-background";
 
+const SELECTED_BORDER_DEFAULT = "!border-red-600 dark:!border-red-400";
+const SELECTED_BG_DEFAULT = "!border-red-600 !bg-red-600 dark:!bg-red-400";
+const SELECTED_CHIP_BG_DEFAULT = "bg-red-600";
+
+const getStatusStyle = (status: MapStatus) =>
+  status ? STATUS_STYLES[status] : undefined;
+
 export const getStatusBase = (status: MapStatus) =>
-  status
-    ? [
-        STATUS_STYLES[status].border,
-        STATUS_STYLES[status].bg,
-        STATUS_STYLES[status].text,
-        STATUS_STYLES[status].darkBorder,
-        STATUS_STYLES[status].darkBg,
-      ].join(" ")
-    : STATUS_BASE_DEFAULT;
+  getStatusStyle(status)?.base ?? STATUS_BASE_DEFAULT;
+
+export const getStatusSolidBg = (status: NonNullable<MapStatus>) =>
+  STATUS_STYLES[status]?.solidBg ?? "missing-bg";
 
 export const getSelectedBorder = (status: MapStatus) =>
-  status
-    ? `${STATUS_STYLES[status].selectedBorder} ${STATUS_STYLES[status].selectedDarkBorder}`
-    : "!border-red-600 dark:!border-red-400";
+  getStatusStyle(status)?.selectedBorder ?? SELECTED_BORDER_DEFAULT;
 
 export const getSelectedBg = (status: MapStatus) =>
-  status
-    ? `${STATUS_STYLES[status].selectedBorder} ${STATUS_STYLES[status].selectedBg} ${STATUS_STYLES[status].selectedDarkBg}`
-    : "!border-red-600 !bg-red-600 dark:!bg-red-400";
+  getStatusStyle(status)?.selected ?? SELECTED_BG_DEFAULT;
 
 export const getSelectedChipBg = (status: MapStatus) =>
-  status ? STATUS_STYLES[status].chipBg : "bg-red-600";
+  getStatusStyle(status)?.chipBg ?? SELECTED_CHIP_BG_DEFAULT;
 
 export const getClusterBg = (status: MapStatus) =>
-  status ? STATUS_STYLES[status].clusterBg : "";
+  getStatusStyle(status)?.clusterBg ?? "";
 
 export const getClusterMid = (status: MapStatus) =>
-  status ? STATUS_STYLES[status].clusterMid : "";
+  getStatusStyle(status)?.clusterMid ?? "";
 
 export const getClusterInner = (status: MapStatus) =>
-  status ? STATUS_STYLES[status].clusterInner : "";
+  getStatusStyle(status)?.clusterInner ?? "";
 
 const STATUSES: NonNullable<MapStatus>[] = [
-  "closing",
-  "deviation",
-  "highlight",
+  "closed",
+  "different-time",
+  "miscellaneous",
+  "event-instance",
 ];
 
 export const getDominantStatus = (
