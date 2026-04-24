@@ -76,7 +76,7 @@ describe("mergeUpcomingInstancesIntoMarkers", () => {
           expect.objectContaining({
             id: -42,
             name: "Roving AO",
-            mapStatus: "miscellaneous",
+            mapStatus: "event-instance",
             aoName: "Roving AO",
           }),
         ],
@@ -163,7 +163,7 @@ describe("mergeUpcomingInstancesIntoMarkers", () => {
     );
   });
 
-  it("adds a standalone instance (no seriesId) with miscellaneous status", () => {
+  it("adds a standalone instance (no seriesId) with event-instance status", () => {
     const locationMarkers: SparseF3Marker[] = [];
 
     mergeUpcomingInstancesIntoMarkers({
@@ -197,7 +197,7 @@ describe("mergeUpcomingInstancesIntoMarkers", () => {
           expect.objectContaining({
             id: -99,
             name: "Summer Convergence",
-            mapStatus: "miscellaneous",
+            mapStatus: "event-instance",
             startTime: "0700",
             aoName: "Convergence AO",
           }),
