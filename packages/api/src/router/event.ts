@@ -538,6 +538,7 @@ export const eventRouter = {
             location: z.string().nullable().describe("Location"),
             locationId: z.number().nullable().describe("Location ID"),
             startDate: z.string().nullable().describe("Event start date"),
+            endDate: z.string().nullable().describe("Event end date"),
             dayOfWeek: z
               .enum(DayOfWeek)
               .nullable()
@@ -590,6 +591,7 @@ export const eventRouter = {
           location: aoOrg.name,
           locationId: schema.events.locationId,
           startDate: schema.events.startDate,
+          endDate: schema.events.endDate,
           dayOfWeek: schema.events.dayOfWeek,
           startTime: schema.events.startTime,
           endTime: schema.events.endTime,

@@ -202,6 +202,13 @@ const columns: TableOptions<WorkoutEvent>["columns"] = [
     cell: (cell) => <Cell {...cell} />,
   },
   {
+    accessorKey: "dayOfWeek",
+    meta: { name: "Day of Week" },
+    accessorFn: (row) => dayOfWeekToShortDayOfWeek(row.dayOfWeek ?? "sunday"),
+    header: Header,
+    cell: Cell,
+  },
+  {
     accessorKey: "startDate",
     meta: { name: "Start Date" },
     accessorFn: (row) =>
@@ -210,9 +217,10 @@ const columns: TableOptions<WorkoutEvent>["columns"] = [
     cell: Cell,
   },
   {
-    accessorKey: "dayOfWeek",
-    meta: { name: "Day of Week" },
-    accessorFn: (row) => dayOfWeekToShortDayOfWeek(row.dayOfWeek ?? "sunday"),
+    accessorKey: "endDate",
+    meta: { name: "End Date" },
+    accessorFn: (row) =>
+      row.endDate ? new Date(row.endDate).toLocaleDateString() : "",
     header: Header,
     cell: Cell,
   },

@@ -7,7 +7,9 @@ import {
   and,
   count,
   eq,
+  gte,
   isNotNull,
+  isNull,
   lte,
   or,
   schema,
@@ -86,6 +88,10 @@ export const mapLocationRouter = os.router({
             eq(schema.events.isActive, true),
             eq(schema.events.isPrivate, false),
             lte(schema.events.startDate, sql`CURRENT_DATE + INTERVAL '6 days'`),
+            or(
+              isNull(schema.events.endDate),
+              gte(schema.events.endDate, sql`CURRENT_DATE`),
+            ),
           ),
         )
         .leftJoin(aoOrg, eq(schema.events.orgId, aoOrg.id))
@@ -379,6 +385,10 @@ export const mapLocationRouter = os.router({
             eq(schema.events.isActive, true),
             eq(schema.events.isPrivate, false),
             lte(schema.events.startDate, sql`CURRENT_DATE + INTERVAL '6 days'`),
+            or(
+              isNull(schema.events.endDate),
+              gte(schema.events.endDate, sql`CURRENT_DATE`),
+            ),
           ),
         )
         .leftJoin(parentOrg, eq(schema.events.orgId, parentOrg.id))

@@ -133,6 +133,7 @@ export default function AdminWorkoutsModal({
       startTime: convertHHmmToHH_mm(event?.startTime ?? ""),
       endTime: convertHHmmToHH_mm(event?.endTime ?? ""),
       startDate: event?.startDate ?? "",
+      endDate: event?.endDate ?? null,
       dayOfWeek: event?.dayOfWeek ?? undefined,
       isActive: event?.isActive ?? true,
       highlight: event?.highlight ?? false,
@@ -190,6 +191,14 @@ export default function AdminWorkoutsModal({
         toast.error("End time must be after start time");
         return;
       }
+    }
+
+    if (data.endDate && data.startDate && data.endDate < data.startDate) {
+      form.setError("endDate", {
+        message: "End date must be on or after start date",
+      });
+      toast.error("End date must be on or after start date");
+      return;
     }
 
     // Validate day of week
@@ -551,6 +560,29 @@ export default function AdminWorkoutsModal({
                             type="date"
                             {...field}
                             value={field.value ?? ""}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <div className="mb-4 w-1/2 px-2">
+                  <FormField
+                    control={form.control}
+                    name="endDate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>End Date</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="End Date"
+                            type="date"
+                            {...field}
+                            value={field.value ?? ""}
+                            onChange={(e) =>
+                              field.onChange(e.target.value || null)
+                            }
                           />
                         </FormControl>
                         <FormMessage />
