@@ -6,6 +6,8 @@
 
 import { useCallback } from "react";
 
+import { Ban } from "lucide-react";
+
 import type { DayOfWeek } from "@acme/shared/app/enums";
 import { cn } from "@acme/ui";
 
@@ -132,6 +134,15 @@ export const EventChip = (props: {
           {when || "No time"}
         </div>
       </div>
+      {props.mapStatus === "closed" && (
+        <Ban
+          className={cn("flex-shrink-0 text-white", {
+            "h-3 w-3": size === "small",
+            "h-4 w-4": size === "medium",
+            "h-5 w-5": size === "large",
+          })}
+        />
+      )}
       <div>
         {event.eventTypes.some((et) => et.name === "Bootcamp") ? (
           <BootSvgComponent

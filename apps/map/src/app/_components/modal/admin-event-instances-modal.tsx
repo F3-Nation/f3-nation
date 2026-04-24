@@ -688,6 +688,7 @@ export default function AdminEventInstancesModal({
                   type="button"
                   variant="outline"
                   onClick={() => {
+                    closeModal();
                     openModal(ModalType.ADMIN_DELETE_CONFIRMATION, {
                       id: data.id ?? -1,
                       type: DeleteType.EVENT_INSTANCE,
