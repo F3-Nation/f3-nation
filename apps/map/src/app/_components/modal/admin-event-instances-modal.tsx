@@ -328,63 +328,54 @@ export default function AdminEventInstancesModal({
                 control={form.control}
                 name="orgId"
                 render={({ field }) => {
-                  const filteredAOs = aos?.orgs.filter(
-                    (ao) => ao.parentId === form.watch("regionId"),
-                  );
+                  const filteredAOs = aos?.orgs
+                    .filter((ao) => ao.parentId === form.watch("regionId"))
+                    ?.slice()
+                    .sort((a, b) => a.name?.localeCompare(b.name ?? "") ?? 0);
                   return (
                     <FormItem key={`ao-${String(field.value ?? "new")}`}>
                       <FormLabel>AO</FormLabel>
-                      <Select
-                        value={field.value > 0 ? field.value.toString() : ""}
-                        onValueChange={(value) => {
-                          const aoId = safeParseInt(value);
-                          field.onChange(aoId ?? 0);
-
-                          const selectedAO = aos?.orgs.find(
-                            (ao) => ao.id === aoId,
-                          );
-                          if (selectedAO?.parentId != null) {
-                            form.setValue("regionId", selectedAO.parentId);
+                      <FormControl>
+                        <VirtualizedCombobox
+                          value={
+                            field.value > 0 ? field.value.toString() : undefined
                           }
+                          options={
+                            filteredAOs?.map((ao) => ({
+                              value: ao.id.toString(),
+                              label: ao.name ?? "",
+                            })) ?? []
+                          }
+                          searchPlaceholder="Select an AO"
+                          onSelect={(value) => {
+                            const aoId = safeParseInt(value as string);
+                            field.onChange(aoId ?? 0);
 
-                          const regionId = form.getValues("regionId");
-                          const regionLocations = locations?.locations.filter(
-                            (l) => l.regionId === regionId,
-                          );
-                          const locationId = form.getValues("locationId");
-                          if (
-                            locationId != null &&
-                            !regionLocations?.find((l) => l.id === locationId)
-                          ) {
-                            form.setValue(
-                              "locationId",
-                              regionLocations?.[0]?.id ?? null,
+                            const selectedAO = aos?.orgs.find(
+                              (ao) => ao.id === aoId,
                             );
-                          }
-                        }}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select an AO" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {filteredAOs
-                            ?.slice()
-                            .sort(
-                              (a, b) =>
-                                a.name?.localeCompare(b.name ?? "") ?? 0,
-                            )
-                            .map((ao) => (
-                              <SelectItem
-                                key={`ao-${ao.id}`}
-                                value={ao.id.toString()}
-                              >
-                                {ao.name}
-                              </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
+                            if (selectedAO?.parentId != null) {
+                              form.setValue("regionId", selectedAO.parentId);
+                            }
+
+                            const regionId = form.getValues("regionId");
+                            const regionLocations = locations?.locations.filter(
+                              (l) => l.regionId === regionId,
+                            );
+                            const locationId = form.getValues("locationId");
+                            if (
+                              locationId != null &&
+                              !regionLocations?.find((l) => l.id === locationId)
+                            ) {
+                              form.setValue(
+                                "locationId",
+                                regionLocations?.[0]?.id ?? null,
+                              );
+                            }
+                          }}
+                          isMulti={false}
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   );
@@ -444,58 +435,54 @@ export default function AdminEventInstancesModal({
                 control={form.control}
                 name="locationId"
                 render={({ field }) => {
-                  const filteredLocations = locations?.locations.filter(
-                    (location) => location.regionId === formRegionId,
-                  );
+                  const filteredLocations = locations?.locations
+                    .filter((location) => location.regionId === formRegionId)
+                    ?.slice()
+                    .sort(
+                      (a, b) =>
+                        a.locationName?.localeCompare(b.locationName ?? "") ??
+                        0,
+                    );
                   return (
                     <FormItem key={`location-${String(field.value ?? "none")}`}>
                       <FormLabel>Location (optional)</FormLabel>
-                      <Select
-                        value={
-                          field.value != null ? field.value.toString() : NONE
-                        }
-                        onValueChange={(value) => {
-                          if (value === NONE) {
-                            field.onChange(null);
-                            return;
+                      <FormControl>
+                        <VirtualizedCombobox
+                          value={
+                            field.value != null
+                              ? field.value.toString()
+                              : undefined
                           }
-                          field.onChange(Number(value));
-                          const selectedLocation = locations?.locations.find(
-                            (location) => location.id === Number(value),
-                          );
-                          if (selectedLocation?.regionId != null) {
-                            form.setValue(
-                              "regionId",
-                              selectedLocation.regionId,
+                          options={
+                            filteredLocations?.map((location) => ({
+                              value: location.id.toString(),
+                              label: location.locationName ?? "",
+                            })) ?? []
+                          }
+                          searchPlaceholder="Select a location"
+                          onSelect={(value) => {
+                            if (
+                              value === "" ||
+                              (Array.isArray(value) && value.length === 0)
+                            ) {
+                              field.onChange(null);
+                              return;
+                            }
+                            const id = safeParseInt(value as string);
+                            field.onChange(id ?? null);
+                            const selectedLocation = locations?.locations.find(
+                              (location) => location.id === id,
                             );
-                          }
-                        }}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a location" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value={NONE}>None</SelectItem>
-                          {filteredLocations
-                            ?.slice()
-                            .sort(
-                              (a, b) =>
-                                a.locationName?.localeCompare(
-                                  b.locationName ?? "",
-                                ) ?? 0,
-                            )
-                            .map((location) => (
-                              <SelectItem
-                                key={`location-${location.id}`}
-                                value={location.id.toString()}
-                              >
-                                {location.locationName}
-                              </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
+                            if (selectedLocation?.regionId != null) {
+                              form.setValue(
+                                "regionId",
+                                selectedLocation.regionId,
+                              );
+                            }
+                          }}
+                          isMulti={false}
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   );
@@ -541,31 +528,31 @@ export default function AdminEventInstancesModal({
                 render={({ field }) => (
                   <FormItem key={`series-${String(field.value ?? "none")}`}>
                     <FormLabel>Series (optional)</FormLabel>
-                    <Select
-                      value={
-                        field.value != null ? field.value.toString() : NONE
-                      }
-                      onValueChange={(value) => {
-                        field.onChange(value === NONE ? null : Number(value));
-                      }}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="None" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value={NONE}>None</SelectItem>
-                        {events.map((event) => (
-                          <SelectItem
-                            key={event.id}
-                            value={event.id.toString()}
-                          >
-                            {event.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <VirtualizedCombobox
+                        value={
+                          field.value != null
+                            ? field.value.toString()
+                            : undefined
+                        }
+                        options={events.map((event) => ({
+                          value: event.id.toString(),
+                          label: event.name ?? "",
+                        }))}
+                        searchPlaceholder="Select a series"
+                        onSelect={(value) => {
+                          if (
+                            value === "" ||
+                            (Array.isArray(value) && value.length === 0)
+                          ) {
+                            field.onChange(null);
+                            return;
+                          }
+                          field.onChange(safeParseInt(value as string) ?? null);
+                        }}
+                        isMulti={false}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -637,7 +624,7 @@ export default function AdminEventInstancesModal({
                         />
                       </FormControl>
                       <FormLabel className="!mt-0 font-normal">
-                        Highlight on map
+                        Highlight
                       </FormLabel>
                     </FormItem>
                   );
