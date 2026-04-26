@@ -2,3 +2,7 @@ packages:
   - apps/*
   - packages/*
   - tooling/*
+
+catalog:
+  typescript: "6.0.2"
+  eslint: "10.2.0"

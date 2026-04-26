@@ -752,7 +752,7 @@ export const eventRouter = {
         meta: meta
           ? {
               ...meta,
-              mapSeed: meta.mapSeed as boolean | undefined,
+              mapSeed: meta.mapSeed,
               eventTypeId: undefined, // Remove eventTypeId from meta since we handle it in join table
             }
           : null,

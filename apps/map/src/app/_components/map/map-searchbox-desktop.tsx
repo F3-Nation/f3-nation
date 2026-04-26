@@ -126,7 +126,7 @@ export function MapSearchBox({
               aria-expanded={isFocused}
               type="text"
               // placeholder="Search by location, zip, etc."
-              placeholder={`Search ${workoutCount?.count === undefined ? "5000+" : workoutCount.count} free, peer-led workouts`}
+              placeholder={`Search ${workoutCount?.count ?? "5000+"} free, peer-led workouts`}
               onFocus={() => {
                 setIsFocused(true);
                 setFocusedIndex(0);

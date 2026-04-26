@@ -140,7 +140,7 @@ export default function AdminWorkoutsModal({
       aoId: event?.aos?.[0]?.aoId ?? undefined,
       eventTypeIds: event?.eventTypes?.map((et) => et.eventTypeId),
       meta: {
-        mapSeed: event?.meta?.mapSeed ?? false,
+        mapSeed: !!event?.meta?.mapSeed,
       },
       description: event?.description ?? "",
       isPrivate: event?.isPrivate ?? false,

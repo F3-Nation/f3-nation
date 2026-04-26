@@ -290,6 +290,7 @@ export const EmailTestForm = () => {
                             {fieldConfig.type === "textarea" ? (
                               <Textarea
                                 {...field}
+                                // eslint-disable-next-line @typescript-eslint/no-base-to-string
                                 value={String(field.value ?? "")}
                               />
                             ) : fieldConfig.type === "boolean" ? (
@@ -306,6 +307,7 @@ export const EmailTestForm = () => {
                               <Input
                                 type={fieldConfig.type}
                                 {...field}
+                                // eslint-disable-next-line @typescript-eslint/no-base-to-string
                                 value={String(field.value ?? "")}
                               />
                             )}

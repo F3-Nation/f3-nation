@@ -89,14 +89,14 @@ export const getReadableDayOfWeek = (dayOfWeek: DayOfWeek | null) => {
 };
 
 export const convertHH_mmToHHmm = (value: string) => {
-  if (!value || value.length !== 5) {
+  if (value?.length !== 5) {
     return "";
   }
   return value.replace(":", "");
 };
 
 export const convertHHmmToHH_mm = (value: string) => {
-  if (!value || value.length !== 4) {
+  if (value?.length !== 4) {
     return "";
   }
   return value.slice(0, 2) + ":" + value.slice(2, 4);

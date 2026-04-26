@@ -1,3 +1,5 @@
+// Mock setups use vi.fn() with untyped callbacks — unsafe rules don't apply here
+/* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-assignment */
 import { render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 

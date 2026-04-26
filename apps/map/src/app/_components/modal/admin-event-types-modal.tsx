@@ -48,8 +48,7 @@ import {
 } from "~/utils/store/modal";
 import { VirtualizedCombobox } from "../virtualized-combobox";
 
-const EventTypeInsertForm = EventTypeInsertSchema;
-type EventTypeInsertFormType = z.infer<typeof EventTypeInsertForm>;
+type EventTypeInsertFormType = z.infer<typeof EventTypeInsertSchema>;
 
 export default function AdminEventTypesModal({
   data,

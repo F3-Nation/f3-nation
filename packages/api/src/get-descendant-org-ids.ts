@@ -29,7 +29,8 @@ export const getDescendantOrgIds = async (
 
   // Single query to get all descendants up to 5 levels deep
   // This mirrors the approach in checkHasRoleOnOrg but goes DOWN instead of UP
-  const descendants = await db
+  // TS6.0: aliasedTable complex conditional types require explicit annotation
+  const descendants = (await db
     .select({
       level0Id: level0.id,
       level1Id: level1.id,
@@ -42,7 +43,13 @@ export const getDescendantOrgIds = async (
     .leftJoin(level2, eq(level1.id, level2.parentId))
     .leftJoin(level3, eq(level2.id, level3.parentId))
     .leftJoin(level4, eq(level3.id, level4.parentId))
-    .where(inArray(level0.id, parentOrgIds));
+    .where(inArray(level0.id, parentOrgIds))) as {
+    level0Id: number;
+    level1Id: number | null;
+    level2Id: number | null;
+    level3Id: number | null;
+    level4Id: number | null;
+  }[];
 
   // Collect all unique org IDs from all levels
   const allOrgIds = new Set<number>();
