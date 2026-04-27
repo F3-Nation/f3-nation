@@ -15,6 +15,30 @@ function hashCode(code: string): string {
 }
 
 /**
+ * Creates an Ethereal test account using the WHATWG fetch API.
+ * Replaces nodemailer's built-in createTestAccount() which uses the deprecated url.parse().
+ * For development/testing only — Ethereal is a fake SMTP service.
+ * Note: apps/auth does not depend on @acme/auth, so this is a local copy of the
+ * helper defined in packages/auth/src/lib/utils.ts.
+ */
+async function createEtherealTestAccount(): Promise<{
+  user: string;
+  pass: string;
+}> {
+  const response = await fetch("https://api.nodemailer.com/user", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ requestor: "nodemailer" }),
+  });
+  if (!response.ok) {
+    throw new Error(
+      `Failed to create Ethereal test account: ${response.statusText}`,
+    );
+  }
+  return response.json() as Promise<{ user: string; pass: string }>;
+}
+
+/**
  * Generate a 6-digit code, hash-store it, and email it to the user.
  * Invalidates any previous active code for that email.
  */
@@ -64,7 +88,7 @@ export async function sendEmailCode(email: string): Promise<void> {
             pass: env.SENDGRID_API_KEY,
           },
         }
-      : await nodemailer.createTestAccount().then(({ user, pass }) => ({
+      : await createEtherealTestAccount().then(({ user, pass }) => ({
           host: "smtp.ethereal.email",
           port: 587,
           secure: false,

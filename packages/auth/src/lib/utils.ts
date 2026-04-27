@@ -3,11 +3,7 @@ import type { Theme } from "@auth/core/types";
 import type { NodemailerConfig } from "next-auth/providers/nodemailer";
 import type SMTPTransport from "nodemailer/lib/smtp-transport";
 import dayjs from "dayjs";
-import {
-  createTestAccount,
-  createTransport,
-  getTestMessageUrl,
-} from "nodemailer";
+import { createTransport, getTestMessageUrl } from "nodemailer";
 
 import type { AppDb } from "@acme/db/client";
 import { schema } from "@acme/db";
@@ -72,6 +68,29 @@ export const createVerifyUrlFromTokenResponse = (params: {
 
 const SHOW_MOBILE = false;
 
+/**
+ * Creates an Ethereal test account using the WHATWG fetch API.
+ * Replaces nodemailer's built-in createTestAccount() which uses the deprecated url.parse().
+ * For development/testing only — Ethereal is a fake SMTP service.
+ * See: https://nodemailer.com/smtp/testing/
+ */
+export async function createEtherealTestAccount(): Promise<{
+  user: string;
+  pass: string;
+}> {
+  const response = await fetch("https://api.nodemailer.com/user", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ requestor: "nodemailer" }),
+  });
+  if (!response.ok) {
+    throw new Error(
+      `Failed to create Ethereal test account: ${response.statusText}`,
+    );
+  }
+  return response.json() as Promise<{ user: string; pass: string }>;
+}
+
 export const sendVerifyEmail = async (params: {
   db: AppDb;
   email: string;
@@ -104,7 +123,7 @@ export const sendVerificationRequest: NodemailerConfig["sendVerificationRequest"
     // In dev, use ethereal.email as test account
     const transportOptions: SMTPTransport.Options = isProduction
       ? (provider.server as SMTPTransport.Options)
-      : await createTestAccount().then(({ user, pass }) => ({
+      : await createEtherealTestAccount().then(({ user, pass }) => ({
           host: "smtp.ethereal.email",
           port: 587,
           secure: false,

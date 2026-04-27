@@ -1,13 +1,10 @@
 import type { Theme } from "@auth/core/types";
 import type { NodemailerConfig } from "next-auth/providers/nodemailer";
 import type SMTPTransport from "nodemailer/lib/smtp-transport";
-import {
-  createTestAccount,
-  createTransport,
-  getTestMessageUrl,
-} from "nodemailer";
+import { createTransport, getTestMessageUrl } from "nodemailer";
 
 import { authConfig } from "@acme/auth/config";
+import { createEtherealTestAccount } from "@acme/auth/lib/utils";
 import { isProduction } from "@acme/shared/common/constants";
 
 const SHOW_MOBILE = false as boolean;
@@ -39,7 +36,7 @@ export const sendVerificationRequest = async (
   // In dev, use ethereal.email as test account
   const transportOptions: SMTPTransport.Options = isProduction
     ? (server as SMTPTransport.Options)
-    : await createTestAccount().then(({ user, pass }) => ({
+    : await createEtherealTestAccount().then(({ user, pass }) => ({
         host: "smtp.ethereal.email",
         port: 587,
         secure: false,
