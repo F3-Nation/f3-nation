@@ -10,6 +10,7 @@
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
     "lint": "eslint .",
     "start": "next start",
+    "test": "pnpm with-env vitest --run",
     "typecheck": "tsc --noEmit",
     "add-client": "tsx scripts/add-client.ts",
     "with-env": "dotenv -e ../../.env --"
