@@ -31,7 +31,7 @@ export const NearbyLocationItem = (props: {
   const ignoreNextNearbyItemMouseEnter =
     appStore.use.ignoreNextNearbyItemMouseEnter();
   const { item } = props;
-  const isSelected = item.id === locationId;
+  const isLocationSelected = item.id === locationId;
 
   const handleClick = useCallback(
     ({
@@ -89,7 +89,7 @@ export const NearbyLocationItem = (props: {
         // pl-1 balances the image on left and right
         "relative w-full cursor-pointer py-2 pl-1 pr-2",
         "bg-background",
-        { "bg-muted": isSelected },
+        { "bg-gray-100 dark:bg-gray-800": isLocationSelected },
       )}
       // @RollOver (SoCo - St. Louis) & @Mr. Roboto (New Bern, NC) had issues with the mouse events we were using here
       // Likely everything needs to be condensed to onClick and onMouseEnter for handleClick and handleHover
@@ -97,7 +97,7 @@ export const NearbyLocationItem = (props: {
       onClick={(e) => {
         handleClick({
           locationId: item.id,
-          eventId: null,
+          eventId: item.events[0]?.id ?? null,
           clearSearch: true,
         });
         e.stopPropagation();
@@ -109,7 +109,7 @@ export const NearbyLocationItem = (props: {
         }
         handleHover({
           locationId: item.id,
-          eventId: null,
+          eventId: item.events[0]?.id ?? null,
         });
         e.stopPropagation();
       }}

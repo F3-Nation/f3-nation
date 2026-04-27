@@ -13,6 +13,7 @@ import {
   isNull,
   or,
   schema,
+  sql,
 } from "@acme/db";
 import { EventCategory, IsActiveStatus } from "@acme/shared/app/enums";
 import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
@@ -26,6 +27,7 @@ export const eventTypeRouter = {
   /**
    * By default this gets all the event types available for the orgIds (meaning that general, nation-wide event types are included)
    * To get only the event types for a specific org, set ignoreNationEventTypes to true
+   * Use nationalOnly to return only nation-wide types (specific_org_id is null); cannot be combined with orgIds
    */
   all: protectedProcedure
     .input(
@@ -64,6 +66,21 @@ export const eventTypeRouter = {
             .describe(
               "If true, only return event types specific to the requested orgs. If false (default), include nation-wide types.",
             ),
+          nationalOnly: z.coerce
+            .boolean()
+            .optional()
+            .describe(
+              "If true, return only nation-wide event types (specific_org_id is null). Cannot be combined with orgIds.",
+            ),
+        })
+        .superRefine((data, ctx) => {
+          if (data.nationalOnly && data.orgIds?.length) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: "nationalOnly cannot be combined with orgIds",
+              path: ["nationalOnly"],
+            });
+          }
         })
         .optional(),
     )
@@ -116,7 +133,7 @@ export const eventTypeRouter = {
           case "name":
             return direction(schema.eventTypes.name);
           case "description":
-            return direction(schema.eventTypes.description);
+            return direction(sql`NULLIF(${schema.eventTypes.description}, '')`);
           case "eventCategory":
             return direction(schema.eventTypes.eventCategory);
           case "specificOrgName":
@@ -142,6 +159,17 @@ export const eventTypeRouter = {
         count: count(schema.eventsXEventTypes.eventTypeId),
       };
 
+      const orgScopeFilter = input?.nationalOnly
+        ? isNull(schema.eventTypes.specificOrgId)
+        : input?.orgIds?.length
+          ? or(
+              inArray(schema.eventTypes.specificOrgId, input.orgIds),
+              input?.ignoreNationEventTypes
+                ? undefined
+                : isNull(schema.eventTypes.specificOrgId),
+            )
+          : undefined;
+
       const where = and(
         input?.searchTerm
           ? or(
@@ -149,14 +177,7 @@ export const eventTypeRouter = {
               ilike(schema.eventTypes.description, `%${input?.searchTerm}%`),
             )
           : undefined,
-        input?.orgIds?.length
-          ? or(
-              inArray(schema.eventTypes.specificOrgId, input?.orgIds),
-              input?.ignoreNationEventTypes
-                ? undefined
-                : isNull(schema.eventTypes.specificOrgId),
-            )
-          : undefined,
+        orgScopeFilter,
         !input?.statuses?.length ||
           input.statuses.length === IsActiveStatus.length
           ? undefined

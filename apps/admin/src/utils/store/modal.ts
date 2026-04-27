@@ -15,6 +15,7 @@ export enum ModalType {
   ADMIN_AOS = "ADMIN_AOS",
   ADMIN_API_KEYS = "ADMIN_API_KEYS",
   ADMIN_EVENT_TYPES = "ADMIN_EVENT_TYPES",
+  ADMIN_POSITIONS = "ADMIN_POSITIONS",
   ADMIN_DELETE_CONFIRMATION = "ADMIN_DELETE_CONFIRMATION",
   DELETE_CONFIRMATION = "DELETE_CONFIRMATION",
   ADMIN_DELETE_REQUEST = "ADMIN_DELETE_REQUEST",
@@ -30,6 +31,7 @@ export enum DeleteType {
   AO = "AO",
   EVENT = "EVENT",
   EVENT_TYPE = "EVENT_TYPE",
+  POSITION = "POSITION",
   REGION = "REGION",
   SECTOR = "SECTOR",
   NATION = "NATION",
@@ -118,6 +120,14 @@ export interface DataType {
   };
   [ModalType.ADMIN_EVENT_TYPES]: {
     id?: number | null;
+  };
+  [ModalType.ADMIN_POSITIONS]: {
+    id?: number | null;
+    /**
+     * When creating a new position, pre-select this org as the owning
+     * organization. Ignored when editing an existing position.
+     */
+    defaultOrgId?: number | null;
   };
   [ModalType.SIGN_IN]: {
     callbackUrl?: string;
