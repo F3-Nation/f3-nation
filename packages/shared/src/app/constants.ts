@@ -204,7 +204,7 @@ export const routes = {
       __auth: "editor",
     },
     positions: {
-      __path: "/admin/positions",
+      __path: "/positions",
       __auth: "editor",
     },
     emailTest: {
