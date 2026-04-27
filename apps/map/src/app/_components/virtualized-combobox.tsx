@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Check, ChevronDownIcon } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
 import { cn } from "@acme/ui";
@@ -52,19 +52,20 @@ const VirtualizedCommand = <T,>({
   onClear,
   hideClearButton,
 }: VirtualizedCommandProps<T>) => {
-  const [filteredOptions, setFilteredOptions] = useState<Option<T>[]>(options);
+  const [searchTerm, setSearchTerm] = useState("");
   const parentRef = useRef(null);
 
+  // Compute filtered + sorted options from the latest `options` prop so that
+  // data which arrives after mount (e.g. an in-flight query) is reflected
+  // without needing to close/re-open the popover.
   const sortedFilteredOptions = useMemo(() => {
-    return filteredOptions.sort((a, b) => {
-      // Pinned options always come first
-      if (a.pinned && !b.pinned) return -1;
-      if (b.pinned && !a.pinned) return 1;
-      // Then selected options
-      if (
-        selectedOptions.includes(a.value) &&
-        !selectedOptions.includes(b.value)
-      ) {
+    const lowered = searchTerm.toLowerCase();
+    const filtered = lowered
+      ? options.filter((option) => option.label.toLowerCase().includes(lowered))
+      : options;
+
+    return [...filtered].sort((a, b) => {
+      if (selectedOptions.includes(a.value)) {
         return -1;
       }
       if (
@@ -75,7 +76,7 @@ const VirtualizedCommand = <T,>({
       }
       return 0;
     });
-  }, [filteredOptions, selectedOptions]);
+  }, [options, searchTerm, selectedOptions]);
 
   const virtualizer = useVirtualizer({
     count: sortedFilteredOptions.length,
@@ -87,11 +88,7 @@ const VirtualizedCommand = <T,>({
   const virtualOptions = virtualizer.getVirtualItems();
 
   const handleSearch = (search: string) => {
-    setFilteredOptions(
-      options.filter((option) =>
-        option.label.toLowerCase().includes(search.toLowerCase() ?? []),
-      ),
-    );
+    setSearchTerm(search);
   };
 
   const handleKeyDown = (event: React.KeyboardEvent) => {

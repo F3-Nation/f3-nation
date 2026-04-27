@@ -227,6 +227,11 @@ export interface DataType {
   };
   [ModalType.ADMIN_POSITIONS]: {
     id?: number | null;
+    /**
+     * When creating a new position, pre-select this org as the owning
+     * organization. Ignored when editing an existing position.
+     */
+    defaultOrgId?: number | null;
   };
   [ModalType.SIGN_IN]: {
     callbackUrl?: string;
