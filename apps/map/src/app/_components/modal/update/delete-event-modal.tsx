@@ -6,8 +6,8 @@ import { Form } from "@acme/ui/form";
 import { DeleteEventSchema } from "@acme/validators/request-schemas";
 
 import type { DataType, ModalType } from "~/utils/store/modal";
-import { isProd } from "~/trpc/util";
-import { vanillaApi } from "~/trpc/vanilla";
+import { isProductionNodeEnv } from "@acme/shared/common/constants";
+import { client } from "~/orpc/client";
 import { FormDebugData } from "../../forms/dev-debug-component";
 import { ContactDetailsForm } from "../../forms/form-inputs/contact-details-form";
 import { DeleteEventForm } from "../../forms/form-inputs/delete-event-form";
@@ -29,12 +29,12 @@ export const DeleteEventModal = ({
     <BaseModal title="Delete Event">
       <Form {...form}>
         <form className="w-[inherit] overflow-x-hidden p-0.5">
-          {!isProd && <FormDebugData />}
+          {!isProductionNodeEnv && <FormDebugData />}
           <DeleteEventForm<DeleteEventType> />
           <ContactDetailsForm<DeleteEventType> />
           <SubmitSection<DeleteEventType>
             mutationFn={(values) =>
-              vanillaApi.request.submitDeleteEventRequest(values)
+              client.request.submitDeleteEventRequest(values)
             }
             text="Delete Event"
             className="bg-destructive hover:bg-destructive/80"

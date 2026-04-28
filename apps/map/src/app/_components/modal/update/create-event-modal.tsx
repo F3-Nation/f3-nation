@@ -6,8 +6,8 @@ import { Form } from "@acme/ui/form";
 import { CreateEventSchema } from "@acme/validators/request-schemas";
 
 import type { DataType, ModalType } from "~/utils/store/modal";
-import { isProd } from "~/trpc/util";
-import { vanillaApi } from "~/trpc/vanilla";
+import { isProductionNodeEnv } from "@acme/shared/common/constants";
+import { client } from "~/orpc/client";
 import { FormDebugData } from "../../forms/dev-debug-component";
 import { ContactDetailsForm } from "../../forms/form-inputs/contact-details-form";
 import { EventDetailsForm } from "../../forms/form-inputs/event-details-form";
@@ -21,19 +21,19 @@ export const CreateEventModal = ({
 }) => {
   const form = useForm<CreateEventType>({
     resolver: zodResolver(CreateEventSchema),
-    defaultValues: data,
+    defaultValues: data as CreateEventType,
   });
 
   return (
     <BaseModal title="Create New Event">
       <Form {...form}>
         <form className="w-[inherit] overflow-x-hidden p-0.5">
-          {!isProd && <FormDebugData />}
+          {!isProductionNodeEnv && <FormDebugData />}
           <EventDetailsForm<CreateEventType> />
           <ContactDetailsForm<CreateEventType> />
           <SubmitSection<CreateEventType>
             mutationFn={(values) =>
-              vanillaApi.request.submitCreateEventRequest(values)
+              client.request.submitCreateEventRequest(values)
             }
             text="Create New Event"
           />

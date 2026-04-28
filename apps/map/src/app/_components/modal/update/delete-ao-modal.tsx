@@ -6,8 +6,8 @@ import { Form } from "@acme/ui/form";
 import { DeleteAOSchema } from "@acme/validators/request-schemas";
 
 import type { DataType, ModalType } from "~/utils/store/modal";
-import { isProd } from "~/trpc/util";
-import { vanillaApi } from "~/trpc/vanilla";
+import { isProductionNodeEnv } from "@acme/shared/common/constants";
+import { client } from "~/orpc/client";
 import { FormDebugData } from "../../forms/dev-debug-component";
 import { ContactDetailsForm } from "../../forms/form-inputs/contact-details-form";
 import { DeleteAoForm } from "../../forms/form-inputs/delete-ao-form";
@@ -29,12 +29,12 @@ export const DeleteAoModal = ({
     <BaseModal title="Delete AO">
       <Form {...form}>
         <form className="w-[inherit] overflow-x-hidden p-0.5">
-          {!isProd && <FormDebugData />}
+          {!isProductionNodeEnv && <FormDebugData />}
           <DeleteAoForm<DeleteAOType> />
           <ContactDetailsForm<DeleteAOType> />
           <SubmitSection<DeleteAOType>
             mutationFn={(values) =>
-              vanillaApi.request.submitDeleteAORequest(values)
+              client.request.submitDeleteAORequest(values)
             }
             text="Delete AO"
             className="bg-destructive hover:bg-destructive/80"

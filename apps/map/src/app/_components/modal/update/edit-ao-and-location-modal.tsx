@@ -9,8 +9,8 @@ import type { DataType, ModalType } from "~/utils/store/modal";
 import { FormDebugData } from "~/app/_components/forms/dev-debug-component";
 import { ContactDetailsForm } from "~/app/_components/forms/form-inputs/contact-details-form";
 import { BaseModal } from "~/app/_components/modal/base-modal";
-import { isProd } from "~/trpc/util";
-import { vanillaApi } from "~/trpc/vanilla";
+import { isProductionNodeEnv } from "@acme/shared/common/constants";
+import { client } from "~/orpc/client";
 import { AODetailsForm } from "../../forms/form-inputs/ao-details-form";
 import { LocationDetailsForm } from "../../forms/form-inputs/location-details-form";
 import { SubmitSection } from "../../forms/submit-section";
@@ -32,14 +32,14 @@ export const EditAoAndLocationModal = ({
       throw new Error("Invalid image URL");
     }
 
-    return await vanillaApi.request.submitEditAOAndLocationRequest(values);
+    return await client.request.submitEditAOAndLocationRequest(values);
   };
 
   return (
     <BaseModal title="Edit AO Details">
       <Form {...form}>
         <form className="w-[inherit] overflow-x-hidden p-0.5">
-          {!isProd && <FormDebugData />}
+          {!isProductionNodeEnv && <FormDebugData />}
           <AODetailsForm<EditAOAndLocationType> />
           <LocationDetailsForm<EditAOAndLocationType> />
           <ContactDetailsForm<EditAOAndLocationType> />

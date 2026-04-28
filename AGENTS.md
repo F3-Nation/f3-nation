@@ -4,7 +4,7 @@
 
 - Use Node >=24.14 (see `.nvmrc`), pnpm 10, and Turborepo for workspace orchestration.
 - The `apps/map` directory contains the Next.js 15 map UI (port 3000).
-- Shared code is organized in `packages/`: `api` (tRPC routers), `auth` (auth helpers), `db` (Drizzle schema/migrations), `ui` (shared components), `validators` (Zod schemas), and `shared` (utilities).
+- Shared code is organized in `packages/`: `api` (oRPC routers), `auth` (auth helpers), `db` (Drizzle schema/migrations), `ui` (shared components), `validators` (Zod schemas), and `shared` (utilities).
 - Configuration files are in `tooling/`; pnpm patches go in `patches/`; Turbo generators live in `turbo/`.
 
 ## Build, Test, and Development Commands

@@ -103,9 +103,10 @@ function useRequestStatusHandler() {
         throw new Error("Failed to submit update request");
 
       case "approved":
-        void invalidateQueries({
-          predicate: (query) => query.queryKey[0] === "request",
-        });
+        void invalidateQueries("request");
+        void invalidateQueries("map");
+        void invalidateQueries("event");
+        void invalidateQueries("location");
         toast.success("Update request automatically applied");
         closeModal();
         router.refresh();

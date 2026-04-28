@@ -470,6 +470,11 @@ const getFormValues = async (params: {
     originalLocationId: req?.originalLocationId ?? cur.originalLocationId,
     originalAoId: req?.originalAoId ?? cur.originalAoId,
     originalRegionId: req?.originalRegionId ?? cur.originalRegionId,
+
+    newRegionId: req?.newRegionId ?? undefined,
+    newAoId: req?.newAoId ?? undefined,
+    newLocationId: req?.newLocationId ?? undefined,
+    newEventId: req?.newEventId ?? undefined,
   };
 
   return {

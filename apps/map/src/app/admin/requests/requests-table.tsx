@@ -27,7 +27,7 @@ import { MobileFilterSheet } from "../_components/mobile-filter-sheet";
 
 import { orpc, useQuery } from "~/orpc/react";
 import type { RouterOutputs } from "~/orpc/types";
-import { vanillaApi } from "~/trpc/vanilla";
+import { client } from "~/orpc/client";
 import { openRequestModal } from "~/utils/open-request-modal";
 
 const initialState = {
@@ -93,7 +93,7 @@ export const RequestsTable = () => {
       totalCount={requests?.totalCount}
       columns={columns}
       onRowClick={async (row) => {
-        const response = await vanillaApi.request.byId({ id: row.original.id });
+        const response = await client.request.byId({ id: row.original.id });
         if (!response?.request) {
           toast.error("Request not found");
           return;
