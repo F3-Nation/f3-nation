@@ -222,10 +222,20 @@ function RegisterForm() {
               onBlur={() => {
                 setTimeout(() => {
                   if (!regionSelectedRef.current) {
-                    setRegionSearch("");
-                    setHomeRegionId("");
+                    if (homeRegionId) {
+                      // Restore the selected region name if user didn't change selection
+                      const selected = regions.find(
+                        (r) => r.id === homeRegionId,
+                      );
+                      if (selected) {
+                        setRegionSearch(selected.name);
+                      }
+                    } else {
+                      setRegionSearch("");
+                    }
                   }
                   regionSelectedRef.current = false;
+                  setRegionDropdownOpen(false);
                 }, 200);
               }}
               placeholder="Search for a region (optional)"
