@@ -3,12 +3,12 @@
 import { Suspense, useState, useEffect, useRef } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import PhoneInput from "react-phone-number-input/input";
 import type { PhoneCountry } from "~/lib/phone";
 
 import Image from "next/image";
 
-import { detectPhoneCountry, phoneCountryOptions } from "~/lib/phone";
+import { detectPhoneCountry } from "~/lib/phone";
+import { PhoneField } from "~/app/components/PhoneField";
 
 interface Region {
   id: number;
@@ -141,281 +141,235 @@ function RegisterForm() {
 
   const inputClass =
     "w-full rounded-md border bg-background px-4 py-3 text-base outline-none focus:ring-2 focus:ring-ring";
-  const selectClass = `${inputClass} pr-10`;
 
   return (
-    <div className="min-h-screen px-4 py-10 sm:px-6 lg:py-16">
-      <div className="mx-auto w-full max-w-lg space-y-8">
-        <div className="flex flex-col items-center space-y-4">
-          <Image
-            src="/f3nation.svg"
-            alt="F3 Nation Logo"
-            width={100}
-            height={100}
-            priority
-          />
-          <h1 className="text-3xl font-bold">Create Your Account</h1>
-          <p className="text-base text-muted-foreground text-center">
-            Welcome to F3 Nation! Fill in your details to get started.
-          </p>
-          <p className="text-base font-medium">{email}</p>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label
-                htmlFor="firstName"
-                className="block text-base font-medium mb-2"
-              >
-                First Name <span className="text-destructive">*</span>
-              </label>
-              <input
-                id="firstName"
-                type="text"
-                required
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                placeholder="John"
-                className={inputClass}
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="lastName"
-                className="block text-base font-medium mb-2"
-              >
-                Last Name <span className="text-destructive">*</span>
-              </label>
-              <input
-                id="lastName"
-                type="text"
-                required
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                placeholder="Doe"
-                className={inputClass}
-              />
-            </div>
-          </div>
-
-          <div>
-            <label
-              htmlFor="f3Name"
-              className="block text-base font-medium mb-2"
-            >
-              F3 Name
-            </label>
-            <input
-              id="f3Name"
-              type="text"
-              value={f3Name}
-              onChange={(e) => setF3Name(e.target.value)}
-              placeholder="The name you got in the gloom"
-              className={inputClass}
+    <div className="min-h-screen bg-card sm:bg-background">
+      <div className="mx-auto w-full max-w-lg px-4 py-10 sm:px-6 lg:py-16">
+        <div className="space-y-8 sm:rounded-xl sm:bg-card sm:p-8 sm:shadow-lg lg:p-10">
+          <div className="flex flex-col items-center space-y-4">
+            <Image
+              src="/f3nation.svg"
+              alt="F3 Nation Logo"
+              width={100}
+              height={100}
+              priority
             />
-          </div>
-
-          <div ref={regionRef} className="relative">
-            <label
-              htmlFor="homeRegion"
-              className="block text-base font-medium mb-2"
-            >
-              Home Region
-            </label>
-            <input
-              id="homeRegion"
-              type="text"
-              value={regionSearch}
-              onChange={(e) => {
-                setRegionSearch(e.target.value);
-                setHomeRegionId("");
-                setRegionDropdownOpen(true);
-              }}
-              onFocus={() => setRegionDropdownOpen(true)}
-              onBlur={() => {
-                setTimeout(() => {
-                  if (!regionSelectedRef.current) {
-                    if (homeRegionId) {
-                      // Restore the selected region name if user didn't change selection
-                      const selected = regions.find(
-                        (r) => r.id === homeRegionId,
-                      );
-                      if (selected) {
-                        setRegionSearch(selected.name);
-                      }
-                    } else {
-                      setRegionSearch("");
-                    }
-                  }
-                  regionSelectedRef.current = false;
-                  setRegionDropdownOpen(false);
-                }, 200);
-              }}
-              placeholder="Search for a region (optional)"
-              autoComplete="off"
-              className={inputClass}
-            />
-            {regionDropdownOpen && filteredRegions.length > 0 && (
-              <ul className="absolute z-10 mt-1 max-h-48 w-full overflow-auto rounded-md border bg-card shadow-lg">
-                {filteredRegions.map((r) => (
-                  <li key={r.id}>
-                    <button
-                      type="button"
-                      onMouseDown={() => {
-                        regionSelectedRef.current = true;
-                      }}
-                      onClick={() => {
-                        setHomeRegionId(r.id);
-                        setRegionSearch(r.name);
-                        setRegionDropdownOpen(false);
-                      }}
-                      className="w-full px-4 py-2 text-left text-base hover:bg-accent transition-colors"
-                    >
-                      {r.name}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {regionDropdownOpen &&
-              regionSearch &&
-              filteredRegions.length === 0 && (
-                <div className="absolute z-10 mt-1 w-full rounded-md border bg-card px-4 py-3 text-base text-muted-foreground shadow-lg">
-                  No regions found
-                </div>
-              )}
-          </div>
-
-          <div>
-            <label htmlFor="phone" className="block text-base font-medium mb-2">
-              Phone Number
-            </label>
-            <div className="flex gap-3">
-              <select
-                id="phoneCountry"
-                value={phoneCountry}
-                onChange={(e) => {
-                  setPhoneCountry(e.target.value as PhoneCountry);
-                  // Drop any value tied to the previous country's calling code
-                  // so `react-phone-number-input` doesn't log a console error
-                  // about the value not matching the new country.
-                  setPhone("");
-                }}
-                className={`${selectClass} w-28 shrink-0`}
-              >
-                {phoneCountryOptions.map((option) => (
-                  <option key={option.country} value={option.country}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <PhoneInput
-                id="phone"
-                country={phoneCountry}
-                value={phone}
-                onChange={(value) => setPhone(value ?? "")}
-                placeholder="Optional phone number"
-                className={`${inputClass} flex-1`}
-              />
-            </div>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Choose the number&apos;s country. International numbers with a
-              leading `+` are also supported.
+            <h1 className="text-3xl font-bold">Create Your Account</h1>
+            <p className="text-base text-muted-foreground text-center">
+              Welcome to F3 Nation! Fill in your details to get started.
             </p>
+            <p className="text-base font-medium">{email}</p>
           </div>
 
-          <div>
-            <button
-              type="button"
-              onClick={() => setShowEmergency(!showEmergency)}
-              className="text-base text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {showEmergency ? "▾" : "▸"} Emergency Contact Info
-            </button>
-          </div>
-
-          {showEmergency && (
-            <div className="space-y-4 rounded-md border p-4">
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <label
-                  htmlFor="emergencyContact"
+                  htmlFor="firstName"
                   className="block text-base font-medium mb-2"
                 >
-                  Emergency Contact Name
+                  First Name <span className="text-destructive">*</span>
                 </label>
                 <input
-                  id="emergencyContact"
+                  id="firstName"
                   type="text"
-                  value={emergencyContact}
-                  onChange={(e) => setEmergencyContact(e.target.value)}
-                  placeholder="Jane Doe"
+                  required
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  placeholder="John"
                   className={inputClass}
                 />
               </div>
               <div>
                 <label
-                  htmlFor="emergencyPhone"
+                  htmlFor="lastName"
                   className="block text-base font-medium mb-2"
                 >
-                  Emergency Phone
+                  Last Name <span className="text-destructive">*</span>
                 </label>
-                <div className="flex gap-3">
-                  <select
-                    id="emergencyPhoneCountry"
-                    value={emergencyPhoneCountry}
-                    onChange={(e) => {
-                      setEmergencyPhoneCountry(e.target.value as PhoneCountry);
-                      // See note on the primary phone selector above.
-                      setEmergencyPhone("");
-                    }}
-                    className={`${selectClass} w-28 shrink-0`}
+                <input
+                  id="lastName"
+                  type="text"
+                  required
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  placeholder="Doe"
+                  className={inputClass}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label
+                htmlFor="f3Name"
+                className="block text-base font-medium mb-2"
+              >
+                F3 Name
+              </label>
+              <input
+                id="f3Name"
+                type="text"
+                value={f3Name}
+                onChange={(e) => setF3Name(e.target.value)}
+                placeholder="The name you got in the gloom"
+                className={inputClass}
+              />
+            </div>
+
+            <div ref={regionRef} className="relative">
+              <label
+                htmlFor="homeRegion"
+                className="block text-base font-medium mb-2"
+              >
+                Home Region
+              </label>
+              <input
+                id="homeRegion"
+                type="text"
+                value={regionSearch}
+                onChange={(e) => {
+                  setRegionSearch(e.target.value);
+                  setHomeRegionId("");
+                  setRegionDropdownOpen(true);
+                }}
+                onFocus={() => setRegionDropdownOpen(true)}
+                onBlur={() => {
+                  setTimeout(() => {
+                    if (!regionSelectedRef.current) {
+                      if (homeRegionId) {
+                        // Restore the selected region name if user didn't change selection
+                        const selected = regions.find(
+                          (r) => r.id === homeRegionId,
+                        );
+                        if (selected) {
+                          setRegionSearch(selected.name);
+                        }
+                      } else {
+                        setRegionSearch("");
+                      }
+                    }
+                    regionSelectedRef.current = false;
+                    setRegionDropdownOpen(false);
+                  }, 200);
+                }}
+                placeholder="Search for a region (optional)"
+                autoComplete="off"
+                className={inputClass}
+              />
+              {regionDropdownOpen && filteredRegions.length > 0 && (
+                <ul className="absolute z-10 mt-1 max-h-48 w-full overflow-auto rounded-md border bg-card shadow-lg">
+                  {filteredRegions.map((r) => (
+                    <li key={r.id}>
+                      <button
+                        type="button"
+                        onMouseDown={() => {
+                          regionSelectedRef.current = true;
+                        }}
+                        onClick={() => {
+                          setHomeRegionId(r.id);
+                          setRegionSearch(r.name);
+                          setRegionDropdownOpen(false);
+                        }}
+                        className="w-full px-4 py-2 text-left text-base hover:bg-accent transition-colors"
+                      >
+                        {r.name}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {regionDropdownOpen &&
+                regionSearch &&
+                filteredRegions.length === 0 && (
+                  <div className="absolute z-10 mt-1 w-full rounded-md border bg-card px-4 py-3 text-base text-muted-foreground shadow-lg">
+                    No regions found
+                  </div>
+                )}
+            </div>
+
+            <div>
+              <PhoneField
+                id="phone"
+                label="Phone Number"
+                placeholder="Optional phone number"
+                value={phone}
+                onChange={setPhone}
+                country={phoneCountry}
+                onCountryChange={setPhoneCountry}
+              />
+              <p className="mt-2 text-sm text-muted-foreground">
+                Choose the number&apos;s country. International numbers with a
+                leading `+` are also supported.
+              </p>
+            </div>
+
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowEmergency(!showEmergency)}
+                className="text-base text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {showEmergency ? "▾" : "▸"} Emergency Contact Info
+              </button>
+            </div>
+
+            {showEmergency && (
+              <div className="space-y-4 rounded-md border p-4">
+                <div>
+                  <label
+                    htmlFor="emergencyContact"
+                    className="block text-base font-medium mb-2"
                   >
-                    {phoneCountryOptions.map((option) => (
-                      <option key={option.country} value={option.country}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  <PhoneInput
-                    id="emergencyPhone"
-                    country={emergencyPhoneCountry}
-                    value={emergencyPhone}
-                    onChange={(value) => setEmergencyPhone(value ?? "")}
-                    placeholder="Optional emergency phone number"
-                    className={`${inputClass} flex-1`}
+                    Emergency Contact Name
+                  </label>
+                  <input
+                    id="emergencyContact"
+                    type="text"
+                    value={emergencyContact}
+                    onChange={(e) => setEmergencyContact(e.target.value)}
+                    placeholder="Jane Doe"
+                    className={inputClass}
+                  />
+                </div>
+                <PhoneField
+                  id="emergencyPhone"
+                  label="Emergency Phone"
+                  placeholder="Optional emergency phone number"
+                  value={emergencyPhone}
+                  onChange={setEmergencyPhone}
+                  country={emergencyPhoneCountry}
+                  onCountryChange={setEmergencyPhoneCountry}
+                />
+                <div>
+                  <label
+                    htmlFor="emergencyNotes"
+                    className="block text-base font-medium mb-2"
+                  >
+                    Notes
+                  </label>
+                  <textarea
+                    id="emergencyNotes"
+                    value={emergencyNotes}
+                    onChange={(e) => setEmergencyNotes(e.target.value)}
+                    placeholder="Allergies, medical conditions, etc."
+                    rows={3}
+                    className={inputClass}
                   />
                 </div>
               </div>
-              <div>
-                <label
-                  htmlFor="emergencyNotes"
-                  className="block text-base font-medium mb-2"
-                >
-                  Notes
-                </label>
-                <textarea
-                  id="emergencyNotes"
-                  value={emergencyNotes}
-                  onChange={(e) => setEmergencyNotes(e.target.value)}
-                  placeholder="Allergies, medical conditions, etc."
-                  rows={3}
-                  className={inputClass}
-                />
-              </div>
-            </div>
-          )}
+            )}
 
-          {error && <p className="text-base text-destructive">{error}</p>}
+            {error && <p className="text-base text-destructive">{error}</p>}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-md bg-primary px-4 py-3 text-base font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
-          >
-            {loading ? "Creating Account..." : "Create Account"}
-          </button>
-        </form>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-md bg-primary px-4 py-3 text-base font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+            >
+              {loading ? "Creating Account..." : "Create Account"}
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   );
