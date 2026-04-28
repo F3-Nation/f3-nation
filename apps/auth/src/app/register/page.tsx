@@ -291,13 +291,17 @@ function RegisterForm() {
             <label htmlFor="phone" className="block text-base font-medium mb-2">
               Phone Number
             </label>
-            <div className="grid gap-3 md:grid-cols-[12rem_minmax(0,1fr)]">
+            <div className="grid gap-3 md:grid-cols-[14rem_minmax(0,1fr)]">
               <select
                 id="phoneCountry"
                 value={phoneCountry}
-                onChange={(e) =>
-                  setPhoneCountry(e.target.value as PhoneCountry)
-                }
+                onChange={(e) => {
+                  setPhoneCountry(e.target.value as PhoneCountry);
+                  // Drop any value tied to the previous country's calling code
+                  // so `react-phone-number-input` doesn't log a console error
+                  // about the value not matching the new country.
+                  setPhone("");
+                }}
                 className={selectClass}
               >
                 {phoneCountryOptions.map((option) => (
@@ -309,8 +313,6 @@ function RegisterForm() {
               <PhoneInput
                 id="phone"
                 country={phoneCountry}
-                international
-                withCountryCallingCode
                 value={phone}
                 onChange={(value) => setPhone(value ?? "")}
                 placeholder="Optional phone number"
@@ -358,13 +360,15 @@ function RegisterForm() {
                 >
                   Emergency Phone
                 </label>
-                <div className="grid gap-3 md:grid-cols-[12rem_minmax(0,1fr)]">
+                <div className="grid gap-3 md:grid-cols-[14rem_minmax(0,1fr)]">
                   <select
                     id="emergencyPhoneCountry"
                     value={emergencyPhoneCountry}
-                    onChange={(e) =>
-                      setEmergencyPhoneCountry(e.target.value as PhoneCountry)
-                    }
+                    onChange={(e) => {
+                      setEmergencyPhoneCountry(e.target.value as PhoneCountry);
+                      // See note on the primary phone selector above.
+                      setEmergencyPhone("");
+                    }}
                     className={selectClass}
                   >
                     {phoneCountryOptions.map((option) => (
@@ -376,8 +380,6 @@ function RegisterForm() {
                   <PhoneInput
                     id="emergencyPhone"
                     country={emergencyPhoneCountry}
-                    international
-                    withCountryCallingCode
                     value={emergencyPhone}
                     onChange={(value) => setEmergencyPhone(value ?? "")}
                     placeholder="Optional emergency phone number"
