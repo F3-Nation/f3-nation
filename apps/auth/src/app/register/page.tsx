@@ -1,19 +1,14 @@
 "use client";
 
 import { Suspense, useState, useEffect, useRef } from "react";
-import type { ChangeEvent } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
+import PhoneInput from "react-phone-number-input/input";
 import type { PhoneCountry } from "~/lib/phone";
 
 import Image from "next/image";
 
-import {
-  detectPhoneCountry,
-  formatPhoneNumber,
-  normalizePhoneNumber,
-  phoneCountryOptions,
-} from "~/lib/phone";
+import { detectPhoneCountry, phoneCountryOptions } from "~/lib/phone";
 
 interface Region {
   id: number;
@@ -114,11 +109,9 @@ function RegisterForm() {
         firstName,
         lastName,
         homeRegionId: homeRegionId || undefined,
-        phone: normalizePhoneNumber(phone, phoneCountry) || undefined,
+        phone: phone || undefined,
         emergencyContact: emergencyContact || undefined,
-        emergencyPhone:
-          normalizePhoneNumber(emergencyPhone, emergencyPhoneCountry) ||
-          undefined,
+        emergencyPhone: emergencyPhone || undefined,
         emergencyNotes: emergencyNotes || undefined,
       }),
     });
@@ -149,24 +142,6 @@ function RegisterForm() {
   const inputClass =
     "w-full rounded-md border bg-background px-4 py-3 text-base outline-none focus:ring-2 focus:ring-ring";
   const selectClass = `${inputClass} pr-10`;
-
-  function handlePhoneChange(
-    event: ChangeEvent<HTMLInputElement>,
-    country: PhoneCountry,
-    setValue: (value: string) => void,
-  ) {
-    setValue(formatPhoneNumber(event.target.value, country));
-  }
-
-  function handlePhoneCountryChange(
-    nextCountry: PhoneCountry,
-    value: string,
-    setCountry: (country: PhoneCountry) => void,
-    setValue: (value: string) => void,
-  ) {
-    setCountry(nextCountry);
-    setValue(formatPhoneNumber(value, nextCountry));
-  }
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center py-10">
@@ -321,12 +296,7 @@ function RegisterForm() {
                 id="phoneCountry"
                 value={phoneCountry}
                 onChange={(e) =>
-                  handlePhoneCountryChange(
-                    e.target.value as PhoneCountry,
-                    phone,
-                    setPhoneCountry,
-                    setPhone,
-                  )
+                  setPhoneCountry(e.target.value as PhoneCountry)
                 }
                 className={selectClass}
               >
@@ -336,11 +306,13 @@ function RegisterForm() {
                   </option>
                 ))}
               </select>
-              <input
+              <PhoneInput
                 id="phone"
-                type="tel"
+                country={phoneCountry}
+                international
+                withCountryCallingCode
                 value={phone}
-                onChange={(e) => handlePhoneChange(e, phoneCountry, setPhone)}
+                onChange={(value) => setPhone(value ?? "")}
                 placeholder="Optional phone number"
                 className={inputClass}
               />
@@ -391,12 +363,7 @@ function RegisterForm() {
                     id="emergencyPhoneCountry"
                     value={emergencyPhoneCountry}
                     onChange={(e) =>
-                      handlePhoneCountryChange(
-                        e.target.value as PhoneCountry,
-                        emergencyPhone,
-                        setEmergencyPhoneCountry,
-                        setEmergencyPhone,
-                      )
+                      setEmergencyPhoneCountry(e.target.value as PhoneCountry)
                     }
                     className={selectClass}
                   >
@@ -406,17 +373,13 @@ function RegisterForm() {
                       </option>
                     ))}
                   </select>
-                  <input
+                  <PhoneInput
                     id="emergencyPhone"
-                    type="tel"
+                    country={emergencyPhoneCountry}
+                    international
+                    withCountryCallingCode
                     value={emergencyPhone}
-                    onChange={(e) =>
-                      handlePhoneChange(
-                        e,
-                        emergencyPhoneCountry,
-                        setEmergencyPhone,
-                      )
-                    }
+                    onChange={(value) => setEmergencyPhone(value ?? "")}
                     placeholder="Optional emergency phone number"
                     className={inputClass}
                   />

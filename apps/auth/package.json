@@ -31,6 +31,7 @@
     "postgres": "^3.4.3",
     "react": "18.3.1",
     "react-dom": "18.3.1",
+    "react-phone-number-input": "^3.4.16",
     "zod": "^3.25.8"
   },
   "devDependencies": {

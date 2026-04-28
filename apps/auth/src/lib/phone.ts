@@ -1,10 +1,7 @@
 import {
-  AsYouType,
   getCountries,
   getCountryCallingCode,
   isSupportedCountry,
-  parseIncompletePhoneNumber,
-  parsePhoneNumberFromString,
 } from "libphonenumber-js";
 import type { CountryCode } from "libphonenumber-js";
 
@@ -32,29 +29,4 @@ export function detectPhoneCountry(locale?: string): PhoneCountry {
   } catch {
     return fallbackCountry;
   }
-}
-
-export function formatPhoneNumber(
-  value: string,
-  country: PhoneCountry = fallbackCountry,
-): string {
-  const parsed = parseIncompletePhoneNumber(value);
-  if (!parsed) return "";
-
-  if (parsed.startsWith("+")) {
-    return new AsYouType().input(parsed);
-  }
-
-  return new AsYouType(country).input(parsed);
-}
-
-export function normalizePhoneNumber(
-  value: string,
-  country: PhoneCountry = fallbackCountry,
-): string {
-  const parsed = parseIncompletePhoneNumber(value);
-  if (!parsed) return "";
-
-  const phoneNumber = parsePhoneNumberFromString(parsed, country);
-  return phoneNumber?.isPossible() ? phoneNumber.number : parsed;
 }
