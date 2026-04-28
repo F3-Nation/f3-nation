@@ -1,92 +1,75 @@
 import { describe, it, expect } from "vitest";
-import { formatPhoneNumber, stripPhoneFormatting } from "./phone";
+import {
+  detectPhoneCountry,
+  formatPhoneNumber,
+  normalizePhoneNumber,
+} from "./phone";
 
 describe("formatPhoneNumber", () => {
   it("returns empty string for empty input", () => {
-    expect(formatPhoneNumber("")).toBe("");
+    expect(formatPhoneNumber("", "US")).toBe("");
   });
 
   it("returns empty string for non-digit input", () => {
-    expect(formatPhoneNumber("abcdef")).toBe("");
+    expect(formatPhoneNumber("abcdef", "US")).toBe("");
   });
 
-  it("wraps a single digit in parenthesis", () => {
-    expect(formatPhoneNumber("5")).toBe("(5");
+  it("formats a US number progressively", () => {
+    expect(formatPhoneNumber("5", "US")).toBe("5");
+    expect(formatPhoneNumber("5551", "US")).toBe("(555) 1");
+    expect(formatPhoneNumber("5551234567", "US")).toBe("(555) 123-4567");
   });
 
-  it("formats two digits with opening parenthesis", () => {
-    expect(formatPhoneNumber("55")).toBe("(55");
+  it("formats a UK local number without truncating it", () => {
+    expect(formatPhoneNumber("01772667002", "GB")).toBe("01772 667002");
   });
 
-  it("formats three digits with opening parenthesis", () => {
-    expect(formatPhoneNumber("555")).toBe("(555");
+  it("formats international numbers when they include a calling code", () => {
+    expect(formatPhoneNumber("+441772667002", "US")).toBe("+44 1772 667002");
   });
 
-  it("formats four digits with area code and space", () => {
-    expect(formatPhoneNumber("5551")).toBe("(555) 1");
+  it("strips unsupported characters before formatting", () => {
+    expect(formatPhoneNumber("abc+44 1772-667002", "GB")).toBe(
+      "+44 1772 667002",
+    );
   });
 
-  it("formats six digits with area code and prefix", () => {
-    expect(formatPhoneNumber("555123")).toBe("(555) 123");
-  });
-
-  it("formats seven digits with area code, prefix, and dash", () => {
-    expect(formatPhoneNumber("5551234")).toBe("(555) 123-4");
-  });
-
-  it("formats a full 10-digit number", () => {
-    expect(formatPhoneNumber("5551234567")).toBe("(555) 123-4567");
-  });
-
-  it("truncates input beyond 10 digits", () => {
-    expect(formatPhoneNumber("55512345678")).toBe("(555) 123-4567");
-    expect(formatPhoneNumber("5551234567890")).toBe("(555) 123-4567");
-  });
-
-  it("strips non-digit characters from mixed input", () => {
-    expect(formatPhoneNumber("abc555def1234567")).toBe("(555) 123-4567");
-  });
-
-  it("re-formats an already formatted number", () => {
-    expect(formatPhoneNumber("(555) 123-4567")).toBe("(555) 123-4567");
-  });
-
-  it("handles partial formatted input", () => {
-    expect(formatPhoneNumber("(555) ")).toBe("(555");
-    expect(formatPhoneNumber("(555) 1")).toBe("(555) 1");
-  });
-
-  it("handles whitespace-only input", () => {
-    expect(formatPhoneNumber("   ")).toBe("");
-  });
-
-  it("handles special characters mixed with digits", () => {
-    expect(formatPhoneNumber("+1-555-123-4567")).toBe("(155) 512-3456");
+  it("re-formats already formatted input idempotently", () => {
+    expect(formatPhoneNumber("(555) 123-4567", "US")).toBe("(555) 123-4567");
+    expect(formatPhoneNumber("01772 667002", "GB")).toBe("01772 667002");
   });
 });
 
-describe("stripPhoneFormatting", () => {
+describe("normalizePhoneNumber", () => {
   it("returns empty string for empty input", () => {
-    expect(stripPhoneFormatting("")).toBe("");
+    expect(normalizePhoneNumber("", "US")).toBe("");
   });
 
-  it("strips parentheses, spaces, and dashes from formatted number", () => {
-    expect(stripPhoneFormatting("(555) 123-4567")).toBe("5551234567");
+  it("normalizes a US number to E.164", () => {
+    expect(normalizePhoneNumber("(555) 123-4567", "US")).toBe("+15551234567");
   });
 
-  it("returns digits unchanged if already stripped", () => {
-    expect(stripPhoneFormatting("5551234567")).toBe("5551234567");
+  it("normalizes a UK local number to E.164", () => {
+    expect(normalizePhoneNumber("01772 667002", "GB")).toBe("+441772667002");
   });
 
-  it("strips all non-digit characters", () => {
-    expect(stripPhoneFormatting("+1 (555) 123-4567")).toBe("15551234567");
+  it("normalizes an international number without a default country", () => {
+    expect(normalizePhoneNumber("+44 1772 667002", "US")).toBe("+441772667002");
   });
 
-  it("returns empty string for non-digit input", () => {
-    expect(stripPhoneFormatting("abcdef")).toBe("");
+  it("falls back to parsed incomplete digits when the number is incomplete", () => {
+    expect(normalizePhoneNumber("(555) 12", "US")).toBe("55512");
+  });
+});
+
+describe("detectPhoneCountry", () => {
+  it("uses the locale region when supported", () => {
+    expect(detectPhoneCountry("en-GB")).toBe("GB");
+    expect(detectPhoneCountry("en-AU")).toBe("AU");
   });
 
-  it("handles partial formatting", () => {
-    expect(stripPhoneFormatting("(555) ")).toBe("555");
+  it("falls back to US when the locale is missing or unsupported", () => {
+    expect(detectPhoneCountry()).toBe("US");
+    expect(detectPhoneCountry("zz-ZZ")).toBe("US");
   });
 });

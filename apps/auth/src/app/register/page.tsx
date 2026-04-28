@@ -1,12 +1,19 @@
 "use client";
 
 import { Suspense, useState, useEffect, useRef } from "react";
+import type { ChangeEvent } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
+import type { PhoneCountry } from "~/lib/phone";
 
 import Image from "next/image";
 
-import { formatPhoneNumber, stripPhoneFormatting } from "~/lib/phone";
+import {
+  detectPhoneCountry,
+  formatPhoneNumber,
+  normalizePhoneNumber,
+  phoneCountryOptions,
+} from "~/lib/phone";
 
 interface Region {
   id: number;
@@ -33,8 +40,11 @@ function RegisterForm() {
   const [lastName, setLastName] = useState("");
   const [homeRegionId, setHomeRegionId] = useState<number | "">("");
   const [phone, setPhone] = useState("");
+  const [phoneCountry, setPhoneCountry] = useState<PhoneCountry>("US");
   const [emergencyContact, setEmergencyContact] = useState("");
   const [emergencyPhone, setEmergencyPhone] = useState("");
+  const [emergencyPhoneCountry, setEmergencyPhoneCountry] =
+    useState<PhoneCountry>("US");
   const [emergencyNotes, setEmergencyNotes] = useState("");
 
   const [regions, setRegions] = useState<Region[]>([]);
@@ -53,6 +63,12 @@ function RegisterForm() {
       .catch(() => {
         /* regions are optional */
       });
+  }, []);
+
+  useEffect(() => {
+    const detectedCountry = detectPhoneCountry(navigator.language);
+    setPhoneCountry(detectedCountry);
+    setEmergencyPhoneCountry(detectedCountry);
   }, []);
 
   // Close region dropdown on outside click
@@ -98,9 +114,11 @@ function RegisterForm() {
         firstName,
         lastName,
         homeRegionId: homeRegionId || undefined,
-        phone: stripPhoneFormatting(phone) || undefined,
+        phone: normalizePhoneNumber(phone, phoneCountry) || undefined,
         emergencyContact: emergencyContact || undefined,
-        emergencyPhone: stripPhoneFormatting(emergencyPhone) || undefined,
+        emergencyPhone:
+          normalizePhoneNumber(emergencyPhone, emergencyPhoneCountry) ||
+          undefined,
         emergencyNotes: emergencyNotes || undefined,
       }),
     });
@@ -130,6 +148,25 @@ function RegisterForm() {
 
   const inputClass =
     "w-full rounded-md border bg-background px-4 py-3 text-base outline-none focus:ring-2 focus:ring-ring";
+  const selectClass = `${inputClass} pr-10`;
+
+  function handlePhoneChange(
+    event: ChangeEvent<HTMLInputElement>,
+    country: PhoneCountry,
+    setValue: (value: string) => void,
+  ) {
+    setValue(formatPhoneNumber(event.target.value, country));
+  }
+
+  function handlePhoneCountryChange(
+    nextCountry: PhoneCountry,
+    value: string,
+    setCountry: (country: PhoneCountry) => void,
+    setValue: (value: string) => void,
+  ) {
+    setCountry(nextCountry);
+    setValue(formatPhoneNumber(value, nextCountry));
+  }
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center py-10">
@@ -279,14 +316,39 @@ function RegisterForm() {
             <label htmlFor="phone" className="block text-base font-medium mb-2">
               Phone Number
             </label>
-            <input
-              id="phone"
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(formatPhoneNumber(e.target.value))}
-              placeholder="(555) 123-4567"
-              className={inputClass}
-            />
+            <div className="grid gap-3 md:grid-cols-[12rem_minmax(0,1fr)]">
+              <select
+                id="phoneCountry"
+                value={phoneCountry}
+                onChange={(e) =>
+                  handlePhoneCountryChange(
+                    e.target.value as PhoneCountry,
+                    phone,
+                    setPhoneCountry,
+                    setPhone,
+                  )
+                }
+                className={selectClass}
+              >
+                {phoneCountryOptions.map((option) => (
+                  <option key={option.country} value={option.country}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <input
+                id="phone"
+                type="tel"
+                value={phone}
+                onChange={(e) => handlePhoneChange(e, phoneCountry, setPhone)}
+                placeholder="Optional phone number"
+                className={inputClass}
+              />
+            </div>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Choose the number&apos;s country. International numbers with a
+              leading `+` are also supported.
+            </p>
           </div>
 
           <div>
@@ -324,16 +386,41 @@ function RegisterForm() {
                 >
                   Emergency Phone
                 </label>
-                <input
-                  id="emergencyPhone"
-                  type="tel"
-                  value={emergencyPhone}
-                  onChange={(e) =>
-                    setEmergencyPhone(formatPhoneNumber(e.target.value))
-                  }
-                  placeholder="(555) 987-6543"
-                  className={inputClass}
-                />
+                <div className="grid gap-3 md:grid-cols-[12rem_minmax(0,1fr)]">
+                  <select
+                    id="emergencyPhoneCountry"
+                    value={emergencyPhoneCountry}
+                    onChange={(e) =>
+                      handlePhoneCountryChange(
+                        e.target.value as PhoneCountry,
+                        emergencyPhone,
+                        setEmergencyPhoneCountry,
+                        setEmergencyPhone,
+                      )
+                    }
+                    className={selectClass}
+                  >
+                    {phoneCountryOptions.map((option) => (
+                      <option key={option.country} value={option.country}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    id="emergencyPhone"
+                    type="tel"
+                    value={emergencyPhone}
+                    onChange={(e) =>
+                      handlePhoneChange(
+                        e,
+                        emergencyPhoneCountry,
+                        setEmergencyPhone,
+                      )
+                    }
+                    placeholder="Optional emergency phone number"
+                    className={inputClass}
+                  />
+                </div>
               </div>
               <div>
                 <label

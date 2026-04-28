@@ -1,16 +1,60 @@
-/**
- * Phone number formatting utilities for US phone numbers.
- * Formats as (XXX) XXX-XXXX and strips formatting for API submission.
- */
+import {
+  AsYouType,
+  getCountries,
+  getCountryCallingCode,
+  isSupportedCountry,
+  parseIncompletePhoneNumber,
+  parsePhoneNumberFromString,
+} from "libphonenumber-js";
+import type { CountryCode } from "libphonenumber-js";
 
-export function formatPhoneNumber(value: string): string {
-  const digits = value.replace(/\D/g, "").slice(0, 10);
-  if (digits.length === 0) return "";
-  if (digits.length <= 3) return `(${digits}`;
-  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
-  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+const fallbackCountry: CountryCode = "US";
+const countryNames =
+  typeof Intl.DisplayNames === "function"
+    ? new Intl.DisplayNames(["en"], { type: "region" })
+    : undefined;
+
+export type PhoneCountry = CountryCode;
+
+export const phoneCountryOptions = getCountries()
+  .map((country) => ({
+    country,
+    label: `${countryNames?.of(country) ?? country} (+${getCountryCallingCode(country)})`,
+  }))
+  .sort((left, right) => left.label.localeCompare(right.label));
+
+export function detectPhoneCountry(locale?: string): PhoneCountry {
+  if (!locale) return fallbackCountry;
+
+  try {
+    const region = new Intl.Locale(locale).maximize().region;
+    return region && isSupportedCountry(region) ? region : fallbackCountry;
+  } catch {
+    return fallbackCountry;
+  }
 }
 
-export function stripPhoneFormatting(value: string): string {
-  return value.replace(/\D/g, "");
+export function formatPhoneNumber(
+  value: string,
+  country: PhoneCountry = fallbackCountry,
+): string {
+  const parsed = parseIncompletePhoneNumber(value);
+  if (!parsed) return "";
+
+  if (parsed.startsWith("+")) {
+    return new AsYouType().input(parsed);
+  }
+
+  return new AsYouType(country).input(parsed);
+}
+
+export function normalizePhoneNumber(
+  value: string,
+  country: PhoneCountry = fallbackCountry,
+): string {
+  const parsed = parseIncompletePhoneNumber(value);
+  if (!parsed) return "";
+
+  const phoneNumber = parsePhoneNumberFromString(parsed, country);
+  return phoneNumber?.isPossible() ? phoneNumber.number : parsed;
 }
