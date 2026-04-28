@@ -16,9 +16,13 @@ export type PhoneCountry = CountryCode;
 export const phoneCountryOptions = getCountries()
   .map((country) => ({
     country,
-    label: `${countryNames?.of(country) ?? country} (+${getCountryCallingCode(country)})`,
+    label: `${country} +${getCountryCallingCode(country)}`,
+    // Internal sort key — keep the dropdown in alphabetical-by-full-name
+    // order even though the displayed label is the compact ISO code form.
+    name: countryNames?.of(country) ?? country,
   }))
-  .sort((left, right) => left.label.localeCompare(right.label));
+  .sort((left, right) => left.name.localeCompare(right.name))
+  .map(({ country, label }) => ({ country, label }));
 
 export function detectPhoneCountry(locale?: string): PhoneCountry {
   if (!locale) return fallbackCountry;

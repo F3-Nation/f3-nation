@@ -144,8 +144,8 @@ function RegisterForm() {
   const selectClass = `${inputClass} pr-10`;
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center py-10">
-      <div className="w-full max-w-lg space-y-8 rounded-lg border bg-card p-10 shadow-sm">
+    <div className="min-h-screen px-4 py-10 sm:px-6 lg:py-16">
+      <div className="mx-auto w-full max-w-lg space-y-8">
         <div className="flex flex-col items-center space-y-4">
           <Image
             src="/f3nation.svg"
@@ -291,7 +291,7 @@ function RegisterForm() {
             <label htmlFor="phone" className="block text-base font-medium mb-2">
               Phone Number
             </label>
-            <div className="grid gap-3 md:grid-cols-[14rem_minmax(0,1fr)]">
+            <div className="flex gap-3">
               <select
                 id="phoneCountry"
                 value={phoneCountry}
@@ -302,7 +302,7 @@ function RegisterForm() {
                   // about the value not matching the new country.
                   setPhone("");
                 }}
-                className={selectClass}
+                className={`${selectClass} w-28 shrink-0`}
               >
                 {phoneCountryOptions.map((option) => (
                   <option key={option.country} value={option.country}>
@@ -316,7 +316,7 @@ function RegisterForm() {
                 value={phone}
                 onChange={(value) => setPhone(value ?? "")}
                 placeholder="Optional phone number"
-                className={inputClass}
+                className={`${inputClass} flex-1`}
               />
             </div>
             <p className="mt-2 text-sm text-muted-foreground">
@@ -360,7 +360,7 @@ function RegisterForm() {
                 >
                   Emergency Phone
                 </label>
-                <div className="grid gap-3 md:grid-cols-[14rem_minmax(0,1fr)]">
+                <div className="flex gap-3">
                   <select
                     id="emergencyPhoneCountry"
                     value={emergencyPhoneCountry}
@@ -369,7 +369,7 @@ function RegisterForm() {
                       // See note on the primary phone selector above.
                       setEmergencyPhone("");
                     }}
-                    className={selectClass}
+                    className={`${selectClass} w-28 shrink-0`}
                   >
                     {phoneCountryOptions.map((option) => (
                       <option key={option.country} value={option.country}>
@@ -383,7 +383,7 @@ function RegisterForm() {
                     value={emergencyPhone}
                     onChange={(value) => setEmergencyPhone(value ?? "")}
                     placeholder="Optional emergency phone number"
-                    className={inputClass}
+                    className={`${inputClass} flex-1`}
                   />
                 </div>
               </div>
