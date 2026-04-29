@@ -11,7 +11,7 @@ const profileUpdateSchema = z
     f3Name: z.string().min(1).max(200).optional(),
     firstName: z.string().max(200).nullable().optional(),
     lastName: z.string().max(200).optional(),
-    phone: z.string().max(50).optional(),
+    phone: z.string().max(50).nullable().optional(),
     homeRegionId: z.number().int().positive().nullable().optional(),
     avatarUrl: z.string().url().nullable().optional(),
     emergencyContact: z.string().max(200).nullable().optional(),

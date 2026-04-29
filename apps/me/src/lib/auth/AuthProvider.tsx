@@ -51,13 +51,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       loading,
       signOut: async () => {
-        const res = await fetch("/api/auth/logout", { method: "POST" });
-        const data = (await res.json()) as { ok: boolean; redirectTo?: string };
-        setUser(null);
-        if (data.redirectTo) {
-          window.location.href = data.redirectTo;
-        } else {
-          window.location.href = "/";
+        let redirectTo = "/";
+        try {
+          const res = await fetch("/api/auth/logout", { method: "POST" });
+          if (res.ok) {
+            const data = (await res.json()) as {
+              ok: boolean;
+              redirectTo?: string;
+            };
+            if (data.redirectTo) redirectTo = data.redirectTo;
+          }
+        } catch (err) {
+          console.error("Logout request failed", err);
+        } finally {
+          setUser(null);
+          window.location.href = redirectTo;
         }
       },
     }),

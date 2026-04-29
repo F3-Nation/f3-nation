@@ -265,6 +265,25 @@ describe("Profile API route", () => {
       expect(updateMyProfile).toHaveBeenCalledWith({ firstName: null });
     });
 
+    it("allows setting phone to null", async () => {
+      vi.mocked(requireAuth).mockResolvedValue(mockSession);
+      vi.mocked(updateMyProfile).mockResolvedValue({
+        ...mockUser,
+        phone: null,
+      });
+
+      const { PATCH } = await import("@/app/api/profile/route");
+      const req = new NextRequest("http://localhost/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: null }),
+      });
+      const response = await PATCH(req);
+
+      expect(response.status).toBe(200);
+      expect(updateMyProfile).toHaveBeenCalledWith({ phone: null });
+    });
+
     it("passes meta fields to the API for server-side merging", async () => {
       vi.mocked(requireAuth).mockResolvedValue(mockSession);
       vi.mocked(updateMyProfile).mockResolvedValue({

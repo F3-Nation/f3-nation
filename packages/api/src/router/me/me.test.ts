@@ -568,30 +568,4 @@ describe("Me Router", () => {
       await expect(client.me.users({ homeRegionId: 1.5 })).rejects.toThrow();
     });
   });
-
-  // -----------------------------------------------------------------------
-  // lookupByEmail (GET)
-  // -----------------------------------------------------------------------
-  describe("lookupByEmail", () => {
-    it("should return the userId for a known email", async () => {
-      const client = createDirectClient();
-      const result = await client.me.lookupByEmail({ email: testUserEmail });
-
-      expect(result.userId).toBe(testUserId);
-    });
-
-    it("should throw NOT_FOUND for an unknown email", async () => {
-      const client = createDirectClient();
-      await expect(
-        client.me.lookupByEmail({ email: "nonexistent-xyz@example.com" }),
-      ).rejects.toThrow();
-    });
-
-    it("should reject an invalid email format", async () => {
-      const client = createDirectClient();
-      await expect(
-        client.me.lookupByEmail({ email: "not-an-email" }),
-      ).rejects.toThrow();
-    });
-  });
 });

@@ -410,38 +410,4 @@ export const meRouter = {
 
       return { users: rows };
     }),
-
-  /**
-   * Look up a user's ID by email address.
-   * Used during OAuth callback to resolve email → numeric user ID.
-   */
-  lookupByEmail: protectedProcedure
-    .input(
-      z.object({
-        email: z.string().email().describe("The email address to look up."),
-      }),
-    )
-    .route({
-      method: "GET",
-      path: "/lookup-by-email",
-      tags: ["Me"],
-      summary: "Look up user ID by email",
-      description:
-        "Resolve an email address to a numeric user ID. Used during login to populate the session.",
-    })
-    .handler(async ({ context: ctx, input }) => {
-      const [user] = await ctx.db
-        .select({ id: schema.users.id })
-        .from(schema.users)
-        .where(eq(schema.users.email, input.email))
-        .limit(1);
-
-      if (!user) {
-        throw new ORPCError("NOT_FOUND", {
-          message: "No user found for this email",
-        });
-      }
-
-      return { userId: user.id };
-    }),
 };
