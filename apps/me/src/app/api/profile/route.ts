@@ -5,6 +5,14 @@ import { requireAuth } from "@/lib/auth/server";
 import { getMyProfile, updateMyProfile } from "@/lib/api/client";
 import type { UserMeta } from "@/lib/types";
 
+// Mirror of the host allow-list enforced in packages/api meRouter.updateProfile.
+// Validating at this layer too means malformed avatarUrl values return 400
+// instead of bubbling up as a 500 from the underlying API.
+const ALLOWED_AVATAR_HOST_PATTERN =
+  /^https:\/\/storage\.googleapis\.com\/f3-public-images(-staging)?\//;
+const isAllowedAvatarUrl = (url: string): boolean =>
+  ALLOWED_AVATAR_HOST_PATTERN.test(url);
+
 const profileUpdateSchema = z
   .object({
     // Regular editable fields
@@ -13,7 +21,12 @@ const profileUpdateSchema = z
     lastName: z.string().max(200).optional(),
     phone: z.string().max(50).nullable().optional(),
     homeRegionId: z.number().int().positive().nullable().optional(),
-    avatarUrl: z.string().url().nullable().optional(),
+    avatarUrl: z
+      .string()
+      .url()
+      .refine(isAllowedAvatarUrl, "avatarUrl must be a GCS public-image URL")
+      .nullable()
+      .optional(),
     emergencyContact: z.string().max(200).nullable().optional(),
     emergencyPhone: z.string().max(50).nullable().optional(),
     emergencyNotes: z.string().max(1000).nullable().optional(),

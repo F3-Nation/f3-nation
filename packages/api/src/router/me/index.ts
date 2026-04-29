@@ -14,6 +14,20 @@ import { protectedProcedure } from "../../shared";
  * profile, positions, and roles with only protectedProcedure auth.
  */
 
+/**
+ * avatarUrl values written through this router must point at the canonical
+ * F3 public-image GCS bucket (prod or staging). The avatar-upload route
+ * builds the URL server-side, so the only legitimate value is a GCS URL
+ * under f3-public-images / f3-public-images-staging. Restricting the host
+ * here prevents an authenticated user from PATCHing avatarUrl to an
+ * arbitrary host and using the field for tracking pixels or SSRF when
+ * other consumers pre-fetch the URL server-side.
+ */
+const ALLOWED_AVATAR_HOST_PATTERN =
+  /^https:\/\/storage\.googleapis\.com\/f3-public-images(-staging)?\//;
+const isAllowedAvatarUrl = (url: string): boolean =>
+  ALLOWED_AVATAR_HOST_PATTERN.test(url);
+
 const profileUpdateSchema = z
   .object({
     f3Name: z
@@ -49,9 +63,13 @@ const profileUpdateSchema = z
     avatarUrl: z
       .string()
       .url()
+      .refine(isAllowedAvatarUrl, "avatarUrl must be a GCS public-image URL")
       .nullable()
       .optional()
-      .describe("URL of the user's avatar image."),
+      .describe(
+        "URL of the user's avatar image. Must be a GCS public-image URL " +
+          "(storage.googleapis.com/f3-public-images[-staging]/...).",
+      ),
     emergencyContact: z
       .string()
       .max(200)
@@ -184,39 +202,18 @@ export const meRouter = {
       // Build the update set from provided fields
       const { meta: metaInput, ...directFields } = input;
 
-      // Merge meta if provided
-      let metaUpdate: Record<string, unknown> | undefined;
-      if (metaInput) {
-        const [currentUser] = await ctx.db
-          .select({ meta: schema.users.meta })
-          .from(schema.users)
-          .where(eq(schema.users.id, userId));
-
-        if (!currentUser) {
-          throw new ORPCError("NOT_FOUND", { message: "User not found" });
-        }
-
-        let existingMeta: Record<string, unknown> = {};
-        if (currentUser.meta) {
-          if (typeof currentUser.meta === "object") {
-            existingMeta = currentUser.meta as Record<string, unknown>;
-          } else if (typeof currentUser.meta === "string") {
-            try {
-              existingMeta = JSON.parse(currentUser.meta) as Record<
-                string,
-                unknown
-              >;
-            } catch {
-              existingMeta = {};
-            }
-          }
-        }
-        metaUpdate = { ...existingMeta, ...metaInput };
-      }
-
       const updateSet: Record<string, unknown> = { ...directFields };
-      if (metaUpdate !== undefined) {
-        updateSet.meta = metaUpdate;
+
+      // Merge meta atomically at the SQL layer to avoid lost-update races
+      // between concurrent PATCH /profile calls (e.g. avatar upload + form
+      // submit). Read-modify-write would let the second writer overwrite the
+      // first writer's merge. Postgres `jsonb ||` is a single-statement
+      // shallow merge that matches the JS `{ ...existing, ...input }`
+      // semantics the tests assert on. The `users.meta` column is `json`
+      // (not `jsonb`), so we cast both sides to jsonb for the merge — the
+      // resulting jsonb value is implicitly cast back to json on assignment.
+      if (metaInput !== undefined) {
+        updateSet.meta = sql`(COALESCE(${schema.users.meta}::jsonb, '{}'::jsonb) || ${JSON.stringify(metaInput)}::jsonb)`;
       }
 
       // Only update if there's something to set

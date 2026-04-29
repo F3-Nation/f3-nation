@@ -610,24 +610,76 @@ describe("Profile API route", () => {
       expect(response.status).toBe(400);
     });
 
-    it("accepts a valid avatarUrl", async () => {
+    it("accepts a valid avatarUrl on the f3-public-images bucket", async () => {
       vi.mocked(requireAuth).mockResolvedValue(mockSession);
+      const url =
+        "https://storage.googleapis.com/f3-public-images/user-avatars/42.jpg";
       vi.mocked(updateMyProfile).mockResolvedValue({
         ...mockUser,
-        avatarUrl: "https://storage.googleapis.com/avatars/42.jpg",
+        avatarUrl: url,
       });
 
       const { PATCH } = await import("@/app/api/profile/route");
       const req = new NextRequest("http://localhost/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          avatarUrl: "https://storage.googleapis.com/avatars/42.jpg",
-        }),
+        body: JSON.stringify({ avatarUrl: url }),
       });
       const response = await PATCH(req);
 
       expect(response.status).toBe(200);
+    });
+
+    it("accepts a valid avatarUrl on the f3-public-images-staging bucket", async () => {
+      vi.mocked(requireAuth).mockResolvedValue(mockSession);
+      const url =
+        "https://storage.googleapis.com/f3-public-images-staging/user-avatars/42.jpg";
+      vi.mocked(updateMyProfile).mockResolvedValue({
+        ...mockUser,
+        avatarUrl: url,
+      });
+
+      const { PATCH } = await import("@/app/api/profile/route");
+      const req = new NextRequest("http://localhost/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ avatarUrl: url }),
+      });
+      const response = await PATCH(req);
+
+      expect(response.status).toBe(200);
+    });
+
+    it("rejects avatarUrl pointing at a non-allow-listed host", async () => {
+      vi.mocked(requireAuth).mockResolvedValue(mockSession);
+
+      const { PATCH } = await import("@/app/api/profile/route");
+      const req = new NextRequest("http://localhost/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          avatarUrl: "https://attacker.example/track.gif",
+        }),
+      });
+      const response = await PATCH(req);
+
+      expect(response.status).toBe(400);
+    });
+
+    it("rejects avatarUrl pointing at a different GCS bucket", async () => {
+      vi.mocked(requireAuth).mockResolvedValue(mockSession);
+
+      const { PATCH } = await import("@/app/api/profile/route");
+      const req = new NextRequest("http://localhost/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          avatarUrl: "https://storage.googleapis.com/other-bucket/42.jpg",
+        }),
+      });
+      const response = await PATCH(req);
+
+      expect(response.status).toBe(400);
     });
 
     it("returns 500 when updateMyProfile throws", async () => {

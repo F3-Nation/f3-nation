@@ -294,9 +294,9 @@ describe("Me Router", () => {
       expect(meta.my_f3_why).toBe("Brotherhood");
     });
 
-    it("should update avatarUrl with a valid URL", async () => {
+    it("should update avatarUrl with a valid GCS public-image URL", async () => {
       const client = createDirectClient();
-      const url = "https://storage.example.com/avatar.jpg";
+      const url = `https://storage.googleapis.com/f3-public-images/user-avatars/${testUserId}.jpg`;
       const result = await client.me.updateProfile({ avatarUrl: url });
       expect(result.user.avatarUrl).toBe(url);
 
@@ -308,6 +308,20 @@ describe("Me Router", () => {
       const client = createDirectClient();
       await expect(
         client.me.updateProfile({ avatarUrl: "not-a-url" }),
+      ).rejects.toThrow();
+    });
+
+    it("should reject an avatarUrl outside the GCS public-image bucket", async () => {
+      const client = createDirectClient();
+      await expect(
+        client.me.updateProfile({
+          avatarUrl: "https://attacker.example/track.gif",
+        }),
+      ).rejects.toThrow();
+      await expect(
+        client.me.updateProfile({
+          avatarUrl: "https://storage.googleapis.com/other-bucket/avatar.jpg",
+        }),
       ).rejects.toThrow();
     });
 
