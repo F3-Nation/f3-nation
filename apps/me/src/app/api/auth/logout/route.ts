@@ -24,7 +24,7 @@ export async function POST() {
 
   const response = NextResponse.json({
     ok: true,
-    redirectTo: `${authServerUrl}/api/oauth/logout?post_logout_redirect_uri=${encodeURIComponent(siteUrl)}`,
+    redirectTo: `${authServerUrl}/api/oauth/logout?post_logout_redirect_uri=${encodeURIComponent(`${siteUrl}?logged_out=true`)}`,
   });
   const clearCookieOpts = {
     httpOnly: true,
