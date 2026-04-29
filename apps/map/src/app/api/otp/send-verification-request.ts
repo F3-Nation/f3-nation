@@ -4,7 +4,7 @@ import type SMTPTransport from "nodemailer/lib/smtp-transport";
 import { createTransport, getTestMessageUrl } from "nodemailer";
 
 import { authConfig } from "@acme/auth/config";
-import { createEtherealTestAccount } from "@acme/auth/lib/utils";
+import { createEtherealTestAccount } from "@acme/mail/ethereal";
 import { isProduction } from "@acme/shared/common/constants";
 
 const SHOW_MOBILE = false as boolean;

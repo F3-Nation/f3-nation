@@ -289,6 +289,9 @@ importers:
       '@acme/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@acme/mail':
+        specifier: workspace:*
+        version: link:../../packages/mail
       '@acme/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -682,6 +685,9 @@ importers:
       '@acme/env':
         specifier: workspace:^0.1.0
         version: link:../env
+      '@acme/mail':
+        specifier: workspace:*
+        version: link:../mail
       '@acme/shared':
         specifier: workspace:^0.1.0
         version: link:../shared
@@ -851,6 +857,9 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 6.0.2
+      vitest:
+        specifier: ^1.6.1
+        version: 1.6.1(@types/node@20.19.39)(jsdom@24.1.3)(terser@5.46.1)
 
   packages/shared:
     devDependencies:

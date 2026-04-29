@@ -1,6 +1,7 @@
 import crypto from "crypto";
 
 import { and, eq, gt, isNull, sql } from "@acme/db";
+import { createEtherealTestAccount } from "@acme/mail/ethereal";
 import { emailMfaCodes, users } from "@acme/db/schema/schema";
 
 import { constantTimeEqual } from "~/lib/crypto-utils";
@@ -12,30 +13,6 @@ const CODE_TTL_MINUTES = 10;
 
 function hashCode(code: string): string {
   return crypto.createHash("sha256").update(code).digest("hex");
-}
-
-/**
- * Creates an Ethereal test account using the WHATWG fetch API.
- * Replaces nodemailer's built-in createTestAccount() which uses the deprecated url.parse().
- * For development/testing only — Ethereal is a fake SMTP service.
- * Note: apps/auth does not depend on @acme/auth, so this is a local copy of the
- * helper defined in packages/auth/src/lib/utils.ts.
- */
-async function createEtherealTestAccount(): Promise<{
-  user: string;
-  pass: string;
-}> {
-  const response = await fetch("https://api.nodemailer.com/user", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ requestor: "nodemailer" }),
-  });
-  if (!response.ok) {
-    throw new Error(
-      `Failed to create Ethereal test account: ${response.statusText}`,
-    );
-  }
-  return response.json() as Promise<{ user: string; pass: string }>;
 }
 
 /**

@@ -18,6 +18,7 @@
   "dependencies": {
     "@acme/db": "workspace:^0.1.0",
     "@acme/env": "workspace:^0.1.0",
+    "@acme/mail": "workspace:*",
     "@acme/shared": "workspace:^0.1.0",
     "@auth/core": "0.37.2",
     "@auth/drizzle-adapter": "^0.6.3",

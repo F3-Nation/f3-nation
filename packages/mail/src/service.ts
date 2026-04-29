@@ -1,9 +1,10 @@
-import nodemailer, { createTestAccount } from "nodemailer";
+import nodemailer from "nodemailer";
 import type Mail from "nodemailer/lib/mailer";
 import type SMTPTransport from "nodemailer/lib/smtp-transport";
 
 import { env } from "@acme/env";
 
+import { createEtherealTestAccount } from "./lib/ethereal";
 import type { TemplateType } from "./templates";
 import { DefaultSubject, renderTemplate, Templates } from "./templates";
 
@@ -92,7 +93,7 @@ export class MailService {
   private async getTransporter() {
     if (!this.transporter) {
       const transporterOptions = isLocalDevelopment
-        ? await createTestAccount().then(({ user, pass }) => ({
+        ? await createEtherealTestAccount().then(({ user, pass }) => ({
             host: "smtp.ethereal.email",
             port: 587,
             secure: false,
