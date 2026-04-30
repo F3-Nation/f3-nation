@@ -17,24 +17,28 @@ steps:
         docker build \
           --build-arg "DOPPLER_TOKEN=$$_DOPPLER_TOKEN" \
           --build-arg "ENVIRONMENT=$$_ENVIRONMENT" \
-          -t gcr.io/f3-admin-portal/f3-nation-admin-staging \
+          -t us-east1-docker.pkg.dev/f3-admin-portal-staging/cloud-run-builds/f3-admin:staging \
           -f apps/admin/Dockerfile \
           .
     secretEnv: ["_DOPPLER_TOKEN"]
 
   # Push step
   - name: "gcr.io/cloud-builders/docker"
-    args: ["push", "gcr.io/f3-admin-portal/f3-nation-admin-staging"]
+    args:
+      [
+        "push",
+        "us-east1-docker.pkg.dev/f3-admin-portal-staging/cloud-run-builds/f3-admin:staging",
+      ]
 
   - name: "gcr.io/cloud-builders/gcloud"
     args:
       - "run"
       - "deploy"
-      - "f3-nation-admin-staging"
+      - "f3-admin"
       - "--image"
-      - "gcr.io/f3-admin-portal/f3-nation-admin-staging"
+      - "us-east1-docker.pkg.dev/f3-admin-portal-staging/cloud-run-builds/f3-admin:staging"
       - "--region"
-      - "us-central1"
+      - "us-east1"
       - "--platform"
       - "managed"
       - "--allow-unauthenticated"
@@ -44,5 +48,5 @@ options:
 
 availableSecrets:
   secretManager:
-    - versionName: projects/542654839493/secrets/DOPPLER_TOKEN_ADMIN_STAGING/versions/latest
+    - versionName: projects/104614337679/secrets/DOPPLER_TOKEN_ADMIN_STAGING/versions/latest
       env: "_DOPPLER_TOKEN"
