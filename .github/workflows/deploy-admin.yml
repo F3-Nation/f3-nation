@@ -1,0 +1,139 @@
+name: Deploy Admin
+
+on:
+  push:
+    tags:
+      - "admin@*"
+
+concurrency:
+  group: deploy-admin-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE_NAME: f3-admin
+  STAGING_PROJECT: f3-admin-portal-staging
+  PROD_PROJECT: f3-admin-portal
+  AR_REPO: cloud-run-builds
+  REGION: us-east1
+  SERVICE_NAME: f3-admin
+
+jobs:
+  # Wait for CI to pass on the tagged commit
+  ci-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wait for CI checks
+        uses: lewagon/wait-on-check-action@v1.3.4
+        with:
+          ref: ${{ github.sha }}
+          check-regexp: "^(build|lint|typecheck|format-check|test-coverage)$"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 15
+
+  build:
+    needs: ci-gate
+    runs-on: ubuntu-latest
+    environment: admin-staging
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP (staging project for AR)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Authorize Docker to Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Extract tag version
+        id: meta
+        run: |
+          TAG="${GITHUB_REF_NAME}"          # e.g. admin@1.2.3
+          VERSION="${TAG#admin@}"            # e.g. 1.2.3
+          IMAGE="${REGION}-docker.pkg.dev/${STAGING_PROJECT}/${AR_REPO}/${IMAGE_NAME}:${VERSION}"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push Docker image
+        run: |
+          docker build \
+            --file apps/admin/Dockerfile \
+            --tag "${{ steps.meta.outputs.image }}" \
+            .
+          docker push "${{ steps.meta.outputs.image }}"
+
+  deploy-staging:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: admin-staging
+      url: https://staging.admin.f3nation.com
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Authenticate to GCP (staging)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SA }}
+
+      - name: Deploy to Cloud Run (staging)
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE_NAME }}
+          image: ${{ needs.build.outputs.image }}
+          region: ${{ env.REGION }}
+          project_id: ${{ env.STAGING_PROJECT }}
+
+  deploy-production:
+    needs: [build, deploy-staging]
+    runs-on: ubuntu-latest
+    environment:
+      name: admin-production
+      url: https://admin.f3nation.com
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Authenticate to GCP (staging — pull image from staging AR)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Promote image to production AR
+        run: |
+          STAGING_IMAGE="${{ needs.build.outputs.image }}"
+          PROD_IMAGE="${REGION}-docker.pkg.dev/${PROD_PROJECT}/${AR_REPO}/${IMAGE_NAME}:${STAGING_IMAGE##*:}"
+          gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
+          docker pull "${STAGING_IMAGE}"
+          docker tag "${STAGING_IMAGE}" "${PROD_IMAGE}"
+          docker push "${PROD_IMAGE}"
+          echo "prod_image=${PROD_IMAGE}" >> "$GITHUB_ENV"
+
+      - name: Authenticate to GCP (prod)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SA }}
+
+      - name: Deploy to Cloud Run (prod)
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE_NAME }}
+          image: ${{ env.prod_image }}
+          region: ${{ env.REGION }}
+          project_id: ${{ env.PROD_PROJECT }}
