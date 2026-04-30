@@ -183,7 +183,7 @@ const columns: TableOptions<WorkoutEvent>["columns"] = [
     ),
   },
   {
-    accessorKey: "ao",
+    accessorKey: "parent",
     meta: { name: "AO" },
     header: Header,
     cell: (cell) => (

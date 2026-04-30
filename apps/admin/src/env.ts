@@ -25,11 +25,13 @@ export const env = createEnv({
   client: {
     NEXT_PUBLIC_MAP_URL: z.string().min(1),
     NEXT_PUBLIC_API_URL: z.string().min(1),
+    NEXT_PUBLIC_ADMIN_URL: z.string().min(1),
     NEXT_PUBLIC_GOOGLE_API_KEY: z.string().min(1),
   },
   experimental__runtimeEnv: {
     NEXT_PUBLIC_MAP_URL: process.env.NEXT_PUBLIC_MAP_URL,
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+    NEXT_PUBLIC_ADMIN_URL: process.env.NEXT_PUBLIC_ADMIN_URL,
     NEXT_PUBLIC_GOOGLE_API_KEY: process.env.NEXT_PUBLIC_GOOGLE_API_KEY,
     VERCEL_ENV: process.env.VERCEL_ENV,
     NODE_ENV: process.env.NODE_ENV,

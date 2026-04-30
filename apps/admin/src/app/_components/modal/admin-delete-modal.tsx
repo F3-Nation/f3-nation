@@ -28,6 +28,7 @@ export default function AdminDeleteModal({
 
   let mutation: ({ id }: { id: number }) => Promise<{
     orgId?: number;
+    positionId?: number;
     eventTypeId?: number;
     eventId?: number;
     locationId?: number;
@@ -53,6 +54,9 @@ export default function AdminDeleteModal({
       break;
     case DeleteType.LOCATION:
       mutation = orpc.location.delete.call;
+      break;
+    case DeleteType.POSITION:
+      mutation = orpc.position.delete.call;
       break;
     default:
       // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
@@ -89,6 +93,9 @@ export default function AdminDeleteModal({
         case DeleteType.LOCATION:
           await invalidateQueries("location");
           await invalidateQueries("map");
+          break;
+        case DeleteType.POSITION:
+          await invalidateQueries("position");
           break;
         default:
           // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
@@ -171,6 +178,8 @@ const dataTypeToName = (
       return "User";
     case DeleteType.LOCATION:
       return "Location";
+    case DeleteType.POSITION:
+      return "Position";
     default:
       // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
       throw new Error(`Invalid delete type: ${dataType}`);

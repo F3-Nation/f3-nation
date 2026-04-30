@@ -305,10 +305,13 @@ export const orgRouter = {
           id: org.id,
           name: org.name,
           parentOrgName: parentOrg.name,
+          aoCount: org.aoCount,
+          lastAnnualReview: org.lastAnnualReview,
           status: org.isActive,
           created: org.created,
         },
         "id",
+        new Set(["parentOrgName", "lastAnnualReview"] as const),
       );
 
       const total = await getOrgCount({ db: ctx.db, where });
@@ -970,7 +973,8 @@ export const orgRouter = {
       path: "/delete/{id}",
       tags: ["org"],
       summary: "Delete organization",
-      description: "Soft delete an organization by marking it as inactive",
+      description:
+        "Soft delete an organization by marking it as inactive. This will also soft delete all associated event series and instances if the org is an AO.",
     })
     .output(
       z.object({
@@ -989,16 +993,55 @@ export const orgRouter = {
           message: "You are not authorized to delete this org",
         });
       }
-      await ctx.db
+
+      // Get the org first to validate it exists and matches the provided type
+      const [org] = await ctx.db
+        .select({
+          orgType: schema.orgs.orgType,
+          isActive: schema.orgs.isActive,
+        })
+        .from(schema.orgs)
+        .where(eq(schema.orgs.id, input.id));
+
+      if (!org) {
+        throw new ORPCError("NOT_FOUND", {
+          message: "Organization not found",
+        });
+      }
+
+      if (input.orgType && org.orgType !== input.orgType) {
+        throw new ORPCError("CONFLICT", {
+          message: `Organization type mismatch: expected ${input.orgType}, got ${org.orgType}`,
+        });
+      }
+
+      if (!org.isActive) {
+        throw new ORPCError("CONFLICT", {
+          message: "Organization is already inactive",
+        });
+      }
+
+      // Perform the soft delete with .returning() to confirm success
+      const [deletedOrg] = await ctx.db
         .update(schema.orgs)
         .set({ isActive: false })
-        .where(
-          and(
-            eq(schema.orgs.id, input.id),
-            input.orgType ? eq(schema.orgs.orgType, input.orgType) : undefined,
-            eq(schema.orgs.isActive, true),
-          ),
-        );
+        .where(eq(schema.orgs.id, input.id))
+        .returning();
+
+      if (!deletedOrg) {
+        throw new ORPCError("CONFLICT", {
+          message: "Failed to delete organization",
+        });
+      }
+
+      // If this is an AO, cascade soft-delete to series and event instances
+      if (org.orgType === "ao") {
+        const { softDeleteSeriesForOrg, softDeleteFutureInstancesForOrg } =
+          await import("../lib/cascade-service");
+
+        await softDeleteSeriesForOrg(ctx.db, input.id);
+        await softDeleteFutureInstancesForOrg(ctx.db, input.id);
+      }
 
       // Notify webhooks about the org deletion
       notifyMapDataChange({ type: "org.deleted", orgId: input.id });

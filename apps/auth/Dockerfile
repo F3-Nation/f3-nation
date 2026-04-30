@@ -1,29 +1,31 @@
 # ---------- Stage 1: Prune monorepo ----------
-FROM node:20-alpine AS builder
+FROM --platform=linux/amd64 node:24-alpine AS builder
 
 ENV TURBO_TELEMETRY_DISABLED=1
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN apk add --no-cache libc6-compat && apk update
 WORKDIR /app
 
-RUN corepack enable && corepack prepare pnpm@8.15.1 --activate
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
 RUN pnpm add -g turbo@^1.12.3
 
 COPY . .
 RUN turbo prune f3-auth --docker
 
 # ---------- Stage 2: Install + build ----------
-FROM node:20-alpine AS installer
+FROM --platform=linux/amd64 node:24-alpine AS installer
 
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV TURBO_TELEMETRY_DISABLED=1
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN apk add --no-cache libc6-compat openssl && apk update
 WORKDIR /app
 
-RUN corepack enable && corepack prepare pnpm@8.15.1 --activate
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
 RUN pnpm add -g turbo@^1.12.3
 
 # Install dependencies from pruned lockfile
@@ -41,7 +43,7 @@ ENV SKIP_ENV_VALIDATION=true
 RUN pnpm turbo build --filter=f3-auth
 
 # ---------- Stage 3: Production runner ----------
-FROM node:20-alpine AS runner
+FROM --platform=linux/amd64 node:24-alpine AS runner
 
 RUN apk add --no-cache libc6-compat openssl && apk update
 WORKDIR /app

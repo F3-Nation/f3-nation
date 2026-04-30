@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  BadgeCheck,
   Earth,
   CircleSmall,
   CirclePile,
@@ -87,6 +88,12 @@ export const AdminNavLinks = ({
       href: routes.admin.workouts.__path,
       icon: PersonStanding,
       label: "Events",
+      type: "link",
+    },
+    {
+      href: routes.admin.positions.__path,
+      icon: BadgeCheck,
+      label: "Positions",
       type: "link",
     },
     {
