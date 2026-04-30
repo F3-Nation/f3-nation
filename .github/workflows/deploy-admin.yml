@@ -67,7 +67,6 @@ jobs:
       - name: Build and push Docker image
         run: |
           docker build \
-            --build-arg "DOPPLER_TOKEN=${{ secrets.DOPPLER_TOKEN_ADMIN_STAGING }}" \
             --file apps/admin/Dockerfile \
             --tag "${{ steps.meta.outputs.image }}" \
             .
