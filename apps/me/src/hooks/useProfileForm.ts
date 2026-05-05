@@ -87,6 +87,14 @@ export function buildDirtyPayload(
   const payload: Record<string, unknown> = {};
   const keys = Object.keys(form) as (keyof ProfileFormState)[];
 
+  const nullableFields = new Set([
+    "firstName",
+    "phone",
+    "emergencyContact",
+    "emergencyPhone",
+    "emergencyNotes",
+  ]);
+
   for (const key of keys) {
     if (form[key] === initial[key]) continue;
     // Skip avatarUrl — uploaded separately
@@ -95,13 +103,6 @@ export function buildDirtyPayload(
     const value = form[key];
     // Coerce empty strings to null for nullable text fields
     if (typeof value === "string" && value === "") {
-      const nullableFields = new Set([
-        "firstName",
-        "phone",
-        "emergencyContact",
-        "emergencyPhone",
-        "emergencyNotes",
-      ]);
       payload[key] = nullableFields.has(key) ? null : "";
     } else {
       payload[key] = value;
@@ -202,6 +203,13 @@ export function useProfileForm({
       setSaving(false);
     }
   }, [form, initialForm, toast]);
+
+  // Sync form state when the user record changes (e.g. after navigation to a different user)
+  useEffect(() => {
+    const fresh = buildInitialFormState(user);
+    setForm(fresh);
+    setInitialForm(fresh);
+  }, [user.id]);
 
   // Keep a stable ref to handleSave for the context registration
   const saveRef = useRef(handleSave);
