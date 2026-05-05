@@ -7,6 +7,32 @@ import { updateMyProfile } from "@/lib/api/client";
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_SIZE = 5 * 1024 * 1024; // 5MB
 
+function mapAvatarUploadError(err: unknown): { status: number; error: string } {
+  const message = err instanceof Error ? err.message : "";
+  const lower = message.toLowerCase();
+
+  if (lower.includes("invalid_grant") && lower.includes("account not found")) {
+    return {
+      status: 503,
+      error:
+        "Avatar storage is misconfigured: GCS service account was not found. Update GCS_CREDENTIALS.",
+    };
+  }
+
+  if (
+    lower.includes("gcs_credentials is not set") ||
+    lower.includes("gcs_bucket is not set")
+  ) {
+    return {
+      status: 500,
+      error:
+        "Avatar storage is not configured. Set GCS_BUCKET and GCS_CREDENTIALS.",
+    };
+  }
+
+  return { status: 500, error: "Failed to upload avatar" };
+}
+
 export async function POST(request: NextRequest) {
   try {
     const session = await requireAuth();
@@ -48,9 +74,10 @@ export async function POST(request: NextRequest) {
     console.error("Failed to upload avatar:", err);
     if (err instanceof Error && err.message.includes("NEXT_REDIRECT"))
       throw err;
+    const mapped = mapAvatarUploadError(err);
     return NextResponse.json(
-      { error: "Failed to upload avatar" },
-      { status: 500 },
+      { error: mapped.error },
+      { status: mapped.status },
     );
   }
 }

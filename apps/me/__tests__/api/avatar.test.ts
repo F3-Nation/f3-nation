@@ -371,6 +371,31 @@ describe("Avatar API route", () => {
     expect(data.error).toContain("Failed to upload avatar");
   });
 
+  it("returns 503 with actionable message when GCS service account is missing", async () => {
+    vi.mocked(requireAuth).mockResolvedValue(mockSession);
+    vi.mocked(uploadAvatar).mockRejectedValue(
+      new Error("invalid_grant: Invalid grant: account not found"),
+    );
+
+    const { POST } = await import("@/app/api/profile/avatar/route");
+    const content = new Uint8Array([0xff, 0xd8]);
+    const file = Object.assign(
+      new File([content], "avatar.jpg", { type: "image/jpeg" }),
+      { arrayBuffer: async () => content.buffer },
+    );
+    const mockFormData = {
+      get: (key: string) => (key === "file" ? file : null),
+    } as unknown as FormData;
+    const req = {
+      formData: async () => mockFormData,
+    } as unknown as NextRequest;
+
+    const response = await POST(req);
+    expect(response.status).toBe(503);
+    const data = (await response.json()) as { error: string };
+    expect(data.error).toContain("service account was not found");
+  });
+
   it("returns 500 when updateMyProfile throws after upload", async () => {
     vi.mocked(requireAuth).mockResolvedValue(mockSession);
     vi.mocked(uploadAvatar).mockResolvedValue(
