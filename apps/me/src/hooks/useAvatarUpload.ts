@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -69,6 +69,10 @@ export function useAvatarUpload({
   const [uploading, setUploading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(currentUrl);
   const [dragOver, setDragOver] = useState(false);
+
+  useEffect(() => {
+    setPreviewUrl(currentUrl);
+  }, [currentUrl]);
 
   const handleUpload = useCallback(
     async (file: File) => {
