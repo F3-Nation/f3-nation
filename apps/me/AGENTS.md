@@ -83,7 +83,7 @@ Profile form allows editing these fields only (whitelist):
 - `f3Name`, `firstName`, `lastName`, `phone`, `homeRegionId`
 - `avatarUrl` (via file upload)
 - `emergencyContact`, `emergencyPhone`, `emergencyNotes`
-- Meta sub-fields: `f3_name_origin`, `my_f3_why`, `user_emergency_info_dr_sharing`, `start_date_override`
+- Meta sub-fields: `f3_name_origin`, `my_f3_why`, `user_emergency_info_dr_sharing`, `start_date_override`, `brought_by`
 
 ## Testing
 
