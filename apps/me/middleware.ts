@@ -10,6 +10,8 @@ import { refreshToken } from "@/lib/auth/oauth";
 import { isAccessTokenExpired } from "@/lib/auth/tokens";
 
 const PUBLIC_PATHS = ["/", "/api/auth/login", "/api/auth/callback"];
+const STATIC_ASSET_PATTERN =
+  /\.(?:css|js|mjs|map|txt|xml|json|png|jpe?g|gif|webp|svg|ico|bmp|avif|woff2?|ttf|otf|eot|mp4|webm|mp3|wav|ogg|pdf)$/i;
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -28,7 +30,7 @@ export async function middleware(request: NextRequest) {
   if (
     pathname.startsWith("/_next/") ||
     pathname.startsWith("/favicon") ||
-    pathname.includes(".")
+    STATIC_ASSET_PATTERN.test(pathname)
   ) {
     return NextResponse.next();
   }
