@@ -3,16 +3,14 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
-interface SwitchProps extends Omit<
-  React.ButtonHTMLAttributes<HTMLButtonElement>,
-  "onChange"
-> {
+interface SwitchProps
+  extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "onChange"> {
   checked?: boolean;
   onCheckedChange?: (checked: boolean) => void;
 }
 
 const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
-  ({ className, checked = false, onCheckedChange, ...props }, ref) => {
+  ({ className, checked = false, onCheckedChange, onClick, ...props }, ref) => {
     return (
       <button
         type="button"
@@ -24,8 +22,11 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
           checked ? "bg-primary" : "bg-input",
           className,
         )}
-        onClick={() => onCheckedChange?.(!checked)}
         {...props}
+        onClick={(e) => {
+          onCheckedChange?.(!checked);
+          onClick?.(e);
+        }}
       >
         <span
           className={cn(
