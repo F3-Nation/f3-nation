@@ -66,7 +66,7 @@ export interface ProfileUpdatePayload {
   f3Name?: string;
   firstName?: string | null;
   lastName?: string;
-  phone?: string;
+  phone?: string | null;
   homeRegionId?: number | null;
   avatarUrl?: string | null;
   emergencyContact?: string | null;

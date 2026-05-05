@@ -8,7 +8,7 @@ export function cn(...inputs: ClassValue[]) {
 
 /** Default fallback avatar URL */
 export function getFallbackAvatar(name?: string): string {
-  const initial = (name ?? "F3").charAt(0).toUpperCase();
+  const initial = (name || "F3").charAt(0).toUpperCase();
   // Return a data URI with the initial letter
   return `data:image/svg+xml,${encodeURIComponent(
     `<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">
