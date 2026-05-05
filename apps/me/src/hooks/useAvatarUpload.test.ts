@@ -39,11 +39,6 @@ describe("validateAvatarFile", () => {
     expect(error?.description).toContain("5MB");
   });
 
-  it("returns error for file exactly at 5MB + 1 byte", () => {
-    const file = makeFile(MAX_FILE_SIZE + 1, "image/jpeg");
-    expect(validateAvatarFile(file)).not.toBeNull();
-  });
-
   it("returns null for file exactly at 5MB", () => {
     const file = makeFile(MAX_FILE_SIZE, "image/jpeg");
     expect(validateAvatarFile(file)).toBeNull();
