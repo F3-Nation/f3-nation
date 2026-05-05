@@ -19,17 +19,14 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   })),
 }));
 
-import { auth } from "@acme/auth";
 import type { Session } from "@acme/auth";
 import { and, eq, schema } from "@acme/db";
 import { db } from "@acme/db/client";
 import { Client, Header } from "@acme/shared/common/enums";
 import { createRouterClient } from "@orpc/server";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { mockAuthWithSession } from "../../__tests__/test-utils";
 import { router } from "../../index";
-
-/** Cast auth to its session-retrieval overload so vi.mocked types correctly. */
-const mockAuth = vi.mocked(auth as () => Promise<Session | null>);
 
 /** Build a minimal Session object for test mocking. */
 const makeTestSession = (
@@ -73,6 +70,7 @@ const uniqueEmail = () =>
 // ---------------------------------------------------------------------------
 const createdUserIds: number[] = [];
 const createdOrgIds: number[] = [];
+const createdRoleIds: number[] = [];
 let testUserId: number;
 let testUserEmail: string;
 let regionOrgId: number;
@@ -138,7 +136,17 @@ describe("Me Router", () => {
       .select({ id: schema.roles.id })
       .from(schema.roles)
       .limit(1);
-    roleId = existingRole!.id;
+
+    if (existingRole) {
+      roleId = existingRole.id;
+    } else {
+      const [created] = await db
+        .insert(schema.roles)
+        .values({ name: "user" })
+        .returning({ id: schema.roles.id });
+      roleId = created!.id;
+      createdRoleIds.push(roleId);
+    }
 
     // --- give the test user a position and a role ---
     await db.insert(schema.positionsXOrgsXUsers).values({
@@ -167,9 +175,12 @@ describe("Me Router", () => {
     for (const oid of createdOrgIds) {
       await db.delete(schema.orgs).where(eq(schema.orgs.id, oid));
     }
+    for (const rid of createdRoleIds) {
+      await db.delete(schema.roles).where(eq(schema.roles.id, rid));
+    }
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     mockLimit.mockResolvedValue({
       success: true,
@@ -178,7 +189,7 @@ describe("Me Router", () => {
       reset: Date.now() + 60000,
     });
     // Restore auth mock to the test user after clearAllMocks
-    mockAuth.mockResolvedValue(makeTestSession(testUserId, testUserEmail));
+    await mockAuthWithSession(makeTestSession(testUserId, testUserEmail));
   });
 
   // -----------------------------------------------------------------------
@@ -200,7 +211,7 @@ describe("Me Router", () => {
     });
 
     it("should throw NOT_FOUND for a non-existent user ID", async () => {
-      mockAuth.mockResolvedValueOnce(
+      await mockAuthWithSession(
         makeTestSession(999999, "ghost@example.com", "Ghost"),
       );
       const client = createDirectClient();
@@ -331,7 +342,7 @@ describe("Me Router", () => {
     });
 
     it("should throw NOT_FOUND when updating a non-existent user", async () => {
-      mockAuth.mockResolvedValueOnce(
+      await mockAuthWithSession(
         makeTestSession(999999, "ghost@example.com", "Ghost"),
       );
       const client = createDirectClient();
