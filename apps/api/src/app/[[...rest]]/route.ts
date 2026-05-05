@@ -53,11 +53,12 @@ async function handleRequest(request: Request) {
     return Response.redirect(`${baseUrl}/docs`);
   }
 
-  // Check if this is an oRPC client request (from the map app)
-  // oRPC client sends a custom header to identify itself
+  // Check if this is an oRPC client request.
+  // oRPC clients send a custom header to identify themselves.
   const isOrpcClient =
     request.headers.get(Header.Client) === Client.ORPC ||
-    request.headers.get(Header.Client) === Client.ORPC_SSG;
+    request.headers.get(Header.Client) === Client.ORPC_SSG ||
+    request.headers.get(Header.Client) === Client.F3_ME;
 
   if (isOrpcClient) {
     // Use RPC handler for oRPC client requests
