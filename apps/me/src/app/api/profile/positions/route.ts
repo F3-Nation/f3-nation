@@ -15,7 +15,12 @@ export async function DELETE(request: NextRequest) {
   try {
     await requireAuth();
 
-    const raw: unknown = await request.json();
+    let raw: unknown;
+    try {
+      raw = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
     const parsed = deletePositionSchema.safeParse(raw);
     if (!parsed.success) {
       return NextResponse.json(
