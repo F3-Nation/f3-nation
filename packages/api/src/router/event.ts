@@ -746,13 +746,15 @@ export const eventRouter = {
       }
 
       const { eventTypeIds, meta, ...eventData } = input;
+      const mapSeed =
+        typeof meta?.mapSeed === "boolean" ? meta.mapSeed : undefined;
       const eventToUpdate: typeof schema.events.$inferInsert = {
         ...eventData,
         orgId: input.aoId,
         meta: meta
           ? {
               ...meta,
-              mapSeed: meta.mapSeed,
+              mapSeed,
               eventTypeId: undefined, // Remove eventTypeId from meta since we handle it in join table
             }
           : null,

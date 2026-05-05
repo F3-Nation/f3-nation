@@ -840,16 +840,45 @@ export const orgRouter = {
         });
       }
 
+      const isChangingParent =
+        input.parentId !== undefined && input.parentId !== existingOrg.parentId;
+
+      let destinationParentOrgId: number | null = null;
+
+      if (isChangingParent) {
+        if (input.parentId == null) {
+          throw new ORPCError("BAD_REQUEST", {
+            message: "Parent ID is required to move this org",
+          });
+        }
+
+        destinationParentOrgId = input.parentId;
+
+        const destinationRoleCheckResult = await checkHasRoleOnOrg({
+          orgId: destinationParentOrgId,
+          session: ctx.session,
+          db: ctx.db,
+          roleName: "editor",
+        });
+
+        if (!destinationRoleCheckResult.success) {
+          throw new ORPCError("UNAUTHORIZED", {
+            message:
+              "You are not authorized to move this org to the destination parent organization",
+          });
+        }
+      }
+
       // If the parentId is changing and this is an AO, we need to move the locations for the org
       if (
-        input.parentId &&
-        existingOrg.parentId &&
-        input.parentId !== existingOrg.parentId &&
-        input.orgType === "ao"
+        isChangingParent &&
+        input.orgType === "ao" &&
+        destinationParentOrgId !== null &&
+        existingOrg.parentId !== null
       ) {
         await moveAOLocsToNewRegion(ctx, {
           oldRegionId: existingOrg.parentId,
-          newRegionId: input.parentId,
+          newRegionId: destinationParentOrgId,
           aoId: existingOrg.id,
         });
       }
