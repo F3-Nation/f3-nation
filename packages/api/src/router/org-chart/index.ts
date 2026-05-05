@@ -15,7 +15,17 @@ interface OrgRow {
 }
 
 interface PositionRow {
+  positionId: number;
   title: string;
+  userId: number;
+  f3Name: string | null;
+  avatarUrl: string | null;
+}
+
+interface RoleRow {
+  roleId: number;
+  title: string;
+  userId: number;
   f3Name: string | null;
   avatarUrl: string | null;
 }
@@ -279,7 +289,9 @@ export const orgChartRouter = {
         positions: z
           .array(
             z.object({
+              positionId: z.number().describe("Position ID"),
               title: z.string().describe("Position title"),
+              userId: z.number().describe("User ID"),
               f3Name: z.string().nullable().describe("User F3 name"),
               avatarUrl: z.string().nullable().describe("User avatar URL"),
             }),
@@ -288,7 +300,9 @@ export const orgChartRouter = {
         roles: z
           .array(
             z.object({
+              roleId: z.number().describe("Role ID"),
               title: z.string().describe("Role title"),
+              userId: z.number().describe("User ID"),
               f3Name: z.string().nullable().describe("User F3 name"),
               avatarUrl: z.string().nullable().describe("User avatar URL"),
             }),
@@ -319,7 +333,9 @@ export const orgChartRouter = {
 
       const orgPositions: PositionRow[] = await ctx.db
         .select({
+          positionId: schema.positions.id,
           title: schema.positions.name,
+          userId: schema.users.id,
           f3Name: schema.users.f3Name,
           avatarUrl: schema.users.avatarUrl,
         })
@@ -339,9 +355,11 @@ export const orgChartRouter = {
         .orderBy(asc(schema.positions.name), asc(schema.users.f3Name));
 
       // Get roles for this org, similar to positions
-      const orgRoles: PositionRow[] = await ctx.db
+      const orgRoles: RoleRow[] = await ctx.db
         .select({
+          roleId: schema.roles.id,
           title: schema.roles.name,
+          userId: schema.users.id,
           f3Name: schema.users.f3Name,
           avatarUrl: schema.users.avatarUrl,
         })
@@ -367,12 +385,16 @@ export const orgChartRouter = {
         facebook: org.facebook,
         instagram: org.instagram,
         positions: orgPositions.map((position) => ({
+          positionId: position.positionId,
           title: position.title,
+          userId: position.userId,
           f3Name: position.f3Name,
           avatarUrl: position.avatarUrl,
         })),
         roles: orgRoles.map((role) => ({
+          roleId: role.roleId,
           title: role.title,
+          userId: role.userId,
           f3Name: role.f3Name,
           avatarUrl: role.avatarUrl,
         })),
