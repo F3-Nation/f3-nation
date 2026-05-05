@@ -99,11 +99,13 @@ export function useUserSearch({
     void fetchUsers(regionIdToFetch);
   }, [open, showAllRegions, homeRegionId, users.length, fetchUsers]);
 
-  // If we have a value but no selectedUser, try to resolve it
-  const resolvedRef = useRef(false);
+  // If we have a value but no selectedUser, try to resolve it.
+  // Tracks the last resolved value so that changing to a new value triggers a fresh fetch.
+  const resolvedRef = useRef<number | null>(null);
   useEffect(() => {
-    if (!value || selectedUser !== null || resolvedRef.current) return;
-    resolvedRef.current = true;
+    if (!value || selectedUser !== null || resolvedRef.current === value)
+      return;
+    resolvedRef.current = value;
 
     void (async () => {
       try {
