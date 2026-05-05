@@ -7,7 +7,7 @@ import {
   REFRESH_TOKEN_MAX_AGE,
 } from "@/lib/auth/constants";
 import { refreshToken } from "@/lib/auth/oauth";
-import { isAccessTokenExpired } from "@/lib/auth/tokens";
+import { verifyAccessToken } from "@/lib/auth/tokens";
 
 const PUBLIC_PATHS = ["/", "/api/auth/login", "/api/auth/callback"];
 const STATIC_ASSET_PATTERN =
@@ -40,7 +40,7 @@ export async function middleware(request: NextRequest) {
     REFRESH_TOKEN_COOKIE_NAME,
   )?.value;
 
-  if (accessToken && !isAccessTokenExpired(accessToken)) {
+  if (accessToken && (await verifyAccessToken(accessToken))) {
     return NextResponse.next();
   }
 
