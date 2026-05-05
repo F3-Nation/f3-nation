@@ -32,10 +32,7 @@ export function useDropdownSelect(): UseDropdownSelectReturn {
     setSearch("");
   }, []);
 
-  const selectAndClose = useCallback(() => {
-    setOpen(false);
-    setSearch("");
-  }, []);
+  const selectAndClose = close;
 
   return { open, search, toggle, close, setSearch, selectAndClose };
 }
