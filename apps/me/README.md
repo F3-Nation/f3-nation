@@ -442,7 +442,7 @@ This requires access to the auth provider admin. The project owner handles this.
 - The app stores `access_token` and `refresh_token` in `httpOnly` cookies and never exposes them to client-side JavaScript.
 - Middleware refreshes expired access tokens using the refresh token before protected requests continue.
 - Profile updates are authorized using the authenticated user's OAuth access token; users can only edit their own profile.
-- File uploads are validated for type (jpeg/png/webp/gif) and size (max 5MB).
+- File uploads are validated for type (jpeg/png/webp) and size (max 5MB).
 - `meta` field updates merge with existing data — unknown keys are preserved.
 - Position removal preserves all other users' assignments.
 - Auth cookies are `httpOnly`, `secure` in production, `sameSite: "lax"`.
