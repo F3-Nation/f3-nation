@@ -41,6 +41,11 @@ describe("auth tokens", () => {
     expect(isAccessTokenExpired(token)).toBe(true);
   });
 
+  it("treats tokens with non-numeric exp as expired", () => {
+    const token = createToken({ sub: "42", exp: "not-a-number" });
+    expect(isAccessTokenExpired(token)).toBe(true);
+  });
+
   it("accepts tokens whose exp is comfortably in the future", () => {
     const futureExp = Math.floor(Date.now() / 1000) + 3600;
     const token = createToken({ sub: "42", exp: futureExp });
