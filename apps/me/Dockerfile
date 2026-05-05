@@ -4,7 +4,7 @@ FROM node:20-alpine AS builder
 ENV TURBO_TELEMETRY_DISABLED=1
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-RUN apk add --no-cache libc6-compat && apk update
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 RUN corepack enable && corepack prepare pnpm@8.15.1 --activate
@@ -21,7 +21,7 @@ ENV TURBO_TELEMETRY_DISABLED=1
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 
-RUN apk add --no-cache libc6-compat && apk update
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 RUN corepack enable && corepack prepare pnpm@8.15.1 --activate
@@ -39,7 +39,7 @@ RUN pnpm turbo build --filter=f3-me
 # ---------- Stage 3: Production runner ----------
 FROM node:20-alpine AS runner
 
-RUN apk add --no-cache libc6-compat && apk update
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 RUN addgroup --system --gid 1001 nodejs && \
