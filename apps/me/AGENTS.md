@@ -15,7 +15,7 @@ F3 Me is a Next.js 15 App Router application that provides self-service profile 
 
 ## File Structure
 
-```
+```text
 src/
 ├── app/
 │   ├── layout.tsx          — Root layout (AuthProvider, Navbar, Toaster)

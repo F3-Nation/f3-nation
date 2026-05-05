@@ -50,7 +50,7 @@ This is aligned with the generic `@acme/sso` integration model: the shared packa
 
 ## Project Structure
 
-```
+```text
 apps/me/
 ├── middleware.ts                  # Auth route protection
 ├── src/
@@ -163,7 +163,7 @@ f3-me uses **tag-based deployment** via GitHub Actions and GCP Cloud Run. This i
 5. You verify on staging, then go to GitHub Actions and **approve** the production deploy
 6. The **same image** (no rebuild) deploys to **production**
 
-```
+```text
 PR → dev → tag me@1.2.3 → [CI passes] → build image → deploy staging → [approve] → deploy prod
 ```
 

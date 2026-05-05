@@ -4,7 +4,7 @@ This document describes the current security model for apps/me. It reflects the 
 
 ## Architecture Overview
 
-```
+```text
 ┌──────────┐     ┌──────────────────┐     ┌─────────────────┐     ┌────────────┐
 │ Browser  │────▶│ apps/me          │────▶│ packages/api    │────▶│ Database   │
 │          │◀────│ Next.js App      │◀────│ oRPC Server     │◀────│ PostgreSQL │
@@ -101,7 +101,7 @@ Relevant file:
 
 apps/me calls the API with:
 
-```
+```http
 Authorization: Bearer {access_token}
 Client: f3-me
 Content-Type: application/json
