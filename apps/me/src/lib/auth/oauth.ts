@@ -13,11 +13,18 @@ function getRequiredEnv(name: string): string {
 }
 
 function buildAuthConfig(): AuthClientConfig {
+  const authServerUrl = getRequiredEnv("AUTH_PROVIDER_URL");
+  if (
+    process.env.NODE_ENV === "production" &&
+    !authServerUrl.startsWith("https://")
+  ) {
+    throw new Error("AUTH_PROVIDER_URL must use HTTPS in production");
+  }
   return {
     clientId: getRequiredEnv("OAUTH_CLIENT_ID"),
     clientSecret: getRequiredEnv("OAUTH_CLIENT_SECRET"),
     redirectUri: getRequiredEnv("OAUTH_REDIRECT_URI"),
-    authServerUrl: getRequiredEnv("AUTH_PROVIDER_URL"),
+    authServerUrl,
   };
 }
 
