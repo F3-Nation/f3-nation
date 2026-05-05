@@ -30,7 +30,7 @@ export const getApiClient = cache(
     const link = new RPCLink({
       url: requireEnv("F3_API_BASE_URL"),
       fetch: (input, init) => {
-        input.headers.set(Header.Client, "f3_me");
+        input.headers.set(Header.Client, Client.F3_ME);
         input.headers.set(Header.Authorization, `Bearer ${accessToken}`);
         return fetch(input, init);
       },
