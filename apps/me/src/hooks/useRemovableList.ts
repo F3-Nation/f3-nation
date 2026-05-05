@@ -53,6 +53,8 @@ export function useRemovableList<T>({
   successMessage,
   failureTitle,
 }: RemovableListOptions<T>): UseRemovableListReturn<T> {
+  // initialItems is intentionally only used on mount for optimistic state; subsequent
+  // parent re-renders do not reset the list (removals are applied locally for instant UI feedback).
   const [items, setItems] = useState<T[]>(initialItems);
   const [removing, setRemoving] = useState<string | null>(null);
 
