@@ -143,7 +143,14 @@ for var in "${!SECRET_MAP[@]}"; do
   push_secret "$var" "${SECRET_MAP[$var]}" "${!var:-}" "$PROJECT" &
   PIDS+=($!)
 done
-for pid in "${PIDS[@]}"; do wait "$pid"; done
+FAILED=0
+for pid in "${PIDS[@]}"; do
+  wait "$pid" || FAILED=1
+done
+if [[ "$FAILED" -ne 0 ]]; then
+  echo "Error: One or more secret pushes failed."
+  exit 1
+fi
 
 # ── Grant Cloud Run service account access to secrets ──
 echo ""
