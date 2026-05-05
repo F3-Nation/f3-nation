@@ -44,7 +44,9 @@ export function parseAccessTokenPayload(
 
 export function isAccessTokenExpired(token: string, skewSeconds = 60): boolean {
   const payload = parseAccessTokenPayload(token);
-  if (!payload?.exp) return true;
+  if (typeof payload?.exp !== "number" || !Number.isFinite(payload.exp)) {
+    return true;
+  }
 
   const now = Math.floor(Date.now() / 1000);
   return payload.exp <= now + skewSeconds;
