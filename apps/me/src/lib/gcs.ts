@@ -35,6 +35,10 @@ export async function uploadAvatar(
   const blob = bucket.file(path);
 
   await blob.save(jpeg, {
+    // Avatars are capped at 5MB, so resumable uploads are unnecessary.
+    // Forcing non-resumable avoids a google-auth resumable path that can
+    // throw "URL is required" with some service-account configurations.
+    resumable: false,
     metadata: {
       contentType: "image/jpeg",
       cacheControl: "public, max-age=300",
