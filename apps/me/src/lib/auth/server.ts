@@ -8,9 +8,11 @@ import {
 import { getUserInfo } from "@/lib/auth/oauth";
 
 export interface SessionPayload {
+  // SSO subject is represented as a string in token/userinfo payloads.
   sub: string;
   email: string;
   name?: string;
+  // Internal app logic expects a numeric identifier for API payloads/DB writes.
   userId: number;
 }
 
