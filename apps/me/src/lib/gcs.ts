@@ -1,7 +1,11 @@
 import { Storage } from "@google-cloud/storage";
 import sharp from "sharp";
 
+let storageClient: Storage | null = null;
+
 function getStorage(): Storage {
+  if (storageClient) return storageClient;
+
   const credsBase64 = process.env.GCS_CREDENTIALS;
   if (!credsBase64) throw new Error("GCS_CREDENTIALS is not set");
 
@@ -9,7 +13,8 @@ function getStorage(): Storage {
     client_email: string;
     private_key: string;
   };
-  return new Storage({ credentials: creds });
+  storageClient = new Storage({ credentials: creds });
+  return storageClient;
 }
 
 export async function uploadAvatar(
