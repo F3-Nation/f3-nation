@@ -89,7 +89,6 @@ export function RegionSelect({ regions, value, onChange }: RegionSelectProps) {
                     region.id === value ? "bg-accent font-medium" : ""
                   }${!region.isActive ? " opacity-50" : ""}`}
                   onClick={() => {
-                    if (!region.isActive) return;
                     onChange(region.id);
                     selectAndClose();
                   }}
