@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { compositeKey } from "./useRemovableList";
+import { compositeKey } from "../useRemovableList";
 
 // ---------------------------------------------------------------------------
 // compositeKey

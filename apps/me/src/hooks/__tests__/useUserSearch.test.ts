@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { displayName, matchesSearch } from "./useUserSearch";
+import { displayName, matchesSearch } from "../useUserSearch";
 import type { UserListItem } from "@/lib/types";
 
 // ---------------------------------------------------------------------------

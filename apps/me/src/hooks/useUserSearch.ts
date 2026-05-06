@@ -61,6 +61,8 @@ export function useUserSearch({
   const [loading, setLoading] = useState(false);
   const [showAllRegions, setShowAllRegions] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserListItem | null>(null);
+  const scopedRegionId =
+    showAllRegions || !homeRegionId ? undefined : homeRegionId;
 
   const fetchUsers = useCallback(
     async (regionId?: number | null) => {
@@ -91,20 +93,35 @@ export function useUserSearch({
   );
 
   // Load users when dropdown opens
+  const previousScopeRef = useRef<number | undefined>(undefined);
   useEffect(() => {
     if (!open) return;
-    if (users.length > 0) return;
-    const regionIdToFetch =
-      showAllRegions || !homeRegionId ? undefined : homeRegionId;
-    void fetchUsers(regionIdToFetch);
-  }, [open, showAllRegions, homeRegionId, users.length, fetchUsers]);
+
+    const scopeChanged = previousScopeRef.current !== scopedRegionId;
+    if (users.length > 0 && !scopeChanged) return;
+
+    previousScopeRef.current = scopedRegionId;
+    void fetchUsers(scopedRegionId);
+  }, [open, users.length, scopedRegionId, fetchUsers]);
 
   // If we have a value but no selectedUser, try to resolve it.
   // Tracks the last resolved value so that changing to a new value triggers a fresh fetch.
   const resolvedRef = useRef<number | null>(null);
   useEffect(() => {
-    if (!value || selectedUser !== null || resolvedRef.current === value)
+    if (value == null) {
+      resolvedRef.current = null;
+      if (selectedUser !== null) setSelectedUser(null);
       return;
+    }
+
+    if (selectedUser !== null && selectedUser.id !== value) {
+      setSelectedUser(null);
+      resolvedRef.current = null;
+      return;
+    }
+
+    if (selectedUser !== null || resolvedRef.current === value) return;
+
     resolvedRef.current = value;
 
     void (async () => {

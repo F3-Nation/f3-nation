@@ -14,6 +14,12 @@ function requireEnv(name: string): string {
   return value;
 }
 
+function getApiTimeoutMs(): number {
+  const raw = process.env.F3_API_TIMEOUT_MS;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 10_000;
+}
+
 /**
  * Per-request cached oRPC client factory.
  *
@@ -30,9 +36,29 @@ export const getApiClient = cache(
     const link = new RPCLink({
       url: requireEnv("F3_API_BASE_URL"),
       fetch: (input, init) => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), getApiTimeoutMs());
+        const upstreamSignal = (init as RequestInit | undefined)?.signal;
+        const onAbort = () => controller.abort();
+
+        if (upstreamSignal) {
+          if (upstreamSignal.aborted) {
+            controller.abort();
+          } else {
+            upstreamSignal.addEventListener("abort", onAbort, { once: true });
+          }
+        }
+
         input.headers.set(Header.Client, Client.F3_ME);
         input.headers.set(Header.Authorization, `Bearer ${accessToken}`);
-        return fetch(input, init);
+
+        return fetch(input, {
+          ...init,
+          signal: controller.signal,
+        }).finally(() => {
+          clearTimeout(timeout);
+          upstreamSignal?.removeEventListener("abort", onAbort);
+        });
       },
     });
 

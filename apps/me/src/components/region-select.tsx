@@ -54,6 +54,7 @@ export function RegionSelect({ regions, value, onChange }: RegionSelectProps) {
         <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md">
           <div className="p-2">
             <Input
+              aria-label="Search regions"
               placeholder="Search regions..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}

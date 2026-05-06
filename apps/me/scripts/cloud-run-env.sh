@@ -112,8 +112,18 @@ push_secret() {
   # Create secret if it doesn't exist
   if ! gcloud secrets describe "$secret_id" --project "$project" &>/dev/null; then
     echo "  CREATE: $secret_id"
-    gcloud secrets create "$secret_id" --project "$project" --replication-policy="automatic" 2>/dev/null || true
-    existing=""
+    create_output=""
+    if ! create_output="$(gcloud secrets create "$secret_id" --project "$project" --replication-policy="automatic" 2>&1)"; then
+      if grep -qi "already exists" <<<"$create_output"; then
+        echo "  EXISTS: $secret_id"
+      else
+        echo "  ERROR: failed to create secret $secret_id"
+        echo "$create_output"
+        return 1
+      fi
+    fi
+
+    existing="$(gcloud secrets versions access latest --secret="$secret_id" --project "$project" 2>/dev/null)" || existing=""
   else
     existing="$(gcloud secrets versions access latest --secret="$secret_id" --project "$project" 2>/dev/null)" || existing=""
   fi

@@ -18,7 +18,8 @@ export async function POST() {
     try {
       await revokeToken(refreshToken);
     } catch (err) {
-      console.error("Failed to revoke refresh token", err);
+      const message = err instanceof Error ? err.message : "unknown error";
+      console.warn("Failed to revoke refresh token", message);
     }
   }
 

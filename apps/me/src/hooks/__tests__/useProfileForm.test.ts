@@ -4,8 +4,8 @@ import {
   buildInitialFormState,
   buildDirtyPayload,
   dirtyFieldClass,
-} from "./useProfileForm";
-import type { ProfileFormState } from "./useProfileForm";
+} from "../useProfileForm";
+import type { ProfileFormState } from "../useProfileForm";
 import type { UserProfile } from "@/lib/types";
 
 // ---------------------------------------------------------------------------

@@ -60,6 +60,7 @@ export function UserSelect({ value, homeRegionId, onChange }: UserSelectProps) {
         <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md">
           <div className="p-2">
             <Input
+              aria-label="Search users"
               placeholder="Search by name or region..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}

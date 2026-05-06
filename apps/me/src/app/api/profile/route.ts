@@ -79,7 +79,15 @@ export async function PATCH(request: NextRequest) {
   try {
     await requireAuth();
 
-    const raw: unknown = await request.json();
+    let raw: unknown;
+    try {
+      raw = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid JSON payload" },
+        { status: 400 },
+      );
+    }
     const parsed = profileUpdateSchema.safeParse(raw);
     if (!parsed.success) {
       return NextResponse.json(

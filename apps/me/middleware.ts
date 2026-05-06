@@ -75,24 +75,31 @@ export async function middleware(request: NextRequest) {
   }
 
   const redirectUrl = new URL("/", request.url);
-  if (!pathname.startsWith("/api/")) {
-    redirectUrl.searchParams.set("redirect", pathname);
+  const clearCookieOpts = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    path: "/",
+    maxAge: 0,
+  };
+
+  if (pathname.startsWith("/api/")) {
+    const response = NextResponse.json(
+      { error: "unauthorized" },
+      { status: 401 },
+    );
+    response.cookies.set(ACCESS_TOKEN_COOKIE_NAME, "", clearCookieOpts);
+    response.cookies.set(REFRESH_TOKEN_COOKIE_NAME, "", clearCookieOpts);
+    return response;
   }
 
+  redirectUrl.searchParams.set("redirect", pathname);
   const response = NextResponse.redirect(redirectUrl);
   response.cookies.set(ACCESS_TOKEN_COOKIE_NAME, "", {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: 0,
+    ...clearCookieOpts,
   });
   response.cookies.set(REFRESH_TOKEN_COOKIE_NAME, "", {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: 0,
+    ...clearCookieOpts,
   });
 
   return response;
