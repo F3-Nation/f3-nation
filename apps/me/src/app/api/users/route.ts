@@ -10,8 +10,15 @@ export async function GET(request: NextRequest) {
     await requireAuth();
 
     const homeRegionId = request.nextUrl.searchParams.get("homeRegionId");
-    const parsed = homeRegionId ? Number(homeRegionId) : undefined;
-    if (homeRegionId && (!Number.isInteger(parsed) || parsed! < 1)) {
+    const hasHomeRegionId = homeRegionId !== null;
+    const parsed =
+      hasHomeRegionId && homeRegionId.trim() !== ""
+        ? Number(homeRegionId)
+        : undefined;
+    if (
+      hasHomeRegionId &&
+      (!parsed || !Number.isInteger(parsed) || parsed < 1)
+    ) {
       return NextResponse.json(
         { error: "homeRegionId must be a positive integer" },
         { status: 400 },

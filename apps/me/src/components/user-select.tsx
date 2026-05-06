@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState, useCallback } from "react";
 import { Button } from "@acme/ui/button";
 import { Input } from "@acme/ui/input";
 import { useDropdownSelect } from "@/hooks/useDropdownSelect";
@@ -24,7 +24,73 @@ export function UserSelect({ value, homeRegionId, onChange }: UserSelectProps) {
     setSelectedUser,
     handleExpandAll,
   } = useUserSearch({ value, homeRegionId, open, search });
+  // TODO: dropdownRef — reserved for click-outside detection or focus management
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const [focusedIndex, setFocusedIndex] = useState(-1);
+  const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  // Total focusable items = optional "clear" button + filteredUsers + optional "expand" button
+  const clearOffset = value !== null ? 1 : 0;
+  const expandOffset = isRegionScoped ? 1 : 0;
+  const totalItems = clearOffset + filteredUsers.length + expandOffset;
+
+  const handleTriggerKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (!open) {
+        if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          toggle();
+          setFocusedIndex(0);
+        }
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        selectAndClose();
+        setFocusedIndex(-1);
+      } else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setFocusedIndex((prev) => {
+          const next = prev < totalItems - 1 ? prev + 1 : 0;
+          itemRefs.current[next]?.focus();
+          return next;
+        });
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setFocusedIndex((prev) => {
+          const next = prev > 0 ? prev - 1 : totalItems - 1;
+          itemRefs.current[next]?.focus();
+          return next;
+        });
+      }
+    },
+    [open, toggle, selectAndClose, totalItems],
+  );
+
+  const handleListKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        selectAndClose();
+        setFocusedIndex(-1);
+      } else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setFocusedIndex((prev) => {
+          const next = prev < totalItems - 1 ? prev + 1 : 0;
+          itemRefs.current[next]?.focus();
+          return next;
+        });
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setFocusedIndex((prev) => {
+          const next = prev > 0 ? prev - 1 : totalItems - 1;
+          itemRefs.current[next]?.focus();
+          return next;
+        });
+      }
+    },
+    [selectAndClose, totalItems],
+  );
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -33,6 +99,10 @@ export function UserSelect({ value, homeRegionId, onChange }: UserSelectProps) {
         type="button"
         className="w-full justify-between text-left font-normal"
         onClick={toggle}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-controls="user-list"
+        onKeyDown={handleTriggerKeyDown}
       >
         <span
           className={`truncate ${value && selectedUser ? "" : "text-muted-foreground"}`}
@@ -57,7 +127,11 @@ export function UserSelect({ value, homeRegionId, onChange }: UserSelectProps) {
       </Button>
 
       {open && (
-        <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md">
+        <div
+          id="user-list"
+          className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md"
+          onKeyDown={handleListKeyDown}
+        >
           <div className="p-2">
             <Input
               aria-label="Search users"
@@ -78,6 +152,9 @@ export function UserSelect({ value, homeRegionId, onChange }: UserSelectProps) {
               <>
                 {value !== null && (
                   <button
+                    ref={(el) => {
+                      itemRefs.current[0] = el;
+                    }}
                     type="button"
                     className="relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm text-muted-foreground outline-none hover:bg-accent"
                     onClick={() => {
@@ -94,9 +171,12 @@ export function UserSelect({ value, homeRegionId, onChange }: UserSelectProps) {
                     No users found.
                   </p>
                 ) : (
-                  filteredUsers.map((user: UserListItem) => (
+                  filteredUsers.map((user: UserListItem, idx: number) => (
                     <button
                       key={user.id}
+                      ref={(el) => {
+                        itemRefs.current[clearOffset + idx] = el;
+                      }}
                       type="button"
                       className={`relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent ${
                         user.id === value ? "bg-accent font-medium" : ""
@@ -120,6 +200,9 @@ export function UserSelect({ value, homeRegionId, onChange }: UserSelectProps) {
                 )}
                 {isRegionScoped && (
                   <button
+                    ref={(el) => {
+                      itemRefs.current[clearOffset + filteredUsers.length] = el;
+                    }}
                     type="button"
                     className="relative flex w-full cursor-pointer select-none items-center justify-center rounded-sm border-t px-2 py-2 text-sm font-medium text-primary outline-none hover:bg-accent"
                     onClick={handleExpandAll}

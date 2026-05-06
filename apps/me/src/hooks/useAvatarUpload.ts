@@ -42,6 +42,12 @@ export interface FileValidationError {
 
 /** Validate a file for avatar upload. Returns an error object or null. */
 export function validateAvatarFile(file: File): FileValidationError | null {
+  if (file.size === 0) {
+    return {
+      title: "Empty file",
+      description: "The selected file is empty.",
+    };
+  }
   if (file.size > MAX_FILE_SIZE) {
     return {
       title: "File too large",

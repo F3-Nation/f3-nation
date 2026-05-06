@@ -29,6 +29,9 @@ export function RegionSelect({ regions, value, onChange }: RegionSelectProps) {
         type="button"
         className="w-full justify-between text-left font-normal"
         onClick={toggle}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-controls="region-list"
       >
         <span className={selectedRegion ? "" : "text-muted-foreground"}>
           {selectedRegion?.name ?? "Select a region..."}
@@ -51,7 +54,10 @@ export function RegionSelect({ regions, value, onChange }: RegionSelectProps) {
       </Button>
 
       {open && (
-        <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md">
+        <div
+          id="region-list"
+          className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md"
+        >
           <div className="p-2">
             <Input
               aria-label="Search regions"

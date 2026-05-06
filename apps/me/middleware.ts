@@ -14,7 +14,7 @@ const STATIC_ASSET_PATTERN =
   /\.(?:css|js|mjs|map|txt|xml|json|png|jpe?g|gif|webp|svg|ico|bmp|avif|woff2?|ttf|otf|eot|mp4|webm|mp3|wav|ogg|pdf)$/i;
 
 export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+  const { pathname, search } = request.nextUrl;
 
   // Allow public paths
   if (PUBLIC_PATHS.includes(pathname)) {
@@ -48,10 +48,37 @@ export async function middleware(request: NextRequest) {
     try {
       const tokens = await refreshToken({ refreshToken: refreshTokenCookie });
       if (tokens.accessToken) {
-        const response = NextResponse.next();
+        // Forward refreshed tokens into the current request cycle so downstream
+        // route handlers and Server Components see the new values immediately.
+        const isSecure = process.env.NODE_ENV === "production";
+        const existingCookie = request.headers.get("cookie") ?? "";
+        const filteredCookie = existingCookie
+          .split(";")
+          .map((c) => c.trim())
+          .filter(
+            (c) =>
+              !c.startsWith(`${ACCESS_TOKEN_COOKIE_NAME}=`) &&
+              !c.startsWith(`${REFRESH_TOKEN_COOKIE_NAME}=`),
+          )
+          .join("; ");
+        const newCookieParts = [
+          filteredCookie,
+          `${ACCESS_TOKEN_COOKIE_NAME}=${tokens.accessToken}`,
+          ...(tokens.refreshToken
+            ? [`${REFRESH_TOKEN_COOKIE_NAME}=${tokens.refreshToken}`]
+            : []),
+        ]
+          .filter(Boolean)
+          .join("; ");
+        const requestHeaders = new Headers(request.headers);
+        requestHeaders.set("cookie", newCookieParts);
+
+        const response = NextResponse.next({
+          request: { headers: requestHeaders },
+        });
         response.cookies.set(ACCESS_TOKEN_COOKIE_NAME, tokens.accessToken, {
           httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
+          secure: isSecure,
           sameSite: "lax",
           path: "/",
           maxAge: tokens.expiresIn ?? ACCESS_TOKEN_DEFAULT_MAX_AGE,
@@ -60,7 +87,7 @@ export async function middleware(request: NextRequest) {
         if (tokens.refreshToken) {
           response.cookies.set(REFRESH_TOKEN_COOKIE_NAME, tokens.refreshToken, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
+            secure: isSecure,
             sameSite: "lax",
             path: "/",
             maxAge: REFRESH_TOKEN_MAX_AGE,
@@ -93,7 +120,7 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  redirectUrl.searchParams.set("redirect", pathname);
+  redirectUrl.searchParams.set("redirect", pathname + search);
   const response = NextResponse.redirect(redirectUrl);
   response.cookies.set(ACCESS_TOKEN_COOKIE_NAME, "", {
     ...clearCookieOpts,

@@ -105,7 +105,7 @@ export async function PATCH(request: NextRequest) {
       if (EDITABLE_FIELDS.has(key)) {
         updateBody[key] = value;
       } else if (META_FIELDS.has(key)) {
-        metaUpdates[key] = value;
+        (metaUpdates as Record<string, unknown>)[key] = value;
       }
     }
 

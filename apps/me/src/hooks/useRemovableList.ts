@@ -60,6 +60,9 @@ export function useRemovableList<T>({
 
   const handleRemove = useCallback(
     async (item: T) => {
+      // Prevent overlapping deletes: if one is already in flight, ignore the second call.
+      if (removing) return;
+
       const key = getKey(item);
       setRemoving(key);
 
@@ -90,6 +93,7 @@ export function useRemovableList<T>({
       }
     },
     [
+      removing,
       getKey,
       endpoint,
       buildDeleteBody,

@@ -66,3 +66,14 @@ export async function uploadAvatar(
 
   return `https://storage.googleapis.com/${bucketName}/${path}`;
 }
+
+export async function deleteAvatar(userId: number): Promise<void> {
+  const bucketName = process.env.GCS_BUCKET;
+  if (!bucketName) throw new Error("GCS_BUCKET is not set");
+
+  const path = `user-avatars/${userId}.jpg`;
+  await getStorage()
+    .bucket(bucketName)
+    .file(path)
+    .delete({ ignoreNotFound: true });
+}

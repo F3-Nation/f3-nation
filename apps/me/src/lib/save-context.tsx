@@ -12,11 +12,9 @@ const noop = () => {
   /* intentional no-op: default context value before registration */
 };
 
-const SaveContext = createContext<SaveState>({
-  isDirty: false,
-  saving: false,
-  save: noop,
-});
+const defaultState: SaveState = { isDirty: false, saving: false, save: noop };
+
+const SaveContext = createContext<SaveState>(defaultState);
 
 interface RegisterFn {
   register: (opts: {
@@ -24,16 +22,16 @@ interface RegisterFn {
     saving: boolean;
     onSave: () => void;
   }) => void;
+  unregister: () => void;
 }
 
-const RegisterContext = createContext<RegisterFn>({ register: noop });
+const RegisterContext = createContext<RegisterFn>({
+  register: noop,
+  unregister: noop,
+});
 
 export function SaveProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<SaveState>({
-    isDirty: false,
-    saving: false,
-    save: noop,
-  });
+  const [state, setState] = useState<SaveState>(defaultState);
 
   const register = useCallback(
     (opts: { isDirty: boolean; saving: boolean; onSave: () => void }) => {
@@ -46,8 +44,12 @@ export function SaveProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  const unregister = useCallback(() => {
+    setState(defaultState);
+  }, []);
+
   return (
-    <RegisterContext.Provider value={{ register }}>
+    <RegisterContext.Provider value={{ register, unregister }}>
       <SaveContext.Provider value={state}>{children}</SaveContext.Provider>
     </RegisterContext.Provider>
   );

@@ -56,6 +56,11 @@ ENV_NAME=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --env)
+      if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        echo "Error: --env requires an argument."
+        echo "Usage: $0 --env <prod|staging>"
+        exit 1
+      fi
       ENV_NAME="$2"
       shift 2
       ;;
@@ -86,10 +91,22 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
-# Source the env file
-set -a
-source "$ENV_FILE"
-set +a
+# Safely parse the env file without sourcing to prevent execution of arbitrary shell code
+while IFS= read -r line || [[ -n "$line" ]]; do
+  # Skip blank lines and comments
+  [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+  # Match only KEY=VALUE pairs (no command substitution or expansion)
+  if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+    _env_key="${BASH_REMATCH[1]}"
+    _env_val="${BASH_REMATCH[2]}"
+    # Strip surrounding single or double quotes
+    if [[ "$_env_val" =~ ^\"(.*)\"$ ]] || [[ "$_env_val" =~ ^\'(.*)\'$ ]]; then
+      _env_val="${BASH_REMATCH[1]}"
+    fi
+    export "${_env_key}=${_env_val}"
+  fi
+done < "$ENV_FILE"
+unset _env_key _env_val
 
 echo "Environment:  $ENV_NAME"
 echo "GCP Project:  $PROJECT"
@@ -179,11 +196,14 @@ fi
 for var in "${!SECRET_MAP[@]}"; do
   secret_id="${SECRET_MAP[$var]}"
   echo "  Granting access to $secret_id..."
-  gcloud secrets add-iam-policy-binding "$secret_id" \
+  if ! gcloud secrets add-iam-policy-binding "$secret_id" \
     --project "$PROJECT" \
     --member "serviceAccount:${SA_EMAIL}" \
     --role "roles/secretmanager.secretAccessor" \
-    --quiet > /dev/null || echo "  WARNING: Failed to bind $secret_id"
+    --quiet > /dev/null; then
+    echo "  ERROR: Failed to grant IAM access for secret $secret_id — aborting."
+    exit 1
+  fi
 done
 
 # ── Build the Cloud Run update command ──

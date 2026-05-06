@@ -74,9 +74,9 @@ describe("validateAvatarFile", () => {
     expect(error?.title).toBe("File too large");
   });
 
-  it("returns null for zero-byte valid type file", () => {
+  it("returns error for zero-byte file", () => {
     const file = makeFile(0, "image/jpeg");
-    expect(validateAvatarFile(file)).toBeNull();
+    expect(validateAvatarFile(file)).not.toBeNull();
   });
 });
 

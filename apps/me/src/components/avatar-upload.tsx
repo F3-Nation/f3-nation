@@ -1,10 +1,11 @@
 "use client";
 
 import { useRef } from "react";
-import { Button } from "@acme/ui/button";
+import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { useToast } from "@/components/ui/toast";
 import { useAvatarUpload } from "@/hooks/useAvatarUpload";
+import { cn } from "@/lib/utils";
 
 interface AvatarUploadProps {
   currentUrl: string | null;
@@ -34,7 +35,10 @@ export function AvatarUpload({
     <div className="flex items-center gap-4">
       <button
         type="button"
-        className={`relative cursor-pointer rounded-full ${dragOver ? "ring-2 ring-primary ring-offset-2" : ""}`}
+        className={cn(
+          "relative cursor-pointer rounded-full",
+          dragOver && "ring-2 ring-primary ring-offset-2",
+        )}
         onClick={openFilePicker}
         onDragOver={(e) => {
           e.preventDefault();

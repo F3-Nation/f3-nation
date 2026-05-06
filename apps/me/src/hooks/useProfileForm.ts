@@ -215,11 +215,16 @@ export function useProfileForm({
   const saveRef = useRef(handleSave);
   saveRef.current = handleSave;
 
-  // Register save state with the navbar
-  const { register } = useSaveRegister();
+  // Register save state with the navbar; unregister on unmount to clear stale state
+  const { register, unregister } = useSaveRegister();
   useEffect(() => {
     register({ isDirty, saving, onSave: () => void saveRef.current() });
   }, [isDirty, saving, register]);
+  useEffect(() => {
+    return () => {
+      unregister();
+    };
+  }, [unregister]);
 
   return {
     form,

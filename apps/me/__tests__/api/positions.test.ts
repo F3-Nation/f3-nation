@@ -133,6 +133,22 @@ describe("Positions API route", () => {
     expect(response.status).toBe(400);
   });
 
+  it("returns 400 when body is malformed JSON", async () => {
+    vi.mocked(requireAuth).mockResolvedValue(mockSession);
+
+    const { DELETE } = await import("@/app/api/profile/positions/route");
+    const req = new NextRequest("http://localhost/api/profile/positions", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: "{",
+    });
+
+    const response = await DELETE(req);
+    expect(response.status).toBe(400);
+    const data = (await response.json()) as { error: string };
+    expect(data.error).toContain("Invalid JSON");
+  });
+
   it("returns 400 when body is empty", async () => {
     vi.mocked(requireAuth).mockResolvedValue(mockSession);
 

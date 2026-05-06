@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { exchangeCodeForToken, getUserInfo } from "@/lib/auth/oauth";
 import { safeReturnTo } from "@/lib/auth/validation";
+import {
+  ACCESS_TOKEN_COOKIE_NAME,
+  REFRESH_TOKEN_COOKIE_NAME,
+  OAUTH_CSRF_COOKIE_NAME,
+  OAUTH_CODE_VERIFIER_COOKIE_NAME,
+} from "@/lib/auth/constants";
 
 interface StatePayload {
   csrfToken: string;
@@ -53,7 +59,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Validate CSRF token against cookie
-  const csrfCookie = request.cookies.get("oauth_csrf")?.value;
+  const csrfCookie = request.cookies.get(OAUTH_CSRF_COOKIE_NAME)?.value;
   if (!csrfCookie || csrfCookie !== state.csrfToken) {
     return errorRedirect(baseUrl, "csrf_mismatch");
   }
@@ -62,7 +68,9 @@ export async function GET(request: NextRequest) {
   const returnTo = safeReturnTo(state.returnTo);
 
   // Validate PKCE code verifier cookie
-  const codeVerifier = request.cookies.get("oauth_code_verifier")?.value;
+  const codeVerifier = request.cookies.get(
+    OAUTH_CODE_VERIFIER_COOKIE_NAME,
+  )?.value;
   if (!codeVerifier) {
     return errorRedirect(baseUrl, "missing_code_verifier", returnTo);
   }
@@ -81,7 +89,8 @@ export async function GET(request: NextRequest) {
     expiresIn =
       typeof tokens.expiresIn === "number" ? tokens.expiresIn : undefined;
   } catch (err) {
-    console.error("Token exchange failed", err);
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("Token exchange failed", message);
     return errorRedirect(baseUrl, "token_exchange_failed", returnTo);
   }
 
@@ -90,7 +99,8 @@ export async function GET(request: NextRequest) {
   try {
     userInfo = await getUserInfo(accessToken);
   } catch (err) {
-    console.error("Failed to fetch user info", err);
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("Failed to fetch user info", message);
     return errorRedirect(baseUrl, "userinfo_failed", returnTo);
   }
 
@@ -102,7 +112,7 @@ export async function GET(request: NextRequest) {
   const accessTokenMaxAge = expiresIn ?? 60 * 60;
   const refreshTokenMaxAge = 30 * 24 * 60 * 60;
 
-  response.cookies.set("access_token", accessToken, {
+  response.cookies.set(ACCESS_TOKEN_COOKIE_NAME, accessToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
@@ -111,7 +121,7 @@ export async function GET(request: NextRequest) {
   });
 
   if (refreshTokenValue) {
-    response.cookies.set("refresh_token", refreshTokenValue, {
+    response.cookies.set(REFRESH_TOKEN_COOKIE_NAME, refreshTokenValue, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
@@ -128,8 +138,8 @@ export async function GET(request: NextRequest) {
     path: "/",
     maxAge: 0,
   };
-  response.cookies.set("oauth_csrf", "", clearCookieOpts);
-  response.cookies.set("oauth_code_verifier", "", clearCookieOpts);
+  response.cookies.set(OAUTH_CSRF_COOKIE_NAME, "", clearCookieOpts);
+  response.cookies.set(OAUTH_CODE_VERIFIER_COOKIE_NAME, "", clearCookieOpts);
 
   return response;
 }

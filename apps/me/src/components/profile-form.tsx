@@ -180,13 +180,20 @@ export function ProfileForm({ user, regions }: ProfileFormProps) {
               }`}
             >
               <div className="space-y-0.5">
-                <Label>Cross-Region Info Sharing</Label>
-                <p className="text-sm text-muted-foreground">
+                <Label htmlFor="user-emergency-info-dr-sharing">
+                  Cross-Region Info Sharing
+                </Label>
+                <p
+                  id="user-emergency-info-dr-sharing-help"
+                  className="text-sm text-muted-foreground"
+                >
                   If enabled, users can search for your emergency info from
                   other Slack workspaces.
                 </p>
               </div>
               <Switch
+                id="user-emergency-info-dr-sharing"
+                aria-describedby="user-emergency-info-dr-sharing-help"
                 checked={form.user_emergency_info_dr_sharing}
                 onCheckedChange={(checked) =>
                   updateField("user_emergency_info_dr_sharing", checked)

@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth/server";
-import { uploadAvatar } from "@/lib/gcs";
+import { uploadAvatar, deleteAvatar } from "@/lib/gcs";
 import { updateMyProfile } from "@/lib/api/client";
 
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -66,8 +66,19 @@ export async function POST(request: NextRequest) {
     // Upload converts to JPEG and saves as user-avatars/{userId}.jpg
     const avatarUrl = await uploadAvatar(userId, buffer);
 
-    // Update user's avatarUrl via the me API
-    await updateMyProfile({ avatarUrl });
+    // Update user's avatarUrl via the me API — if this fails, clean up the uploaded file
+    try {
+      await updateMyProfile({ avatarUrl });
+    } catch (profileErr) {
+      // Best-effort cleanup: delete the orphaned GCS object
+      await deleteAvatar(userId).catch((cleanupErr) => {
+        console.error(
+          "Failed to clean up orphaned avatar after profile update failure",
+          cleanupErr,
+        );
+      });
+      throw profileErr;
+    }
 
     return NextResponse.json({ avatarUrl });
   } catch (err) {

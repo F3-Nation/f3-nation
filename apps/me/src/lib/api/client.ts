@@ -118,7 +118,7 @@ export async function deleteMyRole(orgId: number, roleId: number) {
 export async function getUsers(homeRegionId?: number | null) {
   const client = await getApiClient();
   const result = await client.me.users(
-    homeRegionId ? { homeRegionId } : undefined,
+    homeRegionId != null ? { homeRegionId } : undefined,
   );
   return result.users;
 }

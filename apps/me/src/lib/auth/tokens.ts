@@ -90,8 +90,31 @@ export async function verifyAccessToken(token: string): Promise<boolean> {
   // Fast pre-flight: skip the JWKS network call for obviously-expired tokens.
   if (isAccessTokenExpired(token)) return false;
 
+  const issuer = process.env.AUTH_PROVIDER_URL;
+  const clientId = process.env.OAUTH_CLIENT_ID;
+  if (!issuer) throw new Error("AUTH_PROVIDER_URL is required");
+  if (!clientId) throw new Error("OAUTH_CLIENT_ID is required");
+
+  // Try strict validation: signature + issuer + audience.
   try {
-    await jwtVerify(token, getRemoteJWKS(), { algorithms: ["RS256"] });
+    await jwtVerify(token, getRemoteJWKS(), {
+      algorithms: ["RS256"],
+      issuer,
+      audience: clientId,
+    });
+    return true;
+  } catch {
+    // Some tokens may carry client_id instead of (or in addition to) aud.
+    // Fall back to verifying signature + issuer only, then assert client_id.
+  }
+
+  try {
+    const { payload } = await jwtVerify(token, getRemoteJWKS(), {
+      algorithms: ["RS256"],
+      issuer,
+    });
+    const p = payload as Record<string, unknown>;
+    if (p.client_id !== clientId) return false;
     return true;
   } catch {
     return false;

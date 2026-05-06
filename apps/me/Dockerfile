@@ -8,7 +8,7 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 RUN corepack enable && corepack prepare pnpm@8.15.1 --activate
-RUN pnpm add -g turbo@^1.12.3
+RUN pnpm add -g turbo@1.12.3
 
 COPY . .
 RUN turbo prune f3-me --docker
@@ -25,7 +25,7 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 RUN corepack enable && corepack prepare pnpm@8.15.1 --activate
-RUN pnpm add -g turbo@^1.12.3
+RUN pnpm add -g turbo@1.12.3
 
 # Install dependencies from pruned lockfile
 COPY --from=builder /app/out/json/ .
