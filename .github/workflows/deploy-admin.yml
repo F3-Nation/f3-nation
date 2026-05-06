@@ -68,6 +68,10 @@ jobs:
         run: |
           docker build \
             --file apps/admin/Dockerfile \
+            --build-arg NEXT_PUBLIC_CHANNEL=${{ vars.NEXT_PUBLIC_CHANNEL }} \
+            --build-arg NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL }} \
+            --build-arg NEXT_PUBLIC_MAP_URL=${{ vars.NEXT_PUBLIC_MAP_URL }} \
+            --build-arg NEXT_PUBLIC_ADMIN_URL=${{ vars.NEXT_PUBLIC_ADMIN_URL }} \
             --tag "${{ steps.meta.outputs.image }}" \
             .
           docker push "${{ steps.meta.outputs.image }}"
@@ -96,44 +100,44 @@ jobs:
           region: ${{ env.REGION }}
           project_id: ${{ env.STAGING_PROJECT }}
 
-  deploy-production:
-    needs: [build, deploy-staging]
-    runs-on: ubuntu-latest
-    environment:
-      name: admin-production
-      url: https://admin.f3nation.com
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - name: Authenticate to GCP (staging — pull image from staging AR)
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
-          service_account: ${{ vars.WIF_SA }}
-
-      - uses: google-github-actions/setup-gcloud@v2
-
-      - name: Promote image to production AR
-        run: |
-          STAGING_IMAGE="${{ needs.build.outputs.image }}"
-          PROD_IMAGE="${REGION}-docker.pkg.dev/${PROD_PROJECT}/${AR_REPO}/${IMAGE_NAME}:${STAGING_IMAGE##*:}"
-          gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
-          docker pull "${STAGING_IMAGE}"
-          docker tag "${STAGING_IMAGE}" "${PROD_IMAGE}"
-          docker push "${PROD_IMAGE}"
-          echo "prod_image=${PROD_IMAGE}" >> "$GITHUB_ENV"
-
-      - name: Authenticate to GCP (prod)
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
-          service_account: ${{ vars.WIF_SA }}
-
-      - name: Deploy to Cloud Run (prod)
-        uses: google-github-actions/deploy-cloudrun@v2
-        with:
-          service: ${{ env.SERVICE_NAME }}
-          image: ${{ env.prod_image }}
-          region: ${{ env.REGION }}
-          project_id: ${{ env.PROD_PROJECT }}
+  # deploy-production:
+  #   needs: [build, deploy-staging]
+  #   runs-on: ubuntu-latest
+  #   environment:
+  #     name: admin-production
+  #     url: https://admin.f3nation.com
+  #   permissions:
+  #     contents: read
+  #     id-token: write
+  #   steps:
+  #     - name: Authenticate to GCP (staging — pull image from staging AR)
+  #       uses: google-github-actions/auth@v2
+  #       with:
+  #         workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+  #         service_account: ${{ vars.WIF_SA }}
+  #
+  #     - uses: google-github-actions/setup-gcloud@v2
+  #
+  #     - name: Promote image to production AR
+  #       run: |
+  #         STAGING_IMAGE="${{ needs.build.outputs.image }}"
+  #         PROD_IMAGE="${REGION}-docker.pkg.dev/${PROD_PROJECT}/${AR_REPO}/${IMAGE_NAME}:${STAGING_IMAGE##*:}"
+  #         gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
+  #         docker pull "${STAGING_IMAGE}"
+  #         docker tag "${STAGING_IMAGE}" "${PROD_IMAGE}"
+  #         docker push "${PROD_IMAGE}"
+  #         echo "prod_image=${PROD_IMAGE}" >> "$GITHUB_ENV"
+  #
+  #     - name: Authenticate to GCP (prod)
+  #       uses: google-github-actions/auth@v2
+  #       with:
+  #         workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+  #         service_account: ${{ vars.WIF_SA }}
+  #
+  #     - name: Deploy to Cloud Run (prod)
+  #       uses: google-github-actions/deploy-cloudrun@v2
+  #       with:
+  #         service: ${{ env.SERVICE_NAME }}
+  #         image: ${{ env.prod_image }}
+  #         region: ${{ env.REGION }}
+  #         project_id: ${{ env.PROD_PROJECT }}
