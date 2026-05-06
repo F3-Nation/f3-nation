@@ -1,82 +1,79 @@
+# ---------- Stage 1: Prune monorepo ----------
 FROM --platform=linux/amd64 node:24-alpine AS builder
 
-ENV NEXT_TELEMETRY_DISABLED 1
-ENV TURBO_TELEMETRY_DISABLED 1
-
-RUN apk add --no-cache libc6-compat openssl && apk update
+ENV TURBO_TELEMETRY_DISABLED=1
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+RUN apk add --no-cache libc6-compat && apk update
 WORKDIR /app
-RUN npm install -g turbo@^1.12.3
-COPY . .
 
-# Prune the workspace to only include admin and its dependencies
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
+RUN pnpm add -g turbo@^1.12.3
+
+COPY . .
 RUN turbo prune f3-nation-admin --docker
 
+# ---------- Stage 2: Install + build ----------
 FROM --platform=linux/amd64 node:24-alpine AS installer
+
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV TURBO_TELEMETRY_DISABLED=1
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN apk add --no-cache libc6-compat openssl && apk update
 WORKDIR /app
 
-ENV NODE_ENV production
-ENV CI true
-ENV SKIP_ENV_VALIDATION true
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
+RUN pnpm add -g turbo@^1.12.3
 
-RUN npm install -g turbo@^1.12.3
-RUN corepack enable
-ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
-
-# Copy the pruned workspace
-COPY .gitignore .gitignore
+# Install dependencies from pruned lockfile
 COPY --from=builder /app/out/json/ .
 COPY --from=builder /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
-
-# Install dependencies (pnpm version from root package.json "packageManager")
 RUN pnpm install --frozen-lockfile
 
+# Copy source and build
 COPY --from=builder /app/out/full/ .
 
-RUN wget -q -t3 'https://packages.doppler.com/public/cli/rsa.8004D9FF50437357.key' -O /etc/apk/keys/cli@doppler-8004D9FF50437357.rsa.pub && \
-    echo 'https://packages.doppler.com/public/cli/alpine/any-version/main' | tee -a /etc/apk/repositories && \
-    apk add doppler
+ENV NODE_ENV=production
+ENV CI=true
+ENV SKIP_ENV_VALIDATION=true
 
-ARG DOPPLER_TOKEN
-ARG ENVIRONMENT
-RUN echo "Received DOPPLER_TOKEN (first 5 chars): ${DOPPLER_TOKEN:0:5}"
+# Server-side placeholders: satisfy module-level init checks during next build
+ENV DATABASE_URL=postgres://placeholder:placeholder@localhost:5432/placeholder
+ENV EMAIL_SERVER=smtp://placeholder:placeholder@localhost:587
+ENV EMAIL_FROM=noreply@placeholder.com
 
-ENV DOPPLER_TOKEN=${DOPPLER_TOKEN}
-RUN echo "Set ENV DOPPLER_TOKEN (first 5 chars): ${DOPPLER_TOKEN:0:5}"
+# Client-side: must be real values (baked into browser JS at build time)
+ARG NEXT_PUBLIC_CHANNEL
+ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_MAP_URL
+ARG NEXT_PUBLIC_ADMIN_URL
+ENV NEXT_PUBLIC_CHANNEL=$NEXT_PUBLIC_CHANNEL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_MAP_URL=$NEXT_PUBLIC_MAP_URL
+ENV NEXT_PUBLIC_ADMIN_URL=$NEXT_PUBLIC_ADMIN_URL
 
-# Debug steps to verify the token
-RUN echo "Received DOPPLER_TOKEN (first 5 chars): ${DOPPLER_TOKEN:0:5}" && \
-    if [ -z "$DOPPLER_TOKEN" ]; then \
-        echo "Error: DOPPLER_TOKEN is not set"; \
-        exit 1; \
-    fi && \
-    echo "Using token starting with: ${DOPPLER_TOKEN:0:5}"
+RUN pnpm turbo build --filter=f3-nation-admin
 
-# Use the token explicitly
-RUN doppler setup -p f3-admin --token "$DOPPLER_TOKEN"
-
-RUN doppler secrets download --no-file --format env > /app/apps/admin/.env
-RUN doppler run -- sh -c "pnpm turbo build --filter=f3-nation-admin && pnpm -F db migrate"
-
+# ---------- Stage 3: Production runner ----------
 FROM --platform=linux/amd64 node:24-alpine AS runner
+
 RUN apk add --no-cache libc6-compat openssl && apk update
 WORKDIR /app
 
-# Don't run production as root
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 admin
-USER admin
-EXPOSE 3000
-ENV PORT 3000
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 admin
 
-ENV NODE_ENV production
-
-COPY --from=installer /app/apps/admin/next.config.js ./
-COPY --from=installer /app/apps/admin/package.json ./
-
-COPY --from=installer --chown=admin:nodejs /app/apps/admin/.env ./apps/admin/.env
+# Copy standalone output
 COPY --from=installer --chown=admin:nodejs /app/apps/admin/.next/standalone ./
 COPY --from=installer --chown=admin:nodejs /app/apps/admin/.next/static ./apps/admin/.next/static
 COPY --from=installer --chown=admin:nodejs /app/apps/admin/public ./apps/admin/public
 
-CMD node apps/admin/server.js
+USER admin
+
+ENV PORT=8080
+EXPOSE 8080
+
+CMD ["node", "apps/admin/server.js"]

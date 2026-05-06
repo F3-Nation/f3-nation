@@ -7,16 +7,14 @@ import {
   getTestMessageUrl,
 } from "nodemailer";
 
-import { authConfig } from "@acme/auth/config";
 import { isProduction } from "@acme/shared/common/constants";
 
 const SHOW_MOBILE = false as boolean;
-const authConfigTheme = authConfig.theme;
 const theme: Theme = {
-  colorScheme: authConfigTheme?.colorScheme ?? "auto",
-  logo: authConfigTheme?.logo ?? "/logo.png",
-  brandColor: authConfigTheme?.brandColor ?? "#000000",
-  buttonText: authConfigTheme?.buttonText ?? "Sign in",
+  colorScheme: "auto",
+  logo: "/logo.png",
+  brandColor: "#000000",
+  buttonText: "Sign in",
 };
 
 export const sendVerificationRequest = async (
