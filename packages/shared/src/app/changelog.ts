@@ -10,6 +10,35 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: "4.3.0",
+    date: "2026-05-07",
+    title: "Me, Typescript, Auth fixes",
+    sections: [
+      {
+        title: "Me",
+        items: ["Introducing the F3 Me app."],
+      },
+      {
+        title: "Auth",
+        items: [
+          "Supporting international numbers.",
+          "Fixing UI around home region dropdown.",
+        ],
+      },
+      {
+        title: "API",
+        items: [
+          "Adding user and org IDs to the API call for an org chart org.",
+          "Prevent region admin from moving an AO to a region he doesn't own.",
+        ],
+      },
+      {
+        title: "Repo",
+        items: ["Upgrading Typescript and ESLint."],
+      },
+    ],
+  },
+  {
     version: "4.2.2",
     date: "2026-04-22",
     title: "Admin polish, map behavior & API hardening",
