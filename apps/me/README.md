@@ -121,7 +121,7 @@ Open [https://localhost:3003](https://localhost:3003). Accept the self-signed ce
 | `OAUTH_CLIENT_SECRET`  | OAuth client secret                     | (from auth provider)                       |
 | `OAUTH_REDIRECT_URI`   | OAuth callback URL                      | `https://localhost:3003/api/auth/callback` |
 | `AUTH_PROVIDER_URL`    | F3 SSO base URL                         | `https://auth.f3nation.com`                |
-| `F3_API_BASE_URL`      | F3 API base URL                         | `https://staging.api.f3nation.com`         |
+| `F3_API_BASE_URL`      | F3 API base URL (must include `/v1`)    | `https://staging.api.f3nation.com/v1`      |
 | `GCS_BUCKET`           | GCS bucket for avatars                  | `f3-public-images-staging`                 |
 | `GCS_CREDENTIALS`      | Base64-encoded GCS service account JSON | (from GCP)                                 |
 | `NEXT_PUBLIC_SITE_URL` | Public URL of the app                   | `https://localhost:3003`                   |
