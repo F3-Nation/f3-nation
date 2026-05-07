@@ -1,0 +1,94 @@
+import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
+import { requireAuth } from "@/lib/auth/server";
+import { uploadAvatar, deleteAvatar } from "@/lib/gcs";
+import { updateMyProfile } from "@/lib/api/client";
+
+const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+
+function mapAvatarUploadError(err: unknown): { status: number; error: string } {
+  const message = err instanceof Error ? err.message : "";
+  const lower = message.toLowerCase();
+
+  if (lower.includes("invalid_grant") && lower.includes("account not found")) {
+    return {
+      status: 503,
+      error:
+        "Avatar storage is misconfigured: GCS service account was not found. Update GCS_CREDENTIALS.",
+    };
+  }
+
+  if (
+    lower.includes("gcs_credentials is not set") ||
+    lower.includes("gcs_bucket is not set")
+  ) {
+    return {
+      status: 500,
+      error:
+        "Avatar storage is not configured. Set GCS_BUCKET and GCS_CREDENTIALS.",
+    };
+  }
+
+  return { status: 500, error: "Failed to upload avatar" };
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const session = await requireAuth();
+    const userId = session.userId;
+
+    const formData = await request.formData();
+    const fileEntry = formData.get("file");
+
+    if (!(fileEntry instanceof File)) {
+      return NextResponse.json({ error: "No file provided" }, { status: 400 });
+    }
+    const file = fileEntry;
+
+    if (!ALLOWED_TYPES.has(file.type)) {
+      return NextResponse.json(
+        { error: "Invalid file type. Allowed: jpeg, png, webp" },
+        { status: 400 },
+      );
+    }
+
+    if (file.size > MAX_SIZE) {
+      return NextResponse.json(
+        { error: "File too large. Maximum size is 5MB" },
+        { status: 400 },
+      );
+    }
+
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    // Upload converts to JPEG and saves as user-avatars/{userId}.jpg
+    const avatarUrl = await uploadAvatar(userId, buffer);
+
+    // Update user's avatarUrl via the me API — if this fails, clean up the uploaded file
+    try {
+      await updateMyProfile({ avatarUrl });
+    } catch (profileErr) {
+      // Best-effort cleanup: delete the orphaned GCS object
+      await deleteAvatar(userId).catch((cleanupErr) => {
+        console.error(
+          "Failed to clean up orphaned avatar after profile update failure",
+          cleanupErr,
+        );
+      });
+      throw profileErr;
+    }
+
+    return NextResponse.json({ avatarUrl });
+  } catch (err) {
+    console.error("Failed to upload avatar:", err);
+    if (err instanceof Error && err.message.includes("NEXT_REDIRECT"))
+      throw err;
+    const mapped = mapAvatarUploadError(err);
+    return NextResponse.json(
+      { error: mapped.error },
+      { status: mapped.status },
+    );
+  }
+}

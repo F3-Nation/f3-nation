@@ -1,0 +1,140 @@
+name: Deploy f3-me
+
+on:
+  push:
+    tags:
+      - "me@*"
+
+# Prevent concurrent deploys of the same tag
+concurrency:
+  group: deploy-me-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  IMAGE_NAME: f3-me
+  STAGING_PROJECT: f3-me-app-staging
+  PROD_PROJECT: f3-me-app
+  REGION: us-east1
+  SERVICE_NAME: f3-me
+  AR_REPO: cloud-run-builds
+
+jobs:
+  # ── Gate: wait for CI to pass on this commit ──
+  ci-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for CI to pass
+        uses: lewagon/wait-on-check-action@v1.3.4
+        with:
+          ref: ${{ github.sha }}
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          check-name: "test-coverage"
+          wait-interval: 15
+          allowed-conclusions: success
+
+  # ── Build container image (once) ──
+  build:
+    needs: ci-check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP (staging project for AR)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.ME_WIF_PROVIDER }}
+          service_account: ${{ secrets.ME_WIF_SA_STAGING }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Authorize Docker to Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Extract tag version
+        id: meta
+        run: |
+          TAG="${GITHUB_REF_NAME}"          # e.g. me@1.2.3
+          VERSION="${TAG#me@}"              # e.g. 1.2.3
+          IMAGE="${REGION}-docker.pkg.dev/${STAGING_PROJECT}/${AR_REPO}/${IMAGE_NAME}:${VERSION}"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push Docker image
+        run: |
+          docker build \
+            --file apps/me/Dockerfile \
+            --tag "${{ steps.meta.outputs.image }}" \
+            .
+          docker push "${{ steps.meta.outputs.image }}"
+
+  # ── Deploy to staging ──
+  deploy-staging:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: me-staging
+      url: https://staging.me.f3nation.com
+    steps:
+      - name: Authenticate to GCP (staging)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.ME_WIF_PROVIDER }}
+          service_account: ${{ secrets.ME_WIF_SA_STAGING }}
+
+      - name: Deploy to Cloud Run (staging)
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE_NAME }}
+          image: ${{ needs.build.outputs.image }}
+          region: ${{ env.REGION }}
+          project_id: ${{ env.STAGING_PROJECT }}
+          # Env vars are set via Cloud Run secrets / env config (see scripts/cloud-run-env.sh)
+
+  # ── Deploy to production (requires approval) ──
+  deploy-prod:
+    needs: [build, deploy-staging]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: me-production
+      url: https://me.f3nation.com
+    steps:
+      - name: Authenticate to GCP (prod)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.ME_WIF_PROVIDER }}
+          service_account: ${{ secrets.ME_WIF_SA_PROD }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Authorize Docker to Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Promote image to prod Artifact Registry
+        run: |
+          STAGING_IMAGE="${{ needs.build.outputs.image }}"
+          PROD_IMAGE="${REGION}-docker.pkg.dev/${PROD_PROJECT}/${AR_REPO}/${IMAGE_NAME}:${STAGING_IMAGE##*:}"
+          docker pull "${STAGING_IMAGE}"
+          docker tag "${STAGING_IMAGE}" "${PROD_IMAGE}"
+          docker push "${PROD_IMAGE}"
+          echo "prod_image=${PROD_IMAGE}" >> "$GITHUB_ENV"
+
+      - name: Deploy to Cloud Run (prod)
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE_NAME }}
+          image: ${{ env.prod_image }}
+          region: ${{ env.REGION }}
+          project_id: ${{ env.PROD_PROJECT }}
