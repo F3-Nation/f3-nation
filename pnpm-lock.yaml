@@ -751,6 +751,9 @@ importers:
       axios:
         specifier: '>=1.7.4'
         version: 1.14.0
+      dayjs:
+        specifier: ^1.11.10
+        version: 1.11.20
       google-auth-library:
         specifier: ^10.3.0
         version: 10.6.2
@@ -760,6 +763,9 @@ importers:
       lodash:
         specifier: ^4.17.21
         version: 4.18.1
+      next:
+        specifier: '>=14'
+        version: 15.5.14(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       superjson:
         specifier: 2.2.1
         version: 2.2.1
@@ -803,6 +809,12 @@ importers:
       '@auth/drizzle-adapter':
         specifier: ^0.6.3
         version: 0.6.3(nodemailer@6.10.1)
+      dayjs:
+        specifier: ^1.11.10
+        version: 1.11.20
+      lodash:
+        specifier: ^4.17.21
+        version: 4.18.1
       next:
         specifier: ^15.3.6
         version: 15.5.14(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
