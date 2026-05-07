@@ -7,6 +7,7 @@ import type { RouterClient } from "@orpc/server";
 import type { router } from "@acme/api";
 import { Client, Header } from "@acme/shared/common/enums";
 import { ACCESS_TOKEN_COOKIE_NAME } from "@/lib/auth/constants";
+import { logError, logWarn } from "@/lib/logging";
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -35,8 +36,10 @@ export const getApiClient = cache(
 
     const link = new RPCLink({
       url: requireEnv("F3_API_BASE_URL"),
-      fetch: (input, init) => {
+      fetch: async (input, init) => {
         const controller = new AbortController();
+        const startedAt = Date.now();
+        const endpointPath = new URL(input.url).pathname;
         const timeout = setTimeout(() => controller.abort(), getApiTimeoutMs());
         const upstreamSignal = (init as RequestInit | undefined)?.signal;
         const onAbort = () => controller.abort();
@@ -52,19 +55,63 @@ export const getApiClient = cache(
         input.headers.set(Header.Client, Client.F3_ME);
         input.headers.set(Header.Authorization, `Bearer ${accessToken}`);
 
-        return fetch(input, {
-          ...init,
-          signal: controller.signal,
-        }).finally(() => {
+        try {
+          const response = await fetch(input, {
+            ...init,
+            signal: controller.signal,
+          });
+
+          if (!response.ok) {
+            logWarn("me.api.upstream_http_error", {
+              apiBaseUrl: process.env.F3_API_BASE_URL,
+              endpointPath,
+              status: response.status,
+              statusText: response.statusText,
+              durationMs: Date.now() - startedAt,
+              requestId:
+                response.headers.get("x-request-id") ??
+                response.headers.get("x-cloud-trace-context") ??
+                undefined,
+            });
+          }
+
+          return response;
+        } catch (err) {
+          logError(
+            "me.api.upstream_request_failed",
+            {
+              apiBaseUrl: process.env.F3_API_BASE_URL,
+              endpointPath,
+              durationMs: Date.now() - startedAt,
+              aborted: controller.signal.aborted,
+            },
+            err,
+          );
+          throw err;
+        } finally {
           clearTimeout(timeout);
           upstreamSignal?.removeEventListener("abort", onAbort);
-        });
+        }
       },
     });
 
     return createORPCClient<RouterClient<typeof router>>(link);
   },
 );
+
+type ApiErrorLike = {
+  code?: string;
+  status?: number;
+};
+
+function isApiErrorLike(err: unknown): err is ApiErrorLike {
+  return typeof err === "object" && err !== null;
+}
+
+export function isNotFoundApiError(err: unknown): boolean {
+  if (!isApiErrorLike(err)) return false;
+  return err.code === "NOT_FOUND" || err.status === 404;
+}
 
 /**
  * Get the authenticated user's full profile (user fields + roles + positions).

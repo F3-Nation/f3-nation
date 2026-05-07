@@ -10,6 +10,7 @@ import {
   ACCESS_TOKEN_DEFAULT_MAX_AGE,
   REFRESH_TOKEN_MAX_AGE,
 } from "@/lib/auth/constants";
+import { logError, logInfo, logWarn } from "@/lib/logging";
 
 interface StatePayload {
   csrfToken: string;
@@ -91,8 +92,13 @@ export async function GET(request: NextRequest) {
     expiresIn =
       typeof tokens.expiresIn === "number" ? tokens.expiresIn : undefined;
   } catch (err) {
-    const message = err instanceof Error ? err.message : "unknown error";
-    console.error("Token exchange failed", message);
+    logError(
+      "me.auth.callback.token_exchange_failed",
+      {
+        returnTo,
+      },
+      err,
+    );
     return errorRedirect(baseUrl, "token_exchange_failed", returnTo);
   }
 
@@ -101,12 +107,27 @@ export async function GET(request: NextRequest) {
   try {
     userInfo = await getUserInfo(accessToken);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "unknown error";
-    console.error("Failed to fetch user info", message);
+    logError(
+      "me.auth.callback.userinfo_failed",
+      {
+        returnTo,
+      },
+      err,
+    );
     return errorRedirect(baseUrl, "userinfo_failed", returnTo);
   }
 
+  logInfo("me.auth.callback.userinfo_received", {
+    userSub: userInfo.sub,
+    hasEmail: Boolean(userInfo.email),
+    returnTo,
+  });
+
   if (!userInfo.email) {
+    logWarn("me.auth.callback.user_missing_email", {
+      userSub: userInfo.sub,
+      returnTo,
+    });
     return errorRedirect(baseUrl, "user_not_found", returnTo);
   }
 
@@ -142,6 +163,11 @@ export async function GET(request: NextRequest) {
   };
   response.cookies.set(OAUTH_CSRF_COOKIE_NAME, "", clearCookieOpts);
   response.cookies.set(OAUTH_CODE_VERIFIER_COOKIE_NAME, "", clearCookieOpts);
+
+  logInfo("me.auth.callback.success", {
+    userSub: userInfo.sub,
+    returnTo,
+  });
 
   return response;
 }
