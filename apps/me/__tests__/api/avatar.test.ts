@@ -10,6 +10,7 @@ vi.mock("@/lib/gcs", () => ({
 
 vi.mock("@/lib/api/client", () => ({
   updateMyProfile: vi.fn(),
+  isNotFoundApiError: vi.fn().mockReturnValue(false),
 }));
 
 import { requireAuth } from "@/lib/auth/server";
