@@ -1,5 +1,5 @@
 # ---------- Stage 1: Prune monorepo ----------
-FROM node:20-alpine AS builder
+FROM --platform=linux/amd64 node:24-alpine AS builder
 
 ENV TURBO_TELEMETRY_DISABLED=1
 ENV PNPM_HOME="/pnpm"
@@ -7,14 +7,13 @@ ENV PATH="$PNPM_HOME:$PATH"
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-RUN corepack enable && corepack prepare pnpm@8.15.1 --activate
-RUN pnpm add -g turbo@1.12.3
+RUN npm install -g turbo@^1.12.3
 
 COPY . .
 RUN turbo prune f3-me --docker
 
 # ---------- Stage 2: Install + build ----------
-FROM node:20-alpine AS installer
+FROM --platform=linux/amd64 node:24-alpine AS installer
 
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV TURBO_TELEMETRY_DISABLED=1
@@ -24,12 +23,14 @@ ENV PATH="$PNPM_HOME:$PATH"
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-RUN corepack enable && corepack prepare pnpm@8.15.1 --activate
-RUN pnpm add -g turbo@1.12.3
+RUN npm install -g turbo@^1.12.3
+RUN corepack enable
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 
 # Install dependencies from pruned lockfile
 COPY --from=builder /app/out/json/ .
 COPY --from=builder /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
+# Install dependencies with pnpm version from root package.json "packageManager"
 RUN pnpm install --frozen-lockfile
 
 # Copy source and build
@@ -37,7 +38,7 @@ COPY --from=builder /app/out/full/ .
 RUN pnpm turbo build --filter=f3-me
 
 # ---------- Stage 3: Production runner ----------
-FROM node:20-alpine AS runner
+FROM --platform=linux/amd64 node:24-alpine AS runner
 
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
