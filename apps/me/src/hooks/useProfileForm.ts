@@ -63,7 +63,9 @@ export function buildInitialFormState(user: UserProfile): ProfileFormState {
     lastName: user.lastName ?? "",
     phone: user.phone ?? "",
     homeRegionId: user.homeRegionId,
-    avatarUrl: user.avatarUrl,
+    avatarUrl: user.avatarUrl
+      ? `${user.avatarUrl}?v=${new Date(user.updated).getTime()}`
+      : null,
     emergencyContact: user.emergencyContact ?? "",
     emergencyPhone: user.emergencyPhone ?? "",
     emergencyNotes: user.emergencyNotes ?? "",
