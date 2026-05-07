@@ -95,7 +95,10 @@ export async function POST(request: NextRequest) {
       throw profileErr;
     }
 
-    return NextResponse.json({ avatarUrl });
+    // Return a cache-busted URL to the client so the browser fetches the new
+    // image immediately. The clean URL (without ?v=) is stored in the DB;
+    // useProfileForm derives the busted URL from user.updated on page load.
+    return NextResponse.json({ avatarUrl: `${avatarUrl}?v=${Date.now()}` });
   } catch (err) {
     if (err instanceof Error && err.message.includes("NEXT_REDIRECT"))
       throw err;
