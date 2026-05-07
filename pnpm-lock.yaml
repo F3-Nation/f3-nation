@@ -107,7 +107,7 @@ importers:
         version: 3.1.1(react@18.3.1)
       '@scalar/nextjs-api-reference':
         specifier: ^0.9.5
-        version: 0.9.26(next@15.5.14(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)
+        version: 0.9.26(next@15.5.14(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)
       '@sentry/nextjs':
         specifier: ^9.15.0
         version: 9.47.1(@opentelemetry/context-async-hooks@1.30.1(@opentelemetry/api@1.9.1))(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@1.30.1(@opentelemetry/api@1.9.1))(next@15.5.14(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(webpack@5.105.4)
@@ -748,6 +748,9 @@ importers:
       '@orpc/server':
         specifier: ^1.8.8
         version: 1.13.13(@opentelemetry/api@1.9.1)(ws@8.20.0)
+      axios:
+        specifier: '>=1.7.4'
+        version: 1.14.0
       google-auth-library:
         specifier: ^10.3.0
         version: 10.6.2
@@ -11661,7 +11664,7 @@ snapshots:
 
   '@scalar/helpers@0.2.18': {}
 
-  '@scalar/nextjs-api-reference@0.9.26(next@15.5.14(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)':
+  '@scalar/nextjs-api-reference@0.9.26(next@15.5.14(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)':
     dependencies:
       '@scalar/core': 0.3.45
       next: 15.5.14(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
