@@ -2,7 +2,8 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth/server";
 import { uploadAvatar, deleteAvatar } from "@/lib/gcs";
-import { updateMyProfile } from "@/lib/api/client";
+import { isNotFoundApiError, updateMyProfile } from "@/lib/api/client";
+import { logError } from "@/lib/logging";
 
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_SIZE = 5 * 1024 * 1024; // 5MB
@@ -30,13 +31,23 @@ function mapAvatarUploadError(err: unknown): { status: number; error: string } {
     };
   }
 
+  if (isNotFoundApiError(err)) {
+    return {
+      status: 404,
+      error: "User profile not found for this session.",
+    };
+  }
+
   return { status: 500, error: "Failed to upload avatar" };
 }
 
 export async function POST(request: NextRequest) {
+  let sessionUserId: number | undefined;
+
   try {
     const session = await requireAuth();
     const userId = session.userId;
+    sessionUserId = userId;
 
     const formData = await request.formData();
     const fileEntry = formData.get("file");
@@ -72,8 +83,12 @@ export async function POST(request: NextRequest) {
     } catch (profileErr) {
       // Best-effort cleanup: delete the orphaned GCS object
       await deleteAvatar(userId).catch((cleanupErr) => {
-        console.error(
-          "Failed to clean up orphaned avatar after profile update failure",
+        logError(
+          "me.avatar.cleanup_failed",
+          {
+            sessionUserId: userId,
+            apiBaseUrl: process.env.F3_API_BASE_URL,
+          },
           cleanupErr,
         );
       });
@@ -82,9 +97,18 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ avatarUrl });
   } catch (err) {
-    console.error("Failed to upload avatar:", err);
     if (err instanceof Error && err.message.includes("NEXT_REDIRECT"))
       throw err;
+
+    logError(
+      "me.avatar.upload_failed",
+      {
+        sessionUserId,
+        apiBaseUrl: process.env.F3_API_BASE_URL,
+      },
+      err,
+    );
+
     const mapped = mapAvatarUploadError(err);
     return NextResponse.json(
       { error: mapped.error },

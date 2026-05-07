@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuth } from "@/lib/auth/server";
 import { deleteMyRole } from "@/lib/api/client";
+import { logError } from "@/lib/logging";
 
 const deleteRoleSchema = z
   .object({
@@ -12,8 +13,11 @@ const deleteRoleSchema = z
   .strict();
 
 export async function DELETE(request: NextRequest) {
+  let sessionUserId: number | undefined;
+
   try {
-    await requireAuth();
+    const session = await requireAuth();
+    sessionUserId = session.userId;
 
     let raw: unknown;
     try {
@@ -32,9 +36,18 @@ export async function DELETE(request: NextRequest) {
     const result = await deleteMyRole(parsed.data.orgId, parsed.data.roleId);
     return NextResponse.json(result);
   } catch (err) {
-    console.error("Failed to remove role:", err);
     if (err instanceof Error && err.message.includes("NEXT_REDIRECT"))
       throw err;
+
+    logError(
+      "me.profile_roles.delete_failed",
+      {
+        sessionUserId,
+        apiBaseUrl: process.env.F3_API_BASE_URL,
+      },
+      err,
+    );
+
     return NextResponse.json(
       { error: "Failed to remove role" },
       { status: 500 },
