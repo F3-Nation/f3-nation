@@ -26,6 +26,7 @@
     "@acme/shared": "workspace:^0.1.0",
     "@acme/validators": "workspace:^0.1.0",
     "axios": "^1.7.4",
+    "dayjs": "^1.11.10",
     "@orpc/client": "^1.8.8",
     "@orpc/experimental-ratelimit": "^1.13.2",
     "@orpc/server": "^1.8.8",
@@ -34,6 +35,9 @@
     "lodash": "^4.17.21",
     "superjson": "2.2.1",
     "zod": "^3.25.8"
+  },
+  "peerDependencies": {
+    "next": ">=14"
   },
   "devDependencies": {
     "@acme/eslint-config": "workspace:^0.2.0",

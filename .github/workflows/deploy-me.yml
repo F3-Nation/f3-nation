@@ -1,4 +1,4 @@
-name: Deploy f3-me
+name: Deploy Me
 
 on:
   push:
