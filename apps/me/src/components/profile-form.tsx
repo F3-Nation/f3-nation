@@ -1,5 +1,6 @@
 "use client";
 
+import { cn } from "@/lib/utils";
 import { Input } from "@acme/ui/input";
 import { Textarea } from "@acme/ui/textarea";
 import { Label } from "@acme/ui/label";
@@ -82,7 +83,7 @@ export function ProfileForm({ user, regions }: ProfileFormProps) {
                 to change
               </p>
             </div>
-            <div className={`space-y-2${dc("f3Name")}`}>
+            <div className={cn("space-y-2", dc("f3Name"))}>
               <Label htmlFor="f3Name">F3 Name</Label>
               <Input
                 id="f3Name"
@@ -92,7 +93,7 @@ export function ProfileForm({ user, regions }: ProfileFormProps) {
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className={`space-y-2${dc("firstName")}`}>
+              <div className={cn("space-y-2", dc("firstName"))}>
                 <Label htmlFor="firstName">First Name</Label>
                 <Input
                   id="firstName"
@@ -101,7 +102,7 @@ export function ProfileForm({ user, regions }: ProfileFormProps) {
                   placeholder="First name"
                 />
               </div>
-              <div className={`space-y-2${dc("lastName")}`}>
+              <div className={cn("space-y-2", dc("lastName"))}>
                 <Label htmlFor="lastName">Last Name</Label>
                 <Input
                   id="lastName"
@@ -111,7 +112,7 @@ export function ProfileForm({ user, regions }: ProfileFormProps) {
                 />
               </div>
             </div>
-            <div className={`space-y-2${dc("phone")}`}>
+            <div className={cn("space-y-2", dc("phone"))}>
               <Label htmlFor="phone">Phone</Label>
               <Input
                 id="phone"
@@ -121,7 +122,7 @@ export function ProfileForm({ user, regions }: ProfileFormProps) {
                 placeholder="Phone number"
               />
             </div>
-            <div className={`space-y-2${dc("homeRegionId")}`}>
+            <div className={cn("space-y-2", dc("homeRegionId"))}>
               <Label>Home Region</Label>
               <RegionSelect
                 regions={regions}
@@ -141,7 +142,7 @@ export function ProfileForm({ user, regions }: ProfileFormProps) {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className={`space-y-2${dc("emergencyContact")}`}>
+            <div className={cn("space-y-2", dc("emergencyContact"))}>
               <Label htmlFor="emergencyContact">Contact Name</Label>
               <Input
                 id="emergencyContact"
@@ -152,7 +153,7 @@ export function ProfileForm({ user, regions }: ProfileFormProps) {
                 placeholder="Emergency contact name"
               />
             </div>
-            <div className={`space-y-2${dc("emergencyPhone")}`}>
+            <div className={cn("space-y-2", dc("emergencyPhone"))}>
               <Label htmlFor="emergencyPhone">Contact Phone</Label>
               <Input
                 id="emergencyPhone"
@@ -162,7 +163,7 @@ export function ProfileForm({ user, regions }: ProfileFormProps) {
                 placeholder="Emergency contact phone"
               />
             </div>
-            <div className={`space-y-2${dc("emergencyNotes")}`}>
+            <div className={cn("space-y-2", dc("emergencyNotes"))}>
               <Label htmlFor="emergencyNotes">Notes</Label>
               <Textarea
                 id="emergencyNotes"
@@ -211,7 +212,7 @@ export function ProfileForm({ user, regions }: ProfileFormProps) {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 lg:grid-cols-2">
-            <div className={`space-y-2${dc("f3_name_origin")}`}>
+            <div className={cn("space-y-2", dc("f3_name_origin"))}>
               <Label htmlFor="f3NameOrigin">F3 Name Origin</Label>
               <Textarea
                 id="f3NameOrigin"
@@ -221,7 +222,7 @@ export function ProfileForm({ user, regions }: ProfileFormProps) {
                 rows={3}
               />
             </div>
-            <div className={`space-y-2${dc("my_f3_why")}`}>
+            <div className={cn("space-y-2", dc("my_f3_why"))}>
               <Label htmlFor="myF3Why">My F3 Why</Label>
               <Textarea
                 id="myF3Why"
@@ -233,7 +234,7 @@ export function ProfileForm({ user, regions }: ProfileFormProps) {
             </div>
           </div>
           <div className="grid gap-4 lg:grid-cols-2">
-            <div className={`space-y-2${dc("start_date_override")}`}>
+            <div className={cn("space-y-2", dc("start_date_override"))}>
               <Label htmlFor="startDate">Start Date</Label>
               <Input
                 id="startDate"
@@ -244,7 +245,7 @@ export function ProfileForm({ user, regions }: ProfileFormProps) {
                 }
               />
             </div>
-            <div className={`space-y-2${dc("brought_by")}`}>
+            <div className={cn("space-y-2", dc("brought_by"))}>
               <Label>Who Brought You?</Label>
               <UserSelect
                 value={form.brought_by}

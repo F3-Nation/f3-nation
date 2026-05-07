@@ -7,6 +7,8 @@ import {
   REFRESH_TOKEN_COOKIE_NAME,
   OAUTH_CSRF_COOKIE_NAME,
   OAUTH_CODE_VERIFIER_COOKIE_NAME,
+  ACCESS_TOKEN_DEFAULT_MAX_AGE,
+  REFRESH_TOKEN_MAX_AGE,
 } from "@/lib/auth/constants";
 
 interface StatePayload {
@@ -109,8 +111,8 @@ export async function GET(request: NextRequest) {
   }
 
   const response = NextResponse.redirect(new URL(returnTo, baseUrl).toString());
-  const accessTokenMaxAge = expiresIn ?? 60 * 60;
-  const refreshTokenMaxAge = 30 * 24 * 60 * 60;
+  const accessTokenMaxAge = expiresIn ?? ACCESS_TOKEN_DEFAULT_MAX_AGE;
+  const refreshTokenMaxAge = REFRESH_TOKEN_MAX_AGE;
 
   response.cookies.set(ACCESS_TOKEN_COOKIE_NAME, accessToken, {
     httpOnly: true,

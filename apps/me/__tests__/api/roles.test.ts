@@ -21,7 +21,6 @@ const mockSession = {
 describe("Roles API route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.resetModules();
   });
 
   it("removes a role from the user", async () => {

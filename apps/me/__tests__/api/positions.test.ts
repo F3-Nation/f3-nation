@@ -21,7 +21,6 @@ const mockSession = {
 describe("Positions API route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.resetModules();
   });
 
   it("removes user from a position assignment", async () => {

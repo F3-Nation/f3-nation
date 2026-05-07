@@ -151,7 +151,7 @@ push_secret() {
   fi
 
   echo "  UPDATE: $secret_id"
-  echo -n "$value" | gcloud secrets versions add "$secret_id" --project "$project" --data-file=-
+  printf '%s' "$value" | gcloud secrets versions add "$secret_id" --project "$project" --data-file=-
 
   # Delete all previous versions (keep only the one we just created)
   latest="$(gcloud secrets versions list "$secret_id" --project "$project" \

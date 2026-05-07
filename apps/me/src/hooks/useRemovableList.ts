@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -57,11 +57,13 @@ export function useRemovableList<T>({
   // parent re-renders do not reset the list (removals are applied locally for instant UI feedback).
   const [items, setItems] = useState<T[]>(initialItems);
   const [removing, setRemoving] = useState<string | null>(null);
+  const inFlightRef = useRef(false);
 
   const handleRemove = useCallback(
     async (item: T) => {
-      // Prevent overlapping deletes: if one is already in flight, ignore the second call.
-      if (removing) return;
+      // Synchronous atomic guard — prevents concurrent deletes even if state hasn't flushed yet.
+      if (inFlightRef.current) return;
+      inFlightRef.current = true;
 
       const key = getKey(item);
       setRemoving(key);
@@ -89,11 +91,11 @@ export function useRemovableList<T>({
           variant: "destructive",
         });
       } finally {
+        inFlightRef.current = false;
         setRemoving(null);
       }
     },
     [
-      removing,
       getKey,
       endpoint,
       buildDeleteBody,
