@@ -2,7 +2,11 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth/server";
 import { uploadAvatar } from "@/lib/gcs";
-import { isNotFoundApiError, updateMyProfile } from "@/lib/api/client";
+import {
+  isNotFoundApiError,
+  updateMyProfile,
+  getMyProfile,
+} from "@/lib/api/client";
 import { logError } from "@/lib/logging";
 
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -73,6 +77,11 @@ export async function POST(request: NextRequest) {
 
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
+
+    // Preflight: verify the profile exists before touching GCS.
+    // Aborts early with 404 if the user has no profile, preventing
+    // unnecessary overwrites of the canonical GCS object.
+    await getMyProfile();
 
     // Upload converts to JPEG and saves as user-avatars/{userId}.jpg
     const avatarUrl = await uploadAvatar(userId, buffer);
