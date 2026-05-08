@@ -72,13 +72,10 @@ export const AreasTable = () => {
   const areas = areasData?.orgs;
 
   const idToSectorMap = useMemo(() => {
-    return sectors?.reduce(
-      (acc, sector) => {
-        acc[sector.id] = sector;
-        return acc;
-      },
-      {} as Record<number, Org>,
-    );
+    return sectors?.reduce<Record<number, Org>>((acc, sector) => {
+      acc[sector.id] = sector;
+      return acc;
+    }, {});
   }, [sectors]);
 
   const areasWithSectorNames = useMemo(() => {

@@ -106,23 +106,17 @@ export const RegionsTable = () => {
   }, [selectedSectors]); // Only depend on selectedSectors - areas is stable via useMemo
 
   const idToAreaMap = useMemo(() => {
-    return areas?.reduce(
-      (acc, area) => {
-        acc[area.id] = area;
-        return acc;
-      },
-      {} as Record<number, Org>,
-    );
+    return areas?.reduce<Record<number, Org>>((acc, area) => {
+      acc[area.id] = area;
+      return acc;
+    }, {});
   }, [areas]);
 
   const idToSectorMap = useMemo(() => {
-    return sectors?.reduce(
-      (acc, sector) => {
-        acc[sector.id] = sector;
-        return acc;
-      },
-      {} as Record<number, Org>,
-    );
+    return sectors?.reduce<Record<number, Org>>((acc, sector) => {
+      acc[sector.id] = sector;
+      return acc;
+    }, {});
   }, [sectors]);
 
   const regionsWithNames = useMemo(() => {

@@ -40,7 +40,7 @@ const makeTestSession = (
     user: { id: String(id), email, name, roles: [] },
     roles: [],
     expires: new Date(Date.now() + 86400000).toISOString(),
-  }) as unknown as Session;
+  });
 
 // ---------------------------------------------------------------------------
 // Helpers

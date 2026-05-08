@@ -33,6 +33,7 @@ export enum DeleteType {
   REGION = "REGION",
   SECTOR = "SECTOR",
   NATION = "NATION",
+  POSITION = "POSITION",
 }
 
 export const eventDefaults = {

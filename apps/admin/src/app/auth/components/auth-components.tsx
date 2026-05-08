@@ -24,7 +24,7 @@ export type AuthStatus =
 export const authStore = new ZustandStore({
   initialState: {
     email: "",
-    status: "idle" as AuthStatus,
+    status: "idle",
     text: "",
     callbackUrl: "/",
   },

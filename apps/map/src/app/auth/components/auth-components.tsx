@@ -24,6 +24,7 @@ export type AuthStatus =
 export const authStore = new ZustandStore({
   initialState: {
     email: "",
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
     status: "idle" as AuthStatus,
     text: "",
     callbackUrl: "/",

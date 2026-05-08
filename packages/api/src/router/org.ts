@@ -17,7 +17,6 @@ import type { AppDb } from "@acme/db/client";
 import { F3_NATION_ORG_ID } from "@acme/shared/app/constants";
 import { IsActiveStatus, OrgType } from "@acme/shared/app/enums";
 import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
-import type { OrgMeta } from "@acme/shared/app/types";
 import { OrgInsertSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
@@ -29,28 +28,6 @@ import { notifyMapDataChange } from "../lib/webhook-events";
 import type { Context } from "../shared";
 import { adminProcedure, editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
-
-interface Org {
-  id: number;
-  parentId: number | null;
-  name: string;
-  orgType: "ao" | "region" | "area" | "sector" | "nation";
-  defaultLocationId: number | null;
-  description: string | null;
-  isActive: boolean;
-  logoUrl: string | null;
-  website: string | null;
-  email: string | null;
-  twitter: string | null;
-  facebook: string | null;
-  instagram: string | null;
-  lastAnnualReview: string | null;
-  meta: OrgMeta;
-  created: string;
-  parentOrgName: string;
-  parentOrgType: "ao" | "region" | "area" | "sector" | "nation";
-  aoCount: number | null;
-}
 
 // Shared filter schema for orgs (used by both `all` and `count` endpoints)
 const orgFilterSchema = z.object({
@@ -355,7 +332,7 @@ export const orgRouter = {
         : await query.orderBy(...sortedColumns);
 
       // Something is broken with org to org types
-      return { orgs: orgs_untyped as Org[], total };
+      return { orgs: orgs_untyped, total };
     }),
 
   count: protectedProcedure
@@ -887,7 +864,7 @@ export const orgRouter = {
 
       const orgToCrupdate: typeof schema.orgs.$inferInsert = {
         ...input,
-        meta: input.meta as Record<string, string>,
+        meta: input.meta,
       };
 
       const [result] = await ctx.db

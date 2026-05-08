@@ -816,7 +816,7 @@ export const requestRouter = {
         submitterValidated: false,
         reviewedBy: null,
         reviewedAt: null,
-        eventMeta: input.eventMeta as EventMeta,
+        eventMeta: input.eventMeta,
       };
 
       const [inserted] = await ctx.db

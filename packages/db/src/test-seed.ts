@@ -1,4 +1,4 @@
-import type { EventCategory, RegionRole } from "@acme/shared/app/enums";
+import type { RegionRole } from "@acme/shared/app/enums";
 import {
   TEST_ADMIN_ROLE_ID,
   TEST_ADMIN_USER_ID,
@@ -227,7 +227,7 @@ export const testSeed = async (db?: AppDb) => {
   await _db.insert(eventTypes).values(
     Object.values(EventTypes).map((eventType) => ({
       name: eventType,
-      eventCategory: "first_f" as EventCategory,
+      eventCategory: "first_f" as const,
     })),
   );
 

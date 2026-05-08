@@ -204,7 +204,7 @@ export default function UserModal({
                   submitData = {
                     ...nonPiiData,
                     email: data.email ?? "", // Keep email as it's required by schema
-                  } as typeof data;
+                  };
                 } else {
                   // For new users or users with PII access, send all data
                   submitData = data;

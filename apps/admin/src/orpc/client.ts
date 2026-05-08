@@ -9,7 +9,6 @@ import { Client, Header } from "@acme/shared/common/enums";
 import { env } from "~/env";
 
 declare global {
-  // eslint-disable-next-line no-var
   var $client: RouterClient<typeof router> | undefined;
 }
 
