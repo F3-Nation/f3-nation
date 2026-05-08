@@ -40,20 +40,17 @@ ENV NODE_ENV=production
 ENV CI=true
 ENV SKIP_ENV_VALIDATION=true
 
-# Server-side placeholders: satisfy module-level init checks during next build
-ENV DATABASE_URL=postgres://placeholder:placeholder@localhost:5432/placeholder
-ENV EMAIL_SERVER=smtp://placeholder:placeholder@localhost:587
-ENV EMAIL_FROM=noreply@placeholder.com
-
 # Client-side: must be real values (baked into browser JS at build time)
 ARG NEXT_PUBLIC_CHANNEL
 ARG NEXT_PUBLIC_API_URL
 ARG NEXT_PUBLIC_MAP_URL
 ARG NEXT_PUBLIC_ADMIN_URL
+ARG NEXT_PUBLIC_GOOGLE_API_KEY
 ENV NEXT_PUBLIC_CHANNEL=$NEXT_PUBLIC_CHANNEL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_MAP_URL=$NEXT_PUBLIC_MAP_URL
 ENV NEXT_PUBLIC_ADMIN_URL=$NEXT_PUBLIC_ADMIN_URL
+ENV NEXT_PUBLIC_GOOGLE_API_KEY=$NEXT_PUBLIC_GOOGLE_API_KEY
 
 RUN pnpm turbo build --filter=f3-nation-admin
 

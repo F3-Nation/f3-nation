@@ -12,7 +12,6 @@ export const VersionInfo = (props: HTMLAttributes<HTMLSpanElement>) => {
     <VersionInfoBase
       versionLabel={<span>v{packageJson.version}</span>}
       channel={env.NEXT_PUBLIC_CHANNEL}
-      commitHash={env.NEXT_PUBLIC_GIT_COMMIT_HASH}
       {...props}
     />
   );

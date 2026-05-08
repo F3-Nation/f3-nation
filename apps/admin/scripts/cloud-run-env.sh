@@ -34,8 +34,6 @@ REGION="us-east1"
 # Env vars that map to GCP secrets (var name -> secret ID).
 # Only genuinely sensitive values go here.
 declare -A SECRET_MAP=(
-  [DATABASE_URL]="database-url"
-  [TEST_DATABASE_URL]="test-database-url"
   [NEXT_PUBLIC_GOOGLE_API_KEY]="google-api-key"
 )
 
