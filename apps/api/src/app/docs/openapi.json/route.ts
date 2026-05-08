@@ -138,7 +138,6 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
           "event-tag",
           "attendance",
           "location",
-          "me",
           "org",
           "ping",
           "position",
@@ -181,7 +180,8 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
       },
       {
         name: "Me",
-        description: "Used by the F3 Me app",
+        description:
+          "Used by the F3 Me app to allow authenticated users to manage their profile",
       },
       {
         name: "org",

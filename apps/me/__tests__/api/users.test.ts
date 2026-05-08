@@ -31,8 +31,6 @@ describe("Users API route", () => {
         {
           id: 1,
           f3Name: "Dredd",
-          firstName: "Joe",
-          lastName: "Smith",
           homeRegionId: 1,
           homeRegionName: "Charlotte",
           status: "active",
@@ -40,8 +38,6 @@ describe("Users API route", () => {
         {
           id: 2,
           f3Name: "Maverick",
-          firstName: "Pete",
-          lastName: "Mitchell",
           homeRegionId: 2,
           homeRegionName: "Raleigh",
           status: "active",
@@ -66,8 +62,6 @@ describe("Users API route", () => {
         {
           id: 1,
           f3Name: "Dredd",
-          firstName: "Joe",
-          lastName: "Smith",
           homeRegionId: 5,
           homeRegionName: "Charlotte",
           status: "active",

@@ -80,6 +80,49 @@ const profileUpdateSchema = z
   .strict()
   .describe("Whitelisted profile fields the user can update.");
 
+const meRoleSchema = z.object({
+  roleId: z.number().int().min(1),
+  orgId: z.number().int().min(1),
+  orgName: z.string(),
+  roleName: z.enum(["user", "editor", "admin"]),
+});
+
+const mePositionSchema = z.object({
+  positionId: z.number().int().min(1),
+  orgId: z.number().int().min(1),
+  positionName: z.string(),
+  orgName: z.string(),
+});
+
+const meProfileSchema = z.object({
+  id: z.number().int().min(1),
+  f3Name: z.string().nullable(),
+  firstName: z.string().nullable(),
+  lastName: z.string().nullable(),
+  email: z.string(),
+  emailVerified: z.string().nullable(),
+  phone: z.string().nullable(),
+  homeRegionId: z.number().int().min(1).nullable(),
+  avatarUrl: z.string().nullable(),
+  meta: z.union([z.record(z.unknown()), z.string()]).nullable(),
+  emergencyContact: z.string().nullable(),
+  emergencyPhone: z.string().nullable(),
+  emergencyNotes: z.string().nullable(),
+  status: z.enum(["active", "inactive"]),
+  created: z.string(),
+  updated: z.string(),
+  roles: z.array(meRoleSchema),
+  positions: z.array(mePositionSchema),
+});
+
+const meUsersListItemSchema = z.object({
+  id: z.number().int().min(1),
+  f3Name: z.string().nullable(),
+  homeRegionId: z.number().int().min(1).nullable(),
+  homeRegionName: z.string().nullable(),
+  status: z.enum(["active", "inactive"]),
+});
+
 /** Fetch the full profile (user + roles + positions) for the given userId. */
 async function fetchFullProfile(db: AppDb, userId: number) {
   const [user] = await db
@@ -159,6 +202,11 @@ export const meRouter = {
       description:
         "Return the authenticated user's full profile including PII, roles, and position assignments in a single call.",
     })
+    .output(
+      z.object({
+        user: meProfileSchema,
+      }),
+    )
     .handler(async ({ context: ctx }) => {
       const user = await fetchFullProfile(ctx.db, ctx.session!.id);
       return { user };
@@ -178,6 +226,11 @@ export const meRouter = {
       description:
         "Update the authenticated user's profile fields. Only whitelisted fields are accepted. Returns the full updated profile.",
     })
+    .output(
+      z.object({
+        user: meProfileSchema,
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const userId = ctx.session!.id;
 
@@ -230,6 +283,17 @@ export const meRouter = {
       description:
         "Return all regions (active and inactive) for the region dropdown. Each region includes an isActive flag so the UI can restrict new selections to active ones.",
     })
+    .output(
+      z.object({
+        orgs: z.array(
+          z.object({
+            id: z.number().int().min(1),
+            name: z.string(),
+            isActive: z.boolean(),
+          }),
+        ),
+      }),
+    )
     .handler(async ({ context: ctx }) => {
       const regions = await ctx.db
         .select({
@@ -272,6 +336,12 @@ export const meRouter = {
       description:
         "Remove the authenticated user from a specific position at a specific org.",
     })
+    .output(
+      z.object({
+        success: z.boolean(),
+        found: z.boolean(),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const userId = ctx.session!.id;
 
@@ -319,6 +389,12 @@ export const meRouter = {
       description:
         "Remove the authenticated user from a specific role at a specific org.",
     })
+    .output(
+      z.object({
+        success: z.boolean(),
+        found: z.boolean(),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const userId = ctx.session!.id;
 
@@ -364,6 +440,11 @@ export const meRouter = {
         "Return a lightweight user list for the 'Who Brought You?' dropdown. " +
         "Optionally filter by homeRegionId to limit results to the same region.",
     })
+    .output(
+      z.object({
+        users: z.array(meUsersListItemSchema),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const homeRegionId = input?.homeRegionId;
 
@@ -376,8 +457,6 @@ export const meRouter = {
         .select({
           id: schema.users.id,
           f3Name: schema.users.f3Name,
-          firstName: schema.users.firstName,
-          lastName: schema.users.lastName,
           homeRegionId: schema.users.homeRegionId,
           homeRegionName: sql<string | null>`${schema.orgs.name}`,
           status: schema.users.status,
@@ -385,7 +464,7 @@ export const meRouter = {
         .from(schema.users)
         .leftJoin(schema.orgs, eq(schema.orgs.id, schema.users.homeRegionId))
         .where(conditions.length > 0 ? and(...conditions) : undefined)
-        .orderBy(asc(schema.users.f3Name), asc(schema.users.lastName));
+        .orderBy(asc(schema.users.f3Name), asc(schema.users.id));
 
       return { users: rows };
     }),
