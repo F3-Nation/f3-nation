@@ -372,15 +372,16 @@ gcloud iam service-accounts add-iam-policy-binding \
 
 Replace `WIF_PROJECT_NUMBER` with the `f3-github` project number from the `gcloud projects describe` command above.
 
-#### 4. Add GitHub Secrets
+#### 4. Add GitHub Variables
 
-In GitHub → repo Settings → **Secrets and variables** → **Actions**, add:
+In GitHub → repo Settings → **Secrets and variables** → **Actions** → **Variables** tab, add these variables to the **`me-staging`** and **`me-production`** environments:
 
-| Secret              | Value                                                                                                |
-| ------------------- | ---------------------------------------------------------------------------------------------------- |
-| `ME_WIF_PROVIDER`   | `projects/WIF_PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions/providers/github` |
-| `ME_WIF_SA_STAGING` | `github-actions-deploy@f3-me-app-staging.iam.gserviceaccount.com`                                    |
-| `ME_WIF_SA_PROD`    | `github-actions-deploy@f3-me-app.iam.gserviceaccount.com`                                            |
+| Variable       | Value                                                                                                                                          |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `WIF_PROVIDER` | `projects/WIF_PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions/providers/github`                                           |
+| `WIF_SA`       | `github-actions-deploy@f3-me-app-staging.iam.gserviceaccount.com` (staging) / `github-actions-deploy@f3-me-app.iam.gserviceaccount.com` (prod) |
+
+> **Note:** These are repository/environment **variables** (`vars.WIF_PROVIDER`, `vars.WIF_SA`), not secrets.
 
 #### 5. Create GitHub Environments
 

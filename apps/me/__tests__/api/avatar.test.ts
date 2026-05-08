@@ -15,7 +15,7 @@ vi.mock("@/lib/api/client", () => ({
 
 import { requireAuth } from "@/lib/auth/server";
 import { uploadAvatar } from "@/lib/gcs";
-import { updateMyProfile } from "@/lib/api/client";
+import { updateMyProfile, isNotFoundApiError } from "@/lib/api/client";
 import type { NextRequest } from "next/server";
 
 const mockSession = {
@@ -419,6 +419,36 @@ describe("Avatar API route", () => {
 
     const response = await POST(req);
     expect(response.status).toBe(500);
+  });
+
+  it("returns 404 when updateMyProfile throws a not-found error", async () => {
+    vi.mocked(requireAuth).mockResolvedValue(mockSession);
+    vi.mocked(uploadAvatar).mockResolvedValue(
+      "https://storage.googleapis.com/f3-public-images-staging/user-avatars/42.jpg",
+    );
+    const notFoundErr = Object.assign(new Error("Not found"), {
+      code: "NOT_FOUND",
+    });
+    vi.mocked(updateMyProfile).mockRejectedValue(notFoundErr);
+    vi.mocked(isNotFoundApiError).mockReturnValueOnce(true);
+
+    const { POST } = await import("@/app/api/profile/avatar/route");
+    const content = new Uint8Array([0xff, 0xd8]);
+    const file = Object.assign(
+      new File([content], "avatar.jpg", { type: "image/jpeg" }),
+      { arrayBuffer: async () => content.buffer },
+    );
+    const mockFormData = {
+      get: (key: string) => (key === "file" ? file : null),
+    } as unknown as FormData;
+    const req = {
+      formData: async () => mockFormData,
+    } as unknown as NextRequest;
+
+    const response = await POST(req);
+    expect(response.status).toBe(404);
+    const data = (await response.json()) as { error: string };
+    expect(data.error).toContain("not found");
   });
 
   it("re-throws redirect errors from requireAuth", async () => {

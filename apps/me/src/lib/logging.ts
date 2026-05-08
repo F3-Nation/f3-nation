@@ -2,15 +2,31 @@ type LogLevel = "INFO" | "WARNING" | "ERROR";
 
 type LogContext = Record<string, unknown>;
 
-function emit(level: LogLevel, event: string, context: LogContext = {}) {
-  const payload = {
-    severity: level,
-    event,
-    service: "f3-me",
-    ...context,
-  };
+function safeStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "[Circular]";
+  }
+}
 
-  const line = JSON.stringify(payload);
+function emit(level: LogLevel, event: string, context: LogContext = {}) {
+  let line: string;
+  try {
+    line = JSON.stringify({
+      severity: level,
+      event,
+      service: "f3-me",
+      ...context,
+    });
+  } catch {
+    line = JSON.stringify({
+      severity: level,
+      event,
+      service: "f3-me",
+      serializeError: "payload had circular references",
+    });
+  }
   if (level === "ERROR") {
     console.error(line);
     return;
@@ -36,13 +52,13 @@ export function serializeError(err: unknown): LogContext {
         typeof err.cause === "string"
           ? err.cause
           : err.cause
-            ? JSON.stringify(err.cause)
+            ? safeStringify(err.cause)
             : undefined,
     };
   }
 
   return {
-    errorValue: typeof err === "string" ? err : JSON.stringify(err),
+    errorValue: typeof err === "string" ? err : safeStringify(err),
   };
 }
 

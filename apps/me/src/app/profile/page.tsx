@@ -11,7 +11,7 @@ export default async function ProfilePage() {
   let regions: Awaited<ReturnType<typeof getRegions>>;
 
   try {
-    [user, regions] = await Promise.all([getMyProfile(), getRegions()]);
+    user = await getMyProfile();
   } catch (err) {
     if (isNotFoundApiError(err)) {
       logWarn("me.profile.user_not_found", {
@@ -23,6 +23,20 @@ export default async function ProfilePage() {
 
     logError(
       "me.profile.load_failed",
+      {
+        sessionUserId: session.userId,
+        apiBaseUrl: process.env.F3_API_BASE_URL,
+      },
+      err,
+    );
+    throw err;
+  }
+
+  try {
+    regions = await getRegions();
+  } catch (err) {
+    logError(
+      "me.profile.regions_failed",
       {
         sessionUserId: session.userId,
         apiBaseUrl: process.env.F3_API_BASE_URL,

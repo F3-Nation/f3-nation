@@ -64,7 +64,11 @@ export function buildInitialFormState(user: UserProfile): ProfileFormState {
     phone: user.phone ?? "",
     homeRegionId: user.homeRegionId,
     avatarUrl: user.avatarUrl
-      ? `${user.avatarUrl}?v=${new Date(user.updated).getTime()}`
+      ? (() => {
+          const url = new URL(user.avatarUrl);
+          url.searchParams.set("v", String(new Date(user.updated).getTime()));
+          return url.toString();
+        })()
       : null,
     emergencyContact: user.emergencyContact ?? "",
     emergencyPhone: user.emergencyPhone ?? "",

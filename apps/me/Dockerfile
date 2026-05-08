@@ -7,7 +7,7 @@ ENV PATH="$PNPM_HOME:$PATH"
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-RUN npm install -g turbo@^1.12.3
+RUN npm install -g turbo@1.12.5
 
 COPY . .
 RUN turbo prune f3-me --docker
@@ -19,14 +19,13 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV TURBO_TELEMETRY_DISABLED=1
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-ENV NODE_ENV=production
 ENV CI=true
 ENV SKIP_ENV_VALIDATION=true
 
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-RUN npm install -g turbo@^1.12.3
+RUN npm install -g turbo@1.12.5
 RUN corepack enable
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 
@@ -56,6 +55,7 @@ COPY --from=installer --chown=me:nodejs /app/apps/me/public ./apps/me/public
 
 USER me
 
+ENV NODE_ENV=production
 ENV PORT=3003
 EXPOSE 3003
 

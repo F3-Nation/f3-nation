@@ -21,7 +21,12 @@ export interface SessionPayload {
  * extract the claims we need from the payload.
  */
 const getCachedSessionPayload = cache((accessToken: string) => {
-  const payload = parseAccessTokenPayload(accessToken);
+  let payload: ReturnType<typeof parseAccessTokenPayload>;
+  try {
+    payload = parseAccessTokenPayload(accessToken);
+  } catch {
+    return null;
+  }
   if (!payload?.sub || !payload?.email) return null;
 
   const userId = Number(payload.sub);

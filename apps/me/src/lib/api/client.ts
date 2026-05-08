@@ -105,7 +105,12 @@ type ApiErrorLike = {
 };
 
 function isApiErrorLike(err: unknown): err is ApiErrorLike {
-  return typeof err === "object" && err !== null;
+  if (typeof err !== "object" || err === null) return false;
+  const e = err as Record<string, unknown>;
+  return (
+    ("code" in e && typeof e.code === "string") ||
+    ("status" in e && typeof e.status === "number")
+  );
 }
 
 export function isNotFoundApiError(err: unknown): boolean {
