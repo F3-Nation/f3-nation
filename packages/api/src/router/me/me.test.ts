@@ -33,14 +33,13 @@ const makeTestSession = (
   id: number,
   email: string,
   name = "TestPax",
-): Session =>
-  ({
-    id,
-    email,
-    user: { id: String(id), email, name, roles: [] },
-    roles: [],
-    expires: new Date(Date.now() + 86400000).toISOString(),
-  });
+): Session => ({
+  id,
+  email,
+  user: { id: String(id), email, name, roles: [] },
+  roles: [],
+  expires: new Date(Date.now() + 86400000).toISOString(),
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
