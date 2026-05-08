@@ -30,8 +30,6 @@ export interface UseUserSearchReturn {
 export function displayName(u: UserListItem): string {
   const parts: string[] = [];
   if (u.f3Name) parts.push(u.f3Name);
-  const real = [u.firstName, u.lastName].filter(Boolean).join(" ");
-  if (real) parts.push(`(${real})`);
   if (u.homeRegionName) parts.push(`\u2014 ${u.homeRegionName}`);
   return parts.join(" ") || `User #${u.id}`;
 }
@@ -41,8 +39,6 @@ export function matchesSearch(u: UserListItem, term: string): boolean {
   const lower = term.toLowerCase();
   return (
     (u.f3Name?.toLowerCase().includes(lower) ?? false) ||
-    (u.firstName?.toLowerCase().includes(lower) ?? false) ||
-    (u.lastName?.toLowerCase().includes(lower) ?? false) ||
     (u.homeRegionName?.toLowerCase().includes(lower) ?? false)
   );
 }

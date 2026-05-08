@@ -536,6 +536,8 @@ describe("Me Router", () => {
       expect(first).toHaveProperty("f3Name");
       expect(first).toHaveProperty("homeRegionId");
       expect(first).toHaveProperty("status");
+      expect(first).not.toHaveProperty("firstName");
+      expect(first).not.toHaveProperty("lastName");
     });
 
     it("should filter by homeRegionId", async () => {
