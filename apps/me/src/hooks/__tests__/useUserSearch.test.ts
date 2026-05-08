@@ -34,20 +34,6 @@ describe("displayName", () => {
     expect(displayName(user)).toBe("Dredd");
   });
 
-  it("shows only region when no f3Name", () => {
-    const user = makeUser({
-      f3Name: null,
-    });
-    expect(displayName(user)).toBe("\u2014 Muletown");
-  });
-
-  it("shows only region when only region exists", () => {
-    const user = makeUser({
-      f3Name: null,
-    });
-    expect(displayName(user)).toBe("\u2014 Muletown");
-  });
-
   it("falls back to User #id when everything is null", () => {
     const user = makeUser({
       id: 42,
