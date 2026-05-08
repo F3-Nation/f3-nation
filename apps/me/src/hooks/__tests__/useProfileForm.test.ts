@@ -81,10 +81,17 @@ describe("buildInitialFormState", () => {
     expect(state.lastName).toBe("Smith");
     expect(state.phone).toBe("555-1234");
     expect(state.homeRegionId).toBe(10);
-    expect(state.avatarUrl).toBe("https://example.com/avatar.jpg");
+    expect(state.avatarUrl).toBe(
+      `https://example.com/avatar.jpg?v=${new Date("2024-06-01").getTime()}`,
+    );
     expect(state.emergencyContact).toBe("Jane");
     expect(state.emergencyPhone).toBe("555-5678");
     expect(state.emergencyNotes).toBe("No allergies");
+  });
+
+  it("returns null avatarUrl when user has no avatar", () => {
+    const user = makeUser({ avatarUrl: null });
+    expect(buildInitialFormState(user).avatarUrl).toBeNull();
   });
 
   it("defaults null string fields to empty string", () => {

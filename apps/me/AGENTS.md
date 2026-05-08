@@ -37,9 +37,9 @@ src/
 └── lib/
     ├── auth/
     │   ├── constants.ts    — Cookie names, TTLs
-    │   ├── oauth.ts        — AuthClient wrapper (f3-nation-auth-sdk)
+    │   ├── oauth.ts        — AuthClient wrapper (@acme/sso)
     │   ├── tokens.ts       — Access token parsing/expiry helpers
-    │   ├── server.ts       — getSessionUser(), requireAuth()
+    │   ├── server.ts       — getSessionUser(), requireAuth(), requireAccessToken()
     │   └── AuthProvider.tsx — Client-side auth context
     ├── api/client.ts       — Server-side F3 API client
     ├── gcs.ts              — Google Cloud Storage upload helper
@@ -49,23 +49,17 @@ src/
 
 ## API Reference
 
-- **Base URL**: `https://api.f3nation.com` (prod), `https://staging.api.f3nation.com` (staging)
-- **Headers**: `Authorization: Bearer {access_token}`, `Client: f3-me`
-- **Rate limit**: 200 req/60s
+- **Base URL**: `F3_API_BASE_URL` env var (must include `/v1`, e.g. `https://staging.api.f3nation.com/v1`)
+- **Client**: typed oRPC client (`@orpc/client`) backed by `@acme/api` router — see `src/lib/api/client.ts`
+- **Headers**: `Authorization: Bearer {access_token}`, `Client: f3-me` (set automatically by the client factory)
 
-### User Endpoints
+### Key Procedures
 
-- `GET /v1/user/id/{id}?includePii=true` — Load user profile
-- `POST /v1/user` — Upsert user (include `id` in body for update)
-
-### Org Endpoints
-
-- `GET /v1/org?orgType=region&isActive=true` — List regions
-
-### Position Endpoints
-
-- `GET /v1/position/assignments/{orgId}` — Get org's position assignments
-- `PUT /v1/position/assignments` — Replace org's position assignments
+- `client.me.profile()` — Load authenticated user's profile (user fields + roles + positions)
+- `client.me.regions()` — List active regions for the region picker
+- `client.me.updateProfile(payload)` — Update user profile fields
+- `client.me.removeRole({ roleId })` — Remove a role from the user
+- `client.me.removePosition({ orgId, positionId })` — Remove a position from the user
 
 ## Authentication Flow
 
@@ -73,8 +67,9 @@ OAuth 2.0 Authorization Code + PKCE via `https://auth.f3nation.com`:
 
 1. `/api/auth/login` → Set CSRF + code_verifier cookies → Redirect to auth provider
 2. Auth provider authenticates user (email → 6-digit code)
-3. Redirect to `/api/auth/callback` → Validate CSRF → Exchange code for tokens → Fetch userinfo → Store `access_token` + `refresh_token` cookies
-4. Middleware refreshes the access token using the refresh token for protected requests
+3. Redirect to `/api/auth/callback` → Validate CSRF → Exchange code for tokens → Fetch userinfo (to confirm email) → Store `access_token` + `refresh_token` cookies
+4. Middleware performs full RS256 + JWKS verification and refreshes the access token when needed using the refresh token.
+5. Server components decode claims locally from the already-verified JWT — no additional userinfo network call per render (`parseAccessTokenPayload` in `tokens.ts`, `getSessionUser()` / `requireAuth()` in `server.ts`).
 
 ## Editable Fields
 

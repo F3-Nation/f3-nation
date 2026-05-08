@@ -4,6 +4,7 @@ import { z } from "zod";
 import { requireAuth } from "@/lib/auth/server";
 import { getMyProfile, updateMyProfile } from "@/lib/api/client";
 import type { UserMeta } from "@/lib/types";
+import { logError } from "@/lib/logging";
 
 // Mirror of the host allow-list enforced in packages/api meRouter.updateProfile.
 // Validating at this layer too means malformed avatarUrl values return 400
@@ -60,14 +61,26 @@ const META_FIELDS = new Set([
 ]);
 
 export async function GET() {
+  let sessionUserId: number | undefined;
+
   try {
-    await requireAuth();
+    const session = await requireAuth();
+    sessionUserId = session.userId;
     const user = await getMyProfile();
     return NextResponse.json(user);
   } catch (err) {
-    console.error("Failed to fetch profile:", err);
     if (err instanceof Error && err.message.includes("NEXT_REDIRECT"))
       throw err;
+
+    logError(
+      "me.profile_api.fetch_failed",
+      {
+        sessionUserId,
+        apiBaseUrl: process.env.F3_API_BASE_URL,
+      },
+      err,
+    );
+
     return NextResponse.json(
       { error: "Failed to fetch profile" },
       { status: 500 },
@@ -76,8 +89,11 @@ export async function GET() {
 }
 
 export async function PATCH(request: NextRequest) {
+  let sessionUserId: number | undefined;
+
   try {
-    await requireAuth();
+    const session = await requireAuth();
+    sessionUserId = session.userId;
 
     let raw: unknown;
     try {
@@ -117,9 +133,18 @@ export async function PATCH(request: NextRequest) {
     const updatedUser = await updateMyProfile(updateBody);
     return NextResponse.json(updatedUser);
   } catch (err) {
-    console.error("Failed to update profile:", err);
     if (err instanceof Error && err.message.includes("NEXT_REDIRECT"))
       throw err;
+
+    logError(
+      "me.profile_api.update_failed",
+      {
+        sessionUserId,
+        apiBaseUrl: process.env.F3_API_BASE_URL,
+      },
+      err,
+    );
+
     return NextResponse.json(
       { error: "Failed to update profile" },
       { status: 500 },

@@ -1,8 +1,13 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth/server";
-import { uploadAvatar, deleteAvatar } from "@/lib/gcs";
-import { updateMyProfile } from "@/lib/api/client";
+import { uploadAvatar } from "@/lib/gcs";
+import {
+  isNotFoundApiError,
+  updateMyProfile,
+  getMyProfile,
+} from "@/lib/api/client";
+import { logError } from "@/lib/logging";
 
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_SIZE = 5 * 1024 * 1024; // 5MB
@@ -30,13 +35,23 @@ function mapAvatarUploadError(err: unknown): { status: number; error: string } {
     };
   }
 
+  if (isNotFoundApiError(err)) {
+    return {
+      status: 404,
+      error: "User profile not found for this session.",
+    };
+  }
+
   return { status: 500, error: "Failed to upload avatar" };
 }
 
 export async function POST(request: NextRequest) {
+  let sessionUserId: number | undefined;
+
   try {
     const session = await requireAuth();
     const userId = session.userId;
+    sessionUserId = userId;
 
     const formData = await request.formData();
     const fileEntry = formData.get("file");
@@ -63,28 +78,43 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
+    // Preflight: verify the profile exists before touching GCS.
+    // Aborts early with 404 if the user has no profile, preventing
+    // unnecessary overwrites of the canonical GCS object.
+    await getMyProfile();
+
     // Upload converts to JPEG and saves as user-avatars/{userId}.jpg
     const avatarUrl = await uploadAvatar(userId, buffer);
 
-    // Update user's avatarUrl via the me API — if this fails, clean up the uploaded file
+    // Update user's avatarUrl via the me API
     try {
       await updateMyProfile({ avatarUrl });
     } catch (profileErr) {
-      // Best-effort cleanup: delete the orphaned GCS object
-      await deleteAvatar(userId).catch((cleanupErr) => {
-        console.error(
-          "Failed to clean up orphaned avatar after profile update failure",
-          cleanupErr,
-        );
-      });
+      // Do NOT delete the GCS object on failure: uploadAvatar writes to a
+      // stable path (user-avatars/{userId}.jpg), so calling deleteAvatar here
+      // would remove the user's existing avatar. The new GCS content is
+      // already at the canonical path; if the DB update failed the user
+      // simply retrying will succeed without data loss.
       throw profileErr;
     }
 
-    return NextResponse.json({ avatarUrl });
+    // Return a cache-busted URL to the client so the browser fetches the new
+    // image immediately. The clean URL (without ?v=) is stored in the DB;
+    // useProfileForm derives the busted URL from user.updated on page load.
+    return NextResponse.json({ avatarUrl: `${avatarUrl}?v=${Date.now()}` });
   } catch (err) {
-    console.error("Failed to upload avatar:", err);
     if (err instanceof Error && err.message.includes("NEXT_REDIRECT"))
       throw err;
+
+    logError(
+      "me.avatar.upload_failed",
+      {
+        sessionUserId,
+        apiBaseUrl: process.env.F3_API_BASE_URL,
+      },
+      err,
+    );
+
     const mapped = mapAvatarUploadError(err);
     return NextResponse.json(
       { error: mapped.error },
