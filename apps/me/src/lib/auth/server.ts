@@ -5,31 +5,33 @@ import {
   ACCESS_TOKEN_COOKIE_NAME,
   REFRESH_TOKEN_COOKIE_NAME,
 } from "@/lib/auth/constants";
-import { getUserInfo } from "@/lib/auth/oauth";
+import { parseAccessTokenPayload } from "@/lib/auth/tokens";
 
 export interface SessionPayload {
   // SSO subject is represented as a string in token/userinfo payloads.
   sub: string;
   email: string;
-  name?: string;
   // Internal app logic expects a numeric identifier for API payloads/DB writes.
   userId: number;
 }
 
-const getCachedUserInfo = cache(async (accessToken: string) => {
-  try {
-    const user = await getUserInfo(accessToken);
-    if (!user.email) return null;
+/**
+ * Decode the already-middleware-verified JWT locally — no network call needed.
+ * Middleware performs full RS256 signature + expiry verification; here we just
+ * extract the claims we need from the payload.
+ */
+const getCachedSessionPayload = cache((accessToken: string) => {
+  const payload = parseAccessTokenPayload(accessToken);
+  if (!payload?.sub || !payload?.email) return null;
 
-    return {
-      sub: String(user.sub),
-      email: user.email,
-      name: user.name,
-      userId: user.sub,
-    } satisfies SessionPayload;
-  } catch {
-    return null;
-  }
+  const userId = Number(payload.sub);
+  if (!Number.isFinite(userId) || userId <= 0) return null;
+
+  return {
+    sub: payload.sub,
+    email: payload.email,
+    userId,
+  } satisfies SessionPayload;
 });
 
 export async function getAccessToken(): Promise<string | null> {
@@ -45,7 +47,7 @@ export async function getRefreshToken(): Promise<string | null> {
 export async function getSessionUser(): Promise<SessionPayload | null> {
   const accessToken = await getAccessToken();
   if (!accessToken) return null;
-  return getCachedUserInfo(accessToken);
+  return getCachedSessionPayload(accessToken);
 }
 
 export async function requireAuth(): Promise<SessionPayload> {
@@ -62,7 +64,7 @@ export async function requireAccessToken(): Promise<string> {
     redirect("/");
   }
 
-  const user = await getCachedUserInfo(accessToken);
+  const user = getCachedSessionPayload(accessToken);
   if (!user) {
     redirect("/");
   }

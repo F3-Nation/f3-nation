@@ -43,20 +43,4 @@ describe("Auth /me route", () => {
     expect(response.status).toBe(200);
     expect(data.user).toBeNull();
   });
-
-  it("returns user with name when present", async () => {
-    vi.mocked(getSessionUser).mockResolvedValue({
-      ...mockSession,
-      name: "Joe Dredd",
-    });
-
-    const { GET } = await import("@/app/api/auth/me/route");
-    const response = await GET();
-    const data = (await response.json()) as {
-      user: { name: string };
-    };
-
-    expect(response.status).toBe(200);
-    expect(data.user.name).toBe("Joe Dredd");
-  });
 });
