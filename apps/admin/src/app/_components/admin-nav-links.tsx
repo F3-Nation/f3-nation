@@ -20,6 +20,7 @@ import {
 import { routes } from "@acme/shared/app/constants";
 import { cn } from "@acme/ui";
 
+import { env } from "~/env";
 import { useAuth } from "~/utils/hooks/use-auth";
 
 interface AdminNavLinksProps {
@@ -137,7 +138,7 @@ export const AdminNavLinks = ({
       type: "section",
     },
     {
-      href: "/",
+      href: env.NEXT_PUBLIC_MAP_URL,
       icon: MapPin,
       label: "Map",
       type: "link",
@@ -184,16 +185,25 @@ export const AdminNavLinks = ({
           );
         }
         const Icon = link.icon;
-        return (
-          <Link
+        const isExternal = link.href.startsWith("http");
+        const linkClass = cn(
+          "flex items-center gap-2 text-sm font-medium",
+          !isExternal && pathname === link.href ? "bg-muted" : "",
+          linkClassName,
+        );
+        return isExternal ? (
+          <a
             key={link.href}
-            className={cn(
-              "flex items-center gap-2 text-sm font-medium",
-              pathname === link.href ? "bg-muted" : "",
-              linkClassName,
-            )}
+            className={linkClass}
             href={link.href}
+            target="_blank"
+            rel="noopener noreferrer"
           >
+            <Icon className="h-5 w-5" />
+            {link.label}
+          </a>
+        ) : (
+          <Link key={link.href} className={linkClass} href={link.href}>
             <Icon className="h-5 w-5" />
             {link.label}
           </Link>
