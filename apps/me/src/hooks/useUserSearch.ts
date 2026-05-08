@@ -28,12 +28,10 @@ export interface UseUserSearchReturn {
 
 /** Build a display string for a user in the dropdown. */
 export function displayName(u: UserListItem): string {
-  const parts: string[] = [];
-  if (u.f3Name) parts.push(u.f3Name);
-  const real = [u.firstName, u.lastName].filter(Boolean).join(" ");
-  if (real) parts.push(`(${real})`);
-  if (u.homeRegionName) parts.push(`\u2014 ${u.homeRegionName}`);
-  return parts.join(" ") || `User #${u.id}`;
+  if (u.f3Name && u.homeRegionName)
+    return `${u.f3Name} \u2014 ${u.homeRegionName}`;
+  if (u.f3Name) return u.f3Name;
+  return `User #${u.id}`;
 }
 
 /** Check whether a user matches a search term (case-insensitive). */
@@ -41,8 +39,6 @@ export function matchesSearch(u: UserListItem, term: string): boolean {
   const lower = term.toLowerCase();
   return (
     (u.f3Name?.toLowerCase().includes(lower) ?? false) ||
-    (u.firstName?.toLowerCase().includes(lower) ?? false) ||
-    (u.lastName?.toLowerCase().includes(lower) ?? false) ||
     (u.homeRegionName?.toLowerCase().includes(lower) ?? false)
   );
 }
@@ -143,8 +139,9 @@ export function useUserSearch({
   }, []);
 
   const filteredUsers = useMemo(() => {
-    if (!search) return users;
-    return users.filter((u) => matchesSearch(u, search));
+    const withName = users.filter((u) => !!u.f3Name);
+    if (!search) return withName;
+    return withName.filter((u) => matchesSearch(u, search));
   }, [users, search]);
 
   const isRegionScoped = !showAllRegions && !!homeRegionId;

@@ -54,8 +54,6 @@ export interface Region {
 export interface UserListItem {
   id: number;
   f3Name: string | null;
-  firstName: string | null;
-  lastName: string | null;
   homeRegionId: number | null;
   homeRegionName: string | null;
   status: "active" | "inactive";
