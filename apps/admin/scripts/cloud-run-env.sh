@@ -34,7 +34,7 @@ REGION="us-east1"
 # Env vars that map to GCP secrets (var name -> secret ID).
 # Only genuinely sensitive values go here.
 declare -A SECRET_MAP=(
-  [NEXT_PUBLIC_GOOGLE_API_KEY]="google-api-key"
+  [NEXT_PUBLIC_GOOGLE_API_KEY]="NEXT_PUBLIC_GOOGLE_API_KEY"
 )
 
 # Per-environment env vars read from the env file (not sensitive, set as plain
