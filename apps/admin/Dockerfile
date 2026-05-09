@@ -12,7 +12,7 @@ RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
 RUN pnpm add -g turbo@^1.12.3
 
 COPY . .
-RUN turbo prune f3-nation-admin --docker
+RUN turbo prune f3-admin --docker
 
 # ---------- Stage 2: Install + build ----------
 FROM --platform=linux/amd64 node:24-alpine AS installer
@@ -52,7 +52,7 @@ ENV NEXT_PUBLIC_MAP_URL=$NEXT_PUBLIC_MAP_URL
 ENV NEXT_PUBLIC_ADMIN_URL=$NEXT_PUBLIC_ADMIN_URL
 ENV NEXT_PUBLIC_GOOGLE_API_KEY=$NEXT_PUBLIC_GOOGLE_API_KEY
 
-RUN pnpm turbo build --filter=f3-nation-admin
+RUN pnpm turbo build --filter=f3-admin
 
 # ---------- Stage 3: Production runner ----------
 FROM --platform=linux/amd64 node:24-alpine AS runner

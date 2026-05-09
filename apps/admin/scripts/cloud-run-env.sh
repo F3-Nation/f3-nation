@@ -44,8 +44,6 @@ ENV_FILE_VARS=(
   NEXT_PUBLIC_API_URL
   NEXT_PUBLIC_MAP_URL
   NEXT_PUBLIC_CHANNEL
-  NEXT_PUBLIC_GIT_COMMIT_HASH
-  NEXT_PUBLIC_GIT_BRANCH
 )
 
 # Plain env vars (hardcoded, same across environments).
@@ -99,7 +97,7 @@ echo "Environment:  $ENV_NAME"
 echo "GCP Project:  $PROJECT"
 echo "Service:      $SERVICE_NAME"
 echo "Region:       $REGION"
-echo "Env file:     $ENV_FILE"
+echo "Env file:     $(readlink -f "$ENV_FILE")"
 echo ""
 
 # ---------------------------------------------------------------------------
