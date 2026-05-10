@@ -88,9 +88,7 @@ export class MailService {
   }
 
   private getTransporter() {
-    if (!this.transporter) {
-      this.transporter = nodemailer.createTransport(env.EMAIL_SERVER);
-    }
+    this.transporter ??= nodemailer.createTransport(env.EMAIL_SERVER);
     return this.transporter;
   }
 
