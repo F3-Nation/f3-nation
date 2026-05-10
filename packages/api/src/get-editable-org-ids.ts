@@ -64,7 +64,8 @@ export const getEditableOrgIdsForUser = async (
   const level0Orgs = aliasedTable(schema.orgs, "level0_orgs");
   const level1Orgs = aliasedTable(schema.orgs, "level1_orgs");
   const level2Orgs = aliasedTable(schema.orgs, "level2_orgs");
-  const allOrgs = await ctx.db
+  // TS6.0: aliasedTable complex conditional types require explicit annotation
+  const allOrgs = (await ctx.db
     .select({
       level0OrgId: level0Orgs.id,
       level0OrgType: level0Orgs.orgType,
@@ -93,7 +94,14 @@ export const getEditableOrgIdsForUser = async (
         level0Orgs.id,
         rolesWithEditPermission.map((r) => r.orgId),
       ),
-    );
+    )) as {
+    level0OrgId: number;
+    level0OrgType: OrgType;
+    level1OrgId: number | null;
+    level1OrgType: OrgType | null;
+    level2OrgId: number | null;
+    level2OrgType: OrgType | null;
+  }[];
 
   const editableOrgs = allOrgs
     .flatMap((orgData) => [
@@ -101,6 +109,10 @@ export const getEditableOrgIdsForUser = async (
       { id: orgData.level1OrgId, type: orgData.level1OrgType },
       { id: orgData.level2OrgId, type: orgData.level2OrgType },
     ])
+    .filter(
+      (org): org is { id: number; type: OrgType } =>
+        org.id !== null && org.type !== null,
+    )
     .filter((org, idx, arr) => {
       const found = arr.findIndex((o) => o.id === org.id);
       return found === idx;

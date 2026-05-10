@@ -19,15 +19,9 @@
     "@acme/eslint-config": "workspace:*",
     "@acme/prettier-config": "workspace:*",
     "@acme/tsconfig": "workspace:*",
-    "eslint": "^8.56.0",
+    "eslint": "catalog:",
     "prettier": "^3.2.5",
-    "typescript": "^5.3.3"
-  },
-  "eslintConfig": {
-    "root": true,
-    "extends": [
-      "@acme/eslint-config/base"
-    ]
+    "typescript": "catalog:"
   },
   "prettier": "@acme/prettier-config"
 }

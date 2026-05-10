@@ -318,7 +318,7 @@ export const MDTable = <T extends { id: string | number }>(
                 Download CSV
               </button>
             ) : null}
-            {filterComponent ? filterComponent : null}
+            {filterComponent ?? null}
           </div>
           <div className="ml-2">
             <DropdownMenu>

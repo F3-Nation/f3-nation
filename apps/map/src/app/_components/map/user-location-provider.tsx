@@ -158,7 +158,7 @@ const getCurrentLocationCache =
     try {
       const position = await getGeolocationPosition({ timeout: 1 });
       return position;
-    } catch (error) {
+    } catch {
       return null;
     }
   };
@@ -170,8 +170,8 @@ const getGeolocationPermission = (): Promise<PermissionState> => {
       .then((result) => {
         resolve(result.state);
       })
-      .catch((error) => {
-        reject(error);
+      .catch((error: unknown) => {
+        reject(error instanceof Error ? error : new Error(String(error)));
       });
   });
 };
@@ -200,7 +200,7 @@ const getFakeGeolocationPosition = (
           longitude: position.coords.longitude,
         },
       });
-      resolve(position);
+      resolve(position as unknown as GeolocationPosition);
     }, 1000);
   });
 };
@@ -227,11 +227,11 @@ const getGeolocationPosition = (
         });
         resolve(position);
       },
-      (error) => {
+      (error: GeolocationPositionError) => {
         USER_LOCATION_LOGS &&
           console.log("getCurrentPositionPromise", { error });
         mapStore.setState({ userGpsLocationStatus: "error" });
-        reject(error);
+        reject(new Error(error.message));
       },
       {
         timeout: options?.timeout ?? 1000 * 60, // 1 minute

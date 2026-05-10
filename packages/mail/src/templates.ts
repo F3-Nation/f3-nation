@@ -9,7 +9,7 @@ export enum Templates {
 /**
  * Default subjects for each template
  */
-export const DefaultSubject: { [key in Templates]?: string } = {
+export const DefaultSubject: Partial<Record<Templates, string>> = {
   [Templates.feedbackForm]: "Feedback Form",
   [Templates.mapChangeRequest]: "F3 Map Change Request",
 };

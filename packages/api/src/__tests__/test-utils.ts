@@ -21,7 +21,7 @@ import { router } from "../index";
  */
 export const createTestClient = () => {
   return createRouterClient(router, {
-    context: async () => ({
+    context: () => ({
       reqHeaders: new Headers({
         [Header.Client]: Client.ORPC,
       }),
@@ -153,7 +153,7 @@ export const createNoPermissionSession = (): Session => {
  */
 export const mockAuthWithSession = async (session: Session | null) => {
   const { auth } = await import("@acme/auth");
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
   vi.mocked(auth as any).mockResolvedValue(session);
 };
 

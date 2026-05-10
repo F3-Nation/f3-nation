@@ -21,6 +21,8 @@
     "@acme/shared": "workspace:^0.1.0",
     "@auth/core": "0.37.2",
     "@auth/drizzle-adapter": "^0.6.3",
+    "dayjs": "^1.11.10",
+    "lodash": "^4.17.21",
     "next": "^15.3.6",
     "next-auth": "5.0.0-beta.25",
     "nodemailer": "^6.10.0",
@@ -34,16 +36,10 @@
     "@acme/tsconfig": "workspace:^0.1.0",
     "@types/nodemailer": "^6.4.17",
     "@types/nodemailer-smtp-transport": "^2.7.8",
-    "eslint": "^8.56.0",
+    "eslint": "catalog:",
     "prettier": "^3.2.5",
     "tsx": "^4.7.1",
-    "typescript": "^5.3.3"
-  },
-  "eslintConfig": {
-    "root": true,
-    "extends": [
-      "@acme/eslint-config/base"
-    ]
+    "typescript": "catalog:"
   },
   "prettier": "@acme/prettier-config"
 }

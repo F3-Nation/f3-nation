@@ -12,7 +12,6 @@ const databaseName = env.DATABASE_NAME;
 const databasePort = env.DATABASE_PORT;
 
 declare global {
-  // eslint-disable-next-line no-var
   var _db: ReturnType<typeof createDb> | null;
 }
 
@@ -50,7 +49,7 @@ let db: ReturnType<typeof createDb>;
 if (env.NODE_ENV === "production") {
   db = createDb();
 } else {
-  if (!global._db) global._db = createDb();
+  global._db ??= createDb();
   db = global._db;
 }
 

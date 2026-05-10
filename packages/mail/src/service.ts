@@ -10,7 +10,7 @@ import { DefaultSubject, renderTemplate, Templates } from "./templates";
 /**
  * Default recipients for each template
  */
-export const DefaultTo: { [key in Templates]?: string | string[] } = {
+export const DefaultTo: Partial<Record<Templates, string | string[]>> = {
   [Templates.feedbackForm]: env.EMAIL_ADMIN_DESTINATIONS.split(","),
 };
 

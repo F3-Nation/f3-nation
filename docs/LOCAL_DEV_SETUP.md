@@ -239,6 +239,12 @@ This starts all apps in parallel via Turborepo:
 | Me   | http://localhost:3003 | 3003 |
 | Auth | http://localhost:3004 | 3004 |
 
+## Driving sign-in from automation (CI, AI agents, /pst:qa)
+
+`apps/auth` uses [Ethereal](https://ethereal.email/) instead of SendGrid when `NODE_ENV !== "production"`, and every send logs a public preview URL of the form `Preview email: https://ethereal.email/message/...`. The email contains the 6-digit MFA code and a magic link; headless automation pulls the code and POSTs it to NextAuth's `/api/auth/callback/credentials` with a CSRF token. **No real inbox is needed locally**, and the `/api/verify-email` rate limit is bypassed in non-production environments.
+
+Cookbook: [`docs/QA_LOCAL_AUTH.md`](QA_LOCAL_AUTH.md). Helper: [`scripts/qa/extract-mfa-link.sh`](../scripts/qa/extract-mfa-link.sh). Agent reference: [`apps/auth/AGENTS.md`](../apps/auth/AGENTS.md).
+
 ## Troubleshooting
 
 ### `relation "auth.email_mfa_codes" does not exist`

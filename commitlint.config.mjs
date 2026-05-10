@@ -8,6 +8,7 @@ export default {
       [
         // apps
         'map',
+        'me',
 
         // apps & packages (exist in both apps/ and packages/)
         'api',

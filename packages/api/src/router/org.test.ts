@@ -330,6 +330,234 @@ describe("Org Router", () => {
         }),
       ).rejects.toThrow();
     });
+
+    it("should require editor permission on the destination region when moving an AO", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+
+      const [sourceRegion] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Source Region ${uniqueId()}`,
+          orgType: "region",
+          parentId: f3Nation.id,
+          isActive: true,
+        })
+        .returning();
+
+      const [destinationRegion] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Destination Region ${uniqueId()}`,
+          orgType: "region",
+          parentId: f3Nation.id,
+          isActive: true,
+        })
+        .returning();
+
+      if (!sourceRegion || !destinationRegion) {
+        throw new Error("Failed to create test regions");
+      }
+
+      createdOrgIds.push(sourceRegion.id, destinationRegion.id);
+
+      const [ao] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `AO Move Permission ${uniqueId()}`,
+          orgType: "ao",
+          parentId: sourceRegion.id,
+          isActive: true,
+        })
+        .returning();
+
+      if (!ao) {
+        throw new Error("Failed to create test AO");
+      }
+
+      createdOrgIds.push(ao.id);
+
+      const session = createEditorSession({
+        orgId: sourceRegion.id,
+        orgName: sourceRegion.name,
+      });
+      await mockAuthWithSession(session);
+
+      const client = createTestClient();
+
+      await expect(
+        client.org.crupdate({
+          id: ao.id,
+          name: ao.name,
+          orgType: "ao",
+          parentId: destinationRegion.id,
+          isActive: true,
+          email: null,
+          description: null,
+          website: null,
+          twitter: null,
+          facebook: null,
+          instagram: null,
+        }),
+      ).rejects.toThrow("destination parent");
+    });
+
+    it("should require editor permission on the destination parent when moving a region", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+
+      const [sourceSector] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Source Sector ${uniqueId()}`,
+          orgType: "sector",
+          parentId: f3Nation.id,
+          isActive: true,
+        })
+        .returning();
+
+      const [destinationSector] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Destination Sector ${uniqueId()}`,
+          orgType: "sector",
+          parentId: f3Nation.id,
+          isActive: true,
+        })
+        .returning();
+
+      if (!sourceSector || !destinationSector) {
+        throw new Error("Failed to create test sectors");
+      }
+
+      createdOrgIds.push(sourceSector.id, destinationSector.id);
+
+      const [region] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Region Move Permission ${uniqueId()}`,
+          orgType: "region",
+          parentId: sourceSector.id,
+          isActive: true,
+        })
+        .returning();
+
+      if (!region) {
+        throw new Error("Failed to create test region");
+      }
+
+      createdOrgIds.push(region.id);
+
+      const session = createEditorSession({
+        orgId: sourceSector.id,
+        orgName: sourceSector.name,
+      });
+      await mockAuthWithSession(session);
+
+      const client = createTestClient();
+
+      await expect(
+        client.org.crupdate({
+          id: region.id,
+          name: region.name,
+          orgType: "region",
+          parentId: destinationSector.id,
+          isActive: true,
+          email: null,
+          description: null,
+          website: null,
+          twitter: null,
+          facebook: null,
+          instagram: null,
+        }),
+      ).rejects.toThrow("destination parent");
+    });
+
+    it("should not bypass destination permission checks for parentId zero", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+
+      const [sourceRegion] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Zero Source Region ${uniqueId()}`,
+          orgType: "region",
+          parentId: f3Nation.id,
+          isActive: true,
+        })
+        .returning();
+
+      if (!sourceRegion) {
+        throw new Error("Failed to create source region");
+      }
+
+      createdOrgIds.push(sourceRegion.id);
+
+      const [existingZeroRegion] = await db
+        .select()
+        .from(schema.orgs)
+        .where(eq(schema.orgs.id, 0));
+
+      const zeroRegion =
+        existingZeroRegion ??
+        (
+          await db
+            .insert(schema.orgs)
+            .values({
+              id: 0,
+              name: `Zero Region ${uniqueId()}`,
+              orgType: "region",
+              parentId: f3Nation.id,
+              isActive: true,
+            })
+            .returning()
+        )[0];
+
+      if (!zeroRegion) {
+        throw new Error("Failed to create zero region");
+      }
+
+      if (!existingZeroRegion) {
+        createdOrgIds.push(zeroRegion.id);
+      }
+
+      const [ao] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `AO Zero Move ${uniqueId()}`,
+          orgType: "ao",
+          parentId: sourceRegion.id,
+          isActive: true,
+        })
+        .returning();
+
+      if (!ao) {
+        throw new Error("Failed to create test AO");
+      }
+
+      createdOrgIds.push(ao.id);
+
+      const session = createEditorSession({
+        orgId: sourceRegion.id,
+        orgName: sourceRegion.name,
+      });
+      await mockAuthWithSession(session);
+
+      const client = createTestClient();
+
+      await expect(
+        client.org.crupdate({
+          id: ao.id,
+          name: ao.name,
+          orgType: "ao",
+          parentId: zeroRegion.id,
+          isActive: true,
+          email: null,
+          description: null,
+          website: null,
+          twitter: null,
+          facebook: null,
+          instagram: null,
+        }),
+      ).rejects.toThrow("destination parent");
+    });
   });
 
   describe("mine", () => {
