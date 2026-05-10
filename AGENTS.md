@@ -7,6 +7,10 @@
 - Shared code is organized in `packages/`: `api` (tRPC routers), `auth` (auth helpers), `db` (Drizzle schema/migrations), `ui` (shared components), `validators` (Zod schemas), and `shared` (utilities).
 - Configuration files are in `tooling/`; pnpm patches go in `patches/`; Turbo generators live in `turbo/`.
 
+## Environment Setup
+
+- Node and pnpm are managed via NVM. The pnpm binary lives at `~/.nvm/versions/node/v24.14.1/bin/pnpm` (or whichever Node version is active). If `pnpm` is not on `PATH`, prepend `~/.nvm/versions/node/$(node --version)/bin` or run `. ~/.nvm/nvm.sh && nvm use` before running pnpm commands.
+
 ## Build, Test, and Development Commands
 
 - Install dependencies with `pnpm install`. You can scope installations with `--filter <workspace>`.

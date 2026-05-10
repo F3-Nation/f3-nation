@@ -119,21 +119,20 @@ export class MailService {
 
     for (const batch of batches) {
       await Promise.all(
-        batch.map((msg) =>
-          Promise.resolve(this.getTransporter()).then((t) =>
-            t
-              ?.sendMail({ ...msg, headers: sendGridHeaders })
-              .then((info) => {
-                sentInfo.push(info);
-                console.log("\x1b[32m", "Message sent successfully!");
-              })
-              .catch((error: Error) => {
-                sentInfo.push(error);
-                console.log("\x1b[31m", "Error occurred!");
-                console.error("error", error.message);
-              }),
-          ),
-        ),
+        batch.map((msg) => {
+          const t = this.getTransporter();
+          return t
+            ?.sendMail({ ...msg, headers: sendGridHeaders })
+            .then((info) => {
+              sentInfo.push(info);
+              console.log("\x1b[32m", "Message sent successfully!");
+            })
+            .catch((error: Error) => {
+              sentInfo.push(error);
+              console.log("\x1b[31m", "Error occurred!");
+              console.error("error", error.message);
+            });
+        }),
       );
     }
     return sentInfo;

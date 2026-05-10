@@ -38,7 +38,9 @@ export async function POST(request: Request) {
       });
       const client = await auth.getClient();
       const tokenResult = await client.getAccessToken();
-      bearerToken = tokenResult.token ?? "";
+      if (!tokenResult.token)
+        throw new Error("GCS: failed to obtain access token");
+      bearerToken = tokenResult.token;
     }
 
     const response = await fetch(
