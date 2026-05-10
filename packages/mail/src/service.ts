@@ -1,4 +1,4 @@
-import nodemailer, { createTestAccount } from "nodemailer";
+import nodemailer from "nodemailer";
 import type Mail from "nodemailer/lib/mailer";
 import type SMTPTransport from "nodemailer/lib/smtp-transport";
 
@@ -6,8 +6,6 @@ import { env } from "@acme/env";
 
 import type { TemplateType } from "./templates";
 import { DefaultSubject, renderTemplate, Templates } from "./templates";
-
-const isLocalDevelopment = process.env.NODE_ENV !== "production";
 
 /**
  * Default recipients for each template
@@ -89,18 +87,9 @@ export class MailService {
     return sent;
   }
 
-  private async getTransporter() {
+  private getTransporter() {
     if (!this.transporter) {
-      const transporterOptions = isLocalDevelopment
-        ? await createTestAccount().then(({ user, pass }) => ({
-            host: "smtp.ethereal.email",
-            port: 587,
-            secure: false,
-            auth: { user, pass },
-          }))
-        : // Email now comes from F3 sendgrid
-          env.EMAIL_SERVER;
-      this.transporter = nodemailer.createTransport(transporterOptions);
+      this.transporter = nodemailer.createTransport(env.EMAIL_SERVER);
     }
     return this.transporter;
   }
@@ -133,15 +122,12 @@ export class MailService {
     for (const batch of batches) {
       await Promise.all(
         batch.map((msg) =>
-          this.getTransporter().then((t) =>
+          Promise.resolve(this.getTransporter()).then((t) =>
             t
               ?.sendMail({ ...msg, headers: sendGridHeaders })
               .then((info) => {
                 sentInfo.push(info);
                 console.log("\x1b[32m", "Message sent successfully!");
-                if (isLocalDevelopment) {
-                  console.log("\x1b[33m", nodemailer.getTestMessageUrl(info));
-                }
               })
               .catch((error: Error) => {
                 sentInfo.push(error);

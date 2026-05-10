@@ -1,6 +1,10 @@
 # Local Development Setup
 
-Step-by-step guide for new contributors to get the F3 Nation monorepo running locally.
+> **New to the project?** Use the [Docker-based setup](LOCAL_DEV_DOCKER.md) instead — it requires no GCP credentials and gets you running in minutes with a single command.
+>
+> This document covers the **GCP-connected** setup for contributors who already have access to the `f3-authentication-staging` project.
+
+Step-by-step guide for getting the F3 Nation monorepo running locally with GCP services.
 
 ## Prerequisites
 

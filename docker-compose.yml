@@ -8,6 +8,6 @@ services:
         - DOPPLER_TOKEN=${DOPPLER_TOKEN}
     restart: always
     environment:
-      - DOPPLER_TOKEN={DOPPLER_TOKEN}
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN}
     ports:
       - 3000:3000
