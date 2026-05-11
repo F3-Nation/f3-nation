@@ -40,7 +40,7 @@ declare -A SECRET_MAP=(
   [DATABASE_NAME]="database-name"
   [AUTH_SECRET]="auth-secret"
   [AUTH_JWT_PRIVATE_KEY]="auth-jwt-private-key"
-  [SENDGRID_API_KEY]="sendgrid-api-key"
+  [EMAIL_SERVER]="email-server"
   [API_KEY]="api-key"
 )
 
