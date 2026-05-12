@@ -14,6 +14,14 @@ const nextConfig: NextConfig = {
         hostname: "storage.googleapis.com",
         pathname: "/f3-public-images-staging/**",
       },
+      {
+        protocol: "https",
+        hostname: "avatars.slack-edge.com",
+      },
+      {
+        protocol: "https",
+        hostname: "a.slack-edge.com",
+      },
     ],
   },
 };
