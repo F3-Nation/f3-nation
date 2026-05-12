@@ -6,9 +6,8 @@ import { getMyProfile, updateMyProfile } from "@/lib/api/client";
 import type { UserMeta } from "@/lib/types";
 import { logError } from "@/lib/logging";
 
-// Mirror of the host allow-list enforced in packages/api meRouter.updateProfile.
-// Validating at this layer too means malformed avatarUrl values return 400
-// instead of bubbling up as a 500 from the underlying API.
+// Enforce avatar host allow-list at this boundary so malformed avatarUrl
+// values are rejected with a 400 before calling the underlying API.
 const ALLOWED_AVATAR_HOST_PATTERN =
   /^https:\/\/storage\.googleapis\.com\/f3-public-images(-staging)?\//;
 const isAllowedAvatarUrl = (url: string): boolean =>
