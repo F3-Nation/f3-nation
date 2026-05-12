@@ -1,23 +1,22 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { signOut, useSession } from "next-auth/react";
 
+import type { AdminSession } from "~/lib/auth/session";
+import { navigateToSsoLogout } from "~/lib/auth/client";
 import { AuthWrapper } from "../components/auth-components";
 
-export const AlreadySignedIn = () => {
-  const { data: session } = useSession();
-
+export const AlreadySignedIn = ({ session }: { session: AdminSession }) => {
   const router = useRouter();
   return (
     <AuthWrapper className="max-w-md mx-auto">
       <h2 className="mt-2 text-2xl font-semibold">
-        {`You're already signed in as ${session?.user?.email}`}
+        {`You're already signed in as ${session.email}`}
       </h2>
       <div className="mt-2">Would you like to sign out?</div>
       <button
         className="mt-4 w-full rounded-md bg-foreground px-4 py-4 text-background"
-        onClick={() => signOut()}
+        onClick={() => navigateToSsoLogout()}
       >
         Sign out
       </button>

@@ -6,14 +6,23 @@ import type { router } from "@acme/api";
 import { API_PREFIX_V1 } from "@acme/shared/app/constants";
 import { Client, Header } from "@acme/shared/common/enums";
 
-import { env } from "~/env";
-
 declare global {
   var $client: RouterClient<typeof router> | undefined;
 }
 
+function getOrpcUrl(): string {
+  const path = `/api/orpc${API_PREFIX_V1}`;
+  const origin =
+    typeof window === "undefined"
+      ? process.env.NEXT_PUBLIC_ADMIN_URL ?? "http://localhost:3002"
+      : window.location.origin;
+  return new URL(path, origin).toString();
+}
+
+const orpcUrl = getOrpcUrl();
+
 const link = new RPCLink({
-  url: `${env.NEXT_PUBLIC_API_URL}${API_PREFIX_V1}`,
+  url: orpcUrl,
   fetch: (input, init) => {
     input.headers.set(Header.Client, Client.ORPC);
 

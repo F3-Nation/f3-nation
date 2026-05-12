@@ -1,10 +1,10 @@
-import type { JWT } from "next-auth";
-import { getToken } from "next-auth/jwt";
 import type { NextFetchEvent, NextMiddleware, NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
-import { env } from "@acme/env";
 import { ADMIN_PATHS, routes } from "@acme/shared/app/constants";
+
+import { ACCESS_TOKEN_COOKIE_NAME } from "~/lib/auth/constants";
+import { verifyAccessTokenPayload } from "~/lib/auth/tokens";
 
 import type { MiddlewareFactory } from "./types";
 
@@ -16,28 +16,20 @@ const withAdmin: MiddlewareFactory = (next: NextMiddleware) => {
       return res;
     }
 
-    const [cookieToken] = request.cookies
-      .getAll()
-      .filter((o) => o.name.includes("authjs.session-token"));
-
-    // Must use process.env so that we don't try to validate all the other envs
-    const secret = env.AUTH_SECRET;
-    if (!secret) throw new Error("AUTH_SECRET is not set");
-
-    if (!cookieToken) {
+    const accessToken = request.cookies.get(ACCESS_TOKEN_COOKIE_NAME)?.value;
+    if (!accessToken) {
       return NextResponse.redirect(
-        new URL(`${routes.auth.signIn.__path}?reason=no-cookie`, request.url),
+        new URL(
+          `/api/auth/login?returnTo=${encodeURIComponent(
+            request.nextUrl.pathname + request.nextUrl.search,
+          )}`,
+          request.url,
+        ),
       );
     }
 
-    const payload: JWT | null = await getToken({
-      req: request,
-      secret,
-      salt: cookieToken.name,
-      cookieName: cookieToken.name,
-    });
-
-    const isAdmin = payload?.roles.some((role) => role.roleName === "admin");
+    const payload = await verifyAccessTokenPayload(accessToken);
+    const isAdmin = payload?.roles?.some((role) => role.roleName === "admin");
 
     if (!isAdmin) {
       return NextResponse.redirect(

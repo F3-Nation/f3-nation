@@ -66,21 +66,15 @@ importers:
       '@acme/api':
         specifier: workspace:^0.2.0
         version: link:../../packages/api
-      '@acme/auth':
-        specifier: workspace:^0.1.0
-        version: link:../../packages/auth
-      '@acme/db':
-        specifier: workspace:^0.1.0
-        version: link:../../packages/db
-      '@acme/env':
-        specifier: workspace:^0.1.0
-        version: link:../../packages/env
       '@acme/mail':
         specifier: workspace:*
         version: link:../../packages/mail
       '@acme/shared':
         specifier: workspace:^0.1.0
         version: link:../../packages/shared
+      '@acme/sso':
+        specifier: workspace:*
+        version: link:../../packages/sso
       '@acme/tailwind-config':
         specifier: workspace:^0.1.0
         version: link:../../tooling/tailwind
@@ -132,6 +126,9 @@ importers:
       geist:
         specifier: ^1.2.2
         version: 1.7.0(next@15.5.14(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))
+      jose:
+        specifier: ^6.2.1
+        version: 6.2.2
       lodash:
         specifier: ^4.17.21
         version: 4.18.1

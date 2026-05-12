@@ -35,15 +35,20 @@ REGION="us-east1"
 # Only genuinely sensitive values go here.
 declare -A SECRET_MAP=(
   [NEXT_PUBLIC_GOOGLE_API_KEY]="NEXT_PUBLIC_GOOGLE_API_KEY"
+  [OAUTH_CLIENT_SECRET]="OAUTH_CLIENT_SECRET"
 )
 
 # Per-environment env vars read from the env file (not sensitive, set as plain
 # Cloud Run env vars).
 ENV_FILE_VARS=(
+  AUTH_PROVIDER_URL
+  F3_API_BASE_URL
   NEXT_PUBLIC_ADMIN_URL
   NEXT_PUBLIC_API_URL
   NEXT_PUBLIC_MAP_URL
   NEXT_PUBLIC_CHANNEL
+  OAUTH_CLIENT_ID
+  OAUTH_REDIRECT_URI
 )
 
 # Plain env vars (hardcoded, same across environments).

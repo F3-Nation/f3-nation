@@ -1,17 +1,20 @@
 "use client";
 
 import { ExternalLink } from "lucide-react";
-import { signOut, useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import { routes } from "@acme/shared/app/constants";
+import {
+  navigateToSsoLogin,
+  navigateToSsoLogout,
+  useAdminSession,
+} from "~/lib/auth/client";
 
 const CLEAR_BROWSER_DATA_GUIDE_URL =
   "https://us.norton.com/blog/how-to/how-to-clear-cookies";
 
 export default function NoAccess() {
   const searchParams = useSearchParams();
-  const { data: session } = useSession();
+  const { data: session } = useAdminSession();
   const router = useRouter();
   const reason = searchParams?.get("reason");
 
@@ -50,8 +53,8 @@ export default function NoAccess() {
             <div className="space-y-3">
               <p className="text-gray-600">
                 You are signed in as{" "}
-                <span className="font-medium">{session.user?.email}</span>, but
-                this account does not have the required permissions.
+                <span className="font-medium">{session.email}</span>, but this
+                account does not have the required permissions.
               </p>
               <p className="text-sm text-gray-500">
                 Required role:{" "}
@@ -115,7 +118,7 @@ export default function NoAccess() {
             {session ? (
               <>
                 <button
-                  onClick={() => signOut({ callbackUrl: "/" })}
+                  onClick={() => navigateToSsoLogout()}
                   className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                 >
                   Sign out and try a different account
@@ -129,7 +132,7 @@ export default function NoAccess() {
               </>
             ) : (
               <button
-                onClick={() => router.push(routes.auth.signIn.__path)}
+                onClick={() => navigateToSsoLogin("/")}
                 className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
               >
                 Sign in

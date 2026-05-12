@@ -1,7 +1,6 @@
 "use client";
 
 import { UserPlus } from "lucide-react";
-import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo } from "react";
 import { z } from "zod";
@@ -47,14 +46,22 @@ import {
   useQuery,
 } from "~/orpc/react";
 import type { DataType } from "~/utils/store/modal";
+import type { AdminSessionRole } from "~/lib/auth/session";
+import { useAdminSession } from "~/lib/auth/client";
 import { ModalType, closeModal, openModal } from "~/utils/store/modal";
+
+function isAdminSessionRoleName(
+  roleName: string | null,
+): roleName is AdminSessionRole["roleName"] {
+  return roleName === "admin" || roleName === "editor" || roleName === "user";
+}
 
 export default function UserModal({
   data,
 }: {
   data: DataType[ModalType.ADMIN_USERS];
 }) {
-  const { data: session, update } = useSession();
+  const { data: session, update } = useAdminSession();
   const { data: userResponse } = useQuery(
     orpc.user.byId.queryOptions({
       input: {
@@ -151,8 +158,18 @@ export default function UserModal({
     orpc.user.crupdate.mutationOptions({
       onSuccess: async (data) => {
         await invalidateQueries("user");
-        const { roles } = data;
-        if (session?.id === data.id && data.roles?.length > 0) {
+        const roles: AdminSessionRole[] = data.roles.flatMap((role) => {
+          if (!role.orgName || !isAdminSessionRoleName(role.roleName))
+            return [];
+          return [
+            {
+              orgId: role.orgId,
+              orgName: role.orgName,
+              roleName: role.roleName,
+            },
+          ];
+        });
+        if (session?.id === data.id && roles.length > 0) {
           await update({ ...session, roles });
         }
         closeModal();

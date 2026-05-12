@@ -1,9 +1,6 @@
-import "~/orpc/client.server";
-
 import type { Metadata, Viewport } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
-import { SessionProvider } from "next-auth/react";
 
 import { cn } from "@acme/ui";
 import { ThemeProvider } from "@acme/ui/theme";
@@ -13,6 +10,8 @@ import { TooltipProvider } from "@acme/ui/tooltip";
 import "~/app/globals.css";
 
 import { ModalSwitcher } from "~/app/_components/modal/modal-switcher";
+import { AdminSessionProvider } from "~/lib/auth/client";
+import { getSessionUser } from "~/lib/auth/server";
 import { OrpcReactProvider } from "~/orpc/react";
 
 export const metadata: Metadata = {
@@ -27,7 +26,9 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout(props: { children: React.ReactNode }) {
+export default async function RootLayout(props: { children: React.ReactNode }) {
+  const initialSession = await getSessionUser();
+
   return (
     <html lang="en" suppressHydrationWarning>
       <body
@@ -37,7 +38,7 @@ export default function RootLayout(props: { children: React.ReactNode }) {
           GeistMono.variable,
         )}
       >
-        <SessionProvider>
+        <AdminSessionProvider initialSession={initialSession}>
           <OrpcReactProvider>
             <ThemeProvider
               attribute="class"
@@ -51,7 +52,7 @@ export default function RootLayout(props: { children: React.ReactNode }) {
               <ModalSwitcher />
             </ThemeProvider>
           </OrpcReactProvider>
-        </SessionProvider>
+        </AdminSessionProvider>
       </body>
     </html>
   );

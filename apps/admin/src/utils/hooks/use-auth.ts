@@ -1,10 +1,11 @@
 import { useMemo } from "react";
-import { useSession } from "next-auth/react";
 
 import { isNationAdminFromSession } from "@acme/shared/app/role-checks";
 
+import { useAdminSession } from "~/lib/auth/client";
+
 export const useAuth = () => {
-  const { data: session, status } = useSession();
+  const { data: session, status } = useAdminSession();
   const { isNationAdmin, isEditorOrAdmin, isAdmin } = useMemo(() => {
     if (!session)
       return { isNationAdmin: false, isEditorOrAdmin: false, isAdmin: false };

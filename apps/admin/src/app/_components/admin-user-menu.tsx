@@ -1,7 +1,6 @@
 "use client";
 
 import { LogOut } from "lucide-react";
-import { signOut, useSession } from "next-auth/react";
 
 import { Avatar, AvatarFallback } from "@acme/ui/avatar";
 import { Button } from "@acme/ui/button";
@@ -14,11 +13,13 @@ import {
   DropdownMenuTrigger,
 } from "@acme/ui/dropdown-menu";
 
-export const AdminUserMenu = () => {
-  const { data: session } = useSession();
+import { navigateToSsoLogout, useAdminSession } from "~/lib/auth/client";
 
-  const userEmail = session?.user?.email ?? "";
-  const userName = session?.user?.name ?? userEmail.split("@")[0] ?? "User";
+export const AdminUserMenu = () => {
+  const { data: session } = useAdminSession();
+
+  const userEmail = session?.email ?? "";
+  const userName = session?.name ?? userEmail.split("@")[0] ?? "User";
   const initials = userName
     .split(" ")
     .map((n) => n[0])
@@ -85,10 +86,8 @@ export const AdminUserMenu = () => {
           </>
         )}
         <DropdownMenuItem
-          onClick={async () => {
-            await signOut({
-              callbackUrl: "/",
-            });
+          onClick={() => {
+            navigateToSsoLogout();
           }}
         >
           <LogOut className="mr-2 h-4 w-4" />

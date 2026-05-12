@@ -4,7 +4,6 @@ import { DotsHorizontalIcon } from "@radix-ui/react-icons";
 import { useQuery } from "@tanstack/react-query";
 import type { TableOptions } from "@tanstack/react-table";
 import { Check, ChevronsUpDown } from "lucide-react";
-import { useSession } from "next-auth/react";
 import { useCallback, useMemo, useState } from "react";
 
 import { UserRole, UserStatus } from "@acme/shared/app/enums";
@@ -31,6 +30,7 @@ import { MobileFilterSheet } from "../../_components/mobile-filter-sheet";
 import { ResetFilter } from "../../_components/reset-filter";
 import { orpc } from "~/orpc/react";
 import type { RouterOutputs } from "~/orpc/types";
+import { useAdminSession } from "~/lib/auth/client";
 import { useDebounce } from "~/utils/hooks/use-debounce";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
 import { OrgFilter } from "../org-filter";
@@ -156,7 +156,7 @@ const UserStatusFilter = ({
 };
 
 export const MyUsersTable = () => {
-  const { data: session } = useSession();
+  const { data: session } = useAdminSession();
   const [selectedStatuses, setSelectedStatuses] = useState<UserStatus[]>([
     "active",
   ]);
