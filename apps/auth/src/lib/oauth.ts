@@ -1,10 +1,13 @@
 import crypto from "crypto";
 
-import { and, eq, gt } from "@acme/db";
+import { and, asc, eq, gt } from "@acme/db";
 import {
   oauthAuthorizationCodes,
   oauthClients,
   oauthRefreshTokens,
+  orgs,
+  roles,
+  rolesXUsersXOrg,
   users,
 } from "@acme/db/schema/schema";
 import { importJWK, jwtVerify } from "jose";
@@ -103,8 +106,10 @@ export async function exchangeAuthorizationCode(params: {
     .returning();
 
   if (!authCode) return { error: "invalid_grant" as const };
-  if (new Date(authCode.expiresAt) < new Date())
-    return { error: "invalid_grant" as const };
+  const expiresAt = authCode.expiresAt.endsWith("Z")
+    ? new Date(authCode.expiresAt)
+    : new Date(authCode.expiresAt + "Z");
+  if (expiresAt < new Date()) return { error: "invalid_grant" as const };
   if (authCode.clientId !== params.clientId)
     return { error: "invalid_grant" as const };
   if (authCode.redirectUri !== params.redirectUri)
@@ -144,6 +149,19 @@ export async function exchangeAuthorizationCode(params: {
     .limit(1);
   if (!user) return { error: "invalid_grant" as const };
 
+  // Look up user roles for JWT claims
+  const userRoles = await db
+    .select({
+      orgId: rolesXUsersXOrg.orgId,
+      orgName: orgs.name,
+      roleName: roles.name,
+    })
+    .from(rolesXUsersXOrg)
+    .innerJoin(orgs, eq(orgs.id, rolesXUsersXOrg.orgId))
+    .innerJoin(roles, eq(roles.id, rolesXUsersXOrg.roleId))
+    .where(eq(rolesXUsersXOrg.userId, authCode.userId))
+    .orderBy(asc(orgs.name), asc(roles.name));
+
   // Create tokens — access token is a JWT, refresh token is opaque
   const ACCESS_TOKEN_TTL = 3600; // 1 hour
   const accessToken = await signAccessToken({
@@ -152,6 +170,7 @@ export async function exchangeAuthorizationCode(params: {
     scope: authCode.scopes ?? "openid profile email",
     clientId: authCode.clientId,
     expiresInSeconds: ACCESS_TOKEN_TTL,
+    roles: userRoles,
   });
 
   const refreshToken = generateOpaqueToken();
@@ -220,6 +239,19 @@ export async function exchangeRefreshToken(params: {
     .limit(1);
   if (!user) return { error: "invalid_grant" as const };
 
+  // Look up user roles for JWT claims
+  const userRoles = await db
+    .select({
+      orgId: rolesXUsersXOrg.orgId,
+      orgName: orgs.name,
+      roleName: roles.name,
+    })
+    .from(rolesXUsersXOrg)
+    .innerJoin(orgs, eq(orgs.id, rolesXUsersXOrg.orgId))
+    .innerJoin(roles, eq(roles.id, rolesXUsersXOrg.roleId))
+    .where(eq(rolesXUsersXOrg.userId, existing.userId))
+    .orderBy(asc(orgs.name), asc(roles.name));
+
   const scopes = client.scopes ?? "openid profile email";
   const ACCESS_TOKEN_TTL = 3600; // 1 hour
 
@@ -229,6 +261,7 @@ export async function exchangeRefreshToken(params: {
     scope: scopes,
     clientId: existing.clientId,
     expiresInSeconds: ACCESS_TOKEN_TTL,
+    roles: userRoles,
   });
 
   const refreshToken = generateOpaqueToken();
