@@ -1,5 +1,5 @@
 import tseslint from "typescript-eslint";
-import importPlugin from "eslint-plugin-import";
+import importPlugin from "eslint-plugin-import-x";
 
 /** @type {import("typescript-eslint").Config} */
 export default tseslint.config(
