@@ -115,9 +115,9 @@ describe("First Event Service", () => {
   // --- Tests ---
 
   describe("maybeNotifyFirstEventForRegion", () => {
-    it("sets flag and emits debug log when first event is created for a region", async () => {
-      const debugSpy = vitest
-        .spyOn(console, "debug")
+    it("sets flag and logs when first event is created for a region", async () => {
+      const warnSpy = vitest
+        .spyOn(console, "warn")
         .mockImplementation(() => undefined);
 
       const region = await createTestRegion();
@@ -126,7 +126,6 @@ describe("First Event Service", () => {
 
       await maybeNotifyFirstEventForRegion(db, ao.id);
 
-      // Region meta should have the flag set
       const [updatedRegion] = await db
         .select({ meta: schema.orgs.meta })
         .from(schema.orgs)
@@ -137,12 +136,11 @@ describe("First Event Service", () => {
           .firstEventNotificationSent,
       ).toBe(true);
 
-      // Debug log should mention the region
-      expect(debugSpy).toHaveBeenCalledWith(
+      expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining(region.name),
       );
 
-      debugSpy.mockRestore();
+      warnSpy.mockRestore();
     });
 
     it("does nothing when a second event exists for the region", async () => {
