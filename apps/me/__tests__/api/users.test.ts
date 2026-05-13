@@ -53,7 +53,11 @@ describe("Users API route", () => {
 
       expect(response.status).toBe(200);
       expect(data.users).toHaveLength(2);
-      expect(getUsers).toHaveBeenCalledWith(undefined);
+      expect(getUsers).toHaveBeenCalledWith({
+        userId: undefined,
+        homeRegionId: undefined,
+        searchTerm: undefined,
+      });
     });
 
     it("filters by homeRegionId when provided", async () => {
@@ -77,7 +81,35 @@ describe("Users API route", () => {
 
       expect(response.status).toBe(200);
       expect(data.users).toHaveLength(1);
-      expect(getUsers).toHaveBeenCalledWith(5);
+      expect(getUsers).toHaveBeenCalledWith({
+        userId: undefined,
+        homeRegionId: 5,
+        searchTerm: undefined,
+      });
+    });
+
+    it("passes searchTerm when provided", async () => {
+      vi.mocked(requireAuth).mockResolvedValue(mockSession);
+      vi.mocked(getUsers).mockResolvedValue([
+        {
+          id: 9,
+          f3Name: "Forrest",
+          homeRegionId: 12,
+          homeRegionName: "Shire",
+          status: "active",
+        },
+      ]);
+
+      const { GET } = await import("@/app/api/users/route");
+      const req = new NextRequest("http://localhost/api/users?searchTerm=For");
+      const response = await GET(req);
+
+      expect(response.status).toBe(200);
+      expect(getUsers).toHaveBeenCalledWith({
+        userId: undefined,
+        homeRegionId: undefined,
+        searchTerm: "For",
+      });
     });
 
     it("returns 400 for non-integer homeRegionId", async () => {

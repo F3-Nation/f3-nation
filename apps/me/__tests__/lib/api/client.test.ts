@@ -130,7 +130,7 @@ describe("API client (oRPC)", () => {
     mockMe.users.mockResolvedValueOnce({ users: [{ id: 7, f3Name: "Pax" }] });
 
     const { getUsers } = await import("@/lib/api/client");
-    const users = await getUsers(3);
+    const users = await getUsers({ homeRegionId: 3 });
 
     expect(mockMe.users).toHaveBeenCalledWith({ homeRegionId: 3 });
     expect(users[0]?.f3Name).toBe("Pax");

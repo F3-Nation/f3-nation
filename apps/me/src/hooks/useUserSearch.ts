@@ -18,8 +18,13 @@ export interface UseUserSearchReturn {
   loading: boolean;
   selectedUser: UserListItem | null;
   isRegionScoped: boolean;
+  canRunOutsideRegionSearch: boolean;
+  showOutsideRegionSearchAction: boolean;
+  outsideRegionSearchActionLabel: string;
+  hasPendingOutsideRegionSearch: boolean;
   setSelectedUser: (user: UserListItem | null) => void;
   handleExpandAll: () => void;
+  runOutsideRegionSearch: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -57,16 +62,42 @@ export function useUserSearch({
   const [loading, setLoading] = useState(false);
   const [showAllRegions, setShowAllRegions] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserListItem | null>(null);
+  const [submittedOutsideRegionSearch, setSubmittedOutsideRegionSearch] =
+    useState<string | null>(null);
   const scopedRegionId =
     showAllRegions || !homeRegionId ? undefined : homeRegionId;
+  const isRegionScoped = !showAllRegions && !!homeRegionId;
+  const trimmedSearch = search.trim();
+  const isOutsideRegionMode = !isRegionScoped;
+  const canRunOutsideRegionSearch =
+    isOutsideRegionMode && trimmedSearch.length >= 2;
+  const hasPendingOutsideRegionSearch =
+    isOutsideRegionMode &&
+    trimmedSearch.length >= 2 &&
+    trimmedSearch !== submittedOutsideRegionSearch;
+  const showOutsideRegionSearchAction =
+    isOutsideRegionMode && trimmedSearch.length >= 2;
+  const outsideRegionSearchActionLabel = submittedOutsideRegionSearch
+    ? "Update outside-region search"
+    : "Search outside my home region";
 
   const fetchUsers = useCallback(
-    async (regionId?: number | null) => {
+    async (options?: {
+      userId?: number | null;
+      regionId?: number | null;
+      searchTerm?: string;
+    }) => {
       setLoading(true);
       try {
         const params = new URLSearchParams();
-        if (regionId) {
-          params.set("homeRegionId", String(regionId));
+        if (options?.userId) {
+          params.set("userId", String(options.userId));
+        }
+        if (options?.regionId) {
+          params.set("homeRegionId", String(options.regionId));
+        }
+        if (options?.searchTerm) {
+          params.set("searchTerm", options.searchTerm);
         }
         const qs = params.toString();
         const res = await fetch(`/api/users${qs ? `?${qs}` : ""}`);
@@ -88,16 +119,18 @@ export function useUserSearch({
     [value, selectedUser],
   );
 
-  // Load users when dropdown opens
+  // Load users when dropdown opens or search changes
   const previousScopeRef = useRef<number | undefined>(undefined);
   useEffect(() => {
     if (!open) return;
+    if (scopedRegionId === undefined) return;
 
     const scopeChanged = previousScopeRef.current !== scopedRegionId;
+
     if (users.length > 0 && !scopeChanged) return;
 
     previousScopeRef.current = scopedRegionId;
-    void fetchUsers(scopedRegionId);
+    void fetchUsers({ regionId: scopedRegionId });
   }, [open, users.length, scopedRegionId, fetchUsers]);
 
   // If we have a value but no selectedUser, try to resolve it.
@@ -122,7 +155,7 @@ export function useUserSearch({
 
     void (async () => {
       try {
-        const res = await fetch("/api/users");
+        const res = await fetch(`/api/users?userId=${value}`);
         if (!res.ok) return;
         const data = (await res.json()) as { users: UserListItem[] };
         const found = data.users.find((u) => u.id === value);
@@ -135,16 +168,37 @@ export function useUserSearch({
 
   const handleExpandAll = useCallback(() => {
     setShowAllRegions(true);
-    setUsers([]); // Clear so the load effect refetches
+    setSubmittedOutsideRegionSearch(null);
+    setUsers([]);
   }, []);
+
+  const runOutsideRegionSearch = useCallback(() => {
+    if (!canRunOutsideRegionSearch) return;
+
+    setSubmittedOutsideRegionSearch(trimmedSearch);
+    void fetchUsers({ searchTerm: trimmedSearch });
+  }, [canRunOutsideRegionSearch, fetchUsers, trimmedSearch]);
+
+  useEffect(() => {
+    if (!isOutsideRegionMode) return;
+    if (submittedOutsideRegionSearch === null) return;
+    if (trimmedSearch === submittedOutsideRegionSearch) return;
+    if (users.length === 0) return;
+
+    setUsers([]);
+  }, [
+    isOutsideRegionMode,
+    submittedOutsideRegionSearch,
+    trimmedSearch,
+    users.length,
+  ]);
 
   const filteredUsers = useMemo(() => {
     const withName = users.filter((u) => !!u.f3Name);
+    if (isOutsideRegionMode) return withName;
     if (!search) return withName;
     return withName.filter((u) => matchesSearch(u, search));
-  }, [users, search]);
-
-  const isRegionScoped = !showAllRegions && !!homeRegionId;
+  }, [users, search, isOutsideRegionMode]);
 
   return {
     users,
@@ -152,7 +206,12 @@ export function useUserSearch({
     loading,
     selectedUser,
     isRegionScoped,
+    canRunOutsideRegionSearch,
+    showOutsideRegionSearchAction,
+    outsideRegionSearchActionLabel,
+    hasPendingOutsideRegionSearch,
     setSelectedUser,
     handleExpandAll,
+    runOutsideRegionSearch,
   };
 }
