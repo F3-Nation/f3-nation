@@ -34,7 +34,7 @@ fi
 
 # ── Step 2: Start Docker services ────────────────────────────────────────────
 echo "  → Starting Docker services..."
-docker compose -f docker-compose.local.yml up -d
+docker compose -f docker-compose.yml up -d
 
 # ── Step 3: Wait for Postgres ────────────────────────────────────────────────
 echo "  → Waiting for Postgres to be ready..."

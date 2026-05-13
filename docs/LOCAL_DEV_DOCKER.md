@@ -264,7 +264,7 @@ This stops the containers but keeps the Docker volumes. Your database and upload
 ### Stop services and delete all data
 
 ```bash
-docker compose -f docker-compose.local.yml down -v
+docker compose -f docker-compose.yml down -v
 ```
 
 The `-v` flag removes the named volumes (`postgres_data`, `gcs_data`). Next time you run `pnpm local:setup`, it will start fresh.
@@ -302,7 +302,7 @@ docker logs f3-postgres
 If the logs show a data directory error, try removing the volume and starting fresh:
 
 ```bash
-docker compose -f docker-compose.local.yml down -v
+docker compose -f docker-compose.yml down -v
 pnpm local:setup
 ```
 
