@@ -4,6 +4,7 @@
 export enum Templates {
   feedbackForm = "feedback-form",
   mapChangeRequest = "map-change-request",
+  regionInABox = "region-in-a-box",
 }
 
 /**
@@ -12,6 +13,8 @@ export enum Templates {
 export const DefaultSubject: Partial<Record<Templates, string>> = {
   [Templates.feedbackForm]: "Feedback Form",
   [Templates.mapChangeRequest]: "F3 Map Change Request",
+  [Templates.regionInABox]:
+    "You're on the map! We want to send you resources to accelerate your growth",
 };
 
 /**
@@ -39,11 +42,19 @@ export interface MapChangeRequestData {
 }
 
 /**
+ * Region-in-a-box welcome email template data
+ */
+export interface RegionInABoxData {
+  regionName: string;
+}
+
+/**
  * Template data types mapped by template
  */
 export interface TemplateType {
   [Templates.feedbackForm]: FeedbackFormData;
   [Templates.mapChangeRequest]: MapChangeRequestData;
+  [Templates.regionInABox]: RegionInABoxData;
 }
 
 // Shared email styles
@@ -139,6 +150,37 @@ export const templateRenderers: {
       </div>
       <div class="footer">
         This is an automated message from F3 Nation. Please do not reply to this email.
+      </div>
+    </div>
+  </body>
+</html>`,
+
+  [Templates.regionInABox]: (data: RegionInABoxData) => `<html>
+  <head><style>${emailStyles}</style></head>
+  <body>
+    <div class="container">
+      <div class="header">Welcome to the F3 Nation Map!</div>
+      <div class="content">
+        <p>Dear leaders of <span class="highlight">${escapeHtml(data.regionName)}</span>,</p>
+        <p>
+          Congratulations — you are now approved and have your first workout on the F3 Nation map!
+          We'd like to send you some materials to help you get started, including your very first
+          shovel flag, books, and more.
+        </p>
+        <p>
+          Reply all to this email to let us know which of the following tiers you'd like to take
+          advantage of.
+        </p>
+        <div class="notice">
+          <p><strong>Tiers:</strong> Coming soon — our team will follow up with tier details shortly.</p>
+        </div>
+        <p>
+          We are excited to have <span class="highlight">${escapeHtml(data.regionName)}</span> as
+          part of the F3 Nation community. Keep up the great work!
+        </p>
+      </div>
+      <div class="footer">
+        This message was sent by F3 Nation. Please reply all to respond to the full team.
       </div>
     </div>
   </body>

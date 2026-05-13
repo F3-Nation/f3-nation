@@ -124,6 +124,18 @@ const templateConfigs: Record<Templates, TemplateConfig> = {
       },
     ],
   },
+  [Templates.regionInABox]: {
+    name: "Region In A Box",
+    description: "Email sent when a new region is added to the map",
+    fields: [
+      {
+        name: "regionName",
+        label: "Region Name",
+        type: "text",
+        default: "Test Region",
+      },
+    ],
+  },
 };
 
 const formSchema = z.object({
