@@ -64,7 +64,7 @@ This script does everything automatically:
 
 You should see output ending with:
 
-```
+```text
   ✓ Setup complete!
 
   Services running:

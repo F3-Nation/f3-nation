@@ -9,7 +9,7 @@
 
 ## Environment Setup
 
-- Node and pnpm are managed via NVM. The pnpm binary lives at `~/.nvm/versions/node/v24.14.1/bin/pnpm` (or whichever Node version is active). If `pnpm` is not on `PATH`, prepend `~/.nvm/versions/node/$(node --version)/bin` or run `. ~/.nvm/nvm.sh && nvm use` before running pnpm commands.
+- Node and pnpm are managed via NVM. The pnpm binary lives at `~/.nvm/versions/node/$(node --version)/bin/pnpm` under the currently active Node version. If `pnpm` is not on `PATH`, prepend that directory to `PATH` or run `. ~/.nvm/nvm.sh && nvm use` before running pnpm commands.
 
 ## Build, Test, and Development Commands
 

@@ -32,6 +32,13 @@ else
   echo "  → .env already exists, skipping copy"
 fi
 
+# Safety: refuse to migrate/seed against a non-local database
+if ! grep -q '^DATABASE_URL=postgresql://f3local:f3local@localhost:5433/' .env; then
+  echo "     ERROR: .env DATABASE_URL is not the local Docker Postgres target."
+  echo "     Refusing to run db:migrate and db:seed:local."
+  exit 1
+fi
+
 # ── Step 2: Start Docker services ────────────────────────────────────────────
 echo "  → Starting Docker services..."
 docker compose -f docker-compose.yml up -d
@@ -53,11 +60,18 @@ done
 
 # ── Step 4: Create GCS bucket ────────────────────────────────────────────────
 echo "  → Creating GCS bucket '${BUCKET_NAME}'..."
-curl -sf -X POST "http://localhost:${GCS_PORT}/storage/v1/b" \
+status=$(curl -s -o /tmp/gcs-bucket-create.out -w "%{http_code}" -X POST "http://localhost:${GCS_PORT}/storage/v1/b" \
   -H "Content-Type: application/json" \
-  -d "{\"name\": \"${BUCKET_NAME}\"}" > /dev/null \
-  && echo "     Bucket '${BUCKET_NAME}' created." \
-  || echo "     Bucket may already exist — continuing."
+  -d "{\"name\": \"${BUCKET_NAME}\"}")
+if [ "$status" = "200" ] || [ "$status" = "201" ]; then
+  echo "     Bucket '${BUCKET_NAME}' created."
+elif [ "$status" = "409" ]; then
+  echo "     Bucket already exists — continuing."
+else
+  echo "     ERROR: failed to create bucket (HTTP ${status})."
+  cat /tmp/gcs-bucket-create.out
+  exit 1
+fi
 
 # ── Step 5: Run migrations ────────────────────────────────────────────────────
 echo "  → Running database migrations..."

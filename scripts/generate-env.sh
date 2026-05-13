@@ -106,7 +106,11 @@ DB_NAME="${SECRET_DATABASE_NAME:-f3data}"
 DATABASE_URL="postgresql://${DB_USER}:${DB_PASS}@localhost:5433/${DB_NAME}"
 TEST_DATABASE_URL="postgresql://${DB_USER}:${DB_PASS}@localhost:5433/${DB_NAME}_test"
 
-EMAIL_SERVER="smtp://apikey:${SECRET_SENDGRID_API_KEY:-}@smtp.sendgrid.net:587"
+if [[ -n "${SECRET_SENDGRID_API_KEY:-}" ]]; then
+  EMAIL_SERVER="smtp://apikey:${SECRET_SENDGRID_API_KEY}@smtp.sendgrid.net:587"
+else
+  EMAIL_SERVER=""
+fi
 SUPER_ADMIN_API_KEY="${SECRET_API_KEY:-}"
 
 # --- Generate .env content ----------------------------------------------------

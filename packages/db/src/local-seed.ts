@@ -215,6 +215,7 @@ async function seed() {
         and(
           eq(schema.orgs.name, sector.name),
           eq(schema.orgs.orgType, "sector"),
+          eq(schema.orgs.parentId, nationId),
         ),
       );
     if (existing) {
@@ -239,7 +240,11 @@ async function seed() {
       .select()
       .from(schema.orgs)
       .where(
-        and(eq(schema.orgs.name, area.name), eq(schema.orgs.orgType, "area")),
+        and(
+          eq(schema.orgs.name, area.name),
+          eq(schema.orgs.orgType, "area"),
+          eq(schema.orgs.parentId, sectorId),
+        ),
       );
     if (existing) {
       areaIds[area.name] = existing.id;
@@ -266,6 +271,7 @@ async function seed() {
         and(
           eq(schema.orgs.name, region.name),
           eq(schema.orgs.orgType, "region"),
+          eq(schema.orgs.parentId, areaId),
         ),
       );
     if (existing) {
@@ -297,7 +303,13 @@ async function seed() {
     const [existingAo] = await db
       .select()
       .from(schema.orgs)
-      .where(and(eq(schema.orgs.name, ao.name), eq(schema.orgs.orgType, "ao")));
+      .where(
+        and(
+          eq(schema.orgs.name, ao.name),
+          eq(schema.orgs.orgType, "ao"),
+          eq(schema.orgs.parentId, regionId),
+        ),
+      );
 
     if (existingAo) {
       aoId = existingAo.id;
