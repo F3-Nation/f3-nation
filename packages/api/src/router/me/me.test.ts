@@ -569,13 +569,41 @@ describe("Me Router", () => {
 
     it("should return results in a consistent order", async () => {
       const client = createDirectClient();
-      const result1 = await client.me.users({ searchTerm: "Te" });
-      const result2 = await client.me.users({ searchTerm: "Te" });
+
+      const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const prefix = `OrderTest-${suffix}`;
+
+      const inserted = await db
+        .insert(schema.users)
+        .values([
+          {
+            email: `${prefix}-a@example.com`,
+            f3Name: `${prefix}-B`,
+            homeRegionId: regionOrgId,
+          },
+          {
+            email: `${prefix}-b@example.com`,
+            f3Name: `${prefix}-A`,
+            homeRegionId: regionOrgId,
+          },
+        ])
+        .returning({ id: schema.users.id });
+
+      createdUserIds.push(...inserted.map((u) => u.id));
+
+      const result1 = await client.me.users({ searchTerm: prefix });
+      const result2 = await client.me.users({ searchTerm: prefix });
 
       // Same query should yield the same order
       const ids1 = result1.users.map((u) => u.id);
       const ids2 = result2.users.map((u) => u.id);
+
+      expect(result1.users).toHaveLength(2);
+      expect(result2.users).toHaveLength(2);
       expect(ids1).toEqual(ids2);
+
+      const names1 = result1.users.map((u) => u.f3Name);
+      expect(names1).toEqual([`${prefix}-A`, `${prefix}-B`]);
     });
 
     it("should reject a searchTerm shorter than 2 characters", async () => {
