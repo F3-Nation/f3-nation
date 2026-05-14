@@ -59,21 +59,8 @@ export default function NoAccess() {
               </p>
               <p className="text-sm text-gray-500">
                 Required role:{" "}
-                {isNotAdmin ? (
-                  <span className="font-medium text-green-600">admin</span>
-                ) : hasNoAdminAccess ? (
-                  <>
-                    <span className="font-medium text-green-600">editor</span>{" "}
-                    or <span className="font-medium text-green-600">admin</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="font-medium text-green-600">
-                      data-entry
-                    </span>{" "}
-                    or <span className="font-medium text-green-600">admin</span>
-                  </>
-                )}
+                <span className="font-medium text-green-600">editor</span> or{" "}
+                <span className="font-medium text-green-600">admin</span>
               </p>
             </div>
           ) : (
