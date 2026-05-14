@@ -414,8 +414,7 @@ export const meRouter = {
 
   /**
    * List users for the "Who Brought You?" dropdown.
-   * Optionally filter by homeRegionId to reduce payload size.
-   * When searching outside region (homeRegionId omitted), searchTerm is recommended to limit results.
+   * Requires either userId (to resolve a specific user) or searchTerm (≥2 chars) to filter results.
    */
   users: protectedProcedure
     .input(
@@ -427,20 +426,12 @@ export const meRouter = {
             .min(1)
             .optional()
             .describe("When provided, returns only the matching user ID."),
-          homeRegionId: z.coerce
-            .number()
-            .int()
-            .min(1)
-            .optional()
-            .describe(
-              "When provided, returns only users whose home region matches. Omit to get all users.",
-            ),
           searchTerm: z
             .string()
             .min(2)
             .optional()
             .describe(
-              "Search term for filtering users by f3Name. Case-insensitive partial match. Recommended when searching outside region.",
+              "Search term for filtering users by f3Name. Case-insensitive partial match.",
             ),
         })
         .optional(),
@@ -452,7 +443,7 @@ export const meRouter = {
       summary: "List users for dropdown",
       description:
         "Return a lightweight user list for the 'Who Brought You?' dropdown. " +
-        "Optionally filter by homeRegionId to limit results to the same region.",
+        "Pass userId to resolve a specific user, or searchTerm (≥2 chars) to search all users.",
     })
     .output(
       z.object({
@@ -461,15 +452,11 @@ export const meRouter = {
     )
     .handler(async ({ context: ctx, input }) => {
       const userId = input?.userId;
-      const homeRegionId = input?.homeRegionId;
       const searchTerm = input?.searchTerm;
 
       const conditions = [];
       if (userId) {
         conditions.push(eq(schema.users.id, userId));
-      }
-      if (homeRegionId) {
-        conditions.push(eq(schema.users.homeRegionId, homeRegionId));
       }
       if (searchTerm) {
         conditions.push(ilike(schema.users.f3Name, `%${searchTerm}%`));

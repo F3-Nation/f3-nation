@@ -249,7 +249,6 @@ export function ProfileForm({ user, regions }: ProfileFormProps) {
               <Label>Who Brought You?</Label>
               <UserSelect
                 value={form.brought_by}
-                homeRegionId={form.homeRegionId}
                 onChange={(id) => updateField("brought_by", id)}
               />
             </div>

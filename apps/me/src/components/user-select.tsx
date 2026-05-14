@@ -9,37 +9,26 @@ import type { UserListItem } from "@/lib/types";
 
 interface UserSelectProps {
   value: number | null;
-  homeRegionId: number | null;
   onChange: (userId: number | null) => void;
 }
 
-export function UserSelect({ value, homeRegionId, onChange }: UserSelectProps) {
+export function UserSelect({ value, onChange }: UserSelectProps) {
   const { open, search, toggle, close, setSearch, selectAndClose } =
     useDropdownSelect();
-  const {
-    filteredUsers,
-    loading,
-    selectedUser,
-    isRegionScoped,
-    canRunOutsideRegionSearch,
-    showOutsideRegionSearchAction,
-    outsideRegionSearchActionLabel,
-    hasPendingOutsideRegionSearch,
-    setSelectedUser,
-    handleExpandAll,
-    runOutsideRegionSearch,
-  } = useUserSearch({ value, homeRegionId, open, search });
+  const { results, loading, selectedUser, setSelectedUser } = useUserSearch({
+    value,
+    open,
+    search,
+  });
   // TODO: dropdownRef — reserved for click-outside detection or focus management
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
-  // Total focusable items = optional clear + results + one optional action button
   const clearOffset = value !== null ? 1 : 0;
-  const actionCount = isRegionScoped || showOutsideRegionSearchAction ? 1 : 0;
-  const totalItems = clearOffset + filteredUsers.length + actionCount;
-  const showOutsideRegionPrompt =
-    !isRegionScoped && !showOutsideRegionSearchAction && !loading;
+  const totalItems = clearOffset + results.length;
+  const trimmedSearch = search.trim();
+  const showPrompt = trimmedSearch.length < 2 && !loading;
 
   const handleTriggerKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -142,11 +131,7 @@ export function UserSelect({ value, homeRegionId, onChange }: UserSelectProps) {
           <div className="p-2">
             <Input
               aria-label="Search users"
-              placeholder={
-                isRegionScoped
-                  ? "Search by name or region..."
-                  : "Type at least 2 characters to search all regions"
-              }
+              placeholder="Type to search..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="h-8"
@@ -177,71 +162,41 @@ export function UserSelect({ value, homeRegionId, onChange }: UserSelectProps) {
                     Clear selection
                   </button>
                 )}
-                {filteredUsers.length === 0 && !showOutsideRegionPrompt ? (
+                {showPrompt ? (
                   <p className="px-2 py-4 text-center text-sm text-muted-foreground">
-                    {hasPendingOutsideRegionSearch
-                      ? "Click update to search all regions."
-                      : "No users found."}
+                    Type at least 2 characters to search.
+                  </p>
+                ) : results.length === 0 ? (
+                  <p className="px-2 py-4 text-center text-sm text-muted-foreground">
+                    No users found.
                   </p>
                 ) : null}
-                {showOutsideRegionPrompt ? (
-                  <p className="px-2 py-4 text-center text-sm text-muted-foreground">
-                    Type at least 2 characters, then click search.
-                  </p>
-                ) : null}
-                {filteredUsers.length > 0
-                  ? filteredUsers.map((user: UserListItem, idx: number) => (
-                      <button
-                        key={user.id}
-                        ref={(el) => {
-                          itemRefs.current[clearOffset + idx] = el;
-                        }}
-                        type="button"
-                        className={`relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent ${
-                          user.id === value ? "bg-accent font-medium" : ""
-                        }${user.status !== "active" ? " opacity-50" : ""}`}
-                        onClick={() => {
-                          onChange(user.id);
-                          setSelectedUser(user);
-                          selectAndClose();
-                        }}
-                      >
-                        <span className="truncate">
-                          {displayName(user)}
-                          {user.status !== "active" && (
-                            <span className="ml-1 text-xs text-muted-foreground">
-                              (Inactive)
-                            </span>
-                          )}
+                {results.map((user: UserListItem, idx: number) => (
+                  <button
+                    key={user.id}
+                    ref={(el) => {
+                      itemRefs.current[clearOffset + idx] = el;
+                    }}
+                    type="button"
+                    className={`relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent ${
+                      user.id === value ? "bg-accent font-medium" : ""
+                    }${user.status !== "active" ? " opacity-50" : ""}`}
+                    onClick={() => {
+                      onChange(user.id);
+                      setSelectedUser(user);
+                      selectAndClose();
+                    }}
+                  >
+                    <span className="truncate">
+                      {displayName(user)}
+                      {user.status !== "active" && (
+                        <span className="ml-1 text-xs text-muted-foreground">
+                          (Inactive)
                         </span>
-                      </button>
-                    ))
-                  : null}
-                {isRegionScoped ? (
-                  <button
-                    ref={(el) => {
-                      itemRefs.current[clearOffset + filteredUsers.length] = el;
-                    }}
-                    type="button"
-                    className="relative flex w-full cursor-pointer select-none items-center justify-center rounded-sm border-t px-2 py-2 text-sm font-medium text-primary outline-none hover:bg-accent"
-                    onClick={handleExpandAll}
-                  >
-                    Search outside my home region
+                      )}
+                    </span>
                   </button>
-                ) : null}
-                {!isRegionScoped && showOutsideRegionSearchAction ? (
-                  <button
-                    ref={(el) => {
-                      itemRefs.current[clearOffset + filteredUsers.length] = el;
-                    }}
-                    type="button"
-                    className="relative flex w-full cursor-pointer select-none items-center justify-center rounded-sm border-t px-2 py-2 text-sm font-medium text-primary outline-none hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-                    onClick={runOutsideRegionSearch}
-                    disabled={!canRunOutsideRegionSearch || loading}
-                  >
-                    {outsideRegionSearchActionLabel}
-                  </button>
-                ) : null}
+                ))}
               </>
             )}
           </div>

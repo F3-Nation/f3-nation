@@ -25,7 +25,19 @@ describe("Users API route", () => {
   });
 
   describe("GET /api/users", () => {
-    it("returns all users when no homeRegionId provided", async () => {
+    it("returns 400 when neither userId nor searchTerm provided", async () => {
+      vi.mocked(requireAuth).mockResolvedValue(mockSession);
+
+      const { GET } = await import("@/app/api/users/route");
+      const req = new NextRequest("http://localhost/api/users");
+      const response = await GET(req);
+
+      expect(response.status).toBe(400);
+      const data = (await response.json()) as { error: string };
+      expect(data.error).toContain("userId or searchTerm");
+    });
+
+    it("returns users for a valid searchTerm", async () => {
       vi.mocked(requireAuth).mockResolvedValue(mockSession);
       vi.mocked(getUsers).mockResolvedValue([
         {
@@ -45,7 +57,7 @@ describe("Users API route", () => {
       ]);
 
       const { GET } = await import("@/app/api/users/route");
-      const req = new NextRequest("http://localhost/api/users");
+      const req = new NextRequest("http://localhost/api/users?searchTerm=dre");
       const response = await GET(req);
       const data = (await response.json()) as {
         users: { id: number; f3Name: string }[];
@@ -55,12 +67,11 @@ describe("Users API route", () => {
       expect(data.users).toHaveLength(2);
       expect(getUsers).toHaveBeenCalledWith({
         userId: undefined,
-        homeRegionId: undefined,
-        searchTerm: undefined,
+        searchTerm: "dre",
       });
     });
 
-    it("filters by homeRegionId when provided", async () => {
+    it("returns users for a valid userId", async () => {
       vi.mocked(requireAuth).mockResolvedValue(mockSession);
       vi.mocked(getUsers).mockResolvedValue([
         {
@@ -73,7 +84,7 @@ describe("Users API route", () => {
       ]);
 
       const { GET } = await import("@/app/api/users/route");
-      const req = new NextRequest("http://localhost/api/users?homeRegionId=5");
+      const req = new NextRequest("http://localhost/api/users?userId=1");
       const response = await GET(req);
       const data = (await response.json()) as {
         users: { id: number }[];
@@ -82,90 +93,51 @@ describe("Users API route", () => {
       expect(response.status).toBe(200);
       expect(data.users).toHaveLength(1);
       expect(getUsers).toHaveBeenCalledWith({
-        userId: undefined,
-        homeRegionId: 5,
+        userId: 1,
         searchTerm: undefined,
       });
     });
 
-    it("passes searchTerm when provided", async () => {
-      vi.mocked(requireAuth).mockResolvedValue(mockSession);
-      vi.mocked(getUsers).mockResolvedValue([
-        {
-          id: 9,
-          f3Name: "Forrest",
-          homeRegionId: 12,
-          homeRegionName: "Shire",
-          status: "active",
-        },
-      ]);
-
-      const { GET } = await import("@/app/api/users/route");
-      const req = new NextRequest("http://localhost/api/users?searchTerm=For");
-      const response = await GET(req);
-
-      expect(response.status).toBe(200);
-      expect(getUsers).toHaveBeenCalledWith({
-        userId: undefined,
-        homeRegionId: undefined,
-        searchTerm: "For",
-      });
-    });
-
-    it("returns 400 for non-integer homeRegionId", async () => {
+    it("returns 400 when searchTerm is only 1 character", async () => {
       vi.mocked(requireAuth).mockResolvedValue(mockSession);
 
       const { GET } = await import("@/app/api/users/route");
-      const req = new NextRequest(
-        "http://localhost/api/users?homeRegionId=abc",
-      );
+      const req = new NextRequest("http://localhost/api/users?searchTerm=x");
       const response = await GET(req);
 
       expect(response.status).toBe(400);
       const data = (await response.json()) as { error: string };
-      expect(data.error).toContain("homeRegionId");
+      expect(data.error).toContain("searchTerm");
     });
 
-    it("returns 400 for negative homeRegionId", async () => {
+    it("returns 400 for non-integer userId", async () => {
       vi.mocked(requireAuth).mockResolvedValue(mockSession);
 
       const { GET } = await import("@/app/api/users/route");
-      const req = new NextRequest("http://localhost/api/users?homeRegionId=-1");
+      const req = new NextRequest("http://localhost/api/users?userId=abc");
+      const response = await GET(req);
+
+      expect(response.status).toBe(400);
+      const data = (await response.json()) as { error: string };
+      expect(data.error).toContain("userId");
+    });
+
+    it("returns 400 for negative userId", async () => {
+      vi.mocked(requireAuth).mockResolvedValue(mockSession);
+
+      const { GET } = await import("@/app/api/users/route");
+      const req = new NextRequest("http://localhost/api/users?userId=-1");
       const response = await GET(req);
 
       expect(response.status).toBe(400);
     });
 
-    it("returns 400 for zero homeRegionId", async () => {
-      vi.mocked(requireAuth).mockResolvedValue(mockSession);
-
-      const { GET } = await import("@/app/api/users/route");
-      const req = new NextRequest("http://localhost/api/users?homeRegionId=0");
-      const response = await GET(req);
-
-      expect(response.status).toBe(400);
-    });
-
-    it("returns 400 for decimal homeRegionId", async () => {
-      vi.mocked(requireAuth).mockResolvedValue(mockSession);
-
-      const { GET } = await import("@/app/api/users/route");
-      const req = new NextRequest(
-        "http://localhost/api/users?homeRegionId=3.5",
-      );
-      const response = await GET(req);
-
-      expect(response.status).toBe(400);
-    });
-
-    it("returns empty list when no users match", async () => {
+    it("returns empty list when no users match searchTerm", async () => {
       vi.mocked(requireAuth).mockResolvedValue(mockSession);
       vi.mocked(getUsers).mockResolvedValue([]);
 
       const { GET } = await import("@/app/api/users/route");
-      const req = new NextRequest(
-        "http://localhost/api/users?homeRegionId=999",
-      );
+      const req = new NextRequest("http://localhost/api/users?searchTerm=zzz");
       const response = await GET(req);
       const data = (await response.json()) as {
         users: { id: number }[];
@@ -180,7 +152,7 @@ describe("Users API route", () => {
       vi.mocked(getUsers).mockRejectedValue(new Error("API error 500"));
 
       const { GET } = await import("@/app/api/users/route");
-      const req = new NextRequest("http://localhost/api/users");
+      const req = new NextRequest("http://localhost/api/users?searchTerm=test");
       const response = await GET(req);
 
       expect(response.status).toBe(500);

@@ -540,25 +540,27 @@ describe("Me Router", () => {
       expect(first).not.toHaveProperty("lastName");
     });
 
-    it("should filter by homeRegionId", async () => {
+    it("should filter by searchTerm", async () => {
       const client = createDirectClient();
-      const result = await client.me.users({ homeRegionId: regionOrgId });
+      const result = await client.me.users({
+        searchTerm: "TestPax".slice(0, 4),
+      });
 
       expect(result.users.length).toBeGreaterThanOrEqual(1);
       for (const u of result.users) {
-        expect(u.homeRegionId).toBe(regionOrgId);
+        expect(u.f3Name?.toLowerCase()).toContain("Test".toLowerCase());
       }
     });
 
-    it("should return empty array for a region with no users", async () => {
+    it("should return empty array for a searchTerm with no matches", async () => {
       const client = createDirectClient();
-      const result = await client.me.users({ homeRegionId: 999999 });
+      const result = await client.me.users({ searchTerm: "zzznomatch" });
       expect(result.users).toEqual([]);
     });
 
     it("should include homeRegionName via left join", async () => {
       const client = createDirectClient();
-      const result = await client.me.users({ homeRegionId: regionOrgId });
+      const result = await client.me.users({ userId: testUserId });
 
       const testUser = result.users.find((u) => u.id === testUserId);
       expect(testUser).toBeDefined();
@@ -567,8 +569,8 @@ describe("Me Router", () => {
 
     it("should return results in a consistent order", async () => {
       const client = createDirectClient();
-      const result1 = await client.me.users();
-      const result2 = await client.me.users();
+      const result1 = await client.me.users({ searchTerm: "Te" });
+      const result2 = await client.me.users({ searchTerm: "Te" });
 
       // Same query should yield the same order
       const ids1 = result1.users.map((u) => u.id);
@@ -576,9 +578,9 @@ describe("Me Router", () => {
       expect(ids1).toEqual(ids2);
     });
 
-    it("should reject a non-integer homeRegionId", async () => {
+    it("should reject a searchTerm shorter than 2 characters", async () => {
       const client = createDirectClient();
-      await expect(client.me.users({ homeRegionId: 1.5 })).rejects.toThrow();
+      await expect(client.me.users({ searchTerm: "x" })).rejects.toThrow();
     });
   });
 });
