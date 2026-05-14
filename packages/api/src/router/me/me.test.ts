@@ -543,7 +543,7 @@ describe("Me Router", () => {
     it("should filter by searchTerm", async () => {
       const client = createDirectClient();
       const result = await client.me.users({
-        searchTerm: "TestPax".slice(0, 4),
+        searchTerm: "tEsT",
       });
 
       expect(result.users.length).toBeGreaterThanOrEqual(1);
@@ -608,7 +608,9 @@ describe("Me Router", () => {
 
     it("should reject a searchTerm shorter than 2 characters", async () => {
       const client = createDirectClient();
-      await expect(client.me.users({ searchTerm: "x" })).rejects.toThrow();
+      await expect(client.me.users({ searchTerm: "x" })).rejects.toMatchObject({
+        code: "BAD_REQUEST",
+      });
     });
   });
 });
