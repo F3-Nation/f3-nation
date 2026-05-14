@@ -20,7 +20,8 @@ export default function NoAccess() {
 
   const isNotAdmin = reason === "not-admin";
   const isNotEditor = reason === "not-editor";
-  const isPermissionDenied = isNotAdmin || isNotEditor;
+  const hasNoAdminAccess = reason === "no-admin-access";
+  const isPermissionDenied = isNotAdmin || isNotEditor || hasNoAdminAccess;
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50">
@@ -60,6 +61,11 @@ export default function NoAccess() {
                 Required role:{" "}
                 {isNotAdmin ? (
                   <span className="font-medium text-green-600">admin</span>
+                ) : hasNoAdminAccess ? (
+                  <>
+                    <span className="font-medium text-green-600">editor</span>{" "}
+                    or <span className="font-medium text-green-600">admin</span>
+                  </>
                 ) : (
                   <>
                     <span className="font-medium text-green-600">

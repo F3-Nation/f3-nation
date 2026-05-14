@@ -1,6 +1,7 @@
 export type AdminRoleName = "admin" | "editor" | "user";
 
 export interface AdminSessionRole {
+  roleId?: number;
   orgId: number;
   orgName: string;
   roleName: AdminRoleName;

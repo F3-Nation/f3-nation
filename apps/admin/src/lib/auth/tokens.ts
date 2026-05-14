@@ -1,7 +1,5 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
 
-import type { AdminRoleName, AdminSessionRole } from "./session";
-
 export interface AccessTokenPayload {
   sub: string;
   email?: string;
@@ -10,7 +8,6 @@ export interface AccessTokenPayload {
   iat?: number;
   scope?: string;
   client_id?: string;
-  roles?: AdminSessionRole[];
 }
 
 function decodeBase64Url(value: string): string {
@@ -22,34 +19,6 @@ function decodeBase64Url(value: string): string {
   }
 
   return Buffer.from(padded, "base64").toString("utf-8");
-}
-
-function parseRole(value: unknown): AdminSessionRole | null {
-  if (typeof value !== "object" || value === null) return null;
-
-  const role = value as Record<string, unknown>;
-  if (
-    typeof role.orgId !== "number" ||
-    typeof role.orgName !== "string" ||
-    !["admin", "editor", "user"].includes(String(role.roleName))
-  ) {
-    return null;
-  }
-
-  return {
-    orgId: role.orgId,
-    orgName: role.orgName,
-    roleName: role.roleName as AdminRoleName,
-  };
-}
-
-function parseRoles(value: unknown): AdminSessionRole[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-
-  return value.flatMap((role) => {
-    const parsed = parseRole(role);
-    return parsed ? [parsed] : [];
-  });
 }
 
 export function parseAccessTokenPayload(
@@ -71,11 +40,7 @@ export function parseAccessTokenPayload(
       return null;
     }
 
-    const claims = payload as Record<string, unknown>;
-    return {
-      ...claims,
-      roles: parseRoles(claims.roles),
-    } as AccessTokenPayload;
+    return payload as AccessTokenPayload;
   } catch {
     return null;
   }
@@ -170,6 +135,6 @@ function parseAccessTokenPayloadFromClaims(
 
   return {
     ...payload,
-    roles: parseRoles(payload.roles),
-  } as AccessTokenPayload;
+    sub: payload.sub,
+  };
 }

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
+import { headers } from "next/headers";
 
 import { cn } from "@acme/ui";
 import { ThemeProvider } from "@acme/ui/theme";
@@ -11,7 +12,7 @@ import "~/app/globals.css";
 
 import { ModalSwitcher } from "~/app/_components/modal/modal-switcher";
 import { AdminSessionProvider } from "~/lib/auth/client";
-import { getSessionUser } from "~/lib/auth/server";
+import { getSessionUser, requireAdminPortalAccess } from "~/lib/auth/server";
 import { OrpcReactProvider } from "~/orpc/react";
 
 export const metadata: Metadata = {
@@ -27,7 +28,12 @@ export const viewport: Viewport = {
 };
 
 export default async function RootLayout(props: { children: React.ReactNode }) {
+  const requestHeaders = await headers();
+  const protectedPathname = requestHeaders.get("x-admin-pathname");
   const initialSession = await getSessionUser();
+  if (protectedPathname) {
+    await requireAdminPortalAccess(initialSession);
+  }
 
   return (
     <html lang="en" suppressHydrationWarning>

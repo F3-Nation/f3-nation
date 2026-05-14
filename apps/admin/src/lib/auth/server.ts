@@ -2,12 +2,17 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { routes } from "@acme/shared/app/constants";
+
 import {
   ACCESS_TOKEN_COOKIE_NAME,
   REFRESH_TOKEN_COOKIE_NAME,
 } from "./constants";
 import type { AdminSession } from "./session";
 import { parseAccessTokenPayload } from "./tokens";
+import { getMyProfile } from "~/lib/api/client";
+
+const NO_ADMIN_ACCESS_PATH = `${routes.admin.noAccess.__path}?reason=no-admin-access`;
 
 const getCachedSessionPayload = cache((accessToken: string) => {
   let payload: ReturnType<typeof parseAccessTokenPayload>;
@@ -27,7 +32,7 @@ const getCachedSessionPayload = cache((accessToken: string) => {
     id,
     email: payload.email,
     name: payload.name,
-    roles: payload.roles ?? [],
+    roles: [],
   } satisfies AdminSession;
 });
 
@@ -50,13 +55,50 @@ export function getSessionFromAccessToken(
 export async function getSessionUser(): Promise<AdminSession | null> {
   const accessToken = await getAccessToken();
   if (!accessToken) return null;
-  return getSessionFromAccessToken(accessToken);
+  const session = getSessionFromAccessToken(accessToken);
+  if (!session) return null;
+
+  try {
+    const profile = await getMyProfile();
+
+    return {
+      ...session,
+      roles: profile.roles.map((role) => ({
+        roleId: role.roleId,
+        orgId: role.orgId,
+        orgName: role.orgName,
+        roleName: role.roleName,
+      })),
+    };
+  } catch (error) {
+    console.warn("Failed to hydrate admin roles from API", error);
+    return session;
+  }
 }
 
 export async function requireAuth(): Promise<AdminSession> {
   const user = await getSessionUser();
   if (!user) {
     redirect("/api/auth/login");
+  }
+
+  return user;
+}
+
+export async function requireAdminPortalAccess(
+  session?: AdminSession | null,
+): Promise<AdminSession> {
+  const user = session ?? (await getSessionUser());
+  if (!user) {
+    redirect("/api/auth/login");
+  }
+
+  if (
+    !user.roles.some(
+      (role) => role.roleName === "admin" || role.roleName === "editor",
+    )
+  ) {
+    redirect(NO_ADMIN_ACCESS_PATH);
   }
 
   return user;

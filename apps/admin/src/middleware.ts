@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
-import { ADMIN_PATHS, EDITOR_PATHS, routes } from "@acme/shared/app/constants";
+import { routes } from "@acme/shared/app/constants";
 
 import {
   ACCESS_TOKEN_COOKIE_NAME,
@@ -10,7 +10,6 @@ import {
   REFRESH_TOKEN_MAX_AGE,
 } from "~/lib/auth/constants";
 import { refreshToken } from "~/lib/auth/oauth";
-import type { AccessTokenPayload } from "~/lib/auth/tokens";
 import { verifyAccessTokenPayload } from "~/lib/auth/tokens";
 
 const PUBLIC_PATHS = ["/auth/sign-in", routes.admin.noAccess.__path];
@@ -73,39 +72,10 @@ function unauthorized(request: NextRequest): NextResponse {
   return redirectToLogin(request);
 }
 
-function hasRole(
-  payload: AccessTokenPayload,
-  roleNames: ("admin" | "editor")[],
-): boolean {
-  return (
-    payload.roles?.some((role) =>
-      roleNames.includes(role.roleName as "admin" | "editor"),
-    ) ?? false
-  );
-}
-
-function enforceRoles(
-  request: NextRequest,
-  payload: AccessTokenPayload,
-  response: NextResponse,
-): NextResponse {
-  const pathname = request.nextUrl.pathname;
-  const isAdminPath = ADMIN_PATHS.includes(pathname);
-  const isEditorPath = EDITOR_PATHS.includes(pathname);
-
-  if (isAdminPath && !hasRole(payload, ["admin"])) {
-    return NextResponse.redirect(
-      new URL(`${routes.admin.noAccess.__path}?reason=not-admin`, request.url),
-    );
-  }
-
-  if (isEditorPath && !hasRole(payload, ["admin", "editor"])) {
-    return NextResponse.redirect(
-      new URL(`${routes.admin.noAccess.__path}?reason=not-editor`, request.url),
-    );
-  }
-
-  return response;
+function getRequestHeadersWithPath(request: NextRequest): Headers {
+  const headers = new Headers(request.headers);
+  headers.set("x-admin-pathname", request.nextUrl.pathname);
+  return headers;
 }
 
 function withRefreshedCookieHeader(
@@ -132,7 +102,7 @@ function withRefreshedCookieHeader(
   ]
     .filter(Boolean)
     .join("; ");
-  const headers = new Headers(request.headers);
+  const headers = getRequestHeadersWithPath(request);
   headers.set("cookie", newCookie);
   return headers;
 }
@@ -177,7 +147,9 @@ export async function middleware(request: NextRequest) {
   if (accessToken) {
     const payload = await verifyAccessTokenPayload(accessToken);
     if (payload) {
-      return enforceRoles(request, payload, NextResponse.next());
+      return NextResponse.next({
+        request: { headers: getRequestHeadersWithPath(request) },
+      });
     }
   }
 
@@ -192,11 +164,9 @@ export async function middleware(request: NextRequest) {
             tokens.accessToken,
             tokens.refreshToken,
           );
-          const response = enforceRoles(
-            request,
-            payload,
-            NextResponse.next({ request: { headers: requestHeaders } }),
-          );
+          const response = NextResponse.next({
+            request: { headers: requestHeaders },
+          });
           setRefreshedCookies(
             response,
             tokens.accessToken,

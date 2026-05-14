@@ -1,7 +1,7 @@
 import type { NextFetchEvent, NextMiddleware, NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
-import { EDITOR_PATHS, routes } from "@acme/shared/app/constants";
+import { EDITOR_PATHS } from "@acme/shared/app/constants";
 
 import { ACCESS_TOKEN_COOKIE_NAME } from "~/lib/auth/constants";
 import { verifyAccessTokenPayload } from "~/lib/auth/tokens";
@@ -29,14 +29,12 @@ const withEditor: MiddlewareFactory = (next: NextMiddleware) => {
     }
 
     const payload = await verifyAccessTokenPayload(accessToken);
-    const isEditorOrAdmin = payload?.roles?.some(
-      (role) => role.roleName === "editor" || role.roleName === "admin",
-    );
-
-    if (!isEditorOrAdmin) {
+    if (!payload) {
       return NextResponse.redirect(
         new URL(
-          `${routes.admin.noAccess.__path}?reason=not-editor`,
+          `/api/auth/login?returnTo=${encodeURIComponent(
+            request.nextUrl.pathname + request.nextUrl.search,
+          )}`,
           request.url,
         ),
       );

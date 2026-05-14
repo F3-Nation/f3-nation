@@ -1,7 +1,7 @@
 import type { NextFetchEvent, NextMiddleware, NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
-import { ADMIN_PATHS, routes } from "@acme/shared/app/constants";
+import { ADMIN_PATHS } from "@acme/shared/app/constants";
 
 import { ACCESS_TOKEN_COOKIE_NAME } from "~/lib/auth/constants";
 import { verifyAccessTokenPayload } from "~/lib/auth/tokens";
@@ -29,12 +29,12 @@ const withAdmin: MiddlewareFactory = (next: NextMiddleware) => {
     }
 
     const payload = await verifyAccessTokenPayload(accessToken);
-    const isAdmin = payload?.roles?.some((role) => role.roleName === "admin");
-
-    if (!isAdmin) {
+    if (!payload) {
       return NextResponse.redirect(
         new URL(
-          `${routes.admin.noAccess.__path}?reason=not-admin`,
+          `/api/auth/login?returnTo=${encodeURIComponent(
+            request.nextUrl.pathname + request.nextUrl.search,
+          )}`,
           request.url,
         ),
       );
