@@ -47,7 +47,6 @@ export async function signAccessToken(params: {
   scope: string;
   clientId: string;
   expiresInSeconds: number;
-  roles: { orgId: number; orgName: string; roleName: string }[];
 }): Promise<string> {
   const privateKey = await getPrivateKey();
   const issuer = env.NEXT_PUBLIC_AUTH_URL;
@@ -56,7 +55,6 @@ export async function signAccessToken(params: {
     email: params.email,
     scope: params.scope,
     client_id: params.clientId,
-    roles: params.roles,
   })
     .setProtectedHeader({ alg: "RS256", kid: "f3-auth-1" })
     .setSubject(params.sub.toString())
