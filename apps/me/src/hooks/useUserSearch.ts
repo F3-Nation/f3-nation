@@ -112,10 +112,12 @@ export function useUserSearch({
   // Resolve selectedUser display label when value is set but user isn't loaded yet
   const resolvedRef = useRef<number | null>(null);
   useEffect(() => {
+    const controller = new AbortController();
+
     if (value == null) {
       resolvedRef.current = null;
       if (selectedUser !== null) setSelectedUser(null);
-      return;
+      return () => controller.abort();
     }
 
     if (selectedUser !== null && selectedUser.id !== value) {
@@ -128,12 +130,15 @@ export function useUserSearch({
 
     void (async () => {
       try {
-        const res = await fetch(`/api/users?userId=${value}`);
+        const res = await fetch(`/api/users?userId=${value}`, {
+          signal: controller.signal,
+        });
         if (!res.ok) {
           if (resolvedRef.current === value) resolvedRef.current = null;
           return;
         }
         const data = (await res.json()) as { users: UserListItem[] };
+        if (controller.signal.aborted) return;
         const found = data.users.find((u) => u.id === value);
         if (found) {
           setSelectedUser(found);
@@ -146,6 +151,8 @@ export function useUserSearch({
         // Silently fail — trigger will show fallback text
       }
     })();
+
+    return () => controller.abort();
   }, [value, selectedUser]);
 
   return { results, loading, selectedUser, setSelectedUser };
