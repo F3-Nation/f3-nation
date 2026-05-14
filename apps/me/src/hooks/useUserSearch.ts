@@ -53,19 +53,25 @@ export function useUserSearch({
 
   // Debounced search: fires automatically after the user pauses typing
   useEffect(() => {
-    if (!open) return;
+    // Cancel any in-flight request immediately on dependency change.
+    abortRef.current?.abort();
+
+    if (!open) {
+      setLoading(false);
+      return;
+    }
 
     const trimmed = search.trim();
     if (trimmed.length < MIN_SEARCH_LENGTH) {
       setResults([]);
+      setLoading(false);
       return;
     }
 
-    const timer = setTimeout(() => {
-      abortRef.current?.abort();
-      const controller = new AbortController();
-      abortRef.current = controller;
+    const controller = new AbortController();
+    abortRef.current = controller;
 
+    const timer = setTimeout(() => {
       setLoading(true);
       const params = new URLSearchParams({ searchTerm: trimmed });
       fetch(`/api/users?${params.toString()}`, { signal: controller.signal })
@@ -74,14 +80,14 @@ export function useUserSearch({
           return res.json() as Promise<{ users: UserListItem[] }>;
         })
         .then((data) => {
+          if (controller.signal.aborted) return;
           setResults(data.users.filter((u) => !!u.f3Name));
+          setLoading(false);
         })
         .catch((err: unknown) => {
           if (err instanceof Error && err.name === "AbortError") return;
           console.error("Failed to load users:", err);
           setResults([]);
-        })
-        .finally(() => {
           setLoading(false);
         });
     }, DEBOUNCE_MS);
@@ -114,16 +120,23 @@ export function useUserSearch({
 
     if (selectedUser !== null || resolvedRef.current === value) return;
 
-    resolvedRef.current = value;
-
     void (async () => {
       try {
         const res = await fetch(`/api/users?userId=${value}`);
-        if (!res.ok) return;
+        if (!res.ok) {
+          if (resolvedRef.current === value) resolvedRef.current = null;
+          return;
+        }
         const data = (await res.json()) as { users: UserListItem[] };
         const found = data.users.find((u) => u.id === value);
-        if (found) setSelectedUser(found);
+        if (found) {
+          setSelectedUser(found);
+          resolvedRef.current = value;
+        } else if (resolvedRef.current === value) {
+          resolvedRef.current = null;
+        }
       } catch {
+        if (resolvedRef.current === value) resolvedRef.current = null;
         // Silently fail — trigger will show fallback text
       }
     })();
