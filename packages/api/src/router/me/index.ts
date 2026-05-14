@@ -1,7 +1,7 @@
 import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 
-import { and, asc, eq, schema, sql } from "@acme/db";
+import { and, asc, eq, ilike, schema, sql } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 
 import { protectedProcedure } from "../../shared";
@@ -414,19 +414,24 @@ export const meRouter = {
 
   /**
    * List users for the "Who Brought You?" dropdown.
-   * Optionally filter by homeRegionId to reduce payload size.
+   * Requires either userId (to resolve a specific user) or searchTerm (≥2 chars) to filter results.
    */
   users: protectedProcedure
     .input(
       z
         .object({
-          homeRegionId: z.coerce
+          userId: z.coerce
             .number()
             .int()
             .min(1)
             .optional()
+            .describe("When provided, returns only the matching user ID."),
+          searchTerm: z
+            .string()
+            .min(2)
+            .optional()
             .describe(
-              "When provided, returns only users whose home region matches. Omit to get all users.",
+              "Search term for filtering users by f3Name. Case-insensitive partial match.",
             ),
         })
         .optional(),
@@ -438,7 +443,7 @@ export const meRouter = {
       summary: "List users for dropdown",
       description:
         "Return a lightweight user list for the 'Who Brought You?' dropdown. " +
-        "Optionally filter by homeRegionId to limit results to the same region.",
+        "Pass userId to resolve a specific user, or searchTerm (≥2 chars) to search all users.",
     })
     .output(
       z.object({
@@ -446,11 +451,15 @@ export const meRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
-      const homeRegionId = input?.homeRegionId;
+      const userId = input?.userId;
+      const searchTerm = input?.searchTerm;
 
       const conditions = [];
-      if (homeRegionId) {
-        conditions.push(eq(schema.users.homeRegionId, homeRegionId));
+      if (userId) {
+        conditions.push(eq(schema.users.id, userId));
+      }
+      if (searchTerm) {
+        conditions.push(ilike(schema.users.f3Name, `%${searchTerm}%`));
       }
 
       const rows = await ctx.db
