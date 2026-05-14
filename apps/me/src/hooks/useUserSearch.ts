@@ -92,7 +92,13 @@ export function useUserSearch({
         });
     }, DEBOUNCE_MS);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+      }
+    };
   }, [open, search]);
 
   // Clear results when dropdown closes and cancel any in-flight request
