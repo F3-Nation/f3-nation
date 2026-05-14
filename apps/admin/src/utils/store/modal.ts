@@ -13,6 +13,7 @@ export enum ModalType {
   ADMIN_AREAS = "ADMIN_AREAS",
   ADMIN_REGIONS = "ADMIN_REGIONS",
   ADMIN_AOS = "ADMIN_AOS",
+  ADMIN_POSITIONS = "ADMIN_POSITIONS",
   ADMIN_API_KEYS = "ADMIN_API_KEYS",
   ADMIN_EVENT_TYPES = "ADMIN_EVENT_TYPES",
   ADMIN_DELETE_CONFIRMATION = "ADMIN_DELETE_CONFIRMATION",
@@ -93,6 +94,10 @@ export interface DataType {
   };
   [ModalType.ADMIN_AOS]: {
     id?: number | null;
+  };
+  [ModalType.ADMIN_POSITIONS]: {
+    id?: number | null;
+    defaultOrgId?: number | null;
   };
   [ModalType.ADMIN_API_KEYS]: null;
   [ModalType.ADMIN_DELETE_CONFIRMATION]: {

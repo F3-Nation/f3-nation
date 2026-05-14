@@ -4,6 +4,7 @@ import type { DataType } from "~/utils/store/modal";
 import { ModalType, useOpenModal } from "~/utils/store/modal";
 import AdminAOsModal from "./admin-aos-modal";
 import AdminApiKeysModal from "./admin-api-keys-modal";
+import AdminPositionsModal from "./admin-positions-modal";
 import AdminAreasModal from "./admin-areas-modal";
 import AdminDeleteModal from "./admin-delete-modal";
 import AdminDeleteRequestModal from "./admin-delete-request-modal";
@@ -74,6 +75,12 @@ export const ModalSwitcher = () => {
       );
     case ModalType.ADMIN_AOS:
       return <AdminAOsModal data={data as DataType[ModalType.ADMIN_AOS]} />;
+    case ModalType.ADMIN_POSITIONS:
+      return (
+        <AdminPositionsModal
+          data={data as DataType[ModalType.ADMIN_POSITIONS]}
+        />
+      );
     case ModalType.ADMIN_DELETE_CONFIRMATION:
       return (
         <AdminDeleteModal
