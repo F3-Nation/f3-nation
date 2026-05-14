@@ -1,5 +1,12 @@
-import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { UserListItem } from "@/lib/types";
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const DEBOUNCE_MS = 300;
+const MIN_SEARCH_LENGTH = 2;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -7,19 +14,15 @@ import type { UserListItem } from "@/lib/types";
 
 export interface UseUserSearchOptions {
   value: number | null;
-  homeRegionId: number | null;
   open: boolean;
   search: string;
 }
 
 export interface UseUserSearchReturn {
-  users: UserListItem[];
-  filteredUsers: UserListItem[];
+  results: UserListItem[];
   loading: boolean;
   selectedUser: UserListItem | null;
-  isRegionScoped: boolean;
   setSelectedUser: (user: UserListItem | null) => void;
-  handleExpandAll: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -34,80 +37,87 @@ export function displayName(u: UserListItem): string {
   return `User #${u.id}`;
 }
 
-/** Check whether a user matches a search term (case-insensitive). */
-export function matchesSearch(u: UserListItem, term: string): boolean {
-  const lower = term.toLowerCase();
-  return (
-    (u.f3Name?.toLowerCase().includes(lower) ?? false) ||
-    (u.homeRegionName?.toLowerCase().includes(lower) ?? false)
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
 
 export function useUserSearch({
   value,
-  homeRegionId,
   open,
   search,
 }: UseUserSearchOptions): UseUserSearchReturn {
-  const [users, setUsers] = useState<UserListItem[]>([]);
+  const [results, setResults] = useState<UserListItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [showAllRegions, setShowAllRegions] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserListItem | null>(null);
-  const scopedRegionId =
-    showAllRegions || !homeRegionId ? undefined : homeRegionId;
+  const abortRef = useRef<AbortController | null>(null);
 
-  const fetchUsers = useCallback(
-    async (regionId?: number | null) => {
-      setLoading(true);
-      try {
-        const params = new URLSearchParams();
-        if (regionId) {
-          params.set("homeRegionId", String(regionId));
-        }
-        const qs = params.toString();
-        const res = await fetch(`/api/users${qs ? `?${qs}` : ""}`);
-        if (!res.ok) throw new Error("Failed to fetch users");
-        const data = (await res.json()) as { users: UserListItem[] };
-        setUsers(data.users);
-
-        // Resolve selected user display if we have a value
-        if (value && !selectedUser) {
-          const found = data.users.find((u) => u.id === value);
-          if (found) setSelectedUser(found);
-        }
-      } catch (err) {
-        console.error("Failed to load users:", err);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [value, selectedUser],
-  );
-
-  // Load users when dropdown opens
-  const previousScopeRef = useRef<number | undefined>(undefined);
+  // Debounced search: fires automatically after the user pauses typing
   useEffect(() => {
-    if (!open) return;
+    // Cancel any in-flight request immediately on dependency change.
+    abortRef.current?.abort();
 
-    const scopeChanged = previousScopeRef.current !== scopedRegionId;
-    if (users.length > 0 && !scopeChanged) return;
+    if (!open) {
+      setLoading(false);
+      return;
+    }
 
-    previousScopeRef.current = scopedRegionId;
-    void fetchUsers(scopedRegionId);
-  }, [open, users.length, scopedRegionId, fetchUsers]);
+    const trimmed = search.trim();
+    if (trimmed.length < MIN_SEARCH_LENGTH) {
+      setResults([]);
+      setLoading(false);
+      return;
+    }
 
-  // If we have a value but no selectedUser, try to resolve it.
-  // Tracks the last resolved value so that changing to a new value triggers a fresh fetch.
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    const timer = setTimeout(() => {
+      setLoading(true);
+      const params = new URLSearchParams({ searchTerm: trimmed });
+      fetch(`/api/users?${params.toString()}`, { signal: controller.signal })
+        .then((res) => {
+          if (!res.ok) throw new Error("Failed to fetch users");
+          return res.json() as Promise<{ users: UserListItem[] }>;
+        })
+        .then((data) => {
+          if (controller.signal.aborted) return;
+          setResults(data.users.filter((u) => !!u.f3Name));
+          setLoading(false);
+        })
+        .catch((err: unknown) => {
+          if (err instanceof Error && err.name === "AbortError") return;
+          console.error("Failed to load users:", err);
+          setResults([]);
+          setLoading(false);
+        });
+    }, DEBOUNCE_MS);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+      }
+    };
+  }, [open, search]);
+
+  // Clear results when dropdown closes and cancel any in-flight request
+  useEffect(() => {
+    if (!open) {
+      abortRef.current?.abort();
+      setResults([]);
+    }
+  }, [open]);
+
+  // Resolve selectedUser display label when value is set but user isn't loaded yet
   const resolvedRef = useRef<number | null>(null);
   useEffect(() => {
+    const controller = new AbortController();
+
     if (value == null) {
       resolvedRef.current = null;
       if (selectedUser !== null) setSelectedUser(null);
-      return;
+      return () => controller.abort();
     }
 
     if (selectedUser !== null && selectedUser.id !== value) {
@@ -118,41 +128,32 @@ export function useUserSearch({
 
     if (selectedUser !== null || resolvedRef.current === value) return;
 
-    resolvedRef.current = value;
-
     void (async () => {
       try {
-        const res = await fetch("/api/users");
-        if (!res.ok) return;
+        const res = await fetch(`/api/users?userId=${value}`, {
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          if (resolvedRef.current === value) resolvedRef.current = null;
+          return;
+        }
         const data = (await res.json()) as { users: UserListItem[] };
+        if (controller.signal.aborted) return;
         const found = data.users.find((u) => u.id === value);
-        if (found) setSelectedUser(found);
+        if (found) {
+          setSelectedUser(found);
+          resolvedRef.current = value;
+        } else if (resolvedRef.current === value) {
+          resolvedRef.current = null;
+        }
       } catch {
-        // Silently fail — display will fallback
+        if (resolvedRef.current === value) resolvedRef.current = null;
+        // Silently fail — trigger will show fallback text
       }
     })();
+
+    return () => controller.abort();
   }, [value, selectedUser]);
 
-  const handleExpandAll = useCallback(() => {
-    setShowAllRegions(true);
-    setUsers([]); // Clear so the load effect refetches
-  }, []);
-
-  const filteredUsers = useMemo(() => {
-    const withName = users.filter((u) => !!u.f3Name);
-    if (!search) return withName;
-    return withName.filter((u) => matchesSearch(u, search));
-  }, [users, search]);
-
-  const isRegionScoped = !showAllRegions && !!homeRegionId;
-
-  return {
-    users,
-    filteredUsers,
-    loading,
-    selectedUser,
-    isRegionScoped,
-    setSelectedUser,
-    handleExpandAll,
-  };
+  return { results, loading, selectedUser, setSelectedUser };
 }

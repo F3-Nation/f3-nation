@@ -63,7 +63,13 @@ export function buildInitialFormState(user: UserProfile): ProfileFormState {
     lastName: user.lastName ?? "",
     phone: user.phone ?? "",
     homeRegionId: user.homeRegionId,
-    avatarUrl: user.avatarUrl,
+    avatarUrl: user.avatarUrl
+      ? (() => {
+          const url = new URL(user.avatarUrl);
+          url.searchParams.set("v", String(new Date(user.updated).getTime()));
+          return url.toString();
+        })()
+      : null,
     emergencyContact: user.emergencyContact ?? "",
     emergencyPhone: user.emergencyPhone ?? "",
     emergencyNotes: user.emergencyNotes ?? "",

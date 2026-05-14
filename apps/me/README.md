@@ -121,7 +121,7 @@ Open [https://localhost:3003](https://localhost:3003). Accept the self-signed ce
 | `OAUTH_CLIENT_SECRET`  | OAuth client secret                     | (from auth provider)                       |
 | `OAUTH_REDIRECT_URI`   | OAuth callback URL                      | `https://localhost:3003/api/auth/callback` |
 | `AUTH_PROVIDER_URL`    | F3 SSO base URL                         | `https://auth.f3nation.com`                |
-| `F3_API_BASE_URL`      | F3 API base URL                         | `https://staging.api.f3nation.com`         |
+| `F3_API_BASE_URL`      | F3 API base URL (must include `/v1`)    | `https://staging.api.f3nation.com/v1`      |
 | `GCS_BUCKET`           | GCS bucket for avatars                  | `f3-public-images-staging`                 |
 | `GCS_CREDENTIALS`      | Base64-encoded GCS service account JSON | (from GCP)                                 |
 | `NEXT_PUBLIC_SITE_URL` | Public URL of the app                   | `https://localhost:3003`                   |
@@ -372,15 +372,16 @@ gcloud iam service-accounts add-iam-policy-binding \
 
 Replace `WIF_PROJECT_NUMBER` with the `f3-github` project number from the `gcloud projects describe` command above.
 
-#### 4. Add GitHub Secrets
+#### 4. Add GitHub Variables
 
-In GitHub → repo Settings → **Secrets and variables** → **Actions**, add:
+In GitHub → repo Settings → **Secrets and variables** → **Actions** → **Variables** tab, add these variables to the **`me-staging`** and **`me-production`** environments:
 
-| Secret              | Value                                                                                                |
-| ------------------- | ---------------------------------------------------------------------------------------------------- |
-| `ME_WIF_PROVIDER`   | `projects/WIF_PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions/providers/github` |
-| `ME_WIF_SA_STAGING` | `github-actions-deploy@f3-me-app-staging.iam.gserviceaccount.com`                                    |
-| `ME_WIF_SA_PROD`    | `github-actions-deploy@f3-me-app.iam.gserviceaccount.com`                                            |
+| Variable       | Value                                                                                                                                          |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `WIF_PROVIDER` | `projects/WIF_PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions/providers/github`                                           |
+| `WIF_SA`       | `github-actions-deploy@f3-me-app-staging.iam.gserviceaccount.com` (staging) / `github-actions-deploy@f3-me-app.iam.gserviceaccount.com` (prod) |
+
+> **Note:** These are repository/environment **variables** (`vars.WIF_PROVIDER`, `vars.WIF_SA`), not secrets.
 
 #### 5. Create GitHub Environments
 

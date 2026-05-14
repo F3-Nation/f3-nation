@@ -10,11 +10,17 @@ vi.mock("@/lib/gcs", () => ({
 
 vi.mock("@/lib/api/client", () => ({
   updateMyProfile: vi.fn(),
+  isNotFoundApiError: vi.fn().mockReturnValue(false),
+  getMyProfile: vi.fn(),
 }));
 
 import { requireAuth } from "@/lib/auth/server";
 import { uploadAvatar } from "@/lib/gcs";
-import { updateMyProfile } from "@/lib/api/client";
+import {
+  updateMyProfile,
+  isNotFoundApiError,
+  getMyProfile,
+} from "@/lib/api/client";
 import type { NextRequest } from "next/server";
 
 const mockSession = {
@@ -33,6 +39,27 @@ describe("Avatar API route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
+    // Default: profile exists (preflight succeeds)
+    vi.mocked(getMyProfile).mockResolvedValue({
+      id: 42,
+      f3Name: "Dredd",
+      firstName: null,
+      lastName: null,
+      email: "test@f3.com",
+      emailVerified: null,
+      phone: null,
+      homeRegionId: null,
+      avatarUrl: null,
+      meta: null,
+      emergencyContact: null,
+      emergencyPhone: null,
+      emergencyNotes: null,
+      status: "active" as const,
+      roles: [],
+      positions: [],
+      created: "2024-01-01",
+      updated: "2024-01-01",
+    });
   });
 
   it("rejects requests without a file", async () => {
@@ -418,6 +445,62 @@ describe("Avatar API route", () => {
 
     const response = await POST(req);
     expect(response.status).toBe(500);
+  });
+
+  it("returns 404 when profile does not exist (preflight)", async () => {
+    vi.mocked(requireAuth).mockResolvedValue(mockSession);
+    const notFoundErr = Object.assign(new Error("Not found"), {
+      code: "NOT_FOUND",
+    });
+    vi.mocked(getMyProfile).mockRejectedValue(notFoundErr);
+    vi.mocked(isNotFoundApiError).mockReturnValueOnce(true);
+
+    const { POST } = await import("@/app/api/profile/avatar/route");
+    const content = new Uint8Array([0xff, 0xd8]);
+    const file = Object.assign(
+      new File([content], "avatar.jpg", { type: "image/jpeg" }),
+      { arrayBuffer: async () => content.buffer },
+    );
+    const mockFormData = {
+      get: (key: string) => (key === "file" ? file : null),
+    } as unknown as FormData;
+    const req = {
+      formData: async () => mockFormData,
+    } as unknown as NextRequest;
+
+    const response = await POST(req);
+    expect(response.status).toBe(404);
+    expect(uploadAvatar).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 when updateMyProfile throws a not-found error", async () => {
+    vi.mocked(requireAuth).mockResolvedValue(mockSession);
+    vi.mocked(uploadAvatar).mockResolvedValue(
+      "https://storage.googleapis.com/f3-public-images-staging/user-avatars/42.jpg",
+    );
+    const notFoundErr = Object.assign(new Error("Not found"), {
+      code: "NOT_FOUND",
+    });
+    vi.mocked(updateMyProfile).mockRejectedValue(notFoundErr);
+    vi.mocked(isNotFoundApiError).mockReturnValueOnce(true);
+
+    const { POST } = await import("@/app/api/profile/avatar/route");
+    const content = new Uint8Array([0xff, 0xd8]);
+    const file = Object.assign(
+      new File([content], "avatar.jpg", { type: "image/jpeg" }),
+      { arrayBuffer: async () => content.buffer },
+    );
+    const mockFormData = {
+      get: (key: string) => (key === "file" ? file : null),
+    } as unknown as FormData;
+    const req = {
+      formData: async () => mockFormData,
+    } as unknown as NextRequest;
+
+    const response = await POST(req);
+    expect(response.status).toBe(404);
+    const data = (await response.json()) as { error: string };
+    expect(data.error).toContain("not found");
   });
 
   it("re-throws redirect errors from requireAuth", async () => {
