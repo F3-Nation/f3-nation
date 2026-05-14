@@ -13,12 +13,21 @@ import {
 import { MDTable } from "@acme/ui/md-table";
 import { Cell, Header } from "@acme/ui/table";
 
+import { orpc, useQuery } from "~/orpc/react";
 import type { RouterOutputs } from "~/orpc/types";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
 
 type Nation = RouterOutputs["org"]["all"]["orgs"][number];
 
-export const NationsTable = ({ nations }: { nations: Nation[] }) => {
+export const NationsTable = () => {
+  const { data } = useQuery(
+    orpc.org.all.queryOptions({
+      input: { orgTypes: ["nation"] },
+    }),
+  );
+
+  const nations = data?.orgs;
+
   return (
     <MDTable
       data={nations}
@@ -28,11 +37,6 @@ export const NationsTable = ({ nations }: { nations: Nation[] }) => {
       onRowClick={(row) => {
         openModal(ModalType.ADMIN_NATIONS, { id: row.original.id });
       }}
-      // rowClassName={(row) => {
-      //   if (row.original.submitterValidated === true) {
-      //     return "opacity-30";
-      //   }
-      // }}
     />
   );
 };
