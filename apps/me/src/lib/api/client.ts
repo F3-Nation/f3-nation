@@ -165,12 +165,20 @@ export async function deleteMyRole(orgId: number, roleId: number) {
 
 /**
  * List users for the "Who Brought You?" dropdown.
- * Optionally filter by homeRegionId.
+ * Pass searchTerm (≥2 chars) to search all users, or userId to resolve a specific user.
  */
-export async function getUsers(homeRegionId?: number | null) {
+export async function getUsers(options?: {
+  userId?: number | null;
+  searchTerm?: string;
+}) {
   const client = await getApiClient();
   const result = await client.me.users(
-    homeRegionId != null ? { homeRegionId } : undefined,
+    options && (options.userId != null || options.searchTerm)
+      ? {
+          ...(options.userId != null ? { userId: options.userId } : {}),
+          ...(options.searchTerm ? { searchTerm: options.searchTerm } : {}),
+        }
+      : undefined,
   );
   return result.users;
 }
