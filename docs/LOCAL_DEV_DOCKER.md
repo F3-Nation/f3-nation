@@ -36,6 +36,72 @@ Make sure Docker Desktop is **running** before you continue.
 
 ---
 
+## Installing Docker on WSL
+
+<details>
+<summary>Using WSL on Windows? Install Docker Engine directly (skip Docker Desktop)</summary>
+
+Running Docker Engine natively in WSL is lighter and often more reliable than Docker Desktop's WSL integration. These steps assume Ubuntu — adjust package commands for other distros.
+
+**Before starting:** confirm you're on WSL 2. Run this in PowerShell on Windows:
+
+```powershell
+wsl --list --verbose
+```
+
+The `VERSION` column should show `2` for your distro. If not: `wsl --set-default-version 2`
+
+### 1. Remove any old Docker packages
+
+```bash
+sudo apt-get remove docker docker-engine docker.io containerd runc
+```
+
+### 2. Add Docker's apt repository
+
+```bash
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+  $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" \
+  | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get update
+```
+
+### 3. Install Docker Engine
+
+```bash
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+```
+
+### 4. Add your user to the `docker` group
+
+```bash
+sudo usermod -aG docker $USER
+# if the group doesn't exist yet: sudo addgroup docker
+```
+
+### 5. Restart WSL and verify
+
+From PowerShell on Windows:
+
+```powershell
+wsl --shutdown
+```
+
+Re-open your WSL terminal, then:
+
+```bash
+docker run hello-world
+```
+
+</details>
+
+---
+
 ## Quick start
 
 ### 1. Clone and install dependencies
