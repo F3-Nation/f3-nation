@@ -129,12 +129,20 @@ export class MailService {
             })
             .catch((error: Error) => {
               sentInfo.push(error);
-              console.log("\x1b[31m", "Error occurred!");
-              console.error("error", error.message);
+              console.error("Email send failed:", error);
             });
         }),
       );
     }
+
+    const errors = sentInfo.filter((r): r is Error => r instanceof Error);
+    if (errors.length > 0) {
+      throw new AggregateError(
+        errors,
+        `${errors.length}/${sentInfo.length} emails failed to send`,
+      );
+    }
+
     return sentInfo;
   }
 }

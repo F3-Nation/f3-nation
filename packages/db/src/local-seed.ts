@@ -426,8 +426,8 @@ async function resetSequences() {
 }
 
 void seed()
+  .then(() => process.exit(0))
   .catch((e) => {
     console.error("Seed failed:", e);
     process.exit(1);
-  })
-  .finally(() => process.exit(0));
+  });

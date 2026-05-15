@@ -12,6 +12,12 @@ import { env } from "~/env";
 const MAX_ATTEMPTS = 5;
 const CODE_TTL_MINUTES = 10;
 
+let _transporter: ReturnType<typeof createTransport> | null = null;
+function getTransporter() {
+  _transporter ??= createTransport(env.EMAIL_SERVER);
+  return _transporter;
+}
+
 function hashCode(code: string): string {
   return crypto.createHash("sha256").update(code).digest("hex");
 }
@@ -53,7 +59,7 @@ export async function sendEmailCode(email: string): Promise<void> {
   const authUrl = env.NEXT_PUBLIC_AUTH_URL;
   const magicLink = `${authUrl}/login/email/verify?email=${encodeURIComponent(email)}&code=${code}`;
 
-  const transporter = createTransport(env.EMAIL_SERVER);
+  const transporter = getTransporter();
 
   await transporter.sendMail({
     from: env.EMAIL_FROM,

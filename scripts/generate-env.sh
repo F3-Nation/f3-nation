@@ -111,6 +111,13 @@ if [[ -n "${SECRET_SENDGRID_API_KEY:-}" ]]; then
 else
   EMAIL_SERVER=""
 fi
+
+if [[ -z "${EMAIL_SERVER}" ]]; then
+  echo "  ERROR: EMAIL_SERVER could not be resolved (sendgrid-api-key secret not found)"
+  echo "  The auth app requires EMAIL_SERVER. Set the GCP secret and re-run."
+  exit 1
+fi
+
 SUPER_ADMIN_API_KEY="${SECRET_API_KEY:-}"
 
 # --- Generate .env content ----------------------------------------------------

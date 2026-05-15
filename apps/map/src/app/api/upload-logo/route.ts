@@ -56,7 +56,9 @@ export async function POST(request: Request) {
     );
 
     if (!response.ok) {
-      throw new Error("Failed to upload to Google Cloud Storage");
+      const body = await response.text().catch(() => "(unreadable)");
+      console.error(`GCS upload failed: HTTP ${response.status}`, body);
+      throw new Error(`Failed to upload to GCS: HTTP ${response.status}`);
     }
 
     const publicUrl = isEmulator

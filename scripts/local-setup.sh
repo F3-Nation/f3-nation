@@ -43,6 +43,11 @@ fi
 
 # ── Step 2: Start Docker services ────────────────────────────────────────────
 echo "  → Starting Docker services..."
+if ! docker info >/dev/null 2>&1; then
+  echo "     ERROR: Docker is not running."
+  echo "     Start Docker Desktop (or 'colima start') and re-run this script."
+  exit 1
+fi
 docker compose -f docker-compose.yml up -d
 
 # ── Step 3: Wait for Postgres ────────────────────────────────────────────────
