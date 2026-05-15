@@ -24,7 +24,7 @@
     "db:pull": "pnpm -F db pull",
     "db:push": "pnpm -F db push",
     "db:reset": "pnpm -F db reset",
-    "db:seed:local": "pnpm with-env tsx packages/db/src/local-seed.ts",
+    "db:seed:local": "pnpm -F db seed:local",
     "db:seed": "pnpm -F db seed",
     "db:studio": "pnpm -F db studio",
     "db:update-db": "pnpm -F db update-db",

@@ -23,18 +23,20 @@ echo ""
 echo "  F3 Nation — Local Dev Setup"
 echo "  ────────────────────────────────────────────"
 
-# ── Step 1: Copy env file ────────────────────────────────────────────────────
-if [ ! -f .env ]; then
-  echo "  → Copying .env.docker.example → .env"
-  cp .env.docker.example .env
-  echo "     Done. Edit .env and add NEXT_PUBLIC_GOOGLE_API_KEY when you have one."
-else
-  echo "  → .env already exists, skipping copy"
-fi
+# ── Step 1: Copy per-directory env files ─────────────────────────────────────
+echo "  → Copying .env.local.example files..."
+for dir in apps/api apps/auth apps/map apps/me packages/env; do
+  if [ -f "$dir/.env" ]; then
+    echo "     $dir/.env already exists, skipping"
+  else
+    cp "$dir/.env.local.example" "$dir/.env"
+    echo "     $dir/.env created"
+  fi
+done
 
 # Safety: refuse to migrate/seed against a non-local database
-if ! grep -q '^DATABASE_URL=postgresql://f3local:f3local@localhost:5433/' .env; then
-  echo "     ERROR: .env DATABASE_URL is not the local Docker Postgres target."
+if ! grep -q '^DATABASE_URL=postgresql://f3local:f3local@localhost:5433/' packages/env/.env; then
+  echo "     ERROR: packages/env/.env DATABASE_URL is not the local Docker Postgres target."
   echo "     Refusing to run db:migrate and db:seed:local."
   exit 1
 fi
@@ -92,7 +94,8 @@ echo "    GCS       → http://localhost:9023"
 echo "    Mailpit   → http://localhost:8025  (all outbound emails land here)"
 echo ""
 echo "  Next steps:"
-echo "    1. Set NEXT_PUBLIC_GOOGLE_API_KEY in .env (map tiles won't load without it)"
+echo "    1. Set NEXT_PUBLIC_GOOGLE_API_KEY in apps/map/.env and apps/api/.env"
+echo "       (map tiles won't load without it)"
 echo "       Get one free at: https://console.cloud.google.com/google/maps-apis/"
 echo ""
 echo "    2. Start the app servers:"
