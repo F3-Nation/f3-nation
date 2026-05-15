@@ -55,7 +55,8 @@ pnpm local:setup
 
 This script does everything automatically:
 
-- Copies `.env.docker.example` → `.env` (skips if `.env` already exists)
+- Copies each directory's `.env.local.example` → `.env` (skips any that already exist):
+  `apps/api`, `apps/auth`, `apps/map`, `apps/me`, and `packages/env`
 - Starts the four Docker containers
 - Waits for Postgres to be ready
 - Creates the `f3-logos` bucket in the GCS emulator
@@ -81,7 +82,8 @@ The app will start without this, but the map tiles won't render. To get one:
 1. Go to [console.cloud.google.com/google/maps-apis](https://console.cloud.google.com/google/maps-apis/)
 2. Create a project and enable **Maps JavaScript API**
 3. Create an API key
-4. Open `.env` and set: `NEXT_PUBLIC_GOOGLE_API_KEY=your-key-here`
+4. Set the key in both `apps/map/.env` and `apps/api/.env`:
+   `NEXT_PUBLIC_GOOGLE_API_KEY=your-key-here`
 
 ### 4. Start the app servers
 
@@ -114,9 +116,19 @@ The Docker containers save their data in named volumes (`postgres_data`, `gcs_da
 
 ---
 
-## Understanding the .env file
+## Understanding the .env files
 
-The `.env` file at the repo root controls how the app connects to local services. `.env.docker.example` contains values that work out-of-the-box with Docker. Here's what each variable means:
+Each app and shared package has its own `.env` file, copied from a `.env.local.example` template during `pnpm local:setup`. All template values work out-of-the-box with Docker — you don't need to edit anything to get started.
+
+| Directory           | Purpose                                                            |
+| ------------------- | ------------------------------------------------------------------ |
+| `apps/api/.env`     | API app (Next.js on port 3001)                                     |
+| `apps/auth/.env`    | Auth app (Next.js on port 3004)                                    |
+| `apps/map/.env`     | Map app (Next.js on port 3000)                                     |
+| `apps/me/.env`      | Me app (Next.js on port 3003)                                      |
+| `packages/env/.env` | Shared backend env root (used by `packages/db` and `packages/api`) |
+
+Here's what each variable means:
 
 ### Database
 
@@ -344,10 +356,19 @@ pnpm db:migrate
 
 ### App fails to start with env validation errors
 
-Make sure `.env` exists and has all required variables. Re-copy from the template:
+Make sure each app's `.env` file exists and has all required variables.
+Re-run the setup script — it skips directories that already have a `.env`:
 
 ```bash
-cp .env.docker.example .env
+pnpm local:setup
 ```
 
-Then edit `.env` to add `NEXT_PUBLIC_GOOGLE_API_KEY` if you have one.
+Or manually re-copy an individual app:
+
+```bash
+cp apps/api/.env.local.example apps/api/.env
+cp apps/map/.env.local.example apps/map/.env
+# etc.
+```
+
+Then add `NEXT_PUBLIC_GOOGLE_API_KEY` to `apps/map/.env` and `apps/api/.env` if you have one.
