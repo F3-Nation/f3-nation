@@ -157,6 +157,10 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
         name: "Me",
         tags: ["Me"],
       },
+      {
+        name: "Slack",
+        tags: ["slack"],
+      },
     ],
     tags: [
       {
@@ -203,6 +207,11 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
         description: "Map event/workout endpoints for filtering and querying",
       },
       { name: "revalidate", description: "Cache revalidation for map data" },
+      {
+        name: "slack",
+        description:
+          "Slack workspace integration endpoints for user/space management and org linking",
+      },
     ],
 
     components: {
