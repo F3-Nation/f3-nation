@@ -125,7 +125,7 @@ This script does everything automatically:
   `apps/api`, `apps/auth`, `apps/map`, `apps/me`, and `packages/env`
 - Starts the four Docker containers
 - Waits for Postgres to be ready
-- Creates the `f3-logos` bucket in the GCS emulator
+- Creates the `f3-public-images` bucket in the GCS emulator
 - Runs all database migrations
 - Seeds the database with sample F3 org data
 
@@ -151,6 +151,8 @@ The app will start without this, but the map tiles won't render. To get one:
 4. Set the key in both `apps/map/.env` and `apps/api/.env`:
    `NEXT_PUBLIC_GOOGLE_API_KEY=your-key-here`
 
+> **Troubleshooting AuthFailure:** If the map shows an "AuthFailure" error after adding your key, the API key likely has HTTP referrer restrictions that block `localhost`. In the Google Cloud Console, set **Application restrictions** to **None** (or add `http://localhost:3000/*` as an allowed HTTP referrer) for local development.
+
 ### 4. Start the app servers
 
 ```bash
@@ -161,6 +163,7 @@ pnpm dev
 | ---- | --------------------- |
 | Map  | http://localhost:3000 |
 | API  | http://localhost:3001 |
+| Me   | http://localhost:3003 |
 | Auth | http://localhost:3004 |
 
 ---
@@ -230,9 +233,9 @@ All outbound emails are captured by [Mailpit](https://mailpit.axllent.org/) — 
 | `GCS_EMULATOR_HOST`               | `localhost:9023`        | Tells the app to use the local emulator instead of real GCS         |
 | `GOOGLE_LOGO_BUCKET_PRIVATE_KEY`  | `local-placeholder-...` | Required by env validation, but **ignored** when emulator is active |
 | `GOOGLE_LOGO_BUCKET_CLIENT_EMAIL` | `local@local.local`     | Same — ignored when emulator is active                              |
-| `GOOGLE_LOGO_BUCKET_BUCKET_NAME`  | `f3-logos`              | The bucket name used by both the emulator and real GCS              |
+| `GOOGLE_LOGO_BUCKET_BUCKET_NAME`  | `f3-public-images`      | The bucket name used by both the emulator and real GCS              |
 
-When `GCS_EMULATOR_HOST` is set, the upload route skips Google authentication entirely and sends files directly to the local fake-gcs-server. Uploaded logos are stored in a Docker volume and served at `http://localhost:9023/f3-logos/<filename>`.
+When `GCS_EMULATOR_HOST` is set, the upload route skips Google authentication entirely and sends files directly to the local fake-gcs-server. Uploaded logos are stored in a Docker volume and served at `http://localhost:9023/f3-public-images/<filename>`.
 
 ### Client-side URLs
 
@@ -304,8 +307,18 @@ Logo uploads in the Map app are handled by the GCS emulator (`fake-gcs-server`) 
 
 1. When you upload a logo, the Map app sends the image to its `/api/upload-logo` route
 2. The route detects `GCS_EMULATOR_HOST` in the env and calls the emulator instead of real GCS
-3. The emulator stores the file in the `f3-logos` bucket
-4. The returned public URL points to `http://localhost:9023/f3-logos/<filename>`
+3. The emulator stores the file in the `f3-public-images` bucket
+4. The returned public URL points to `http://localhost:9023/f3-public-images/<filename>`
+
+### Browsing stored files
+
+To list all uploaded files in the emulator:
+
+```bash
+curl http://localhost:9023/storage/v1/b/f3-public-images/o | jq '.items[].name'
+```
+
+Individual files are directly accessible at `http://localhost:9023/f3-public-images/<filename>`.
 
 ### Resetting uploaded files
 
@@ -324,7 +337,7 @@ pnpm docker:up
 # then re-create the bucket:
 curl -X POST http://localhost:9023/storage/v1/b \
   -H "Content-Type: application/json" \
-  -d '{"name": "f3-logos"}'
+  -d '{"name": "f3-public-images"}'
 ```
 
 ---
@@ -391,7 +404,7 @@ The bucket needs to be created after the emulator starts. Run:
 ```bash
 curl -X POST http://localhost:9023/storage/v1/b \
   -H "Content-Type: application/json" \
-  -d '{"name": "f3-logos"}'
+  -d '{"name": "f3-public-images"}'
 ```
 
 ### Migrations failing

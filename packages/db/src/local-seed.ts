@@ -14,7 +14,7 @@
 import { EventTypes, RegionRole } from "@acme/shared/app/enums";
 
 import { and, eq, sql } from ".";
-import { schema } from ".";
+import { authSchema, schema } from ".";
 import { db } from "./client";
 
 // ---------------------------------------------------------------------------
@@ -171,6 +171,32 @@ const DEV_USERS = [
     lastName: "Editor",
     emailVerified: new Date().toISOString(),
     role: "editor" as const,
+  },
+  {
+    email: "dev-user@f3local.dev",
+    f3Name: "Spotter",
+    firstName: "Dev",
+    lastName: "User",
+    emailVerified: new Date().toISOString(),
+    role: "user" as const,
+  },
+];
+
+// ---------------------------------------------------------------------------
+// OAuth clients (local dev — plaintext secret: local-me-client-secret)
+// ---------------------------------------------------------------------------
+
+const LOCAL_OAUTH_CLIENTS = [
+  {
+    id: "f3-me-local",
+    name: "F3 Me (local dev)",
+    // SHA-256 of "local-me-client-secret" — deterministic so it can be committed
+    clientSecretHash:
+      "6239f25f8cff37f5ab67b37bfbb9ae94abd1805db915f010573412111a8d54fc",
+    redirectUris: JSON.stringify(["http://localhost:3003/api/auth/callback"]),
+    allowedOrigin: "http://localhost:3003",
+    scopes: "openid profile email",
+    isActive: true,
   },
 ];
 
@@ -358,7 +384,9 @@ async function seed() {
   const allRoles = await db.select().from(schema.roles);
   const adminRole = allRoles.find((r) => r.name === "admin");
   const editorRole = allRoles.find((r) => r.name === "editor");
-  if (!adminRole || !editorRole) throw new Error("Roles missing after insert");
+  const userRole = allRoles.find((r) => r.name === "user");
+  if (!adminRole || !editorRole || !userRole)
+    throw new Error("Roles missing after insert");
 
   // 7. Event types — check by name since there's no unique constraint
   const existingEventTypes = await db.select().from(schema.eventTypes);
@@ -384,7 +412,12 @@ async function seed() {
       .where(eq(schema.users.email, devUser.email));
     if (!user) continue;
 
-    const roleId = role === "admin" ? adminRole.id : editorRole.id;
+    const roleId =
+      role === "admin"
+        ? adminRole.id
+        : role === "editor"
+          ? editorRole.id
+          : userRole.id;
     await db
       .insert(schema.rolesXUsersXOrg)
       .values({ userId: user.id, roleId, orgId: nationId })
@@ -392,11 +425,22 @@ async function seed() {
     console.log(`  ✓ Dev user: ${devUser.email} (${role})`);
   }
 
-  // 9. Reset sequences so auto-increment IDs don't collide with inserted rows
+  // 9. OAuth clients
+  for (const client of LOCAL_OAUTH_CLIENTS) {
+    await db
+      .insert(authSchema.oauthClients)
+      .values(client)
+      .onConflictDoNothing();
+    console.log(`  ✓ OAuth client: ${client.id}`);
+  }
+
+  // 10. Reset sequences so auto-increment IDs don't collide with inserted rows
   await resetSequences();
 
   console.log("\nLocal seed complete.");
-  console.log("  Log in with: dev-admin@f3local.dev or dev-editor@f3local.dev");
+  console.log(
+    "  Log in with: dev-admin@f3local.dev, dev-editor@f3local.dev, or dev-user@f3local.dev",
+  );
 }
 
 async function resetSequences() {
