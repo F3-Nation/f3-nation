@@ -147,47 +147,33 @@ export default function AdminRegionsModal({
               async (data) => {
                 setIsSubmitting(true);
                 try {
-                  if (selectedLogoFile && data.id) {
-                    setIsUploadingLogo(true);
-                    const logoUrl = await uploadLogo({
-                      file: selectedLogoFile,
-                      orgId: data.id,
-                    });
-                    void uploadLogo({
-                      file: selectedLogoFile,
-                      orgId: data.id,
-                      size: 64,
-                    });
-                    await crupdateRegion.mutateAsync({
-                      ...data,
-                      logoUrl,
-                      orgType: "region",
-                    });
-                  } else {
+                  let orgId = data.id;
+
+                  if (!orgId) {
                     const result = await crupdateRegion.mutateAsync({
                       ...data,
                       orgType: "region",
                     });
-
-                    if (selectedLogoFile && result.org) {
-                      setIsUploadingLogo(true);
-                      const logoUrl = await uploadLogo({
-                        file: selectedLogoFile,
-                        orgId: result.org.id,
-                      });
-                      void uploadLogo({
-                        file: selectedLogoFile,
-                        orgId: result.org.id,
-                        size: 64,
-                      });
-                      await crupdateRegion.mutateAsync({
-                        ...data,
-                        id: result.org.id,
-                        logoUrl,
-                        orgType: "region",
-                      });
-                    }
+                    orgId = result.org?.id;
                   }
+
+                  let logoUrl: string | undefined;
+
+                  if (selectedLogoFile && orgId) {
+                    setIsUploadingLogo(true);
+
+                    logoUrl = await uploadLogo({
+                      file: selectedLogoFile,
+                      orgId,
+                    });
+                  }
+
+                  await crupdateRegion.mutateAsync({
+                    ...data,
+                    id: orgId,
+                    ...(logoUrl ? { logoUrl } : {}),
+                    orgType: "region",
+                  });
 
                   await invalidateQueries("org");
                   closeModal();

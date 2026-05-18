@@ -52,11 +52,7 @@ export async function POST(request: NextRequest) {
       width: dimension,
       height: dimension,
     });
-    const url = await uploadFile(
-      `org-logos/${orgId}/${dimension}.jpg`,
-      jpeg,
-      "image/jpeg",
-    );
+    const url = await uploadFile(`org-logos/${orgId}.jpg`, jpeg, "image/jpeg");
 
     return NextResponse.json({ url });
   } catch (err) {

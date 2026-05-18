@@ -145,47 +145,33 @@ export default function AdminAOsModal({
               async (data) => {
                 setIsSubmitting(true);
                 try {
-                  if (selectedLogoFile && data.id) {
-                    setIsUploadingLogo(true);
-                    const logoUrl = await uploadLogo({
-                      file: selectedLogoFile,
-                      orgId: data.id,
-                    });
-                    void uploadLogo({
-                      file: selectedLogoFile,
-                      orgId: data.id,
-                      size: 64,
-                    });
-                    await crupdateAO.mutateAsync({
-                      ...data,
-                      logoUrl,
-                      orgType: "ao",
-                    });
-                  } else {
+                  let orgId = data.id;
+                  if (!orgId) {
                     const result = await crupdateAO.mutateAsync({
                       ...data,
                       orgType: "ao",
                     });
 
-                    if (selectedLogoFile && result.org) {
-                      setIsUploadingLogo(true);
-                      const logoUrl = await uploadLogo({
-                        file: selectedLogoFile,
-                        orgId: result.org.id,
-                      });
-                      void uploadLogo({
-                        file: selectedLogoFile,
-                        orgId: result.org.id,
-                        size: 64,
-                      });
-                      await crupdateAO.mutateAsync({
-                        ...data,
-                        id: result.org.id,
-                        logoUrl,
-                        orgType: "ao",
-                      });
-                    }
+                    orgId = result.org?.id;
                   }
+
+                  let logoUrl: string | undefined;
+
+                  if (selectedLogoFile && orgId) {
+                    setIsUploadingLogo(true);
+
+                    logoUrl = await uploadLogo({
+                      file: selectedLogoFile,
+                      orgId,
+                    });
+                  }
+
+                  await crupdateAO.mutateAsync({
+                    ...data,
+                    id: orgId,
+                    ...(logoUrl ? { logoUrl } : {}),
+                    orgType: "ao",
+                  });
 
                   void invalidateQueries("org");
                   closeModal();

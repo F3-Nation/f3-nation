@@ -91,11 +91,6 @@ export default function AdminRequestsModal({
             file: selectedAoLogoFile,
             orgId: values.regionId,
           });
-          await uploadLogo({
-            file: selectedAoLogoFile,
-            orgId: values.regionId,
-            size: 64,
-          });
           valuesToSubmit.aoLogo = aoLogo;
         }
 
@@ -106,6 +101,7 @@ export default function AdminRequestsModal({
           ),
           eventEndTime: convertHH_mmToHHmm(valuesToSubmit.eventEndTime ?? ""),
         });
+
         void invalidateQueries("request");
         void invalidateQueries("event");
         void invalidateQueries("location");
