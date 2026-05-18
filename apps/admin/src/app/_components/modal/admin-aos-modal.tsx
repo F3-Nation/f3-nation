@@ -2,7 +2,7 @@
 
 import gte from "lodash/gte";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Controller } from "react-hook-form";
 import { z } from "zod";
 
@@ -36,11 +36,11 @@ import {
 import { Spinner } from "@acme/ui/spinner";
 import { Textarea } from "@acme/ui/textarea";
 import { toast } from "@acme/ui/toast";
+import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 import { AOInsertSchema } from "@acme/validators";
 
 import { env } from "~/env";
 import { invalidateQueries, orpc, useMutation, useQuery } from "~/orpc/react";
-import { scaleAndCropImage } from "~/utils/image/scale-and-crop-image";
 import { uploadLogo } from "~/utils/image/upload-logo";
 import type { DataType } from "~/utils/store/modal";
 import {
@@ -50,7 +50,6 @@ import {
   openModal,
 } from "~/utils/store/modal";
 import { DebouncedImage } from "../debounced-image";
-import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 
 export default function AdminAOsModal({
   data,
@@ -71,6 +70,8 @@ export default function AdminAOsModal({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [selectedLogoFile, setSelectedLogoFile] = useState<File | null>(null);
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
   const form = useForm({
     schema: AOInsertSchema.extend({
       badImage: z.boolean().default(false),
@@ -112,11 +113,15 @@ export default function AdminAOsModal({
       lastAnnualReview: ao?.lastAnnualReview ?? null,
       meta: ao?.meta ?? null,
     });
+    setSelectedLogoFile(null);
+    setLogoPreviewUrl(null);
   }, [form, ao]);
 
-  const formAoId = form.watch("id");
-
-  const formId = useMemo(() => crypto.randomUUID(), []);
+  useEffect(() => {
+    return () => {
+      if (logoPreviewUrl) URL.revokeObjectURL(logoPreviewUrl);
+    };
+  }, [logoPreviewUrl]);
 
   const crupdateAO = useMutation(orpc.org.crupdate.mutationOptions());
 
@@ -139,24 +144,63 @@ export default function AdminAOsModal({
             onSubmit={form.handleSubmit(
               async (data) => {
                 setIsSubmitting(true);
-                await crupdateAO
-                  .mutateAsync({ ...data, orgType: "ao" })
-                  .then(() => {
-                    void invalidateQueries("org");
-                    closeModal();
-                    toast.success("Successfully updated ao");
-                    router.refresh();
-                  })
-                  .catch((error) => {
-                    toast.error(
-                      error instanceof Error
-                        ? error.message
-                        : "Failed to update ao",
-                    );
-                  })
-                  .finally(() => {
-                    setIsSubmitting(false);
-                  });
+                try {
+                  if (selectedLogoFile && data.id) {
+                    setIsUploadingLogo(true);
+                    const logoUrl = await uploadLogo({
+                      file: selectedLogoFile,
+                      orgId: data.id,
+                    });
+                    void uploadLogo({
+                      file: selectedLogoFile,
+                      orgId: data.id,
+                      size: 64,
+                    });
+                    await crupdateAO.mutateAsync({
+                      ...data,
+                      logoUrl,
+                      orgType: "ao",
+                    });
+                  } else {
+                    const result = await crupdateAO.mutateAsync({
+                      ...data,
+                      orgType: "ao",
+                    });
+
+                    if (selectedLogoFile && result.org) {
+                      setIsUploadingLogo(true);
+                      const logoUrl = await uploadLogo({
+                        file: selectedLogoFile,
+                        orgId: result.org.id,
+                      });
+                      void uploadLogo({
+                        file: selectedLogoFile,
+                        orgId: result.org.id,
+                        size: 64,
+                      });
+                      await crupdateAO.mutateAsync({
+                        ...data,
+                        id: result.org.id,
+                        logoUrl,
+                        orgType: "ao",
+                      });
+                    }
+                  }
+
+                  void invalidateQueries("org");
+                  closeModal();
+                  toast.success("Successfully updated ao");
+                  router.refresh();
+                } catch (error) {
+                  toast.error(
+                    error instanceof Error
+                      ? error.message
+                      : "Failed to update ao",
+                  );
+                } finally {
+                  setIsUploadingLogo(false);
+                  setIsSubmitting(false);
+                }
               },
               (error) => {
                 toast.error("Failed to update ao");
@@ -383,62 +427,30 @@ export default function AdminAOsModal({
                 <Controller
                   control={form.control}
                   name="logoUrl"
-                  render={({ field: { onChange, value } }) => {
+                  render={({ field: { value } }) => {
                     return (
                       <div className="flex flex-col items-center gap-2">
                         <Input
                           type="file"
                           accept="image/*"
-                          onChange={async (e) => {
-                            if (!formAoId) return;
+                          onChange={(e) => {
                             const file = e.target.files?.[0];
                             if (!file) return;
 
-                            setIsUploadingLogo(true);
-                            try {
-                              const blob640 = await scaleAndCropImage(
-                                file,
-                                640,
-                                640,
-                              );
-                              if (!blob640) return;
-                              const url640 = await uploadLogo({
-                                file: blob640,
-                                orgId: formAoId,
-                                requestId: formId,
-                              });
-                              onChange(url640);
-                              const blob64 = await scaleAndCropImage(
-                                file,
-                                64,
-                                64,
-                              );
-                              if (blob64) {
-                                void uploadLogo({
-                                  file: blob64,
-                                  orgId: formAoId,
-                                  requestId: formId,
-                                  size: 64,
-                                });
-                              }
-                            } finally {
-                              setIsUploadingLogo(false);
-                            }
+                            const previewUrl = URL.createObjectURL(file);
+                            setSelectedLogoFile(file);
+                            setLogoPreviewUrl(previewUrl);
                           }}
-                          disabled={
-                            typeof formAoId !== "number" ||
-                            formAoId <= -1 ||
-                            isUploadingLogo
-                          }
+                          disabled={isUploadingLogo}
                         />
                         {isUploadingLogo ? (
                           <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <Spinner className="size-4" /> Uploading...
                           </div>
                         ) : (
-                          value && (
+                          (logoPreviewUrl ?? value) && (
                             <DebouncedImage
-                              src={value}
+                              src={logoPreviewUrl ?? value ?? ""}
                               alt="AO Logo"
                               onImageFail={() =>
                                 form.setValue("badImage", true)

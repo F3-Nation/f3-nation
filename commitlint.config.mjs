@@ -21,6 +21,7 @@ export default {
         'mail',
         'shared',
         'sso',
+        'storage',
         'ui',
         'validators',
 

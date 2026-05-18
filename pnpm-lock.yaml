@@ -75,6 +75,9 @@ importers:
       '@acme/sso':
         specifier: workspace:*
         version: link:../../packages/sso
+      '@acme/storage':
+        specifier: workspace:^0.1.0
+        version: link:../../packages/storage
       '@acme/tailwind-config':
         specifier: workspace:^0.1.0
         version: link:../../tooling/tailwind
@@ -1156,6 +1159,34 @@ importers:
       prettier:
         specifier: 3.2.5
         version: 3.2.5
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.2
+
+  packages/storage:
+    dependencies:
+      '@google-cloud/storage':
+        specifier: ^7.14.0
+        version: 7.19.0
+      sharp:
+        specifier: ^0.34.5
+        version: 0.34.5
+    devDependencies:
+      '@acme/eslint-config':
+        specifier: workspace:^0.2.0
+        version: link:../../tooling/eslint
+      '@acme/prettier-config':
+        specifier: workspace:^0.1.0
+        version: link:../../tooling/prettier
+      '@acme/tsconfig':
+        specifier: workspace:^0.1.0
+        version: link:../../tooling/typescript
+      '@types/node':
+        specifier: ^20.11.13
+        version: 20.19.39
+      eslint:
+        specifier: 'catalog:'
+        version: 10.2.0(jiti@2.6.1)
       typescript:
         specifier: 'catalog:'
         version: 6.0.2

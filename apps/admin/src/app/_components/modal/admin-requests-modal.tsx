@@ -29,6 +29,7 @@ import {
   useQuery,
 } from "~/orpc/react";
 import { useUpdateLocationForm } from "~/utils/forms";
+import { uploadLogo } from "~/utils/image/upload-logo";
 import type { DataType, ModalType } from "~/utils/store/modal";
 import { closeModal } from "~/utils/store/modal";
 import { FormDebugData, LocationEventForm } from "../forms/location-event-form";
@@ -41,6 +42,12 @@ export default function AdminRequestsModal({
   const [status, setStatus] = useState<"approving" | "rejecting" | "idle">(
     "idle",
   );
+  const [selectedAoLogoFile, setSelectedAoLogoFile] = useState<File | null>(
+    null,
+  );
+  const [selectedAoLogoPreviewUrl, setSelectedAoLogoPreviewUrl] = useState<
+    string | null
+  >(null);
   const { data: requestResponse } = useQuery(
     orpc.request.byId.queryOptions({
       input: { id: requestData.id },
@@ -69,10 +76,35 @@ export default function AdminRequestsModal({
     async (values) => {
       try {
         setStatus("approving");
+        const valuesToSubmit = { ...values };
+
+        if (selectedAoLogoFile) {
+          if (values.regionId == null || values.regionId <= -1) {
+            form.setError("regionId", {
+              message: "Please select a region before uploading an AO logo",
+            });
+            toast.error("Please select a region before uploading an AO logo");
+            return;
+          }
+
+          const aoLogo = await uploadLogo({
+            file: selectedAoLogoFile,
+            orgId: values.regionId,
+          });
+          await uploadLogo({
+            file: selectedAoLogoFile,
+            orgId: values.regionId,
+            size: 64,
+          });
+          valuesToSubmit.aoLogo = aoLogo;
+        }
+
         await validateSubmissionByAdmin.mutateAsync({
-          ...values,
-          eventStartTime: convertHH_mmToHHmm(values.eventStartTime ?? ""),
-          eventEndTime: convertHH_mmToHHmm(values.eventEndTime ?? ""),
+          ...valuesToSubmit,
+          eventStartTime: convertHH_mmToHHmm(
+            valuesToSubmit.eventStartTime ?? "",
+          ),
+          eventEndTime: convertHH_mmToHHmm(valuesToSubmit.eventEndTime ?? ""),
         });
         void invalidateQueries("request");
         void invalidateQueries("event");
@@ -151,7 +183,16 @@ export default function AdminRequestsModal({
       aoWebsite: request.aoWebsite ?? "",
       submittedBy: request.submittedBy ?? "",
     });
+    setSelectedAoLogoFile(null);
+    setSelectedAoLogoPreviewUrl(null);
   }, [request, form, eventTypes]);
+
+  useEffect(() => {
+    return () => {
+      if (selectedAoLogoPreviewUrl)
+        URL.revokeObjectURL(selectedAoLogoPreviewUrl);
+    };
+  }, [selectedAoLogoPreviewUrl]);
 
   return (
     <Dialog open={true} onOpenChange={() => closeModal()}>
@@ -172,7 +213,14 @@ export default function AdminRequestsModal({
                   {!isProd && <FormDebugData />}
                 </DialogTitle>
               </DialogHeader>
-              <LocationEventForm isAdminForm={true} />
+              <LocationEventForm
+                isAdminForm={true}
+                selectedAoLogoPreviewUrl={selectedAoLogoPreviewUrl}
+                onAoLogoFileChange={(file, previewUrl) => {
+                  setSelectedAoLogoFile(file);
+                  setSelectedAoLogoPreviewUrl(previewUrl);
+                }}
+              />
               <div className="mt-4 flex justify-between gap-2">
                 <Button
                   type="button"

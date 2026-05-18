@@ -94,6 +94,7 @@ export const requestRouter = {
                 .describe("The name of the old workout"),
               newWorkoutName: z
                 .string()
+                .nullable()
                 .describe("The name of the new workout"),
               oldRegionName: z
                 .string()

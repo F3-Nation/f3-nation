@@ -36,6 +36,7 @@ REGION="us-east1"
 declare -A SECRET_MAP=(
   [NEXT_PUBLIC_GOOGLE_API_KEY]="NEXT_PUBLIC_GOOGLE_API_KEY"
   [OAUTH_CLIENT_SECRET]="OAUTH_CLIENT_SECRET"
+  [GCS_CREDENTIALS]="GCS_CREDENTIALS"
 )
 
 # Per-environment env vars read from the env file (not sensitive, set as plain
@@ -49,6 +50,7 @@ ENV_FILE_VARS=(
   NEXT_PUBLIC_CHANNEL
   OAUTH_CLIENT_ID
   OAUTH_REDIRECT_URI
+  GCS_BUCKET
 )
 
 # Plain env vars (hardcoded, same across environments).

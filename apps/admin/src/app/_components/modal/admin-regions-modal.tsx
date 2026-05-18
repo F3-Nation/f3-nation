@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Controller } from "react-hook-form";
 import { z } from "zod";
 
@@ -44,7 +44,6 @@ import {
   useMutation,
   useQuery,
 } from "~/orpc/react";
-import { scaleAndCropImage } from "~/utils/image/scale-and-crop-image";
 import { uploadLogo } from "~/utils/image/upload-logo";
 import type { DataType } from "~/utils/store/modal";
 import {
@@ -74,6 +73,8 @@ export default function AdminRegionsModal({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [selectedLogoFile, setSelectedLogoFile] = useState<File | null>(null);
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
   const form = useForm({
     schema: RegionInsertSchema.extend({
       badImage: z.boolean().default(false),
@@ -114,30 +115,17 @@ export default function AdminRegionsModal({
       lastAnnualReview: region?.lastAnnualReview ?? null,
       meta: region?.meta ?? null,
     });
+    setSelectedLogoFile(null);
+    setLogoPreviewUrl(null);
   }, [form, region]);
 
-  const crupdateRegion = useMutation(
-    orpc.org.crupdate.mutationOptions({
-      onSuccess: async () => {
-        await invalidateQueries("org");
-        closeModal();
-        toast.success("Successfully updated region");
-        router.refresh();
-      },
-      onError: (err) => {
-        toast.error(
-          // ORPCError code = "UNAUTHORIZED", message, data
-          err instanceof ORPCError && err?.code === "UNAUTHORIZED"
-            ? "You must be logged in to update regions"
-            : "Failed to update region",
-        );
-      },
-    }),
-  );
+  useEffect(() => {
+    return () => {
+      if (logoPreviewUrl) URL.revokeObjectURL(logoPreviewUrl);
+    };
+  }, [logoPreviewUrl]);
 
-  const formRegionId = form.watch("id");
-
-  const formId = useMemo(() => crypto.randomUUID(), []);
+  const crupdateRegion = useMutation(orpc.org.crupdate.mutationOptions());
 
   return (
     <Dialog open={true} onOpenChange={() => closeModal()}>
@@ -159,14 +147,61 @@ export default function AdminRegionsModal({
               async (data) => {
                 setIsSubmitting(true);
                 try {
-                  await crupdateRegion.mutateAsync({
-                    ...data,
-                    orgType: "region",
-                  });
+                  if (selectedLogoFile && data.id) {
+                    setIsUploadingLogo(true);
+                    const logoUrl = await uploadLogo({
+                      file: selectedLogoFile,
+                      orgId: data.id,
+                    });
+                    void uploadLogo({
+                      file: selectedLogoFile,
+                      orgId: data.id,
+                      size: 64,
+                    });
+                    await crupdateRegion.mutateAsync({
+                      ...data,
+                      logoUrl,
+                      orgType: "region",
+                    });
+                  } else {
+                    const result = await crupdateRegion.mutateAsync({
+                      ...data,
+                      orgType: "region",
+                    });
+
+                    if (selectedLogoFile && result.org) {
+                      setIsUploadingLogo(true);
+                      const logoUrl = await uploadLogo({
+                        file: selectedLogoFile,
+                        orgId: result.org.id,
+                      });
+                      void uploadLogo({
+                        file: selectedLogoFile,
+                        orgId: result.org.id,
+                        size: 64,
+                      });
+                      await crupdateRegion.mutateAsync({
+                        ...data,
+                        id: result.org.id,
+                        logoUrl,
+                        orgType: "region",
+                      });
+                    }
+                  }
+
+                  await invalidateQueries("org");
+                  closeModal();
+                  toast.success("Successfully updated region");
+                  router.refresh();
                 } catch (error) {
-                  toast.error("Failed to update region");
+                  toast.error(
+                    error instanceof ORPCError && error?.code === "UNAUTHORIZED"
+                      ? "You must be logged in to update regions"
+                      : "Failed to update region",
+                  );
                   console.error(error);
                 } finally {
+                  setIsUploadingLogo(false);
                   setIsSubmitting(false);
                 }
               },
@@ -252,63 +287,30 @@ export default function AdminRegionsModal({
                 <Controller
                   control={form.control}
                   name="logoUrl"
-                  render={({ field: { onChange, value } }) => {
+                  render={({ field: { value } }) => {
                     return (
                       <div className="flex flex-col items-center gap-2">
                         <Input
                           type="file"
                           accept="image/*"
-                          onChange={async (e) => {
-                            if (!formRegionId) return;
-                            console.log("files", e.target.files);
+                          onChange={(e) => {
                             const file = e.target.files?.[0];
                             if (!file) return;
 
-                            setIsUploadingLogo(true);
-                            try {
-                              const blob640 = await scaleAndCropImage(
-                                file,
-                                640,
-                                640,
-                              );
-                              if (!blob640) return;
-                              const url640 = await uploadLogo({
-                                file: blob640,
-                                orgId: formRegionId,
-                                requestId: formId,
-                              });
-                              onChange(url640);
-                              const blob64 = await scaleAndCropImage(
-                                file,
-                                64,
-                                64,
-                              );
-                              if (blob64) {
-                                void uploadLogo({
-                                  file: blob64,
-                                  orgId: formRegionId,
-                                  requestId: formId,
-                                  size: 64,
-                                });
-                              }
-                            } finally {
-                              setIsUploadingLogo(false);
-                            }
+                            const previewUrl = URL.createObjectURL(file);
+                            setSelectedLogoFile(file);
+                            setLogoPreviewUrl(previewUrl);
                           }}
-                          disabled={
-                            typeof formRegionId !== "number" ||
-                            formRegionId <= -1 ||
-                            isUploadingLogo
-                          }
+                          disabled={isUploadingLogo}
                         />
                         {isUploadingLogo ? (
                           <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <Spinner className="size-4" /> Uploading...
                           </div>
                         ) : (
-                          value && (
+                          (logoPreviewUrl ?? value) && (
                             <DebouncedImage
-                              src={value}
+                              src={logoPreviewUrl ?? value ?? ""}
                               alt="Region Logo"
                               onImageFail={() =>
                                 form.setValue("badImage", true)

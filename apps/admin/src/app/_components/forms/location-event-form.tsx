@@ -19,8 +19,6 @@ import { RequestInsertSchema } from "@acme/validators";
 
 import { orpc, useQuery } from "~/orpc/react";
 import { useUpdateLocationFormContext } from "~/utils/forms";
-import { scaleAndCropImage } from "~/utils/image/scale-and-crop-image";
-import { uploadLogo } from "~/utils/image/upload-logo";
 import { DebouncedImage } from "../debounced-image";
 import { CountrySelect } from "../modal/country-select";
 import { ControlledTimeInput } from "../time-input";
@@ -33,11 +31,14 @@ type UpdateLocationSchema = z.infer<typeof UpdateLocationSchema>;
 
 export const LocationEventForm = ({
   isAdminForm = true,
+  selectedAoLogoPreviewUrl,
+  onAoLogoFileChange,
 }: {
   isAdminForm?: boolean;
+  selectedAoLogoPreviewUrl?: string | null;
+  onAoLogoFileChange?: (file: File | null, previewUrl: string | null) => void;
 }) => {
   const form = useUpdateLocationFormContext();
-  const formId = form.watch("id");
   const formRegionId = form.watch("regionId");
   const formLocationId = form.watch("locationId");
   const formAoId = form.watch("aoId");
@@ -381,6 +382,7 @@ export const LocationEventForm = ({
                   form.setValue("aoId", ao.id);
                   form.setValue("aoName", ao.name);
                   form.setValue("aoLogo", ao.logoUrl);
+                  onAoLogoFileChange?.(null, null);
                 }
               }}
               searchPlaceholder="Select"
@@ -416,44 +418,33 @@ export const LocationEventForm = ({
                   <Input
                     type="file"
                     accept="image/*"
-                    onChange={async (e) => {
+                    onChange={(e) => {
                       if (formRegionId == null) {
                         toast.error("Please select a region first");
                         return;
                       }
-                      console.log("files", e.target.files);
                       const file = e.target.files?.[0];
                       if (!file) return;
 
-                      const blob640 = await scaleAndCropImage(file, 640, 640);
-                      if (!blob640) return;
-                      const url640 = await uploadLogo({
-                        file: blob640,
-                        orgId: formRegionId,
-                        requestId: formId,
-                      });
-                      onChange(url640);
-                      const blob64 = await scaleAndCropImage(file, 64, 64);
-                      if (blob64) {
-                        await uploadLogo({
-                          file: blob64,
-                          orgId: formRegionId,
-                          requestId: formId,
-                          size: 64,
-                        });
-                      }
+                      onAoLogoFileChange?.(file, URL.createObjectURL(file));
                     }}
                     disabled={lt(formRegionId, 0)}
                     className="flex-1"
                   />
-                  {value && (
+                  {(selectedAoLogoPreviewUrl ?? value) && (
                     <button
                       type="button"
                       className="relative size-16 cursor-pointer"
-                      onClick={() => onChange("")}
+                      onClick={() => {
+                        if (selectedAoLogoPreviewUrl) {
+                          onAoLogoFileChange?.(null, null);
+                          return;
+                        }
+                        onChange("");
+                      }}
                     >
                       <DebouncedImage
-                        src={value}
+                        src={selectedAoLogoPreviewUrl ?? value ?? ""}
                         alt="AO Logo"
                         onImageFail={() => form.setValue("badImage", true)}
                         onImageSuccess={() => form.setValue("badImage", false)}
