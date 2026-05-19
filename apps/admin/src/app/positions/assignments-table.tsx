@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, X } from "lucide-react";
 
-import { isValidEmail } from "@acme/shared/app/functions";
+import { isValidF3Name } from "@acme/shared/app/functions";
+import { useDebounce } from "~/utils/hooks/use-debounce";
 import { cn } from "@acme/ui";
 import { Badge } from "@acme/ui/badge";
 import { Button } from "@acme/ui/button";
@@ -25,6 +26,13 @@ import {
   useMutation,
   useQuery,
 } from "~/orpc/react";
+import {
+  DeleteType,
+  ModalType,
+  closeModal,
+  openModal,
+} from "~/utils/store/modal";
+import { Avatar, AvatarFallback, AvatarImage } from "@acme/ui/avatar";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 
 type AccessibleOrg = RouterOutputs["org"]["accessible"]["orgs"][number];
@@ -257,16 +265,32 @@ function PositionAssignmentRow({
             <Badge
               key={user.id}
               variant="secondary"
-              className="flex items-center gap-1 border-blue-200 bg-blue-50 px-2 py-0.5 text-xs text-blue-800 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200"
+              className="flex items-center gap-1.5 border-blue-200 bg-blue-50 px-2 py-1 text-xs text-blue-800 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200"
             >
-              {user.f3Name ?? user.firstName ?? `User #${user.id}`}
+              <Avatar className="h-5 w-5">
+                {user.avatarUrl && (
+                  <AvatarImage src={user.avatarUrl} alt={user.f3Name ?? ""} />
+                )}
+                <AvatarFallback className="bg-blue-600 text-[10px] font-semibold text-white dark:bg-blue-500">
+                  {user.f3Name?.charAt(0) ?? user.firstName?.charAt(0) ?? "?"}
+                </AvatarFallback>
+              </Avatar>
+              <span className="text-sm font-medium">
+                {user.f3Name ?? user.firstName ?? `User #${user.id}`}
+              </span>
               {canEdit && (
                 <button
                   onClick={() =>
-                    removeAssignment.mutate({
-                      positionId: position.id,
-                      orgId,
-                      userId: user.id,
+                    openModal(ModalType.DELETE_CONFIRMATION, {
+                      type: DeleteType.ASSIGNMENT,
+                      onConfirm: () => {
+                        removeAssignment.mutate({
+                          positionId: position.id,
+                          orgId,
+                          userId: user.id,
+                        });
+                        closeModal();
+                      },
                     })
                   }
                   className="ml-0.5 rounded-full p-0.5 hover:bg-muted"
@@ -302,14 +326,15 @@ function AddUserDialog({
   assignedUserIds: number[];
   onClose: () => void;
 }) {
-  const [emailSearch, setEmailSearch] = useState("");
-  const emailToSearch = emailSearch.trim();
-  const emailIsValid = isValidEmail(emailToSearch);
+  const [f3NameSearch, setF3NameSearch] = useState("");
+  const [assigningUserId, setAssigningUserId] = useState<number | null>(null);
+  const debouncedF3Name = useDebounce(f3NameSearch.trim(), 300);
+  const f3NameIsValid = isValidF3Name(debouncedF3Name);
 
-  const { data: userByEmailData, isLoading } = useQuery(
-    orpc.user.byEmail.queryOptions({
-      input: { email: emailToSearch },
-      enabled: emailIsValid,
+  const { data: userByF3NameData, isLoading } = useQuery(
+    orpc.user.byF3Name.queryOptions({
+      input: { f3Name: debouncedF3Name },
+      enabled: f3NameIsValid,
     }),
   );
 
@@ -318,23 +343,27 @@ function AddUserDialog({
       onSuccess: async () => {
         await invalidateQueries("position");
         toast.success("User assigned");
-        onClose();
       },
       onError: (err) => {
+        setAssigningUserId(null);
         toast.error(
           err instanceof ORPCError && err.code === "UNAUTHORIZED"
             ? "You are not authorized to manage assignments for this org"
             : "Failed to assign user",
         );
       },
+      onSettled: () => {
+        setAssigningUserId(null);
+      },
     }),
   );
 
-  const matchedUser = userByEmailData?.user ?? null;
-  const isAlreadyAssigned =
-    matchedUser !== null && assignedUserIds.includes(matchedUser.id);
+  const matchedUsers = useMemo(
+    () => userByF3NameData?.users ?? [],
+    [userByF3NameData?.users],
+  );
 
-  const getUserDisplayName = (user: NonNullable<typeof matchedUser>) => {
+  const getUserDisplayName = (user: (typeof matchedUsers)[number]) => {
     if (user.f3Name && user.firstName) {
       return `${user.f3Name} (${user.firstName} ${user.lastName ?? ""})`.trim();
     }
@@ -349,7 +378,7 @@ function AddUserDialog({
         </DialogHeader>
 
         <p className="text-sm text-muted-foreground">
-          Enter the user&apos;s email address to find and assign them.
+          Enter the user&apos;s F3 name to find and assign them.
         </p>
 
         <div className="flex flex-col gap-3">
@@ -358,80 +387,97 @@ function AddUserDialog({
             shouldFilter={false}
           >
             <CommandInput
-              placeholder="user@example.com"
-              value={emailSearch}
-              onValueChange={setEmailSearch}
+              placeholder="e.g. Dredd"
+              value={f3NameSearch}
+              onValueChange={setF3NameSearch}
             />
-          </Command>
 
-          {isLoading && emailIsValid && (
-            <div className="flex items-center justify-center py-4">
-              <Spinner className="size-4" />
-            </div>
-          )}
-
-          {!isLoading && emailIsValid && matchedUser && (
-            <div
-              className={cn(
-                "flex items-center justify-between rounded-lg border p-3",
-                isAlreadyAssigned
-                  ? "border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-950"
-                  : "border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950",
-              )}
-            >
-              <div className="flex flex-col gap-0.5">
-                <span className="text-sm font-medium">
-                  {getUserDisplayName(matchedUser)}
-                </span>
-                {matchedUser.email && (
-                  <span className="text-xs text-muted-foreground">
-                    {matchedUser.email}
-                  </span>
+            {!isLoading && f3NameIsValid && matchedUsers.length > 0 && (
+              <div
+                className={cn(
+                  "flex flex-col",
+                  matchedUsers.length > 5 &&
+                    "max-h-[360px] overflow-y-auto pr-1",
                 )}
+              >
+                {matchedUsers.map((matchedUser) => {
+                  const isAlreadyAssigned = assignedUserIds.includes(
+                    matchedUser.id,
+                  );
+                  const isAssigningThisUser =
+                    addAssignment.isPending &&
+                    assigningUserId === matchedUser.id;
+
+                  return (
+                    <div
+                      key={matchedUser.id}
+                      className={cn(
+                        "flex items-center justify-between border-b p-3",
+                        {
+                          "border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-950":
+                            isAlreadyAssigned,
+                          "border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950":
+                            !isAlreadyAssigned,
+                        },
+                      )}
+                    >
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-sm font-medium">
+                          {getUserDisplayName(matchedUser)}
+                        </span>
+                        {matchedUser.homeRegion?.homeRegionName && (
+                          <span className="text-xs text-muted-foreground">
+                            {matchedUser.homeRegion.homeRegionName}
+                          </span>
+                        )}
+                      </div>
+                      {isAlreadyAssigned ? (
+                        <Badge
+                          variant="outline"
+                          className="shrink-0 text-yellow-700 dark:text-yellow-300"
+                        >
+                          Already assigned
+                        </Badge>
+                      ) : (
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            setAssigningUserId(matchedUser.id);
+                            addAssignment.mutate({
+                              positionId,
+                              orgId,
+                              userId: matchedUser.id,
+                            });
+                          }}
+                          disabled={isAssigningThisUser}
+                        >
+                          {isAssigningThisUser ? (
+                            <Spinner className="size-3" />
+                          ) : (
+                            <>
+                              <Plus className="mr-1 h-3 w-3" />
+                              Assign
+                            </>
+                          )}
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-              {isAlreadyAssigned ? (
-                <Badge
-                  variant="outline"
-                  className="shrink-0 text-yellow-700 dark:text-yellow-300"
-                >
-                  Already assigned
-                </Badge>
-              ) : (
-                <Button
-                  size="sm"
-                  onClick={() =>
-                    addAssignment.mutate({
-                      positionId,
-                      orgId,
-                      userId: matchedUser.id,
-                    })
-                  }
-                  disabled={addAssignment.isPending}
-                >
-                  {addAssignment.isPending ? (
-                    <Spinner className="size-3" />
-                  ) : (
-                    <>
-                      <Plus className="mr-1 h-3 w-3" />
-                      Assign
-                    </>
-                  )}
-                </Button>
-              )}
-            </div>
-          )}
+            )}
+            {!isLoading && f3NameIsValid && matchedUsers.length === 0 && (
+              <p className="py-2 text-center text-sm text-muted-foreground">
+                No user found with that F3 name.
+              </p>
+            )}
 
-          {!isLoading && emailIsValid && !matchedUser && (
-            <p className="py-2 text-center text-sm text-muted-foreground">
-              No user found with that email address.
-            </p>
-          )}
-
-          {!emailIsValid && emailToSearch.length > 0 && (
-            <p className="py-2 text-center text-sm text-muted-foreground">
-              Please enter a valid email address.
-            </p>
-          )}
+            {!f3NameIsValid && debouncedF3Name.length > 0 && (
+              <p className="py-2 text-center text-sm text-muted-foreground">
+                Please enter at least 3 characters.
+              </p>
+            )}
+          </Command>
         </div>
       </DialogContent>
     </Dialog>

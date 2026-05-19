@@ -260,6 +260,40 @@ export const userRouter = {
         includeListFields: true,
       });
     }),
+  byF3Name: editorProcedure
+    .input(
+      z.object({
+        f3Name: z.string().describe("The F3 name of the user to retrieve"),
+      }),
+    )
+    .route({
+      method: "GET",
+      path: "/f3name/{f3Name}",
+      tags: ["user"],
+      summary: "Search users by F3 name",
+      description:
+        "Search for users whose F3 name partially matches the input. Returns up to 10 results with home region info.",
+    })
+    .output(
+      z.object({
+        users: z.array(userListUserOutputSchema),
+        totalCount: z.number().describe("Total number of users"),
+        includePii: z.boolean().describe("Whether PII fields are included"),
+      }),
+    )
+    .handler(async ({ context: ctx, input }) => {
+      return buildUserListQuery({
+        ctx,
+        input: {
+          searchTerm: input.f3Name,
+          pageIndex: 0,
+          pageSize: 10,
+          sorting: [{ id: "f3Name", desc: false }],
+          includePii: false,
+        },
+        includePii: false,
+      });
+    }),
   crupdate: editorProcedure
     .input(CrupdateUserSchema)
     .route({

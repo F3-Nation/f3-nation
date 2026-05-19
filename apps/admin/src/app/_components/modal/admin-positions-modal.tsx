@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { z } from "zod";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
@@ -76,7 +76,6 @@ export default function AdminPositionsModal({
   const router = useRouter();
 
   const isNational = position?.orgId === null || position?.orgId === undefined;
-  const isReadOnly = isNational && !isNationAdmin && !!position;
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -104,7 +103,6 @@ export default function AdminPositionsModal({
   const isEditing = !!position?.id;
 
   const selectedOrgType = form.watch("orgType");
-  const selectedOrgId = form.watch("orgId");
 
   const { data: editableOrgsResponse } = useQuery(
     orpc.org.all.queryOptions({
@@ -117,14 +115,17 @@ export default function AdminPositionsModal({
     }),
   );
 
+  const prevOrgTypeRef = useRef<string | null | undefined>(undefined);
+
   useEffect(() => {
-    if (!selectedOrgType || selectedOrgId == null) return;
-    const orgs = editableOrgsResponse?.orgs ?? [];
-    const match = orgs.find((o) => o.id === selectedOrgId);
-    if (match && match.orgType !== selectedOrgType) {
+    if (
+      prevOrgTypeRef.current != null &&
+      prevOrgTypeRef.current !== selectedOrgType
+    ) {
       form.setValue("orgId", null, { shouldDirty: true });
     }
-  }, [selectedOrgType, selectedOrgId, editableOrgsResponse, form]);
+    prevOrgTypeRef.current = selectedOrgType;
+  }, [selectedOrgType, form]);
 
   const orgOptions = useMemo(() => {
     const orgs = editableOrgsResponse?.orgs ?? [];
@@ -140,8 +141,36 @@ export default function AdminPositionsModal({
       });
     }
 
+    if (
+      position?.orgId != null &&
+      position.orgName &&
+      position.orgType === selectedOrgType &&
+      !options.some((o) => o.value === position.orgId!.toString())
+    ) {
+      options.push({
+        value: position.orgId.toString(),
+        label: position.orgName,
+      });
+    }
+
     return options;
-  }, [editableOrgsResponse, isNationAdmin, selectedOrgType]);
+  }, [editableOrgsResponse, isNationAdmin, selectedOrgType, position]);
+
+  const [confirmedOrgAccess, setConfirmedOrgAccess] = useState(false);
+
+  useEffect(() => {
+    if (!isEditing || !position?.orgId || confirmedOrgAccess) return;
+    if (editableOrgsResponse?.orgs?.some((o) => o.id === position.orgId)) {
+      setConfirmedOrgAccess(true);
+    }
+  }, [isEditing, position?.orgId, editableOrgsResponse, confirmedOrgAccess]);
+
+  const userCanEditOrg = isNationAdmin || !isEditing || confirmedOrgAccess;
+
+  const isReadOnly =
+    (isNational && !isNationAdmin && !!position) ||
+    (isEditing && !userCanEditOrg);
+
   const actionText = isEditing ? "update" : "add";
   const actionTextPast = isEditing ? "updated" : "added";
 
@@ -202,7 +231,9 @@ export default function AdminPositionsModal({
 
         {isReadOnly && (
           <p className="text-center text-sm text-muted-foreground">
-            National positions can only be edited by F3 Nation admins.
+            {isNational
+              ? "National positions can only be edited by F3 Nation admins."
+              : "You do not have permission to edit this position."}
           </p>
         )}
 
@@ -248,7 +279,11 @@ export default function AdminPositionsModal({
                 control={form.control}
                 label="Org Level"
                 name="orgType"
-                options={[...ORG_TYPE_OPTIONS]}
+                options={
+                  isNationAdmin
+                    ? [...ORG_TYPE_OPTIONS]
+                    : ORG_TYPE_OPTIONS.filter((o) => o.value !== "nation")
+                }
                 disabled={isReadOnly}
               />
             </div>
@@ -279,11 +314,17 @@ export default function AdminPositionsModal({
                         value={selectedValue}
                         options={orgOptions}
                         searchPlaceholder={placeholder}
-                        disabled={isReadOnly || isEditing || !selectedOrgType}
+                        disabled={
+                          isReadOnly || !userCanEditOrg || !selectedOrgType
+                        }
                         hideClearButton={!isNationAdmin}
                         onSelect={(value) => {
                           const next = Array.isArray(value) ? value[0] : value;
-                          if (next === NATIONAL_ORG_VALUE || next === "") {
+                          if (
+                            next == null ||
+                            next === NATIONAL_ORG_VALUE ||
+                            next === ""
+                          ) {
                             field.onChange(null);
                             return;
                           }

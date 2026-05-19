@@ -517,13 +517,14 @@ export const orgRouter = {
 
       // Get all editable orgs (includes descendants via hierarchy traversal)
       const { editableOrgs } = await getEditableOrgIdsForUser(ctx);
-      const editableOrgIds = editableOrgs
+      const directEditableIds = editableOrgs
         .map((o) => o.id)
         .filter((id): id is number => id !== null);
 
-      if (editableOrgIds.length === 0) {
-        return { orgs: [], total: 0 };
-      }
+      const editableOrgIds =
+        directEditableIds.length > 0
+          ? await getDescendantOrgIds(ctx.db, directEditableIds)
+          : [];
 
       // Query full org details for all editable orgs
       const editableOrgsData = await ctx.db
