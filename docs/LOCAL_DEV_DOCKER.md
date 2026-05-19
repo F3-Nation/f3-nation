@@ -19,8 +19,6 @@ Four Docker containers replace the cloud services you'd otherwise need access to
 
 Your app servers (Map, API, Auth) still run natively on your machine with `pnpm dev`. Docker only manages the stateful infrastructure.
 
----
-
 ## Prerequisites
 
 Install these before starting:
@@ -34,30 +32,49 @@ Install these before starting:
 
 Make sure Docker Desktop is **running** before you continue.
 
----
-
-## Installing Docker on WSL
+## Detailed Prerequites Install Instructions
 
 <details>
-<summary>Using WSL on Windows? Install Docker Engine directly (skip Docker Desktop)</summary>
+<summary>WSL: Coding on a Windows machine</summary>
+
+In order to properly develop for the repo, you'll need to develop against Linux, not Windows. You can do this by installing Windows Subsystem for Linux (WSL). Think of it as a virtual Linux server on your Windows machine. You can connect to it and from there use git to interact with GitHub and your favorite IDE to develop.
+
+1. Open PowerShell as an admin and run the following command to enable the WSL features and download an Ubuntu (a version of Linux) 'distro' (your virtual Linux environment). It will ask you for a default username and password. Don't forget those.
+
+```bash
+wsl --install
+```
+
+<img width="713" height="225" alt="image" src="https://github.com/user-attachments/assets/7597a8aa-214e-4b8d-b701-cdf8b0a5be2c" />
+
+2. Run the command below to check that it's installed correctly. You should see Name = `Ubuntu` and Version = `2`. Version 2 means you have WSL2. This is important you're on WSL2.
+
+```bash
+wsl.exe --list --verbose
+```
+
+<img width="464" height="56" alt="image" src="https://github.com/user-attachments/assets/ef199882-f2ec-4596-ad0f-e025cf847b41" />
+
+3. Open Linux. Go to your start menu and search for 'Ubuntu'. Select it. This will open a command prompt.
+
+<img width="797" height="798" alt="image" src="https://github.com/user-attachments/assets/49976145-4994-42ba-99c2-ebc4b04d1ebf" />
+
+<img width="784" height="484" alt="image" src="https://github.com/user-attachments/assets/8b0254ee-abbc-4802-b930-ea4c2aebfc55" />
+
+You can interact with files in WSL via File Explorer. It should show up near where you see This PC. You'll go to Linux, then select the distro 'Ubuntu', then drill down to `home` > your username. This folder will be your base of operations. When you open Ubuntu from the Start menu, it defaults you to here.
+
+<img width="847" height="462" alt="image" src="https://github.com/user-attachments/assets/784a79d5-85ea-44e3-925f-b0c295e76b7c" />
+
+_You'll need git. Based on testing, git comes pre-installed with Ubuntu. If not, please update these instructions with how you installed it._
+
+</details>
+
+<details>
+<summary>Docker for WSL: Skip the need for Docker Desktop </summary>
 
 Running Docker Engine natively in WSL is lighter and often more reliable than Docker Desktop's WSL integration. These steps assume Ubuntu — adjust package commands for other distros.
 
-**Before starting:** confirm you're on WSL 2. Run this in PowerShell on Windows:
-
-```powershell
-wsl --list --verbose
-```
-
-The `VERSION` column should show `2` for your distro. If not: `wsl --set-default-version 2`
-
-### 1. Remove any old Docker packages
-
-```bash
-sudo apt-get remove docker docker-engine docker.io containerd runc
-```
-
-### 2. Add Docker's apt repository
+### 1. Add Docker's apt repository
 
 ```bash
 sudo apt-get update
@@ -71,28 +88,22 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.
 sudo apt-get update
 ```
 
-### 3. Install Docker Engine
+### 2. Install Docker Engine
 
 ```bash
 sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 ```
 
-### 4. Add your user to the `docker` group
+### 3. Add your user to the `docker` group
 
 ```bash
 sudo usermod -aG docker $USER
 # if the group doesn't exist yet: sudo addgroup docker
 ```
 
-### 5. Restart WSL and verify
+### 4. Test
 
-From PowerShell on Windows:
-
-```powershell
-wsl --shutdown
-```
-
-Re-open your WSL terminal, then:
+Close and re-open your terminal, then:
 
 ```bash
 docker run hello-world
@@ -100,14 +111,42 @@ docker run hello-world
 
 </details>
 
----
+<details>
+<summary>git: Saving and submitting code; working with GitHub</summary>
+git is how you interact with GitHub from your instance of the code. You often already have git. If not, here's a link.
 
-## Quick start
+1. Go to https://git-scm.com/install/ and download the correct version. During install, if you don't know what anything means, just leave defaults and keep hitting Next.
+</details>
+
+<details>
+<summary>VS Code: User interface work coding</summary>
+You will need a code editor in order to edit code! The instructions assume you will be using VS Code. If you have a different IDE, you'll have to adjust accordingly.
+
+1. Go to https://code.visualstudio.com/download and download the correct version.
+</details>
+
+<details>
+<summary>NVM: Node Version Manager</Summary>
+The monorepo is based on Node.js. NVM allows you to install and manage versions of Node on your machine. You will need it installed in order to run the apps.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+```
+
+After install, close and reopen your terminal.
+
+</details>
+
+## Set Up
 
 ### 1. Clone and install dependencies
 
+> If you are on Windows, it is recommended you use WSL (Windows Subsystem for Linux) to run local development.
+
+The following commands will set up the base environment. If any commands fail, look above for more detailed setup.
+
 ```bash
-git clone git@github.com:F3-Nation/f3-nation.git
+git clone https://github.com/F3-Nation/f3-nation.git
 cd f3-nation
 nvm install        # installs the Node version in .nvmrc
 pnpm install
@@ -153,7 +192,17 @@ The app will start without this, but the map tiles won't render. To get one:
 
 > **Troubleshooting AuthFailure:** If the map shows an "AuthFailure" error after adding your key, the API key likely has HTTP referrer restrictions that block `localhost`. In the Google Cloud Console, set **Application restrictions** to **None** (or add `http://localhost:3000/*` as an allowed HTTP referrer) for local development.
 
-### 4. Start the app servers
+### 4. (Optional) Open Code in VSCode or other IDE
+
+Instead of interating with code via terminal, you can use an IDE like Visual Studio Code.
+
+```bash
+code .
+```
+
+The above command will install code if you don't have it already and then open you workspace in it.
+
+### 5. Start the app servers
 
 ```bash
 pnpm dev
@@ -167,6 +216,21 @@ pnpm dev
 | Auth | http://localhost:3004 |
 
 ---
+
+## Set Up
+
+### 1. Clone and install dependencies
+
+> If you are on Windows, it is recommended you use WSL (Windows Subsystem for Linux) to run local development.
+
+The following commands will set up the base environment. If any commands fail, look below for more detailed setup.
+
+```bash
+git clone git@github.com:F3-Nation/f3-nation.git
+cd f3-nation
+nvm install        # installs the Node version in .nvmrc
+pnpm install
+```
 
 ## Daily workflow
 
@@ -381,6 +445,24 @@ systemctl --user stop cloud-sql-proxy                                        # L
 ```
 
 The same pattern works for ports 8080 and 9023.
+
+### WSL - Ports in use or 'could not translate host name
+
+If you're using WSL, know that different instances of WSL can affect each other. This pertains to docker, docker network, and ports. If you have docker running on one WSL distribution, it could prevent it working here. If you've already stood up the system and are in a weird state follow these steps.
+
+1. Launch all other instances of WSL you have and shutdown docker with
+
+```bash
+sudo systemctl stop docker.socket docker.service
+```
+
+2. Restart docker in the Nation monorepo distro (this won't affect any existing data)
+
+```bash
+docker compose -f docker-compose.yml down --remove-orphans
+sudo systemctl restart docker
+pnpm local:setup
+```
 
 ### Postgres won't start
 
