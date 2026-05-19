@@ -24,6 +24,7 @@ import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { editorProcedure, protectedProcedure } from "../shared";
+import { arrayOrSingle } from "@acme/shared/app/functions";
 
 export const positionRouter = {
   /**
@@ -73,6 +74,12 @@ export const positionRouter = {
             .optional()
             .describe(
               "Search positions by name, description, or org name. Case-insensitive partial matching.",
+            ),
+          /** Filter by active status */
+          statuses: arrayOrSingle(z.enum(["active", "inactive"]))
+            .optional()
+            .describe(
+              "Filter positions by status. Matches positions with ANY of the given statuses.",
             ),
           /** Zero-based page index for pagination */
           pageIndex: z.coerce
@@ -149,7 +156,9 @@ export const positionRouter = {
       const where = and(
         input?.isActive !== undefined
           ? eq(schema.positions.isActive, input.isActive)
-          : eq(schema.positions.isActive, true),
+          : input?.statuses !== undefined
+            ? undefined
+            : eq(schema.positions.isActive, true),
         input?.orgId
           ? or(
               eq(schema.positions.orgId, input.orgId),

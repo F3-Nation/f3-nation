@@ -65,6 +65,7 @@ export const PositionsTable = () => {
       input: {
         isActive: isActiveFilter,
         orgType: selectedOrgLevel || undefined,
+        statuses: selectedStatuses,
         onlyMine: onlyMine || undefined,
         searchTerm: debouncedSearchTerm || undefined,
         pageSize: pagination.pageSize,
