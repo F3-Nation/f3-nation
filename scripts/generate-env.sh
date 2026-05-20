@@ -134,6 +134,7 @@ generate_env() {
 NODE_ENV=development
 
 # -- Local dev server URLs --
+NEXT_PUBLIC_ADMIN_URL=http://localhost:3002
 NEXT_PUBLIC_API_URL=http://localhost:3001
 NEXT_PUBLIC_MAP_URL=http://localhost:3000
 NEXT_PUBLIC_AUTH_URL=http://localhost:3004

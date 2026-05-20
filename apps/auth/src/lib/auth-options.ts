@@ -115,7 +115,7 @@ export const authOptions: NextAuthConfig = {
         session.user.id = String(token.userId);
         session.user.name = String(token.name);
         session.user.email = String(token.email);
-        session.user.image = token.picture as string | undefined;
+        session.user.image = token.picture;
       }
       return {
         ...session,

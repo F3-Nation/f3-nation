@@ -224,3 +224,13 @@ export function isValidEmail(email: string | null | undefined): boolean {
   if (!trimmed) return false;
   return z.string().email().safeParse(trimmed).success;
 }
+
+/**
+ * @param f3Name - F3 name string to validate
+ * @returns boolean indicating if the F3 name is valid (non-empty, 2+ characters)
+ */
+export function isValidF3Name(f3Name: string | null | undefined): boolean {
+  if (typeof f3Name !== "string") return false;
+  const trimmed = f3Name.trim();
+  return trimmed.length >= 3;
+}

@@ -24,7 +24,7 @@ import {
 } from "~/utils/store/modal";
 import textLink from "~/utils/text-link";
 import { ContactLinks } from "../contact-links";
-import { ImageWithFallback } from "../image-with-fallback";
+import { ImageWithFallback } from "@acme/ui/image-with-fallback";
 import { EventChip } from "../map/event-chip";
 import { WorkoutDetailsSkeleton } from "../modal/workout-details-skeleton";
 import { DeletedWorkoutWarning } from "./deleted-workout-warning";

@@ -109,8 +109,8 @@ function buildEventWhereClause(params: {
   const { input, editableOrgIds, isNationAdmin } = params;
 
   return and(
-    !input?.statuses?.length // no statuses provided, default to active
-      ? eq(schema.events.isActive, true)
+    !input?.statuses?.length
+      ? undefined
       : input.statuses.length === IsActiveStatus.length
         ? undefined
         : eq(schema.events.isActive, input.statuses.includes("active")),
