@@ -30,6 +30,7 @@ import {
 } from "@acme/ui/dialog";
 import { toast } from "@acme/ui/toast";
 
+import { env } from "~/env";
 import { useAuth } from "~/utils/hooks/use-auth";
 import { appStore } from "~/utils/store/app";
 import { mapStore } from "~/utils/store/map";
@@ -279,7 +280,11 @@ export default function SettingsModal() {
                   ))}
                 </div>
                 {isEditorOrAdmin && (
-                  <Link href={"/admin"}>
+                  <Link
+                    href={env.NEXT_PUBLIC_ADMIN_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
                     <button
                       className={cn(
                         "flex w-full flex-row items-center justify-center gap-1 rounded-md bg-background p-2 text-foreground shadow-sm hover:bg-accent",

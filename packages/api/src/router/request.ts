@@ -94,6 +94,7 @@ export const requestRouter = {
                 .describe("The name of the old workout"),
               newWorkoutName: z
                 .string()
+                .nullable()
                 .describe("The name of the new workout"),
               oldRegionName: z
                 .string()
@@ -816,7 +817,7 @@ export const requestRouter = {
         submitterValidated: false,
         reviewedBy: null,
         reviewedAt: null,
-        eventMeta: input.eventMeta as EventMeta,
+        eventMeta: input.eventMeta,
       };
 
       const [inserted] = await ctx.db

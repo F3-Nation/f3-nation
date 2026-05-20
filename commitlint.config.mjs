@@ -7,6 +7,7 @@ export default {
       'always',
       [
         // apps
+        'admin',
         'map',
         'me',
 
@@ -20,6 +21,7 @@ export default {
         'mail',
         'shared',
         'sso',
+        'storage',
         'ui',
         'validators',
 
