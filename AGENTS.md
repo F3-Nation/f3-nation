@@ -9,13 +9,17 @@
 
 ## Environment Setup
 
+- **Cross-platform:** All shell scripts use `#!/usr/bin/env bash` and are tested on **macOS** and **WSL 2** (Ubuntu). Windows developers must use WSL 2 — do not run scripts in native Windows shells (cmd, PowerShell). Never write macOS-only commands (`brew`, `open`, `launchctl`) or Windows-only paths without a Linux fallback.
 - Node and pnpm are managed via NVM. The pnpm binary lives at `~/.nvm/versions/node/$(node --version)/bin/pnpm` under the currently active Node version. If `pnpm` is not on `PATH`, prepend that directory to `PATH` or run `. ~/.nvm/nvm.sh && nvm use` before running pnpm commands.
+- The recommended local dev environment uses Docker. Run `pnpm local:setup` once after cloning; see [docs/LOCAL_DEV_DOCKER.md](docs/LOCAL_DEV_DOCKER.md) for setup instructions covering both macOS and WSL 2.
 
 ## Build, Test, and Development Commands
 
+- **First-time setup:** `pnpm local:setup` — copies per-directory `.env` files, starts Docker services, runs migrations, and seeds the database. See [docs/LOCAL_DEV_DOCKER.md](docs/LOCAL_DEV_DOCKER.md) for the full guide.
+- **Docker services:** `pnpm docker:up` to start (Postgres, Adminer, GCS emulator, Mailpit), `pnpm docker:down` to stop.
 - Install dependencies with `pnpm install`. You can scope installations with `--filter <workspace>`.
 - Start development: `pnpm dev --filter f3-nation-map` for the map app, or `pnpm dev` to run all watch tasks.
-- Ensure a populated root `.env` file is present for any scripts relying on `with-env`.
+- Each app and `packages/env` has its own `.env` file (copied from `.env.local.example` by `pnpm local:setup`). Never commit `.env` files.
 - Build with `pnpm build` (or `pnpm build --filter apps/map`), and start production with `pnpm -C apps/map start`.
 - Code quality: always run `pnpm lint` (or `pnpm lint --filter apps/map`) and `pnpm format:fix` to ensure your code passes all lint and formatting checks. Also run `pnpm typecheck` to validate types.
 - Testing:
@@ -41,7 +45,12 @@
 
 ### Driving auth-bounded flows in local dev
 
-Apps that require sign-in (apps/map, apps/me, pax-vault, the-codex, ...) authenticate via `apps/auth`, which uses email-based MFA. In local development the auth server routes mail through [Ethereal](https://ethereal.email/) and emits a public preview URL to its stdout. **No real inbox is involved.** AI agents and CI scripts drive the full sign-in flow by pulling the 6-digit code out of the latest preview email (helper: `scripts/qa/extract-mfa-link.sh --code`) and POSTing it to NextAuth's standard `/api/auth/callback/credentials` endpoint with a CSRF token. The `/api/verify-email` rate limit is bypassed in non-production environments to keep this viable for parallel agent QA.
+Apps that require sign-in (apps/map, apps/me, pax-vault, the-codex, ...) authenticate via `apps/auth`, which uses email-based MFA. **No real inbox is involved.** In local development, outbound email is captured by one of two backends depending on your setup:
+
+- **Docker setup (recommended):** Mailpit captures all mail at `http://localhost:8025`. Read MFA codes from the Mailpit web UI or its REST API.
+- **Non-Docker / GCP setup:** The auth server routes mail through [Ethereal](https://ethereal.email/) and emits a public preview URL to its stdout.
+
+AI agents and CI scripts drive the full sign-in flow by pulling the 6-digit code from the active mail backend and POSTing it to NextAuth's standard `/api/auth/callback/credentials` endpoint with a CSRF token (helper: `scripts/qa/extract-mfa-link.sh --code`). The `/api/verify-email` rate limit is bypassed in non-production environments to keep this viable for parallel agent QA.
 
 Start here:
 
@@ -109,5 +118,5 @@ chore(repo): configure turborepo remote caching
 
 ## Security & Environment
 
-- Store all secrets in a root `.env` file. Always use `with-env` helpers to load environment variables and never commit `.env` files to the repo.
+- Store all secrets in per-directory `.env` files (one per app and `packages/env`). Always use `with-env` helpers to load environment variables and never commit `.env` files to the repo.
 - Scope Sentry/analytics keys per environment and rotate if leaked. Run production DB changes only through scripts in `packages/db`.
