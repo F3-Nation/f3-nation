@@ -183,6 +183,18 @@ const DEV_USERS = [
 ];
 
 // ---------------------------------------------------------------------------
+// API keys (local dev — used by apps/auth to call the API on behalf of users)
+// ---------------------------------------------------------------------------
+
+const LOCAL_API_KEYS = [
+  {
+    key: "local-api-key",
+    name: "Auth Service (local dev)",
+    description: "Used by apps/auth to register new users via the API",
+  },
+];
+
+// ---------------------------------------------------------------------------
 // OAuth clients (local dev — plaintext secret: local-me-client-secret)
 // ---------------------------------------------------------------------------
 
@@ -402,6 +414,7 @@ async function seed() {
   }
 
   // 8. Dev users
+  let adminUserId: number | undefined;
   for (const devUser of DEV_USERS) {
     const { role, ...userData } = devUser;
     await db.insert(schema.users).values(userData).onConflictDoNothing();
@@ -411,6 +424,8 @@ async function seed() {
       .from(schema.users)
       .where(eq(schema.users.email, devUser.email));
     if (!user) continue;
+
+    if (role === "admin") adminUserId = user.id;
 
     const roleId =
       role === "admin"
@@ -425,7 +440,36 @@ async function seed() {
     console.log(`  ✓ Dev user: ${devUser.email} (${role})`);
   }
 
-  // 9. OAuth clients
+  // 9. API keys
+  if (!adminUserId) throw new Error("Admin dev user missing after insert");
+  for (const apiKey of LOCAL_API_KEYS) {
+    const [inserted] = await db
+      .insert(schema.apiKeys)
+      .values({ ...apiKey, ownerId: adminUserId })
+      .onConflictDoNothing()
+      .returning({ id: schema.apiKeys.id });
+
+    // Look up the key id (either just inserted, or already exists)
+    const keyId =
+      inserted?.id ??
+      (
+        await db
+          .select({ id: schema.apiKeys.id })
+          .from(schema.apiKeys)
+          .where(eq(schema.apiKeys.key, apiKey.key))
+          .limit(1)
+      )[0]?.id;
+
+    if (keyId) {
+      await db
+        .insert(schema.rolesXApiKeysXOrg)
+        .values({ apiKeyId: keyId, roleId: editorRole.id, orgId: nationId })
+        .onConflictDoNothing();
+    }
+    console.log(`  ✓ API key: ${apiKey.key}`);
+  }
+
+  // 10. OAuth clients
   for (const client of LOCAL_OAUTH_CLIENTS) {
     await db
       .insert(authSchema.oauthClients)
@@ -434,7 +478,7 @@ async function seed() {
     console.log(`  ✓ OAuth client: ${client.id}`);
   }
 
-  // 10. Reset sequences so auto-increment IDs don't collide with inserted rows
+  // 11. Reset sequences so auto-increment IDs don't collide with inserted rows
   await resetSequences();
 
   console.log("\nLocal seed complete.");
@@ -465,6 +509,15 @@ async function resetSequences() {
   if (maxEventId?.max !== undefined && maxEventId.max > 0) {
     await db.execute(
       sql`SELECT setval('events_id_seq', ${maxEventId.max + 1})`,
+    );
+  }
+
+  const [maxApiKeyId] = await db
+    .select({ max: sql<number>`coalesce(max(${schema.apiKeys.id}), 0)` })
+    .from(schema.apiKeys);
+  if (maxApiKeyId?.max !== undefined && maxApiKeyId.max > 0) {
+    await db.execute(
+      sql`SELECT setval('api_keys_id_seq', ${maxApiKeyId.max + 1})`,
     );
   }
 }

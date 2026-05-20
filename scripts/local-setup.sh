@@ -34,6 +34,23 @@ for dir in apps/api apps/auth apps/map apps/me packages/env; do
   fi
 done
 
+# ── Step 1b: Generate AUTH_JWT_PRIVATE_KEY for apps/auth ─────────────────────
+if grep -q '\.\.\.' apps/auth/.env 2>/dev/null; then
+  if command -v openssl >/dev/null 2>&1; then
+    KEY=$(openssl genrsa 2048 2>/dev/null | \
+          openssl pkcs8 -topk8 -nocrypt -outform PEM | \
+          awk 'NR>1{printf "\\n"} {printf "%s", $0}')
+    KEY="${KEY%\\n}"
+    grep -v '^AUTH_JWT_PRIVATE_KEY=' apps/auth/.env > /tmp/auth_env_tmp
+    printf 'AUTH_JWT_PRIVATE_KEY="%s"\n' "$KEY" >> /tmp/auth_env_tmp
+    mv /tmp/auth_env_tmp apps/auth/.env
+    echo "     Generated AUTH_JWT_PRIVATE_KEY in apps/auth/.env"
+  else
+    echo "     WARNING: openssl not found — AUTH_JWT_PRIVATE_KEY left as placeholder in apps/auth/.env"
+    echo "     Fix manually: openssl genrsa 2048 | openssl pkcs8 -topk8 -nocrypt -outform PEM"
+  fi
+fi
+
 # Safety: refuse to migrate/seed against a non-local database
 if ! grep -q '^DATABASE_URL=postgresql://f3local:f3local@localhost:5433/' packages/env/.env; then
   echo "     ERROR: packages/env/.env DATABASE_URL is not the local Docker Postgres target."
