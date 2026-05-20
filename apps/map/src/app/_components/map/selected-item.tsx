@@ -14,7 +14,7 @@ import {
 } from "~/utils/store/selected-item";
 import textLink from "~/utils/text-link";
 import { isTouchDevice } from "~/utils/touch-device-provider";
-import { ImageWithFallback } from "../image-with-fallback";
+import { ImageWithFallback } from "@acme/ui/image-with-fallback";
 import { EventChip } from "./event-chip";
 
 export const SelectedItem = (props: {

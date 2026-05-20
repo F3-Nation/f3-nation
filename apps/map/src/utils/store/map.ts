@@ -21,6 +21,7 @@ const initialState = {
     longitude: number;
   } | null,
   // bounds: null as google.maps.LatLngBoundsLiteral | null,
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
   center: {
     lat: DEFAULT_CENTER[0],
     lng: DEFAULT_CENTER[1],
