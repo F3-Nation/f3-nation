@@ -25,7 +25,7 @@ echo "  ────────────────────────
 
 # ── Step 1: Copy per-directory env files ─────────────────────────────────────
 echo "  → Copying .env.local.example files..."
-for dir in apps/api apps/auth apps/map apps/me packages/env; do
+for dir in apps/api apps/auth apps/map apps/me apps/admin packages/env; do
   if [ -f "$dir/.env" ]; then
     echo "     $dir/.env already exists, skipping"
   else
@@ -116,7 +116,7 @@ echo "    GCS       → http://localhost:9023"
 echo "    Mailpit   → http://localhost:8025  (all outbound emails land here)"
 echo ""
 echo "  Next steps:"
-echo "    1. Set NEXT_PUBLIC_GOOGLE_API_KEY in apps/map/.env and apps/api/.env"
+echo "    1. Set NEXT_PUBLIC_GOOGLE_API_KEY in apps/map/.env, apps/api/.env, and apps/admin/.env"
 echo "       (map tiles won't load without it)"
 echo "       Get one free at: https://console.cloud.google.com/google/maps-apis/"
 echo ""
