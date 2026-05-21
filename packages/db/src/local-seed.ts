@@ -210,6 +210,17 @@ const LOCAL_OAUTH_CLIENTS = [
     scopes: "openid profile email",
     isActive: true,
   },
+  {
+    id: "f3-admin-local",
+    name: "F3 Admin (local dev)",
+    // SHA-256 of "local-admin-client-secret" — deterministic so it can be committed
+    clientSecretHash:
+      "47c7916194a344bae65495f8eae734a58ad0f37a28449b8f7d6e14535f4246e6",
+    redirectUris: JSON.stringify(["http://localhost:3002/api/auth/callback"]),
+    allowedOrigin: "http://localhost:3002",
+    scopes: "openid profile email",
+    isActive: true,
+  },
 ];
 
 // ---------------------------------------------------------------------------
