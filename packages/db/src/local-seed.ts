@@ -191,6 +191,13 @@ const LOCAL_API_KEYS = [
     key: "local-api-key",
     name: "Auth Service (local dev)",
     description: "Used by apps/auth to register new users via the API",
+    role: "editor" as const,
+  },
+  {
+    key: "local-map-key",
+    name: "Map App (local dev)",
+    description: "Used by apps/map for read-only API access",
+    role: "user" as const,
   },
 ];
 
@@ -472,9 +479,10 @@ async function seed() {
       )[0]?.id;
 
     if (keyId) {
+      const roleId = apiKey.role === "editor" ? editorRole.id : userRole.id;
       await db
         .insert(schema.rolesXApiKeysXOrg)
-        .values({ apiKeyId: keyId, roleId: editorRole.id, orgId: nationId })
+        .values({ apiKeyId: keyId, roleId, orgId: nationId })
         .onConflictDoNothing();
     }
     console.log(`  ✓ API key: ${apiKey.key}`);
