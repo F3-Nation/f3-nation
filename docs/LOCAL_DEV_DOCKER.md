@@ -161,7 +161,7 @@ pnpm local:setup
 This script does everything automatically:
 
 - Copies each directory's `.env.local.example` → `.env` (skips any that already exist):
-  `apps/api`, `apps/auth`, `apps/map`, `apps/me`, and `packages/env`
+  `apps/api`, `apps/auth`, `apps/map`, `apps/me`, `apps/admin`, and `packages/env`
 - Starts the four Docker containers
 - Waits for Postgres to be ready
 - Creates the `f3-public-images` bucket in the GCS emulator
@@ -208,12 +208,13 @@ The above command will install code if you don't have it already and then open y
 pnpm dev
 ```
 
-| App  | URL                   |
-| ---- | --------------------- |
-| Map  | http://localhost:3000 |
-| API  | http://localhost:3001 |
-| Me   | http://localhost:3003 |
-| Auth | http://localhost:3004 |
+| App   | URL                   |
+| ----- | --------------------- |
+| Map   | http://localhost:3000 |
+| API   | http://localhost:3001 |
+| Admin | http://localhost:3002 |
+| Me    | http://localhost:3003 |
+| Auth  | http://localhost:3004 |
 
 ---
 
@@ -258,6 +259,7 @@ Each app and shared package has its own `.env` file, copied from a `.env.local.e
 | `apps/api/.env`     | API app (Next.js on port 3001)                                     |
 | `apps/auth/.env`    | Auth app (Next.js on port 3004)                                    |
 | `apps/map/.env`     | Map app (Next.js on port 3000)                                     |
+| `apps/admin/.env`   | Admin app (Next.js on port 3002)                                   |
 | `apps/me/.env`      | Me app (Next.js on port 3003)                                      |
 | `packages/env/.env` | Shared backend env root (used by `packages/db` and `packages/api`) |
 
@@ -305,12 +307,13 @@ When `GCS_EMULATOR_HOST` is set, the upload route skips Google authentication en
 
 These tell each Next.js app where to find the other apps. Don't change these unless you're running on non-default ports.
 
-| Variable               | Value                   |
-| ---------------------- | ----------------------- |
-| `NEXT_PUBLIC_API_URL`  | `http://localhost:3001` |
-| `NEXT_PUBLIC_MAP_URL`  | `http://localhost:3000` |
-| `NEXT_PUBLIC_AUTH_URL` | `http://localhost:3004` |
-| `NEXT_PUBLIC_CHANNEL`  | `local`                 |
+| Variable                | Value                   |
+| ----------------------- | ----------------------- |
+| `NEXT_PUBLIC_API_URL`   | `http://localhost:3001` |
+| `NEXT_PUBLIC_MAP_URL`   | `http://localhost:3000` |
+| `NEXT_PUBLIC_ADMIN_URL` | `http://localhost:3002` |
+| `NEXT_PUBLIC_AUTH_URL`  | `http://localhost:3004` |
+| `NEXT_PUBLIC_CHANNEL`   | `local`                 |
 
 ### Google Maps
 
@@ -350,8 +353,9 @@ The seed script lives at [packages/db/src/local-seed.ts](../packages/db/src/loca
 
 - An F3 Nation org hierarchy (nation → sectors → areas → regions → AOs)
 - Locations with coordinates centered around Charlotte, NC and Boone, NC
-- Two dev users: `dev-admin@f3local.dev` and `dev-editor@f3local.dev`
+- Three dev users: `dev-admin@f3local.dev`, `dev-editor@f3local.dev`, and `dev-user@f3local.dev`
 - Standard event types (Bootcamp, Run, Ruck, etc.)
+- OAuth clients for the Me app (`f3-me-local`) and the Admin app (`f3-admin-local`)
 
 To add more data:
 
