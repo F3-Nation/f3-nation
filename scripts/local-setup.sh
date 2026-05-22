@@ -25,13 +25,14 @@ echo "  ────────────────────────
 
 # ── Step 1: Copy per-directory env files ─────────────────────────────────────
 echo "  → Copying .env.local.example files..."
+_env_ts=$(date +%Y%m%d%H%M%S)
 for dir in apps/api apps/auth apps/map apps/me apps/admin packages/env; do
   if [ -f "$dir/.env" ]; then
-    echo "     $dir/.env already exists, skipping"
-  else
-    cp "$dir/.env.local.example" "$dir/.env"
-    echo "     $dir/.env created"
+    mv "$dir/.env" "$dir/.env.bak.$_env_ts"
+    echo "     $dir/.env backed up → $dir/.env.bak.$_env_ts"
   fi
+  cp "$dir/.env.local.example" "$dir/.env"
+  echo "     $dir/.env created"
 done
 
 # ── Step 1b: Generate AUTH_JWT_PRIVATE_KEY for apps/auth ─────────────────────
