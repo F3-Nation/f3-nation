@@ -55,7 +55,8 @@
     "lefthook": "catalog:",
     "prettier": "catalog:",
     "turbo": "^1.12.3",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "typescript-eslint": "catalog:"
   },
   "config": {
     "commitizen": {
@@ -83,8 +84,5 @@
       "lefthook",
       "sharp"
     ]
-  },
-  "dependencies": {
-    "typescript-eslint": "catalog:"
   }
 }

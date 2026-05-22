@@ -96,7 +96,7 @@ export function UserSelect({ value, onChange }: UserSelectProps) {
         className="w-full justify-between text-left font-normal"
         onClick={toggle}
         aria-expanded={open}
-        aria-haspopup="listbox"
+        aria-haspopup="true"
         aria-controls="user-list"
         onKeyDown={handleTriggerKeyDown}
       >
@@ -123,10 +123,9 @@ export function UserSelect({ value, onChange }: UserSelectProps) {
       </Button>
 
       {open && (
+        // eslint-disable-next-line jsx-a11y/no-static-element-interactions
         <div
           id="user-list"
-          role="listbox"
-          tabIndex={0}
           className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md"
           onKeyDown={handleListKeyDown}
         >
