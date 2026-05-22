@@ -8,7 +8,7 @@ import { WorkoutList } from '@/components/WorkoutList';
 import { WorkoutFilters } from '@/components/WorkoutFilters';
 import { getMapUrl } from '@/utils/mapUtils';
 import type { MapParameters } from '@/utils/mapUtils';
-import { WorkoutWithRegion } from '@/types/Workout';
+import type { WorkoutWithRegion } from '@/types/Workout';
 import type { RegionEvent } from '@/types/Event';
 import {
   buildEventSlug,

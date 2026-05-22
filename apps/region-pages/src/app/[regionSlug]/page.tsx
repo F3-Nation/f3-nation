@@ -2,7 +2,7 @@
 // Edit app/[regionSlug]/page.tsx
 
 import { notFound } from 'next/navigation';
-import { Metadata } from 'next';
+import type { Metadata } from 'next';
 import {
   fetchRegions,
   fetchWorkoutLocationsByRegion,

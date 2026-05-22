@@ -21,11 +21,11 @@ export interface MapParameters {
     lng: number;
   };
   zoom: number;
-  markers: Array<{
+  markers: {
     lat: number;
     lng: number;
     title: string;
-  }>;
+  }[];
 }
 
 /**
@@ -76,11 +76,11 @@ export function getMapUrl(params: MapParameters): string {
  * @returns Object containing latitude, longitude, and zoom level
  */
 export function calculateMapParameters(
-  workouts: Array<{
+  workouts: {
     latitude?: number | null;
     longitude?: number | null;
     name: string;
-  }>
+  }[]
 ): MapParameters {
   // Filter out workouts without coordinates
   const workoutsWithCoords = workouts.filter(

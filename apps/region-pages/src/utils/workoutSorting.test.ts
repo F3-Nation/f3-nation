@@ -1,6 +1,6 @@
 import { sortWorkoutsByDayAndTime } from './workoutSorting';
-import { WorkoutWithRegion } from '@/types/Workout';
-import { Region } from '@/types/Region';
+import type { WorkoutWithRegion } from '@/types/Workout';
+import type { Region } from '@/types/Region';
 import fixtureData from './__fixtures__/Points.fixture.json';
 
 // Mock current time for consistent testing

@@ -1,4 +1,4 @@
-export type Region = {
+export interface Region {
   id: string;
   name: string;
   description?: string;
@@ -16,4 +16,4 @@ export type Region = {
   latitude?: number;
   longitude?: number;
   zoom?: number;
-};
+}

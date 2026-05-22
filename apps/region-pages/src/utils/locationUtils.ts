@@ -19,10 +19,10 @@ export function extractCityAndState(location: string): string {
     const next = parts[i + 1];
 
     // Skip if current part is a street address
-    if (current.match(/^\d+\s+[A-Za-z]/)) continue;
+    if (/^\d+\s+[A-Za-z]/.exec(current)) continue;
 
     // Look for state pattern (2 letters, possibly followed by zip)
-    const stateMatch = next.match(/^([A-Z]{2})(\s+\d{5})?$/i);
+    const stateMatch = /^([A-Z]{2})(\s+\d{5})?$/i.exec(next);
     if (stateMatch) {
       return `${current}, ${stateMatch[1].toUpperCase()}`;
     }
@@ -34,31 +34,28 @@ export function extractCityAndState(location: string): string {
     const next = parts[i + 1];
 
     // Skip if current part is a street address
-    if (current.match(/^\d+\s+[A-Za-z]/)) continue;
+    if (/^\d+\s+[A-Za-z]/.exec(current)) continue;
 
     // If we have a postal code followed by country
     if (
-      next.match(/^[A-Z0-9\s]+$/i) &&
+      /^[A-Z0-9\s]+$/i.exec(next) &&
       i + 2 < parts.length &&
-      parts[i + 2].match(/^[A-Z]{2}$/i)
+      /^[A-Z]{2}$/i.exec(parts[i + 2])
     ) {
       // Make sure current part is a city (not a street number or postal code)
-      if (
-        !current.match(/^\d+/) &&
-        !current.match(/^[A-Z0-9]+\s*[A-Z0-9]*$/i)
-      ) {
+      if (!/^\d+/.exec(current) && !/^[A-Z0-9]+\s*[A-Z0-9]*$/i.exec(current)) {
         return `${current}, ${parts[i + 2].toUpperCase()}`;
       }
     }
 
     // Direct city and country format
-    if (next.match(/^[A-Z]{2}$/i)) {
+    if (/^[A-Z]{2}$/i.exec(next)) {
       return `${current}, ${next.toUpperCase()}`;
     }
   }
 
   // Third pass: Handle addresses ending with US/United States
-  const usMatch = parts[parts.length - 1].match(/^\s*(US|United States)\s*$/i);
+  const usMatch = /^\s*(US|United States)\s*$/i.exec(parts[parts.length - 1]);
   if (usMatch) {
     const cleanParts = parts.slice(0, -1);
 
@@ -68,10 +65,10 @@ export function extractCityAndState(location: string): string {
       const next = cleanParts[i + 1];
 
       // Skip if current part is a street address
-      if (current.match(/^\d+\s+[A-Za-z]/)) continue;
+      if (/^\d+\s+[A-Za-z]/.exec(current)) continue;
 
       // Look for state pattern
-      const stateMatch = next.match(/^([A-Z]{2})(\s+\d{5})?$/i);
+      const stateMatch = /^([A-Z]{2})(\s+\d{5})?$/i.exec(next);
       if (stateMatch) {
         return `${current}, ${stateMatch[1].toUpperCase()}`;
       }
@@ -80,7 +77,7 @@ export function extractCityAndState(location: string): string {
     // If no state found, try the last two parts
     if (cleanParts.length >= 2) {
       const lastTwo = cleanParts.slice(-2);
-      const stateMatch = lastTwo[1].match(/^([A-Z]{2})(\s+\d{5})?$/i);
+      const stateMatch = /^([A-Z]{2})(\s+\d{5})?$/i.exec(lastTwo[1]);
       if (stateMatch) {
         return `${lastTwo[0]}, ${stateMatch[1].toUpperCase()}`;
       }
@@ -89,12 +86,12 @@ export function extractCityAndState(location: string): string {
 
   // Final pass: Try the last two non-country parts
   const cleanParts = parts.filter(
-    (part) => !part.match(/^\s*(US|United States)\s*$/i)
+    (part) => !/^\s*(US|United States)\s*$/i.exec(part)
   );
 
   if (cleanParts.length >= 2) {
     const lastTwo = cleanParts.slice(-2);
-    const stateMatch = lastTwo[1].match(/^([A-Z]{2})(\s+\d{5})?$/i);
+    const stateMatch = /^([A-Z]{2})(\s+\d{5})?$/i.exec(lastTwo[1]);
     if (stateMatch) {
       return `${lastTwo[0]}, ${stateMatch[1].toUpperCase()}`;
     }

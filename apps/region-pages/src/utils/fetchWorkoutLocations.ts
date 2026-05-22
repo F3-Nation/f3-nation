@@ -1,8 +1,8 @@
 /** @todo refactor lazy `as Region` type coercion */
 
 import { unstable_cache } from 'next/cache';
-import { WorkoutWithRegion } from '@/types/Workout';
-import { Region } from '@/types/Region';
+import type { WorkoutWithRegion } from '@/types/Workout';
+import type { Region } from '@/types/Region';
 import { db } from '../../drizzle/db';
 import { regions, workouts } from '../../drizzle/schema';
 import { ALL_LETTERS, cacheTtl } from '@/lib/const';
@@ -220,7 +220,7 @@ const getCachedRegionWorkouts = unstable_cache(
 
 export const fetchRegions = async (): Promise<Region[]> => {
   const regionsRaw = await getCachedRegions();
-  return regionsRaw.map(normalizeRegionFields) as Region[];
+  return regionsRaw.map(normalizeRegionFields);
 };
 
 export const fetchRegionsByLetter = async (): Promise<
@@ -274,7 +274,7 @@ export const fetchRegionBySlug = async (
     .where(eq(regions.slug, regionSlug))
     .limit(1);
   if (!regionData[0]) return null;
-  return normalizeRegionFields(regionData[0] as Region) as Region;
+  return normalizeRegionFields(regionData[0] as Region);
 };
 
 export const fetchRegionsWithWorkoutCounts = async (): Promise<

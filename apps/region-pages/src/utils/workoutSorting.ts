@@ -1,4 +1,4 @@
-import { WorkoutWithRegion } from '@/types/Workout';
+import type { WorkoutWithRegion } from '@/types/Workout';
 
 // Calendar constants
 export const DAYS_ORDER = [
@@ -25,7 +25,7 @@ const parseStartTime = (time?: string): { hours: number; minutes: number } => {
   }
 
   const start = time.split('-')[0]?.trim() ?? '';
-  const match = start.toUpperCase().match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)/);
+  const match = /(\d{1,2})(?::(\d{2}))?\s*(AM|PM)/.exec(start.toUpperCase());
 
   if (!match) {
     return { hours: 0, minutes: 0 };

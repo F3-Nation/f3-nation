@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { WorkoutCard } from '@/components/WorkoutCard';
-import { WorkoutWithRegion } from '@/types/Workout';
+import type { WorkoutWithRegion } from '@/types/Workout';
 import { DAYS_ORDER } from '@/utils/workoutSorting';
 
 interface WorkoutListProps {

@@ -1,5 +1,6 @@
 import { kebabCase } from 'lodash';
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 import { eq, desc } from 'drizzle-orm';
 
 import { db } from '../../../../drizzle/db';
@@ -396,11 +397,11 @@ export async function POST(request: NextRequest) {
       );
 
       const {
-        regionsPrunedNames: _rpn, // eslint-disable-line @typescript-eslint/no-unused-vars
-        workoutsPrunedItems: _wpi, // eslint-disable-line @typescript-eslint/no-unused-vars
-        regionsSeededNames: _rsn, // eslint-disable-line @typescript-eslint/no-unused-vars
-        workoutRegionBreakdown: _wrb, // eslint-disable-line @typescript-eslint/no-unused-vars
-        skipBreakdown: _sb, // eslint-disable-line @typescript-eslint/no-unused-vars
+        regionsPrunedNames: _rpn,
+        workoutsPrunedItems: _wpi,
+        regionsSeededNames: _rsn,
+        workoutRegionBreakdown: _wrb,
+        skipBreakdown: _sb,
         ...summaryStats
       } = stats;
 

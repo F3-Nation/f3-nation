@@ -4,7 +4,7 @@ import {
   // fetchRegionsByLetter,
 } from '@/utils/fetchWorkoutLocations';
 import { RegionsClient } from '@/components/RegionsClient';
-import { Metadata } from 'next';
+import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { ALL_LETTERS } from '@/lib/const';
 

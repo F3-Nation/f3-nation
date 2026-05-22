@@ -45,3 +45,7 @@ firebase-debug.log
 pr.md.context/**/logs.json
 .context/logs.json
 pr.md
+tsconfig.tsbuildinfo
+pglite-debug.log
+.vscode/
+*.log

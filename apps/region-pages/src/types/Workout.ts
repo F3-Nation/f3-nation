@@ -1,4 +1,4 @@
-import { Region } from '@/types/Region';
+import type { Region } from '@/types/Region';
 
 export interface Workout {
   id: string;

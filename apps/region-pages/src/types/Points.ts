@@ -31,9 +31,7 @@ export interface RawPointData {
   entryId: string;
 }
 
-export type RawPointDataJson = {
-  [K in RawPointDataJsonKeys]: string | number;
-};
+export type RawPointDataJson = Record<RawPointDataJsonKeys, string | number>;
 
 export type RawPointDataJsonKeys =
   | 'Group'

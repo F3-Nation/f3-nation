@@ -1,17 +1,11 @@
 'use client';
 
-import {
-  useState,
-  useEffect,
-  useCallback,
-  useRef,
-  KeyboardEvent,
-  useMemo,
-} from 'react';
+import type { KeyboardEvent } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ALL_LETTERS } from '@/lib/const';
-import { Region } from '@/types/Region';
+import type { Region } from '@/types/Region';
 import { calculateHaversineDistance } from '@/utils/mapUtils';
 
 interface Props {
@@ -530,8 +524,7 @@ export default function SearchableRegionList({
                   {/* Show distance in GPS mode */}
                   {isGpsMode && 'distance' in region && (
                     <div className="text-sm text-blue-600 dark:text-blue-400 mt-1">
-                      {(region as RegionWithDistance).distance.toFixed(1)} miles
-                      away
+                      {region.distance.toFixed(1)} miles away
                     </div>
                   )}
                 </div>

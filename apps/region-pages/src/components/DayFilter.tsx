@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { WorkoutWithRegion } from '@/types/Workout';
+import type { WorkoutWithRegion } from '@/types/Workout';
 
 const DAYS_OF_WEEK = [
   'Sunday',

@@ -1,6 +1,6 @@
 'use client';
 
-import { WorkoutWithRegion } from '@/types/Workout';
+import type { WorkoutWithRegion } from '@/types/Workout';
 import { WorkoutNotes } from './WorkoutNotes';
 
 interface WorkoutCardProps {

@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { DayFilter } from '@/components/DayFilter';
 import { WorkoutTypeFilter } from '@/components/WorkoutTypeFilter';
 import { ClearFiltersButton } from '@/components/ClearFiltersButton';
-import { WorkoutWithRegion } from '@/types/Workout';
+import type { WorkoutWithRegion } from '@/types/Workout';
 
 interface WorkoutFiltersProps {
   workouts: WorkoutWithRegion[];

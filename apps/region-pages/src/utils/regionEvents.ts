@@ -31,7 +31,7 @@ const extractEventIdFromSlug = (slug: string): string | null => {
     return null;
   }
 
-  const match = slug.match(/^[0-9a-fA-F]{6,64}/);
+  const match = /^[0-9a-fA-F]{6,64}/.exec(slug);
   return match ? match[0].toLowerCase() : null;
 };
 
@@ -154,10 +154,7 @@ export const hasEventEnded = (
   return eventDate < comparisonDate;
 };
 
-export const formatEventDate = (
-  date: string,
-  locale: string = 'en-US'
-): string => {
+export const formatEventDate = (date: string, locale = 'en-US'): string => {
   const formatter = new Intl.DateTimeFormat(locale, {
     weekday: 'long',
     month: 'long',
