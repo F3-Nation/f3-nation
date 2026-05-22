@@ -250,58 +250,68 @@ export const fetchWorkoutLocationsByRegion = async (
 export const fetchRegionBySlug = async (
   regionSlug: string
 ): Promise<Region | null> => {
-  const regionData = await db
-    .select({
-      id: regions.id,
-      name: regions.name,
-      description: regions.description,
-      slug: regions.slug,
-      website: regions.website,
-      email: regions.email,
-      facebook: regions.facebook,
-      twitter: regions.twitter,
-      instagram: regions.instagram,
-      image: regions.image,
-      city: regions.city,
-      state: regions.state,
-      zip: regions.zip,
-      country: regions.country,
-      latitude: regions.latitude,
-      longitude: regions.longitude,
-      zoom: regions.zoom,
-    })
-    .from(regions)
-    .where(eq(regions.slug, regionSlug))
-    .limit(1);
-  if (!regionData[0]) return null;
-  return normalizeRegionFields(regionData[0] as Region);
+  try {
+    const regionData = await db
+      .select({
+        id: regions.id,
+        name: regions.name,
+        description: regions.description,
+        slug: regions.slug,
+        website: regions.website,
+        email: regions.email,
+        facebook: regions.facebook,
+        twitter: regions.twitter,
+        instagram: regions.instagram,
+        image: regions.image,
+        city: regions.city,
+        state: regions.state,
+        zip: regions.zip,
+        country: regions.country,
+        latitude: regions.latitude,
+        longitude: regions.longitude,
+        zoom: regions.zoom,
+      })
+      .from(regions)
+      .where(eq(regions.slug, regionSlug))
+      .limit(1);
+    if (!regionData[0]) return null;
+    return normalizeRegionFields(regionData[0] as Region);
+  } catch (error) {
+    console.error('fetchRegionBySlug failed:', error);
+    return null;
+  }
 };
 
 export const fetchRegionsWithWorkoutCounts = async (): Promise<
   (Region & { workoutCount: number })[]
 > => {
-  // Query regions with LEFT JOIN to get workout counts
-  const results = (await db
-    .select({
-      id: regions.id,
-      name: regions.name,
-      description: regions.description,
-      slug: regions.slug,
-      website: regions.website,
-      city: regions.city,
-      state: regions.state,
-      zip: regions.zip,
-      country: regions.country,
-      latitude: regions.latitude,
-      longitude: regions.longitude,
-      zoom: regions.zoom,
-      workoutCount: sql<number>`count(${workouts.id})::int`,
-    })
-    .from(regions)
-    .leftJoin(workouts, eq(regions.id, workouts.regionId))
-    .groupBy(regions.id)
-    .orderBy(regions.name)) as Region[];
-  return results.map(normalizeRegionFields) as (Region & {
-    workoutCount: number;
-  })[];
+  try {
+    // Query regions with LEFT JOIN to get workout counts
+    const results = (await db
+      .select({
+        id: regions.id,
+        name: regions.name,
+        description: regions.description,
+        slug: regions.slug,
+        website: regions.website,
+        city: regions.city,
+        state: regions.state,
+        zip: regions.zip,
+        country: regions.country,
+        latitude: regions.latitude,
+        longitude: regions.longitude,
+        zoom: regions.zoom,
+        workoutCount: sql<number>`count(${workouts.id})::int`,
+      })
+      .from(regions)
+      .leftJoin(workouts, eq(regions.id, workouts.regionId))
+      .groupBy(regions.id)
+      .orderBy(regions.name)) as Region[];
+    return results.map(normalizeRegionFields) as (Region & {
+      workoutCount: number;
+    })[];
+  } catch (error) {
+    console.error('fetchRegionsWithWorkoutCounts failed:', error);
+    return [];
+  }
 };

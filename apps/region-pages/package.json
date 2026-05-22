@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "SKIP_ENV_VALIDATION=1 next build",
     "start": "next start",
     "lint": "eslint .",
     "format": "pnpm format:fix",

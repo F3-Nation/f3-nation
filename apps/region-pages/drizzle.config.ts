@@ -1,14 +1,16 @@
 import { defineConfig } from 'drizzle-kit';
 import { loadEnvConfig } from '@/lib/env';
 
-const { POSTGRES_URL, F3_DATA_WAREHOUSE_URL } = loadEnvConfig();
+const { POSTGRES_URL } = loadEnvConfig();
 
 export default defineConfig({
   schema: './drizzle/schema.ts',
   out: './drizzle/migrations',
   dialect: 'postgresql',
   dbCredentials: {
-    url: POSTGRES_URL,
+    // drizzle-kit receives the real POSTGRES_URL at runtime; `?? ''` only
+    // satisfies typecheck when SKIP_ENV_VALIDATION leaves it undefined.
+    url: POSTGRES_URL ?? '',
   },
   verbose: true,
   strict: true,
