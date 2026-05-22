@@ -13,9 +13,9 @@ import { Client, Header } from "@acme/shared/common/enums";
 import { ACCESS_TOKEN_COOKIE_NAME } from "~/lib/auth/constants";
 
 function requireApiBaseUrl(): string {
-  const value = process.env.F3_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL;
+  const value = process.env.F3_API_BASE_URL;
   if (!value) {
-    throw new Error("F3_API_BASE_URL or NEXT_PUBLIC_API_URL is required");
+    throw new Error("F3_API_BASE_URL is required");
   }
 
   const normalized = value.replace(/\/+$/, "");

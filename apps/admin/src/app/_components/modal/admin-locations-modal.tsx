@@ -6,7 +6,6 @@ import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 
 import { COUNTRIES, DEFAULT_CENTER, Z_INDEX } from "@acme/shared/app/constants";
-import { isProd } from "@acme/shared/common/constants";
 import { safeParseFloat, safeParseInt } from "@acme/shared/common/functions";
 import { cn } from "@acme/ui";
 import { Button } from "@acme/ui/button";
@@ -64,8 +63,12 @@ import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 
 export default function AdminLocationsModal({
   data,
+  googleApiKey,
+  isProd,
 }: {
   data: DataType[ModalType.ADMIN_LOCATIONS];
+  googleApiKey: string;
+  isProd: boolean;
 }) {
   const { data: locationResponse } = useQuery(
     orpc.location.byId.queryOptions({
@@ -330,6 +333,7 @@ export default function AdminLocationsModal({
                   {/* Map shown inline on mobile, right after lat/lng fields */}
                   <div className="mb-4 h-[250px] w-full px-2 md:hidden">
                     <GoogleMapSimple
+                      apiKey={googleApiKey}
                       onCenterChanged={(center) => {
                         form.setValue("latitude", center.lat.toString());
                         form.setValue("longitude", center.lng.toString());
@@ -588,6 +592,7 @@ export default function AdminLocationsModal({
           {/* Map shown as right column on desktop */}
           <div className="hidden md:block md:w-1/2">
             <GoogleMapSimple
+              apiKey={googleApiKey}
               onCenterChanged={(center) => {
                 form.setValue("latitude", center.lat.toString());
                 form.setValue("longitude", center.lng.toString());

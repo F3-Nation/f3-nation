@@ -1,5 +1,3 @@
-"use client";
-
 import type { ReactNode } from "react";
 import Image from "next/image";
 import { Menu } from "lucide-react";
@@ -20,6 +18,7 @@ import {
 } from "@acme/ui/sheet";
 
 import { VersionInfo } from "~/app/_components/version-info";
+import { env } from "~/env";
 import { AdminNavLinks } from "./_components/admin-nav-links";
 import { AdminUserMenu } from "./_components/admin-user-menu";
 
@@ -32,6 +31,9 @@ const Layout = ({
   className?: string;
   title?: string;
 }) => {
+  const channel = env.F3_CHANNEL;
+  const mapUrl = env.F3_MAP_BASE_URL;
+
   return (
     <div className="h-[100vh] w-full overflow-auto">
       <div
@@ -55,7 +57,10 @@ const Layout = ({
                   <SheetTitle>Menu</SheetTitle>
                 </SheetHeader>
                 <div className="flex max-h-[calc(100vh-5rem)] flex-col gap-4 overflow-y-auto py-4">
-                  <AdminNavLinks linkClassName="flex flex-row items-center gap-3 rounded-lg px-3 py-3" />
+                  <AdminNavLinks
+                    mapUrl={mapUrl}
+                    linkClassName="flex flex-row items-center gap-3 rounded-lg px-3 py-3"
+                  />
                   <div className="mt-4 border-t pt-4">
                     <AdminUserMenu />
                   </div>
@@ -74,6 +79,7 @@ const Layout = ({
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-2">
           <AdminNavLinks
+            mapUrl={mapUrl}
             className="flex flex-col"
             linkClassName="flex flex-row items-center gap-1 rounded-lg px-1 py-2"
           />
@@ -81,7 +87,10 @@ const Layout = ({
         {/* User menu and version info */}
         <div className="flex w-full flex-col items-center justify-end gap-2 border-t p-2">
           <AdminUserMenu />
-          <VersionInfo className="mt-2 text-center text-gray-600" />
+          <VersionInfo
+            channel={channel}
+            className="mt-2 text-center text-gray-600"
+          />
         </div>
       </div>
       <div className={`flex flex-col lg:flex-row`}>

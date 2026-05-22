@@ -22,7 +22,16 @@ import { FullImageModal } from "./full-image-modal";
 import { QRCodeModal } from "./qr-code-modal";
 import SignInModal from "./sign-in-modal";
 
-export const ModalSwitcher = () => {
+interface ModalRuntimeConfig {
+  googleApiKey: string;
+  isProd: boolean;
+}
+
+export const ModalSwitcher = ({
+  runtimeConfig,
+}: {
+  runtimeConfig: ModalRuntimeConfig;
+}) => {
   const modal = useOpenModal();
 
   if (!modal) return null;
@@ -56,6 +65,8 @@ export const ModalSwitcher = () => {
     case ModalType.ADMIN_LOCATIONS:
       return (
         <AdminLocationsModal
+          googleApiKey={runtimeConfig.googleApiKey}
+          isProd={runtimeConfig.isProd}
           data={data as DataType[ModalType.ADMIN_LOCATIONS]}
         />
       );
@@ -74,7 +85,12 @@ export const ModalSwitcher = () => {
         <AdminRegionsModal data={data as DataType[ModalType.ADMIN_REGIONS]} />
       );
     case ModalType.ADMIN_AOS:
-      return <AdminAOsModal data={data as DataType[ModalType.ADMIN_AOS]} />;
+      return (
+        <AdminAOsModal
+          isProd={runtimeConfig.isProd}
+          data={data as DataType[ModalType.ADMIN_AOS]}
+        />
+      );
     case ModalType.ADMIN_POSITIONS:
       return (
         <AdminPositionsModal

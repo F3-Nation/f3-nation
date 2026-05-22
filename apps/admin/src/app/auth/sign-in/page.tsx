@@ -1,9 +1,14 @@
 import { getSessionUser } from "~/lib/auth/server";
+import { env } from "~/env";
 
 import { AlreadySignedIn } from "./already-signed-in";
 import { SignIn } from "./sign-in";
 
 export default async function SignInPage() {
   const session = await getSessionUser();
-  return session ? <AlreadySignedIn session={session} /> : <SignIn />;
+  return session ? (
+    <AlreadySignedIn session={session} />
+  ) : (
+    <SignIn channel={env.F3_CHANNEL} />
+  );
 }

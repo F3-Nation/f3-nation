@@ -21,7 +21,7 @@ interface StatePayload {
 }
 
 function getPublicOrigin(): string {
-  return (process.env.NEXT_PUBLIC_ADMIN_URL ?? "http://localhost:3002").replace(
+  return (process.env.F3_ADMIN_BASE_URL ?? "http://localhost:3002").replace(
     /\/+$/,
     "",
   );

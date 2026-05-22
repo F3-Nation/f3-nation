@@ -4,14 +4,17 @@ import type { HTMLAttributes } from "react";
 
 import { VersionInfo as VersionInfoBase } from "@acme/ui/version-info";
 
-import { env } from "~/env";
 import packageJson from "../../../package.json";
 
-export const VersionInfo = (props: HTMLAttributes<HTMLSpanElement>) => {
+interface VersionInfoProps extends HTMLAttributes<HTMLSpanElement> {
+  channel: string;
+}
+
+export const VersionInfo = ({ channel, ...props }: VersionInfoProps) => {
   return (
     <VersionInfoBase
       versionLabel={<span>v{packageJson.version}</span>}
-      channel={env.NEXT_PUBLIC_CHANNEL}
+      channel={channel}
       {...props}
     />
   );
