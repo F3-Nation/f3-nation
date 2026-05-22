@@ -64,23 +64,10 @@ jobs:
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
-      - name: Fetch secrets from GCP Secret Manager
-        id: secrets
-        run: |
-          gcloud secrets versions access latest --secret="NEXT_PUBLIC_GOOGLE_API_KEY" --project="${{ env.STAGING_PROJECT }}" > /tmp/google_api_key.txt
-          echo "::add-mask::$(cat /tmp/google_api_key.txt)"
-          GOOGLE_API_KEY=$(cat /tmp/google_api_key.txt)
-          echo "google_api_key=${GOOGLE_API_KEY}" >> "$GITHUB_OUTPUT"
-
       - name: Build and push Docker image
         run: |
           docker build \
             --file apps/admin/Dockerfile \
-            --build-arg NEXT_PUBLIC_CHANNEL=staging \
-            --build-arg NEXT_PUBLIC_API_URL=https://staging.api.f3nation.com \
-            --build-arg NEXT_PUBLIC_MAP_URL=https://staging.map.f3nation.com \
-            --build-arg NEXT_PUBLIC_ADMIN_URL=https://staging.admin.f3nation.com \
-            --build-arg NEXT_PUBLIC_GOOGLE_API_KEY="${{ steps.secrets.outputs.google_api_key }}" \
             --tag "${{ steps.meta.outputs.image }}" \
             .
           docker push "${{ steps.meta.outputs.image }}"
