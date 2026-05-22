@@ -50,8 +50,8 @@ export function TouchDeviceProvider({ children }: { children: ReactNode }) {
     // Primary check for touch capability
     const hasTouch = Boolean(
       "ontouchstart" in window ||
-        // @ts-expect-error - DocumentTouch is not recognized by TypeScript
-        (window.DocumentTouch && document instanceof DocumentTouch),
+      // @ts-expect-error - DocumentTouch is not recognized by TypeScript
+      (window.DocumentTouch && document instanceof DocumentTouch),
     );
 
     // Only set up listeners if touch capability is detected

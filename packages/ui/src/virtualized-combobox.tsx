@@ -201,7 +201,7 @@ export function VirtualizedCombobox<T>({
 }: VirtualizedComboboxProps<T>) {
   const [open, setOpen] = useState<boolean>(false);
   const [selectedOptions, setSelectedOptions] = useState<string[]>(
-    typeof value === "string" ? [value] : value ?? [],
+    typeof value === "string" ? [value] : (value ?? []),
   );
   const valueToLabel = useMemo(() => {
     return options.reduce(
@@ -216,7 +216,7 @@ export function VirtualizedCombobox<T>({
   const [buttonWidth, setButtonWidth] = useState(0);
 
   useEffect(() => {
-    setSelectedOptions(typeof value === "string" ? [value] : value ?? []);
+    setSelectedOptions(typeof value === "string" ? [value] : (value ?? []));
   }, [value]);
 
   const handleSelect = (currentValue: string) => {

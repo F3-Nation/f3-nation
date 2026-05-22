@@ -24,7 +24,6 @@ This is the F3 Nation Map application, an interactive map for F3 Nation location
    ```
 
 3. **Environment setup**:
-
    - Get env.zip from F3 Nation Slack
    - Unzip and rename to `.env`
    - Place the `.env` file in this directory (`apps/map/.env`)
