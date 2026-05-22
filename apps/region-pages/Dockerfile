@@ -45,7 +45,7 @@ RUN --mount=type=secret,id=postgres_url \
     --mount=type=secret,id=warehouse_url \
     POSTGRES_URL="$(cat /run/secrets/postgres_url 2>/dev/null)" \
     F3_DATA_WAREHOUSE_URL="$(cat /run/secrets/warehouse_url 2>/dev/null)" \
-    pnpm turbo build --filter=f3-region-pages
+    pnpm --filter=f3-region-pages run build
 
 FROM --platform=linux/amd64 node:24-alpine AS runner
 RUN apk add --no-cache libc6-compat openssl && apk update
