@@ -34,7 +34,7 @@ REGION="us-east1"
 # Env vars that map to GCP secrets (var name -> secret ID).
 # Only genuinely sensitive values go here.
 declare -A SECRET_MAP=(
-  [NEXT_PUBLIC_GOOGLE_API_KEY]="NEXT_PUBLIC_GOOGLE_API_KEY"
+  [F3_GOOGLE_API_KEY]="NEXT_PUBLIC_GOOGLE_API_KEY"
   [OAUTH_CLIENT_SECRET]="OAUTH_CLIENT_SECRET"
   [GCS_CREDENTIALS]="GCS_CREDENTIALS"
 )
@@ -44,14 +44,14 @@ declare -A SECRET_MAP=(
 ENV_FILE_VARS=(
   AUTH_PROVIDER_URL
   F3_API_BASE_URL
-  NEXT_PUBLIC_ADMIN_URL
-  NEXT_PUBLIC_API_URL
-  NEXT_PUBLIC_MAP_URL
-  NEXT_PUBLIC_CHANNEL
+  F3_ADMIN_BASE_URL
+  F3_MAP_BASE_URL
+  F3_CHANNEL
   OAUTH_CLIENT_ID
   OAUTH_REDIRECT_URI
   GCS_BUCKET
 )
+
 
 # Plain env vars (hardcoded, same across environments).
 declare -A PLAIN_VARS=(

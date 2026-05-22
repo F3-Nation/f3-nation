@@ -1,9 +1,7 @@
-"use client";
-
 import Layout from "../admin-layout";
 import { EmailTestForm } from "./email-test-form";
 
-const EmailTestPage = () => {
+export default function EmailTestPage() {
   return (
     <Layout title="Email Template Test">
       <div className="flex flex-col gap-6">
@@ -20,6 +18,4 @@ const EmailTestPage = () => {
       </div>
     </Layout>
   );
-};
-
-export default EmailTestPage;
+}

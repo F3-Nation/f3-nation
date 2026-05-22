@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -20,12 +22,12 @@ import {
 import { routes } from "@acme/shared/app/constants";
 import { cn } from "@acme/ui";
 
-import { env } from "~/env";
 import { useAuth } from "~/utils/hooks/use-auth";
 
 interface AdminNavLinksProps {
   className?: string;
   linkClassName?: string;
+  mapUrl: string;
   sectionClassName?: string;
 }
 
@@ -47,6 +49,7 @@ type NavLink =
 export const AdminNavLinks = ({
   className,
   linkClassName,
+  mapUrl,
   sectionClassName,
 }: AdminNavLinksProps) => {
   const pathname = usePathname();
@@ -138,7 +141,7 @@ export const AdminNavLinks = ({
       type: "section",
     },
     {
-      href: env.NEXT_PUBLIC_MAP_URL,
+      href: mapUrl,
       icon: MapPin,
       label: "Map",
       type: "link",

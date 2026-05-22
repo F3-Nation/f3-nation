@@ -43,7 +43,7 @@ function clearAuthCookies(response: NextResponse): void {
 
 function getAdminOrigin(request: NextRequest): string {
   return (
-    process.env.NEXT_PUBLIC_ADMIN_URL ??
+    process.env.F3_ADMIN_BASE_URL ??
     `${request.headers.get("x-forwarded-proto") ?? request.nextUrl.protocol.replace(":", "")}://${request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? request.nextUrl.host}`
   ).replace(/\/+$/, "");
 }
