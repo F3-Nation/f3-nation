@@ -8,7 +8,7 @@ import { getOAuthConfig, revokeToken } from "~/lib/auth/oauth";
 function getLogoutUrl(): string {
   const { authServerUrl } = getOAuthConfig();
   const siteUrl = (
-    process.env.NEXT_PUBLIC_ADMIN_URL ?? "http://localhost:3002"
+    process.env.F3_ADMIN_BASE_URL ?? "http://localhost:3002"
   ).replace(/\/+$/, "");
   const postLogoutRedirectUri = `${siteUrl}/auth/sign-in?logged_out=true`;
 

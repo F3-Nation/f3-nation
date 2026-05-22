@@ -1,5 +1,3 @@
-"use client";
-
 import Image from "next/image";
 
 import { VersionInfo } from "~/app/_components/version-info";
@@ -7,7 +5,9 @@ import { env } from "~/env";
 import { AuthWrapper } from "../components/auth-components";
 
 export default function VerifyRequestPage() {
-  const url = new URL(env.NEXT_PUBLIC_MAP_URL);
+  const url = new URL(env.F3_MAP_BASE_URL);
+  const channel = env.F3_CHANNEL;
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col items-center">
@@ -38,7 +38,7 @@ export default function VerifyRequestPage() {
         </div>
       </AuthWrapper>
       <div className="my-4 flex w-full justify-center">
-        <VersionInfo />
+        <VersionInfo channel={channel} />
       </div>
     </div>
   );
