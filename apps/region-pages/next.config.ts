@@ -8,6 +8,12 @@ const nextConfig: NextConfig = {
   // In the monorepo, trace the workspace ROOT so the standalone bundle includes
   // the hoisted node_modules (two levels up from apps/region-pages).
   outputFileTracingRoot: path.join(__dirname, '../../'),
+  eslint: {
+    // Lint runs as a separate monorepo task (`turbo lint` / `pnpm lint` uses the
+    // app's own eslint.config.mjs). Skipping it during `next build` avoids the
+    // eslint-config-next vs monorepo-eslint version conflict at build time.
+    ignoreDuringBuilds: true,
+  },
   images: {
     remotePatterns: [
       {

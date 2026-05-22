@@ -357,7 +357,7 @@ async function fetchWorkoutsBatch(args: FetchBatchArgs): Promise<BatchResult> {
     new Set(
       baseRows
         .map((row) => row.locationId)
-        .filter((locationId) => locationId !== null)
+        .filter((locationId): locationId is number => locationId !== null)
     )
   );
 

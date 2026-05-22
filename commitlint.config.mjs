@@ -10,6 +10,7 @@ export default {
         'admin',
         'map',
         'me',
+        'region-pages',
 
         // apps & packages (exist in both apps/ and packages/)
         'api',

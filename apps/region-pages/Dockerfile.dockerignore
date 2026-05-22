@@ -1,0 +1,24 @@
+# Dockerfile-scoped ignore (BuildKit uses <dockerfile>.dockerignore) for the
+# region-pages monorepo build. Context is the monorepo root; we only need source
+# + workspace manifests (turbo prune installs deps fresh), so exclude all
+# node_modules / build artifacts / secrets to keep the context small.
+**/node_modules
+**/.next
+**/.turbo
+**/.expo
+**/.output
+**/.vercel
+.git
+**/coverage
+**/.cache
+**/dist
+**/.DS_Store
+# secrets / local env (never ship these in the context)
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.*.sample
+.secrets
+**/terraform.tfvars
+**/*.tfstate*
+**/.terraform

@@ -49,6 +49,11 @@
     },
     "build": {
       "dependsOn": ["^build"],
+      "passThroughEnv": [
+        "POSTGRES_URL",
+        "F3_DATA_WAREHOUSE_URL",
+        "WAREHOUSE_DB_CONNECTION_MODE"
+      ],
       "outputs": [
         ".next/**",
         "!.next/cache/**",
