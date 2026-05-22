@@ -22,7 +22,7 @@ export function UserSelect({ value, onChange }: UserSelectProps) {
   });
   // TODO: dropdownRef — reserved for click-outside detection or focus management
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const [focusedIndex, setFocusedIndex] = useState(-1);
+  const [_focusedIndex, setFocusedIndex] = useState(-1);
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   const clearOffset = value !== null ? 1 : 0;
@@ -125,6 +125,8 @@ export function UserSelect({ value, onChange }: UserSelectProps) {
       {open && (
         <div
           id="user-list"
+          role="listbox"
+          tabIndex={0}
           className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md"
           onKeyDown={handleListKeyDown}
         >

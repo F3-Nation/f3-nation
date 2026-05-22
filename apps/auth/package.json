@@ -48,7 +48,7 @@
     "dotenv-cli": "^7.3.0",
     "eslint": "catalog:",
     "postcss": "^8.4.35",
-    "prettier": "^3.2.5",
+    "prettier": "catalog:",
     "tailwindcss": "^3.4.1",
     "tsx": "^4.7.1",
     "typescript": "catalog:",

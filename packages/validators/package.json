@@ -25,7 +25,7 @@
     "@acme/prettier-config": "workspace:*",
     "@acme/tsconfig": "workspace:*",
     "eslint": "catalog:",
-    "prettier": "^3.2.5",
+    "prettier": "catalog:",
     "typescript": "catalog:"
   },
   "prettier": "@acme/prettier-config"

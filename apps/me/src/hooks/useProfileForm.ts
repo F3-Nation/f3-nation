@@ -46,7 +46,7 @@ export function parseMeta(
   meta: string | Record<string, unknown> | null,
 ): UserMeta {
   if (!meta) return {};
-  if (typeof meta === "object") return meta as UserMeta;
+  if (typeof meta === "object") return meta;
   try {
     return JSON.parse(meta) as UserMeta;
   } catch {
@@ -215,6 +215,7 @@ export function useProfileForm({
     const fresh = buildInitialFormState(user);
     setForm(fresh);
     setInitialForm(fresh);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally syncs only on user.id change (navigation between users), not on every user object update
   }, [user.id]);
 
   // Keep a stable ref to handleSave for the context registration
