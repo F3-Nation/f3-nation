@@ -1,0 +1,23 @@
+CREATE TABLE IF NOT EXISTS "ingest_runs" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"started_at" timestamp NOT NULL,
+	"completed_at" timestamp,
+	"status" varchar(20) NOT NULL,
+	"duration_sec" integer,
+	"regions_pruned" integer,
+	"workouts_pruned" integer,
+	"regions_seeded" integer,
+	"regions_skipped_fresh" integer,
+	"workouts_seeded" integer,
+	"workouts_skipped" integer,
+	"workout_batches" integer,
+	"workouts_skipped_fresh" integer,
+	"workouts_skipped_missing_type" integer,
+	"workouts_skipped_missing_ao" integer,
+	"workouts_skipped_missing_region" integer,
+	"workouts_skipped_missing_location" integer,
+	"workouts_skipped_missing_group" integer,
+	"regions_enriched" integer,
+	"error_message" text,
+	"workout_region_breakdown" text
+);

@@ -1,0 +1,33 @@
+project_id                      = "region-pages"
+region                          = "us-central1"
+artifact_registry_repository_id = "f3-region-pages"
+service_name                    = "f3-region-pages"
+
+# Set after building and pushing the image (see README).
+image = "us-central1-docker.pkg.dev/region-pages/f3-region-pages/web:v1"
+
+# Set to the custom domain to build the external HTTPS load balancer (serverless
+# NEG + Google-managed cert). Leave empty to skip the LB entirely. When set, the
+# `load_balancer_ip` / `dns_handoff` outputs give Tackle the A record to create.
+service_domain = "regions.f3nation.com"
+
+min_instance_count = 0
+max_instance_count = 4
+cpu                = "1"
+memory             = "512Mi"
+
+# Recreated runtime secrets, keyed by their logical (Firebase) names. Seed these
+# from the existing Firebase-managed secrets:
+#   gcloud secrets versions access latest --secret=postgres-url --project=region-pages
+# DO NOT COMMIT real values — terraform.tfvars is gitignored.
+secret_values = {
+  "postgres-url"                        = "REPLACE_ME"
+  "f3-data-warehouse-url"               = "REPLACE_ME"
+  "cloud-sql-warehouse-connection-name" = "REPLACE_ME"
+  "warehouse-db-user"                   = "REPLACE_ME"
+  "warehouse-db-password"               = "REPLACE_ME"
+  "warehouse-db-name"                   = "REPLACE_ME"
+  "cron-secret"                         = "REPLACE_ME"
+  "slack-bot-auth-token"                = "REPLACE_ME"
+  "slack-channel-id"                    = "REPLACE_ME"
+}

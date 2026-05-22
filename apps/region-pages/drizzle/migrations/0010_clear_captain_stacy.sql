@@ -1,0 +1,1 @@
+ALTER TABLE "ingest_runs" ADD COLUMN "workouts_deduplicated" integer;

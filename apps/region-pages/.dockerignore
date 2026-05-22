@@ -1,0 +1,16 @@
+node_modules
+.next
+.git
+.github
+.env
+.env.*
+!.env.example
+npm-debug.log*
+firebase-debug.log*
+firebase-debug.*.log
+.firebase
+infra
+coverage
+.DS_Store
+*.local
+.secrets

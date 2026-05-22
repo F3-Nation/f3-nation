@@ -1,0 +1,10 @@
+# Real variable values (including secrets) — never commit.
+terraform.tfvars
+*.auto.tfvars
+
+# Terraform working state.
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+crash.log

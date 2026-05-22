@@ -1,0 +1,10 @@
+# Ignore build directories
+.next
+node_modules
+drizzle/migrations
+
+# Ignore other common files
+*.min.js
+*.bundle.js
+*.map 
+pnpm-lock.yaml
