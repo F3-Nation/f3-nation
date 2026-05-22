@@ -26,6 +26,8 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"
+    volumes:
+      - ./scripts/docker/adminer-plugins.php:/var/www/html/index.php:ro
     depends_on:
       postgres:
         condition: service_healthy

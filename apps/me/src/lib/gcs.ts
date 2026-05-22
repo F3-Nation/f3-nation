@@ -2,6 +2,8 @@ import "server-only";
 import { Storage } from "@google-cloud/storage";
 import sharp from "sharp";
 
+const emulatorHost = process.env.GCS_EMULATOR_HOST;
+
 let storageClient: Storage | null = null;
 
 function getStorage(): Storage {
@@ -50,8 +52,30 @@ export async function uploadAvatar(
     throw new Error(`Failed to process avatar image: ${message}`);
   }
 
-  const bucket = getStorage().bucket(bucketName);
   const path = `user-avatars/${userId}.jpg`;
+
+  if (emulatorHost) {
+    const response = await fetch(
+      `http://${emulatorHost}/upload/storage/v1/b/${bucketName}/o?uploadType=media&name=${path}`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer local-dev-token",
+          "Content-Type": "image/jpeg",
+        },
+        body: jpeg,
+      },
+    );
+    if (!response.ok) {
+      const body = await response.text().catch(() => "(unreadable)");
+      throw new Error(
+        `GCS emulator upload failed: HTTP ${response.status} ${body}`,
+      );
+    }
+    return `http://${emulatorHost}/${bucketName}/${path}`;
+  }
+
+  const bucket = getStorage().bucket(bucketName);
   const blob = bucket.file(path);
 
   await blob.save(jpeg, {
@@ -73,6 +97,22 @@ export async function deleteAvatar(userId: number): Promise<void> {
   if (!bucketName) throw new Error("GCS_BUCKET is not set");
 
   const path = `user-avatars/${userId}.jpg`;
+
+  if (emulatorHost) {
+    const encodedPath = encodeURIComponent(path);
+    const response = await fetch(
+      `http://${emulatorHost}/storage/v1/b/${bucketName}/o/${encodedPath}`,
+      {
+        method: "DELETE",
+        headers: { Authorization: "Bearer local-dev-token" },
+      },
+    );
+    if (!response.ok && response.status !== 404) {
+      throw new Error(`GCS emulator delete failed: HTTP ${response.status}`);
+    }
+    return;
+  }
+
   await getStorage()
     .bucket(bucketName)
     .file(path)
