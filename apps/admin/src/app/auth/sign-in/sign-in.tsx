@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { VersionInfo } from "~/app/_components/version-info";
 import { AuthContent } from "../components/auth-components";
 
-export const SignIn = () => {
+export const SignIn = ({ channel }: { channel: string }) => {
   const searchParams = useSearchParams();
   const callbackUrl =
     searchParams.get("callbackUrl") ?? searchParams.get("returnTo") ?? "/";
@@ -19,7 +19,7 @@ export const SignIn = () => {
       </div>
       <AuthContent callbackUrl={callbackUrl} withWrapper={true} />
       <div className="my-4 flex w-full justify-center">
-        <VersionInfo />
+        <VersionInfo channel={channel} />
       </div>
     </div>
   );

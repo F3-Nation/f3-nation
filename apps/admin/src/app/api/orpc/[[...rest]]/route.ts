@@ -9,10 +9,8 @@ import { getAccessToken } from "~/lib/auth/server";
 const PROXY_PREFIX = "/api/orpc";
 
 function getApiBaseUrl(): string {
-  const baseUrl =
-    process.env.F3_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL;
-  if (!baseUrl)
-    throw new Error("F3_API_BASE_URL or NEXT_PUBLIC_API_URL is required");
+  const baseUrl = process.env.F3_API_BASE_URL;
+  if (!baseUrl) throw new Error("F3_API_BASE_URL is required");
 
   const normalized = baseUrl.replace(/\/+$/, "");
   return normalized.endsWith(API_PREFIX_V1)

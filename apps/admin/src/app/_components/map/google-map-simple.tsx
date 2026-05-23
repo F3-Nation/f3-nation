@@ -1,23 +1,28 @@
+"use client";
+
 import { APIProvider, Map, Marker, useMap } from "@vis.gl/react-google-maps";
 import { useEffect } from "react";
 
 import { DEFAULT_CENTER } from "@acme/shared/app/constants";
 
-import { env } from "~/env";
-
-interface GoogleMapSimpleProps {
+interface ProvidedGoogleMapSimpleProps {
   latitude: number | undefined;
   longitude: number | undefined;
   onCenterChanged?: (position: google.maps.LatLngLiteral) => void;
 }
 
+interface GoogleMapSimpleProps extends ProvidedGoogleMapSimpleProps {
+  apiKey: string;
+}
+
 export const GoogleMapSimple = ({
+  apiKey,
   latitude,
   longitude,
   onCenterChanged,
 }: GoogleMapSimpleProps) => {
   return (
-    <APIProvider apiKey={env.NEXT_PUBLIC_GOOGLE_API_KEY}>
+    <APIProvider apiKey={apiKey}>
       <ProvidedGoogleMapSimple
         latitude={latitude}
         longitude={longitude}
@@ -31,7 +36,7 @@ const ProvidedGoogleMapSimple = ({
   latitude,
   longitude,
   onCenterChanged,
-}: GoogleMapSimpleProps) => {
+}: ProvidedGoogleMapSimpleProps) => {
   const map = useMap();
 
   useEffect(() => {

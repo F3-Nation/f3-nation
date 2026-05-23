@@ -11,6 +11,7 @@ import { TooltipProvider } from "@acme/ui/tooltip";
 import "~/app/globals.css";
 
 import { ModalSwitcher } from "~/app/_components/modal/modal-switcher";
+import { env } from "~/env";
 import { AdminSessionProvider } from "~/lib/auth/client";
 import { getSessionUser, requireAdminPortalAccess } from "~/lib/auth/server";
 import { OrpcReactProvider } from "~/orpc/react";
@@ -31,6 +32,11 @@ export default async function RootLayout(props: { children: React.ReactNode }) {
   const requestHeaders = await headers();
   const protectedPathname = requestHeaders.get("x-admin-pathname");
   const initialSession = await getSessionUser();
+  const runtimeConfig = {
+    googleApiKey: env.F3_GOOGLE_API_KEY,
+    isProd: env.F3_CHANNEL === "prod",
+  };
+
   if (protectedPathname) {
     await requireAdminPortalAccess(initialSession);
   }
@@ -55,7 +61,7 @@ export default async function RootLayout(props: { children: React.ReactNode }) {
                 {props.children}
               </TooltipProvider>
               <Toaster />
-              <ModalSwitcher />
+              <ModalSwitcher runtimeConfig={runtimeConfig} />
             </ThemeProvider>
           </OrpcReactProvider>
         </AdminSessionProvider>

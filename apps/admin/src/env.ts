@@ -2,35 +2,26 @@ import { createEnv } from "@t3-oss/env-nextjs";
 import { z } from "zod";
 
 export const env = createEnv({
-  shared: {
+  server: {
     NODE_ENV: z
       .enum(["development", "production", "test"])
       .default("development"),
     VERCEL_ENV: z.enum(["development", "preview", "production"]).optional(),
-    NEXT_PUBLIC_CHANNEL: z.enum([
-      "local",
-      "ci",
-      "branch",
-      "dev",
-      "staging",
-      "prod",
-    ]),
+    F3_CHANNEL: z.enum(["local", "ci", "branch", "dev", "staging", "prod"]),
+    F3_MAP_BASE_URL: z.string().min(1),
+    F3_API_BASE_URL: z.string().min(1),
+    F3_ADMIN_BASE_URL: z.string().min(1),
+    F3_GOOGLE_API_KEY: z.string().min(1),
   },
-  server: {},
-  client: {
-    NEXT_PUBLIC_MAP_URL: z.string().min(1),
-    NEXT_PUBLIC_API_URL: z.string().min(1),
-    NEXT_PUBLIC_ADMIN_URL: z.string().min(1),
-    NEXT_PUBLIC_GOOGLE_API_KEY: z.string().min(1),
-  },
+  client: {},
   experimental__runtimeEnv: {
-    NEXT_PUBLIC_MAP_URL: process.env.NEXT_PUBLIC_MAP_URL,
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
-    NEXT_PUBLIC_ADMIN_URL: process.env.NEXT_PUBLIC_ADMIN_URL,
-    NEXT_PUBLIC_GOOGLE_API_KEY: process.env.NEXT_PUBLIC_GOOGLE_API_KEY,
+    F3_CHANNEL: process.env.F3_CHANNEL,
+    F3_MAP_BASE_URL: process.env.F3_MAP_BASE_URL,
+    F3_API_BASE_URL: process.env.F3_API_BASE_URL,
+    F3_ADMIN_BASE_URL: process.env.F3_ADMIN_BASE_URL,
+    F3_GOOGLE_API_KEY: process.env.F3_GOOGLE_API_KEY,
     VERCEL_ENV: process.env.VERCEL_ENV,
     NODE_ENV: process.env.NODE_ENV,
-    NEXT_PUBLIC_CHANNEL: process.env.NEXT_PUBLIC_CHANNEL,
   },
   skipValidation:
     !!process.env.CI ||

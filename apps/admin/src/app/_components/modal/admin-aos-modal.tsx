@@ -39,7 +39,6 @@ import { toast } from "@acme/ui/toast";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 import { AOInsertSchema } from "@acme/validators";
 
-import { env } from "~/env";
 import { invalidateQueries, orpc, useMutation, useQuery } from "~/orpc/react";
 import { uploadLogo } from "~/utils/image/upload-logo";
 import type { DataType } from "~/utils/store/modal";
@@ -53,8 +52,10 @@ import { DebouncedImage } from "../debounced-image";
 
 export default function AdminAOsModal({
   data,
+  isProd,
 }: {
   data: DataType[ModalType.ADMIN_AOS];
+  isProd: boolean;
 }) {
   const { data: aoResponse } = useQuery(
     orpc.org.byId.queryOptions({
@@ -494,7 +495,7 @@ export default function AdminAOsModal({
                     )}
                   </Button>
                   {/* in dev mode, show a button to preload values */}
-                  {env.NEXT_PUBLIC_CHANNEL !== "prod" ? (
+                  {!isProd ? (
                     <Button
                       type="button"
                       className="w-full bg-black hover:bg-black/80"
