@@ -215,7 +215,7 @@ export function useProfileForm({
     const fresh = buildInitialFormState(user);
     setForm(fresh);
     setInitialForm(fresh);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally syncs only on user.id change (navigation between users), not on every user object update; accepted trade-off: if user.id is unchanged but other fields change (e.g. a background refresh updates f3Name/avatarUrl), the form will not re-run and may silently lag
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync on user.id only; f3Name/avatarUrl updates won't re-trigger (accepted trade-off)
   }, [user.id]);
 
   // Keep a stable ref to handleSave for the context registration
