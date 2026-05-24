@@ -13,12 +13,17 @@ export const POST = async (req: NextRequest) => {
     return NextResponse.json({ success: false }, { status: 401 });
   }
 
-  await sendVerificationRequest({
-    identifier,
-    url,
-    server,
-    from,
-    token,
-  });
-  return NextResponse.json({ success: true });
+  try {
+    await sendVerificationRequest({
+      identifier,
+      url,
+      server,
+      from,
+      token,
+    });
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    console.error("sendVerificationRequest failed:", err);
+    return NextResponse.json({ success: false }, { status: 500 });
+  }
 };
