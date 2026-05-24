@@ -15,6 +15,12 @@ const nextConfig: NextConfig = {
         pathname: "/f3-public-images-staging/**",
       },
       {
+        protocol: "http",
+        hostname: "localhost",
+        port: "9023",
+        pathname: "/f3-public-images/**",
+      },
+      {
         protocol: "https",
         hostname: "avatars.slack-edge.com",
       },
