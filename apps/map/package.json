@@ -18,7 +18,7 @@
     "test:e2e:debug": "pnpm with-env playwright test --debug",
     "test:e2e:ui": "pnpm with-env playwright test --ui",
     "test:e2e:report": "pnpm with-env playwright show-report",
-    "with-env": "dotenv -e ../../.env --"
+    "with-env": "dotenv -e .env --"
   },
   "dependencies": {
     "@acme/api": "workspace:^0.2.0",

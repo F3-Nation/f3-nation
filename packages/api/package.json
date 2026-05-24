@@ -16,7 +16,7 @@
     "test:org-hierarchy": "pnpm with-env tsx src/scripts/test-org-hierarchy.ts",
     "test:watch": "pnpm with-env vitest -w",
     "typecheck": "tsc --noEmit",
-    "with-env": "dotenv -e ../../.env --"
+    "with-env": "dotenv -e ../env/.env --"
   },
   "dependencies": {
     "@acme/auth": "workspace:^0.1.0",

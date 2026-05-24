@@ -5,7 +5,6 @@ import { env } from "@acme/env";
 
 export async function POST(request: Request) {
   try {
-    // Get the file from the request
     const formData = await request.formData();
     const file = formData.get("file") as File;
     const orgId = formData.get("orgId") as string;
@@ -16,32 +15,40 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
-    // Initialize Google Auth
-    const auth = new GoogleAuth({
-      credentials: {
-        private_key: env.GOOGLE_LOGO_BUCKET_PRIVATE_KEY.replace(
-          /\\\n/g,
-          "\n",
-        ).replace(/\\n/g, "\n"),
-        client_email: env.GOOGLE_LOGO_BUCKET_CLIENT_EMAIL,
-      },
-      scopes: ["https://www.googleapis.com/auth/cloud-platform"],
-    });
-
-    // Get auth client and token
-    const client = await auth.getClient();
-    const token = await client.getAccessToken();
-
-    // Generate a unique filename (you might want to customize this)
     const filename = `${orgId}-${requestId}${size ? `-${size}` : ""}.${file.type.split("/")[1]}`;
+    const bucket = env.GOOGLE_LOGO_BUCKET_BUCKET_NAME;
+    const isEmulator = !!env.GCS_EMULATOR_HOST;
+    const gcsBase = isEmulator
+      ? `http://${env.GCS_EMULATOR_HOST}`
+      : "https://storage.googleapis.com";
 
-    // Upload to Google Cloud Storage
+    let bearerToken: string;
+    if (isEmulator) {
+      bearerToken = "local-dev-token";
+    } else {
+      const auth = new GoogleAuth({
+        credentials: {
+          private_key: env.GOOGLE_LOGO_BUCKET_PRIVATE_KEY.replace(
+            /\\\n/g,
+            "\n",
+          ).replace(/\\n/g, "\n"),
+          client_email: env.GOOGLE_LOGO_BUCKET_CLIENT_EMAIL,
+        },
+        scopes: ["https://www.googleapis.com/auth/cloud-platform"],
+      });
+      const client = await auth.getClient();
+      const tokenResult = await client.getAccessToken();
+      if (!tokenResult.token)
+        throw new Error("GCS: failed to obtain access token");
+      bearerToken = tokenResult.token;
+    }
+
     const response = await fetch(
-      `https://storage.googleapis.com/upload/storage/v1/b/${env.GOOGLE_LOGO_BUCKET_BUCKET_NAME}/o?uploadType=media&name=${filename}`,
+      `${gcsBase}/upload/storage/v1/b/${bucket}/o?uploadType=media&name=${filename}`,
       {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token.token}`,
+          Authorization: `Bearer ${bearerToken}`,
           "Content-Type": file.type,
         },
         body: await file.arrayBuffer(),
@@ -49,11 +56,15 @@ export async function POST(request: Request) {
     );
 
     if (!response.ok) {
-      throw new Error("Failed to upload to Google Cloud Storage");
+      const body = await response.text().catch(() => "(unreadable)");
+      console.error(`GCS upload failed: HTTP ${response.status}`, body);
+      throw new Error(`Failed to upload to GCS: HTTP ${response.status}`);
     }
 
-    // Return the public URL of the uploaded file
-    const publicUrl = `https://storage.googleapis.com/${env.GOOGLE_LOGO_BUCKET_BUCKET_NAME}/${filename}`;
+    const publicUrl = isEmulator
+      ? `http://${env.GCS_EMULATOR_HOST}/${bucket}/${filename}`
+      : `https://storage.googleapis.com/${bucket}/${filename}`;
+
     return NextResponse.json({ url: publicUrl });
   } catch (error) {
     console.error("Error uploading file:", error);

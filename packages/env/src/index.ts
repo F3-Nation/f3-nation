@@ -32,6 +32,7 @@ export const env = createEnv({
     API_KEY: z.string().min(1),
     SUPER_ADMIN_API_KEY: z.string().min(1),
     NOTIFY_WEBHOOK_URLS_COMMA_SEPARATED: z.string().optional(),
+    GCS_EMULATOR_HOST: z.string().optional(),
   },
   client: {
     NEXT_PUBLIC_ADMIN_URL: z.string().min(1).optional(),

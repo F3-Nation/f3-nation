@@ -13,7 +13,7 @@
     "test": "pnpm with-env vitest --run",
     "typecheck": "tsc --noEmit",
     "add-client": "tsx scripts/add-client.ts",
-    "with-env": "dotenv -e ../../.env --"
+    "with-env": "dotenv -e .env --"
   },
   "dependencies": {
     "@acme/db": "workspace:*",
