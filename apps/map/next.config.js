@@ -43,11 +43,24 @@ const config = {
   eslint: { ignoreDuringBuilds: true },
   typescript: { ignoreBuildErrors: true },
   redirects: async () => {
+    const adminUrl = (
+      process.env.NEXT_PUBLIC_ADMIN_URL ?? "https://admin.f3nation.com"
+    ).replace(/\/$/, "");
     return [
       {
         source: "/map",
         destination: "/",
         permanent: true,
+      },
+      {
+        source: "/admin",
+        destination: adminUrl,
+        permanent: false,
+      },
+      {
+        source: "/admin/:path*",
+        destination: `${adminUrl}/:path*`,
+        permanent: false,
       },
     ];
   },
