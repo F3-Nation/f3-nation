@@ -216,10 +216,7 @@ export const notifyMapChangeRequest = async ({
   }
 
   // Prepare email parameters
-  const adminBaseUrl = env.NEXT_PUBLIC_ADMIN_URL?.endsWith("/")
-    ? env.NEXT_PUBLIC_ADMIN_URL.slice(0, -1)
-    : env.NEXT_PUBLIC_ADMIN_URL ?? "";
-
+  const adminBaseUrl = (env.NEXT_PUBLIC_ADMIN_URL ?? "").replace(/\/$/, "");
   const requestsUrl = `${adminBaseUrl}/requests`;
   const title = requestTypeToTitle(request.requestType);
 

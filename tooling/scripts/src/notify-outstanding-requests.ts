@@ -158,10 +158,8 @@ async function main() {
   console.log("\n" + "─".repeat(80));
   console.log("\n📬 Email Summary:\n");
 
-  const mapBaseUrl = env.NEXT_PUBLIC_MAP_URL?.endsWith("/")
-    ? env.NEXT_PUBLIC_MAP_URL.slice(0, -1)
-    : env.NEXT_PUBLIC_MAP_URL ?? "";
-  const requestsUrl = `${mapBaseUrl}/admin/requests`;
+  const adminBaseUrl = (env.NEXT_PUBLIC_ADMIN_URL ?? "").replace(/\/$/, "");
+  const requestsUrl = `${adminBaseUrl}/requests`;
 
   // Display and optionally send emails
   let emailsSent = 0;
