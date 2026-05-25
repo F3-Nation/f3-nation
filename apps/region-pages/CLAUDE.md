@@ -41,7 +41,7 @@ Upstash QStash cron. Bearer `CRON_SECRET`. Idempotent (20h window). Prunes stale
 curl -X POST http://localhost:3000/api/ingest -H "Authorization: Bearer $CRON_SECRET"
 ```
 
-## Env (`.env.local.sample`)
+## Env (`.env.local.example`)
 
 ```
 POSTGRES_URL               # Supabase connection
