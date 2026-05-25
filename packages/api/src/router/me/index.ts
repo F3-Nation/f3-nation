@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { and, asc, eq, ilike, schema, sql } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
+import { isAllowedAvatarUrl } from "@acme/shared/app/avatar";
 
 import { protectedProcedure } from "../../shared";
 
@@ -14,19 +15,9 @@ import { protectedProcedure } from "../../shared";
  * profile, positions, and roles with only protectedProcedure auth.
  */
 
-/**
- * avatarUrl values written through this router must point at the canonical
- * F3 public-image GCS bucket (prod or staging). The avatar-upload route
- * builds the URL server-side, so the only legitimate value is a GCS URL
- * under f3-public-images / f3-public-images-staging. Restricting the host
- * here prevents an authenticated user from PATCHing avatarUrl to an
- * arbitrary host and using the field for tracking pixels or SSRF when
- * other consumers pre-fetch the URL server-side.
- */
-const ALLOWED_AVATAR_HOST_PATTERN =
-  /^https:\/\/storage\.googleapis\.com\/f3-public-images(-staging)?\//;
-const isAllowedAvatarUrl = (url: string): boolean =>
-  ALLOWED_AVATAR_HOST_PATTERN.test(url);
+// avatarUrl write-path validation uses the shared allowlist
+// (@acme/shared/app/avatar) so the API and the backfill migration in
+// packages/db enforce exactly the same canonical-host rule.
 
 const profileUpdateSchema = z
   .object({

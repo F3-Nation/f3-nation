@@ -26,11 +26,13 @@
     "seed:local": "pnpm with-env tsx src/local-seed.ts",
     "typecheck": "tsc --noEmit",
     "with-env": "dotenv -e ../env/.env --",
-    "update-db": "pnpm with-env node -r esbuild-register src/update-db.ts"
+    "update-db": "pnpm with-env node -r esbuild-register src/update-db.ts",
+    "backfill:avatars": "pnpm with-env tsx src/backfill-avatar-urls.ts"
   },
   "dependencies": {
     "@acme/env": "workspace:*",
     "@acme/shared": "workspace:*",
+    "@acme/storage": "workspace:*",
     "dotenv-cli": "catalog:",
     "drizzle-orm": "catalog:",
     "esbuild-register": "catalog:",

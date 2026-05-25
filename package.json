@@ -46,7 +46,8 @@
     "reset-test-db": "turbo run reset-test-db",
     "test": "turbo test",
     "typecheck": "turbo typecheck",
-    "with-env": "dotenv -e .env --"
+    "with-env": "dotenv -e .env --",
+    "db:backfill:avatars": "pnpm -F db backfill:avatars"
   },
   "devDependencies": {
     "@acme/prettier-config": "workspace:^0.1.0",
