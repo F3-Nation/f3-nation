@@ -19,9 +19,13 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   })),
 }));
 
+import { execSync } from "child_process";
+import path from "path";
+
 import { eq, schema } from "@acme/db";
 import {
   afterAll,
+  beforeAll,
   beforeEach,
   describe,
   expect,
@@ -35,6 +39,16 @@ describe("First Event Service", () => {
   // Track created entities for cleanup
   const createdEventIds: number[] = [];
   const createdOrgIds: number[] = [];
+
+  beforeAll(() => {
+    // Reset the test DB before any tests run to ensure a clean state and
+    // prevent order-dependent flakiness from prior runs.
+    const repoRoot = path.resolve(__dirname, "../../../..");
+    execSync("pnpm -C packages/db reset-test-db", {
+      cwd: repoRoot,
+      stdio: "inherit",
+    });
+  }, 60000);
 
   beforeEach(() => {
     vi.clearAllMocks();

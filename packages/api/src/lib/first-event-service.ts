@@ -99,18 +99,7 @@ export async function maybeNotifyFirstEventForRegion(
     return;
   }
 
-  // Step 5: mark the region as notified.
-  const updatedMeta: Record<string, unknown> = {
-    ...meta,
-    firstEventNotificationSent: true,
-  };
-
-  await db
-    .update(schema.orgs)
-    .set({ meta: updatedMeta })
-    .where(eq(schema.orgs.id, regionId));
-
-  // Step 6: build the recipient list — region contact email + all region admins.
+  // Step 5: build the recipient list — region contact email + all region admins.
   const toSet = new Set<string>();
   if (region.email) toSet.add(region.email);
 
@@ -130,17 +119,36 @@ export async function maybeNotifyFirstEventForRegion(
     return;
   }
 
-  // Step 7: send the "region in a box" welcome email.
+  // Step 6: send the "region in a box" welcome email.
   const ccList = (env.EMAIL_REGION_IN_A_BOX_CC ?? "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
 
-  await mail.sendTemplateMessages(Templates.regionInABox, {
-    to: [...toSet],
-    ...(ccList.length > 0 && { cc: ccList }),
-    regionName: region.name,
-  });
+  try {
+    await mail.sendTemplateMessages(Templates.regionInABox, {
+      to: [...toSet],
+      ...(ccList.length > 0 && { cc: ccList }),
+      regionName: region.name,
+    });
+  } catch (err) {
+    console.error(
+      `[first-event-service] Failed to send "region in a box" email for region "${region.name}" (id: ${regionId}):`,
+      err,
+    );
+    throw err;
+  }
+
+  // Step 7: mark the region as notified — only after successful delivery.
+  const updatedMeta: Record<string, unknown> = {
+    ...meta,
+    firstEventNotificationSent: true,
+  };
+
+  await db
+    .update(schema.orgs)
+    .set({ meta: updatedMeta })
+    .where(eq(schema.orgs.id, regionId));
 
   console.debug(
     `[first-event-service] "Region in a box" email sent for region "${region.name}" (id: ${regionId}).`,

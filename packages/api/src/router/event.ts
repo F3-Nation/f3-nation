@@ -836,7 +836,10 @@ export const eventRouter = {
           const { maybeNotifyFirstEventForRegion } = await import(
             "../lib/first-event-service"
           );
-          await maybeNotifyFirstEventForRegion(ctx.db, result.orgId);
+          void maybeNotifyFirstEventForRegion(ctx.db, result.orgId).catch(
+            (err: unknown) =>
+              console.error("maybeNotifyFirstEventForRegion failed", { err }),
+          );
         } else if (existingEvent.recurrencePattern) {
           // Existing series: check for structural changes
           const existingSeriesData = {
