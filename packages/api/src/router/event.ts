@@ -817,7 +817,7 @@ export const eventRouter = {
           isActive: result.isActive,
           isPrivate: result.isPrivate,
           highlight: result.highlight,
-          meta: result.meta as Record<string, unknown> | null,
+          meta: result.meta,
           eventTypeIds: eventTypeIds,
           // eventTagId: eventTagIds?.[0], // TODO: event tag support
         };

@@ -151,7 +151,7 @@ Defined and validated in `src/env.ts` using `@t3-oss/env-nextjs`. Variables pref
 | `NEXT_PUBLIC_AUTH_URL` | Base URL of the auth server (e.g. `https://auth.f3nation.com`)                                | Yes                            |
 | `NEXT_PUBLIC_API_URL`  | F3 API endpoint for user management (e.g. `https://api.f3nation.com`)                         | Yes                            |
 | `API_KEY`              | API key for authenticating calls to the F3 API                                                | Yes                            |
-| `SENDGRID_API_KEY`     | SendGrid SMTP API key (used in production for transactional email)                            | Yes                            |
+| `EMAIL_SERVER`         | SMTP connection string (e.g. `smtp://apikey:<key>@smtp.sendgrid.net:587`)                     | Yes                            |
 | `EMAIL_FROM`           | Sender email address (e.g. `noreply@f3nation.com`)                                            | Yes                            |
 | `NODE_ENV`             | `development`, `production`, or `test`                                                        | No (defaults to `development`) |
 
@@ -159,7 +159,7 @@ Set `SKIP_ENV_VALIDATION=1` to bypass validation during CI builds.
 
 ### Shared vs. Auth-Only Variables
 
-Most of these variables (`AUTH_SECRET`, `DATABASE_HOST`, `DATABASE_USER`, `DATABASE_PASSWORD`, `DATABASE_NAME`, `API_KEY`, `SENDGRID_API_KEY`, `EMAIL_FROM`) are already in the root `.env` and shared across all apps. **You only need to define them once** -- `apps/auth` reads from the same root `.env` as `apps/map` and `apps/api`.
+Most of these variables (`AUTH_SECRET`, `DATABASE_HOST`, `DATABASE_USER`, `DATABASE_PASSWORD`, `DATABASE_NAME`, `API_KEY`, `EMAIL_SERVER`, `EMAIL_FROM`) are already in the root `.env` and shared across all apps. **You only need to define them once** -- `apps/auth` reads from the same root `.env` as `apps/map` and `apps/api`.
 
 The only variable unique to `apps/auth` is **`AUTH_JWT_PRIVATE_KEY`** -- the RSA key for signing OAuth access tokens. Add it to your root `.env` alongside the existing variables. No duplication needed.
 

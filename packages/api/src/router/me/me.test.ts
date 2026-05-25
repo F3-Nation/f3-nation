@@ -33,14 +33,13 @@ const makeTestSession = (
   id: number,
   email: string,
   name = "TestPax",
-): Session =>
-  ({
-    id,
-    email,
-    user: { id: String(id), email, name, roles: [] },
-    roles: [],
-    expires: new Date(Date.now() + 86400000).toISOString(),
-  }) as unknown as Session;
+): Session => ({
+  id,
+  email,
+  user: { id: String(id), email, name, roles: [] },
+  roles: [],
+  expires: new Date(Date.now() + 86400000).toISOString(),
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -540,25 +539,27 @@ describe("Me Router", () => {
       expect(first).not.toHaveProperty("lastName");
     });
 
-    it("should filter by homeRegionId", async () => {
+    it("should filter by searchTerm", async () => {
       const client = createDirectClient();
-      const result = await client.me.users({ homeRegionId: regionOrgId });
+      const result = await client.me.users({
+        searchTerm: "tEsT",
+      });
 
       expect(result.users.length).toBeGreaterThanOrEqual(1);
       for (const u of result.users) {
-        expect(u.homeRegionId).toBe(regionOrgId);
+        expect(u.f3Name?.toLowerCase()).toContain("Test".toLowerCase());
       }
     });
 
-    it("should return empty array for a region with no users", async () => {
+    it("should return empty array for a searchTerm with no matches", async () => {
       const client = createDirectClient();
-      const result = await client.me.users({ homeRegionId: 999999 });
+      const result = await client.me.users({ searchTerm: "zzznomatch" });
       expect(result.users).toEqual([]);
     });
 
     it("should include homeRegionName via left join", async () => {
       const client = createDirectClient();
-      const result = await client.me.users({ homeRegionId: regionOrgId });
+      const result = await client.me.users({ userId: testUserId });
 
       const testUser = result.users.find((u) => u.id === testUserId);
       expect(testUser).toBeDefined();
@@ -567,18 +568,48 @@ describe("Me Router", () => {
 
     it("should return results in a consistent order", async () => {
       const client = createDirectClient();
-      const result1 = await client.me.users();
-      const result2 = await client.me.users();
+
+      const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const prefix = `OrderTest-${suffix}`;
+
+      const inserted = await db
+        .insert(schema.users)
+        .values([
+          {
+            email: `${prefix}-a@example.com`,
+            f3Name: `${prefix}-B`,
+            homeRegionId: regionOrgId,
+          },
+          {
+            email: `${prefix}-b@example.com`,
+            f3Name: `${prefix}-A`,
+            homeRegionId: regionOrgId,
+          },
+        ])
+        .returning({ id: schema.users.id });
+
+      createdUserIds.push(...inserted.map((u) => u.id));
+
+      const result1 = await client.me.users({ searchTerm: prefix });
+      const result2 = await client.me.users({ searchTerm: prefix });
 
       // Same query should yield the same order
       const ids1 = result1.users.map((u) => u.id);
       const ids2 = result2.users.map((u) => u.id);
+
+      expect(result1.users).toHaveLength(2);
+      expect(result2.users).toHaveLength(2);
       expect(ids1).toEqual(ids2);
+
+      const names1 = result1.users.map((u) => u.f3Name);
+      expect(names1).toEqual([`${prefix}-A`, `${prefix}-B`]);
     });
 
-    it("should reject a non-integer homeRegionId", async () => {
+    it("should reject a searchTerm shorter than 2 characters", async () => {
       const client = createDirectClient();
-      await expect(client.me.users({ homeRegionId: 1.5 })).rejects.toThrow();
+      await expect(client.me.users({ searchTerm: "x" })).rejects.toMatchObject({
+        code: "BAD_REQUEST",
+      });
     });
   });
 });

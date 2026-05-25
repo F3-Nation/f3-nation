@@ -18,7 +18,7 @@ import {
 } from "@acme/ui/select";
 import { useTheme } from "@acme/ui/theme";
 
-import { VirtualizedCombobox } from "~/app/_components/virtualized-combobox";
+import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 import { orpc, useQuery } from "~/orpc/react";
 import type { FiltersType } from "~/utils/store/filter";
 import {
@@ -195,7 +195,7 @@ export const FiltersAll = (props: ComponentProps<"div">) => {
                     ? "border-blue-500 bg-blue-950"
                     : "border-blue-500 bg-blue-100"),
               )}
-              onSelect={(item) => {
+              onSelect={(item: string | string[]) => {
                 const ids = Array.isArray(item)
                   ? item.map((id) => Number(id))
                   : [Number(item)];

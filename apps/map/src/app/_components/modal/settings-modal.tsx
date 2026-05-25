@@ -30,6 +30,7 @@ import {
 } from "@acme/ui/dialog";
 import { toast } from "@acme/ui/toast";
 
+import { env } from "~/env";
 import { useAuth } from "~/utils/hooks/use-auth";
 import { appStore } from "~/utils/store/app";
 import { mapStore } from "~/utils/store/map";
@@ -278,21 +279,35 @@ export default function SettingsModal() {
                     </p>
                   ))}
                 </div>
-                {isEditorOrAdmin && (
-                  <Link href={"/admin"}>
-                    <button
-                      className={cn(
-                        "flex w-full flex-row items-center justify-center gap-1 rounded-md bg-background p-2 text-foreground shadow-sm hover:bg-accent",
-                      )}
-                      onClick={() => {
-                        closeModal();
-                      }}
-                    >
-                      <Shield className="size-4" />
-                      <span className="text-xs">Admin Portal</span>
-                    </button>
-                  </Link>
-                )}
+                {isEditorOrAdmin &&
+                  (() => {
+                    const adminUrl =
+                      env.NEXT_PUBLIC_ADMIN_URL ??
+                      (env.NEXT_PUBLIC_CHANNEL === "prod"
+                        ? "https://admin.f3nation.com"
+                        : env.NEXT_PUBLIC_CHANNEL === "staging"
+                          ? "https://staging.admin.f3nation.com"
+                          : undefined);
+                    return adminUrl ? (
+                      <Link
+                        href={adminUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <button
+                          className={cn(
+                            "flex w-full flex-row items-center justify-center gap-1 rounded-md bg-background p-2 text-foreground shadow-sm hover:bg-accent",
+                          )}
+                          onClick={() => {
+                            closeModal();
+                          }}
+                        >
+                          <Shield className="size-4" />
+                          <span className="text-xs">Admin Portal</span>
+                        </button>
+                      </Link>
+                    ) : null;
+                  })()}
                 <Link
                   href={"/api/auth/signout"}
                   onClick={() => {

@@ -49,7 +49,14 @@ export const authOptions: NextAuthConfig = {
 
         // Step 1: Send code (action=send or no code provided)
         if (credentials.action === "send" || !credentials.code) {
-          await sendEmailCode(email);
+          try {
+            await sendEmailCode(email);
+          } catch (err) {
+            console.error("sendEmailCode failed in authorize:", err);
+            throw new Error(
+              "Failed to send verification code. Please try again.",
+            );
+          }
           // Return null to signal "code sent" — not an error, just not authed yet
           return null;
         }
@@ -108,7 +115,7 @@ export const authOptions: NextAuthConfig = {
         session.user.id = String(token.userId);
         session.user.name = String(token.name);
         session.user.email = String(token.email);
-        session.user.image = token.picture as string | undefined;
+        session.user.image = token.picture;
       }
       return {
         ...session,

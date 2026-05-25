@@ -1,5 +1,7 @@
 import crypto from "crypto";
 
+import { createTransport } from "nodemailer";
+
 import { and, eq, gt, isNull, sql } from "@acme/db";
 import { emailMfaCodes, users } from "@acme/db/schema/schema";
 
@@ -9,6 +11,12 @@ import { env } from "~/env";
 
 const MAX_ATTEMPTS = 5;
 const CODE_TTL_MINUTES = 10;
+
+let _transporter: ReturnType<typeof createTransport> | null = null;
+function getTransporter() {
+  _transporter ??= createTransport(env.EMAIL_SERVER);
+  return _transporter;
+}
 
 function hashCode(code: string): string {
   return crypto.createHash("sha256").update(code).digest("hex");
@@ -51,28 +59,9 @@ export async function sendEmailCode(email: string): Promise<void> {
   const authUrl = env.NEXT_PUBLIC_AUTH_URL;
   const magicLink = `${authUrl}/login/email/verify?email=${encodeURIComponent(email)}&code=${code}`;
 
-  // Send via SendGrid SMTP
-  const nodemailer = await import("nodemailer");
-  const transporter = nodemailer.createTransport(
-    env.NODE_ENV === "production"
-      ? {
-          host: "smtp.sendgrid.net",
-          port: 587,
-          secure: false,
-          auth: {
-            user: "apikey",
-            pass: env.SENDGRID_API_KEY,
-          },
-        }
-      : await nodemailer.createTestAccount().then(({ user, pass }) => ({
-          host: "smtp.ethereal.email",
-          port: 587,
-          secure: false,
-          auth: { user, pass },
-        })),
-  );
+  const transporter = getTransporter();
 
-  const info = await transporter.sendMail({
+  await transporter.sendMail({
     from: env.EMAIL_FROM,
     to: email,
     subject: "Your F3 Nation sign-in code",
@@ -87,13 +76,6 @@ export async function sendEmailCode(email: string): Promise<void> {
       </div>
     `,
   });
-
-  if (env.NODE_ENV !== "production") {
-    const previewUrl = nodemailer.getTestMessageUrl(info);
-    if (previewUrl) {
-      console.log("Preview email:", previewUrl);
-    }
-  }
 }
 
 /**
