@@ -18,8 +18,8 @@ import { getUsersWithRoles } from "../services/map-request-notification";
 
 /**
  * Check whether the event just inserted is the first recurring event for its
- * region. If it is, mark the region as notified and emit a debug log. A future
- * implementation will replace the log with an actual email (Hubspot / SendGrid).
+ * region. If it is, mark the region as notified and send the first-event
+ * notification email.
  *
  * @param db   - Database client
  * @param aoId - The AO (Activity Organization) that owns the newly created event

@@ -126,7 +126,7 @@ const templateConfigs: Record<Templates, TemplateConfig> = {
   },
   [Templates.regionInABox]: {
     name: "Region In A Box",
-    description: "Email sent when a new region is added to the map",
+    description: "Email sent when a region creates their first event.",
     fields: [
       {
         name: "regionName",
