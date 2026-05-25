@@ -164,7 +164,7 @@ export const templateRenderers: {
         <p>Dear leaders of <span class="highlight">${escapeHtml(data.regionName)}</span>,</p>
         <p>
           Congratulations — you are now approved and have your first workout on the F3 Nation map!
-          We'd love to send you a bundle of materials to help you get started and accelerate your
+          We'd love to send you some key materials to help you get started and accelerate your
           region's growth.
         </p>
         <p><strong>The Region-in-a-Box bundle includes:</strong></p>
