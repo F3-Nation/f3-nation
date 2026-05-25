@@ -84,6 +84,7 @@ describe("First Event Service", () => {
         orgType: "region",
         parentId: nationOrg.id,
         isActive: true,
+        email: `fes-region-${uniqueId()}@example.com`,
         meta: metaOverrides ?? null,
       })
       .returning();
@@ -130,8 +131,8 @@ describe("First Event Service", () => {
 
   describe("maybeNotifyFirstEventForRegion", () => {
     it("sets flag and logs when first event is created for a region", async () => {
-      const warnSpy = vitest
-        .spyOn(console, "warn")
+      const debugSpy = vitest
+        .spyOn(console, "debug")
         .mockImplementation(() => undefined);
 
       const region = await createTestRegion();
@@ -146,15 +147,15 @@ describe("First Event Service", () => {
         .where(eq(schema.orgs.id, region.id));
 
       expect(
-        (updatedRegion?.meta as Record<string, unknown>)
-          .firstEventNotificationSent,
+        (updatedRegion?.meta as Record<string, unknown> | null)
+          ?.firstEventNotificationSent,
       ).toBe(true);
 
-      expect(warnSpy).toHaveBeenCalledWith(
+      expect(debugSpy).toHaveBeenCalledWith(
         expect.stringContaining(region.name),
       );
 
-      warnSpy.mockRestore();
+      debugSpy.mockRestore();
     });
 
     it("does nothing when a second event exists for the region", async () => {
