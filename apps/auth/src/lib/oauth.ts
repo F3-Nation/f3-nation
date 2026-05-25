@@ -103,8 +103,10 @@ export async function exchangeAuthorizationCode(params: {
     .returning();
 
   if (!authCode) return { error: "invalid_grant" as const };
-  if (new Date(authCode.expiresAt) < new Date())
-    return { error: "invalid_grant" as const };
+  const expiresAt = authCode.expiresAt.endsWith("Z")
+    ? new Date(authCode.expiresAt)
+    : new Date(authCode.expiresAt + "Z");
+  if (expiresAt < new Date()) return { error: "invalid_grant" as const };
   if (authCode.clientId !== params.clientId)
     return { error: "invalid_grant" as const };
   if (authCode.redirectUri !== params.redirectUri)

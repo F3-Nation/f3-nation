@@ -102,9 +102,7 @@ export const useSelectedItem = () => {
           aoName: instance.aoName,
           aoLogo: instance.aoLogo,
           aoWebsite: null,
-        } as NonNullable<
-          NonNullable<typeof data>["location"]
-        >["events"][number];
+        };
       }
     }
 

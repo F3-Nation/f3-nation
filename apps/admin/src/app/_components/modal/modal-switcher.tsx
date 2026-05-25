@@ -8,6 +8,7 @@ import AdminPositionsModal from "./admin-positions-modal";
 import AdminAreasModal from "./admin-areas-modal";
 import AdminDeleteModal from "./admin-delete-modal";
 import AdminDeleteRequestModal from "./admin-delete-request-modal";
+import AdminEventInstancesModal from "./admin-event-instances-modal";
 import AdminEventTypesModal from "./admin-event-types-modal";
 import AdminLocationsModal from "./admin-locations-modal";
 import AdminManageAccessModal from "./admin-manage-access-modal";
@@ -53,6 +54,12 @@ export const ModalSwitcher = ({
     case ModalType.ADMIN_EVENTS:
       return (
         <AdminWorkoutsModal data={data as DataType[ModalType.ADMIN_EVENTS]} />
+      );
+    case ModalType.ADMIN_EVENT_INSTANCES:
+      return (
+        <AdminEventInstancesModal
+          data={data as DataType[ModalType.ADMIN_EVENT_INSTANCES]}
+        />
       );
     case ModalType.ADMIN_EVENT_TYPES:
       return (

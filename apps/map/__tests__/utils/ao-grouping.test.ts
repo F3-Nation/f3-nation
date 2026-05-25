@@ -14,6 +14,9 @@ const makeEvent = (
   eventTypes: [],
   aoName: null,
   aoLogo: null,
+  startDate: null,
+  endDate: null,
+  mapStatus: null,
   ...overrides,
 });
 

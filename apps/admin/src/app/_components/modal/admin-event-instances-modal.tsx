@@ -57,7 +57,7 @@ import {
   openModal,
 } from "~/utils/store/modal";
 import { ControlledTimeInput } from "../time-input";
-import { VirtualizedCombobox } from "../virtualized-combobox";
+import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 
 const NONE = "__none__";
 
@@ -232,11 +232,11 @@ export default function AdminEventInstancesModal({
     setIsSubmitting(true);
     try {
       const startTime =
-        formData.startTime && formData.startTime.length === 5
+        formData.startTime?.length === 5
           ? convertHH_mmToHHmm(formData.startTime)
           : undefined;
       const endTime =
-        formData.endTime && formData.endTime.length === 5
+        formData.endTime?.length === 5
           ? convertHH_mmToHHmm(formData.endTime)
           : undefined;
 
@@ -248,10 +248,10 @@ export default function AdminEventInstancesModal({
         startDate: formData.startDate,
         endDate: formData.endDate,
         locationId: formData.locationId ?? null,
-        name: trimmedName ? trimmedName : undefined,
+        name: trimmedName ?? undefined,
         description: descTrim == null || descTrim === "" ? null : descTrim,
-        startTime: startTime ? startTime : undefined,
-        endTime: endTime ? endTime : undefined,
+        startTime: startTime ?? undefined,
+        endTime: endTime ?? undefined,
         ...(formData.eventTypeId ? { eventTypeId: formData.eventTypeId } : {}),
         seriesId: formData.seriesId ?? null,
         seriesException: formData.seriesException ?? null,

@@ -7,7 +7,6 @@ import { DEFAULT_CENTER } from "@acme/shared/app/constants";
 import { RERENDER_LOGS } from "@acme/shared/common/constants";
 
 import { groupMarkersByAo } from "~/utils/group-markers-by-ao";
-import { DAYS_OF_WEEK } from "~/utils/days-of-week";
 import type { MapStatus, SparseF3Marker } from "~/utils/types";
 import { orpc, useQuery } from "~/orpc/react";
 import { dateToDayOfWeek } from "~/utils/date-to-day-of-week";
@@ -276,6 +275,8 @@ export const FilteredMapResultsProvider = (params: { children: ReactNode }) => {
         dayOfWeek: dayOfWeek,
         startTime: instance.startTime,
         eventTypes: instance.eventTypes,
+        aoName: instance.aoName,
+        aoLogo: instance.aoLogo,
         startDate: instance.startDate,
         endDate: null,
         mapStatus: "highlight" as MapStatus,

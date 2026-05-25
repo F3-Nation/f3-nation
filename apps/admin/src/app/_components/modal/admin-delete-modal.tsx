@@ -63,7 +63,6 @@ export default function AdminDeleteModal({
       mutation = orpc.eventInstance.delete.call;
       break;
     default:
-       
       throw new Error(`Invalid delete type: ${data.type}`);
   }
 
@@ -71,7 +70,9 @@ export default function AdminDeleteModal({
     setIsPending(true);
     try {
       await mutation({ id });
-      toast.success(`Successfully deleted ${data.type.toLowerCase()}`);
+      toast.success(
+        `Successfully deleted ${dataTypeToName(data.type).toLowerCase()}`,
+      );
 
       // Invalidate queries and wait for completion so the table refreshes
       switch (data.type) {
@@ -105,7 +106,6 @@ export default function AdminDeleteModal({
           await invalidateQueries("map");
           break;
         default:
-           
           throw new Error(`Invalid delete type: ${data.type}`);
       }
 
@@ -190,7 +190,6 @@ const dataTypeToName = (
     case DeleteType.EVENT_INSTANCE:
       return "Event Instance";
     default:
-       
       throw new Error(`Invalid delete type: ${dataType}`);
   }
 };
