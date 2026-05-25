@@ -19,6 +19,16 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   })),
 }));
 
+vi.mock("@acme/mail", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@acme/mail")>();
+  return {
+    ...actual,
+    mail: {
+      sendTemplateMessages: vi.fn().mockResolvedValue(undefined),
+    },
+  };
+});
+
 import { execSync } from "child_process";
 import path from "path";
 
