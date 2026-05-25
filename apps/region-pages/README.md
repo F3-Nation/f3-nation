@@ -17,7 +17,7 @@ F3 Region Pages is a web application for managing F3 regional content, workouts,
 
 ## Tech Stack
 
-- **Frontend:** React 19, Next.js 15
+- **Frontend:** React 18, Next.js 15
 - **Styling:** TailwindCSS
 - **Backend:** Next.js API routes
 - **Database:** PostgreSQL (via Supabase)

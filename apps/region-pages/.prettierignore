@@ -6,5 +6,5 @@ drizzle/migrations
 # Ignore other common files
 *.min.js
 *.bundle.js
-*.map 
+*.map
 pnpm-lock.yaml

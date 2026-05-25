@@ -306,10 +306,13 @@ export const fetchRegionsWithWorkoutCounts = async (): Promise<
       .from(regions)
       .leftJoin(workouts, eq(regions.id, workouts.regionId))
       .groupBy(regions.id)
-      .orderBy(regions.name)) as Region[];
-    return results.map(normalizeRegionFields) as (Region & {
-      workoutCount: number;
-    })[];
+      .orderBy(regions.name)) as (Region & { workoutCount: number })[];
+    // normalizeRegionFields returns a Region (no workoutCount), so merge the
+    // computed count back in — otherwise callers see workoutCount === undefined.
+    return results.map((r) => ({
+      ...normalizeRegionFields(r),
+      workoutCount: r.workoutCount,
+    }));
   } catch (error) {
     console.error('fetchRegionsWithWorkoutCounts failed:', error);
     return [];

@@ -18,23 +18,21 @@ interface RegionsPageProps {
 }
 
 export default async function HomePage({ searchParams }: RegionsPageProps) {
-  const [regions, regionsByLetter, resolvedParams] = await Promise.all([
+  const [regions, resolvedParams] = await Promise.all([
     fetchRegionsWithWorkoutCounts(),
-    (async () => {
-      const all = await fetchRegionsWithWorkoutCounts();
-      // Group by first letter
-      return ALL_LETTERS.reduce(
-        (acc, letter) => {
-          acc[letter] = all.filter((r) =>
-            (r.name || '').toUpperCase().startsWith(letter)
-          );
-          return acc;
-        },
-        {} as Record<string, typeof all>
-      );
-    })(),
     searchParams,
   ]);
+
+  // Derive the letter grouping from the single query above (no second DB hit).
+  const regionsByLetter = ALL_LETTERS.reduce(
+    (acc, letter) => {
+      acc[letter] = regions.filter((r) =>
+        (r.name || '').toUpperCase().startsWith(letter)
+      );
+      return acc;
+    },
+    {} as Record<string, typeof regions>
+  );
 
   // Get current letter from URL or default to first available letter with regions
   const defaultLetter = ALL_LETTERS[0] || 'A';

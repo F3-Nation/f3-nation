@@ -4,9 +4,9 @@ Thank you for your interest in contributing to the F3 Region Pages project! This
 
 ## Prerequisites
 
-- [Node.js](https://nodejs.org/) version 20.18.2 (as specified in `.nvmrc`)
-- [nvm](https://github.com/nvm-sh/nvm) (Node Version Manager)
-- [npm](https://www.npmjs.com/) (Node Package Manager)
+- [Node.js](https://nodejs.org/) >= 24.14.1 (monorepo `engines.node`; see root `.nvmrc`)
+- [pnpm](https://pnpm.io/) (the monorepo package manager)
+- [Docker](https://www.docker.com/) (for the shared local database — root `docker-compose.yml`)
 - [Docker](https://www.docker.com/) (for local database setup)
 
 ## Development Environment Setup
@@ -21,7 +21,7 @@ Thank you for your interest in contributing to the F3 Region Pages project! This
 2. **Set up Node.js environment**
 
    ```bash
-   nvm install     # Installs the version specified in .nvmrc (20.18.2)
+   nvm install     # Installs the version specified in the root .nvmrc (24.14.1)
    nvm use         # Switches to the project's Node.js version
    ```
 
@@ -51,11 +51,10 @@ Thank you for your interest in contributing to the F3 Region Pages project! This
 - `npm run build` - Build for production
 - `npm run test` - Run tests
 - `npm run lint` - Run linting
-- `npm run db:reset` - Reset the database
-- `npm run db:migrate` - Run database migrations
-- `npm run db:seed` - Seed the database with initial data
-- `npm run docker:kill` - Stop Docker containers
-- `npm run supabase:start` - Start Supabase locally
+- `pnpm db:setup:local` - One-shot local DB setup (starts the shared Postgres via root `docker compose`, migrates, seeds)
+- `pnpm db:reset` - Reset the database
+- `pnpm db:migrate` - Run database migrations
+- `pnpm db:seed` - Seed the database with initial data
 
 ## Workflow
 

@@ -23,11 +23,12 @@ interface RegionProps {
 }
 
 export const generateStaticParams = async () =>
-  (await fetchRegions()).map((region) => ({
-    id: region.id,
-    regionName: region.name,
-    regionSlug: region.slug || '',
-  }));
+  // Return only the dynamic segment; skip regions without a slug. (Next.js
+  // ignores extra keys, and an empty regionSlug would generate a bad route.)
+  (await fetchRegions())
+    .map((region) => region.slug)
+    .filter((slug): slug is string => !!slug)
+    .map((regionSlug) => ({ regionSlug }));
 
 export async function generateMetadata({
   params,
@@ -97,7 +98,9 @@ export default async function RegionPage({
   }
   const regionData = await fetchWorkoutLocationsByRegion(regionSlug);
 
-  if (regionData[0].id === 'no-workouts') {
+  // fetchWorkoutLocationsByRegion can return [] on a DB/query failure; treat an
+  // empty result like a region with no workouts rather than throwing on [0].
+  if (regionData.length === 0 || regionData[0].id === 'no-workouts') {
     return <OrphanedRegionContent region={region} />;
   }
 

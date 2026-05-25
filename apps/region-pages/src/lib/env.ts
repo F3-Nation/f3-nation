@@ -2,7 +2,12 @@ import * as dotenv from 'dotenv';
 
 export function loadEnvConfig() {
   const env = process.env.NODE_ENV || 'local';
+  // Load the environment-specific file first, then fall back to .env.local for
+  // anything it didn't set (dotenv won't override already-set vars). This keeps
+  // bun/drizzle scripts working with a single .env.local, matching the rest of
+  // the monorepo's local-dev convention.
   dotenv.config({ path: `.env.${env}` });
+  dotenv.config({ path: '.env.local' });
 
   // During CI builds (no DB secrets) SKIP_ENV_VALIDATION is set so missing
   // connection strings warn instead of throwing; build-time data fetches fall
