@@ -10,6 +10,19 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: "4.3.2",
+    date: "2026-05-24",
+    title: "Streamlined dev environment",
+    sections: [
+      {
+        title: "Everything",
+        items: [
+          "Most of the developer-side code was rewritten to allow new developers to easily start contributing. Not application functionality should have been changed.",
+        ],
+      },
+    ],
+  },
+  {
     version: "4.3.0",
     date: "2026-05-07",
     title: "Me, Typescript, Auth fixes",
