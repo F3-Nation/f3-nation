@@ -164,16 +164,37 @@ export const templateRenderers: {
         <p>Dear leaders of <span class="highlight">${escapeHtml(data.regionName)}</span>,</p>
         <p>
           Congratulations — you are now approved and have your first workout on the F3 Nation map!
-          We'd like to send you some materials to help you get started, including your very first
-          shovel flag, books, and more.
+          We'd love to send you a bundle of materials to help you get started and accelerate your
+          region's growth.
         </p>
-        <p>
-          Reply all to this email to let us know which of the following tiers you'd like to take
-          advantage of.
-        </p>
-        <div class="notice">
-          <p><strong>Tiers:</strong> Coming soon — our team will follow up with tier details shortly.</p>
-        </div>
+        <p><strong>The Region-in-a-Box bundle includes:</strong></p>
+        <ul>
+          <li>1 F3 Knitted Polyester Flag</li>
+          <li>2 F3 Freed to Lead Book — 2nd Edition</li>
+          <li>2 F3 Q Source Book</li>
+          <li>1 F3 Stencil — "Worm's Coupon Maker"</li>
+          <li>10 F3 Stickers</li>
+          <li>10 F3 Business Cards</li>
+        </ul>
+        <p><strong>To claim your free bundle, here's what to do:</strong></p>
+        <ol>
+          <li>
+            <strong>Reply all</strong> to this email and let us know you'd like to take advantage of
+            the bundle. One of us will respond with two coupon codes — one to make the bundle free
+            and one to cover shipping.
+          </li>
+          <li>
+            Head to the product page:
+            <a href="https://f3gear.com/products/f3-region-in-a-box-tier1">
+              https://f3gear.com/products/f3-region-in-a-box-tier1
+            </a>
+            and add it to your cart.
+          </li>
+          <li>
+            Enter your shipping details and apply <strong>both coupon codes</strong> at checkout to
+            receive the bundle at no cost.
+          </li>
+        </ol>
         <p>
           We are excited to have <span class="highlight">${escapeHtml(data.regionName)}</span> as
           part of the F3 Nation community. Keep up the great work!
