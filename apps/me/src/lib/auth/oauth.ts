@@ -30,9 +30,7 @@ function buildAuthConfig(): AuthClientConfig {
 
 let _authClient: AuthClient | null = null;
 function getAuthClient(): AuthClient {
-  if (!_authClient) {
-    _authClient = new AuthClient(buildAuthConfig());
-  }
+  _authClient ??= new AuthClient(buildAuthConfig());
   return _authClient;
 }
 

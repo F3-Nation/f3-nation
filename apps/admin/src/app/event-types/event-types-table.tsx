@@ -46,7 +46,7 @@ export const EventTypesTable = () => {
   const orgIdsToUse =
     selectedOrgs.length > 0
       ? selectedOrgs.map((org) => org.id)
-      : accessibleOrgs?.orgs.map((org) => org.id) ?? [];
+      : (accessibleOrgs?.orgs.map((org) => org.id) ?? []);
 
   const { data: eventTypes } = useQuery({
     ...orpc.eventType.all.queryOptions({

@@ -87,7 +87,7 @@ export const UpdateLocationModal = ({
           ...values,
           eventStartTime: convertHH_mmToHHmm(values.eventStartTime ?? ""),
           eventEndTime: convertHH_mmToHHmm(values.eventEndTime ?? ""),
-          eventId: gte(data.eventId, 0) ? data.eventId ?? null : null,
+          eventId: gte(data.eventId, 0) ? (data.eventId ?? null) : null,
         };
 
         const result = await submitUpdateRequest(updateRequestData);
