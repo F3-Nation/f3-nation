@@ -46,7 +46,7 @@
     "reset-test-db": "turbo run reset-test-db",
     "test:coverage": "turbo test -- --coverage",
     "test": "turbo test",
-    "typecheck": "turbo typecheck --filter='!@acme/auth'",
+    "typecheck": "turbo typecheck --no-daemon --filter='!@acme/auth'",
     "with-env": "dotenv -e .env --"
   },
   "devDependencies": {
