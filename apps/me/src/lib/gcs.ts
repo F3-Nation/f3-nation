@@ -63,7 +63,7 @@ export async function uploadAvatar(
           Authorization: "Bearer local-dev-token",
           "Content-Type": "image/jpeg",
         },
-        body: jpeg,
+        body: jpeg as Uint8Array,
       },
     );
     if (!response.ok) {
