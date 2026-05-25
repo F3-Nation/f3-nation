@@ -82,7 +82,7 @@ export const FeatureMarker = ({
       const lat = e.latLng?.lat();
       const lng = e.latLng?.lng();
 
-      if (!lat || !lng) return;
+      if (lat == null || lng == null) return;
 
       mapStore.setState({
         modifiedLocationMarkers: {

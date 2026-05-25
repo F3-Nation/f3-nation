@@ -15,7 +15,7 @@ export const ControlledTimeInput = <T extends FieldValues>({
   id,
   label,
 }: TimeInputProps<T>) => {
-  const form = useFormContext();
+  const form = useFormContext<T>();
 
   return (
     <Controller

@@ -10,7 +10,7 @@ interface AODetailsFormValues {
   aoName?: string;
   aoWebsite?: string | null;
   aoLogo?: string | null;
-  originalRegionId: number;
+  originalRegionId?: number | null;
   id: string;
   badImage: boolean;
 }
@@ -59,25 +59,39 @@ export const AODetailsForm = <_T extends AODetailsFormValues>() => {
                     name="aoLogo"
                     accept="image/*"
                     onChange={async (e) => {
-                      console.log("files", e.target.files);
                       const file = e.target.files?.[0];
                       if (!file) return;
 
-                      const blob640 = await scaleAndCropImage(file, 640, 640);
-                      if (!blob640) return;
-                      const url640 = await uploadLogo({
-                        file: blob640,
-                        orgId: formOriginalRegionId ?? 0,
-                        requestId: formId,
-                      });
-                      onChange(url640);
-                      const blob64 = await scaleAndCropImage(file, 64, 64);
-                      if (blob64) {
-                        void uploadLogo({
-                          file: blob64,
-                          orgId: formOriginalRegionId ?? 0,
-                          requestId: formId ?? "",
-                          size: 64,
+                      if (
+                        typeof formOriginalRegionId !== "number" ||
+                        formOriginalRegionId <= -1 ||
+                        !formId
+                      ) {
+                        return;
+                      }
+
+                      try {
+                        const blob640 = await scaleAndCropImage(file, 640, 640);
+                        if (!blob640) return;
+                        const url640 = await uploadLogo({
+                          file: blob640,
+                          orgId: formOriginalRegionId,
+                          requestId: formId,
+                        });
+                        onChange(url640);
+                        const blob64 = await scaleAndCropImage(file, 64, 64);
+                        if (blob64) {
+                          void uploadLogo({
+                            file: blob64,
+                            orgId: formOriginalRegionId,
+                            requestId: formId,
+                            size: 64,
+                          });
+                        }
+                      } catch {
+                        form.setError("aoLogo", {
+                          type: "manual",
+                          message: "Logo upload failed. Please try again.",
                         });
                       }
                     }}

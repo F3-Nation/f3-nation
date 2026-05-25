@@ -185,5 +185,5 @@ Environment variables are application-specific in this monorepo. The `.env` file
 - add tests for approvals in the admin portal
 - test image issues
 - better text of where we're moving aos and regions
-- decide which things you can change region and and which you can't
+- decide which things you can change region and which you can't
 - TODO: Think through AO and location appearance

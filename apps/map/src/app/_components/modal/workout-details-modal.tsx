@@ -50,7 +50,6 @@ export const WorkoutDetailsModal = ({
   const eventName = selectedEvent?.name ?? "Workout";
   const aoName = results?.location?.parentName ?? "AO";
   const aoId = selectedEvent?.aoId ?? modalAOIds?.[0] ?? null;
-  console.log("aoId", aoId, modalAOIds, results);
 
   // Format time display
   const shortDayOfWeek = getShortDayOfWeek(selectedEvent?.dayOfWeek);

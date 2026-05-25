@@ -2,8 +2,6 @@ import { Z_INDEX } from "@acme/shared/app/constants";
 import { Dialog, DialogContent } from "@acme/ui/dialog";
 import { Loader } from "@acme/ui/loader";
 
-import { closeModal } from "~/utils/store/modal";
-
 /**
  * Loading placeholder modal shown while modal data is being prepared
  * Single Responsibility: Display loading state for modals
@@ -13,7 +11,7 @@ export function LoadingModal() {
     <Dialog
       open={true}
       onOpenChange={() => {
-        closeModal();
+        // Intentionally empty - prevent dismissal during loading
       }}
     >
       <DialogContent

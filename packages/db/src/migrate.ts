@@ -14,9 +14,13 @@ const migrate = async () => {
   if (!databaseUrl) return;
   if (process.env.CI) return;
 
-  await createDatabaseIfNotExists(databaseUrl)
-    .then(() => console.log("Database check/creation completed."))
-    .catch((err) => console.error("Failed to check/create database:", err));
+  try {
+    await createDatabaseIfNotExists(databaseUrl);
+    console.log("Database check/creation completed.");
+  } catch (err) {
+    console.error("Failed to check/create database:", err);
+    throw err;
+  }
 
   // If we have arg `--reset` then we should reset the database
   if (process.argv.includes("--reset")) {

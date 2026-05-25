@@ -12,8 +12,8 @@ const NEW_LOCATION_VALUE = "new";
 interface ExistingLocationPickerFormValues {
   newLocationId: number | null;
   originalLocationId: number;
-  originalRegionId: number;
-  newRegionId?: number;
+  originalRegionId?: number | null;
+  newRegionId?: number | null;
 }
 
 export const ExistingLocationPickerForm = <

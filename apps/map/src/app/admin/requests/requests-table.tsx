@@ -93,15 +93,19 @@ export const RequestsTable = () => {
       totalCount={requests?.totalCount}
       columns={columns}
       onRowClick={async (row) => {
-        const response = await client.request.byId({ id: row.original.id });
-        if (!response?.request) {
-          toast.error("Request not found");
-          return;
+        try {
+          const response = await client.request.byId({ id: row.original.id });
+          if (!response?.request) {
+            toast.error("Request not found");
+            return;
+          }
+          void openRequestModal({
+            type: row.original.requestType as RequestType,
+            review: { request: response.request },
+          });
+        } catch (error) {
+          toast.error("Failed to load request details");
         }
-        void openRequestModal({
-          type: row.original.requestType as RequestType,
-          review: { request: response.request },
-        });
       }}
       rowClassName={(row) =>
         `${row.original.status !== "pending" ? "opacity-30" : ""} ${

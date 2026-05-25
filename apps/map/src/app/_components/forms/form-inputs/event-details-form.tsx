@@ -11,9 +11,10 @@ import { Textarea } from "@acme/ui/textarea";
 
 import { orpc, useQuery } from "~/orpc/react";
 import { ControlledTimeInput } from "./controlled-time-input";
+import { useEffect } from "react";
 
 interface EventDetailsFormValues {
-  originalRegionId: number;
+  originalRegionId?: number | null;
   eventName?: string;
   eventDayOfWeek?: DayOfWeek | null;
   eventTypeIds?: number[];
@@ -42,6 +43,19 @@ export const EventDetailsForm = <_T extends EventDetailsFormValues>() => {
       enabled: formRegionId != null,
     }),
   );
+
+  useEffect(() => {
+    if (!eventTypes) return;
+    const validIds = new Set(eventTypes.eventTypes.map((type) => type.id));
+    const selectedIds = form.getValues("eventTypeIds") ?? [];
+    const nextIds = selectedIds.filter((id) => validIds.has(id));
+    if (nextIds.length !== selectedIds.length) {
+      form.setValue("eventTypeIds", nextIds, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
+  }, [eventTypes, form]);
 
   return (
     <>
@@ -176,11 +190,12 @@ export const EventDetailsForm = <_T extends EventDetailsFormValues>() => {
             {...form.register("eventDescription")}
             placeholder="Tell people if there's anything they need to know prior to showing up to the workout"
           />
-          {currentValues?.eventDescription !== formEventDescription && (
-            <p className="text-xs text-muted-foreground line-through">
-              {currentValues?.eventDescription}
-            </p>
-          )}
+          {currentValues?.eventDescription &&
+            currentValues.eventDescription !== formEventDescription && (
+              <p className="text-xs text-muted-foreground line-through">
+                {currentValues.eventDescription}
+              </p>
+            )}
           <p className="text-xs text-destructive">
             {form.formState.errors.eventDescription?.message}
           </p>

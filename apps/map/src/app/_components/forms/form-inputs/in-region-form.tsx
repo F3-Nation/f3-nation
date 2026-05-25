@@ -5,7 +5,7 @@ import { useOptions } from "~/utils/use-options";
 import { VirtualizedCombobox } from "../../virtualized-combobox";
 
 interface InRegionFormValues {
-  originalRegionId?: number;
+  originalRegionId?: number | null;
 }
 
 // TODO: Fix selection form for all use cases
@@ -45,11 +45,7 @@ export const InRegionForm = <_T extends InRegionFormValues>() => {
                     const region = regions?.orgs.find(
                       (region) => region.id.toString() === item,
                     );
-                    form.setValue(
-                      "originalRegionId",
-                      // @ts-expect-error - need to unset regionId despite zod
-                      region?.id ?? (null as number),
-                    );
+                    field.onChange(region?.id ?? null);
                   }}
                   searchPlaceholder="Select Region"
                 />

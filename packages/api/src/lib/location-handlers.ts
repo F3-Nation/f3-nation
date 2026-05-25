@@ -74,6 +74,7 @@ export const updateLocation = async (
   const [location] = await ctx.db
     .update(schema.locations)
     .set({
+      name: updateRequest.locationName ?? undefined,
       description: updateRequest.locationDescription ?? undefined,
       addressStreet: updateRequest.locationAddress ?? undefined,
       addressStreet2: updateRequest.locationAddress2 ?? undefined,

@@ -8,12 +8,17 @@ import { TestId } from "@acme/shared/common/enums";
 
 import { turnOnEditMode } from "../helpers";
 
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const prefix = "EDIT FLOW";
 
 /**
  * This test covers all map actions for admin: create, move, edit, add, and move event/AO.
  */
-test.describe("Admin Map Actions", () => {
+test.describe.serial("Admin Map Actions", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/?lat=31.659308&lng=-132.955330&zoom=8");
     await turnOnEditMode(page);
@@ -75,7 +80,7 @@ test.describe("Admin Map Actions", () => {
     await page.getByText("AO Details:").scrollIntoViewIfNeeded();
     await page.locator('input[name="aoName"]').fill(`${prefix} AO1`);
     await page.locator('input[name="aoWebsite"]').fill("https://ao1.com");
-    const filePath = path.resolve(process.cwd(), "e2e/tests/image.png");
+    const filePath = path.resolve(__dirname, "../tests/image.png");
     await page.locator('input[type="file"]').setInputFiles(filePath);
     await page.getByText("Event Details:").scrollIntoViewIfNeeded();
     await page.locator('input[name="eventName"]').fill(`${prefix} EVENT1`);

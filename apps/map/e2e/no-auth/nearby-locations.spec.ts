@@ -8,7 +8,7 @@ const prefix = "EDIT TEST";
 
 test("searches for TEST EVENT in the search bar", async ({ page }) => {
   // Navigate to the site
-  await page.goto("http://localhost:3000");
+  await page.goto("/");
 
   // Click the search bar (try common selectors)
 
@@ -16,7 +16,15 @@ test("searches for TEST EVENT in the search bar", async ({ page }) => {
   const mapSearchboxInput = page.getByTestId(TestId.MAP_SEARCHBOX_INPUT);
   await mapSearchboxInput.click();
   await mapSearchboxInput.fill(prefix);
-  await page.waitForTimeout(2000);
+  // Wait for search results to appear instead of arbitrary timeout
+  await expect(
+    page
+      .getByRole("button", {
+        name: `item ${prefix} Event Workout (F3 Boone)`,
+        exact: true,
+      })
+      .first(),
+  ).toBeVisible({ timeout: 10000 });
   const searchResult = page
     .getByRole("button", {
       name: `item ${prefix} Event Workout (F3 Boone)`,

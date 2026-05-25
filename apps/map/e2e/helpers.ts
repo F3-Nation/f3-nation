@@ -81,7 +81,7 @@ export const setStore = async (
  */
 export const cleanupTestData = async (params: {
   page: Page;
-  prefix: "SUPER TEST" | "MAP TEST";
+  prefix: string;
 }) => {
   const { page, prefix } = params;
   const logger = testLogger("cleanupTestData");
@@ -214,7 +214,7 @@ export const addNewItemAndVerify = async (params: {
   page: Page;
   section: string;
   extraSteps?: () => Promise<void>;
-  prefix: "SUPER TEST" | "MAP TEST";
+  prefix: string;
 }) => {
   const { page, section, extraSteps, prefix } = params;
   await page.getByRole("button", { name: `Add ${section}` }).click();
@@ -233,7 +233,7 @@ export const editItemAndVerify = async (params: {
   page: Page;
   name: string;
   order: number;
-  prefix: "SUPER TEST" | "MAP TEST";
+  prefix: string;
   extraSteps?: () => Promise<void>;
 }) => {
   const { page, name, order, prefix, extraSteps } = params;

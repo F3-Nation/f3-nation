@@ -19,8 +19,8 @@ import { handleSubmissionError } from "../modal/utils/handle-submission-error";
 
 interface SubmitSectionFormValues {
   id?: string;
-  originalRegionId?: number;
-  newRegionId?: number;
+  originalRegionId?: number | null;
+  newRegionId?: number | null;
   isReview?: boolean;
 }
 
@@ -57,8 +57,8 @@ type CanEditRegionsResult = RouterOutputs["request"]["canEditRegions"];
  * Hook to check if user has edit permissions for regions
  */
 function useRegionPermissions(params: {
-  originalRegionId?: number;
-  newRegionId?: number;
+  originalRegionId?: number | null;
+  newRegionId?: number | null;
 }) {
   const orgIds = useMemo(
     () => [params.originalRegionId, params.newRegionId].filter(isTruthy),

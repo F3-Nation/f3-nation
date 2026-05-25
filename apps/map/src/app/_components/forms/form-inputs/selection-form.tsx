@@ -42,12 +42,8 @@ export const SelectionForm = <_T extends SelectionFormValues>(
   props: SelectionFormProps,
 ) => {
   const form = useFormContext<SelectionFormValues>();
-  const _formOriginalRegionId = form.watch("originalRegionId");
   const formNewRegionId = form.watch("newRegionId");
-  const _formOriginalAOId = form.watch("originalAoId");
   const formNewAOId = form.watch("newAoId");
-  const _formOriginalEventId = form.watch("originalEventId");
-  const _formNewEventId = form.watch("newEventId");
 
   const { data: regions } = useQuery(
     orpc.org.all.queryOptions({ input: { orgTypes: ["region"] } }),

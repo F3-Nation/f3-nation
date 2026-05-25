@@ -21,7 +21,7 @@ export const createAO = async (
     aoWebsite,
     aoLogo,
   }: {
-    regionId?: number;
+    regionId?: number | null;
     locationId?: number | null;
     aoName?: string;
     aoWebsite?: string | null;
@@ -29,14 +29,20 @@ export const createAO = async (
   },
 ): Promise<number> => {
   console.log("createAO", { regionId, locationId, aoName });
+  const normalizedAoName = aoName?.trim();
+
+  if (!normalizedAoName || normalizedAoName.length < 2) {
+    throw new Error("AO name must be at least 2 characters");
+  }
+
   const [ao] = await ctx.db
     .insert(schema.orgs)
     .values({
-      parentId: regionId,
+      parentId: regionId ?? undefined,
       orgType: "ao",
       website: aoWebsite ?? undefined,
       defaultLocationId: locationId ?? undefined,
-      name: aoName ?? "",
+      name: normalizedAoName,
       isActive: true,
       logoUrl: aoLogo ?? undefined,
     })

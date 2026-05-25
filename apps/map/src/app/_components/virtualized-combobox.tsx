@@ -65,16 +65,10 @@ const VirtualizedCommand = <T,>({
       : options;
 
     return [...filtered].sort((a, b) => {
-      if (selectedOptions.includes(a.value)) {
-        return -1;
-      }
-      if (
-        selectedOptions.includes(b.value) &&
-        !selectedOptions.includes(a.value)
-      ) {
-        return 1;
-      }
-      return 0;
+      const aSelected = selectedOptions.includes(a.value);
+      const bSelected = selectedOptions.includes(b.value);
+      if (aSelected === bSelected) return 0;
+      return aSelected ? -1 : 1;
     });
   }, [options, searchTerm, selectedOptions]);
 

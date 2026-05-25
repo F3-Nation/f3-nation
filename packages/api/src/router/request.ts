@@ -30,7 +30,6 @@ import {
   MoveEventToNewLocationSchema,
 } from "@acme/validators/request-schemas";
 
-import type { CheckUpdatePermissionsInput } from "../lib/check-update-permissions";
 import type { UpdateRequestData } from "../lib/types";
 import type { Context } from "../shared";
 
@@ -767,7 +766,12 @@ export const requestRouter = {
     }),
 };
 
-interface CheckRequestInput extends CheckUpdatePermissionsInput {
+interface CheckRequestInput {
+  originalEventId?: number | null;
+  originalLocationId?: number | null;
+  newLocationId?: number | null;
+  originalRegionId?: number | null;
+  newRegionId?: number | null;
   submittedBy: string;
 }
 
@@ -775,9 +779,7 @@ const checkRequest = async ({
   input,
   ctx,
 }: {
-  input: CheckUpdatePermissionsInput & {
-    submittedBy: string;
-  };
+  input: CheckRequestInput;
   ctx: Context;
 }) => {
   const regionId = input.newRegionId ?? input.originalRegionId;

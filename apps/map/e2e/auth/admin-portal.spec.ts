@@ -10,7 +10,8 @@ import {
   goToSection,
 } from "../helpers";
 
-const prefix = "SUPER TEST";
+const testRunSuffix = Date.now().toString(36);
+const prefix = `SUPER TEST – ${testRunSuffix}`;
 
 // To run this file:
 // 1. pnpm -F nextjs test:e2e:ui --grep="admin"
@@ -65,7 +66,7 @@ test.describe("Admin Portal", () => {
       section: "Area",
       extraSteps: async () => {
         await page.getByRole("combobox").filter({ hasText: /^$/ }).click();
-        await page.getByRole("option", { name: "SUPER TEST SECTOR" }).click();
+        await page.getByRole("option", { name: `${prefix} SECTOR` }).click();
       },
       prefix,
     });
@@ -114,7 +115,7 @@ test.describe("Admin Portal", () => {
       prefix,
       extraSteps: async () => {
         await page.getByRole("combobox").filter({ hasText: /^$/ }).click();
-        await page.getByPlaceholder("Select a region").fill("super");
+        await page.getByPlaceholder("Select a region").fill(prefix);
         await page
           .getByRole("option", { name: `${prefix} REGION 2` })
           .first()
@@ -149,9 +150,9 @@ test.describe("Admin Portal", () => {
           .getByRole("combobox")
           .filter({ hasText: "Select a region" })
           .click();
-        await page.getByPlaceholder("Select a region").fill("SUPER");
+        await page.getByPlaceholder("Select a region").fill(prefix);
         await page
-          .getByRole("option", { name: "SUPER TEST REGION 2" })
+          .getByRole("option", { name: `${prefix} REGION 2` })
           .first()
           .click();
       },
@@ -177,7 +178,7 @@ test.describe("Admin Portal", () => {
       extraSteps: async () => {
         await page
           .getByRole("textbox", { name: "Name" })
-          .fill("SUPER TEST LOCATION");
+          .fill(`${prefix} LOCATION`);
         await page.waitForTimeout(250);
         await page
           .getByRole("combobox")
@@ -214,7 +215,7 @@ test.describe("Admin Portal", () => {
           .getByRole("combobox")
           .filter({ hasText: "Select a region" })
           .click();
-        await page.getByPlaceholder("Select a region").fill("SUPER");
+        await page.getByPlaceholder("Select a region").fill(prefix);
         await page
           .getByRole("option", { name: `${prefix} REGION 2` })
           .first()
@@ -273,7 +274,11 @@ test.describe("Admin Portal", () => {
         // Set date and time
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
-        const dateString = tomorrow.toISOString().split("T")[0] ?? "";
+        const dateString = [
+          tomorrow.getFullYear(),
+          String(tomorrow.getMonth() + 1).padStart(2, "0"),
+          String(tomorrow.getDate()).padStart(2, "0"),
+        ].join("-");
 
         await page.getByLabel("Start Date").fill(dateString);
         await fillTimeInput(page, "startTime", "0600A");

@@ -112,7 +112,7 @@ async function main() {
       id: request.id,
       regionId: request.regionId,
       regionName: request.regionName,
-      eventName: request.eventName ?? "",
+      eventName: request.eventName ?? "Unknown Event",
       submittedBy: request.submittedBy,
       requestType: request.requestType,
       created: request.created,

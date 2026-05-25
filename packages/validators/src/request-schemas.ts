@@ -76,7 +76,7 @@ export const BaseSchema = RequestInsertSchema.pick({
   originalEventId: z.number().nullish(),
   originalLocationId: z.number().nullish(),
   originalAoId: z.number().nullish(),
-  originalRegionId: z.number().positive("Original region ID is required"), // must be nullable for new events and locs?
+  originalRegionId: z.number().positive("Original region ID is required"),
 });
 export type BaseSchemaType = z.infer<typeof BaseSchema>;
 

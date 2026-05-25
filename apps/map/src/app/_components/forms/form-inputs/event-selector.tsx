@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Controller, useFormContext } from "react-hook-form";
 
 import { dayOfWeekToShortDayOfWeek } from "@acme/shared/app/functions";
@@ -36,6 +37,7 @@ export function EventSelector<_T extends EventSelectorFormValues>({
   const form = useFormContext<EventSelectorFormValues>();
   const regionId = form.watch(regionFieldName);
   const aoId = form.watch(aoFieldName);
+  const selectedEventId = form.watch(fieldName);
 
   const { data: events } = useQuery(
     orpc.event.all.queryOptions({
@@ -56,6 +58,14 @@ export function EventSelector<_T extends EventSelectorFormValues>({
     (e) => e.id.toString(),
   );
 
+  useEffect(() => {
+    if (selectedEventId == null || !events) return;
+    const exists = events.events.some((event) => event.id === selectedEventId);
+    if (!exists) {
+      form.setValue(fieldName, null, { shouldValidate: true });
+    }
+  }, [events, selectedEventId, fieldName, form]);
+
   return (
     <div className="flex-1">
       <div className="text-sm font-medium text-muted-foreground">{label}</div>
@@ -65,7 +75,7 @@ export function EventSelector<_T extends EventSelectorFormValues>({
         render={({ field, fieldState }) => (
           <>
             <VirtualizedCombobox
-              key={regionId?.toString()}
+              key={`${regionId ?? "none"}-${aoId ?? "none"}`}
               options={eventOptions}
               value={field.value?.toString()}
               onSelect={(item) => {

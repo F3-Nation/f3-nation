@@ -32,7 +32,6 @@ export const MoveAOToDifferentLocationModal = ({
         <form className="w-[inherit] overflow-x-hidden p-0.5">
           {!isProductionNodeEnv && <FormDebugData />}
           <div>
-            <p>Moving AO ID: {data?.originalAoId}</p>
             <p>From Location ID: {data?.originalLocationId}</p>
             <p>To Location ID: {data?.newLocationId}</p>
             <p>Original Region ID: {data?.originalRegionId}</p>

@@ -4,7 +4,7 @@ import type { Context } from "../../shared";
 
 // In-memory store to simulate database
 let mockDatabase: Map<string, Record<string, unknown>>;
-
+let idCounter = 0;
 /**
  * Creates a mock database with chainable methods that tracks inserts/updates.
  * Simulates Drizzle ORM's query builder pattern.
@@ -29,7 +29,7 @@ export const createMockDb = () => {
     .fn()
     .mockImplementation((data: Record<string, unknown>) => {
       // Store the data in our mock database
-      const id = (data.id as string) || `generated-${Date.now()}`;
+      const id = (data.id as string) || `generated-${++idCounter}`;
       const record = {
         ...data,
         id,

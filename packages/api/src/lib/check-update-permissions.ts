@@ -9,7 +9,7 @@ export interface CheckUpdatePermissionsInput {
   originalEventId?: number | null;
   originalLocationId?: number | null;
   newLocationId?: number | null;
-  originalRegionId: number;
+  originalRegionId?: number | null;
   newRegionId?: number | null;
 }
 
