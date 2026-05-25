@@ -45,26 +45,12 @@
     "@vitejs/plugin-react": "^4.2.1",
     "@vitest/coverage-v8": "^1.5.0",
     "autoprefixer": "^10.4.17",
-    "eslint": "^8.56.0",
+    "eslint": "catalog:",
     "postcss": "^8.4.35",
-    "prettier": "^3.2.5",
+    "prettier": "catalog:",
     "tailwindcss": "^3.4.1",
     "tailwindcss-animate": "^1.0.7",
-    "typescript": "^5.3.3",
+    "typescript": "catalog:",
     "vitest": "^1.5.0"
-  },
-  "eslintConfig": {
-    "root": true,
-    "extends": [
-      "@acme/eslint-config/base",
-      "@acme/eslint-config/nextjs",
-      "@acme/eslint-config/react"
-    ],
-    "ignorePatterns": [
-      "next-env.d.ts",
-      "coverage/**",
-      "vitest.config.ts",
-      "vitest.setup.ts"
-    ]
   }
 }

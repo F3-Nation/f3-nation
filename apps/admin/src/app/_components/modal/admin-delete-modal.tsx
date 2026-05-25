@@ -59,7 +59,6 @@ export default function AdminDeleteModal({
       mutation = orpc.position.delete.call;
       break;
     default:
-      // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
       throw new Error(`Invalid delete type: ${data.type}`);
   }
 
@@ -98,7 +97,6 @@ export default function AdminDeleteModal({
           await invalidateQueries("position");
           break;
         default:
-          // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
           throw new Error(`Invalid delete type: ${data.type}`);
       }
 
@@ -181,7 +179,6 @@ const dataTypeToName = (
     case DeleteType.POSITION:
       return "Position";
     default:
-      // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
       throw new Error(`Invalid delete type: ${dataType}`);
   }
 };

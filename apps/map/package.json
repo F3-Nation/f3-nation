@@ -91,7 +91,7 @@
     "eslint": "catalog:",
     "jiti": "^2.4.2",
     "jsdom": "^24.0.0",
-    "prettier": "^3.2.5",
+    "prettier": "catalog:",
     "tailwindcss": "^3.4.1",
     "typescript": "catalog:",
     "vite-tsconfig-paths": "^4.3.2",

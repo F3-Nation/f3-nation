@@ -980,9 +980,8 @@ export const eventRouter = {
         );
 
       // Cascade delete event instances for series events
-      const { softDeleteFutureInstancesForSeries } = await import(
-        "../lib/cascade-service"
-      );
+      const { softDeleteFutureInstancesForSeries } =
+        await import("../lib/cascade-service");
       await softDeleteFutureInstancesForSeries(ctx.db, input.id);
 
       // Notify webhooks and invalidate cache about the event deletion

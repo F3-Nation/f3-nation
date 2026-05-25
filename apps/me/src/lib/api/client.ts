@@ -99,10 +99,10 @@ export const getApiClient = cache(
   },
 );
 
-type ApiErrorLike = {
+interface ApiErrorLike {
   code?: string;
   status?: number;
-};
+}
 
 function isApiErrorLike(err: unknown): err is ApiErrorLike {
   if (typeof err !== "object" || err === null) return false;

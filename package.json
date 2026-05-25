@@ -58,10 +58,11 @@
     "@turbo/gen": "^1.12.3",
     "commitizen": "^4.3.1",
     "inquirer": "^9.3.8",
-    "lefthook": "^2.1.5",
-    "prettier": "^3.2.5",
+    "lefthook": "catalog:",
+    "prettier": "catalog:",
     "turbo": "^1.12.3",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "typescript-eslint": "catalog:"
   },
   "config": {
     "commitizen": {
@@ -74,7 +75,6 @@
       "axios": ">=1.7.4",
       "braces": ">=3.0.3",
       "cross-spawn": ">=7.0.5",
-      "prettier": "3.2.5",
       "@vis.gl/react-google-maps": "1.5.2"
     },
     "peerDependencyRules": {

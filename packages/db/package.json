@@ -44,7 +44,7 @@
     "@faker-js/faker": "^8.1.0",
     "drizzle-kit": "^0.31.10",
     "eslint": "catalog:",
-    "prettier": "^3.2.5",
+    "prettier": "catalog:",
     "typescript": "catalog:"
   },
   "prettier": "@acme/prettier-config"

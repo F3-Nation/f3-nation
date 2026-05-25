@@ -14,7 +14,7 @@ function getOrpcUrl(): string {
   const path = `/api/orpc${API_PREFIX_V1}`;
   const origin =
     typeof window === "undefined"
-      ? process.env.F3_ADMIN_BASE_URL ?? "http://localhost:3002"
+      ? (process.env.F3_ADMIN_BASE_URL ?? "http://localhost:3002")
       : window.location.origin;
   return new URL(path, origin).toString();
 }
