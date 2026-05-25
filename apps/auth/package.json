@@ -39,7 +39,7 @@
     "@acme/prettier-config": "workspace:*",
     "@acme/tailwind-config": "workspace:*",
     "@acme/tsconfig": "workspace:*",
-    "@types/node": "^20.11.13",
+    "@types/node": "catalog:",
     "@types/nodemailer": "^6.4.17",
     "@types/pg": "^8.10.9",
     "@types/react": "^18.3.1",
