@@ -20,6 +20,7 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
 }));
 
 vi.mock("@acme/mail", async (importOriginal) => {
+  // eslint-disable-next-line
   const actual = await importOriginal<typeof import("@acme/mail")>();
   return {
     ...actual,
