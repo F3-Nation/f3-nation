@@ -10,7 +10,10 @@
 # All resources are gated on var.service_domain: empty (default) builds nothing.
 
 locals {
-  enable_lb = var.service_domain == "" ? 0 : 1
+  # LB resources exist only when a domain is set AND routing_mode selects the LB.
+  # Flipping routing_mode to "domain_mapping" (after the domain is verified +
+  # validated) tears these down — that is the ~$18-25/mo saving.
+  enable_lb = var.service_domain != "" && var.routing_mode == "load_balancer" ? 1 : 0
 }
 
 # Stable anycast IP — this is the value Tackle points the A record at.

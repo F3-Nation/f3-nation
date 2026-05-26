@@ -28,9 +28,35 @@ variable "image" {
 }
 
 variable "service_domain" {
-  description = "Optional domain mapped directly to the Cloud Run service (e.g. regions.f3nation.com). Left empty until the F3 Nation dev team (Tackle) is ready to make the DNS change; the domain mapping resource is disabled while empty."
+  description = "Optional domain mapped directly to the Cloud Run service (e.g. regions.f3nation.com). Left empty until the F3 Nation dev team (Tackle) is ready to make the DNS change; routing resources are disabled while empty."
   type        = string
   default     = ""
+}
+
+variable "routing_mode" {
+  description = <<-EOT
+    How public traffic reaches the Cloud Run service for var.service_domain:
+
+      "domain_mapping" (recommended) — Cloud Run custom domain mapping. Free;
+        Google-managed TLS; DNS is a CNAME to ghs.googlehosted.com. Requires the
+        domain to be verified once in Search Console. No load balancer billed.
+
+      "load_balancer" — global external HTTPS load balancer + serverless NEG.
+        ~$18-25/mo fixed baseline regardless of traffic. Adds Cloud CDN / Cloud
+        Armor / multi-region / static-anycast-IP capability we do not currently
+        use. Kept as a toggle for rollback until the domain mapping is validated.
+
+    Mutually exclusive — exactly one set of routing resources is created. Default
+    stays "load_balancer" so an apply before the DNS cutover does not tear down
+    the live LB; flip to "domain_mapping" once the domain is verified + validated.
+  EOT
+  type        = string
+  default     = "load_balancer"
+
+  validation {
+    condition     = contains(["domain_mapping", "load_balancer"], var.routing_mode)
+    error_message = "routing_mode must be \"domain_mapping\" or \"load_balancer\"."
+  }
 }
 
 variable "ingress" {
