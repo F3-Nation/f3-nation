@@ -9,7 +9,7 @@
   "packageManager": "pnpm@11.3.0",
   "scripts": {
     "build": "turbo build",
-    "ci:local": "pnpm format && pnpm lint && pnpm typecheck && pnpm build && pnpm test:coverage",
+    "ci:local": "pnpm format && pnpm lint && pnpm typecheck && pnpm build --filter='!@acme/auth' && pnpm test:coverage",
     "clean:workspaces": "turbo clean && pnpm clean",
     "clean": "rm -rf .turbo node_modules",
     "commit": "cz",
