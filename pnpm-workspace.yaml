@@ -51,3 +51,24 @@ catalog:
   vitest: ^3.2.4
   vitest-canvas-mock: ^1.1.4
   zod: ^3.25.76
+overrides:
+  axios: ">=1.7.4"
+  braces: ">=3.0.3"
+  cross-spawn: ">=7.0.5"
+  "@vis.gl/react-google-maps": 1.5.2
+peerDependencyRules:
+  allowedVersions:
+    eslint-plugin-react>eslint: "10"
+    eslint-plugin-react-hooks>eslint: "10"
+    eslint-plugin-jsx-a11y>eslint: "10"
+nodeLinker: hoisted
+allowBuilds:
+  "@sentry/cli": true
+  core-js: true
+  core-js-pure: true
+  esbuild: true
+  lefthook: true
+  sharp: true
+  unrs-resolver: true
+
+minimumReleaseAge: 0
