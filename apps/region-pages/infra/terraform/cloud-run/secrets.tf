@@ -36,6 +36,14 @@ resource "google_secret_manager_secret_version" "runtime" {
 
   secret      = google_secret_manager_secret.runtime[each.key].id
   secret_data = var.secret_values[each.key]
+
+  # Secret rotation is operational data, not infrastructure drift. Terraform owns
+  # the secret container, its IAM, and the env-var mapping; the value itself may
+  # be rotated out of band without showing as drift. This also lets the drift-
+  # detection CI run `plan` with placeholder values — it never reads real secrets.
+  lifecycle {
+    ignore_changes = [secret_data]
+  }
 }
 
 # Allow the Cloud Run runtime service account to read each secret.

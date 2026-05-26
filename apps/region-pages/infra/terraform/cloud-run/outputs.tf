@@ -24,15 +24,16 @@ output "managed_certificate_domains" {
 }
 
 output "domain_mapping_dns_records" {
-  description = "DNS records Tackle adds when routing_mode = domain_mapping (subdomain -> CNAME ghs.googlehosted.com). Empty otherwise."
-  value       = try(google_cloud_run_domain_mapping.app[0].status[0].resource_records, [])
+  description = "Per-domain DNS records for each Cloud Run domain mapping (subdomain -> CNAME ghs.googlehosted.com). Keyed by domain."
+  value       = { for d, m in google_cloud_run_domain_mapping.app : d => try(m.status[0].resource_records, []) }
 }
 
 output "dns_handoff" {
-  description = "Copy/paste DNS instruction for Tackle, based on routing_mode."
-  value = var.service_domain == "" ? "service_domain not set — no DNS change to hand off yet." : (
-    var.routing_mode == "domain_mapping" ?
-    "Verify ${var.service_domain} once in Search Console (google-site-verification TXT), then add: ${var.service_domain} -> CNAME ghs.googlehosted.com. (TTL 300). Free Google-managed cert auto-provisions after it resolves." :
-    "Create an A record: ${var.service_domain} -> ${try(google_compute_global_address.lb[0].address, "(pending apply)")} (TTL 300). HTTPS cert auto-provisions within ~15-60 min after it resolves."
+  description = "Copy/paste DNS instructions per domain mapping, plus any transitional load-balancer A record."
+  value = merge(
+    { for d in var.domain_mappings : d => "Verify ${d} once in Search Console (google-site-verification TXT), then add: ${d} -> CNAME ghs.googlehosted.com (TTL 300). Free Google-managed cert auto-provisions after it resolves." },
+    var.service_domain == "" ? {} : {
+      "${var.service_domain} (transitional LB)" = "Create an A record: ${var.service_domain} -> ${try(google_compute_global_address.lb[0].address, "(pending apply)")} (TTL 300)."
+    }
   )
 }

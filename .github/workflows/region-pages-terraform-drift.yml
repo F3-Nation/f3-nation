@@ -1,0 +1,99 @@
+name: region-pages Terraform Drift
+
+# Enforces the zero-drift rule for the region-pages GCP project: the committed
+# Terraform under apps/region-pages/infra/terraform/cloud-run is the source of
+# truth. This workflow runs `terraform plan` and fails if live infrastructure
+# has drifted from the code — daily (catch console drift) and on every PR that
+# touches the Terraform (catch drift before merge).
+#
+# Auth is keyless via the F3-Nation org Workload Identity pool (vars.WIF_PROVIDER,
+# the same provider the deploy-* workflows use), impersonating the read-only
+# github-actions-deploy@region-pages SA created in ci.tf.
+
+on:
+  schedule:
+    - cron: "0 13 * * *" # daily at 13:00 UTC (~7-8am Central)
+  pull_request:
+    paths:
+      - "apps/region-pages/infra/terraform/cloud-run/**"
+      - ".github/workflows/region-pages-terraform-drift.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: region-pages-tf-drift
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/region-pages/infra/terraform/cloud-run
+    env:
+      # Plan only — never applied. secret_data and the image tag are ignored by
+      # the config (see secrets.tf / main.tf lifecycle blocks), so placeholders
+      # produce no diff and the workflow never touches real secret values.
+      TF_VAR_image: "ci-plan-placeholder"
+      TF_VAR_secret_values: >-
+        {"postgres-url":"x","f3-data-warehouse-url":"x","cloud-sql-warehouse-connection-name":"x","warehouse-db-user":"x","warehouse-db-password":"x","warehouse-db-name":"x","cron-secret":"x","slack-bot-auth-token":"x","slack-channel-id":"x"}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP (Workload Identity Federation)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: github-actions-deploy@region-pages.iam.gserviceaccount.com
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.15.3"
+
+      - name: Terraform init
+        run: terraform init -input=false
+
+      - name: Terraform plan (detect drift)
+        id: plan
+        run: |
+          set +e
+          terraform plan -input=false -lock=false -no-color -detailed-exitcode
+          code=$?
+          set -e
+          echo "exitcode=$code" >> "$GITHUB_OUTPUT"
+          # 0 = in sync, 2 = drift detected, 1 = error
+          if [ "$code" = "1" ]; then
+            echo "::error::terraform plan failed."
+            exit 1
+          elif [ "$code" = "2" ]; then
+            echo "::error::Drift detected — region-pages infrastructure no longer matches Terraform. Reconcile by applying the committed config or importing the change."
+            exit 2
+          else
+            echo "No drift — region-pages matches Terraform."
+          fi
+
+      - name: Comment drift result on PR
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const code = '${{ steps.plan.outputs.exitcode }}';
+            const body = code === '0'
+              ? '✅ **region-pages Terraform drift check:** in sync — live infrastructure matches the committed config.'
+              : code === '2'
+              ? '⚠️ **region-pages Terraform drift check:** drift detected — `terraform plan` shows changes. Reconcile before merge (apply the committed config or import the out-of-band change).'
+              : '❌ **region-pages Terraform drift check:** `terraform plan` errored. See the job logs.';
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });

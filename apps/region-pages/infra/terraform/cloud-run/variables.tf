@@ -28,9 +28,22 @@ variable "image" {
 }
 
 variable "service_domain" {
-  description = "Optional domain mapped directly to the Cloud Run service (e.g. regions.f3nation.com). Left empty until the F3 Nation dev team (Tackle) is ready to make the DNS change; routing resources are disabled while empty."
+  description = "Domain fronted by the transitional external HTTPS load balancer (lb.tf). Empty disables the LB. Being retired in favour of var.domain_mappings; kept only until staging.f3regions.com moves onto a Cloud Run domain mapping."
   type        = string
   default     = ""
+}
+
+variable "domain_mappings" {
+  description = <<-EOT
+    Domains served directly by Cloud Run custom domain mappings (free, no load
+    balancer; Google-managed TLS; DNS is a CNAME to ghs.googlehosted.com). Each
+    domain must be verified once in Search Console before Google activates it.
+    This is the target serving mechanism — the load balancer (lb.tf) is removed
+    once every domain here is live. Example: ["regions.f3nation.com",
+    "staging.f3regions.com"].
+  EOT
+  type        = list(string)
+  default     = ["regions.f3nation.com", "staging.f3regions.com"]
 }
 
 variable "routing_mode" {

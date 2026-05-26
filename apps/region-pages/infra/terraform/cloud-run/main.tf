@@ -46,12 +46,42 @@ resource "google_project_iam_member" "runtime_cloudsql_client" {
   member  = "serviceAccount:${google_service_account.runtime.email}"
 }
 
+# Legacy Cloud SQL service account (pre-Terraform). Not the Cloud Run runtime
+# identity (that is google_service_account.runtime); retained and codified here
+# because it holds roles/cloudsql.client and may be referenced as a Cloud SQL
+# IAM database user on the external F3 data warehouse. Managed in Terraform so it
+# is no longer console drift; safe to retire later if confirmed unused.
+resource "google_service_account" "cloudsql" {
+  project      = var.project_id
+  account_id   = "f3-cloudsql-sa"
+  display_name = "F3 Cloud SQL Service Account"
+}
+
+resource "google_project_iam_member" "cloudsql_sa_client" {
+  project = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.cloudsql.email}"
+}
+
 resource "google_cloud_run_v2_service" "app" {
   name                = var.service_name
   location            = var.region
   ingress             = var.ingress
   labels              = var.service_labels
   deletion_protection = false
+
+  # Image deploys and deploy-tool metadata are owned by CI (`gcloud run deploy`),
+  # not by `terraform apply`. Ignoring them keeps Terraform authoritative for the
+  # service's shape (scaling, secrets, SA, ingress) without fighting CI over the
+  # rolling image tag — the difference between perpetual drift and a clean plan.
+  lifecycle {
+    ignore_changes = [
+      client,
+      client_version,
+      scaling,
+      template[0].containers[0].image,
+    ]
+  }
 
   template {
     service_account = google_service_account.runtime.email

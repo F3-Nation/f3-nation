@@ -6,10 +6,15 @@ service_name                    = "f3-region-pages"
 # Set after building and pushing the image (see README).
 image = "us-central1-docker.pkg.dev/region-pages/f3-region-pages/web:v1"
 
-# Set to the custom domain to build the external HTTPS load balancer (serverless
-# NEG + Google-managed cert). Leave empty to skip the LB entirely. When set, the
-# `load_balancer_ip` / `dns_handoff` outputs give Tackle the A record to create.
-service_domain = "regions.f3nation.com"
+# Domains served directly by Cloud Run domain mappings (free, Google-managed TLS,
+# CNAME -> ghs.googlehosted.com). This is the live serving mechanism. Each domain
+# must be verified once in Search Console. Defaults to the two production domains.
+domain_mappings = ["regions.f3nation.com", "staging.f3regions.com"]
+
+# Transitional external HTTPS load balancer domain. Empty = no load balancer
+# (the current/target state — staging migrated off the LB on 2026-05-26). Only
+# set this to roll back onto the LB for a single domain.
+service_domain = ""
 
 min_instance_count = 0
 max_instance_count = 4
