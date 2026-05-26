@@ -70,6 +70,33 @@ export const recordUpdateRequest = async (params: {
     getVal("originalLocationId") ??
     getVal("locationId");
   const eventId = getVal("originalEventId") ?? getVal("eventId");
+  const shouldHydrateDestinationAo =
+    req.requestType === "move_event_to_different_ao" && getVal("newAoId");
+
+  const [destinationAo] = shouldHydrateDestinationAo
+    ? await params.ctx.db
+        .select({
+          name: schema.orgs.name,
+          logoUrl: schema.orgs.logoUrl,
+          website: schema.orgs.website,
+          locationId: schema.orgs.defaultLocationId,
+          locationAddress: schema.locations.addressStreet,
+          locationAddress2: schema.locations.addressStreet2,
+          locationCity: schema.locations.addressCity,
+          locationState: schema.locations.addressState,
+          locationZip: schema.locations.addressZip,
+          locationCountry: schema.locations.addressCountry,
+          locationLat: schema.locations.latitude,
+          locationLng: schema.locations.longitude,
+          locationDescription: schema.locations.description,
+        })
+        .from(schema.orgs)
+        .leftJoin(
+          schema.locations,
+          eq(schema.locations.id, schema.orgs.defaultLocationId),
+        )
+        .where(eq(schema.orgs.id, getVal("newAoId")!))
+    : [];
 
   if (!regionId) {
     console.error("Region ID missing in update request", params.updateRequest);
@@ -82,7 +109,20 @@ export const recordUpdateRequest = async (params: {
     submittedBy: params.updateRequest.submittedBy,
     regionId,
     aoId,
-    locationId,
+    aoName: destinationAo?.name ?? req.aoName,
+    aoLogo: destinationAo?.logoUrl ?? req.aoLogo,
+    aoWebsite: destinationAo?.website ?? req.aoWebsite,
+    locationId: destinationAo?.locationId ?? locationId,
+    locationAddress: destinationAo?.locationAddress ?? req.locationAddress,
+    locationAddress2: destinationAo?.locationAddress2 ?? req.locationAddress2,
+    locationCity: destinationAo?.locationCity ?? req.locationCity,
+    locationState: destinationAo?.locationState ?? req.locationState,
+    locationZip: destinationAo?.locationZip ?? req.locationZip,
+    locationCountry: destinationAo?.locationCountry ?? req.locationCountry,
+    locationLat: destinationAo?.locationLat ?? req.locationLat,
+    locationLng: destinationAo?.locationLng ?? req.locationLng,
+    locationDescription:
+      destinationAo?.locationDescription ?? req.locationDescription,
     eventId,
     status: params.status,
     reviewedAt,
@@ -203,7 +243,7 @@ export const handleEditEvent = async (ctx: Context, request: EditEventType) => {
   // Use explicit type for updateData
   const updateData: Parameters<typeof updateEvent>[1] = {
     eventId: request.originalEventId,
-    locationId: undefined as unknown as number,
+    locationId: undefined,
     eventName: request.eventName,
     eventDescription: request.eventDescription,
     eventDayOfWeek: request.eventDayOfWeek,
@@ -337,9 +377,6 @@ export const handleMoveEventToNewAO = async (
     aoWebsite: request.aoWebsite,
     locationId,
   });
-
-  console.log("aoId", aoId);
-  console.log("locationId", locationId);
 
   await updateEvent(ctx, {
     eventId: request.originalEventId,

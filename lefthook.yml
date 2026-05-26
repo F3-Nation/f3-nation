@@ -8,7 +8,7 @@ pre-commit:
 
     - name: eslint
       glob: "**/*.{ts,tsx,js,jsx,mjs,cjs}"
-      run: pnpm exec eslint --fix {staged_files}
+      run: pnpm exec eslint --fix --no-warn-ignored {staged_files}
       stage_fixed: true
 
     - name: typecheck

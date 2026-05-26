@@ -86,4 +86,5 @@ export enum Client {
   ORPC = "orpc",
   ORPC_SSG = "orpc-ssg",
   SCALAR_API = "scalar-api",
+  F3_ME = "f3-me",
 }

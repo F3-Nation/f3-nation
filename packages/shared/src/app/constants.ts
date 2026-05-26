@@ -151,70 +151,70 @@ export const routes = {
     __auth: "none",
   },
   admin: {
-    __path: "/admin",
+    __path: "/",
     __auth: "editor",
     regions: {
-      __path: "/admin/regions",
+      __path: "/regions",
       __auth: "editor",
     },
     theNation: {
-      __path: "/admin/the-nation",
+      __path: "/the-nation",
       __auth: "editor",
     },
     sectors: {
-      __path: "/admin/sectors",
+      __path: "/sectors",
       __auth: "editor",
     },
     areas: {
-      __path: "/admin/areas",
+      __path: "/areas",
       __auth: "editor",
     },
     aos: {
-      __path: "/admin/aos",
+      __path: "/aos",
       __auth: "editor",
     },
     users: {
-      __path: "/admin/users",
+      __path: "/users",
       __auth: "editor",
       all: {
-        __path: "/admin/users/all",
+        __path: "/users/all",
         __auth: "editor",
       },
       mine: {
-        __path: "/admin/users/mine",
+        __path: "/users/mine",
         __auth: "editor",
       },
     },
     requests: {
-      __path: "/admin/requests",
+      __path: "/requests",
       __auth: "editor",
     },
     apiKeys: {
-      __path: "/admin/api-keys",
+      __path: "/api-keys",
       __auth: "admin",
     },
     locations: {
-      __path: "/admin/locations",
+      __path: "/locations",
       __auth: "editor",
     },
     eventTypes: {
-      __path: "/admin/event-types",
+      __path: "/event-types",
       __auth: "editor",
     },
     workouts: {
-      __path: "/admin/workouts",
+      __path: "/workouts",
       __auth: "editor",
     },
     positions: {
-      __path: "/admin/positions",
+      __path: "/positions",
       __auth: "editor",
     },
     emailTest: {
-      __path: "/admin/email-test",
+      __path: "/email-test",
       __auth: "admin",
     },
     noAccess: {
-      __path: "/admin/no-access",
+      __path: "/no-access",
       __auth: "none",
     },
   },

@@ -17,7 +17,6 @@ import type { AppDb } from "@acme/db/client";
 import { F3_NATION_ORG_ID } from "@acme/shared/app/constants";
 import { IsActiveStatus, OrgType } from "@acme/shared/app/enums";
 import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
-import type { OrgMeta } from "@acme/shared/app/types";
 import { OrgInsertSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
@@ -29,28 +28,6 @@ import { notifyMapDataChange } from "../lib/webhook-events";
 import type { Context } from "../shared";
 import { adminProcedure, editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
-
-interface Org {
-  id: number;
-  parentId: number | null;
-  name: string;
-  orgType: "ao" | "region" | "area" | "sector" | "nation";
-  defaultLocationId: number | null;
-  description: string | null;
-  isActive: boolean;
-  logoUrl: string | null;
-  website: string | null;
-  email: string | null;
-  twitter: string | null;
-  facebook: string | null;
-  instagram: string | null;
-  lastAnnualReview: string | null;
-  meta: OrgMeta;
-  created: string;
-  parentOrgName: string;
-  parentOrgType: "ao" | "region" | "area" | "sector" | "nation";
-  aoCount: number | null;
-}
 
 // Shared filter schema for orgs (used by both `all` and `count` endpoints)
 const orgFilterSchema = z.object({
@@ -194,11 +171,12 @@ async function getOrgCount(params: {
 }): Promise<number> {
   const { db, where } = params;
 
-  const [result] = await db
+  // TS6.0: aliasedTable complex conditional types require explicit annotation
+  const [result] = (await db
     .select({ count: countDistinct(org.id) })
     .from(org)
     .leftJoin(parentOrg, eq(org.parentId, parentOrg.id))
-    .where(where);
+    .where(where)) as { count: number }[];
 
   return result?.count ?? 0;
 }
@@ -354,7 +332,7 @@ export const orgRouter = {
         : await query.orderBy(...sortedColumns);
 
       // Something is broken with org to org types
-      return { orgs: orgs_untyped as Org[], total };
+      return { orgs: orgs_untyped, total };
     }),
 
   count: protectedProcedure
@@ -539,13 +517,14 @@ export const orgRouter = {
 
       // Get all editable orgs (includes descendants via hierarchy traversal)
       const { editableOrgs } = await getEditableOrgIdsForUser(ctx);
-      const editableOrgIds = editableOrgs
+      const directEditableIds = editableOrgs
         .map((o) => o.id)
         .filter((id): id is number => id !== null);
 
-      if (editableOrgIds.length === 0) {
-        return { orgs: [], total: 0 };
-      }
+      const editableOrgIds =
+        directEditableIds.length > 0
+          ? await getDescendantOrgIds(ctx.db, directEditableIds)
+          : [];
 
       // Query full org details for all editable orgs
       const editableOrgsData = await ctx.db
@@ -839,16 +818,45 @@ export const orgRouter = {
         });
       }
 
+      const isChangingParent =
+        input.parentId !== undefined && input.parentId !== existingOrg.parentId;
+
+      let destinationParentOrgId: number | null = null;
+
+      if (isChangingParent) {
+        if (input.parentId == null) {
+          throw new ORPCError("BAD_REQUEST", {
+            message: "Parent ID is required to move this org",
+          });
+        }
+
+        destinationParentOrgId = input.parentId;
+
+        const destinationRoleCheckResult = await checkHasRoleOnOrg({
+          orgId: destinationParentOrgId,
+          session: ctx.session,
+          db: ctx.db,
+          roleName: "editor",
+        });
+
+        if (!destinationRoleCheckResult.success) {
+          throw new ORPCError("UNAUTHORIZED", {
+            message:
+              "You are not authorized to move this org to the destination parent organization",
+          });
+        }
+      }
+
       // If the parentId is changing and this is an AO, we need to move the locations for the org
       if (
-        input.parentId &&
-        existingOrg.parentId &&
-        input.parentId !== existingOrg.parentId &&
-        input.orgType === "ao"
+        isChangingParent &&
+        input.orgType === "ao" &&
+        destinationParentOrgId !== null &&
+        existingOrg.parentId !== null
       ) {
         await moveAOLocsToNewRegion(ctx, {
           oldRegionId: existingOrg.parentId,
-          newRegionId: input.parentId,
+          newRegionId: destinationParentOrgId,
           aoId: existingOrg.id,
         });
       }
@@ -857,7 +865,7 @@ export const orgRouter = {
 
       const orgToCrupdate: typeof schema.orgs.$inferInsert = {
         ...input,
-        meta: input.meta as Record<string, string>,
+        meta: input.meta,
       };
 
       const [result] = await ctx.db
@@ -936,13 +944,11 @@ export const orgRouter = {
 
       for (const row of orgsQuery) {
         const orgId = row.orgs.id;
-        if (!orgMap[orgId]) {
-          orgMap[orgId] = {
-            orgs: row.orgs,
-            roles_x_users_x_org: row.roles_x_users_x_org,
-            roles: [],
-          };
-        }
+        orgMap[orgId] ??= {
+          orgs: row.orgs,
+          roles_x_users_x_org: row.roles_x_users_x_org,
+          roles: [],
+        };
         if (row.roles?.name) {
           orgMap[orgId]?.roles.push(row.roles.name);
         }

@@ -56,6 +56,66 @@ import { notifyMapChangeRequest } from "../services/map-request-notification";
 import { editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
+const ValidateSubmissionByAdminSchema = z.discriminatedUnion("requestType", [
+  CreateAOAndLocationAndEventSchema,
+  CreateEventSchema,
+  EditEventSchema,
+  EditAOAndLocationSchema,
+  MoveAOToDifferentRegionSchema,
+  MoveAOToDifferentLocationSchema,
+  MoveAOToNewLocationSchema,
+  MoveEventToDifferentAOSchema,
+  MoveEventToNewAOSchema,
+  MoveEventToNewLocationSchema,
+  DeleteEventSchema,
+  DeleteAOSchema,
+]);
+
+const normalizeAdminRequestInput = (input: Record<string, unknown>) => {
+  const normalized = { ...input };
+  const meta =
+    normalized.meta && typeof normalized.meta === "object"
+      ? (normalized.meta as Record<string, unknown>)
+      : {};
+  const usesOriginalIds = [
+    "edit_ao_and_location",
+    "create_event",
+    "edit_event",
+  ].includes(String(normalized.requestType));
+  const usesCurrentValues = ["edit_ao_and_location", "edit_event"].includes(
+    String(normalized.requestType),
+  );
+
+  if (usesOriginalIds) {
+    normalized.originalRegionId ??= normalized.regionId;
+    normalized.originalAoId ??= normalized.aoId;
+    normalized.originalLocationId ??= normalized.locationId;
+    normalized.originalEventId ??= normalized.eventId;
+  }
+
+  if (normalized.requestType === "move_event_to_different_ao") {
+    normalized.originalRegionId ??= meta.originalRegionId;
+    normalized.originalAoId ??= meta.originalAoId;
+    normalized.originalEventId ??= meta.originalEventId ?? normalized.eventId;
+    normalized.newRegionId ??= meta.newRegionId ?? normalized.regionId;
+    normalized.newAoId ??= meta.newAoId ?? normalized.aoId;
+    normalized.newLocationId ??= meta.newLocationId ?? normalized.locationId;
+  }
+
+  if (usesCurrentValues) {
+    normalized.currentValues ??= {};
+  }
+
+  return normalized;
+};
+
+const updateRequestMutationOutput = z.object({
+  status: z.enum(UpdateRequestStatus).describe("The status of the request"),
+  updateRequest: z.object({
+    id: z.string().describe("Request ID"),
+  }),
+});
+
 export const requestRouter = {
   all: editorProcedure
     .input(
@@ -716,6 +776,97 @@ export const requestRouter = {
       const handler = handleDeleteAO;
       return await handleRequest({ ctx, input, handler });
     }),
+  validateSubmissionByAdmin: editorProcedure
+    .input(z.record(z.string(), z.unknown()))
+    .route({
+      method: "POST",
+      path: "/validate-submission-by-admin",
+      tags: ["request"],
+      summary: "Validate request by admin",
+      description: "Approve and apply a pending map change request",
+    })
+    .output(updateRequestMutationOutput)
+    .handler(async ({ context: ctx, input }) => {
+      const normalizedInput = normalizeAdminRequestInput(input);
+      const parsedInput =
+        ValidateSubmissionByAdminSchema.parse(normalizedInput);
+
+      switch (parsedInput.requestType) {
+        case "create_ao_and_location_and_event":
+          return await handleRequest({
+            ctx,
+            input: parsedInput,
+            handler: handleCreateLocationAndEvent,
+          });
+        case "create_event":
+          return await handleRequest({
+            ctx,
+            input: parsedInput,
+            handler: handleCreateEvent,
+          });
+        case "edit_event":
+          return await handleRequest({
+            ctx,
+            input: parsedInput,
+            handler: handleEditEvent,
+          });
+        case "edit_ao_and_location":
+          return await handleRequest({
+            ctx,
+            input: parsedInput,
+            handler: handleEditAOAndLocation,
+          });
+        case "move_ao_to_different_region":
+          return await handleRequest({
+            ctx,
+            input: parsedInput,
+            handler: handleMoveAOToDifferentRegion,
+          });
+        case "move_ao_to_different_location":
+          return await handleRequest({
+            ctx,
+            input: parsedInput,
+            handler: handleMoveAOToDifferentLocation,
+          });
+        case "move_ao_to_new_location":
+          return await handleRequest({
+            ctx,
+            input: parsedInput,
+            handler: handleMoveAOToNewLocation,
+          });
+        case "move_event_to_different_ao":
+          return await handleRequest({
+            ctx,
+            input: parsedInput,
+            handler: handleMoveEventToDifferentAO,
+          });
+        case "move_event_to_new_ao":
+          return await handleRequest({
+            ctx,
+            input: parsedInput,
+            handler: handleMoveEventToNewAO,
+          });
+        case "move_event_to_new_location":
+          return await handleRequest({
+            ctx,
+            input: parsedInput,
+            handler: handleMoveEventToNewLocation,
+          });
+        case "delete_event":
+          return await handleRequest({
+            ctx,
+            input: parsedInput,
+            handler: handleDeleteEvent,
+          });
+        case "delete_ao":
+          return await handleRequest({
+            ctx,
+            input: parsedInput,
+            handler: handleDeleteAO,
+          });
+      }
+    }),
+
   rejectSubmission: editorProcedure
     .input(z.object({ id: z.string() }))
     .route({

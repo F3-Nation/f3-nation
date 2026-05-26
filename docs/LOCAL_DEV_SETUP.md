@@ -1,6 +1,10 @@
 # Local Development Setup
 
-Step-by-step guide for new contributors to get the F3 Nation monorepo running locally.
+> **New to the project?** Use the [Docker-based setup](LOCAL_DEV_DOCKER.md) instead — it requires no GCP credentials and gets you running in minutes with a single command.
+>
+> This document covers the **GCP-connected** setup for contributors who already have access to the `f3-authentication-staging` project.
+
+Step-by-step guide for getting the F3 Nation monorepo running locally with GCP services.
 
 ## Prerequisites
 
@@ -234,6 +238,14 @@ This starts all apps in parallel via Turborepo:
 | API  | http://localhost:3001 | 3001 |
 | Me   | http://localhost:3003 | 3003 |
 | Auth | http://localhost:3004 | 3004 |
+
+## Driving sign-in from automation (CI, AI agents, /pst:qa)
+
+`apps/auth` routes all outbound email through `EMAIL_SERVER` (set in `.env`). In the Docker local dev environment, this points to Mailpit (`smtp://localhost:1025`), which captures every email without sending it. Headless automation can retrieve the 6-digit MFA code or magic link from Mailpit's API at `http://localhost:8025/api/v1/messages`. **No real inbox is needed locally**, and the `/api/verify-email` rate limit is bypassed in non-production environments.
+
+> **Note:** `scripts/qa/extract-mfa-link.sh` was written for the old Ethereal flow and needs to be updated to query Mailpit's API instead of parsing Ethereal preview URLs from logs.
+
+Cookbook: [`docs/QA_LOCAL_AUTH.md`](QA_LOCAL_AUTH.md). Agent reference: [`apps/auth/AGENTS.md`](../apps/auth/AGENTS.md).
 
 ## Troubleshooting
 

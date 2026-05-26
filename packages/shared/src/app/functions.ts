@@ -89,14 +89,14 @@ export const getReadableDayOfWeek = (dayOfWeek: DayOfWeek | null) => {
 };
 
 export const convertHH_mmToHHmm = (value: string) => {
-  if (!value || value.length !== 5) {
+  if (value?.length !== 5) {
     return "";
   }
   return value.replace(":", "");
 };
 
 export const convertHHmmToHH_mm = (value: string) => {
-  if (!value || value.length !== 4) {
+  if (value?.length !== 4) {
     return "";
   }
   return value.slice(0, 2) + ":" + value.slice(2, 4);
@@ -226,4 +226,14 @@ export function isValidEmail(email: string | null | undefined): boolean {
   const trimmed = email.trim();
   if (!trimmed) return false;
   return z.string().email().safeParse(trimmed).success;
+}
+
+/**
+ * @param f3Name - F3 name string to validate
+ * @returns boolean indicating if the F3 name is valid (non-empty, 2+ characters)
+ */
+export function isValidF3Name(f3Name: string | null | undefined): boolean {
+  if (typeof f3Name !== "string") return false;
+  const trimmed = f3Name.trim();
+  return trimmed.length >= 3;
 }

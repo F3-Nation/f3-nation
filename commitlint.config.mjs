@@ -7,7 +7,9 @@ export default {
       'always',
       [
         // apps
+        'admin',
         'map',
+        'me',
 
         // apps & packages (exist in both apps/ and packages/)
         'api',
@@ -19,6 +21,7 @@ export default {
         'mail',
         'shared',
         'sso',
+        'storage',
         'ui',
         'validators',
 
