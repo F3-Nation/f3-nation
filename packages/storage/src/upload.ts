@@ -25,8 +25,11 @@ export async function uploadFile(
   const emulatorHost = getEmulatorHost();
 
   if (emulatorHost) {
+    // cacheControl is a GCS object-metadata field; the fake-gcs simple upload
+    // API has no equivalent, so it is intentionally ignored under the emulator.
+    const encodedPath = encodeURIComponent(path);
     const response = await emulatorFetch(
-      `http://${emulatorHost}/upload/storage/v1/b/${bucketName}/o?uploadType=media&name=${path}`,
+      `http://${emulatorHost}/upload/storage/v1/b/${bucketName}/o?uploadType=media&name=${encodedPath}`,
       {
         method: "POST",
         headers: { "Content-Type": contentType },
@@ -39,7 +42,7 @@ export async function uploadFile(
         `GCS emulator upload failed: HTTP ${response.status} ${body}`,
       );
     }
-    return `http://${emulatorHost}/${bucketName}/${path}`;
+    return `http://${emulatorHost}/${bucketName}/${encodedPath}`;
   }
 
   const bucket = getStorage().bucket(bucketName);

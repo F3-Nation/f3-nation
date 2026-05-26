@@ -9,16 +9,16 @@ export function getEmulatorHost(): string | null {
 /**
  * Perform a request against the fake-gcs emulator, injecting the shared dev
  * token. Callers only need to supply the method, any extra headers, and body.
+ *
+ * Headers are normalized via `new Headers()` so any valid `HeadersInit` shape
+ * (object, `Headers` instance, or `string[][]`) is handled correctly before
+ * the Authorization entry is set.
  */
 export async function emulatorFetch(
   url: string,
   init?: RequestInit,
 ): Promise<Response> {
-  return fetch(url, {
-    ...init,
-    headers: {
-      Authorization: "Bearer local-dev-token",
-      ...init?.headers,
-    },
-  });
+  const headers = new Headers(init?.headers);
+  headers.set("Authorization", "Bearer local-dev-token");
+  return fetch(url, { ...init, headers });
 }
