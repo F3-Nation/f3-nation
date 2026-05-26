@@ -33,6 +33,7 @@ catalog:
   dotenv-cli: ^11.0.0
   drizzle-kit: ^0.31.10
   eslint: ^10.4.0
+  eslint-config-turbo: ^2.9.14
   inquirer: ^12.11.1
   jiti: ^2.7.0
   jsdom: ^29.1.1
@@ -44,7 +45,7 @@ catalog:
   tailwindcss: ^3.4.1
   tailwindcss-animate: ^1.0.7
   tsx: ^4.22.3
-  turbo: ^1.12.3
+  turbo: ^2.9.14
   typescript: ^6.0.3
   typescript-eslint: ^8.60.0
   vite-tsconfig-paths: ^6.1.1
