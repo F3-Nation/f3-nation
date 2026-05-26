@@ -9,7 +9,7 @@
  * fires at most once per region even if events are later deleted and re-created.
  */
 
-import { aliasedTable, and, count, eq, schema } from "@acme/db";
+import { aliasedTable, and, count, eq, isNull, not, schema } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 import { env } from "@acme/env";
 import { mail, Templates } from "@acme/mail";
@@ -83,6 +83,7 @@ export async function maybeNotifyFirstEventForRegion(
   // Step 4: count ALL events (including soft-deleted) across every AO under
   // this region. Including soft-deleted rows prevents re-triggering when a
   // user deletes an event and re-creates one.
+  // Must include dayOfWeek = null filter to exclude one-off events.
   const aoOrg = aliasedTable(schema.orgs, "ao_org_fes");
   const [countRow] = await db
     .select({ total: count() })
@@ -90,7 +91,8 @@ export async function maybeNotifyFirstEventForRegion(
     .innerJoin(
       aoOrg,
       and(eq(aoOrg.id, schema.events.orgId), eq(aoOrg.parentId, regionId)),
-    );
+    )
+    .where(not(isNull(schema.events.dayOfWeek)));
 
   const totalEvents = countRow?.total ?? 0;
 
