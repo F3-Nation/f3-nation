@@ -1,8 +1,6 @@
 {
   "$schema": "https://turborepo.org/schema.json",
-  "globalDependencies": [
-    "**/.env"
-  ],
+  "globalDependencies": ["**/.env"],
   "globalEnv": [
     "CI",
     "NODE_ENV",
@@ -44,14 +42,10 @@
   ],
   "tasks": {
     "topo": {
-      "dependsOn": [
-        "^topo"
-      ]
+      "dependsOn": ["^topo"]
     },
     "build": {
-      "dependsOn": [
-        "^build"
-      ],
+      "dependsOn": ["^build"],
       "outputs": [
         ".next/**",
         "!.next/cache/**",
@@ -59,7 +53,8 @@
         ".expo/**",
         ".output/**",
         ".vercel/output/**"
-      ]
+      ],
+      "passThroughEnv": ["SENTRY_AUTH_TOKEN"]
     },
     "dev": {
       "persistent": true,
@@ -70,24 +65,16 @@
       "outputLogs": "full"
     },
     "lint": {
-      "dependsOn": [
-        "^topo"
-      ]
+      "dependsOn": ["^topo"]
     },
     "reset-test-db": {
       "cache": false
     },
     "typecheck": {
-      "dependsOn": [
-        "^topo"
-      ]
+      "dependsOn": ["^topo"]
     },
     "test": {
-      "dependsOn": [
-        "^topo",
-        "reset-test-db",
-        "^reset-test-db"
-      ]
+      "dependsOn": ["^topo", "reset-test-db", "^reset-test-db"]
     },
     "clean": {
       "cache": false
