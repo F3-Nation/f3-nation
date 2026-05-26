@@ -41,12 +41,18 @@ async function makePortraitSelfieFixture(): Promise<Buffer> {
     .toBuffer();
 }
 
+/** Mean red/green/blue channel values over a region of raw RGB pixels. */
 interface MeanRgb {
   r: number;
   g: number;
   b: number;
 }
 
+/**
+ * Compute the mean RGB of a horizontal band of a raw RGB buffer, from row
+ * `yStart` (inclusive) to `yEnd` (exclusive) across the full width. Used to
+ * assert which color dominates the top vs. bottom half of the processed avatar.
+ */
 function meanRgb(
   data: Buffer,
   width: number,
