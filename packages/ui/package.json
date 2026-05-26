@@ -67,7 +67,7 @@
     "eslint": "catalog:",
     "prettier": "catalog:",
     "react": "catalog:",
-    "tailwindcss": "^3.4.1",
+    "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "zod": "catalog:"
   },
