@@ -77,16 +77,14 @@ const SuspendedInitialLocationProvider = (params: { children: ReactNode }) => {
       };
   }
 
-  if (zoom.current === null) {
-    // If we have a query zoom, use that
-    zoom.current = queryZoom
-      ? queryZoom
-      : // If we have a query location or lat/lon, use the close zoom
-        !!queryLocationId || (queryLat != null && queryLon != null)
-        ? CLOSE_ZOOM
-        : // Otherwise, use the stored zoom or default zoom
-          mapStore.get("zoom") ?? DEFAULT_ZOOM;
-  }
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+  zoom.current ??= queryZoom
+    ? queryZoom
+    : // If we have a query location or lat/lon, use the close zoom
+      !!queryLocationId || (queryLat != null && queryLon != null)
+      ? CLOSE_ZOOM
+      : // Otherwise, use the stored zoom or default zoom
+        mapStore.get("zoom") ?? DEFAULT_ZOOM;
 
   // Perform state updates in useEffect (not during render)
   useEffect(() => {

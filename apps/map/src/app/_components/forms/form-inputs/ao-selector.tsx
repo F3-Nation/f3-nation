@@ -1,7 +1,7 @@
+import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 import { Controller, useFormContext } from "react-hook-form";
 
 import { orpc, useQuery } from "~/orpc/react";
-import { VirtualizedCombobox } from "../../virtualized-combobox";
 
 interface AOSelectorProps {
   label?: string;

@@ -25,6 +25,10 @@ export const EditEventModal = ({
     mode: "onBlur",
   });
 
+  const handleSubmission = async (values: EditEventType) => {
+    return await client.request.submitEditEventRequest(values);
+  };
+
   return (
     <BaseModal title="Edit workout details">
       <Form {...form}>
@@ -33,9 +37,7 @@ export const EditEventModal = ({
           <EventDetailsForm<EditEventType> />
           <ContactDetailsForm<EditEventType> />
           <SubmitSection<EditEventType>
-            mutationFn={(values) =>
-              client.request.submitEditEventRequest(values)
-            }
+            mutationFn={handleSubmission}
             text="Edit Workout Details"
           />
         </form>

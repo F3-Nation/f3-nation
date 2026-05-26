@@ -15,7 +15,7 @@ import {
   selectedItemStore,
   setSelectedItem,
 } from "~/utils/store/selected-item";
-import { ImageWithFallback } from "../image-with-fallback";
+import { ImageWithFallback } from "@acme/ui/image-with-fallback";
 import { EventChip } from "./event-chip";
 
 export const MobileNearbyLocationsItem = (props: {
@@ -75,6 +75,7 @@ export const MobileNearbyLocationsItem = (props: {
           }}
         >
           <ImageWithFallback
+            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
             src={searchResult.logo ? searchResult.logo : "/f3_logo.png"}
             fallbackSrc="/f3_logo.png"
             loading="lazy"

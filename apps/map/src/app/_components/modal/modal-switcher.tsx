@@ -8,20 +8,6 @@ import type { DataType } from "~/utils/store/modal";
 import { ModalType, useOpenModal } from "~/utils/store/modal";
 import { AboutMapModal } from "../map/about-map-modal";
 import { MapHelpModal } from "../map/map-help-modal";
-import AdminAOsModal from "./admin-aos-modal";
-import AdminApiKeysModal from "./admin-api-keys-modal";
-import AdminAreasModal from "./admin-areas-modal";
-import AdminDeleteModal from "./admin-delete-modal";
-import AdminEventTypesModal from "./admin-event-types-modal";
-import AdminLocationsModal from "./admin-locations-modal";
-import AdminManageAccessModal from "./admin-manage-access-modal";
-import AdminNationsModal from "./admin-nations-modal";
-import AdminPositionsModal from "./admin-positions-modal";
-import AdminRegionsModal from "./admin-regions-modal";
-import AdminSectorsModal from "./admin-sectors-modal";
-import AdminUsersModal from "./admin-users-modal";
-import AdminWorkoutsModal from "./admin-workouts-modal";
-import DeleteConfirmationModal from "./delete-confirmation-modal";
 import { EditModeInfoModal } from "./edit-mode-info-modal";
 import { FullImageModal } from "./full-image-modal";
 import HowToJoinModal from "./how-to-join-modal";
@@ -32,8 +18,6 @@ import SettingsModal from "./settings-modal";
 import SignInModal from "./sign-in-modal";
 import { CreateAOAndLocationAndEventModal } from "./update/create-ao-and-location-and-event-modal";
 import { CreateEventModal } from "./update/create-event-modal";
-import { DeleteAoModal } from "./update/delete-ao-modal";
-import { DeleteEventModal } from "./update/delete-event-modal";
 import { EditAoAndLocationModal } from "./update/edit-ao-and-location-modal";
 import { EditEventModal } from "./update/edit-event-modal";
 import { MoveAOToDifferentLocationModal } from "./update/move-ao-to-different-location-modal";
@@ -112,7 +96,6 @@ export const ModalSwitcher = () => {
         />
       );
     case ModalType.WORKOUT_DETAILS:
-      // Hide on desktop
       return width >= Number(BreakPoints.LG) ? null : (
         <WorkoutDetailsModal
           data={data as DataType[ModalType.WORKOUT_DETAILS]}
@@ -122,72 +105,6 @@ export const ModalSwitcher = () => {
       return <MapInfoModal />;
     case ModalType.SETTINGS:
       return <SettingsModal />;
-    case ModalType.ADMIN_USERS:
-      return <AdminUsersModal data={data as DataType[ModalType.ADMIN_USERS]} />;
-    case ModalType.ADMIN_MANAGE_ACCESS:
-      return (
-        <AdminManageAccessModal
-          data={data as DataType[ModalType.ADMIN_MANAGE_ACCESS]}
-        />
-      );
-    case ModalType.ADMIN_EVENTS:
-      return (
-        <AdminWorkoutsModal data={data as DataType[ModalType.ADMIN_EVENTS]} />
-      );
-    case ModalType.ADMIN_EVENT_TYPES:
-      return (
-        <AdminEventTypesModal
-          data={data as DataType[ModalType.ADMIN_EVENT_TYPES]}
-        />
-      );
-    case ModalType.ADMIN_API_KEYS:
-      return <AdminApiKeysModal />;
-    case ModalType.ADMIN_LOCATIONS:
-      return (
-        <AdminLocationsModal
-          data={data as DataType[ModalType.ADMIN_LOCATIONS]}
-        />
-      );
-    case ModalType.ADMIN_NATIONS:
-      return (
-        <AdminNationsModal data={data as DataType[ModalType.ADMIN_NATIONS]} />
-      );
-    case ModalType.ADMIN_SECTORS:
-      return (
-        <AdminSectorsModal data={data as DataType[ModalType.ADMIN_SECTORS]} />
-      );
-    case ModalType.ADMIN_AREAS:
-      return <AdminAreasModal data={data as DataType[ModalType.ADMIN_AREAS]} />;
-    case ModalType.ADMIN_REGIONS:
-      return (
-        <AdminRegionsModal data={data as DataType[ModalType.ADMIN_REGIONS]} />
-      );
-    case ModalType.ADMIN_AOS:
-      return <AdminAOsModal data={data as DataType[ModalType.ADMIN_AOS]} />;
-    case ModalType.ADMIN_POSITIONS:
-      return (
-        <AdminPositionsModal
-          data={data as DataType[ModalType.ADMIN_POSITIONS]}
-        />
-      );
-    case ModalType.ADMIN_DELETE_CONFIRMATION:
-      return (
-        <AdminDeleteModal
-          data={data as DataType[ModalType.ADMIN_DELETE_CONFIRMATION]}
-        />
-      );
-    case ModalType.DELETE_CONFIRMATION:
-      return (
-        <DeleteConfirmationModal
-          data={data as DataType[ModalType.DELETE_CONFIRMATION]}
-        />
-      );
-    case ModalType.DELETE_EVENT:
-      return (
-        <DeleteEventModal data={data as DataType[ModalType.DELETE_EVENT]} />
-      );
-    case ModalType.DELETE_AO:
-      return <DeleteAoModal data={data as DataType[ModalType.DELETE_AO]} />;
     case ModalType.QR_CODE:
       return <QRCodeModal data={data as DataType[ModalType.QR_CODE]} />;
     case ModalType.ABOUT_MAP:

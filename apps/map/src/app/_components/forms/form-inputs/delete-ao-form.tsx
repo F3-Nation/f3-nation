@@ -37,9 +37,7 @@ export const DeleteAoForm = <_T extends DeleteAOType>() => {
           </div>
           <div>
             <div className="text-lg font-semibold text-red-800 dark:text-red-200">
-              {result?.org?.name ? (
-                result.org.name
-              ) : (
+              {result?.org?.name ?? (
                 <span className="italic text-red-400">AO name loading...</span>
               )}
             </div>
@@ -60,7 +58,7 @@ export const DeleteAoForm = <_T extends DeleteAOType>() => {
               <span className="font-semibold">
                 This will delete{" "}
                 <span className="underline">
-                  {result?.org?.name ? result.org.name : "this AO"}
+                  {result?.org?.name ?? "this AO"}
                 </span>
                 , all its workouts, and possibly the location if no other events
                 exist there.

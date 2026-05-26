@@ -239,6 +239,9 @@ test.describe("Admin Portal", () => {
               .filter({ hasText: `${prefix} LOCATION 2` }),
           ).toBeVisible();
         } catch (error) {
+          console.error("Error waiting for locator", {
+            error: error instanceof Error ? error.message : String(error),
+          });
           // Select a location
           await page
             .getByRole("combobox")

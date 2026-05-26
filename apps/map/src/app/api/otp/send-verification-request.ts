@@ -1,16 +1,10 @@
 import type { Theme } from "@auth/core/types";
 import type { NodemailerConfig } from "next-auth/providers/nodemailer";
 import type SMTPTransport from "nodemailer/lib/smtp-transport";
-import {
-  createTestAccount,
-  createTransport,
-  getTestMessageUrl,
-} from "nodemailer";
+import { createTransport } from "nodemailer";
 
 import { authConfig } from "@acme/auth/config";
-import { isProduction } from "@acme/shared/common/constants";
 
-const SHOW_MOBILE = false as boolean;
 const authConfigTheme = authConfig.theme;
 const theme: Theme = {
   colorScheme: authConfigTheme?.colorScheme ?? "auto",
@@ -30,23 +24,8 @@ export const sendVerificationRequest = async (
 ) => {
   const { identifier, url, server, from, token } = params;
   const { host } = new URL(url);
-  const protocol = url.split("://")[0] + "://";
-  const search = new URL(url).search;
-  const mobileUrl = SHOW_MOBILE
-    ? `${protocol}${host}/redirect-to-app${search}`
-    : undefined;
 
-  // In dev, use ethereal.email as test account
-  const transportOptions: SMTPTransport.Options = isProduction
-    ? (server as SMTPTransport.Options)
-    : await createTestAccount().then(({ user, pass }) => ({
-        host: "smtp.ethereal.email",
-        port: 587,
-        secure: false,
-        auth: { user, pass },
-      }));
-
-  const transport = createTransport(transportOptions);
+  const transport = createTransport(server as SMTPTransport.Options);
   const subject = `Authentication code: ${token}`;
   const result = await transport.sendMail({
     to: identifier,
@@ -60,15 +39,6 @@ export const sendVerificationRequest = async (
     throw new Error(
       `Email (${failed.map((f) => (typeof f === "string" ? f : f.address)).join(", ")}) could not be sent`,
     );
-  }
-
-  if (!isProduction) {
-    console.log("Development email bypass!", {
-      subject,
-      etherealMail: getTestMessageUrl(result),
-      mobileUrl,
-      url,
-    });
   }
 };
 
@@ -134,38 +104,3 @@ function html(params: { token: string; host: string; theme: Theme }) {
 function text({ host, token }: { host: string; token: string }) {
   return `Sign in to ${host} in your browser with this code: ${token}\n`;
 }
-
-//   sendVerificationRequest: ({
-//     identifier: email,
-//     url,
-//     token,
-//     baseUrl,
-//     provider,
-//   }) => {
-//     return new Promise((resolve, reject) => {
-//       const { server, from } = provider;
-//       // Strip protocol from URL and use domain as site name
-//       const site = baseUrl.replace(/^https?:\/\//, "");
-
-//       nodemailer.createTransport(server).sendMail(
-//         {
-//           to: email,
-//           from,
-//           subject: `Authentication code: ${token}`,
-//           text: text({ url, site, email, token }),
-//           html: html({ url, site, email, token }),
-//         },
-//         (error) => {
-//           if (error) {
-//             // logger.error('SEND_VERIFICATION_EMAIL_ERROR', email, error);
-//             console.error("SEND_VERIFICATION_EMAIL_ERROR", email, error);
-//             return reject(
-//               new Error(`SEND_VERIFICATION_EMAIL_ERROR ${error}`)
-//             );
-//           }
-//           return resolve();
-//         }
-//       );
-//     });
-//   },
-// }),

@@ -58,7 +58,7 @@ export class GeolocationMarkerClass {
       this.overlay.onAdd = () => this.onAdd();
       this.overlay.onRemove = () => this.onRemove();
       this.overlay.draw = () => this.draw();
-    } catch (err) {
+    } catch {
       throw new Error(
         "Google Maps API has to be loaded before a marker can be created",
       );

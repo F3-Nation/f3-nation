@@ -1,6 +1,6 @@
 {
   "name": "f3-nation-map",
-  "version": "4.2.2",
+  "version": "4.2.3",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,7 +9,7 @@
     "dev:inspect": "NODE_OPTIONS='--inspect' TZ=UTC pnpm with-env next dev",
     "dev": "TZ=UTC pnpm with-env next dev -p 3000",
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
-    "lint": "dotenv -v SKIP_ENV_VALIDATION=1 next lint",
+    "lint": "dotenv -v SKIP_ENV_VALIDATION=1 eslint .",
     "start": "pnpm with-env next start",
     "typecheck": "tsc --noEmit",
     "test": "SKIP_ENV_VALIDATION=1 pnpm with-env vitest --run \"$@\"",
@@ -19,7 +19,7 @@
     "test:e2e:debug": "pnpm with-env playwright test --debug",
     "test:e2e:ui": "pnpm with-env playwright test --ui",
     "test:e2e:report": "pnpm with-env playwright show-report",
-    "with-env": "dotenv -e ../../.env --"
+    "with-env": "dotenv -e .env --"
   },
   "dependencies": {
     "@acme/api": "workspace:^0.2.0",
@@ -89,26 +89,15 @@
     "@vitejs/plugin-react": "^4.2.1",
     "@vitest/coverage-v8": "^1.5.0",
     "cross-fetch": "^4.0.0",
-    "eslint": "^8.56.0",
-    "jiti": "^1.21.0",
+    "eslint": "catalog:",
+    "jiti": "^2.4.2",
     "jsdom": "^24.0.0",
     "prettier": "^3.2.5",
     "tailwindcss": "^3.4.1",
-    "typescript": "^5.3.3",
+    "typescript": "catalog:",
     "vite-tsconfig-paths": "^4.3.2",
     "vitest": "^1.5.0",
     "vitest-canvas-mock": "^0.3.3"
-  },
-  "eslintConfig": {
-    "root": true,
-    "extends": [
-      "@acme/eslint-config/base",
-      "@acme/eslint-config/nextjs",
-      "@acme/eslint-config/react"
-    ],
-    "ignorePatterns": [
-      "vitest.config.ts"
-    ]
   },
   "prettier": "@acme/prettier-config"
 }

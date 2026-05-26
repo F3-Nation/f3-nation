@@ -5,7 +5,7 @@ import { Controller, useFormContext } from "react-hook-form";
 import { isTruthy } from "@acme/shared/common/functions";
 
 import { orpc, useQuery } from "~/orpc/react";
-import { VirtualizedCombobox } from "../../virtualized-combobox";
+import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 
 const NEW_LOCATION_VALUE = "new";
 

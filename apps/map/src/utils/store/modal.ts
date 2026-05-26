@@ -26,20 +26,6 @@ export enum ModalType {
   WORKOUT_DETAILS = "WORKOUT_DETAILS",
   INFO = "INFO",
   SETTINGS = "SETTINGS",
-  ADMIN_USERS = "ADMIN_USERS",
-  ADMIN_MANAGE_ACCESS = "ADMIN_MANAGE_ACCESS",
-  ADMIN_REQUESTS = "ADMIN_REQUESTS",
-  ADMIN_EVENTS = "ADMIN_EVENTS",
-  ADMIN_LOCATIONS = "ADMIN_LOCATIONS",
-  ADMIN_NATIONS = "ADMIN_NATIONS",
-  ADMIN_SECTORS = "ADMIN_SECTORS",
-  ADMIN_AREAS = "ADMIN_AREAS",
-  ADMIN_REGIONS = "ADMIN_REGIONS",
-  ADMIN_AOS = "ADMIN_AOS",
-  ADMIN_API_KEYS = "ADMIN_API_KEYS",
-  ADMIN_EVENT_TYPES = "ADMIN_EVENT_TYPES",
-  ADMIN_POSITIONS = "ADMIN_POSITIONS",
-  ADMIN_DELETE_CONFIRMATION = "ADMIN_DELETE_CONFIRMATION",
   DELETE_CONFIRMATION = "DELETE_CONFIRMATION",
   QR_CODE = "QR_CODE",
   ABOUT_MAP = "ABOUT_MAP",
@@ -69,7 +55,6 @@ export enum DeleteType {
   REGION = "REGION",
   SECTOR = "SECTOR",
   NATION = "NATION",
-  POSITION = "POSITION",
 }
 
 export const eventDefaults = {
@@ -176,39 +161,10 @@ export interface DataType {
   [ModalType.INFO]: null;
   [ModalType.USER_LOCATION_INFO]: null;
   [ModalType.SETTINGS]: null;
-  [ModalType.ADMIN_USERS]: {
-    id?: number | null;
+  [ModalType.DELETE_CONFIRMATION]: {
+    type: DeleteType;
+    onConfirm: () => void;
   };
-  [ModalType.ADMIN_MANAGE_ACCESS]: {
-    userId?: number;
-  } | null;
-  [ModalType.ADMIN_REQUESTS]: {
-    id: string;
-  };
-  [ModalType.ADMIN_EVENTS]: {
-    id?: number | null;
-  };
-  [ModalType.ADMIN_LOCATIONS]: {
-    id?: number | null;
-  };
-  [ModalType.ADMIN_NATIONS]: {
-    id?: number | null;
-  };
-  [ModalType.ADMIN_SECTORS]: {
-    id?: number | null;
-  };
-  [ModalType.ADMIN_AREAS]: {
-    id?: number | null;
-  };
-  [ModalType.ADMIN_REGIONS]: {
-    id?: number | null;
-  };
-  [ModalType.ADMIN_AOS]: {
-    id?: number | null;
-  };
-  [ModalType.ADMIN_API_KEYS]: null;
-  [ModalType.ADMIN_DELETE_CONFIRMATION]: { id: number; type: DeleteType };
-  [ModalType.DELETE_CONFIRMATION]: { type: DeleteType; onConfirm: () => void };
   [ModalType.QR_CODE]: {
     url: string;
     fileName: string;
@@ -222,17 +178,6 @@ export interface DataType {
     alt: string;
   };
   [ModalType.MAP_HELP]: null;
-  [ModalType.ADMIN_EVENT_TYPES]: {
-    id?: number | null;
-  };
-  [ModalType.ADMIN_POSITIONS]: {
-    id?: number | null;
-    /**
-     * When creating a new position, pre-select this org as the owning
-     * organization. Ignored when editing an existing position.
-     */
-    defaultOrgId?: number | null;
-  };
   [ModalType.SIGN_IN]: {
     callbackUrl?: string;
     message?: string;
@@ -303,8 +248,6 @@ export const closeModal = (open?: boolean, type?: ModalType | "all") => {
       modals: lessOneModals,
     });
   }
-  // Modal becomes unresponsive when closing with select menu open or similar
-  // https://github.com/shadcn-ui/ui/issues/1912#issuecomment-2613189967
   setTimeout(() => {
     const body = document.querySelector("body");
     if (body) {

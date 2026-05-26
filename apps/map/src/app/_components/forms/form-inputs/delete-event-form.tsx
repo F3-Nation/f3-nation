@@ -37,9 +37,7 @@ export const DeleteEventForm = <_T extends DeleteEventType>() => {
           </div>
           <div>
             <div className="text-lg font-semibold text-red-800 dark:text-red-200">
-              {event?.event?.name ? (
-                event.event.name
-              ) : (
+              {event?.event?.name ?? (
                 <span className="italic text-red-400">
                   Event name loading...
                 </span>

@@ -1,8 +1,9 @@
 import { Controller, useFormContext } from "react-hook-form";
 
+import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
+
 import { orpc, useQuery } from "~/orpc/react";
 import { useOptions } from "~/utils/use-options";
-import { VirtualizedCombobox } from "../../virtualized-combobox";
 
 interface RegionSelectorProps {
   label?: string;

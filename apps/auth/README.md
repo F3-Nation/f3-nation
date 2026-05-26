@@ -1,4 +1,4 @@
-# F3 Auth — OAuth 2.0 / OpenID Connect Server
+# F3 Auth -- OAuth 2.0 / OpenID Connect Server
 
 Central authentication and authorization server for the F3 Nation ecosystem. Issues OAuth 2.0 tokens to any registered client application (pax-vault, the-codex, apps/me, etc.) via the Authorization Code Grant with PKCE support.
 
@@ -15,6 +15,7 @@ Central authentication and authorization server for the F3 Nation ecosystem. Iss
 ## Table of Contents
 
 - [Quick Start](#quick-start)
+- [Local QA / Email Preview](#local-qa--email-preview)
 - [Environment Variables](#environment-variables)
 - [Project Structure](#project-structure)
 - [Authentication Flow](#authentication-flow)
@@ -25,12 +26,14 @@ Central authentication and authorization server for the F3 Nation ecosystem. Iss
 - [Deployment](#deployment)
 - [Development Notes](#development-notes)
 
+> **Working with this app from an AI agent or QA-automation script?** Start at [`AGENTS.md`](AGENTS.md). It documents how to drive the email-MFA flow programmatically in local dev without any real inbox.
+
 ---
 
 ## Quick Start
 
 ```bash
-# From monorepo root — ensure Node >=20.19 and pnpm 8.15.1
+# From monorepo root -- ensure Node >=20.19 and pnpm 8.15.1
 
 # 1. Install dependencies
 pnpm install
@@ -70,6 +73,69 @@ pnpm -C apps/auth typecheck
 
 ---
 
+## Local QA / Email Preview
+
+In local development the auth server uses [Ethereal](https://ethereal.email/) -- a free, no-auth SMTP relay that publishes a public preview URL for every message. **No real email account is involved**, no SendGrid credentials are needed, and no inbox has to be polled. This makes the email-MFA flow scriptable end-to-end.
+
+The transport switches on `NODE_ENV` (`apps/auth/src/lib/email-mfa.ts`):
+
+| `NODE_ENV`    | SMTP host                                                  | Preview URL?             | Real inbox?    |
+| ------------- | ---------------------------------------------------------- | ------------------------ | -------------- |
+| `production`  | `smtp.sendgrid.net:587`                                    | No                       | Yes (SendGrid) |
+| anything else | `smtp.ethereal.email:587` (fresh test account per process) | Yes -- printed to stdout | No             |
+
+In dev, every send is followed by a log line of the shape:
+
+```
+Preview email: https://ethereal.email/message/abc123...
+```
+
+That URL is publicly fetchable with `curl` and contains the full email HTML -- both the **6-digit code** and a magic link. Headless QA pulls the **code** out of that HTML and POSTs it to NextAuth's standard `/api/auth/callback/credentials` endpoint to complete sign-in.
+
+> Note: a raw `curl` of the magic link does **not** complete sign-in. The verify page (`/login/email/verify`) is a client component that calls `signIn("email-mfa", ...)` from a `useEffect`. Hitting the URL with `curl -L` only returns HTML -- the cookie jar gets no session. Use the CSRF + callback recipe below for headless flows, or drive the magic link from a JS-capable browser (Playwright, CDP) for browser-based regression testing.
+
+In dev (`NODE_ENV !== "production"`), `/api/verify-email`'s 10-requests-per-minute-per-IP rate limit is bypassed -- the email transport is Ethereal, so there is no real inbox to bomb. Production traffic remains capped.
+
+### Quick recipe (headless)
+
+```bash
+# 1. Capture the auth dev log
+pnpm --filter f3-auth dev > /tmp/f3-auth.log 2>&1 &
+
+# 2. Get a NextAuth CSRF token + cookie
+CSRF=$(curl -sc /tmp/jar http://localhost:3004/api/auth/csrf | jq -r .csrfToken)
+
+# 3. Trigger an MFA send
+curl -sb /tmp/jar -X POST -H 'Content-Type: application/json' \
+  -d '{"email":"qa-bot@f3nation.test"}' \
+  'http://localhost:3004/api/verify-email?action=send'
+
+# 4. Pull the 6-digit code out of the latest preview email
+CODE=$(scripts/qa/extract-mfa-link.sh --code)
+
+# 5. POST email + code to NextAuth's Credentials callback -- auth completes
+curl -sb /tmp/jar -c /tmp/jar -L -X POST \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  --data-urlencode "csrfToken=$CSRF" \
+  --data-urlencode "email=qa-bot@f3nation.test" \
+  --data-urlencode "code=$CODE" \
+  --data-urlencode "callbackUrl=http://localhost:3004/" \
+  --data-urlencode "json=true" \
+  http://localhost:3004/api/auth/callback/credentials
+```
+
+The cookie jar `/tmp/jar` now contains a `next-auth.session-token` cookie. Use it for any follow-up requests.
+
+`scripts/qa/extract-mfa-link.sh` returns the magic link by default if you're driving a JS-capable browser instead.
+
+### Where to learn more
+
+- **[`AGENTS.md`](AGENTS.md)** -- full agent-friendly recipe, error modes, and the source-of-truth log line patterns
+- **[`../../docs/QA_LOCAL_AUTH.md`](../../docs/QA_LOCAL_AUTH.md)** -- cookbook version cross-referenced from every consuming app
+- **[`src/lib/email-mfa.ts`](src/lib/email-mfa.ts)** -- the actual code that decides between SendGrid and Ethereal
+
+---
+
 ## Environment Variables
 
 Defined and validated in `src/env.ts` using `@t3-oss/env-nextjs`. Variables prefixed with `NEXT_PUBLIC_` are exposed to the browser; all others are server-side only.
@@ -85,7 +151,7 @@ Defined and validated in `src/env.ts` using `@t3-oss/env-nextjs`. Variables pref
 | `NEXT_PUBLIC_AUTH_URL` | Base URL of the auth server (e.g. `https://auth.f3nation.com`)                                | Yes                            |
 | `NEXT_PUBLIC_API_URL`  | F3 API endpoint for user management (e.g. `https://api.f3nation.com`)                         | Yes                            |
 | `API_KEY`              | API key for authenticating calls to the F3 API                                                | Yes                            |
-| `SENDGRID_API_KEY`     | SendGrid SMTP API key (used in production for transactional email)                            | Yes                            |
+| `EMAIL_SERVER`         | SMTP connection string (e.g. `smtp://apikey:<key>@smtp.sendgrid.net:587`)                     | Yes                            |
 | `EMAIL_FROM`           | Sender email address (e.g. `noreply@f3nation.com`)                                            | Yes                            |
 | `NODE_ENV`             | `development`, `production`, or `test`                                                        | No (defaults to `development`) |
 
@@ -93,9 +159,9 @@ Set `SKIP_ENV_VALIDATION=1` to bypass validation during CI builds.
 
 ### Shared vs. Auth-Only Variables
 
-Most of these variables (`AUTH_SECRET`, `DATABASE_HOST`, `DATABASE_USER`, `DATABASE_PASSWORD`, `DATABASE_NAME`, `API_KEY`, `SENDGRID_API_KEY`, `EMAIL_FROM`) are already in the root `.env` and shared across all apps. **You only need to define them once** — `apps/auth` reads from the same root `.env` as `apps/map` and `apps/api`.
+Most of these variables (`AUTH_SECRET`, `DATABASE_HOST`, `DATABASE_USER`, `DATABASE_PASSWORD`, `DATABASE_NAME`, `API_KEY`, `EMAIL_SERVER`, `EMAIL_FROM`) are already in the root `.env` and shared across all apps. **You only need to define them once** -- `apps/auth` reads from the same root `.env` as `apps/map` and `apps/api`.
 
-The only variable unique to `apps/auth` is **`AUTH_JWT_PRIVATE_KEY`** — the RSA key for signing OAuth access tokens. Add it to your root `.env` alongside the existing variables. No duplication needed.
+The only variable unique to `apps/auth` is **`AUTH_JWT_PRIVATE_KEY`** -- the RSA key for signing OAuth access tokens. Add it to your root `.env` alongside the existing variables. No duplication needed.
 
 ### Generating the JWT Private Key
 
@@ -126,14 +192,14 @@ The corresponding public key is served automatically at `/.well-known/jwks.json`
 
 #### `NEXT_PUBLIC_AUTH_URL` in the Root `.env`
 
-`packages/api` (via `packages/env`) reads `NEXT_PUBLIC_AUTH_URL` from the root `.env` to discover the auth server's JWKS public key and verify JWT access tokens. The JWKS URL is derived automatically: `${NEXT_PUBLIC_AUTH_URL}/.well-known/jwks.json`. This is the same variable that `apps/auth` uses for its own base URL — no extra env var needed.
+`packages/api` (via `packages/env`) reads `NEXT_PUBLIC_AUTH_URL` from the root `.env` to discover the auth server's JWKS public key and verify JWT access tokens. The JWKS URL is derived automatically: `${NEXT_PUBLIC_AUTH_URL}/.well-known/jwks.json`. This is the same variable that `apps/auth` uses for its own base URL -- no extra env var needed.
 
 ```
 # Root .env
 NEXT_PUBLIC_AUTH_URL=https://auth.f3nation.com
 ```
 
-- If `NEXT_PUBLIC_AUTH_URL` is **not set** in the root `.env`, the API ignores JWT auth entirely — existing auth flows (NextAuth cookies, API keys) continue to work unchanged.
+- If `NEXT_PUBLIC_AUTH_URL` is **not set** in the root `.env`, the API ignores JWT auth entirely -- existing auth flows (NextAuth cookies, API keys) continue to work unchanged.
 - If `NEXT_PUBLIC_AUTH_URL` **is set**, the API fetches `${NEXT_PUBLIC_AUTH_URL}/.well-known/jwks.json`, accepts `Authorization: Bearer <jwt>` tokens, and validates the issuer matches.
 
 ---
@@ -274,7 +340,7 @@ Client App → POST /api/oauth/token
                          │
                          ▼
               Returns: { access_token, refresh_token, expires_in, token_type, scope }
-              (access_token is an RS256 JWT — verified via JWKS, not DB lookup)
+              (access_token is an RS256 JWT -- verified via JWKS, not DB lookup)
                          │
                          ▼
 Client App → GET /api/oauth/userinfo
@@ -344,7 +410,7 @@ GET /.well-known/openid-configuration
 | `/`                   | Home page. Forwards OAuth parameters to `/api/oauth/authorize` if present. Shows session info if authenticated.                        |
 | `/login`              | Sign-in method selection (currently email only).                                                                                       |
 | `/login/email`        | Email address input form. Client-side email validation with regex. Submits to `/api/verify-email` to send a 6-digit code.              |
-| `/login/email/verify` | Code input form. Checks if user exists first — existing users sign in, new users are redirected to `/register` with their MFA code.    |
+| `/login/email/verify` | Code input form. Checks if user exists first -- existing users sign in, new users are redirected to `/register` with their MFA code.   |
 | `/register`           | New user registration form. Collects First Name, Last Name, F3 Name, Home Region (searchable dropdown), Phone, Emergency Contact info. |
 | `/onboarding`         | Profile completion form (F3 Name, First Name, Last Name). For legacy users who haven't completed onboarding.                           |
 
@@ -521,7 +587,7 @@ gcloud run deploy f3-auth \
 
 #### 3. Set up Workload Identity Federation (WIF)
 
-This lets GitHub Actions authenticate to GCP without service account keys. The WIF pool is shared across all F3 apps in the `f3-github` project — if it already exists (e.g. from the `apps/me` setup), skip to the service account steps.
+This lets GitHub Actions authenticate to GCP without service account keys. The WIF pool is shared across all F3 apps in the `f3-github` project -- if it already exists (e.g. from the `apps/me` setup), skip to the service account steps.
 
 ```bash
 # ── Skip if f3-github project + WIF pool already exist ──
@@ -548,7 +614,7 @@ gcloud iam workload-identity-pools providers create-oidc "github" \
 
 # Get the f3-github project number (used in SA bindings below)
 gcloud projects describe f3-github --format='value(projectNumber)'
-# ↑ Note this — referred to as WIF_PROJECT_NUMBER below
+# ↑ Note this -- referred to as WIF_PROJECT_NUMBER below
 ```
 
 Make sure the org has a variable for the WIF Provider. Go to https://github.com/organizations/F3-Nation/settings/variables and make sure there is a variable called WIP_PROVIDER with value "projects/WIF_PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions/providers/github". (Make sure WIF_PROJECT_NUMBER uses the number from the previous step). This one provider is used for all F3 Nation repos to deploy to GCP.
@@ -610,11 +676,11 @@ Replace `WIF_PROJECT_NUMBER` with the `f3-github` project number from the `gclou
 
 In GitHub → repo Settings → **Environments**:
 
-1. Create **`auth-staging`** — no special rules needed
+1. Create **`auth-staging`** -- no special rules needed
 
 - Add an Environment variable called WIF_SA and set it to github-actions-deploy@f3-authentication-staging.iam.gserviceaccount.com
 
-2. Create **`auth-production`** — add **Required reviewers** (add yourself or your team)
+2. Create **`auth-production`** -- add **Required reviewers** (add yourself or your team)
 
 - Add an Environment variable called WIF_SA and set it to github-actions-deploy@f3-authentication.iam.gserviceaccount.com
 
@@ -732,7 +798,7 @@ bash apps/auth/scripts/cloud-run-env.sh --env prod
 
 ### Relationship to `packages/auth`
 
-The monorepo has `packages/auth` — a NextAuth v5 session config used by `apps/map`. That package handles cookie-based session auth for the map app only.
+The monorepo has `packages/auth` -- a NextAuth v5 session config used by `apps/map`. That package handles cookie-based session auth for the map app only.
 
 `apps/auth` is a full OAuth 2.0 authorization server that issues tokens to any registered client. These are separate systems:
 
@@ -752,8 +818,8 @@ The current rate limiter is in-memory (suitable for single Cloud Run instances).
 
 ### Email Transport
 
-- **Production**: SendGrid SMTP (`smtp.sendgrid.net:465`)
-- **Development**: Ethereal (auto-generated test account, preview URLs logged to console)
+- **Production**: SendGrid SMTP (`smtp.sendgrid.net:587`)
+- **Development**: Ethereal (auto-generated test account, preview URLs logged to console). See [Local QA / Email Preview](#local-qa--email-preview) and [`AGENTS.md`](AGENTS.md) for the full automation recipe.
 
 ### CI Exclusion
 

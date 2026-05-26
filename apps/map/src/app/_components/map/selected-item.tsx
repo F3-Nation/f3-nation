@@ -14,7 +14,7 @@ import {
 } from "~/utils/store/selected-item";
 import textLink from "~/utils/text-link";
 import { isTouchDevice } from "~/utils/touch-device-provider";
-import { ImageWithFallback } from "../image-with-fallback";
+import { ImageWithFallback } from "@acme/ui/image-with-fallback";
 import { EventChip } from "./event-chip";
 
 export const SelectedItem = (props: {
@@ -73,6 +73,7 @@ export const SelectedItem = (props: {
           <div className="flex flex-shrink-0 flex-col items-center">
             <ImageWithFallback
               src={
+                // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
                 selectedLocation.parentLogo
                   ? selectedLocation.parentLogo
                   : "/f3_logo.png"

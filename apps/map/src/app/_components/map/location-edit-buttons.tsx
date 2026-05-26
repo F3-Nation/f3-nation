@@ -92,6 +92,7 @@ export const LocationEditButtons = ({
                     type: "edit_event",
                     eventId,
                     locationId,
+                    aoId,
                   });
                 }}
               >
@@ -295,7 +296,7 @@ export const getShortDayOfWeek = (day: string | null | undefined) => {
 };
 
 export const formatTime = (time: string | null | undefined) => {
-  if (!time || time.length !== 4) return "";
+  if (time?.length !== 4) return "";
 
   const hour = parseInt(time.substring(0, 2));
   const minute = time.substring(2, 4);

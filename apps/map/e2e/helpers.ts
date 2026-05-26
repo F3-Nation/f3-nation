@@ -108,6 +108,9 @@ const waitOrMoveOn = async (locator: Locator, timeoutMs = 1000) => {
     return await locator.all();
   } catch (error) {
     // Timeout occurred or element not found
+    console.error("Error waiting for locator", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return [];
   }
 };

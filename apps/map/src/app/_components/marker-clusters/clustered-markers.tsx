@@ -1,7 +1,6 @@
 import type Supercluster from "supercluster";
 import { useCallback, useMemo } from "react";
 import { useMap } from "@vis.gl/react-google-maps";
-
 import { CLOSE_ZOOM } from "@acme/shared/app/constants";
 
 import type {

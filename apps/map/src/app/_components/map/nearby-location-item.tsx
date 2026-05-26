@@ -15,7 +15,7 @@ import {
   selectedItemStore,
   setSelectedItem,
 } from "~/utils/store/selected-item";
-import { ImageWithFallback } from "../image-with-fallback";
+import { ImageWithFallback } from "@acme/ui/image-with-fallback";
 import { EventChip } from "./event-chip";
 
 const SHOW_ID = false;
@@ -117,6 +117,7 @@ export const NearbyLocationItem = (props: {
       <div className="flex flex-row items-stretch gap-1">
         <div className="flex flex-shrink-0 flex-col items-center justify-center">
           <ImageWithFallback
+            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
             src={item.logo ? item.logo : "/f3_logo.png"}
             fallbackSrc="/f3_logo.png"
             loading="lazy"

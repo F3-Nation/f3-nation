@@ -124,7 +124,7 @@ test.describe("Update Actions", () => {
     await page.locator('input[name="submittedBy"]').fill("test@example.com");
 
     // Submit the form
-    await page.getByTestId(TestId.UPDATE_MODAL_SUBMIT_BUTTON).click();
+    await page.getByTestId("update-modal-submit-button").click();
     await page.waitForTimeout(2000);
 
     // Search for the newly created item
@@ -197,7 +197,7 @@ test.describe("Update Actions", () => {
           page.getByRole("button", { name: /MAP TEST Event Updated/i }),
         ).not.toBeVisible({ timeout: 5000 });
       }
-    } catch (e) {
+    } catch {
       console.log("Button not found, which is expected if item was deleted");
     }
   });
@@ -250,7 +250,7 @@ test.describe("Update Actions", () => {
         await page.keyboard.type("Yarak");
         await page.waitForTimeout(1000);
       }
-    } catch (e) {
+    } catch {
       console.log("Could not select AO");
     }
 

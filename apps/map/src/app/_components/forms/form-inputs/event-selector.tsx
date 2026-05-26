@@ -5,7 +5,7 @@ import { dayOfWeekToShortDayOfWeek } from "@acme/shared/app/functions";
 
 import { orpc, useQuery } from "~/orpc/react";
 import { useOptions } from "~/utils/use-options";
-import { VirtualizedCombobox } from "../../virtualized-combobox";
+import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 
 interface EventSelectorProps {
   label?: string;

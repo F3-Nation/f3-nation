@@ -4,7 +4,7 @@ import { dayOfWeekToShortDayOfWeek } from "@acme/shared/app/functions";
 
 import { orpc, useQuery } from "~/orpc/react";
 import { useOptions } from "~/utils/use-options";
-import { VirtualizedCombobox } from "../../virtualized-combobox";
+import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 
 interface SelectionFormProps {
   title?: string;
@@ -114,11 +114,7 @@ export const SelectionForm = <_T extends SelectionFormValues>(
                       const region = regions?.orgs.find(
                         (region) => region.id.toString() === item,
                       );
-                      form.setValue(
-                        "newRegionId",
-                        // @ts-expect-error - need to unset regionId despite zod
-                        region?.id ?? (null as number),
-                      );
+                      form.setValue("newRegionId", region?.id ?? null);
                     }}
                     searchPlaceholder="Select Region"
                   />

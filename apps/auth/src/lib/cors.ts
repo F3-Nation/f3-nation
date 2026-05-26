@@ -27,7 +27,7 @@ export async function getCorsHeaders(
   // If we have a clientId, look up the allowed origin directly
   if (clientId) {
     const client = await getClient(clientId);
-    if (client && client.allowedOrigin === origin) {
+    if (client?.allowedOrigin === origin) {
       return headers;
     }
     return {};
