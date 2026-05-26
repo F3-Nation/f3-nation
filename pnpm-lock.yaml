@@ -6,24 +6,147 @@ settings:
 
 catalogs:
   default:
+    '@commitlint/cli':
+      specifier: 20.5.0
+      version: 20.5.0
+    '@commitlint/config-conventional':
+      specifier: 20.5.0
+      version: 20.5.0
+    '@commitlint/cz-commitlint':
+      specifier: 20.5.1
+      version: 20.5.1
+    '@faker-js/faker':
+      specifier: ^8.1.0
+      version: 8.4.1
+    '@playwright/test':
+      specifier: ^1.52.0
+      version: 1.59.1
+    '@release-it/bumper':
+      specifier: ^7.0.1
+      version: 7.0.5
+    '@testing-library/jest-dom':
+      specifier: ^6.4.2
+      version: 6.9.1
+    '@testing-library/react':
+      specifier: ^15.0.2
+      version: 15.0.7
+    '@turbo/gen':
+      specifier: ^1.12.3
+      version: 1.13.4
+    '@types/dompurify':
+      specifier: ^3.0.5
+      version: 3.2.0
+    '@types/geojson':
+      specifier: ^7946.0.16
+      version: 7946.0.16
+    '@types/google.maps':
+      specifier: ^3.58.1
+      version: 3.58.1
+    '@types/lodash':
+      specifier: ^4.14.195
+      version: 4.17.24
     '@types/node':
       specifier: ^24.12.4
       version: 24.12.4
+    '@types/nodemailer':
+      specifier: ^6.4.17
+      version: 6.4.23
+    '@types/nodemailer-smtp-transport':
+      specifier: ^2.7.8
+      version: 2.7.8
+    '@types/pg':
+      specifier: ^8.10.9
+      version: 8.20.0
+    '@types/react':
+      specifier: ^18.3.1
+      version: 18.3.28
+    '@types/react-dom':
+      specifier: ^18.3.1
+      version: 18.3.7
+    '@types/supercluster':
+      specifier: ^7.1.3
+      version: 7.1.3
+    '@types/testing-library__jest-dom':
+      specifier: ^6.0.0
+      version: 6.0.0
+    '@vitejs/plugin-react':
+      specifier: ^4.2.1
+      version: 4.7.0
+    '@vitest/coverage-v8':
+      specifier: ^1.5.0
+      version: 1.6.1
+    autoprefixer:
+      specifier: ^10.4.17
+      version: 10.4.27
+    commitizen:
+      specifier: ^4.3.1
+      version: 4.3.1
+    cross-fetch:
+      specifier: ^4.0.0
+      version: 4.1.0
+    dotenv-cli:
+      specifier: ^7.3.0
+      version: 7.4.4
+    drizzle-kit:
+      specifier: ^0.31.10
+      version: 0.31.10
     eslint:
       specifier: ^10.4.0
       version: 10.4.0
+    inquirer:
+      specifier: ^9.3.8
+      version: 9.3.8
+    jiti:
+      specifier: ^2.4.2
+      version: 2.6.1
+    jsdom:
+      specifier: ^24.0.0
+      version: 24.1.3
     lefthook:
       specifier: ^2.1.8
       version: 2.1.8
+    postcss:
+      specifier: ^8.4.35
+      version: 8.5.8
     prettier:
       specifier: ^3.8.3
       version: 3.8.3
+    react:
+      specifier: 18.3.1
+      version: 18.3.1
+    release-it:
+      specifier: ^18.1.2
+      version: 18.1.2
+    tailwindcss:
+      specifier: ^3.4.1
+      version: 3.4.19
+    tailwindcss-animate:
+      specifier: ^1.0.7
+      version: 1.0.7
+    tsx:
+      specifier: ^4.7.1
+      version: 4.21.0
+    turbo:
+      specifier: ^1.12.3
+      version: 1.13.4
     typescript:
       specifier: ^6.0.3
       version: 6.0.3
     typescript-eslint:
       specifier: ^8.59.4
       version: 8.59.4
+    vite-tsconfig-paths:
+      specifier: ^4.3.2
+      version: 4.3.2
+    vitest:
+      specifier: ^1.5.0
+      version: 1.6.1
+    vitest-canvas-mock:
+      specifier: ^0.3.3
+      version: 0.3.3
+    zod:
+      specifier: ^3.25.8
+      version: 3.25.76
 
 overrides:
   axios: '>=1.7.4'
@@ -42,22 +165,22 @@ importers:
         specifier: workspace:*
         version: link:tooling/release-it
       '@commitlint/cli':
-        specifier: 20.5.0
+        specifier: 'catalog:'
         version: 20.5.0(@types/node@24.12.4)(conventional-commits-parser@6.4.0)(typescript@6.0.3)
       '@commitlint/config-conventional':
-        specifier: 20.5.0
+        specifier: 'catalog:'
         version: 20.5.0
       '@commitlint/cz-commitlint':
-        specifier: 20.5.1
+        specifier: 'catalog:'
         version: 20.5.1(@types/node@24.12.4)(commitizen@4.3.1(@types/node@24.12.4)(typescript@6.0.3))(inquirer@9.3.8(@types/node@24.12.4))(typescript@6.0.3)
       '@turbo/gen':
-        specifier: ^1.12.3
+        specifier: 'catalog:'
         version: 1.13.4(@types/node@24.12.4)(typescript@6.0.3)
       commitizen:
-        specifier: ^4.3.1
+        specifier: 'catalog:'
         version: 4.3.1(@types/node@24.12.4)(typescript@6.0.3)
       inquirer:
-        specifier: ^9.3.8
+        specifier: 'catalog:'
         version: 9.3.8(@types/node@24.12.4)
       lefthook:
         specifier: 'catalog:'
@@ -66,7 +189,7 @@ importers:
         specifier: 'catalog:'
         version: 3.8.3
       turbo:
-        specifier: ^1.12.3
+        specifier: 'catalog:'
         version: 1.13.4
       typescript:
         specifier: 'catalog:'
@@ -190,31 +313,31 @@ importers:
         specifier: workspace:*
         version: link:../../tooling/typescript
       '@types/dompurify':
-        specifier: ^3.0.5
+        specifier: 'catalog:'
         version: 3.2.0
       '@types/lodash':
-        specifier: ^4.14.195
+        specifier: 'catalog:'
         version: 4.17.24
       '@types/node':
         specifier: 'catalog:'
         version: 24.12.4
       '@types/react':
-        specifier: ^18.3.1
+        specifier: 'catalog:'
         version: 18.3.28
       '@types/react-dom':
-        specifier: ^18.3.1
+        specifier: 'catalog:'
         version: 18.3.7(@types/react@18.3.28)
       eslint:
         specifier: 'catalog:'
         version: 10.4.0(jiti@2.6.1)
       jiti:
-        specifier: ^2.4.2
+        specifier: 'catalog:'
         version: 2.6.1
       prettier:
         specifier: 'catalog:'
         version: 3.8.3
       tailwindcss:
-        specifier: ^3.4.1
+        specifier: 'catalog:'
         version: 3.4.19(tsx@4.21.0)
       typescript:
         specifier: 'catalog:'
@@ -266,10 +389,10 @@ importers:
         version: 3.1.1(react@18.3.1)
       '@scalar/nextjs-api-reference':
         specifier: ^0.9.5
-        version: 0.9.26(next@15.5.14(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)
+        version: 0.9.26(next@15.5.14(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)
       '@sentry/nextjs':
         specifier: ^9.15.0
-        version: 9.47.1(@opentelemetry/context-async-hooks@1.30.1(@opentelemetry/api@1.9.1))(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@1.30.1(@opentelemetry/api@1.9.1))(next@15.5.14(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(webpack@5.105.4)
+        version: 9.47.1(@opentelemetry/context-async-hooks@1.30.1(@opentelemetry/api@1.9.1))(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@1.30.1(@opentelemetry/api@1.9.1))(next@15.5.14(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(webpack@5.105.4)
       '@t3-oss/env-nextjs':
         specifier: ^0.9.2
         version: 0.9.2(typescript@6.0.3)(zod@3.25.76)
@@ -314,7 +437,7 @@ importers:
         version: 15.5.14(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       next-plausible:
         specifier: ^3.12.0
-        version: 3.12.5(next@15.5.14(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        version: 3.12.5(next@15.5.14(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react:
         specifier: 18.3.1
         version: 18.3.1
@@ -365,82 +488,82 @@ importers:
         specifier: workspace:*
         version: link:../../tooling/typescript
       '@playwright/test':
-        specifier: ^1.52.0
+        specifier: 'catalog:'
         version: 1.59.1
       '@testing-library/jest-dom':
-        specifier: ^6.4.2
+        specifier: 'catalog:'
         version: 6.9.1
       '@testing-library/react':
-        specifier: ^15.0.2
+        specifier: 'catalog:'
         version: 15.0.7(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@types/dompurify':
-        specifier: ^3.0.5
+        specifier: 'catalog:'
         version: 3.2.0
       '@types/geojson':
-        specifier: ^7946.0.16
+        specifier: 'catalog:'
         version: 7946.0.16
       '@types/google.maps':
-        specifier: ^3.58.1
+        specifier: 'catalog:'
         version: 3.58.1
       '@types/lodash':
-        specifier: ^4.14.195
+        specifier: 'catalog:'
         version: 4.17.24
       '@types/node':
         specifier: 'catalog:'
         version: 24.12.4
       '@types/nodemailer':
-        specifier: ^6.4.17
+        specifier: 'catalog:'
         version: 6.4.23
       '@types/nodemailer-smtp-transport':
-        specifier: ^2.7.8
+        specifier: 'catalog:'
         version: 2.7.8
       '@types/react':
-        specifier: ^18.3.1
+        specifier: 'catalog:'
         version: 18.3.28
       '@types/react-dom':
-        specifier: ^18.3.1
+        specifier: 'catalog:'
         version: 18.3.7(@types/react@18.3.28)
       '@types/supercluster':
-        specifier: ^7.1.3
+        specifier: 'catalog:'
         version: 7.1.3
       '@types/testing-library__jest-dom':
-        specifier: ^6.0.0
+        specifier: 'catalog:'
         version: 6.0.0
       '@vitejs/plugin-react':
-        specifier: ^4.2.1
+        specifier: 'catalog:'
         version: 4.7.0(vite@5.4.21(@types/node@24.12.4)(terser@5.46.1))
       '@vitest/coverage-v8':
-        specifier: ^1.5.0
+        specifier: 'catalog:'
         version: 1.6.1(vitest@1.6.1(@types/node@24.12.4)(jsdom@24.1.3)(terser@5.46.1))
       cross-fetch:
-        specifier: ^4.0.0
+        specifier: 'catalog:'
         version: 4.1.0
       eslint:
         specifier: 'catalog:'
         version: 10.4.0(jiti@2.6.1)
       jiti:
-        specifier: ^2.4.2
+        specifier: 'catalog:'
         version: 2.6.1
       jsdom:
-        specifier: ^24.0.0
+        specifier: 'catalog:'
         version: 24.1.3
       prettier:
         specifier: 'catalog:'
         version: 3.8.3
       tailwindcss:
-        specifier: ^3.4.1
+        specifier: 'catalog:'
         version: 3.4.19(tsx@4.21.0)
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
       vite-tsconfig-paths:
-        specifier: ^4.3.2
+        specifier: 'catalog:'
         version: 4.3.2(typescript@6.0.3)(vite@5.4.21(@types/node@24.12.4)(terser@5.46.1))
       vitest:
-        specifier: ^1.5.0
+        specifier: 'catalog:'
         version: 1.6.1(@types/node@24.12.4)(jsdom@24.1.3)(terser@5.46.1)
       vitest-canvas-mock:
-        specifier: ^0.3.3
+        specifier: 'catalog:'
         version: 0.3.3(vitest@1.6.1(@types/node@24.12.4)(jsdom@24.1.3)(terser@5.46.1))
 
   apps/auth:
@@ -513,43 +636,43 @@ importers:
         specifier: 'catalog:'
         version: 24.12.4
       '@types/nodemailer':
-        specifier: ^6.4.17
+        specifier: 'catalog:'
         version: 6.4.23
       '@types/pg':
-        specifier: ^8.10.9
+        specifier: 'catalog:'
         version: 8.20.0
       '@types/react':
-        specifier: ^18.3.1
+        specifier: 'catalog:'
         version: 18.3.28
       '@types/react-dom':
-        specifier: ^18.3.1
+        specifier: 'catalog:'
         version: 18.3.7(@types/react@18.3.28)
       autoprefixer:
-        specifier: ^10.4.17
+        specifier: 'catalog:'
         version: 10.4.27(postcss@8.5.8)
       dotenv-cli:
-        specifier: ^7.3.0
+        specifier: 'catalog:'
         version: 7.4.4
       eslint:
         specifier: 'catalog:'
         version: 10.4.0(jiti@2.6.1)
       postcss:
-        specifier: ^8.4.35
+        specifier: 'catalog:'
         version: 8.5.8
       prettier:
         specifier: 'catalog:'
         version: 3.8.3
       tailwindcss:
-        specifier: ^3.4.1
+        specifier: 'catalog:'
         version: 3.4.19(tsx@4.21.0)
       tsx:
-        specifier: ^4.7.1
+        specifier: 'catalog:'
         version: 4.21.0
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
       vitest:
-        specifier: ^1.5.0
+        specifier: 'catalog:'
         version: 1.6.1(@types/node@24.12.4)(jsdom@24.1.3)(terser@5.46.1)
 
   apps/map:
@@ -601,7 +724,7 @@ importers:
         version: 3.1.1(react@18.3.1)
       '@sentry/nextjs':
         specifier: ^9.15.0
-        version: 9.47.1(@opentelemetry/context-async-hooks@1.30.1(@opentelemetry/api@1.9.1))(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@1.30.1(@opentelemetry/api@1.9.1))(next@15.5.14(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(webpack@5.105.4)
+        version: 9.47.1(@opentelemetry/context-async-hooks@1.30.1(@opentelemetry/api@1.9.1))(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@1.30.1(@opentelemetry/api@1.9.1))(next@15.5.14(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(webpack@5.105.4)
       '@t3-oss/env-nextjs':
         specifier: ^0.9.2
         version: 0.9.2(typescript@6.0.3)(zod@3.25.76)
@@ -646,7 +769,7 @@ importers:
         version: 15.5.14(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       next-plausible:
         specifier: ^3.12.0
-        version: 3.12.5(next@15.5.14(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        version: 3.12.5(next@15.5.14(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react:
         specifier: 18.3.1
         version: 18.3.1
@@ -700,82 +823,82 @@ importers:
         specifier: workspace:*
         version: link:../../tooling/typescript
       '@playwright/test':
-        specifier: ^1.52.0
+        specifier: 'catalog:'
         version: 1.59.1
       '@testing-library/jest-dom':
-        specifier: ^6.4.2
+        specifier: 'catalog:'
         version: 6.9.1
       '@testing-library/react':
-        specifier: ^15.0.2
+        specifier: 'catalog:'
         version: 15.0.7(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@types/dompurify':
-        specifier: ^3.0.5
+        specifier: 'catalog:'
         version: 3.2.0
       '@types/geojson':
-        specifier: ^7946.0.16
+        specifier: 'catalog:'
         version: 7946.0.16
       '@types/google.maps':
-        specifier: ^3.58.1
+        specifier: 'catalog:'
         version: 3.58.1
       '@types/lodash':
-        specifier: ^4.14.195
+        specifier: 'catalog:'
         version: 4.17.24
       '@types/node':
         specifier: 'catalog:'
         version: 24.12.4
       '@types/nodemailer':
-        specifier: ^6.4.17
+        specifier: 'catalog:'
         version: 6.4.23
       '@types/nodemailer-smtp-transport':
-        specifier: ^2.7.8
+        specifier: 'catalog:'
         version: 2.7.8
       '@types/react':
-        specifier: ^18.3.1
+        specifier: 'catalog:'
         version: 18.3.28
       '@types/react-dom':
-        specifier: ^18.3.1
+        specifier: 'catalog:'
         version: 18.3.7(@types/react@18.3.28)
       '@types/supercluster':
-        specifier: ^7.1.3
+        specifier: 'catalog:'
         version: 7.1.3
       '@types/testing-library__jest-dom':
-        specifier: ^6.0.0
+        specifier: 'catalog:'
         version: 6.0.0
       '@vitejs/plugin-react':
-        specifier: ^4.2.1
+        specifier: 'catalog:'
         version: 4.7.0(vite@5.4.21(@types/node@24.12.4)(terser@5.46.1))
       '@vitest/coverage-v8':
-        specifier: ^1.5.0
+        specifier: 'catalog:'
         version: 1.6.1(vitest@1.6.1(@types/node@24.12.4)(jsdom@24.1.3)(terser@5.46.1))
       cross-fetch:
-        specifier: ^4.0.0
+        specifier: 'catalog:'
         version: 4.1.0
       eslint:
         specifier: 'catalog:'
         version: 10.4.0(jiti@2.6.1)
       jiti:
-        specifier: ^2.4.2
+        specifier: 'catalog:'
         version: 2.6.1
       jsdom:
-        specifier: ^24.0.0
+        specifier: 'catalog:'
         version: 24.1.3
       prettier:
         specifier: 'catalog:'
         version: 3.8.3
       tailwindcss:
-        specifier: ^3.4.1
+        specifier: 'catalog:'
         version: 3.4.19(tsx@4.21.0)
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
       vite-tsconfig-paths:
-        specifier: ^4.3.2
+        specifier: 'catalog:'
         version: 4.3.2(typescript@6.0.3)(vite@5.4.21(@types/node@24.12.4)(terser@5.46.1))
       vitest:
-        specifier: ^1.5.0
+        specifier: 'catalog:'
         version: 1.6.1(@types/node@24.12.4)(jsdom@24.1.3)(terser@5.46.1)
       vitest-canvas-mock:
-        specifier: ^0.3.3
+        specifier: 'catalog:'
         version: 0.3.3(vitest@1.6.1(@types/node@24.12.4)(jsdom@24.1.3)(terser@5.46.1))
 
   apps/me:
@@ -836,46 +959,46 @@ importers:
         specifier: workspace:^0.1.0
         version: link:../../tooling/typescript
       '@testing-library/jest-dom':
-        specifier: ^6.4.2
+        specifier: 'catalog:'
         version: 6.9.1
       '@types/node':
         specifier: 'catalog:'
         version: 24.12.4
       '@types/react':
-        specifier: ^18.3.1
+        specifier: 'catalog:'
         version: 18.3.28
       '@types/react-dom':
-        specifier: ^18.3.1
+        specifier: 'catalog:'
         version: 18.3.7(@types/react@18.3.28)
       '@vitejs/plugin-react':
-        specifier: ^4.2.1
+        specifier: 'catalog:'
         version: 4.7.0(vite@5.4.21(@types/node@24.12.4)(terser@5.46.1))
       '@vitest/coverage-v8':
-        specifier: ^1.5.0
+        specifier: 'catalog:'
         version: 1.6.1(vitest@1.6.1(@types/node@24.12.4)(jsdom@24.1.3)(terser@5.46.1))
       autoprefixer:
-        specifier: ^10.4.17
+        specifier: 'catalog:'
         version: 10.4.27(postcss@8.5.8)
       eslint:
         specifier: 'catalog:'
         version: 10.4.0(jiti@2.6.1)
       postcss:
-        specifier: ^8.4.35
+        specifier: 'catalog:'
         version: 8.5.8
       prettier:
         specifier: 'catalog:'
         version: 3.8.3
       tailwindcss:
-        specifier: ^3.4.1
+        specifier: 'catalog:'
         version: 3.4.19(tsx@4.21.0)
       tailwindcss-animate:
-        specifier: ^1.0.7
+        specifier: 'catalog:'
         version: 1.0.7(tailwindcss@3.4.19(tsx@4.21.0))
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
       vitest:
-        specifier: ^1.5.0
+        specifier: 'catalog:'
         version: 1.6.1(@types/node@24.12.4)(jsdom@24.1.3)(terser@5.46.1)
 
   packages/api:
@@ -1003,10 +1126,10 @@ importers:
         specifier: workspace:^0.1.0
         version: link:../../tooling/typescript
       '@types/nodemailer':
-        specifier: ^6.4.17
+        specifier: 'catalog:'
         version: 6.4.23
       '@types/nodemailer-smtp-transport':
-        specifier: ^2.7.8
+        specifier: 'catalog:'
         version: 2.7.8
       eslint:
         specifier: 'catalog:'
@@ -1015,7 +1138,7 @@ importers:
         specifier: 'catalog:'
         version: 3.8.3
       tsx:
-        specifier: ^4.7.1
+        specifier: 'catalog:'
         version: 4.21.0
       typescript:
         specifier: 'catalog:'
@@ -1055,10 +1178,10 @@ importers:
         specifier: workspace:*
         version: link:../../tooling/typescript
       '@faker-js/faker':
-        specifier: ^8.1.0
+        specifier: 'catalog:'
         version: 8.4.1
       drizzle-kit:
-        specifier: ^0.31.10
+        specifier: 'catalog:'
         version: 0.31.10
       eslint:
         specifier: 'catalog:'
@@ -1098,7 +1221,7 @@ importers:
         specifier: 'catalog:'
         version: 3.8.3
       tsx:
-        specifier: ^4.7.1
+        specifier: 'catalog:'
         version: 4.21.0
       typescript:
         specifier: 'catalog:'
@@ -1123,7 +1246,7 @@ importers:
         specifier: workspace:^0.1.0
         version: link:../../tooling/typescript
       '@types/nodemailer':
-        specifier: ^6.4.17
+        specifier: 'catalog:'
         version: 6.4.23
       eslint:
         specifier: 'catalog:'
@@ -1341,10 +1464,10 @@ importers:
         specifier: workspace:^0.1.0
         version: link:../../tooling/typescript
       '@types/lodash':
-        specifier: ^4.14.195
+        specifier: 'catalog:'
         version: 4.17.24
       '@types/react':
-        specifier: ^18.3.1
+        specifier: 'catalog:'
         version: 18.3.28
       eslint:
         specifier: 'catalog:'
@@ -1353,16 +1476,16 @@ importers:
         specifier: 'catalog:'
         version: 3.8.3
       react:
-        specifier: 18.3.1
+        specifier: 'catalog:'
         version: 18.3.1
       tailwindcss:
-        specifier: ^3.4.1
+        specifier: 'catalog:'
         version: 3.4.19(tsx@4.21.0)
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
       zod:
-        specifier: ^3.25.8
+        specifier: 'catalog:'
         version: 3.25.76
 
   packages/validators:
@@ -1466,10 +1589,10 @@ importers:
         specifier: workspace:^0.1.0
         version: link:../typescript
       '@release-it/bumper':
-        specifier: ^7.0.1
+        specifier: 'catalog:'
         version: 7.0.5(release-it@18.1.2(@types/node@24.12.4)(typescript@6.0.3))
       release-it:
-        specifier: ^18.1.2
+        specifier: 'catalog:'
         version: 18.1.2(@types/node@24.12.4)(typescript@6.0.3)
 
   tooling/scripts:
@@ -1505,7 +1628,7 @@ importers:
         specifier: 'catalog:'
         version: 3.8.3
       tsx:
-        specifier: ^4.7.1
+        specifier: 'catalog:'
         version: 4.21.0
       typescript:
         specifier: 'catalog:'
@@ -1537,7 +1660,7 @@ importers:
         version: link:../typescript
       eslint:
         specifier: 'catalog:'
-        version: 10.4.0(jiti@2.6.1)
+        version: 10.4.0(jiti@1.21.7)
       prettier:
         specifier: 'catalog:'
         version: 3.8.3
@@ -9919,6 +10042,11 @@ snapshots:
   '@esbuild/win32-x64@0.27.7':
     optional: true
 
+  '@eslint-community/eslint-utils@4.9.1(eslint@10.4.0(jiti@1.21.7))':
+    dependencies:
+      eslint: 10.4.0(jiti@1.21.7)
+      eslint-visitor-keys: 3.4.3
+
   '@eslint-community/eslint-utils@4.9.1(eslint@10.4.0(jiti@2.6.1))':
     dependencies:
       eslint: 10.4.0(jiti@2.6.1)
@@ -11910,7 +12038,7 @@ snapshots:
 
   '@scalar/helpers@0.2.18': {}
 
-  '@scalar/nextjs-api-reference@0.9.26(next@15.5.14(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)':
+  '@scalar/nextjs-api-reference@0.9.26(next@15.5.14(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)':
     dependencies:
       '@scalar/core': 0.3.45
       next: 15.5.14(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -12013,7 +12141,7 @@ snapshots:
 
   '@sentry/core@9.47.1': {}
 
-  '@sentry/nextjs@9.47.1(@opentelemetry/context-async-hooks@1.30.1(@opentelemetry/api@1.9.1))(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@1.30.1(@opentelemetry/api@1.9.1))(next@15.5.14(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(webpack@5.105.4)':
+  '@sentry/nextjs@9.47.1(@opentelemetry/context-async-hooks@1.30.1(@opentelemetry/api@1.9.1))(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@1.30.1(@opentelemetry/api@1.9.1))(next@15.5.14(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(webpack@5.105.4)':
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/semantic-conventions': 1.40.0
@@ -13990,6 +14118,43 @@ snapshots:
 
   eslint-visitor-keys@5.0.1: {}
 
+  eslint@10.4.0(jiti@1.21.7):
+    dependencies:
+      '@eslint-community/eslint-utils': 4.9.1(eslint@10.4.0(jiti@1.21.7))
+      '@eslint-community/regexpp': 4.12.2
+      '@eslint/config-array': 0.23.5
+      '@eslint/config-helpers': 0.6.0
+      '@eslint/core': 1.2.1
+      '@eslint/plugin-kit': 0.7.1
+      '@humanfs/node': 0.16.8
+      '@humanwhocodes/module-importer': 1.0.1
+      '@humanwhocodes/retry': 0.4.3
+      '@types/estree': 1.0.8
+      ajv: 6.14.0
+      cross-spawn: 7.0.6
+      debug: 4.4.3
+      escape-string-regexp: 4.0.0
+      eslint-scope: 9.1.2
+      eslint-visitor-keys: 5.0.1
+      espree: 11.2.0
+      esquery: 1.7.0
+      esutils: 2.0.3
+      fast-deep-equal: 3.1.3
+      file-entry-cache: 8.0.0
+      find-up: 5.0.0
+      glob-parent: 6.0.2
+      ignore: 5.3.2
+      imurmurhash: 0.1.4
+      is-glob: 4.0.3
+      json-stable-stringify-without-jsonify: 1.0.1
+      minimatch: 10.2.5
+      natural-compare: 1.4.0
+      optionator: 0.9.4
+    optionalDependencies:
+      jiti: 1.21.7
+    transitivePeerDependencies:
+      - supports-color
+
   eslint@10.4.0(jiti@2.6.1):
     dependencies:
       '@eslint-community/eslint-utils': 4.9.1(eslint@10.4.0(jiti@2.6.1))
@@ -15411,7 +15576,7 @@ snapshots:
     optionalDependencies:
       nodemailer: 6.10.1
 
-  next-plausible@3.12.5(next@15.5.14(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
+  next-plausible@3.12.5(next@15.5.14(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:
       next: 15.5.14(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react: 18.3.1
@@ -16995,7 +17160,7 @@ snapshots:
       is-npm: 6.1.0
       latest-version: 9.0.0
       pupa: 3.3.0
-      semver: 7.6.3
+      semver: 7.7.4
       xdg-basedir: 5.1.0
 
   upper-case-first@1.1.2:
