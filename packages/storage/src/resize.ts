@@ -10,6 +10,11 @@ export interface ResizeImageOptions {
 /**
  * Resize an image to the given dimensions and convert to JPEG.
  * Uses cover fit (center-crop) and strips metadata.
+ *
+ * `.rotate()` (no angle) auto-applies the source EXIF Orientation before the
+ * crop, so portrait photos from phones (stored as landscape pixels + an
+ * orientation flag) are processed upright rather than rotated 90°. Must run
+ * before `.resize()`. See #315.
  */
 export async function resizeImage(
   data: Buffer,
@@ -17,6 +22,7 @@ export async function resizeImage(
 ): Promise<Buffer> {
   try {
     return await sharp(data)
+      .rotate()
       .resize(options.width, options.height, {
         fit: "cover",
         withoutEnlargement: true,

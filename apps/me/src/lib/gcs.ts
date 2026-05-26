@@ -33,6 +33,25 @@ function getStorage(): Storage {
   return storageClient;
 }
 
+/**
+ * Process a raw uploaded image into the canonical avatar JPEG:
+ * a 512x512, cover-cropped, quality-85 JPEG.
+ */
+export async function processAvatarImage(file: Buffer): Promise<Buffer> {
+  return (
+    sharp(file)
+      // Honor the EXIF Orientation tag before any geometry op. Phone cameras
+      // (esp. Android) store portrait photos as landscape pixels + an
+      // orientation flag; calling .rotate() with no angle auto-applies that
+      // flag so the avatar is saved upright. Must come before .resize()
+      // (cover-crop) so the crop sees the correctly-oriented image. (#315)
+      .rotate()
+      .resize(512, 512, { fit: "cover", withoutEnlargement: true })
+      .jpeg({ quality: 85 })
+      .toBuffer()
+  );
+}
+
 export async function uploadAvatar(
   userId: number,
   file: Buffer,
@@ -40,13 +59,10 @@ export async function uploadAvatar(
   const bucketName = process.env.GCS_BUCKET;
   if (!bucketName) throw new Error("GCS_BUCKET is not set");
 
-  // Convert to JPEG, resize to max 512x512, strip metadata
+  // Convert to JPEG, resize to max 512x512
   let jpeg: Buffer;
   try {
-    jpeg = await sharp(file)
-      .resize(512, 512, { fit: "cover", withoutEnlargement: true })
-      .jpeg({ quality: 85 })
-      .toBuffer();
+    jpeg = await processAvatarImage(file);
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown image error";
     throw new Error(`Failed to process avatar image: ${message}`);
