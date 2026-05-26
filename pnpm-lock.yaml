@@ -90,7 +90,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/sso
       '@acme/storage':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../packages/storage
       '@acme/tailwind-config':
         specifier: workspace:^0.1.0
