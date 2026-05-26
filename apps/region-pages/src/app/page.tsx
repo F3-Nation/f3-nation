@@ -11,6 +11,8 @@ import { ALL_LETTERS } from '@/lib/const';
 export const metadata: Metadata = {
   title: 'All Regions',
   description: 'Browse all F3 workout regions',
+  // Canonical resolves against metadataBase (SITE_CONFIG.url = the canonical host).
+  alternates: { canonical: '/' },
 };
 
 interface RegionsPageProps {

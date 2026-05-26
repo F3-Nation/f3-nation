@@ -85,6 +85,9 @@ export async function generateMetadata({
           nextEvent.date
         )}.`
       : workoutsDescription,
+    // Resolved against metadataBase (SITE_CONFIG.url) so the canonical URL always
+    // points at the canonical host regardless of which domain served the page.
+    alternates: { canonical: `/${regionSlug}` },
   };
 }
 
