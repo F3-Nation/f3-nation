@@ -1,20 +1,20 @@
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 
-import { processAvatarImage } from "@/lib/gcs";
+import { prepareImageForStorage } from "./resize";
 
 /**
  * Regression test for #315: portrait selfies from Android phones are stored as
  * landscape pixel data plus an EXIF Orientation tag (value 6 = "rotate 90° CW
- * to display"). If the avatar pipeline reads the raw pixels without honoring
- * EXIF, the saved avatar is rotated 90° CW from what the user saw.
+ * to display"). If the pipeline reads raw pixels without honoring EXIF, the
+ * saved image is rotated 90° CW from what the user saw.
  *
  * We build a wide (landscape) image whose LEFT half is red and RIGHT half is
  * blue, then tag it Orientation=6 WITHOUT rotating the pixels — exactly how a
  * phone stores a portrait photo. When orientation is honored (rotate 90° CW),
- * the left column maps to the TOP, so the processed square avatar should be
- * red on top / blue on bottom. The un-rotated (buggy) output is red on the
- * left / blue on the right, so each half is ~50/50 and the assertions fail.
+ * the left column maps to the TOP, so the processed square should be red on
+ * top / blue on bottom. The un-rotated (buggy) output is red on the left /
+ * blue on the right, so each half is ~50/50 and the assertions fail.
  */
 
 const RED = { r: 255, g: 0, b: 0 } as const;
@@ -51,7 +51,7 @@ interface MeanRgb {
 /**
  * Compute the mean RGB of a horizontal band of a raw RGB buffer, from row
  * `yStart` (inclusive) to `yEnd` (exclusive) across the full width. Used to
- * assert which color dominates the top vs. bottom half of the processed avatar.
+ * assert which color dominates the top vs. bottom half of the processed image.
  */
 function meanRgb(
   data: Buffer,
@@ -76,11 +76,14 @@ function meanRgb(
   return { r: r / n, g: g / n, b: b / n };
 }
 
-describe("processAvatarImage — EXIF orientation (#315)", () => {
+describe("prepareImageForStorage — EXIF orientation (#315)", () => {
   it("honors EXIF orientation so portrait selfies are not rotated 90°", async () => {
     const fixture = await makePortraitSelfieFixture();
 
-    const out = await processAvatarImage(fixture);
+    const out = await prepareImageForStorage(fixture, {
+      width: 512,
+      height: 512,
+    });
 
     const { data, info } = await sharp(out)
       .raw()
@@ -104,9 +107,12 @@ describe("processAvatarImage — EXIF orientation (#315)", () => {
     expect(bottom.b - bottom.r).toBeGreaterThan(80);
   });
 
-  it("produces a 512x512 JPEG", async () => {
+  it("produces a JPEG at the requested dimensions", async () => {
     const fixture = await makePortraitSelfieFixture();
-    const out = await processAvatarImage(fixture);
+    const out = await prepareImageForStorage(fixture, {
+      width: 512,
+      height: 512,
+    });
     const meta = await sharp(out).metadata();
     expect(meta.format).toBe("jpeg");
     expect(meta.width).toBe(512);
