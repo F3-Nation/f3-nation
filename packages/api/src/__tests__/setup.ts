@@ -6,6 +6,19 @@ vi.mock("next/server", () => ({
   default: {},
 }));
 
+// Mock @acme/mail to prevent module-load-time crash when EMAIL_ADMIN_DESTINATIONS
+// is unavailable in test workers (e.g. Vitest 3 forks pool in CI).
+// API unit tests should never depend on real mail infrastructure.
+vi.mock("@acme/mail", () => ({
+  mail: {
+    sendTemplateMessages: vi.fn().mockResolvedValue([]),
+    getTemplate: vi.fn().mockReturnValue("<html></html>"),
+    templates: {},
+    adminDestinations: [],
+  },
+  DefaultTo: {},
+}));
+
 // Mock next-auth to avoid Next.js dependencies
 vi.mock("next-auth", () => ({
   default: vi.fn(),
