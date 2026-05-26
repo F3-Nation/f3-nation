@@ -40,9 +40,11 @@ resource "google_project_iam_member" "ci_secret_accessor" {
   member  = "serviceAccount:${google_service_account.ci.email}"
 }
 
-# State backend access (plan reads state + takes a lock).
+# State backend access. Bucket-scoped storage.admin (not project-wide) so the SA
+# can read/write state objects AND read the bucket's IAM policy — Terraform needs
+# the latter to refresh this very binding during `plan` (storage.buckets.getIamPolicy).
 resource "google_storage_bucket_iam_member" "ci_state" {
   bucket = "region-pages-tfstate"
-  role   = "roles/storage.objectAdmin"
+  role   = "roles/storage.admin"
   member = "serviceAccount:${google_service_account.ci.email}"
 }
