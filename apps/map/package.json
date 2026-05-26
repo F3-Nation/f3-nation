@@ -78,7 +78,7 @@
     "@types/geojson": "^7946.0.16",
     "@types/google.maps": "^3.58.1",
     "@types/lodash": "^4.14.195",
-    "@types/node": "^20.11.13",
+    "@types/node": "catalog:",
     "@types/nodemailer": "^6.4.17",
     "@types/nodemailer-smtp-transport": "^2.7.8",
     "@types/react": "^18.3.1",
