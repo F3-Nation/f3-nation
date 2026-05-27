@@ -1,15 +1,24 @@
 /**
  * First Event Service
  *
- * Detects when the first recurring event is created for a region and triggers
- * the "region in a box" notification flow (GitHub issue #273).
+ * Fires the "region in a box" notification email the first time a recurring
+ * event is created for a region that has not yet been notified
+ * (GitHub issue #273).
  *
  * Deduplication strategy: a `firstEventNotificationSent` flag is stored on the
- * region's `meta` JSON column. Once set it is never cleared, so the notification
- * fires at most once per region even if events are later deleted and re-created.
+ * region's `meta` JSON column. Once set it is never cleared, so the
+ * notification fires at most once per region.
+ *
+ * Deferral strategy: if the region has no contact email and no admin users at
+ * the time an event is created, the flag is intentionally left unset. This
+ * allows the notification to fire on a subsequent event creation once admins
+ * have been assigned — which is a common setup ordering in practice.
+ *
+ * IMPORTANT: before deploying, set `firstEventNotificationSent: true` on all
+ * existing region org records to avoid retroactive emails being sent.
  */
 
-import { aliasedTable, and, count, eq, isNull, not, schema } from "@acme/db";
+import { eq, schema } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 import { env } from "@acme/env";
 import { mail, Templates } from "@acme/mail";
@@ -17,9 +26,13 @@ import { mail, Templates } from "@acme/mail";
 import { getUsersWithRoles } from "../services/map-request-notification";
 
 /**
- * Check whether the event just inserted is the first recurring event for its
- * region. If it is, mark the region as notified and send the first-event
- * notification email.
+ * Check whether the region that owns this AO has already received the
+ * "region in a box" notification. If not, and if the region has at least one
+ * recipient (contact email or admin), send the notification and mark the
+ * region as notified.
+ *
+ * If the region has no recipients yet the flag is intentionally left unset,
+ * allowing a later event creation to retry once admins have been assigned.
  *
  * @param db   - Database client
  * @param aoId - The AO (Activity Organization) that owns the newly created event
@@ -80,28 +93,7 @@ export async function maybeNotifyFirstEventForRegion(
     return;
   }
 
-  // Step 4: count ALL events (including soft-deleted) across every AO under
-  // this region. Including soft-deleted rows prevents re-triggering when a
-  // user deletes an event and re-creates one.
-  // Must include dayOfWeek = null filter to exclude one-off events.
-  const aoOrg = aliasedTable(schema.orgs, "ao_org_fes");
-  const [countRow] = await db
-    .select({ total: count() })
-    .from(schema.events)
-    .innerJoin(
-      aoOrg,
-      and(eq(aoOrg.id, schema.events.orgId), eq(aoOrg.parentId, regionId)),
-    )
-    .where(not(isNull(schema.events.dayOfWeek)));
-
-  const totalEvents = countRow?.total ?? 0;
-
-  if (totalEvents !== 1) {
-    // More than one event exists — this is not the first, nothing to do.
-    return;
-  }
-
-  // Step 5: build the recipient list — region contact email + all region admins.
+  // Step 4: build the recipient list — region contact email + all region admins.
   const toSet = new Set<string>();
   if (region.email) toSet.add(region.email);
 
@@ -115,13 +107,19 @@ export async function maybeNotifyFirstEventForRegion(
   }
 
   if (toSet.size === 0) {
+    // No recipients yet — intentionally leave the flag unset so that the next
+    // event creation will retry. This handles the common case where admins are
+    // assigned after the first event is already created.
     console.warn(
-      `[first-event-service] Region "${region.name}" (id: ${regionId}) has no contact email and no admins — skipping "region in a box" email.`,
+      `[first-event-service] Region "${region.name}" (id: ${regionId}) has no contact email and no admins — deferring "region in a box" email until admins are assigned.`,
     );
     return;
   }
 
-  // Step 6: send the "region in a box" welcome email.
+  // Step 5: send the "region in a box" welcome email.
+  // NOTE: if two events are created concurrently before the flag is persisted,
+  // both could reach this point and send the email. This is a low-probability
+  // race condition accepted as a known trade-off.
   const ccList = (env.EMAIL_REGION_IN_A_BOX_CC ?? "")
     .split(",")
     .map((s) => s.trim())
@@ -141,7 +139,7 @@ export async function maybeNotifyFirstEventForRegion(
     throw err;
   }
 
-  // Step 7: mark the region as notified — only after successful delivery.
+  // Step 6: mark the region as notified — only after successful delivery.
   const updatedMeta: Record<string, unknown> = {
     ...meta,
     firstEventNotificationSent: true,

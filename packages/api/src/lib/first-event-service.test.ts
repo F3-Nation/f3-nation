@@ -72,7 +72,10 @@ describe("First Event Service", () => {
 
   // --- Helpers ---
 
-  const createTestRegion = async (metaOverrides?: Record<string, unknown>) => {
+  const createTestRegion = async (opts?: {
+    meta?: Record<string, unknown>;
+    email?: string | null;
+  }) => {
     const nationOrg = await getOrCreateF3NationOrg();
     const [region] = await db
       .insert(schema.orgs)
@@ -81,8 +84,11 @@ describe("First Event Service", () => {
         orgType: "region",
         parentId: nationOrg.id,
         isActive: true,
-        email: `fes-region-${uniqueId()}@example.com`,
-        meta: metaOverrides ?? null,
+        email:
+          opts?.email !== undefined
+            ? opts.email
+            : `fes-region-${uniqueId()}@example.com`,
+        meta: opts?.meta ?? null,
       })
       .returning();
     if (region) createdOrgIds.push(region.id);
@@ -155,20 +161,17 @@ describe("First Event Service", () => {
       debugSpy.mockRestore();
     });
 
-    it("does nothing when a second event exists for the region", async () => {
-      const debugSpy = vitest
-        .spyOn(console, "debug")
-        .mockImplementation(() => undefined);
-
+    it("sends notification even when multiple events exist, as long as flag is not set", async () => {
       const region = await createTestRegion();
       const ao = await createTestAO(region.id);
-      // Two events under the same AO
+      // Two events under the same AO — count no longer gates the notification
       await createTestEvent(ao.id);
       await createTestEvent(ao.id);
 
       await maybeNotifyFirstEventForRegion(db, ao.id);
 
-      // Flag should NOT be set because there are already 2 events
+      // Flag SHOULD be set because the region has a contact email and no prior
+      // notification has been sent.
       const [updatedRegion] = await db
         .select({ meta: schema.orgs.meta })
         .from(schema.orgs)
@@ -177,18 +180,10 @@ describe("First Event Service", () => {
       expect(
         (updatedRegion?.meta as Record<string, unknown> | null)
           ?.firstEventNotificationSent,
-      ).not.toBe(true);
-
-      // No region-name debug log should have been emitted
-      const regionLogCalls = debugSpy.mock.calls.filter((args) =>
-        String(args[0]).includes(region.name),
-      );
-      expect(regionLogCalls).toHaveLength(0);
-
-      debugSpy.mockRestore();
+      ).toBe(true);
     });
 
-    it("does nothing when events exist across two different AOs in the region", async () => {
+    it("sends notification for the region regardless of which AO the event belongs to", async () => {
       const region = await createTestRegion();
       const ao1 = await createTestAO(region.id);
       const ao2 = await createTestAO(region.id);
@@ -197,6 +192,7 @@ describe("First Event Service", () => {
 
       await maybeNotifyFirstEventForRegion(db, ao2.id);
 
+      // Flag SHOULD be set — event count across AOs no longer blocks notification.
       const [updatedRegion] = await db
         .select({ meta: schema.orgs.meta })
         .from(schema.orgs)
@@ -205,7 +201,7 @@ describe("First Event Service", () => {
       expect(
         (updatedRegion?.meta as Record<string, unknown> | null)
           ?.firstEventNotificationSent,
-      ).not.toBe(true);
+      ).toBe(true);
     });
 
     it("skips when the flag is already set on the region (deduplication)", async () => {
@@ -215,7 +211,7 @@ describe("First Event Service", () => {
 
       // Region already has the flag set from a prior notification
       const region = await createTestRegion({
-        firstEventNotificationSent: true,
+        meta: { firstEventNotificationSent: true },
       });
       const ao = await createTestAO(region.id);
       await createTestEvent(ao.id);
@@ -238,23 +234,23 @@ describe("First Event Service", () => {
       debugSpy.mockRestore();
     });
 
-    it("counts soft-deleted events to prevent re-notification after delete+recreate", async () => {
-      const region = await createTestRegion();
+    it("defers notification (leaves flag unset) when region has no contact email and no admins", async () => {
+      const warnSpy = vitest
+        .spyOn(console, "warn")
+        .mockImplementation(() => undefined);
+
+      // Region with no contact email and no admin users assigned
+      const region = await createTestRegion({ email: null });
       const ao = await createTestAO(region.id);
-
-      // Create and then soft-delete the first event
-      const firstEvent = await createTestEvent(ao.id);
-      await db
-        .update(schema.events)
-        .set({ isActive: false })
-        .where(eq(schema.events.id, firstEvent.id));
-
-      // Create a second event — total count is now 2 (one inactive, one active)
       await createTestEvent(ao.id);
+
+      // eslint-disable-next-line @typescript-eslint/unbound-method
+      const mailMock = (await import("@acme/mail")).mail
+        .sendTemplateMessages as ReturnType<typeof vitest.fn>;
 
       await maybeNotifyFirstEventForRegion(db, ao.id);
 
-      // Because count=2, flag should NOT be set
+      // Flag must remain unset so a future event creation can retry.
       const [updatedRegion] = await db
         .select({ meta: schema.orgs.meta })
         .from(schema.orgs)
@@ -264,6 +260,16 @@ describe("First Event Service", () => {
         (updatedRegion?.meta as Record<string, unknown> | null)
           ?.firstEventNotificationSent,
       ).not.toBe(true);
+
+      expect(mailMock).not.toHaveBeenCalled();
+
+      // A deferral warning should have been logged.
+      const warnCalls = warnSpy.mock.calls.filter((args) =>
+        String(args[0]).includes(region.name),
+      );
+      expect(warnCalls.length).toBeGreaterThan(0);
+
+      warnSpy.mockRestore();
     });
 
     it("handles an AO with no parent gracefully without throwing", async () => {
