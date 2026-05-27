@@ -53,8 +53,7 @@
         ".expo/**",
         ".output/**",
         ".vercel/output/**"
-      ],
-      "passThroughEnv": ["SENTRY_AUTH_TOKEN"]
+      ]
     },
     "dev": {
       "persistent": true,
