@@ -1,6 +1,6 @@
 {
   "name": "f3-admin",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "private": true,
   "type": "module",
   "scripts": {
@@ -18,7 +18,7 @@
     "@acme/mail": "workspace:*",
     "@acme/shared": "workspace:^0.1.0",
     "@acme/sso": "workspace:*",
-    "@acme/storage": "workspace:^0.1.0",
+    "@acme/storage": "workspace:*",
     "@acme/tailwind-config": "workspace:^0.1.0",
     "@acme/ui": "workspace:^0.1.0",
     "@acme/validators": "workspace:^0.1.0",
