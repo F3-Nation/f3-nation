@@ -30,13 +30,9 @@ vi.mock("@acme/mail", async (importOriginal) => {
   };
 });
 
-import { execSync } from "child_process";
-import path from "path";
-
 import { eq, schema } from "@acme/db";
 import {
   afterAll,
-  beforeAll,
   beforeEach,
   describe,
   expect,
@@ -50,16 +46,6 @@ describe("First Event Service", () => {
   // Track created entities for cleanup
   const createdEventIds: number[] = [];
   const createdOrgIds: number[] = [];
-
-  beforeAll(() => {
-    // Reset the test DB before any tests run to ensure a clean state and
-    // prevent order-dependent flakiness from prior runs.
-    const repoRoot = path.resolve(__dirname, "../../../..");
-    execSync("pnpm -C packages/db reset-test-db", {
-      cwd: repoRoot,
-      stdio: "inherit",
-    });
-  }, 60000);
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -234,19 +220,20 @@ describe("First Event Service", () => {
       const ao = await createTestAO(region.id);
       await createTestEvent(ao.id);
 
+      // eslint-disable-next-line @typescript-eslint/unbound-method
+      const mailMock = (await import("@acme/mail")).mail
+        .sendTemplateMessages as ReturnType<typeof vitest.fn>;
+
       await maybeNotifyFirstEventForRegion(db, ao.id);
 
-      // Flag should still be true (untouched) but no "first event" log
-      const regionNameLogs = debugSpy.mock.calls.filter((args) =>
-        String(args[0]).includes("First recurring"),
-      );
-      expect(regionNameLogs).toHaveLength(0);
-
-      // A "already notified" debug message should appear instead
+      // A "already notified" debug message should appear
       const skippedLogs = debugSpy.mock.calls.filter((args) =>
         String(args[0]).includes("already notified"),
       );
       expect(skippedLogs.length).toBeGreaterThan(0);
+
+      // Mail should not be called since we skip early
+      expect(mailMock).not.toHaveBeenCalled();
 
       debugSpy.mockRestore();
     });
