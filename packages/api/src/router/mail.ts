@@ -94,8 +94,8 @@ export const mailRouter = {
           });
         } else if (template === Templates.mapChangeRequest) {
           const adminBaseUrl = env.NEXT_PUBLIC_ADMIN_URL?.endsWith("/")
-            ? env.NEXT_PUBLIC_ADMIN_URL.slice(0, -1)
-            : env.NEXT_PUBLIC_ADMIN_URL ?? "";
+            ? env.NEXT_PUBLIC_ADMIN_URL?.slice(0, -1)
+            : (env.NEXT_PUBLIC_ADMIN_URL ?? "");
 
           await mail.sendTemplateMessages(Templates.mapChangeRequest, {
             to,
@@ -167,7 +167,7 @@ export const mailRouter = {
       } else if (template === Templates.mapChangeRequest) {
         const adminBaseUrl = env.NEXT_PUBLIC_ADMIN_URL?.endsWith("/")
           ? env.NEXT_PUBLIC_ADMIN_URL?.slice(0, -1)
-          : env.NEXT_PUBLIC_ADMIN_URL ?? "";
+          : (env.NEXT_PUBLIC_ADMIN_URL ?? "");
 
         html = mail.getTemplate(Templates.mapChangeRequest, {
           regionName: String(data.regionName ?? "Test Region"),

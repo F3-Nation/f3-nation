@@ -1,6 +1,6 @@
 {
   "name": "@acme/storage",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "private": true,
   "exports": {
@@ -11,6 +11,8 @@
     "clean": "rm -rf .turbo node_modules",
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
     "lint": "eslint .",
+    "test": "vitest --run",
+    "test:watch": "vitest -w",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -21,9 +23,10 @@
     "@acme/eslint-config": "workspace:^0.2.0",
     "@acme/prettier-config": "workspace:^0.1.0",
     "@acme/tsconfig": "workspace:^0.1.0",
-    "@types/node": "^20.11.13",
+    "@types/node": "catalog:",
     "eslint": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "^1.5.0"
   },
   "prettier": "@acme/prettier-config"
 }

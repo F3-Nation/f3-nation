@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
-import { resizeImage, uploadFile } from "@acme/storage";
+import { prepareImageForStorage, uploadFile } from "@acme/storage";
 
 import { requireAccessToken } from "~/lib/auth/server";
 
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const buffer = Buffer.from(await fileEntry.arrayBuffer());
-    const jpeg = await resizeImage(buffer, {
+    const jpeg = await prepareImageForStorage(buffer, {
       width: dimension,
       height: dimension,
     });

@@ -53,12 +53,12 @@ function getCookieDomain(): string | undefined {
     typeof window !== "undefined"
       ? window.location.hostname
       : // Try Vercel env first (it won't have protocol in NEXT_PUBLIC_VERCEL_URL)
-        extractHostname(process.env.NEXT_PUBLIC_VERCEL_URL) ??
+        (extractHostname(process.env.NEXT_PUBLIC_VERCEL_URL) ??
         extractHostname(process.env.VERCEL_URL) ??
         extractHostname(env.NEXT_PUBLIC_ADMIN_URL) ??
         extractHostname(env.NEXT_PUBLIC_API_URL) ??
         extractHostname(env.NEXT_PUBLIC_MAP_URL) ??
-        undefined;
+        undefined);
 
   if (
     !hostname ||

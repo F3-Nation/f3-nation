@@ -85,7 +85,7 @@ export default function AdminPositionsModal({
 
   useEffect(() => {
     const defaultOrgId = position
-      ? position.orgId ?? undefined
+      ? (position.orgId ?? undefined)
       : data.defaultOrgId === null
         ? undefined
         : data.defaultOrgId;
@@ -185,8 +185,8 @@ export default function AdminPositionsModal({
       onError: (err) => {
         toast.error(
           err instanceof ORPCError && err?.code === "UNAUTHORIZED"
-            ? err.message ??
-                `You are not authorized to ${actionText} this position`
+            ? (err.message ??
+                `You are not authorized to ${actionText} this position`)
             : `Failed to ${actionText} position`,
         );
       },
