@@ -16,6 +16,7 @@ export const DefaultTo: Partial<Record<Templates, string | string[]>> = {
 
 type TemplateMessage<T extends Templates> = TemplateType[T] & {
   to?: string | string[];
+  cc?: string | string[];
   subject?: string;
   from?: string;
 };

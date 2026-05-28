@@ -830,6 +830,15 @@ export const eventRouter = {
             4,
             seriesData.startDate,
           );
+
+          // Check if this is the first recurring event for the region and
+          // trigger the "region in a box" notification flow.
+          const { maybeNotifyFirstEventForRegion } =
+            await import("../lib/first-event-service");
+          void maybeNotifyFirstEventForRegion(ctx.db, result.orgId).catch(
+            (err: unknown) =>
+              console.error("maybeNotifyFirstEventForRegion failed", { err }),
+          );
         } else if (existingEvent.recurrencePattern) {
           // Existing series: check for structural changes
           const existingSeriesData = {
