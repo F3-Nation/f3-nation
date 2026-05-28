@@ -8,6 +8,7 @@ export default {
       [
         // apps
         'admin',
+        'homepage',
         'map',
         'me',
 
