@@ -52,6 +52,12 @@ const APPS: App[] = [
     linkLabel: "Learn More",
   },
   {
+    name: "Region Pages",
+    description:
+      "Dedicated pages for F3 regions — workout calendars, member directories, event info, and contact details for each local community.",
+    href: "https://regions.f3nation.com",
+  },
+  {
     name: "Org Chart",
     description:
       "Geographic digital directory visualizing F3's organizational structure — Sectors, Areas, and Regions on a map.",
