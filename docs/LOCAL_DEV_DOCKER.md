@@ -286,11 +286,12 @@ The `5433` port is where the Docker Postgres container is exposed on your machin
 
 All outbound emails are captured by [Mailpit](https://mailpit.axllent.org/) — no emails actually leave your machine. Open http://localhost:8025 to read any email the app sends (password resets, notifications, etc.).
 
-| Variable                   | Value                    | Meaning                                            |
-| -------------------------- | ------------------------ | -------------------------------------------------- |
-| `EMAIL_SERVER`             | `smtp://localhost:1025`  | Points to Mailpit's SMTP port                      |
-| `EMAIL_FROM`               | `noreply@f3nation.local` | Sender address shown in Mailpit                    |
-| `EMAIL_ADMIN_DESTINATIONS` | `admin@f3nation.local`   | Admin notification recipients (visible in Mailpit) |
+| Variable                   | Value                    | Meaning                                                                 |
+| -------------------------- | ------------------------ | ----------------------------------------------------------------------- |
+| `EMAIL_SERVER`             | `smtp://localhost:1025`  | Points to Mailpit's SMTP port                                           |
+| `EMAIL_FROM`               | `noreply@f3nation.local` | Sender address shown in Mailpit                                         |
+| `EMAIL_ADMIN_DESTINATIONS` | `admin@f3nation.local`   | Admin notification recipients (visible in Mailpit)                      |
+| `EMAIL_REGION_IN_A_BOX_CC` | _(unset)_                | Optional CC list (comma-separated) for "region in a box" welcome emails |
 
 ### Google Cloud Storage (GCS emulator)
 
