@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Plus, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 
 import { isValidF3Name } from "@acme/shared/app/functions";
 import { useDebounce } from "~/utils/hooks/use-debounce";
@@ -48,6 +48,7 @@ const ORG_TYPE_ORDER: Record<string, number> = {
 };
 
 const ORG_TYPE_ORDER_FALLBACK = 99;
+const USER_SEARCH_PAGE_SIZE = 10;
 
 export const AssignmentsTable = () => {
   const [selectedOrg, setSelectedOrg] = useState<AccessibleOrg | null>(null);
@@ -327,13 +328,22 @@ function AddUserDialog({
   onClose: () => void;
 }) {
   const [f3NameSearch, setF3NameSearch] = useState("");
+  const [pageIndex, setPageIndex] = useState(0);
   const [assigningUserId, setAssigningUserId] = useState<number | null>(null);
   const debouncedF3Name = useDebounce(f3NameSearch.trim(), 300);
   const f3NameIsValid = isValidF3Name(debouncedF3Name);
 
-  const { data: userByF3NameData, isLoading } = useQuery(
+  const {
+    data: userByF3NameData,
+    isLoading,
+    isFetching,
+  } = useQuery(
     orpc.user.byF3Name.queryOptions({
-      input: { f3Name: debouncedF3Name },
+      input: {
+        f3Name: debouncedF3Name,
+        pageIndex,
+        pageSize: USER_SEARCH_PAGE_SIZE,
+      },
       enabled: f3NameIsValid,
     }),
   );
@@ -363,6 +373,17 @@ function AddUserDialog({
     [userByF3NameData?.users],
   );
 
+  const totalCount = userByF3NameData?.totalCount ?? 0;
+  const pageCount = Math.max(1, Math.ceil(totalCount / USER_SEARCH_PAGE_SIZE));
+  const rangeStart =
+    totalCount === 0 ? 0 : pageIndex * USER_SEARCH_PAGE_SIZE + 1;
+  const rangeEnd = Math.min(
+    (pageIndex + 1) * USER_SEARCH_PAGE_SIZE,
+    totalCount,
+  );
+  const canGoPrevious = pageIndex > 0;
+  const canGoNext = pageIndex < pageCount - 1;
+
   const getUserDisplayName = (user: (typeof matchedUsers)[number]) => {
     if (user.f3Name && user.firstName) {
       return `${user.f3Name} (${user.firstName} ${user.lastName ?? ""})`.trim();
@@ -389,81 +410,132 @@ function AddUserDialog({
             <CommandInput
               placeholder="e.g. Dredd"
               value={f3NameSearch}
-              onValueChange={setF3NameSearch}
+              onValueChange={(value) => {
+                setF3NameSearch(value);
+                setPageIndex(0);
+              }}
             />
 
             {!isLoading && f3NameIsValid && matchedUsers.length > 0 && (
-              <div
-                className={cn(
-                  "flex flex-col",
-                  matchedUsers.length > 5 &&
-                    "max-h-[360px] overflow-y-auto pr-1",
-                )}
-              >
-                {matchedUsers.map((matchedUser) => {
-                  const isAlreadyAssigned = assignedUserIds.includes(
-                    matchedUser.id,
-                  );
-                  const isAssigningThisUser =
-                    addAssignment.isPending &&
-                    assigningUserId === matchedUser.id;
+              <>
+                <div
+                  className={cn(
+                    "flex flex-col",
+                    matchedUsers.length > 5 &&
+                      "max-h-[360px] overflow-y-auto pr-1",
+                  )}
+                >
+                  {matchedUsers.map((matchedUser) => {
+                    const isAlreadyAssigned = assignedUserIds.includes(
+                      matchedUser.id,
+                    );
+                    const isAssigningThisUser =
+                      addAssignment.isPending &&
+                      assigningUserId === matchedUser.id;
 
-                  return (
-                    <div
-                      key={matchedUser.id}
-                      className={cn(
-                        "flex items-center justify-between border-b p-3",
-                        {
-                          "border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-950":
-                            isAlreadyAssigned,
-                          "border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950":
-                            !isAlreadyAssigned,
-                        },
-                      )}
-                    >
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-sm font-medium">
-                          {getUserDisplayName(matchedUser)}
-                        </span>
-                        {matchedUser.homeRegion?.homeRegionName && (
-                          <span className="text-xs text-muted-foreground">
-                            {matchedUser.homeRegion.homeRegionName}
+                    return (
+                      <div
+                        key={matchedUser.id}
+                        className={cn(
+                          "flex items-center justify-between border-b p-3",
+                          {
+                            "border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-950":
+                              isAlreadyAssigned,
+                            "border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950":
+                              !isAlreadyAssigned,
+                          },
+                        )}
+                      >
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-sm font-medium">
+                            {getUserDisplayName(matchedUser)}
                           </span>
+                          {matchedUser.homeRegion?.homeRegionName && (
+                            <span className="text-xs text-muted-foreground">
+                              {matchedUser.homeRegion.homeRegionName}
+                            </span>
+                          )}
+                        </div>
+                        {isAlreadyAssigned ? (
+                          <Badge
+                            variant="outline"
+                            className="shrink-0 text-yellow-700 dark:text-yellow-300"
+                          >
+                            Already assigned
+                          </Badge>
+                        ) : (
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              setAssigningUserId(matchedUser.id);
+                              addAssignment.mutate({
+                                positionId,
+                                orgId,
+                                userId: matchedUser.id,
+                              });
+                            }}
+                            disabled={isAssigningThisUser}
+                          >
+                            {isAssigningThisUser ? (
+                              <Spinner className="size-3" />
+                            ) : (
+                              <>
+                                <Plus className="mr-1 h-3 w-3" />
+                                Assign
+                              </>
+                            )}
+                          </Button>
                         )}
                       </div>
-                      {isAlreadyAssigned ? (
-                        <Badge
-                          variant="outline"
-                          className="shrink-0 text-yellow-700 dark:text-yellow-300"
-                        >
-                          Already assigned
-                        </Badge>
-                      ) : (
-                        <Button
-                          size="sm"
-                          onClick={() => {
-                            setAssigningUserId(matchedUser.id);
-                            addAssignment.mutate({
-                              positionId,
-                              orgId,
-                              userId: matchedUser.id,
-                            });
-                          }}
-                          disabled={isAssigningThisUser}
-                        >
-                          {isAssigningThisUser ? (
-                            <Spinner className="size-3" />
-                          ) : (
-                            <>
-                              <Plus className="mr-1 h-3 w-3" />
-                              Assign
-                            </>
-                          )}
-                        </Button>
-                      )}
+                    );
+                  })}
+                </div>
+
+                {totalCount > USER_SEARCH_PAGE_SIZE && (
+                  <div className="flex items-center justify-between border-t px-3 py-2">
+                    <span className="text-xs text-muted-foreground">
+                      {isFetching
+                        ? "Loading…"
+                        : `${rangeStart}–${rangeEnd} of ${totalCount}`}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2"
+                        disabled={!canGoPrevious || isFetching}
+                        onClick={() =>
+                          setPageIndex((prev) => Math.max(0, prev - 1))
+                        }
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <span className="min-w-[4.5rem] text-center text-xs text-muted-foreground">
+                        Page {pageIndex + 1} of {pageCount}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2"
+                        disabled={!canGoNext || isFetching}
+                        onClick={() =>
+                          setPageIndex((prev) =>
+                            Math.min(pageCount - 1, prev + 1),
+                          )
+                        }
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
                     </div>
-                  );
-                })}
+                  </div>
+                )}
+              </>
+            )}
+            {isLoading && f3NameIsValid && (
+              <div className="flex justify-center py-4">
+                <Spinner className="size-5" />
               </div>
             )}
             {!isLoading && f3NameIsValid && matchedUsers.length === 0 && (

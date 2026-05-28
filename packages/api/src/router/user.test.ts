@@ -514,6 +514,31 @@ describe("User Router", () => {
     });
   });
 
+  describe("byF3Name", () => {
+    it("should support pagination inputs", async () => {
+      const client = createTestClient();
+      const firstPage = await client.user.byF3Name({
+        f3Name: "o",
+        pageIndex: 0,
+        pageSize: 1,
+      });
+      const secondPage = await client.user.byF3Name({
+        f3Name: "o",
+        pageIndex: 1,
+        pageSize: 1,
+      });
+
+      expect(firstPage.users.length).toBeLessThanOrEqual(1);
+      expect(secondPage.users.length).toBeLessThanOrEqual(1);
+      expect(firstPage.totalCount).toBeGreaterThanOrEqual(
+        firstPage.users.length,
+      );
+      expect(secondPage.totalCount).toBeGreaterThanOrEqual(
+        secondPage.users.length,
+      );
+    });
+  });
+
   describe("crupdate", () => {
     it("should create a new user with required fields", async () => {
       const dbInstance = db;

@@ -264,6 +264,14 @@ export const userRouter = {
     .input(
       z.object({
         f3Name: z.string().describe("The F3 name of the user to retrieve"),
+        pageIndex: z.coerce.number().int().min(0).optional().default(0),
+        pageSize: z.coerce
+          .number()
+          .int()
+          .min(1)
+          .max(100)
+          .optional()
+          .default(10),
       }),
     )
     .route({
@@ -272,7 +280,7 @@ export const userRouter = {
       tags: ["user"],
       summary: "Search users by F3 name",
       description:
-        "Search for users whose F3 name partially matches the input. Returns up to 10 results with home region info.",
+        "Search for users whose F3 name partially matches the input. Supports pagination and includes home region info.",
     })
     .output(
       z.object({
@@ -286,8 +294,8 @@ export const userRouter = {
         ctx,
         input: {
           searchTerm: input.f3Name,
-          pageIndex: 0,
-          pageSize: 10,
+          pageIndex: input.pageIndex,
+          pageSize: input.pageSize,
           sorting: [{ id: "f3Name", desc: false }],
           includePii: false,
         },
