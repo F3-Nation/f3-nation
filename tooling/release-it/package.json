@@ -7,8 +7,8 @@
   "devDependencies": {
     "@acme/prettier-config": "workspace:^0.1.0",
     "@acme/tsconfig": "workspace:^0.1.0",
-    "@release-it/bumper": "^7.0.1",
-    "release-it": "^18.1.2"
+    "@release-it/bumper": "catalog:",
+    "release-it": "catalog:"
   },
   "version": "3.9.1"
 }

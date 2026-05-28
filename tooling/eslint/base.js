@@ -1,3 +1,4 @@
+import turboConfig from "eslint-config-turbo/flat";
 import tseslint from "typescript-eslint";
 import importPlugin from "eslint-plugin-import-x";
 
@@ -14,6 +15,7 @@ export default tseslint.config(
       "**/next-env.d.ts",
     ],
   },
+  ...turboConfig,
   tseslint.configs.recommendedTypeChecked,
   tseslint.configs.stylisticTypeChecked,
   {
