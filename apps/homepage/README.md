@@ -30,14 +30,14 @@ apps/homepage/
 ├── tailwind.config.ts
 ├── public/
 │   ├── CNAME                    # Custom domain declaration for GitHub Pages
-│   └── .nojekyll                # Prevents Jekyll from processing the static output
+│   ├── .nojekyll                # Prevents Jekyll from processing the static output
+│   ├── favicon.ico
+│   └── f3_logo.png
 └── src/
     └── app/
         ├── layout.tsx            # Root layout (Inter font, CSS vars)
         ├── globals.css           # Tailwind directives + CSS custom properties
-        ├── page.tsx              # Landing page — app directory
-        └── status/
-            └── page.tsx          # Placeholder for future status dashboard
+        └── page.tsx              # Landing page — app directory
 ```
 
 ## Local Development
@@ -60,9 +60,7 @@ Output is written to `apps/homepage/out/`. This is what gets deployed to GitHub 
 
 ## Deployment
 
-Deployment is tag-based via Release Please. See [docs/RELEASE_PROCESS.md](../../docs/RELEASE_PROCESS.md) for the full flow.
-
-When a `homepage@*` tag is pushed (e.g. `homepage@0.2.0`), `.github/workflows/deploy-homepage.yml`:
+Deployment is tag-based via Release Please. When a `homepage@*` tag is pushed (e.g. `homepage@0.2.0`), `.github/workflows/deploy-homepage.yml`:
 
 1. Waits for CI to pass
 2. Runs `next build` (static export)
@@ -91,15 +89,12 @@ Edit the `APPS` array in `src/app/page.tsx`:
 {
   name: "New App Name",
   description: "What it does.",
-  url: "https://newapp.f3nation.com",
-  label: "Open New App",
+  href: "https://newapp.f3nation.com",
+  // optional: override the default "Open" link label
+  linkLabel: "Learn More",
 }
 ```
 
 ### Adding a new route
 
 Create a new directory under `src/app/`. Because the site uses `output: "export"`, every page must be fully static — no `getServerSideProps`, no API routes, no dynamic segments without `generateStaticParams`.
-
-### Building out the `/status` route
-
-`src/app/status/page.tsx` is a placeholder. When ready, replace its contents with the full status dashboard. The existing external link to `status.f3nation.com` is a fallback until then.
