@@ -9,6 +9,10 @@ concurrency:
   group: deploy-homepage
   cancel-in-progress: false
 
+permissions:
+  contents: read
+  checks: read
+
 jobs:
   # ── Gate: wait for CI to pass on this commit ──
   ci-check:
@@ -29,6 +33,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: pnpm/action-setup@v4
 
