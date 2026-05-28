@@ -100,7 +100,7 @@ export async function maybeNotifyFirstEventForRegion(
   const adminUsers = await getUsersWithRoles({
     db,
     orgId: regionId,
-    roleNames: ["admin"],
+    roleNames: ["admin", "editor"],
   });
   for (const u of adminUsers) {
     if (u.email) toSet.add(u.email);
