@@ -1,0 +1,58 @@
+#!/bin/bash
+# Container-Optimized OS startup script: run the redirect tier on the host
+# network (so it owns ports 80/443) and keep it running. Retries the image
+# pull so the VM can boot before the first image is pushed by CI/CD.
+set -uo pipefail
+
+IMAGE="${image}"
+REGISTRY="${region}-docker.pkg.dev"
+
+# Container-Optimized OS ships a locked-down host firewall (INPUT policy DROP,
+# only lo/icmp/established/ssh allowed). Open the web ports so external traffic
+# reaches the container on the host network. Idempotent across reboots.
+for PORT in 80 443; do
+  iptables -w -C INPUT -p tcp --dport "$PORT" -j ACCEPT 2>/dev/null \
+    || iptables -w -A INPUT -p tcp --dport "$PORT" -j ACCEPT
+done
+
+# COS has a read-only root filesystem, so docker can't write its default
+# config under /root/.docker. Point DOCKER_CONFIG at a writable path.
+export DOCKER_CONFIG=/var/lib/redirectd/docker
+mkdir -p "$DOCKER_CONFIG"
+
+# Authenticate Docker to Artifact Registry using the VM service account's
+# access token from the metadata server (reliable on COS, no extra tooling).
+docker_login() {
+  local token
+  token=$(curl -s -H "Metadata-Flavor: Google" \
+    "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" \
+    | sed -E 's/.*"access_token":"([^"]+)".*/\1/')
+  [ -n "$token" ] || return 1
+  echo "$token" | docker login -u oauth2accesstoken --password-stdin "https://$REGISTRY" >/dev/null 2>&1
+}
+
+run_redirectd() {
+  docker rm -f redirectd >/dev/null 2>&1 || true
+  docker run -d --name redirectd --restart=always --network host \
+    -e CONFIG_BUCKET="${bucket}" \
+    -e CONFIG_OBJECT="${config_object}" \
+    -e CERT_BUCKET="${bucket}" \
+    -e CERT_PREFIX="${cert_prefix}" \
+    -e ACME_EMAIL="${acme_email}" \
+    -e ACME_STAGING="${acme_staging}" \
+    -e REDIRECT_STATUS="${redirect_status}" \
+    -e ADMIN_HOST="${admin_host}" \
+    -e ADMIN_UPSTREAM="${admin_upstream}" \
+    "$IMAGE"
+}
+
+# Retry until the image is available and the container starts.
+for i in $(seq 1 60); do
+  if docker_login && docker pull "$IMAGE" >/dev/null 2>&1; then
+    run_redirectd && exit 0
+  fi
+  echo "redirectd image not ready yet (attempt $i); retrying in 15s" >&2
+  sleep 15
+done
+echo "failed to start redirectd after retries" >&2
+exit 1

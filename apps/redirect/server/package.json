@@ -1,0 +1,15 @@
+{
+  "name": "f3-redirect-server",
+  "version": "0.1.0",
+  "private": true,
+  "//": "Thin adapter: maps Turborepo's task vocabulary to native Go tooling so the monorepo orchestrates this Go module uniformly. Scripts route through scripts/*.sh wrappers that ignore forwarded args (turbo passes eslint's --cache and vitest's --coverage to every task of that name). No npm deps. Requires the Go toolchain (and Docker for the certstore emulator tests) on the runner.",
+  "scripts": {
+    "build": "bash scripts/build.sh",
+    "test": "bash scripts/test.sh",
+    "test:coverage": "bash scripts/coverage.sh",
+    "typecheck": "bash scripts/build.sh",
+    "lint": "bash scripts/lint.sh",
+    "format": "bash scripts/format.sh",
+    "format:check": "bash scripts/format-check.sh"
+  }
+}

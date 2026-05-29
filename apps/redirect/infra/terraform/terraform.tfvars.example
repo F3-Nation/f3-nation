@@ -1,0 +1,24 @@
+# Copy to terraform.tfvars (gitignored) and fill in. The values must match the
+# live VM startup-script metadata or `terraform plan` will report drift (the
+# drift-detection CI relies on this).
+project      = "f3-redirects"
+region       = "us-central1"
+zone         = "us-central1-a"
+machine_type = "e2-small"
+
+acme_email      = "you@example.com"
+acme_staging    = false
+redirect_status = "302"
+# image_tag  = "latest"   # deploys push :latest; the VM pulls it on boot/restart
+
+# config_object = "config/redirects.json"
+# cert_prefix   = "certs"
+
+# Admin web tier (Cloud Run). admin_host/admin_upstream configure the redirect
+# VM's reverse-proxy fallback; admin_domain creates the primary Cloud Run domain
+# mapping (free, Google-managed TLS, no load balancer). Set admin_domain = ""
+# to disable the mapping and serve admin only through the VM proxy.
+admin_host         = "admin.f3regions.com"
+admin_upstream     = "https://f3redirect-web-<project-number>.us-central1.run.app"
+admin_domain       = "admin.f3regions.com"
+admin_service_name = "f3redirect-web"

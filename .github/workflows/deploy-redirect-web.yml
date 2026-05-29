@@ -1,0 +1,100 @@
+name: Deploy Redirect Web
+
+# Self-serve admin web (Next.js, `f3-redirect-web`): build the turbo-pruned
+# container and deploy to Cloud Run. The Go redirect tier reverse-proxies the
+# admin hostname to this service.
+#
+# Deploy model: SINGLE production environment. Pushing to `dev` (the monorepo's
+# integration/default branch) IS the prod deploy — no separate staging for
+# redirect. Path-filtered to web changes.
+#
+# ⚠️ SANDBOX (v1): targets Patrick's PERSONAL, self-funded GCP project
+# `f3-redirects`. Long-term pivots to an F3 Nation org-owned/funded project
+# (provisioned by Tackle), and the interim Cloud SQL database is replaced by an
+# app-specific schema + service principal in the F3PROD data warehouse (the
+# Codex/PaxVault pattern). Neon Postgres is off the table.
+#
+# Keyless auth via Workload Identity Federation.
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - "apps/redirect/web/**"
+      - ".github/workflows/deploy-redirect-web.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-redirect-web
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT: f3-redirects
+  REGION: us-central1
+  AR_REPO: redirect
+  # NOTE: the Artifact Registry image and the Cloud Run service are both named
+  # `f3redirect-web` (no hyphen) — matching the existing deployed resources so
+  # this workflow updates them in place. (The pnpm package is `f3-redirect-web`;
+  # the turbo --filter below uses that package name.)
+  IMAGE_NAME: f3redirect-web
+  SERVICE_NAME: f3redirect-web
+  WIF_PROVIDER: projects/355149658273/locations/global/workloadIdentityPools/github-pool/providers/github
+  DEPLOYER_SA: redirect-deployer@f3-redirects.iam.gserviceaccount.com
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Authorize Docker to Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Resolve image reference (immutable by commit SHA)
+        id: meta
+        run: |
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT}/${AR_REPO}/${IMAGE_NAME}:${GITHUB_SHA}"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push Docker image
+        run: |
+          docker build \
+            --file apps/redirect/web/Dockerfile \
+            --tag "${{ steps.meta.outputs.image }}" \
+            .
+          docker push "${{ steps.meta.outputs.image }}"
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SA }}
+
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE_NAME }}
+          image: ${{ needs.build.outputs.image }}
+          region: ${{ env.REGION }}
+          project_id: ${{ env.PROJECT }}
+          # Env vars (DATABASE_URL, BETTER_AUTH_SECRET, GCS bucket, etc.) are
+          # set on the Cloud Run service out-of-band, not in this workflow.

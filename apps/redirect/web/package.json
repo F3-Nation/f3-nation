@@ -1,0 +1,50 @@
+{
+  "name": "f3-redirect-web",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3007",
+    "build": "next build",
+    "start": "next start --port 3007",
+    "lint": "dotenv -v SKIP_ENV_VALIDATION=1 eslint .",
+    "format:check": "prettier --check .",
+    "format": "prettier --write .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "db:push": "drizzle-kit push",
+    "reset-test-db": "node scripts/reset-test-db.mjs"
+  },
+  "dependencies": {
+    "@better-auth/passkey": "^1.6.11",
+    "@google-cloud/storage": "^7.14.0",
+    "better-auth": "^1.6.11",
+    "drizzle-orm": "^0.45.2",
+    "next": "^15.3.6",
+    "postgres": "^3.4.3",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "tldts": "^6.1.71",
+    "zod": "^3.25.8"
+  },
+  "devDependencies": {
+    "@acme/eslint-config": "workspace:^0.2.0",
+    "@acme/tsconfig": "workspace:^0.1.0",
+    "@playwright/test": "^1.52.0",
+    "@testing-library/jest-dom": "^6.4.2",
+    "@testing-library/react": "^15.0.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^20.11.13",
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.1",
+    "@vitest/coverage-v8": "^1.5.0",
+    "drizzle-kit": "^0.31.10",
+    "eslint": "catalog:",
+    "jsdom": "^24.0.0",
+    "prettier": "^3.2.5",
+    "typescript": "catalog:",
+    "vitest": "^1.5.0"
+  }
+}

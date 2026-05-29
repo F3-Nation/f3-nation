@@ -1,0 +1,12 @@
+.git
+.github
+infra
+docs
+scripts
+.claude
+coverage.out
+coverage.html
+*.md
+.gitignore
+.dockerignore
+Dockerfile

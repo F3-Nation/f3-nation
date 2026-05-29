@@ -1,0 +1,7 @@
+# Terraform working dir + state (never commit; provider binaries are huge).
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!terraform.tfvars.example
+crash.log

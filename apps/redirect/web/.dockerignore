@@ -1,0 +1,10 @@
+node_modules
+.next
+.git
+.env
+.env.*
+!.env.example
+npm-debug.log
+Dockerfile
+.dockerignore
+scripts/local-e2e.ts

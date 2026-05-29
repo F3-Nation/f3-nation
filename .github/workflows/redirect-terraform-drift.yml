@@ -1,0 +1,105 @@
+name: redirect Terraform Drift
+
+# Enforces the zero-drift rule for the f3-redirects GCP project: the committed
+# Terraform under apps/redirect/infra/terraform is the source of truth. This
+# workflow runs `terraform plan` and fails if live infrastructure has drifted
+# from the code — daily (catch console drift) and on every PR that touches the
+# Terraform (catch drift before merge).
+#
+# Auth is keyless via the f3-redirects project's own Workload Identity pool
+# (github-pool/github), whose attribute condition was widened in ci.tf to allow
+# this repo (F3-Nation/f3-nation). It impersonates the read-only
+# github-actions-ci@f3-redirects service account.
+#
+# NOTE: f3-redirects is currently Patrick's personal v1 sandbox. When the
+# redirect app pivots to an F3 Nation org-owned project, update the project id,
+# WIF provider, service account, and the TF_VAR_* values below.
+
+on:
+  schedule:
+    - cron: "17 13 * * *" # daily ~7-8am Central (offset from region-pages' :00)
+  pull_request:
+    paths:
+      - "apps/redirect/infra/terraform/**"
+      - ".github/workflows/redirect-terraform-drift.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: redirect-tf-drift
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/redirect/infra/terraform
+    env:
+      # Non-secret values that must match the live VM startup-script metadata so
+      # `plan` reports no spurious drift. (The image_tag, project, region, zone,
+      # machine_type, config_object, and cert_prefix variable defaults already
+      # match live.)
+      TF_VAR_acme_email: "patrick@pstaylor.net"
+      TF_VAR_admin_host: "admin.f3regions.com"
+      TF_VAR_admin_upstream: "https://f3redirect-web-355149658273.us-central1.run.app"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP (Workload Identity Federation)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: "projects/355149658273/locations/global/workloadIdentityPools/github-pool/providers/github"
+          service_account: "github-actions-ci@f3-redirects.iam.gserviceaccount.com"
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.15.3"
+
+      - name: Terraform init
+        run: terraform init -input=false
+
+      - name: Terraform plan (detect drift)
+        id: plan
+        run: |
+          set +e
+          terraform plan -input=false -lock=false -no-color -detailed-exitcode
+          code=$?
+          set -e
+          echo "exitcode=$code" >> "$GITHUB_OUTPUT"
+          # 0 = in sync, 2 = drift detected, 1 = error
+          if [ "$code" = "1" ]; then
+            echo "::error::terraform plan failed."
+            exit 1
+          elif [ "$code" = "2" ]; then
+            echo "::error::Drift detected — f3-redirects infrastructure no longer matches Terraform. Reconcile by applying the committed config or importing the change."
+            exit 2
+          else
+            echo "No drift — f3-redirects matches Terraform."
+          fi
+
+      - name: Comment drift result on PR
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const code = '${{ steps.plan.outputs.exitcode }}';
+            const body = code === '0'
+              ? '✅ **redirect Terraform drift check:** in sync — live infrastructure matches the committed config.'
+              : code === '2'
+              ? '⚠️ **redirect Terraform drift check:** drift detected — `terraform plan` shows changes. Reconcile before merge (apply the committed config or import the out-of-band change).'
+              : '❌ **redirect Terraform drift check:** `terraform plan` errored. See the job logs.';
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });

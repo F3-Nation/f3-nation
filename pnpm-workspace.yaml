@@ -1,5 +1,10 @@
 packages:
   - apps/*
+  # The redirect app is a grouped multi-tier package; list its real packages
+  # explicitly so non-package dirs (infra/terraform) aren't treated as packages.
+  - apps/redirect/web
+  - apps/redirect/server
+  - apps/redirect/shared
   - packages/*
   - tooling/*
 

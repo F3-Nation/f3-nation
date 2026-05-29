@@ -15,6 +15,12 @@ docker-compose*
 README.md
 LICENSE
 
+# Local-only dirs that must never enter any image build context.
+.worktrees
+**/.terraform
+**/*.tfstate*
+coverage
+
 *.swp
 
 /aws

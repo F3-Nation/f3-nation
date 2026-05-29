@@ -1,0 +1,9 @@
+{
+  "name": "f3-redirect-shared",
+  "version": "0.1.0",
+  "private": true,
+  "//": "Non-code shared asset package: holds dns-instructions.json, the single source-of-truth DNS-rule contract that both the Go tier (server) and TS tier (web) parity-test against. No build/test/lint scripts — exists so the apps/redirect/* workspace glob resolves a valid package here.",
+  "files": [
+    "dns-instructions.json"
+  ]
+}

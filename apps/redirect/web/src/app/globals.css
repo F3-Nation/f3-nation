@@ -1,0 +1,302 @@
+:root {
+  /* F3 brand: light mode by default, deep-red accent. */
+  color-scheme: light;
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-alt: #f6f6f7;
+  --text: #18181b;
+  --muted: #6b7280;
+  --border: #e4e4e7;
+  --red: #9b1c1c;
+  --red-hover: #7f1717;
+  --green: #166534;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+  line-height: 1.5;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.container {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 4rem;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.9rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+}
+.brand svg {
+  color: var(--red);
+}
+.brand-name {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+h1 {
+  font-size: 1.6rem;
+  margin: 0 0 0.25rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+a {
+  color: var(--red);
+}
+
+button,
+.btn {
+  font: inherit;
+  padding: 0.55rem 0.95rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-alt);
+  color: var(--text);
+  cursor: pointer;
+}
+button:hover {
+  border-color: var(--red);
+}
+/* link-styled button (accessible replacement for clickable span/anchor) */
+button.linkbtn {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--red);
+  cursor: pointer;
+}
+button.linkbtn:hover {
+  text-decoration: underline;
+}
+button.linkbtn.muted {
+  color: var(--muted);
+}
+button.primary {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+}
+button.primary:hover {
+  background: var(--red-hover);
+  border-color: var(--red-hover);
+}
+button.danger {
+  background: transparent;
+  border-color: var(--red);
+  color: var(--red);
+}
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+input {
+  font: inherit;
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+input:focus {
+  outline: none;
+  border-color: var(--red);
+}
+
+label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: 0.75rem 0 0.3rem;
+}
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  margin: 1rem 0;
+  background: var(--surface);
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+/* Domain card header: let the (long) destination wrap instead of overflowing
+   and pushing the Remove button off the right edge on mobile. */
+.domain-head {
+  min-width: 0;
+  flex: 1;
+}
+.domain-head .dest {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.row > button {
+  flex-shrink: 0;
+}
+
+code,
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.error {
+  color: var(--red);
+  font-size: 0.9rem;
+}
+
+/* --- DNS records (stacked) + bottom-sheet drawer --- */
+.badge {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.1rem 0.4rem;
+  background: var(--surface-alt);
+}
+.req {
+  color: var(--green);
+}
+.dns-record {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.75rem 0.9rem;
+  margin: 0.6rem 0;
+  background: var(--surface-alt);
+}
+.dns-record-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+}
+.dns-kv {
+  display: grid;
+  grid-template-columns: 5rem 1fr;
+  gap: 0.25rem 0.75rem;
+  margin: 0;
+}
+.dns-kv dt {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.dns-kv dd {
+  margin: 0;
+  word-break: break-all;
+}
+.dns-note {
+  font-size: 0.8rem;
+  margin: 0.5rem 0 0;
+}
+
+dialog.sheet {
+  border: none;
+  padding: 0;
+  background: transparent;
+  max-width: 100%;
+  width: 100%;
+  margin: 0;
+  position: fixed;
+  inset: 0;
+}
+dialog.sheet::backdrop {
+  background: rgba(0, 0, 0, 0.45);
+}
+.sheet-body {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  border-radius: 16px 16px 0 0;
+  padding: 1rem 1.1rem calc(1.25rem + env(safe-area-inset-bottom));
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.12);
+}
+
+/* Slide the sheet up from the bottom when it opens (mobile). */
+@keyframes sheet-slide-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+@keyframes sheet-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+dialog.sheet[open] .sheet-body {
+  animation: sheet-slide-up 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+}
+dialog.sheet[open]::backdrop {
+  animation: sheet-backdrop-in 0.3s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  dialog.sheet[open] .sheet-body,
+  dialog.sheet[open]::backdrop {
+    animation: none;
+  }
+}
+
+@media (min-width: 640px) {
+  .sheet-body {
+    left: 50%;
+    right: auto;
+    bottom: auto;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 520px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+  }
+  /* On desktop the sheet is centered; pop instead of slide (keeps centering). */
+  @keyframes sheet-pop-in {
+    from {
+      opacity: 0;
+      transform: translate(-50%, -46%);
+    }
+    to {
+      opacity: 1;
+      transform: translate(-50%, -50%);
+    }
+  }
+  dialog.sheet[open] .sheet-body {
+    animation: sheet-pop-in 0.2s ease-out;
+  }
+}

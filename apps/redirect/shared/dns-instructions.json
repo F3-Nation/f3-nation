@@ -1,0 +1,75 @@
+{
+  "_comment": "Shared contract for DNS-instruction generation. Asserted by BOTH the Go (internal/mappings) and TS (web/src/lib/domains.ts) suites so the two implementations cannot drift. Only structural fields (type/name/value/optional) are compared; human-readable notes may differ in wording.",
+  "cases": [
+    {
+      "name": "apex with canonical host: required A + recommended www CNAME",
+      "host": "f3muletown.com",
+      "options": {
+        "staticIP": "203.0.113.10",
+        "canonicalHost": "redirect.example.net"
+      },
+      "records": [
+        {
+          "type": "A",
+          "name": "f3muletown.com",
+          "value": "203.0.113.10",
+          "optional": false
+        },
+        {
+          "type": "CNAME",
+          "name": "www.f3muletown.com",
+          "value": "f3muletown.com",
+          "optional": true
+        }
+      ]
+    },
+    {
+      "name": "subdomain with canonical host: single required CNAME to canonical",
+      "host": "stats.f3muletown.com",
+      "options": {
+        "staticIP": "203.0.113.10",
+        "canonicalHost": "redirect.example.net"
+      },
+      "records": [
+        {
+          "type": "CNAME",
+          "name": "stats.f3muletown.com",
+          "value": "redirect.example.net",
+          "optional": false
+        }
+      ]
+    },
+    {
+      "name": "subdomain without canonical host: CNAME falls back to apex",
+      "host": "www.f3marshall.com",
+      "options": { "staticIP": "203.0.113.10", "canonicalHost": "" },
+      "records": [
+        {
+          "type": "CNAME",
+          "name": "www.f3marshall.com",
+          "value": "f3marshall.com",
+          "optional": false
+        }
+      ]
+    },
+    {
+      "name": "apex without canonical host still recommends www",
+      "host": "example.com",
+      "options": { "staticIP": "198.51.100.7", "canonicalHost": "" },
+      "records": [
+        {
+          "type": "A",
+          "name": "example.com",
+          "value": "198.51.100.7",
+          "optional": false
+        },
+        {
+          "type": "CNAME",
+          "name": "www.example.com",
+          "value": "example.com",
+          "optional": true
+        }
+      ]
+    }
+  ]
+}
