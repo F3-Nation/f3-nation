@@ -65,6 +65,7 @@ peerDependencyRules:
 nodeLinker: hoisted
 allowBuilds:
   "@sentry/cli": true
+  bun: true
   core-js: true
   core-js-pure: true
   esbuild: true
