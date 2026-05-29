@@ -37,7 +37,7 @@ apps/homepage/
     └── app/
         ├── layout.tsx            # Root layout (Inter font, CSS vars)
         ├── globals.css           # Tailwind directives + CSS custom properties
-        └── page.tsx              # Landing page — app directory
+        └── page.tsx              # Landing page (Next.js App Router entry)
 ```
 
 ## Local Development
