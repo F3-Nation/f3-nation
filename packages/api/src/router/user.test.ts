@@ -536,6 +536,14 @@ describe("User Router", () => {
       expect(secondPage.totalCount).toBeGreaterThanOrEqual(
         secondPage.users.length,
       );
+      expect(secondPage.totalCount).toBe(firstPage.totalCount);
+      if (
+        firstPage.totalCount > 1 &&
+        firstPage.users.length > 0 &&
+        secondPage.users.length > 0
+      ) {
+        expect(firstPage.users[0]?.id).not.toBe(secondPage.users[0]?.id);
+      }
     });
   });
 

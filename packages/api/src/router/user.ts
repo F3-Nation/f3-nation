@@ -263,15 +263,26 @@ export const userRouter = {
   byF3Name: editorProcedure
     .input(
       z.object({
-        f3Name: z.string().describe("The F3 name of the user to retrieve"),
-        pageIndex: z.coerce.number().int().min(0).optional().default(0),
+        f3Name: z
+          .string()
+          .describe(
+            "Partial F3 name to search for. Case-insensitive partial matching.",
+          ),
+        pageIndex: z.coerce
+          .number()
+          .int()
+          .min(0)
+          .optional()
+          .default(0)
+          .describe("Zero-based page index for pagination. Defaults to 0."),
         pageSize: z.coerce
           .number()
           .int()
           .min(1)
           .max(100)
           .optional()
-          .default(10),
+          .default(10)
+          .describe("Number of users per page. Defaults to 10."),
       }),
     )
     .route({

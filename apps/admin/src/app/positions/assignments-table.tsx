@@ -510,6 +510,7 @@ function AddUserDialog({
                         }
                       >
                         <ChevronLeft className="h-4 w-4" />
+                        <span className="sr-only">Previous page</span>
                       </Button>
                       <span className="min-w-[4.5rem] text-center text-xs text-muted-foreground">
                         Page {pageIndex + 1} of {pageCount}
@@ -527,6 +528,7 @@ function AddUserDialog({
                         }
                       >
                         <ChevronRight className="h-4 w-4" />
+                        <span className="sr-only">Next page</span>
                       </Button>
                     </div>
                   </div>
