@@ -98,7 +98,7 @@ Only these commit types appear in the generated `CHANGELOG.md`:
 
 Breaking changes appear in a dedicated **⚠ BREAKING CHANGES** section regardless of type. Each entry links to the originating commit SHA.
 
-The changelogs live at `apps/me/CHANGELOG.md`, `apps/admin/CHANGELOG.md`, and `apps/auth/CHANGELOG.md`. Each app is responsible for consuming and displaying its own changelog in the UI.
+The changelogs live alongside each app's source and can be referenced during release PR review.
 
 ---
 
@@ -144,7 +144,7 @@ The app is configured at the organization level:
 4. **Repository permissions granted**:
    - Contents: Read & Write (to create commits, tags, and update files)
    - Pull requests: Read & Write (to open and update release PRs)
-   - Workflows: Read & Write (to allow created tags to trigger workflow runs)
+   - Issues: Read & Write (for edge cases in release tracking)
 5. **Installed on**: the `F3-Nation/f3-nation` repository only
 
 During each workflow run, `actions/create-github-app-token@v1` exchanges the App ID and private key for a **short-lived installation token** that expires when the workflow ends. No long-lived credential is ever used at runtime.

@@ -82,7 +82,7 @@ Scopes are defined in `commitlint.config.mjs` and map to monorepo packages:
 | Apps & Packages | `api`, `auth` (exist in both `apps/` and `packages/`)             |
 | Packages        | `db`, `env`, `mail`, `shared`, `sso`, `ui`, `validators`          |
 | Tooling         | `eslint`, `prettier`, `tsconfig`, `scripts`, `github`, `tailwind` |
-| Cross-cutting   | `deps`, `ci`, `repo`, `release`                                   |
+| Cross-cutting   | `deps`, `ci`, `repo`, `release`, `dev` (used by Release Please)   |
 
 **Choosing a scope:**
 
