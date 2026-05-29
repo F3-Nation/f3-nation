@@ -32,7 +32,32 @@ import { useUpdateLocationForm } from "~/utils/forms";
 import { uploadLogo } from "~/utils/image/upload-logo";
 import type { DataType, ModalType } from "~/utils/store/modal";
 import { closeModal } from "~/utils/store/modal";
-import { FormDebugData, LocationEventForm } from "../forms/location-event-form";
+import type { RequestType } from "@acme/shared/app/enums";
+
+import type { AdminRequestFormProps } from "../forms/admin-request-form-props";
+import { CreateAoLocationEventRequestForm } from "../forms/create-ao-location-event-request-form";
+import { CreateEventRequestForm } from "../forms/create-event-request-form";
+import { EditAoAndLocationRequestForm } from "../forms/edit-ao-and-location-request-form";
+import { FormDebugData } from "../forms/location-event-form";
+import { MoveAoToDifferentLocationRequestForm } from "../forms/move-ao-to-different-location-request-form";
+import { MoveAoToDifferentRegionRequestForm } from "../forms/move-ao-to-different-region-request-form";
+import { MoveAoToNewLocationRequestForm } from "../forms/move-ao-to-new-location-request-form";
+import { MoveEventToDifferentAoRequestForm } from "../forms/move-event-to-different-ao-request-form";
+
+const REQUEST_FORM_MAP: Partial<
+  Record<RequestType, React.ComponentType<AdminRequestFormProps>>
+> = {
+  create_ao_and_location_and_event: CreateAoLocationEventRequestForm,
+  create_event: CreateEventRequestForm,
+  edit_event: CreateEventRequestForm,
+  edit_ao_and_location: EditAoAndLocationRequestForm,
+  move_ao_to_different_location: MoveAoToDifferentLocationRequestForm,
+  move_ao_to_different_region: MoveAoToDifferentRegionRequestForm,
+  move_ao_to_new_location: MoveAoToNewLocationRequestForm,
+  move_event_to_different_ao: MoveEventToDifferentAoRequestForm,
+  move_event_to_new_ao: MoveEventToDifferentAoRequestForm,
+};
+
 export default function AdminRequestsModal({
   data: requestData,
 }: {
@@ -148,6 +173,14 @@ export default function AdminRequestsModal({
       });
   };
 
+  const handleAoLogoFileChange: AdminRequestFormProps["onAoLogoFileChange"] = (
+    file,
+    previewUrl,
+  ) => {
+    setSelectedAoLogoFile(file);
+    setSelectedAoLogoPreviewUrl(previewUrl);
+  };
+
   useEffect(() => {
     if (!request) return;
     const requestMeta: Record<string, unknown> | null =
@@ -213,15 +246,17 @@ export default function AdminRequestsModal({
                   {!isProd && <FormDebugData />}
                 </DialogTitle>
               </DialogHeader>
-              <LocationEventForm
-                isAdminForm={true}
-                requestType={request.requestType}
-                selectedAoLogoPreviewUrl={selectedAoLogoPreviewUrl}
-                onAoLogoFileChange={(file, previewUrl) => {
-                  setSelectedAoLogoFile(file);
-                  setSelectedAoLogoPreviewUrl(previewUrl);
-                }}
-              />
+              {(() => {
+                const FormComponent = REQUEST_FORM_MAP[request.requestType];
+                if (FormComponent) {
+                  return (
+                    <FormComponent
+                      selectedAoLogoPreviewUrl={selectedAoLogoPreviewUrl}
+                      onAoLogoFileChange={handleAoLogoFileChange}
+                    />
+                  );
+                }
+              })()}
               <div className="mt-4 flex justify-between gap-2">
                 <Button
                   type="button"

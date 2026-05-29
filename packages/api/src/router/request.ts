@@ -10,6 +10,7 @@ import {
   inArray,
   or,
   schema,
+  sql,
 } from "@acme/db";
 import type { OrgType, UserRole } from "@acme/shared/app/enums";
 import { DayOfWeek } from "@acme/shared/app/enums";
@@ -93,6 +94,11 @@ const normalizeAdminRequestInput = (input: Record<string, unknown>) => {
     normalized.originalEventId ??= normalized.eventId;
   }
 
+  if (normalized.requestType === "create_ao_and_location_and_event") {
+    normalized.originalRegionId ??=
+      meta.originalRegionId ?? normalized.regionId;
+  }
+
   if (normalized.requestType === "move_event_to_different_ao") {
     normalized.originalRegionId ??= meta.originalRegionId;
     normalized.originalAoId ??= meta.originalAoId;
@@ -100,6 +106,29 @@ const normalizeAdminRequestInput = (input: Record<string, unknown>) => {
     normalized.newRegionId ??= meta.newRegionId ?? normalized.regionId;
     normalized.newAoId ??= meta.newAoId ?? normalized.aoId;
     normalized.newLocationId ??= meta.newLocationId ?? normalized.locationId;
+  }
+
+  if (normalized.requestType === "move_ao_to_different_location") {
+    normalized.originalRegionId ??=
+      meta.originalRegionId ?? normalized.regionId;
+    normalized.originalAoId ??= meta.originalAoId ?? normalized.aoId;
+    normalized.originalLocationId ??= meta.originalLocationId;
+    normalized.newLocationId ??= meta.newLocationId ?? normalized.locationId;
+  }
+
+  if (normalized.requestType === "move_ao_to_new_location") {
+    normalized.originalRegionId ??=
+      meta.originalRegionId ?? normalized.regionId;
+    normalized.originalAoId ??= meta.originalAoId ?? normalized.aoId;
+    normalized.originalLocationId ??=
+      meta.originalLocationId ?? normalized.locationId;
+    normalized.currentValues ??= {};
+  }
+
+  if (normalized.requestType === "move_ao_to_different_region") {
+    normalized.originalRegionId ??= meta.originalRegionId;
+    normalized.originalAoId ??= meta.originalAoId ?? normalized.aoId;
+    normalized.newRegionId ??= meta.newRegionId ?? normalized.regionId;
   }
 
   if (usesCurrentValues) {
@@ -444,9 +473,21 @@ export const requestRouter = {
           eq(schema.updateRequests.regionId, newRegionOrg.id),
         )
         .leftJoin(oldEvent, eq(schema.updateRequests.eventId, oldEvent.id))
-        .leftJoin(oldAoOrg, eq(oldAoOrg.id, oldEvent.orgId))
+        .leftJoin(
+          oldAoOrg,
+          eq(
+            oldAoOrg.id,
+            sql<number>`COALESCE(${oldEvent.orgId}, ${schema.updateRequests.aoId})`,
+          ),
+        )
         .leftJoin(oldRegionOrg, eq(oldRegionOrg.id, oldAoOrg.parentId))
-        .leftJoin(oldLocation, eq(oldLocation.id, oldEvent.locationId))
+        .leftJoin(
+          oldLocation,
+          eq(
+            oldLocation.id,
+            sql<number>`COALESCE(${oldEvent.locationId}, ${schema.updateRequests.locationId})`,
+          ),
+        )
         .where(where);
 
       const requests = usePagination

@@ -33,13 +33,6 @@ export const MoveEventToDifferentAoModal = ({
         <form className="w-[inherit] overflow-x-hidden p-0.5">
           {!isProductionNodeEnv && <FormDebugData />}
 
-          <div>
-            <p>Moving Event ID: {data?.originalEventId}</p>
-            <p>From AO ID: {data?.originalAoId}</p>
-            <p>To AO ID: {data?.newAoId}</p>
-            <p>Original Region ID: {data?.originalRegionId}</p>
-          </div>
-
           <RegionAndAOSelector<MoveEventToDifferentAOType>
             title="Destination AO"
             regionLabel="In Region:"

@@ -40,6 +40,12 @@ const EVENT_REQUEST_TYPES: RequestType[] = [
   "move_event_to_new_location",
 ];
 
+const AO_UNCHANGED_REQUEST_TYPES: RequestType[] = [
+  "move_ao_to_new_location",
+  "move_ao_to_different_location",
+  "move_event_to_new_location",
+];
+
 const initialState = {
   searchTerm: "",
   onlyMine: true,
@@ -198,13 +204,19 @@ const columns: TableOptions<
     meta: { name: "Location / AO Name" },
     header: Header,
     cell: ({ row }) => {
+      const aoUnchanged = AO_UNCHANGED_REQUEST_TYPES.includes(
+        row.original.requestType as RequestType,
+      );
       const isAnUpdate =
+        !aoUnchanged &&
         row.original.oldAoName !== row.original.newAoName &&
         row.original.status === "pending";
       return (
         <div className="flex items-center justify-start gap-1">
           <div className="flex flex-col gap-1">
-            <p>{row.original.newAoName}</p>
+            <p>
+              {aoUnchanged ? row.original.oldAoName : row.original.newAoName}
+            </p>
             {isAnUpdate ? (
               <p className="line-through">{row.original.oldAoName}</p>
             ) : null}
@@ -260,14 +272,36 @@ const columns: TableOptions<
         locationCountry: row.original.oldLocationCountry,
       });
 
+      const coordinatesChanged =
+        row.original.oldLocationLat !== row.original.newLocationLat ||
+        row.original.oldLocationLng !== row.original.newLocationLng;
+      const newCoordinates =
+        row.original.newLocationLat != null &&
+        row.original.newLocationLng != null
+          ? `${row.original.newLocationLat}, ${row.original.newLocationLng}`
+          : null;
+      const oldCoordinates =
+        row.original.oldLocationLat != null &&
+        row.original.oldLocationLng != null
+          ? `${row.original.oldLocationLat}, ${row.original.oldLocationLng}`
+          : null;
       const isAnUpdate =
-        oldLocation !== newLocation && row.original.status === "pending";
+        (oldLocation !== newLocation || coordinatesChanged) &&
+        row.original.status === "pending";
 
       return (
         <div className="flex items-center justify-start gap-1">
           <div className="flex flex-col gap-1">
             <p>{newLocation}</p>
+            {coordinatesChanged && newCoordinates ? (
+              <p className="text-xs text-muted-foreground">{newCoordinates}</p>
+            ) : null}
             {isAnUpdate ? <p className="line-through">{oldLocation}</p> : null}
+            {isAnUpdate && coordinatesChanged && oldCoordinates ? (
+              <p className="text-xs text-muted-foreground line-through">
+                {oldCoordinates}
+              </p>
+            ) : null}
           </div>
           {isAnUpdate ? <CircleBadge /> : null}
         </div>

@@ -149,11 +149,11 @@ export const requestTypeToTitle = (requestType: RequestType) => {
     case "move_ao_to_different_location":
       return "Move AO to Different Location";
     case "move_event_to_different_ao":
-      return "Move Workout to Different AO";
+      return "Move Event to Different AO";
     case "move_event_to_new_ao":
-      return "Move Workout to New AO";
+      return "Move Event to New AO";
     case "move_event_to_new_location":
-      return "Move Workout to New Location";
+      return "Move Event to New Location";
 
     case "delete_event":
       return "Delete Workout";

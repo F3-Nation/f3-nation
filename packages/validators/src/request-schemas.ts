@@ -141,7 +141,9 @@ export const MoveAOToDifferentRegionSchema = BaseSchema.extend({
   requestType: z.literal("move_ao_to_different_region"),
   newRegionId: z.number().positive("Target region ID is required"),
   originalAoId: z.number().positive("Original AO ID is required"),
-});
+})
+  .merge(AOFields.partial())
+  .merge(LocationFields.partial());
 
 export type MoveAoToDifferentRegionType = z.infer<
   typeof MoveAOToDifferentRegionSchema
@@ -166,7 +168,10 @@ export const MoveAOToDifferentLocationSchema = BaseSchema.extend({
   originalAoId: z.number().positive("Original AO ID is required"),
   originalLocationId: z.number().positive("Original location ID is required"),
   newLocationId: z.number().positive("Target location ID is required"),
-});
+})
+  .merge(EventFields.partial())
+  .merge(AOFields.partial())
+  .merge(LocationFields.partial());
 
 export type MoveAOToDifferentLocationType = z.infer<
   typeof MoveAOToDifferentLocationSchema
@@ -183,7 +188,9 @@ export const MoveEventToDifferentAOSchema = BaseSchema.extend({
     .number()
     .positive("Target location ID is required")
     .optional(),
-}).merge(EventFields.partial());
+})
+  .merge(EventFields.partial())
+  .merge(LocationFields.partial());
 
 export type MoveEventToDifferentAOType = z.infer<
   typeof MoveEventToDifferentAOSchema
@@ -202,6 +209,7 @@ export const MoveEventToNewAOSchema = BaseSchema.extend({
   newRegionId: z.number().positive("Target region ID is required").optional(),
   badImage: z.boolean().default(false),
 })
+  .merge(EventFields)
   .merge(AOFields)
   .merge(LocationFields);
 

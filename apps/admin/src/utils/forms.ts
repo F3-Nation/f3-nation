@@ -19,6 +19,7 @@ export const {
     eventStartTime: timeFormat,
     eventEndTime: timeFormat,
     eventName: z.string().optional().or(z.literal("")),
+    aoName: z.string().optional().or(z.literal("")),
     eventTypeIds: z.array(z.number()).optional(),
   }),
 );
