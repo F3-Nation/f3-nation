@@ -5,11 +5,11 @@ import { render } from "@testing-library/react";
 import { vi } from "vitest";
 
 // Must be set before vitest-canvas-mock is imported
-// because jest-canvas-mock accesses the jest global during initialization
-declare global {
-  var jest: typeof vi;
-}
-globalThis.jest = vi;
+// because jest-canvas-mock accesses the jest global during initialization.
+// Assign via an untyped view of globalThis so this does not redeclare the
+// global `jest` (which collides with @types/jest once it is present anywhere
+// in the workspace, e.g. apps/region-pages).
+(globalThis as Record<string, unknown>).jest = vi;
 
 import "@testing-library/jest-dom";
 import "vitest-canvas-mock";
