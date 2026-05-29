@@ -61,6 +61,11 @@ export default withSentryConfig(config, {
   org: "f3-nation",
   project: "maps-nextjs",
 
+  // This app is App Router only — it has no pages/ API routes or data-fetching
+  // functions (getServerSideProps, etc.). Disabling auto-instrumentation of
+  // Pages Router server functions avoids unnecessary webpack loader overhead.
+  autoInstrumentServerFunctions: false,
+
   // Only print logs for uploading source maps in CI
   silent: !process.env.CI,
 
