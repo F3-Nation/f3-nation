@@ -1,7 +1,11 @@
 variable "project" {
   type        = string
-  description = "GCP project ID."
-  default     = "f3-redirects"
+  description = "GCP project ID. Required — supply per environment via tfvars/CLI so an unparameterized apply can't target a live project."
+
+  validation {
+    condition     = length(trimspace(var.project)) > 0
+    error_message = "project must be set explicitly (e.g. via -var or a tfvars file)."
+  }
 }
 
 variable "region" {
@@ -52,7 +56,7 @@ variable "redirect_status" {
 
 variable "image_tag" {
   type        = string
-  description = "Container image tag to run."
+  description = "Container image tag to run. v1 intentionally uses the mutable :latest tag — the VM pulls it on boot/restart and deploys push :latest (see terraform.tfvars.example). Immutable tags/digests are deferred to the org-owned-project migration."
   default     = "latest"
 }
 
@@ -88,7 +92,7 @@ variable "admin_domain" {
     ghs.googlehosted.com). Empty disables the mapping (falls back to the VM
     reverse-proxy via admin_host).
   EOT
-  default     = "admin.f3regions.com"
+  default     = ""
 }
 
 variable "admin_service_name" {

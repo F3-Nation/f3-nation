@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
   push: vi.fn(),
@@ -40,7 +40,13 @@ function mockFetchOnce(status: number, body: unknown) {
 beforeEach(() => {
   h.push.mockReset();
   h.addPasskey.mockReset();
-  global.fetch = vi.fn();
+  // Stub rather than assign so the mocked fetch is torn down per suite and
+  // doesn't leak into later Vitest files/workers (avoids order-dependence).
+  vi.stubGlobal("fetch", vi.fn());
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe("Dashboard", () => {

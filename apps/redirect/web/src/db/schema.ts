@@ -104,6 +104,9 @@ export const passkey = pgTable(
   },
   (table) => [
     index("passkey_userId_idx").on(table.userId),
-    index("passkey_credentialID_idx").on(table.credentialID),
+    // WebAuthn credential IDs must resolve to exactly one registered
+    // credential; enforce uniqueness at the DB level rather than relying on
+    // the authenticator's probabilistic uniqueness.
+    uniqueIndex("passkey_credentialID_unique").on(table.credentialID),
   ],
 );

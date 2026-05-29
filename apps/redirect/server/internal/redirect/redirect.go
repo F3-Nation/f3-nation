@@ -46,7 +46,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	host := mappings.NormalizeHost(r.Host)
 
 	// Admin host is reverse-proxied (e.g. to the Cloud Run web app), not redirected.
-	if h.AdminHost != "" && h.AdminProxy != nil && host == h.AdminHost {
+	// Normalize the configured AdminHost the same way r.Host is normalized so a
+	// value with uppercase letters or a trailing dot still matches.
+	if h.AdminHost != "" && h.AdminProxy != nil && host == mappings.NormalizeHost(h.AdminHost) {
 		h.AdminProxy.ServeHTTP(w, r)
 		return
 	}

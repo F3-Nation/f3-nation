@@ -7,6 +7,9 @@ func TestDNSInstructionsApex(t *testing.T) {
 		Mapping{Host: "f3muletown.com", Target: "https://regions.f3nation.com/muletown"},
 		DNSOptions{StaticIP: "203.0.113.10"},
 	)
+	if len(recs) == 0 {
+		t.Fatalf("expected at least one DNS record, got none")
+	}
 	// Required A record first.
 	if recs[0].Type != "A" || recs[0].Name != "f3muletown.com" || recs[0].Value != "203.0.113.10" || recs[0].Optional {
 		t.Errorf("apex required A record = %+v", recs[0])
@@ -41,6 +44,9 @@ func TestDNSInstructionsSubdomainFallsBackToApex(t *testing.T) {
 		Mapping{Host: "www.f3marshall.com", Target: "https://x"},
 		DNSOptions{StaticIP: "203.0.113.10"}, // no canonical host
 	)
+	if len(recs) == 0 {
+		t.Fatalf("expected at least one DNS record, got none")
+	}
 	if recs[0].Type != "CNAME" || recs[0].Value != "f3marshall.com" {
 		t.Errorf("subdomain fallback = %+v, want CNAME to apex", recs[0])
 	}

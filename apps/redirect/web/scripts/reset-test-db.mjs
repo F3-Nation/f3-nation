@@ -21,18 +21,27 @@ function withPath(urlStr, dbName) {
   return u.toString();
 }
 
-// 1) Create the dedicated database if it doesn't exist (connect via the
-//    server's default `postgres` database; CREATE DATABASE can't run in a tx).
+// 1) Reset the dedicated database (connect via the server's default `postgres`
+//    database; CREATE/DROP DATABASE can't run in a tx). This is the advertised
+//    reset entrypoint, so drop-and-recreate when it exists rather than leaving
+//    rows behind — `drizzle-kit push --force` only reconciles schema, not data,
+//    so a create-if-missing would make the integration suite stateful across
+//    runs.
 const admin = postgres(withPath(base, "postgres"), { max: 1 });
 try {
   const exists =
     await admin`SELECT 1 FROM pg_database WHERE datname = ${DEDICATED_DB}`;
-  if (exists.length === 0) {
-    await admin.unsafe(`CREATE DATABASE ${DEDICATED_DB}`);
-    console.log(`created database ${DEDICATED_DB}`);
-  } else {
-    console.log(`database ${DEDICATED_DB} already exists`);
+  if (exists.length !== 0) {
+    // Terminate other connections so DROP DATABASE doesn't block.
+    await admin.unsafe(`
+      SELECT pg_terminate_backend(pid)
+      FROM pg_stat_activity
+      WHERE datname = '${DEDICATED_DB}' AND pid <> pg_backend_pid()
+    `);
+    await admin.unsafe(`DROP DATABASE ${DEDICATED_DB}`);
   }
+  await admin.unsafe(`CREATE DATABASE ${DEDICATED_DB}`);
+  console.log(`reset database ${DEDICATED_DB}`);
 } finally {
   await admin.end();
 }

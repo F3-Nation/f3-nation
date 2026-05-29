@@ -48,6 +48,10 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Production deploys come only from dev. workflow_dispatch can target any
+    # ref, so guard the entry job (deploy needs: build) to block a manual
+    # deploy of unmerged code to prod.
+    if: github.ref == 'refs/heads/dev'
     outputs:
       image: ${{ steps.meta.outputs.image }}
     steps:

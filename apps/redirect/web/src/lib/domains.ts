@@ -55,6 +55,13 @@ export const registerSchema = z.object({
     .refine(
       (h) => HOSTNAME_RE.test(h),
       "must be a valid fully-qualified domain (e.g. example.com)",
+    )
+    // HOSTNAME_RE accepts bare public suffixes like "co.uk", which are not
+    // registrable and would later yield impossible DNS instructions. Require a
+    // registrable (eTLD+1) domain.
+    .refine(
+      (h) => getDomain(h) !== null,
+      "must be a registrable domain, not a public suffix",
     ),
   destination: destinationField,
 });

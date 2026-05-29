@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -33,11 +33,13 @@ describe("AuthForm", () => {
     await userEvent.type(screen.getByLabelText("Password"), "pw123456");
     await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
 
-    expect(h.signInEmail).toHaveBeenCalledWith({
-      email: "a@b.com",
-      password: "pw123456",
+    await waitFor(() => {
+      expect(h.signInEmail).toHaveBeenCalledWith({
+        email: "a@b.com",
+        password: "pw123456",
+      });
+      expect(h.push).toHaveBeenCalledWith("/dashboard");
     });
-    expect(h.push).toHaveBeenCalledWith("/dashboard");
   });
 
   it("surfaces the server error and does NOT navigate on failure", async () => {
@@ -76,7 +78,9 @@ describe("AuthForm", () => {
       screen.getByRole("button", { name: "Sign in with a passkey" }),
     );
 
-    expect(h.signInPasskey).toHaveBeenCalled();
-    expect(h.push).toHaveBeenCalledWith("/dashboard");
+    await waitFor(() => {
+      expect(h.signInPasskey).toHaveBeenCalled();
+      expect(h.push).toHaveBeenCalledWith("/dashboard");
+    });
   });
 });

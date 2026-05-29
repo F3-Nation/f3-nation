@@ -159,11 +159,19 @@ function DomainCard({
 
   async function remove() {
     setBusy(true);
+    setError(null);
     try {
       const res = await fetch(`/api/domains/${domain.id}`, {
         method: "DELETE",
       });
-      if (res.ok) onRemove(domain.id);
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as ApiResponse;
+        setError(data.error ?? "remove failed");
+        return;
+      }
+      onRemove(domain.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "remove failed");
     } finally {
       setBusy(false);
     }
@@ -218,6 +226,7 @@ function DomainCard({
           <DnsSheet domain={domain} />
         </div>
       )}
+      {!editing && error && <p className="error">{error}</p>}
     </div>
   );
 }

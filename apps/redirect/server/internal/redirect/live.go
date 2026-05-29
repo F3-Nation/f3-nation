@@ -28,8 +28,19 @@ func NewLive(ctx context.Context, store mappings.Store) (*Live, error) {
 	return l, nil
 }
 
-// Config returns the current config snapshot.
-func (l *Live) Config() mappings.Config { return *l.cfg.Load() }
+// Config returns a defensive copy of the current config snapshot.
+// mappings.Config holds a slice, so returning *l.cfg.Load() directly would
+// expose the live backing array; a caller mutating cfg.Mappings could corrupt
+// the snapshot and race with concurrent readers.
+func (l *Live) Config() mappings.Config {
+	cfg := l.cfg.Load()
+	if cfg == nil {
+		return mappings.Config{}
+	}
+	return mappings.Config{
+		Mappings: append([]mappings.Mapping(nil), cfg.Mappings...),
+	}
+}
 
 // Resolve looks up the target for host in the current config.
 func (l *Live) Resolve(host string) (string, bool) { return l.cfg.Load().Resolve(host) }

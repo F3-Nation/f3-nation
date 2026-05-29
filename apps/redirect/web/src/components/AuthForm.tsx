@@ -83,7 +83,11 @@ export function AuthForm() {
             : "new here? create an account"}
         </button>
       </div>
-      {error && <p className="error">{error}</p>}
+      {error && (
+        <p className="error" role="alert" aria-live="assertive" aria-atomic="true">
+          {error}
+        </p>
+      )}
 
       {mode === "signin" && (
         <div

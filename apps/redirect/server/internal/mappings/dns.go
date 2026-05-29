@@ -74,11 +74,17 @@ func DNSInstructions(m Mapping, opt DNSOptions) []DNSRecord {
 	}
 
 	apex := ApexOf(host)
+	// Mirror the apex placeholder behavior: if the static IP isn't configured,
+	// the fallback note would otherwise read "...A record to ." with no target.
+	staticIPTarget := opt.StaticIP
+	if staticIPTarget == "" {
+		staticIPTarget = "the redirect tier's static IP (not yet configured — contact the administrator)"
+	}
 	return []DNSRecord{{
 		Type:     "CNAME",
 		Name:     host,
 		Value:    apex,
-		Note:     fmt.Sprintf("Required: %s is a subdomain; CNAME it to %s (which must carry an A record to %s).", host, apex, opt.StaticIP),
+		Note:     fmt.Sprintf("Required: %s is a subdomain; CNAME it to %s (which must carry an A record to %s).", host, apex, staticIPTarget),
 		Optional: false,
 	}}
 }

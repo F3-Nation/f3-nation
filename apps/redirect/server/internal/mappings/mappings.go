@@ -10,11 +10,16 @@ package mappings
 import (
 	"fmt"
 	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 
 	"golang.org/x/net/publicsuffix"
 )
+
+// hostnameLabel matches a single DNS label: 1–63 chars, alphanumeric, with
+// interior hyphens allowed but no leading/trailing hyphen.
+var hostnameLabel = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
 // Mapping is a single redirect rule: any request whose Host equals Host is
 // redirected to Target.
@@ -48,8 +53,18 @@ func (c Config) Validate() error {
 		if host == "" {
 			return fmt.Errorf("mapping %d: empty host", i)
 		}
-		if !strings.Contains(host, ".") {
+		// strings.Contains(host, ".") accepts malformed hosts like "a..com",
+		// ".example.com", or "foo/bar.com". Require at least two non-empty,
+		// well-formed DNS labels instead so bad values never reach DNS
+		// generation or certificate gating.
+		labels := strings.Split(host, ".")
+		if len(labels) < 2 {
 			return fmt.Errorf("mapping %d (%q): host must be a fully-qualified domain", i, m.Host)
+		}
+		for _, label := range labels {
+			if !hostnameLabel.MatchString(label) {
+				return fmt.Errorf("mapping %d (%q): invalid host", i, m.Host)
+			}
 		}
 		if _, dup := seen[host]; dup {
 			return fmt.Errorf("mapping %d: duplicate host %q", i, host)

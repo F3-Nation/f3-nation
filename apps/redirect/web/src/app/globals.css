@@ -152,7 +152,6 @@ label {
 }
 .domain-head .dest {
   overflow-wrap: anywhere;
-  word-break: break-word;
 }
 .row > button {
   flex-shrink: 0;

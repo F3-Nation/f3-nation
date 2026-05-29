@@ -34,7 +34,10 @@ func TestServerIntegration(t *testing.T) {
 		_, _ = io.WriteString(w, "ADMIN-APP host="+r.Header.Get("X-Forwarded-Host"))
 	}))
 	defer upstream.Close()
-	up, _ := redirect.NewAdminProxy(upstream.URL, "admin.example.com")
+	up, err := redirect.NewAdminProxy(upstream.URL, "admin.example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	h := redirect.NewHandler(live, http.StatusFound)
 	h.AdminHost = "admin.example.com"

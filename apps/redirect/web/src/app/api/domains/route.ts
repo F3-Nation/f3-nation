@@ -88,7 +88,18 @@ export async function POST(req: Request) {
     );
   }
 
-  await exportConfigToGCS();
+  // Publish the live redirect config to GCS. If this fails the claim must NOT
+  // persist — otherwise retries hit 409 while the published config stays stale.
+  // Roll back the row and surface a 503 so the caller can retry cleanly.
+  try {
+    await exportConfigToGCS();
+  } catch {
+    await db.delete(domain).where(eq(domain.id, inserted.id));
+    return NextResponse.json(
+      { error: "failed to publish redirect config" },
+      { status: 503 },
+    );
+  }
 
   return NextResponse.json(
     {

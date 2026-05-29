@@ -31,7 +31,9 @@ GCS — no database anywhere.
   same file is the registry the TLS gate consults. The server hot-reloads it on
   an interval, so new mappings take effect without a redeploy.
 - **Admin CLI (Go, `cmd/f3redirect`).** Add/list/remove mappings and print the DNS
-  records a tenant must create. A TypeScript management UI is deferred.
+  records a tenant must create.
+- **Self-serve admin web (`apps/redirect/web`).** A Next.js + Better Auth management
+  UI covering the same add/list/remove flow and DNS-record guidance.
 
 ```text
 cmd/redirectd      HTTPS redirect server (on-demand TLS)

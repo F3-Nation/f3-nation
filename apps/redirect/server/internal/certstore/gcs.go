@@ -201,15 +201,21 @@ func (g *GCS) Lock(ctx context.Context, name string) error {
 		if !isPreconditionFailed(werr) {
 			return werr
 		}
-		// Someone holds it. Steal if stale.
-		if attrs, err := obj.Attrs(ctx); err == nil {
-			if time.Since(attrs.Created) > lockTTL {
-				_ = g.client.Bucket(g.bucket).
-					Object(obj.ObjectName()).
-					If(storage.Conditions{GenerationMatch: attrs.Generation}).
-					Delete(ctx)
-				continue
+		// Someone holds it. Steal if stale. Treat a missing object as benign
+		// (the holder released it between the create attempt and this read),
+		// but propagate any other inspection error instead of silently
+		// sleeping/retrying until the context expires.
+		attrs, err := obj.Attrs(ctx)
+		if err != nil {
+			if !errors.Is(err, storage.ErrObjectNotExist) {
+				return err
 			}
+		} else if time.Since(attrs.Created) > lockTTL {
+			_ = g.client.Bucket(g.bucket).
+				Object(obj.ObjectName()).
+				If(storage.Conditions{GenerationMatch: attrs.Generation}).
+				Delete(ctx)
+			continue
 		}
 		select {
 		case <-ctx.Done():

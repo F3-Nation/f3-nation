@@ -243,6 +243,9 @@ func cmdDNS(args []string) error {
 	}
 
 	only := ""
+	if fs.NArg() > 1 {
+		return fmt.Errorf("usage: f3redirect dns [host]")
+	}
 	if fs.NArg() == 1 {
 		only = mappings.NormalizeHost(fs.Arg(0))
 	}

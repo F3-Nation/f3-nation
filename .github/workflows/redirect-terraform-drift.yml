@@ -41,9 +41,11 @@ jobs:
         working-directory: apps/redirect/infra/terraform
     env:
       # Non-secret values that must match the live VM startup-script metadata so
-      # `plan` reports no spurious drift. (The image_tag, project, region, zone,
-      # machine_type, config_object, and cert_prefix variable defaults already
-      # match live.)
+      # `plan` reports no spurious drift. project has no variable default
+      # (removed to prevent unparameterized applies from targeting a live
+      # environment), so it is supplied explicitly here. image_tag, region,
+      # zone, machine_type, config_object, and cert_prefix defaults match live.
+      TF_VAR_project: "f3-redirects"
       TF_VAR_acme_email: "patrick@pstaylor.net"
       TF_VAR_admin_host: "admin.f3regions.com"
       TF_VAR_admin_upstream: "https://f3redirect-web-355149658273.us-central1.run.app"
@@ -87,7 +89,9 @@ jobs:
           fi
 
       - name: Comment drift result on PR
-        if: github.event_name == 'pull_request' && always()
+        # On fork PRs GitHub forces GITHUB_TOKEN to read-only, so createComment
+        # would 403 and fail the job. Only comment for same-repo PRs.
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && always()
         uses: actions/github-script@v7
         with:
           script: |
