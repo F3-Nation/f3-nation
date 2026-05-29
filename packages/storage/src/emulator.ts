@@ -20,5 +20,13 @@ export async function emulatorFetch(
 ): Promise<Response> {
   const headers = new Headers(init?.headers);
   headers.set("Authorization", "Bearer local-dev-token");
-  return fetch(url, { ...init, headers });
+  try {
+    return await fetch(url, { ...init, headers });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `GCS emulator unreachable at ${url}: ${message}. Is GCS_EMULATOR_HOST correct?`,
+      { cause: err },
+    );
+  }
 }
