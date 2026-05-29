@@ -28,7 +28,7 @@ ENV SKIP_ENV_VALIDATION=true
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-RUN npm install -g turbo@${TURBO_VERSION} && corepack enable
+RUN corepack enable
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 
 # Install dependencies from pruned lockfile

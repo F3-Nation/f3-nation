@@ -29,7 +29,6 @@ RUN apk add --no-cache libc6-compat openssl && apk update
 WORKDIR /app
 
 RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
-RUN pnpm add -g turbo@${TURBO_VERSION}
 
 # Install dependencies from pruned lockfile
 COPY --from=builder /app/out/json/ .

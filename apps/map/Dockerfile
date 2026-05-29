@@ -22,7 +22,6 @@ ENV NODE_ENV production
 ENV CI true
 ENV SKIP_ENV_VALIDATION true
 
-RUN npm install -g turbo@${TURBO_VERSION}
 RUN corepack enable
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 
