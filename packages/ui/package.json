@@ -62,14 +62,14 @@
     "@acme/prettier-config": "workspace:^0.1.0",
     "@acme/tailwind-config": "workspace:^0.1.0",
     "@acme/tsconfig": "workspace:^0.1.0",
-    "@types/lodash": "^4.14.195",
-    "@types/react": "^18.3.1",
+    "@types/lodash": "catalog:",
+    "@types/react": "catalog:",
     "eslint": "catalog:",
     "prettier": "catalog:",
-    "react": "18.3.1",
-    "tailwindcss": "^3.4.1",
+    "react": "catalog:",
+    "tailwindcss": "catalog:",
     "typescript": "catalog:",
-    "zod": "^3.25.8"
+    "zod": "catalog:"
   },
   "prettier": "@acme/prettier-config"
 }

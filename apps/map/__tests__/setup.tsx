@@ -6,8 +6,10 @@ import { vi } from "vitest";
 
 // Must be set before vitest-canvas-mock is imported
 // because jest-canvas-mock accesses the jest global during initialization
-// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
-globalThis.jest = vi as unknown as typeof jest;
+declare global {
+  var jest: typeof vi;
+}
+globalThis.jest = vi;
 
 import "@testing-library/jest-dom";
 import "vitest-canvas-mock";

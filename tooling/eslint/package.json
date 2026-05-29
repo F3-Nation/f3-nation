@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@next/eslint-plugin-next": "^16.2.3",
+    "eslint-config-turbo": "catalog:",
     "eslint-plugin-import-x": "^4.15.1",
     "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-react": "^7.37.5",

@@ -1,7 +1,7 @@
 {
   "name": "f3-me",
   "type": "module",
-  "version": "1.1.0",
+  "version": "1.2.1",
   "private": true,
   "scripts": {
     "dev": "next dev --port 3003",
@@ -37,19 +37,19 @@
   "devDependencies": {
     "@acme/eslint-config": "workspace:^0.2.0",
     "@acme/tsconfig": "workspace:^0.1.0",
-    "@testing-library/jest-dom": "^6.4.2",
+    "@testing-library/jest-dom": "catalog:",
     "@types/node": "catalog:",
-    "@types/react": "^18.3.1",
-    "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^4.2.1",
-    "@vitest/coverage-v8": "^1.5.0",
-    "autoprefixer": "^10.4.17",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "autoprefixer": "catalog:",
     "eslint": "catalog:",
-    "postcss": "^8.4.35",
+    "postcss": "catalog:",
     "prettier": "catalog:",
-    "tailwindcss": "^3.4.1",
-    "tailwindcss-animate": "^1.0.7",
+    "tailwindcss": "catalog:",
+    "tailwindcss-animate": "catalog:",
     "typescript": "catalog:",
-    "vitest": "^1.5.0"
+    "vitest": "catalog:"
   }
 }

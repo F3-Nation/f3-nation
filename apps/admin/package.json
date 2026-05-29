@@ -1,6 +1,6 @@
 {
   "name": "f3-admin",
-  "version": "1.0.3",
+  "version": "1.1.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -53,15 +53,15 @@
     "@acme/eslint-config": "workspace:^0.2.0",
     "@acme/prettier-config": "workspace:^0.1.0",
     "@acme/tsconfig": "workspace:*",
-    "@types/dompurify": "^3.0.5",
-    "@types/lodash": "^4.14.195",
+    "@types/dompurify": "catalog:",
+    "@types/lodash": "catalog:",
     "@types/node": "catalog:",
-    "@types/react": "^18.3.1",
-    "@types/react-dom": "^18.3.1",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
     "eslint": "catalog:",
-    "jiti": "^2.4.2",
+    "jiti": "catalog:",
     "prettier": "catalog:",
-    "tailwindcss": "^3.4.1",
+    "tailwindcss": "catalog:",
     "typescript": "catalog:"
   },
   "prettier": "@acme/prettier-config"

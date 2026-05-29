@@ -66,8 +66,10 @@ jobs:
 
       - name: Build and push Docker image
         run: |
+          TURBO_VERSION=$(grep '^  turbo:' pnpm-workspace.yaml | awk '{print $2}')
           docker build \
             --file apps/auth/Dockerfile \
+            --build-arg TURBO_VERSION="${TURBO_VERSION}" \
             --tag "${{ steps.meta.outputs.image }}" \
             .
           docker push "${{ steps.meta.outputs.image }}"

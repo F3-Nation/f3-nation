@@ -41,8 +41,8 @@
     "@acme/eslint-config": "workspace:*",
     "@acme/prettier-config": "workspace:*",
     "@acme/tsconfig": "workspace:*",
-    "@faker-js/faker": "^8.1.0",
-    "drizzle-kit": "^0.31.10",
+    "@faker-js/faker": "catalog:",
+    "drizzle-kit": "catalog:",
     "eslint": "catalog:",
     "prettier": "catalog:",
     "typescript": "catalog:"
