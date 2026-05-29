@@ -39,7 +39,17 @@ export async function PUT(
   if (!updated)
     return NextResponse.json({ error: "not found" }, { status: 404 });
 
-  await exportConfigToGCS();
+  // Surface a publish failure so the caller knows the live config is stale and
+  // can retry (the same PUT re-exports). Without this the DB shows the new
+  // destination while the redirect tier keeps serving the old one silently.
+  try {
+    await exportConfigToGCS();
+  } catch {
+    return NextResponse.json(
+      { error: "destination updated but failed to publish redirect config; retry" },
+      { status: 503 },
+    );
+  }
 
   return NextResponse.json({
     domain: {
