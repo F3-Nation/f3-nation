@@ -39,6 +39,9 @@ export default {
         'ci',
         'repo',
         'release',
+
+        // release-please uses the target branch as the scope (e.g. "chore(dev): release me 1.2.0")
+        'dev',
       ],
     ],
     'scope-empty': [2, 'never'],
