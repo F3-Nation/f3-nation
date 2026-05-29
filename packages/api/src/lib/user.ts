@@ -2,6 +2,7 @@ import type { SQL } from "@acme/db";
 import {
   aliasedTable,
   and,
+  asc,
   count,
   eq,
   getTableColumns,
@@ -302,23 +303,27 @@ export const buildUserListQuery = async ({
 
   const homeRegion = aliasedTable(schema.orgs, "homeRegion");
 
-  const sortedColumns = getSortingColumns(
-    input?.sorting,
-    {
-      id: schema.users.id,
-      name: schema.users.firstName,
-      f3Name: schema.users.f3Name,
-      roles: sql`MIN(${schema.roles.name})`,
-      status: schema.users.status,
-      homeRegion: homeRegion.name,
-      email: schema.users.email,
-      phone: sql`NULLIF(${schema.users.phone}, '')`,
-      regions: sql`MIN(${schema.orgs.name})`,
-      created: schema.users.created,
-    },
-    "id",
-    new Set(["homeRegion", "regions", "roles"] as const),
-  );
+  const sortedColumns = [
+    ...getSortingColumns(
+      input?.sorting,
+      {
+        id: schema.users.id,
+        name: schema.users.firstName,
+        f3Name: schema.users.f3Name,
+        roles: sql`MIN(${schema.roles.name})`,
+        status: schema.users.status,
+        homeRegion: homeRegion.name,
+        email: schema.users.email,
+        phone: sql`NULLIF(${schema.users.phone}, '')`,
+        regions: sql`MIN(${schema.orgs.name})`,
+        created: schema.users.created,
+      },
+      "id",
+      new Set(["homeRegion", "regions", "roles"] as const),
+    ),
+    // Always add id as a tiebreaker to ensure stable pagination order
+    asc(schema.users.id),
+  ];
 
   const userIdsQuery = ctx.db
     .selectDistinct({ id: schema.users.id })
