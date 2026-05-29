@@ -421,7 +421,12 @@ async function seed() {
     const [existingLoc] = await db
       .select()
       .from(schema.locations)
-      .where(eq(schema.locations.name, ao.name));
+      .where(
+        and(
+          eq(schema.locations.name, ao.name),
+          eq(schema.locations.orgId, regionId),
+        ),
+      );
 
     let locationId: number | undefined;
     if (!existingLoc) {
@@ -521,8 +526,13 @@ async function seed() {
 
     if (role === "admin") adminUserId = user.id;
 
-    const roleId = role === "admin" ? adminRole.id : editorRole.id;
-    if (role !== null) {
+    const roleId =
+      role === "admin"
+        ? adminRole.id
+        : role === "editor"
+          ? editorRole.id
+          : null;
+    if (roleId !== null) {
       await db
         .insert(schema.rolesXUsersXOrg)
         .values({ userId: user.id, roleId, orgId: nationId })
