@@ -20,15 +20,18 @@
   "packages": {
     "apps/me": {
       "component": "me",
-      "changelog-path": "CHANGELOG.md"
+      "changelog-path": "CHANGELOG.md",
+      "path": "apps/me"
     },
     "apps/admin": {
       "component": "admin",
-      "changelog-path": "CHANGELOG.md"
+      "changelog-path": "CHANGELOG.md",
+      "path": "apps/admin"
     },
     "apps/auth": {
       "component": "auth",
-      "changelog-path": "CHANGELOG.md"
+      "changelog-path": "CHANGELOG.md",
+      "path": "apps/auth"
     }
   }
 }
