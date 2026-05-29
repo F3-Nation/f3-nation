@@ -75,8 +75,6 @@ export default function AdminPositionsModal({
   const position = positionResponse?.position;
   const router = useRouter();
 
-  const isNational = position?.orgId === null || position?.orgId === undefined;
-
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm({
@@ -156,21 +154,6 @@ export default function AdminPositionsModal({
     return options;
   }, [editableOrgsResponse, isNationAdmin, selectedOrgType, position]);
 
-  const [confirmedOrgAccess, setConfirmedOrgAccess] = useState(false);
-
-  useEffect(() => {
-    if (!isEditing || !position?.orgId || confirmedOrgAccess) return;
-    if (editableOrgsResponse?.orgs?.some((o) => o.id === position.orgId)) {
-      setConfirmedOrgAccess(true);
-    }
-  }, [isEditing, position?.orgId, editableOrgsResponse, confirmedOrgAccess]);
-
-  const userCanEditOrg = isNationAdmin || !isEditing || confirmedOrgAccess;
-
-  const isReadOnly =
-    (isNational && !isNationAdmin && !!position) ||
-    (isEditing && !userCanEditOrg);
-
   const actionText = isEditing ? "update" : "add";
   const actionTextPast = isEditing ? "updated" : "added";
 
@@ -185,8 +168,7 @@ export default function AdminPositionsModal({
       onError: (err) => {
         toast.error(
           err instanceof ORPCError && err?.code === "UNAUTHORIZED"
-            ? (err.message ??
-                `You are not authorized to ${actionText} this position`)
+            ? `You are not authorized to ${actionText} this position`
             : `Failed to ${actionText} position`,
         );
       },
@@ -211,11 +193,7 @@ export default function AdminPositionsModal({
     }
   };
 
-  const title = isReadOnly
-    ? "View Position"
-    : isEditing
-      ? "Edit Position"
-      : "Add Position";
+  const title = isEditing ? "Edit Position" : "Add Position";
 
   return (
     <Dialog open={true} onOpenChange={() => closeModal()}>
@@ -228,14 +206,6 @@ export default function AdminPositionsModal({
         <DialogHeader>
           <DialogTitle className="text-center">{title}</DialogTitle>
         </DialogHeader>
-
-        {isReadOnly && (
-          <p className="text-center text-sm text-muted-foreground">
-            {isNational
-              ? "National positions can only be edited by F3 Nation admins."
-              : "You do not have permission to edit this position."}
-          </p>
-        )}
 
         <Form {...form}>
           <div className="flex flex-wrap">
@@ -264,7 +234,6 @@ export default function AdminPositionsModal({
                     <FormControl>
                       <Input
                         placeholder="Position name"
-                        disabled={isReadOnly}
                         {...field}
                         value={field.value ?? ""}
                       />
@@ -284,7 +253,6 @@ export default function AdminPositionsModal({
                     ? [...ORG_TYPE_OPTIONS]
                     : ORG_TYPE_OPTIONS.filter((o) => o.value !== "nation")
                 }
-                disabled={isReadOnly}
               />
             </div>
             <div className="mb-3 w-full px-2 md:w-1/2">
@@ -314,9 +282,7 @@ export default function AdminPositionsModal({
                         value={selectedValue}
                         options={orgOptions}
                         searchPlaceholder={placeholder}
-                        disabled={
-                          isReadOnly || !userCanEditOrg || !selectedOrgType
-                        }
+                        disabled={!selectedOrgType}
                         hideClearButton={!isNationAdmin}
                         onSelect={(value) => {
                           const next = Array.isArray(value) ? value[0] : value;
@@ -350,61 +316,42 @@ export default function AdminPositionsModal({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Description</FormLabel>
-                    <Textarea
-                      {...field}
-                      value={field.value ?? ""}
-                      rows={3}
-                      disabled={isReadOnly}
-                    />
+                    <Textarea {...field} value={field.value ?? ""} rows={3} />
                     <FormMessage />
                   </FormItem>
                 )}
               />
             </div>
             <div className="mb-3 w-full px-2">
-              {!isReadOnly && (
-                <div className="mb-3 flex flex-col space-y-2 pt-3 sm:flex-row sm:space-x-4 sm:space-y-0">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => closeModal()}
-                    className="w-full"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="button"
-                    className="w-full"
-                    onClick={() => {
-                      void form.handleSubmit(onSubmit, (errors) => {
-                        console.log(errors);
-                        toast.error(`Failed to ${actionText} position`);
-                      })();
-                    }}
-                  >
-                    {isSubmitting ? (
-                      <div className="flex items-center gap-2">
-                        Saving... <Spinner className="size-4" />
-                      </div>
-                    ) : (
-                      "Save Changes"
-                    )}
-                  </Button>
-                </div>
-              )}
-              {isReadOnly && (
-                <div className="pt-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => closeModal()}
-                    className="w-full"
-                  >
-                    Close
-                  </Button>
-                </div>
-              )}
-              {!isReadOnly && isEditing && (
+              <div className="mb-3 flex flex-col space-y-2 pt-3 sm:flex-row sm:space-x-4 sm:space-y-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => closeModal()}
+                  className="w-full"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  className="w-full"
+                  onClick={() => {
+                    void form.handleSubmit(onSubmit, (errors) => {
+                      console.log(errors);
+                      toast.error(`Failed to ${actionText} position`);
+                    })();
+                  }}
+                >
+                  {isSubmitting ? (
+                    <div className="flex items-center gap-2">
+                      Saving... <Spinner className="size-4" />
+                    </div>
+                  ) : (
+                    "Save Changes"
+                  )}
+                </Button>
+              </div>
+              {isEditing && (
                 <Button
                   type="button"
                   variant="outline"

@@ -105,7 +105,11 @@ export default function AdminDeleteModal({
     } catch (err) {
       console.error("delete-modal err", err);
       if (err instanceof ORPCError) {
-        toast.error(err.message);
+        toast.error(
+          err?.code === "UNAUTHORIZED"
+            ? `You are not authorized to delete this ${dataTypeToName(data.type).toLowerCase()}`
+            : `Failed to delete ${dataTypeToName(data.type).toLowerCase()}`,
+        );
       } else {
         toast.error(`Failed to delete ${data.type}`);
       }

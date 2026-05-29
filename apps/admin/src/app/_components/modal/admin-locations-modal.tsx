@@ -117,20 +117,26 @@ export default function AdminLocationsModal({
     });
   }, [form, location]);
 
+  const isEditing = !!location?.id;
+  const actionText = isEditing ? "update" : "add";
+  const actionTextPast = isEditing ? "updated" : "added";
+
   const crupdateLocation = useMutation(
     orpc.location.crupdate.mutationOptions({
       onSuccess: async () => {
         await invalidateQueries("location");
         closeModal();
-        toast.success("Successfully updated location");
+        toast.success(`Successfully ${actionTextPast} location`);
         router.refresh();
+        setIsSubmitting(false);
       },
       onError: (err) => {
         toast.error(
           err instanceof ORPCError && err?.code === "UNAUTHORIZED"
-            ? "You must be logged in to update users"
-            : "Failed to update user",
+            ? `You are not authorized to ${actionText} this location`
+            : `Failed to ${actionText} location`,
         );
+        setIsSubmitting(false);
       },
     }),
   );
@@ -159,33 +165,19 @@ export default function AdminLocationsModal({
           <div className="w-full md:w-1/2">
             <Form {...form}>
               <form
-                onSubmit={form.handleSubmit(
-                  async (data) => {
-                    setIsSubmitting(true);
-                    try {
-                      if (!data?.regionId) {
-                        toast.error("Region not found");
-                        return;
-                      }
-                      await crupdateLocation.mutateAsync({
-                        ...data,
-                        orgId: data.regionId,
-                        latitude: safeParseFloat(data.latitude),
-                        longitude: safeParseFloat(data.longitude),
-                      });
-                    } catch (error) {
-                      toast.error("Failed to update location");
-                      console.error(error);
-                    } finally {
-                      setIsSubmitting(false);
-                    }
-                  },
-                  (error) => {
-                    toast.error("Failed to update location");
-                    console.log(error);
-                    setIsSubmitting(false);
-                  },
-                )}
+                onSubmit={form.handleSubmit(async (data) => {
+                  setIsSubmitting(true);
+                  if (!data?.regionId) {
+                    toast.error("Region not found");
+                    return;
+                  }
+                  await crupdateLocation.mutateAsync({
+                    ...data,
+                    orgId: data.regionId,
+                    latitude: safeParseFloat(data.latitude),
+                    longitude: safeParseFloat(data.longitude),
+                  });
+                })}
                 className="space-y-4"
               >
                 <div className="flex flex-wrap">

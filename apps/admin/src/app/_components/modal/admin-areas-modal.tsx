@@ -107,20 +107,25 @@ export default function AdminAreasModal({
     });
   }, [form, area]);
 
+  const isEditing = !!area?.id;
+  const actionText = isEditing ? "update" : "add";
+  const actionTextPast = isEditing ? "updated" : "added";
+
   const crupdateArea = useMutation(
     orpc.org.crupdate.mutationOptions({
       onSuccess: async () => {
         await invalidateQueries("org");
         closeModal();
-        toast.success("Successfully updated area");
+        toast.success(`Successfully ${actionTextPast} area`);
         router.refresh();
       },
       onError: (err) => {
         toast.error(
           err instanceof ORPCError && err?.code === "UNAUTHORIZED"
-            ? "You must be logged in to update areas"
-            : "Failed to update area",
+            ? `You are not authorized to ${actionText} this area`
+            : `Failed to ${actionText} area`,
         );
+        setIsSubmitting(false);
       },
     }),
   );
@@ -141,24 +146,10 @@ export default function AdminAreasModal({
 
         <Form {...form}>
           <form
-            onSubmit={form.handleSubmit(
-              async (data) => {
-                setIsSubmitting(true);
-                try {
-                  await crupdateArea.mutateAsync({ ...data, orgType: "area" });
-                } catch (error) {
-                  toast.error("Failed to update area");
-                  console.error(error);
-                } finally {
-                  setIsSubmitting(false);
-                }
-              },
-              (error) => {
-                toast.error("Failed to update area");
-                console.log(error);
-                setIsSubmitting(false);
-              },
-            )}
+            onSubmit={form.handleSubmit(async (data) => {
+              setIsSubmitting(true);
+              await crupdateArea.mutateAsync({ ...data, orgType: "area" });
+            })}
             className="space-y-4"
           >
             <div className="flex flex-wrap">

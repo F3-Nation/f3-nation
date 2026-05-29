@@ -103,8 +103,7 @@ export default function AdminEventTypesModal({
       onError: (err) => {
         toast.error(
           err instanceof ORPCError && err?.code === "UNAUTHORIZED"
-            ? (err.message ??
-                `You are not authorized to ${actionText} this Event Type`)
+            ? `You are not authorized to ${actionText} this event type`
             : `Failed to ${actionText} event type`,
         );
       },
