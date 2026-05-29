@@ -61,6 +61,11 @@ export default withSentryConfig(config, {
   org: "f3-nation",
   project: "maps-nextjs",
 
+  // This app is App Router only (no pages/ directory). Disable Sentry's
+  // automatic injection of pages/_error.js, which imports <Html> from
+  // next/document and causes a hard build error in Next.js 15.
+  autoInstrumentServerFunctions: false,
+
   // Only print logs for uploading source maps in CI
   silent: !process.env.CI,
 
