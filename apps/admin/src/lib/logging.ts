@@ -49,11 +49,17 @@ export function serializeError(err: unknown): LogContext {
       errorMessage: err.message,
       errorStack: err.stack,
       errorCause:
-        typeof err.cause === "string"
-          ? err.cause
-          : err.cause
-            ? safeStringify(err.cause)
-            : undefined,
+        err.cause instanceof Error
+          ? safeStringify({
+              name: err.cause.name,
+              message: err.cause.message,
+              stack: err.cause.stack,
+            })
+          : typeof err.cause === "string"
+            ? err.cause
+            : err.cause
+              ? safeStringify(err.cause)
+              : undefined,
     };
   }
 

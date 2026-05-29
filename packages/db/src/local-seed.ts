@@ -190,13 +190,13 @@ const POSITIONS = [
   {
     name: "Nant'an",
     description:
-      "When I looked, all the tags went to a View called Javelin. And tags in there were based on description, not CygNet tag name. And Don said most of the descriptions are the same. Is that not the case? If not, we'll want to let Don know. They want to keep tag names the same in the downstream View because people have displays built off of them and they don't want to have to update them. He did not mention retention time. Sounds like a mess!",
+      "The cultural and spiritual leader of his PAX, who represents but does not govern.  Encourages Plant/Grow/Serve and ignites the need for male community leadership amongst the Pax.",
     orgType: "region" as const,
   },
   {
     name: "Site Q",
     description:
-      " He plants the flag for the AO, makes folks feel welcome, makes sure the disclaimer is correctly spoken, cadence is called, picks up the 6, makes sure the FNGs have a battle buddy, watches for hydration issues, ETC..",
+      "He plants the flag for the AO, makes folks feel welcome, makes sure the disclaimer is correctly spoken, cadence is called, picks up the 6, makes sure the FNGs have a battle buddy, watches for hydration issues, etc.",
     orgType: "region" as const,
   },
   {
@@ -476,7 +476,7 @@ async function seed() {
         if (insertedEvent) {
           // Link to Bootcamp event type
           const bootcampType = allEventTypes.find(
-            (et) => et.name === "Bootcamp",
+            (et) => et.name === (EventTypes.Bootcamp as string),
           );
           if (bootcampType) {
             await db
@@ -538,7 +538,7 @@ async function seed() {
         .values({ userId: user.id, roleId, orgId: nationId })
         .onConflictDoNothing();
     }
-    console.log(`  ✓ Dev user: ${devUser.email} (${role})`);
+    console.log(`  ✓ Dev user: ${devUser.email} (${role ?? "no role"})`);
   }
 
   // 9. API keys
@@ -649,6 +649,15 @@ async function resetSequences() {
   if (maxApiKeyId?.max !== undefined && maxApiKeyId.max > 0) {
     await db.execute(
       sql`SELECT setval('api_keys_id_seq', ${maxApiKeyId.max + 1})`,
+    );
+  }
+
+  const [maxPositionId] = await db
+    .select({ max: sql<number>`coalesce(max(${schema.positions.id}), 0)` })
+    .from(schema.positions);
+  if (maxPositionId?.max !== undefined && maxPositionId.max > 0) {
+    await db.execute(
+      sql`SELECT setval('positions_id_seq', ${maxPositionId.max + 1})`,
     );
   }
 }
