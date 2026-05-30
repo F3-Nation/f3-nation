@@ -35,7 +35,15 @@ for dir in apps/api apps/auth apps/map apps/me apps/admin packages/env; do
   echo "     $dir/.env created"
 done
 
-# ── Step 1b: Generate AUTH_JWT_PRIVATE_KEY for apps/auth ─────────────────────
+# ── Step 1b: Copy root .env for docker-compose variable interpolation ─────────
+if [ -f ".env" ]; then
+  mv ".env" ".env.bak.$_env_ts"
+  echo "     .env backed up → .env.bak.$_env_ts"
+fi
+cp ".env.example" ".env"
+echo "     .env created"
+
+# ── Step 1c: Generate AUTH_JWT_PRIVATE_KEY for apps/auth ─────────────────────
 if grep -q '\.\.\.' apps/auth/.env 2>/dev/null; then
   if command -v openssl >/dev/null 2>&1; then
     KEY=$(openssl genrsa 2048 2>/dev/null | \

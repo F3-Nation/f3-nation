@@ -6,16 +6,16 @@ services:
     container_name: f3-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: f3local
-      POSTGRES_PASSWORD: f3local
-      POSTGRES_DB: f3nation
+      POSTGRES_USER: ${POSTGRES_USER:-f3local}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-f3local}
+      POSTGRES_DB: ${POSTGRES_DB:-f3nation}
     ports:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql
       - ./scripts/docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U f3local -d f3nation"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-f3local} -d ${POSTGRES_DB:-f3nation}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -26,6 +26,12 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"
+    environment:
+      ADMINER_SERVER: f3-postgres
+      ADMINER_USERNAME: ${POSTGRES_USER:-f3local}
+      ADMINER_PASSWORD: ${POSTGRES_PASSWORD:-f3local}
+      ADMINER_DATABASE: ${POSTGRES_DB:-f3nation}
+      ADMINER_DEFAULT_SERVER: f3-postgres
     volumes:
       - ./scripts/docker/adminer-plugins.php:/var/www/html/index.php:ro
     depends_on:
