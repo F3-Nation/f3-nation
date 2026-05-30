@@ -85,22 +85,44 @@ export async function POST(request: NextRequest) {
 
     // Mark onboarding complete so the OAuth authorize flow doesn't redirect
     // the newly registered user to /onboarding.
-    const email = payload.email;
-    const [dbUser] = await db
-      .select({ id: users.id, meta: users.meta })
-      .from(users)
-      .where(eq(users.email, email))
-      .limit(1);
+    // This is best-effort — a failure here must not mask the successful registration.
+    try {
+      const email = payload.email;
+      const [dbUser] = await db
+        .select({ id: users.id, meta: users.meta })
+        .from(users)
+        .where(eq(users.email, email))
+        .limit(1);
 
-    if (dbUser) {
-      const updatedMeta = {
-        ...((dbUser.meta as Record<string, unknown>) ?? {}),
-        onboarding_completed: true,
-      };
-      await db
-        .update(users)
-        .set({ meta: updatedMeta })
-        .where(eq(users.id, dbUser.id));
+      if (dbUser) {
+        const updatedMeta = {
+          ...((dbUser.meta as Record<string, unknown>) ?? {}),
+          onboarding_completed: true,
+        };
+        await db
+          .update(users)
+          .set({ meta: updatedMeta })
+          .where(eq(users.id, dbUser.id));
+      } else {
+        // The F3 API succeeded but the user isn't visible in the local DB yet
+        // (e.g. replication lag or casing mismatch). The user will see /onboarding
+        // once and it will set the flag at that point.
+        console.warn(
+          JSON.stringify({
+            event: "register.onboarding_flag_skipped",
+            reason: "user not found in local DB after F3 API creation",
+            email,
+          }),
+        );
+      }
+    } catch (dbErr) {
+      // Non-fatal — log and continue so the user gets { created: true }.
+      console.error(
+        JSON.stringify({
+          event: "register.onboarding_flag_error",
+          error: dbErr instanceof Error ? dbErr.message : String(dbErr),
+        }),
+      );
     }
 
     return NextResponse.json({ created: true });

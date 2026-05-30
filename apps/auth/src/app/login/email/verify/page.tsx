@@ -6,6 +6,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import Image from "next/image";
 
+import { isValidCallbackUrl } from "~/lib/callback-url";
+
 export default function VerifyEmailPage() {
   return (
     <Suspense>
@@ -61,8 +63,12 @@ function VerifyEmailForm() {
         return;
       }
 
-      // Success — redirect
-      router.push(callbackUrl);
+      // Success — redirect. Guard against open-redirect: only follow
+      // same-origin or relative callbackUrls.
+      const safeUrl = isValidCallbackUrl(callbackUrl, window.location.origin)
+        ? callbackUrl
+        : "/";
+      router.push(safeUrl);
     },
     [email, callbackUrl, router],
   );

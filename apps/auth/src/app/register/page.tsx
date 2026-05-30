@@ -100,13 +100,16 @@ function RegisterForm() {
       return;
     }
 
-    if (phone && !isValidPhoneNumber(phone)) {
+    if (phone && !isValidPhoneNumber(phone, phoneCountry)) {
       setError("Please enter a valid phone number.");
       setLoading(false);
       return;
     }
 
-    if (emergencyPhone && !isValidPhoneNumber(emergencyPhone)) {
+    if (
+      emergencyPhone &&
+      !isValidPhoneNumber(emergencyPhone, emergencyPhoneCountry)
+    ) {
       setError("Please enter a valid emergency phone number.");
       setLoading(false);
       return;

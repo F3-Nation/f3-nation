@@ -5,6 +5,7 @@ import { createTransport } from "nodemailer";
 import { and, eq, gt, isNull, sql } from "@acme/db";
 import { emailMfaCodes, users } from "@acme/db/schema/schema";
 
+import { isValidCallbackUrl } from "~/lib/callback-url";
 import { constantTimeEqual } from "~/lib/crypto-utils";
 import { db } from "~/lib/db";
 import { env } from "~/env";
@@ -32,6 +33,9 @@ export async function sendEmailCode(
   email: string,
   callbackUrl?: string,
 ): Promise<void> {
+  // Normalize early so all downstream usage (DB keys, magic link URL) is consistent.
+  email = email.toLowerCase().trim();
+
   const code = crypto.randomInt(100000, 999999).toString();
   const codeHash = hashCode(code);
   const id = crypto.randomUUID();
@@ -62,9 +66,13 @@ export async function sendEmailCode(
 
   // Build the magic link — include callbackUrl so clicking the link lands
   // back in the originating app, not on the auth homepage.
+  // Only embed the callbackUrl if it is same-origin or a relative path;
+  // this prevents open-redirect attacks via crafted magic links.
   const authUrl = env.NEXT_PUBLIC_AUTH_URL;
   const verifyParams = new URLSearchParams({ email, code });
-  if (callbackUrl) verifyParams.set("callbackUrl", callbackUrl);
+  if (callbackUrl && isValidCallbackUrl(callbackUrl, authUrl)) {
+    verifyParams.set("callbackUrl", callbackUrl);
+  }
   const magicLink = `${authUrl}/login/email/verify?${verifyParams.toString()}`;
 
   const transporter = getTransporter();
