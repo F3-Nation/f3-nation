@@ -101,7 +101,11 @@ describe("uploadFile (emulator mode)", () => {
     const requestedUrls: string[] = [];
     globalThis.fetch = vi.fn((input: RequestInfo | URL) => {
       requestedUrls.push(
-        typeof input === "string" ? input : (input as Request).url,
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.href
+            : (input).url,
       );
       return Promise.resolve(new Response("{}", { status: 200 }));
     });
