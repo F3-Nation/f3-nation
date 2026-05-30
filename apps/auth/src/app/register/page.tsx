@@ -3,6 +3,7 @@
 import { Suspense, useState, useEffect, useRef } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { isValidPhoneNumber } from "libphonenumber-js";
 import type { PhoneCountry } from "~/lib/phone";
 
 import Image from "next/image";
@@ -95,6 +96,18 @@ function RegisterForm() {
 
     if (!firstName.trim() || !lastName.trim()) {
       setError("First name and last name are required.");
+      setLoading(false);
+      return;
+    }
+
+    if (phone && !isValidPhoneNumber(phone)) {
+      setError("Please enter a valid phone number.");
+      setLoading(false);
+      return;
+    }
+
+    if (emergencyPhone && !isValidPhoneNumber(emergencyPhone)) {
+      setError("Please enter a valid emergency phone number.");
       setLoading(false);
       return;
     }

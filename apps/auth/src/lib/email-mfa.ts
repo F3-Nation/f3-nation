@@ -25,8 +25,13 @@ function hashCode(code: string): string {
 /**
  * Generate a 6-digit code, hash-store it, and email it to the user.
  * Invalidates any previous active code for that email.
+ *
+ * @param callbackUrl - Optional URL to redirect to after sign-in via magic link.
  */
-export async function sendEmailCode(email: string): Promise<void> {
+export async function sendEmailCode(
+  email: string,
+  callbackUrl?: string,
+): Promise<void> {
   const code = crypto.randomInt(100000, 999999).toString();
   const codeHash = hashCode(code);
   const id = crypto.randomUUID();
@@ -55,9 +60,12 @@ export async function sendEmailCode(email: string): Promise<void> {
     attemptCount: 0,
   });
 
-  // Build the magic link
+  // Build the magic link — include callbackUrl so clicking the link lands
+  // back in the originating app, not on the auth homepage.
   const authUrl = env.NEXT_PUBLIC_AUTH_URL;
-  const magicLink = `${authUrl}/login/email/verify?email=${encodeURIComponent(email)}&code=${code}`;
+  const verifyParams = new URLSearchParams({ email, code });
+  if (callbackUrl) verifyParams.set("callbackUrl", callbackUrl);
+  const magicLink = `${authUrl}/login/email/verify?${verifyParams.toString()}`;
 
   const transporter = getTransporter();
 

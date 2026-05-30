@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+import { eq } from "@acme/db";
+import { users } from "@acme/db/schema/schema";
+
+import { db } from "~/lib/db";
 import { env } from "~/env";
 import { rateLimit } from "~/lib/rate-limit";
 
@@ -77,6 +81,26 @@ export async function POST(request: NextRequest) {
         { error: "Failed to create account. Please try again." },
         { status: 502 },
       );
+    }
+
+    // Mark onboarding complete so the OAuth authorize flow doesn't redirect
+    // the newly registered user to /onboarding.
+    const email = payload.email;
+    const [dbUser] = await db
+      .select({ id: users.id, meta: users.meta })
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+
+    if (dbUser) {
+      const updatedMeta = {
+        ...((dbUser.meta as Record<string, unknown>) ?? {}),
+        onboarding_completed: true,
+      };
+      await db
+        .update(users)
+        .set({ meta: updatedMeta })
+        .where(eq(users.id, dbUser.id));
     }
 
     return NextResponse.json({ created: true });
