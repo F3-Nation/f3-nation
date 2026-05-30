@@ -105,7 +105,7 @@ describe("uploadFile (emulator mode)", () => {
           ? input
           : input instanceof URL
             ? input.href
-            : (input).url,
+            : input.url,
       );
       return Promise.resolve(new Response("{}", { status: 200 }));
     });
