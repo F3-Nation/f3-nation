@@ -17,7 +17,7 @@ export default async function HomePage({ searchParams }: PageProps) {
   // Show auth card (with error if any) when there's an error or explicit logout.
   // This check must come BEFORE the user redirect to prevent an infinite loop:
   // /profile → user_not_found → / → (user still authed) → /profile → ...
-  if (params.error ?? params.logged_out) {
+  if (params.error || params.logged_out) {
     return (
       <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center p-4">
         <AuthCard error={params.error} />
