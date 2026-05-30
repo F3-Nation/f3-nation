@@ -75,7 +75,6 @@ catalog:
   class-variance-authority: ^0.7.0
   clsx: ^2.1.0
   cmdk: ^0.2.1
-  cmk: ^0.1.1
   commitizen: ^4.3.1
   cross-fetch: ^4.0.0
   dayjs: ^1.11.10
