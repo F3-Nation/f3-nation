@@ -26,12 +26,6 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"
-    environment:
-      ADMINER_SERVER: f3-postgres
-      ADMINER_USERNAME: ${POSTGRES_USER:-f3local}
-      ADMINER_PASSWORD: ${POSTGRES_PASSWORD:-f3local}
-      ADMINER_DATABASE: ${POSTGRES_DB:-f3nation}
-      ADMINER_DEFAULT_SERVER: f3-postgres
     volumes:
       - ./scripts/docker/adminer-plugins.php:/var/www/html/index.php:ro
     depends_on:

@@ -9,17 +9,13 @@ namespace docker {
                 return "F3 Nation DB";
             }
             function credentials() {
-                return [
-                    getenv('ADMINER_SERVER') ?: 'f3-postgres',
-                    getenv('ADMINER_USERNAME') ?: 'f3local',
-                    getenv('ADMINER_PASSWORD') ?: 'f3local',
-                ];
+                return ['f3-postgres', 'f3local', 'f3local'];
             }
             function login($login, $password) {
                 return true;
             }
             function database() {
-                return getenv('ADMINER_DATABASE') ?: 'f3nation';
+                return 'f3nation';
             }
         }
 
@@ -39,10 +35,10 @@ namespace {
     if (empty($_GET['username']) && empty($_POST['auth']) && empty($_COOKIE['adminer_permanent'])) {
         $_POST['auth'] = [
             'driver'    => 'pgsql',
-            'server'    => getenv('ADMINER_SERVER') ?: 'f3-postgres',
-            'username'  => getenv('ADMINER_USERNAME') ?: 'f3local',
-            'password'  => getenv('ADMINER_PASSWORD') ?: 'f3local',
-            'db'        => getenv('ADMINER_DATABASE') ?: 'f3nation',
+            'server'    => 'f3-postgres',
+            'username'  => 'f3local',
+            'password'  => 'f3local',
+            'db'        => 'f3nation',
             'permanent' => '1',
         ];
         $_SERVER['REQUEST_METHOD'] = 'POST';
