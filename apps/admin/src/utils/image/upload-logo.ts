@@ -20,7 +20,10 @@ export async function uploadLogo({
   });
 
   if (!response.ok) {
-    throw new Error("Failed to upload logo");
+    const data = (await response.json().catch(() => null)) as {
+      error?: string;
+    } | null;
+    throw new Error(data?.error ?? "Failed to upload logo");
   }
 
   const data = (await response.json()) as { url: string };

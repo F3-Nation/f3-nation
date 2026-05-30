@@ -42,7 +42,7 @@ export async function uploadFile(
         `GCS emulator upload failed: HTTP ${response.status} ${body}`,
       );
     }
-    return `http://${emulatorHost}/${bucketName}/${encodedPath}`;
+    return `http://${emulatorHost}/${bucketName}/${path}`;
   }
 
   const bucket = getStorage().bucket(bucketName);

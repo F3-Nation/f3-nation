@@ -11,7 +11,7 @@ RUN apk add --no-cache libc6-compat && apk update
 WORKDIR /app
 
 RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
-RUN pnpm add -g turbo@${TURBO_VERSION}
+RUN npm install -g turbo@${TURBO_VERSION}
 
 COPY . .
 RUN turbo prune f3-auth --docker

@@ -178,7 +178,32 @@ const DEV_USERS = [
     firstName: "Dev",
     lastName: "User",
     emailVerified: new Date().toISOString(),
-    role: "user" as const,
+    role: null,
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Standard F3 positions seeded per org
+// ---------------------------------------------------------------------------
+
+const POSITIONS = [
+  {
+    name: "Nant'an",
+    description:
+      "The cultural and spiritual leader of his PAX, who represents but does not govern.  Encourages Plant/Grow/Serve and ignites the need for male community leadership amongst the Pax.",
+    orgType: "region" as const,
+  },
+  {
+    name: "Site Q",
+    description:
+      "He plants the flag for the AO, makes folks feel welcome, makes sure the disclaimer is correctly spoken, cadence is called, picks up the 6, makes sure the FNGs have a battle buddy, watches for hydration issues, etc.",
+    orgType: "region" as const,
+  },
+  {
+    name: "ITQ",
+    description:
+      "Helping streamline operations so guys can get back out into the gloom.",
+    orgType: "region" as const,
   },
 ];
 
@@ -342,7 +367,21 @@ async function seed() {
     }
   }
 
-  // 5. AOs + locations
+  // 5. Event types — loaded here so event seeding in step 6 can reference them
+  const existingEventTypes = await db.select().from(schema.eventTypes);
+  const existingNames = new Set(existingEventTypes.map((et) => et.name));
+  const eventTypesToInsert = EVENT_TYPES.filter(
+    (et) => !existingNames.has(et.name),
+  );
+  if (eventTypesToInsert.length > 0) {
+    await db.insert(schema.eventTypes).values(eventTypesToInsert);
+    console.log(`  + Inserted ${eventTypesToInsert.length} event type(s)`);
+  } else {
+    console.log(`  ✓ Event types already seeded`);
+  }
+  const allEventTypes = await db.select().from(schema.eventTypes);
+
+  // 6. AOs + locations + events
   for (const ao of AOS) {
     const regionId = regionIds[ao.regionName];
     if (!regionId) throw new Error(`Region not found: ${ao.regionName}`);
@@ -382,24 +421,79 @@ async function seed() {
     const [existingLoc] = await db
       .select()
       .from(schema.locations)
-      .where(eq(schema.locations.orgId, aoId));
+      .where(
+        and(
+          eq(schema.locations.name, ao.name),
+          eq(schema.locations.orgId, regionId),
+        ),
+      );
 
+    let locationId: number | undefined;
     if (!existingLoc) {
-      await db.insert(schema.locations).values({
-        orgId: aoId,
-        name: ao.name,
-        isActive: true,
-        latitude,
-        longitude,
-        addressCity,
-        addressState,
-        addressCountry: "US",
-      });
+      const [insertedLoc] = await db
+        .insert(schema.locations)
+        .values({
+          orgId: regionId,
+          name: ao.name,
+          isActive: true,
+          latitude,
+          longitude,
+          addressCity,
+          addressState,
+          addressCountry: "US",
+        })
+        .returning({ id: schema.locations.id });
+      locationId = insertedLoc?.id;
       console.log(`  + Inserted location for AO: ${ao.name}`);
+    } else {
+      locationId = existingLoc.id;
+    }
+    // Create a weekly Bootcamp event for the AO if none exists
+    if (locationId) {
+      const [existingEvent] = await db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.orgId, aoId));
+
+      if (!existingEvent) {
+        const [insertedEvent] = await db
+          .insert(schema.events)
+          .values({
+            orgId: aoId,
+            locationId,
+            isActive: true,
+            highlight: false,
+            startDate: "2025-01-06",
+            startTime: "05:30",
+            endTime: "06:15",
+            name: `${ao.name} Bootcamp`,
+            dayOfWeek: "monday",
+            recurrencePattern: "weekly",
+            recurrenceInterval: 1,
+          })
+          .returning({ id: schema.events.id });
+
+        if (insertedEvent) {
+          // Link to Bootcamp event type
+          const bootcampType = allEventTypes.find(
+            (et) => et.name === (EventTypes.Bootcamp as string),
+          );
+          if (bootcampType) {
+            await db
+              .insert(schema.eventsXEventTypes)
+              .values({
+                eventId: insertedEvent.id,
+                eventTypeId: bootcampType.id,
+              })
+              .onConflictDoNothing();
+          }
+          console.log(`  + Inserted event for AO: ${ao.name}`);
+        }
+      }
     }
   }
 
-  // 6. Roles
+  // 7. Roles
   const existingRoles = await db.select().from(schema.roles);
   const rolesToInsert = RegionRole.filter(
     (r) => !existingRoles.some((e) => e.name === r),
@@ -417,19 +511,6 @@ async function seed() {
   const userRole = allRoles.find((r) => r.name === "user");
   if (!adminRole || !editorRole || !userRole)
     throw new Error("Roles missing after insert");
-
-  // 7. Event types — check by name since there's no unique constraint
-  const existingEventTypes = await db.select().from(schema.eventTypes);
-  const existingNames = new Set(existingEventTypes.map((et) => et.name));
-  const eventTypesToInsert = EVENT_TYPES.filter(
-    (et) => !existingNames.has(et.name),
-  );
-  if (eventTypesToInsert.length > 0) {
-    await db.insert(schema.eventTypes).values(eventTypesToInsert);
-    console.log(`  + Inserted ${eventTypesToInsert.length} event type(s)`);
-  } else {
-    console.log(`  ✓ Event types already seeded`);
-  }
 
   // 8. Dev users
   let adminUserId: number | undefined;
@@ -450,12 +531,14 @@ async function seed() {
         ? adminRole.id
         : role === "editor"
           ? editorRole.id
-          : userRole.id;
-    await db
-      .insert(schema.rolesXUsersXOrg)
-      .values({ userId: user.id, roleId, orgId: nationId })
-      .onConflictDoNothing();
-    console.log(`  ✓ Dev user: ${devUser.email} (${role})`);
+          : null;
+    if (roleId !== null) {
+      await db
+        .insert(schema.rolesXUsersXOrg)
+        .values({ userId: user.id, roleId, orgId: nationId })
+        .onConflictDoNothing();
+    }
+    console.log(`  ✓ Dev user: ${devUser.email} (${role ?? "no role"})`);
   }
 
   // 9. API keys
@@ -497,7 +580,52 @@ async function seed() {
     console.log(`  ✓ OAuth client: ${client.id}`);
   }
 
-  // 11. Reset sequences so auto-increment IDs don't collide with inserted rows
+  // 11. Positions — global standard F3 positions (orgId null = applies to all orgs)
+  //
+  // Migration note: earlier versions seeded positions per-region (orgId = regionId).
+  // On re-run we migrate any such rows to global (orgId = null) and deduplicate.
+  for (const position of POSITIONS) {
+    const existing = await db
+      .select()
+      .from(schema.positions)
+      .where(eq(schema.positions.name, position.name));
+
+    const globalRow = existing.find((p) => p.orgId === null);
+    const legacyRows = existing.filter((p) => p.orgId !== null);
+
+    if (globalRow) {
+      // Already a global row — delete any leftover per-region duplicates
+      for (const legacy of legacyRows) {
+        await db
+          .delete(schema.positions)
+          .where(eq(schema.positions.id, legacy.id));
+      }
+    } else if (legacyRows.length > 0) {
+      // Migrate first legacy row to global, delete the rest
+      const [first, ...rest] = legacyRows;
+      await db
+        .update(schema.positions)
+        .set({ orgId: null, orgType: "region" })
+        .where(eq(schema.positions.id, first!.id));
+      for (const dup of rest) {
+        await db
+          .delete(schema.positions)
+          .where(eq(schema.positions.id, dup.id));
+      }
+      console.log(`  ~ Migrated position "${position.name}" to global`);
+    } else {
+      await db.insert(schema.positions).values({
+        name: position.name,
+        description: position.description,
+        orgId: null,
+        orgType: "region",
+        isActive: true,
+      });
+      console.log(`  + Inserted position "${position.name}" (global)`);
+    }
+  }
+
+  // 12. Reset sequences so auto-increment IDs don't collide with inserted rows
   await resetSequences();
 
   console.log("\nLocal seed complete.");
@@ -537,6 +665,15 @@ async function resetSequences() {
   if (maxApiKeyId?.max !== undefined && maxApiKeyId.max > 0) {
     await db.execute(
       sql`SELECT setval('api_keys_id_seq', ${maxApiKeyId.max + 1})`,
+    );
+  }
+
+  const [maxPositionId] = await db
+    .select({ max: sql<number>`coalesce(max(${schema.positions.id}), 0)` })
+    .from(schema.positions);
+  if (maxPositionId?.max !== undefined && maxPositionId.max > 0) {
+    await db.execute(
+      sql`SELECT setval('positions_id_seq', ${maxPositionId.max + 1})`,
     );
   }
 }
