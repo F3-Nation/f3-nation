@@ -32,10 +32,10 @@
     "@acme/env": "workspace:*",
     "@acme/shared": "workspace:*",
     "dotenv-cli": "^7.3.0",
-    "drizzle-orm": "^0.45.2",
-    "esbuild-register": "^3.5.0",
-    "pg": "^8.11.3",
-    "postgres": "^3.4.3"
+    "drizzle-orm": "catalog:",
+    "esbuild-register": "catalog:",
+    "pg": "catalog:",
+    "postgres": "catalog:"
   },
   "devDependencies": {
     "@acme/eslint-config": "workspace:*",
