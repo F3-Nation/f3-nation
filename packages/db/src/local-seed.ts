@@ -13,7 +13,7 @@
 
 import { EventTypes, RegionRole } from "@acme/shared/app/enums";
 
-import { and, eq, sql } from ".";
+import { and, eq, isNull, sql } from ".";
 import { authSchema, schema } from ".";
 import { db } from "./client";
 
@@ -580,32 +580,26 @@ async function seed() {
     console.log(`  ✓ OAuth client: ${client.id}`);
   }
 
-  // 11. Positions — standard F3 positions seeded per region
-  for (const region of REGIONS) {
-    const regionId = regionIds[region.name];
-    if (!regionId) continue;
-    for (const position of POSITIONS) {
-      const [existing] = await db
-        .select()
-        .from(schema.positions)
-        .where(
-          and(
-            eq(schema.positions.name, position.name),
-            eq(schema.positions.orgId, regionId),
-          ),
-        );
-      if (!existing) {
-        await db.insert(schema.positions).values({
-          name: position.name,
-          description: position.description,
-          orgId: regionId,
-          orgType: "region",
-          isActive: true,
-        });
-        console.log(
-          `  + Inserted position "${position.name}" for ${region.name}`,
-        );
-      }
+  // 11. Positions — global standard F3 positions (orgId null = applies to all orgs)
+  for (const position of POSITIONS) {
+    const [existing] = await db
+      .select()
+      .from(schema.positions)
+      .where(
+        and(
+          eq(schema.positions.name, position.name),
+          isNull(schema.positions.orgId),
+        ),
+      );
+    if (!existing) {
+      await db.insert(schema.positions).values({
+        name: position.name,
+        description: position.description,
+        orgId: null,
+        orgType: "region",
+        isActive: true,
+      });
+      console.log(`  + Inserted position "${position.name}" (global)`);
     }
   }
 
