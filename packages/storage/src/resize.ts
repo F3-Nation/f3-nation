@@ -31,6 +31,6 @@ export async function prepareImageForStorage(
       .toBuffer();
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown image error";
-    throw new Error(`Failed to process image: ${message}`);
+    throw new Error(`Failed to process image: ${message}`, { cause: err });
   }
 }
