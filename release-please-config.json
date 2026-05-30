@@ -18,6 +18,11 @@
     { "type": "refactor", "hidden": true }
   ],
   "packages": {
+    "apps/homepage": {
+      "component": "homepage",
+      "changelog-path": "CHANGELOG.md",
+      "path": "apps/homepage"
+    },
     "apps/me": {
       "component": "me",
       "changelog-path": "CHANGELOG.md",

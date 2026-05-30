@@ -37,7 +37,9 @@
     "zod": "^3.25.8"
   },
   "peerDependencies": {
-    "next": ">=14"
+    "next": ">=14 <16",
+    "react": ">=18 <19",
+    "react-dom": ">=18 <19"
   },
   "devDependencies": {
     "@acme/eslint-config": "workspace:^0.2.0",

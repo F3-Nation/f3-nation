@@ -20,7 +20,10 @@ export async function deleteFile(path: string): Promise<void> {
       { method: "DELETE" },
     );
     if (!response.ok && response.status !== 404) {
-      throw new Error(`GCS emulator delete failed: HTTP ${response.status}`);
+      const body = await response.text().catch(() => "(unreadable)");
+      throw new Error(
+        `GCS emulator delete failed: HTTP ${response.status} ${body}`,
+      );
     }
     return;
   }

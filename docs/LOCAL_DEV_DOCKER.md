@@ -208,13 +208,14 @@ The above command will install code if you don't have it already and then open y
 pnpm dev
 ```
 
-| App   | URL                   |
-| ----- | --------------------- |
-| Map   | http://localhost:3000 |
-| API   | http://localhost:3001 |
-| Admin | http://localhost:3002 |
-| Me    | http://localhost:3003 |
-| Auth  | http://localhost:3004 |
+| App      | URL                   |
+| -------- | --------------------- |
+| Map      | http://localhost:3000 |
+| API      | http://localhost:3001 |
+| Admin    | http://localhost:3002 |
+| Me       | http://localhost:3003 |
+| Auth     | http://localhost:3004 |
+| Homepage | http://localhost:3005 |
 
 ---
 
