@@ -4,8 +4,11 @@ interface App {
   name: string;
   description: string;
   href?: string;
+  localHref?: string;
   linkLabel?: string;
 }
+
+const isLocal = process.env.NEXT_PUBLIC_LOCAL_DEV === "true";
 
 const APPS: App[] = [
   {
@@ -13,6 +16,7 @@ const APPS: App[] = [
     description:
       "Find F3 workouts near you. Browse every workout group across the nation on an interactive map.",
     href: "https://map.f3nation.com",
+    localHref: "http://localhost:3000",
   },
   {
     name: "F3 Near Me",
@@ -25,12 +29,14 @@ const APPS: App[] = [
     description:
       "Your personal F3 profile. Update your avatar, manage emergency contacts, and control your info.",
     href: "https://me.f3nation.com",
+    localHref: "http://localhost:3003",
   },
   {
     name: "Admin",
     description:
       "Administrative portal for region and group leadership. Manage locations, events, and organization settings.",
     href: "https://admin.f3nation.com",
+    localHref: "http://localhost:3002",
   },
   {
     name: "PAX Vault",
@@ -67,12 +73,14 @@ const APPS: App[] = [
     name: "Auth",
     description:
       "Shared SSO authentication powering F3 Nation apps. Secure, centralized sign-in for PAX across the ecosystem.",
+    localHref: "http://localhost:3004",
   },
   {
     name: "API",
     description:
       "The F3 Nation data API. Unified backend powering the map, admin, and other apps — the single source of truth for F3 data.",
     href: "https://api.f3nation.com",
+    localHref: "http://localhost:3001",
   },
   {
     name: "Status",
@@ -104,13 +112,14 @@ function ArrowIcon() {
 
 function AppCard({ app }: { app: App }) {
   const label = app.linkLabel ?? "Open";
+  const resolvedHref = isLocal ? (app.localHref ?? app.href) : app.href;
   const inner = (
     <>
       <h2 className="mb-2 text-lg font-semibold text-foreground">{app.name}</h2>
       <p className="mb-4 flex-1 text-sm text-muted-foreground">
         {app.description}
       </p>
-      {app.href && (
+      {resolvedHref && (
         <span className="inline-flex items-center gap-1 text-sm font-medium text-primary">
           {label} <ArrowIcon />
         </span>
@@ -118,7 +127,7 @@ function AppCard({ app }: { app: App }) {
     </>
   );
 
-  if (!app.href) {
+  if (!resolvedHref) {
     return (
       <div className="flex flex-col rounded-lg border border-border bg-card p-6 shadow-sm">
         {inner}
@@ -128,7 +137,7 @@ function AppCard({ app }: { app: App }) {
 
   return (
     <a
-      href={app.href}
+      href={resolvedHref}
       target="_blank"
       rel="noopener noreferrer"
       className="group flex flex-col rounded-lg border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md"
