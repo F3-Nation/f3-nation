@@ -1113,7 +1113,7 @@ export const authProviderSchema = pgSchema("auth");
 export const oauthClients = authProviderSchema.table("oauth_clients", {
   id: text().primaryKey().notNull(),
   name: text().notNull(),
-  clientSecretHash: text("client_secret_hash").notNull(),
+  clientSecretHash: text("client_secret_hash"),
   redirectUris: text("redirect_uris").notNull(), // JSON array
   allowedOrigin: text("allowed_origin").notNull(),
   scopes: text().default("openid profile email"),
@@ -1121,6 +1121,7 @@ export const oauthClients = authProviderSchema.table("oauth_clients", {
     .default(sql`timezone('utc'::text, now())`)
     .notNull(),
   isActive: boolean("is_active").default(true).notNull(),
+  isPublic: boolean("is_public").default(false).notNull(),
 });
 
 export const oauthAuthorizationCodes = authProviderSchema.table(

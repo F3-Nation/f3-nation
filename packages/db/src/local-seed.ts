@@ -228,6 +228,19 @@ const LOCAL_OAUTH_CLIENTS = [
     scopes: "openid profile email",
     isActive: true,
   },
+  {
+    id: "scalar-docs-local",
+    name: "Scalar API Docs (local dev)",
+    // Public client — no secret, PKCE only
+    clientSecretHash: null,
+    redirectUris: JSON.stringify([
+      "http://localhost:3001/docs/oauth2-redirect",
+    ]),
+    allowedOrigin: "http://localhost:3001",
+    scopes: "openid profile email",
+    isActive: true,
+    isPublic: true,
+  },
 ];
 
 // ---------------------------------------------------------------------------

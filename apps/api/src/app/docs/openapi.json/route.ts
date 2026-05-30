@@ -49,6 +49,11 @@ export async function GET(request: Request) {
   const derivedBase = `${proto}://${host}`;
   const baseUrl = (envBase ?? derivedBase).replace(/\/$/, "");
 
+  // Auth server base URL (e.g. https://auth.f3nation.com or http://localhost:3004)
+  const authIssuer = (
+    process.env.NEXT_PUBLIC_AUTH_URL ?? "http://localhost:3004"
+  ).replace(/\/$/, "");
+
   const generator = new OpenAPIGenerator({
     schemaConverters: [new ZodToJsonSchemaConverter()],
   });
@@ -125,7 +130,7 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
       },
     },
     servers: [{ url: `${baseUrl}` }],
-    security: [{ bearerAuth: [] }],
+    security: [{ oauth2: ["openid", "profile", "email"] }, { bearerAuth: [] }],
     // @ts-expect-error -- https://github.com/scalar/scalar/pull/1305
     "x-tagGroups": [
       {
@@ -207,6 +212,20 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
 
     components: {
       securitySchemes: {
+        oauth2: {
+          type: "oauth2",
+          flows: {
+            authorizationCode: {
+              authorizationUrl: `${authIssuer}/api/oauth/authorize`,
+              tokenUrl: `${authIssuer}/api/oauth/token`,
+              scopes: {
+                openid: "OpenID identity",
+                profile: "F3 name and profile",
+                email: "Email address",
+              },
+            },
+          },
+        },
         bearerAuth: {
           type: "http",
           scheme: "bearer",

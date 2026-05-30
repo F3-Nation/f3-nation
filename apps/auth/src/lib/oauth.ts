@@ -92,7 +92,7 @@ export async function createAuthorizationCode(params: {
 export async function exchangeAuthorizationCode(params: {
   code: string;
   clientId: string;
-  clientSecret: string;
+  clientSecret: string | null;
   redirectUri: string;
   codeVerifier?: string;
 }) {
@@ -110,13 +110,21 @@ export async function exchangeAuthorizationCode(params: {
   if (authCode.redirectUri !== params.redirectUri)
     return { error: "invalid_grant" as const };
 
-  // Validate client secret (compare hash)
   const client = await getClient(params.clientId);
   if (!client) return { error: "invalid_client" as const };
-  if (
-    !constantTimeEqual(client.clientSecretHash, hashSecret(params.clientSecret))
-  )
-    return { error: "invalid_client" as const };
+
+  // Validate client secret — skip for public clients (PKCE-only)
+  if (!client.isPublic) {
+    if (!params.clientSecret) return { error: "invalid_client" as const };
+    if (
+      !client.clientSecretHash ||
+      !constantTimeEqual(
+        client.clientSecretHash,
+        hashSecret(params.clientSecret),
+      )
+    )
+      return { error: "invalid_client" as const };
+  }
 
   // PKCE verification
   if (authCode.codeChallenge) {
@@ -182,15 +190,24 @@ export async function exchangeAuthorizationCode(params: {
 export async function exchangeRefreshToken(params: {
   refreshToken: string;
   clientId: string;
-  clientSecret: string;
+  clientSecret: string | null;
 }) {
   // Validate client
   const client = await getClient(params.clientId);
   if (!client) return { error: "invalid_client" as const };
-  if (
-    !constantTimeEqual(client.clientSecretHash, hashSecret(params.clientSecret))
-  )
-    return { error: "invalid_client" as const };
+
+  // Skip secret check for public clients (PKCE-only)
+  if (!client.isPublic) {
+    if (!params.clientSecret) return { error: "invalid_client" as const };
+    if (
+      !client.clientSecretHash ||
+      !constantTimeEqual(
+        client.clientSecretHash,
+        hashSecret(params.clientSecret),
+      )
+    )
+      return { error: "invalid_client" as const };
+  }
 
   // Find refresh token
   const [existing] = await db

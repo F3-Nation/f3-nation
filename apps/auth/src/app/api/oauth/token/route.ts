@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-import { exchangeAuthorizationCode, exchangeRefreshToken } from "~/lib/oauth";
+import {
+  exchangeAuthorizationCode,
+  exchangeRefreshToken,
+  getClient,
+} from "~/lib/oauth";
 import { getCorsHeaders, handlePreflight } from "~/lib/cors";
 import { rateLimit } from "~/lib/rate-limit";
 
@@ -50,7 +54,16 @@ export async function POST(request: NextRequest) {
     const redirectUri = formData.get("redirect_uri") as string | null;
     const codeVerifier = formData.get("code_verifier") as string | null;
 
-    if (!code || !redirectUri || !resolvedClientSecret) {
+    if (!code || !redirectUri) {
+      return NextResponse.json(
+        { error: "invalid_request" },
+        { status: 400, headers: corsHeaders },
+      );
+    }
+
+    // Public clients don't send a client_secret; require it only for confidential clients
+    const client = await getClient(resolvedClientId);
+    if (!client?.isPublic && !resolvedClientSecret) {
       return NextResponse.json(
         { error: "invalid_request" },
         { status: 400, headers: corsHeaders },
@@ -60,7 +73,7 @@ export async function POST(request: NextRequest) {
     const result = await exchangeAuthorizationCode({
       code,
       clientId: resolvedClientId,
-      clientSecret: resolvedClientSecret,
+      clientSecret: resolvedClientSecret ?? null,
       redirectUri,
       codeVerifier: codeVerifier ?? undefined,
     });
@@ -78,7 +91,16 @@ export async function POST(request: NextRequest) {
   if (grantType === "refresh_token") {
     const refreshToken = formData.get("refresh_token") as string | null;
 
-    if (!refreshToken || !resolvedClientSecret) {
+    if (!refreshToken) {
+      return NextResponse.json(
+        { error: "invalid_request" },
+        { status: 400, headers: corsHeaders },
+      );
+    }
+
+    // Public clients don't send a client_secret
+    const client = await getClient(resolvedClientId);
+    if (!client?.isPublic && !resolvedClientSecret) {
       return NextResponse.json(
         { error: "invalid_request" },
         { status: 400, headers: corsHeaders },
@@ -88,7 +110,7 @@ export async function POST(request: NextRequest) {
     const result = await exchangeRefreshToken({
       refreshToken,
       clientId: resolvedClientId,
-      clientSecret: resolvedClientSecret,
+      clientSecret: resolvedClientSecret ?? null,
     });
 
     if ("error" in result) {
