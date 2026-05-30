@@ -88,7 +88,15 @@ export async function GET(request: NextRequest) {
     .where(eq(users.id, userId))
     .limit(1);
 
-  const meta = (dbUser?.meta ?? {}) as Record<string, unknown>;
+  // User not found in DB — session is stale (e.g. after a DB wipe). Force re-login.
+  if (!dbUser) {
+    const callbackUrl = `${publicUrl}${reqUrl.pathname}${reqUrl.search}`;
+    const loginUrl = new URL("/login/email", publicUrl);
+    loginUrl.searchParams.set("callbackUrl", callbackUrl);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  const meta = (dbUser.meta ?? {}) as Record<string, unknown>;
   if (!meta.onboarding_completed) {
     const callbackUrl = `${publicUrl}${reqUrl.pathname}${reqUrl.search}`;
     const onboardingUrl = new URL("/onboarding", publicUrl);

@@ -1,5 +1,7 @@
 # ---------- Stage 1: Prune monorepo ----------
+ARG TURBO_VERSION=2
 FROM --platform=linux/amd64 node:24-alpine AS builder
+ARG TURBO_VERSION
 
 ENV TURBO_TELEMETRY_DISABLED=1
 ENV PNPM_HOME="/pnpm"
@@ -9,13 +11,14 @@ RUN apk add --no-cache libc6-compat && apk update
 WORKDIR /app
 
 RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
-RUN pnpm add -g turbo@^1.12.3
+RUN npm install -g turbo@${TURBO_VERSION}
 
 COPY . .
 RUN turbo prune f3-admin --docker
 
 # ---------- Stage 2: Install + build ----------
 FROM --platform=linux/amd64 node:24-alpine AS installer
+ARG TURBO_VERSION
 
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV TURBO_TELEMETRY_DISABLED=1
@@ -26,7 +29,6 @@ RUN apk add --no-cache libc6-compat openssl && apk update
 WORKDIR /app
 
 RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
-RUN pnpm add -g turbo@^1.12.3
 
 # Install dependencies from pruned lockfile
 COPY --from=builder /app/out/json/ .

@@ -1,4 +1,3 @@
-export { getStorage, getBucketName } from "./client";
 export { uploadFile } from "./upload";
 export type { UploadFileOptions } from "./upload";
 export { deleteFile } from "./delete";
