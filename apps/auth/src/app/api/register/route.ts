@@ -16,6 +16,13 @@ interface RegisterBody {
   emergencyNotes?: string;
 }
 
+/** Strip the +1 country code from US E.164 numbers — most users are US-based
+ *  and the DB stores bare 10-digit numbers for domestic numbers. */
+function normalizePhone(phone: string | undefined): string | undefined {
+  if (!phone) return undefined;
+  return phone.startsWith("+1") ? phone.slice(2) : phone;
+}
+
 export async function POST(request: NextRequest) {
   const ip = request.headers.get("x-forwarded-for") ?? "unknown";
   const { allowed } = rateLimit(`register:${ip}`, 5, 60 * 1000);
@@ -45,12 +52,12 @@ export async function POST(request: NextRequest) {
     lastName: body.lastName.trim(),
     ...(body.f3Name?.trim() && { f3Name: body.f3Name.trim() }),
     ...(body.homeRegionId && { homeRegionId: body.homeRegionId }),
-    ...(body.phone?.trim() && { phone: body.phone.trim() }),
+    ...(body.phone?.trim() && { phone: normalizePhone(body.phone.trim()) }),
     ...(body.emergencyContact?.trim() && {
       emergencyContact: body.emergencyContact.trim(),
     }),
     ...(body.emergencyPhone?.trim() && {
-      emergencyPhone: body.emergencyPhone.trim(),
+      emergencyPhone: normalizePhone(body.emergencyPhone.trim()),
     }),
     ...(body.emergencyNotes?.trim() && {
       emergencyNotes: body.emergencyNotes.trim(),
