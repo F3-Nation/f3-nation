@@ -224,7 +224,7 @@ credential.
 These are enforced; AI-generated changes must comply. Full detail in
 [`AGENTS.md`](../AGENTS.md).
 
-- **Runtime:** Node ≥ 24.14 (`.nvmrc`), pnpm 10, Turborepo. If `pnpm` isn't on
+- **Runtime:** Node ≥ 24.14 (`.nvmrc`), pnpm 11, Turborepo. If `pnpm` isn't on
   `PATH`: `. ~/.nvm/nvm.sh && nvm use`.
 - **Cross-platform:** scripts use `#!/usr/bin/env bash` and must run on macOS and
   WSL 2. No macOS-only (`brew`, `open`) or Windows-only assumptions without a

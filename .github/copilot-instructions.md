@@ -33,11 +33,11 @@ If asked to **audit** the repo and file issues, follow
 
 ## Conventions
 
-- Node ≥ 24.14, pnpm 10, Turborepo. TypeScript with explicit types. Prettier +
+- Node ≥ 24.14, pnpm 11, Turborepo. TypeScript with explicit types. Prettier +
   ESLint are authoritative. kebab-case files, PascalCase components,
   `use`-prefixed hooks.
-- Commits: Conventional Commits with a **required scope** (`<type>(<scope>):
-<subject>`), enforced by commitlint. Scopes are defined in
+- Commits: Conventional Commits with a **required scope**
+  (`<type>(<scope>): <subject>`), enforced by commitlint. Scopes are defined in
   `commitlint.config.mjs`.
 - Before a PR: `pnpm lint`, `pnpm format`, `pnpm typecheck`, and relevant
   `pnpm test` must pass.
