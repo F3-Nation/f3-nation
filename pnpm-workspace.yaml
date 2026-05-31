@@ -80,7 +80,7 @@ catalog:
   dayjs: ^1.11.10
   dompurify: ^3.1.7
   dotenv: ^16.3.2
-  dotenv-cli: ^11.0.0
+  dotenv-cli: ^7.3.0
   drizzle-kit: ^0.31.10
   drizzle-orm: ^0.45.2
   drizzle-zod: ^0.7.1
