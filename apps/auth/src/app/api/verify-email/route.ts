@@ -22,6 +22,7 @@ export async function POST(request: NextRequest) {
     email?: string;
     code?: string;
     action?: string;
+    callbackUrl?: string;
   };
 
   if (!body.email) {
@@ -40,7 +41,7 @@ export async function POST(request: NextRequest) {
   // Send code
   if (body.action === "send" || !body.code) {
     try {
-      await sendEmailCode(email);
+      await sendEmailCode(email, body.callbackUrl);
       return NextResponse.json({ sent: true });
     } catch (err: unknown) {
       // Log the real error for GCP observability

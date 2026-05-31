@@ -3,12 +3,14 @@
 import { Suspense, useState, useEffect, useRef } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { isValidPhoneNumber } from "libphonenumber-js";
 import type { PhoneCountry } from "~/lib/phone";
 
 import Image from "next/image";
 
 import { detectPhoneCountry } from "~/lib/phone";
 import { PhoneField } from "~/app/components/PhoneField";
+import { isValidCallbackUrl } from "~/lib/callback-url";
 
 interface Region {
   id: number;
@@ -99,6 +101,21 @@ function RegisterForm() {
       return;
     }
 
+    if (phone && !isValidPhoneNumber(phone, phoneCountry)) {
+      setError("Please enter a valid phone number.");
+      setLoading(false);
+      return;
+    }
+
+    if (
+      emergencyPhone &&
+      !isValidPhoneNumber(emergencyPhone, emergencyPhoneCountry)
+    ) {
+      setError("Please enter a valid emergency phone number.");
+      setLoading(false);
+      return;
+    }
+
     // Create user via API
     const res = await fetch("/api/register", {
       method: "POST",
@@ -136,7 +153,10 @@ function RegisterForm() {
       return;
     }
 
-    router.push(callbackUrl);
+    const safeUrl = isValidCallbackUrl(callbackUrl, window.location.origin)
+      ? callbackUrl
+      : "/";
+    router.push(safeUrl);
   }
 
   const inputClass =
