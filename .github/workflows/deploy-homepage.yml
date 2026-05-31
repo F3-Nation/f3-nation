@@ -5,8 +5,11 @@ on:
     tags:
       - "homepage@*"
 
+# Single GitHub Pages site: serialize all deploys through one group so a slower
+# older-tag run can't publish after a newer one. (cancel-in-progress: false lets
+# an in-flight production deploy finish.)
 concurrency:
-  group: deploy-homepage-${{ github.ref_name }}
+  group: deploy-homepage
   cancel-in-progress: false
 
 permissions:
