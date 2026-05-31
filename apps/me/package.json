@@ -25,6 +25,7 @@
     "@acme/ui": "workspace:^0.1.0",
     "@orpc/client": "catalog:",
     "@orpc/server": "catalog:",
+    "@t3-oss/env-nextjs": "catalog:",
     "clsx": "catalog:",
     "jose": "catalog:",
     "next": "catalog:",

@@ -233,7 +233,7 @@ export function ProfileForm({ user, regions }: ProfileFormProps) {
               />
             </div>
           </div>
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className={cn("space-y-2", dc("start_date_override"))}>
               <Label htmlFor="startDate">Start Date</Label>
               <Input
