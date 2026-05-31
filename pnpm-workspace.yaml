@@ -147,7 +147,7 @@ overrides:
   braces: ">=3.0.3"
   cross-spawn: ">=7.0.5"
   fast-uri: ">=3.1.1"
-  next: ">=15.5.18"
+  next: "^15.5.18"
   "@vis.gl/react-google-maps": 1.5.2
 peerDependencyRules:
   allowedVersions:
