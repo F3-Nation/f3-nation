@@ -20,7 +20,7 @@ interface RegisterBody {
  *  and the DB stores bare 10-digit numbers for domestic numbers. */
 function normalizePhone(phone: string | undefined): string | undefined {
   if (!phone) return undefined;
-  return phone.startsWith("+1") ? phone.slice(2) : phone;
+  return phone.startsWith("+1") ? phone.slice(2).trim() : phone;
 }
 
 export async function POST(request: NextRequest) {

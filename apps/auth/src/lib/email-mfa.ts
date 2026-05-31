@@ -34,7 +34,7 @@ export async function sendEmailCode(
   callbackUrl?: string,
 ): Promise<void> {
   // Normalize early so all downstream usage (DB keys, magic link URL) is consistent.
-  email = email.toLowerCase().trim();
+  const normalizedEmail = email.toLowerCase().trim();
 
   const code = crypto.randomInt(100000, 999999).toString();
   const codeHash = hashCode(code);
@@ -49,7 +49,7 @@ export async function sendEmailCode(
     .set({ consumedAt: new Date().toISOString() })
     .where(
       and(
-        eq(emailMfaCodes.email, email.toLowerCase()),
+        eq(emailMfaCodes.email, normalizedEmail),
         isNull(emailMfaCodes.consumedAt),
         gt(emailMfaCodes.expiresAt, new Date().toISOString()),
       ),
@@ -58,7 +58,7 @@ export async function sendEmailCode(
   // Insert new code
   await db.insert(emailMfaCodes).values({
     id,
-    email: email.toLowerCase(),
+    email: normalizedEmail,
     codeHash,
     expiresAt,
     attemptCount: 0,
@@ -69,9 +69,13 @@ export async function sendEmailCode(
   // Only embed the callbackUrl if it is same-origin or a relative path;
   // this prevents open-redirect attacks via crafted magic links.
   const authUrl = env.NEXT_PUBLIC_AUTH_URL;
-  const verifyParams = new URLSearchParams({ email, code });
+  const verifyParams = new URLSearchParams({ email: normalizedEmail, code });
   if (callbackUrl && isValidCallbackUrl(callbackUrl, authUrl)) {
     verifyParams.set("callbackUrl", callbackUrl);
+  } else if (callbackUrl) {
+    console.warn("sendEmailCode: dropping invalid callbackUrl", {
+      callbackUrl,
+    });
   }
   const magicLink = `${authUrl}/login/email/verify?${verifyParams.toString()}`;
 
@@ -79,7 +83,7 @@ export async function sendEmailCode(
 
   await transporter.sendMail({
     from: env.EMAIL_FROM,
-    to: email,
+    to: normalizedEmail,
     subject: "Your F3 Nation sign-in code",
     html: `
       <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">

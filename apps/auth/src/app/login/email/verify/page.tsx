@@ -64,8 +64,13 @@ function VerifyEmailForm() {
       }
 
       // Success — redirect. Guard against open-redirect: only follow
-      // same-origin or relative callbackUrls.
-      const safeUrl = isValidCallbackUrl(callbackUrl, window.location.origin)
+      // same-origin or relative callbackUrls. Use the canonical auth URL
+      // (not window.location.origin) so the check stays consistent with the
+      // server-side guard in sendEmailCode even when served behind a proxy.
+      const safeUrl = isValidCallbackUrl(
+        callbackUrl,
+        process.env.NEXT_PUBLIC_AUTH_URL ?? window.location.origin,
+      )
         ? callbackUrl
         : "/";
       router.push(safeUrl);

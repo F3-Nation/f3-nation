@@ -10,6 +10,7 @@ import Image from "next/image";
 
 import { detectPhoneCountry } from "~/lib/phone";
 import { PhoneField } from "~/app/components/PhoneField";
+import { isValidCallbackUrl } from "~/lib/callback-url";
 
 interface Region {
   id: number;
@@ -152,7 +153,10 @@ function RegisterForm() {
       return;
     }
 
-    router.push(callbackUrl);
+    const safeUrl = isValidCallbackUrl(callbackUrl, window.location.origin)
+      ? callbackUrl
+      : "/";
+    router.push(safeUrl);
   }
 
   const inputClass =
