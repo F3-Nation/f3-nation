@@ -1,0 +1,203 @@
+name: Reusable Cloud Run Deploy
+
+# Reusable pipeline shared by every Cloud Run app (me, admin, auth, ...).
+# ci-gate -> build image once -> deploy staging -> promote + deploy prod.
+# Callers (deploy-*.yml) only pass app-specific inputs; behavior stays identical
+# across apps so the workflows can never drift again.
+
+on:
+  workflow_call:
+    inputs:
+      image_name:
+        description: "Artifact Registry image name (e.g. f3-me)"
+        required: true
+        type: string
+      service_name:
+        description: "Cloud Run service name"
+        required: true
+        type: string
+      staging_project:
+        description: "GCP project ID for staging"
+        required: true
+        type: string
+      prod_project:
+        description: "GCP project ID for production"
+        required: true
+        type: string
+      tag_prefix:
+        description: "Tag prefix to strip for the image version (e.g. me@)"
+        required: true
+        type: string
+      dockerfile:
+        description: "Path to the app Dockerfile"
+        required: true
+        type: string
+      staging_environment:
+        description: "GitHub Environment name for staging"
+        required: true
+        type: string
+      prod_environment:
+        description: "GitHub Environment name for production"
+        required: true
+        type: string
+      staging_url:
+        description: "Public staging URL"
+        required: true
+        type: string
+      prod_url:
+        description: "Public production URL"
+        required: true
+        type: string
+      region:
+        description: "GCP region"
+        required: false
+        type: string
+        default: us-east1
+      ar_repo:
+        description: "Artifact Registry repository"
+        required: false
+        type: string
+        default: cloud-run-builds
+
+jobs:
+  # ── Gate: wait for the full CI check set to pass on this commit ──
+  ci-gate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: read
+    steps:
+      - name: Wait for CI to pass
+        uses: lewagon/wait-on-check-action@9312864dfbc9fd208e9c0417843430751c042800 # v1.7.0
+        with:
+          ref: ${{ github.sha }}
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          check-regexp: "^(build|lint|typecheck|format-check|test-coverage)$"
+          wait-interval: 15
+          allowed-conclusions: success
+
+  # ── Build container image (once) ──
+  build:
+    needs: ci-gate
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.staging_environment }}
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Authenticate to GCP (staging project for AR)
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SA }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Authorize Docker to Artifact Registry
+        run: gcloud auth configure-docker ${{ inputs.region }}-docker.pkg.dev --quiet
+
+      - name: Extract tag version
+        id: meta
+        env:
+          TAG_PREFIX: ${{ inputs.tag_prefix }}
+          REGION: ${{ inputs.region }}
+          STAGING_PROJECT: ${{ inputs.staging_project }}
+          AR_REPO: ${{ inputs.ar_repo }}
+          IMAGE_NAME: ${{ inputs.image_name }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"          # e.g. me@1.2.3
+          VERSION="${TAG#"${TAG_PREFIX}"}"  # e.g. 1.2.3
+          IMAGE="${REGION}-docker.pkg.dev/${STAGING_PROJECT}/${AR_REPO}/${IMAGE_NAME}:${VERSION}"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push Docker image
+        env:
+          DOCKERFILE: ${{ inputs.dockerfile }}
+        run: |
+          TURBO_VERSION=$(grep '^  turbo:' pnpm-workspace.yaml | awk '{print $2}')
+          docker build \
+            --file "${DOCKERFILE}" \
+            --build-arg TURBO_VERSION="${TURBO_VERSION}" \
+            --tag "${{ steps.meta.outputs.image }}" \
+            .
+          docker push "${{ steps.meta.outputs.image }}"
+
+  # ── Deploy to staging ──
+  deploy-staging:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: ${{ inputs.staging_environment }}
+      url: ${{ inputs.staging_url }}
+    steps:
+      - name: Authenticate to GCP (staging)
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SA }}
+
+      - name: Deploy to Cloud Run (staging)
+        uses: google-github-actions/deploy-cloudrun@2028e2d7d30a78c6910e0632e48dd561b064884d # v3.0.1
+        with:
+          service: ${{ inputs.service_name }}
+          image: ${{ needs.build.outputs.image }}
+          region: ${{ inputs.region }}
+          project_id: ${{ inputs.staging_project }}
+          # deploy-cloudrun v3 defaults wait to false; keep waiting for the revision to be healthy
+          wait: "true"
+          # Env vars are set via Cloud Run secrets / env config (see scripts/cloud-run-env.sh)
+
+  # ── Deploy to production (requires approval) ──
+  deploy-prod:
+    needs: [build, deploy-staging]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: ${{ inputs.prod_environment }}
+      url: ${{ inputs.prod_url }}
+    steps:
+      - name: Authenticate to GCP (staging — pull image from staging AR)
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SA }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Promote image to production Artifact Registry
+        env:
+          REGION: ${{ inputs.region }}
+          PROD_PROJECT: ${{ inputs.prod_project }}
+          AR_REPO: ${{ inputs.ar_repo }}
+          IMAGE_NAME: ${{ inputs.image_name }}
+        run: |
+          STAGING_IMAGE="${{ needs.build.outputs.image }}"
+          PROD_IMAGE="${REGION}-docker.pkg.dev/${PROD_PROJECT}/${AR_REPO}/${IMAGE_NAME}:${STAGING_IMAGE##*:}"
+          gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
+          docker pull "${STAGING_IMAGE}"
+          docker tag "${STAGING_IMAGE}" "${PROD_IMAGE}"
+          docker push "${PROD_IMAGE}"
+          echo "prod_image=${PROD_IMAGE}" >> "$GITHUB_ENV"
+
+      - name: Deploy to Cloud Run (prod)
+        uses: google-github-actions/deploy-cloudrun@2028e2d7d30a78c6910e0632e48dd561b064884d # v3.0.1
+        with:
+          service: ${{ inputs.service_name }}
+          image: ${{ env.prod_image }}
+          region: ${{ inputs.region }}
+          project_id: ${{ inputs.prod_project }}
+          # deploy-cloudrun v3 defaults wait to false; keep waiting for the revision to be healthy
+          wait: "true"
