@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/F3-Nation/f3-nation/compare/me@1.2.1...me@1.3.0) (2026-05-31)
+
+
+### Features
+
+* **me:** fixed redirect loop, added google analytics, improved mobile rendering ([c8e5b61](https://github.com/F3-Nation/f3-nation/commit/c8e5b61b70406b41691b62e19641517f8a4ef967))
+
 ## [1.2.1](https://github.com/F3-Nation/f3-nation/compare/me@1.2.0...me@1.2.1) (2026-05-29)
 
 
