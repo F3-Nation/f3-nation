@@ -44,7 +44,7 @@
     "axios": "catalog:",
     "dayjs": "catalog:",
     "dompurify": "catalog:",
-    "dotenv-cli": "^7.3.0",
+    "dotenv-cli": "catalog:",
     "geist": "catalog:",
     "handlebars": "catalog:",
     "handlebars-loader": "catalog:",

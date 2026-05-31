@@ -534,8 +534,8 @@ importers:
         specifier: 'catalog:'
         version: 3.3.3
       dotenv-cli:
-        specifier: ^7.3.0
-        version: 7.4.4
+        specifier: 'catalog:'
+        version: 11.0.0
       geist:
         specifier: 'catalog:'
         version: 1.7.0(next@15.5.14(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.60.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))
@@ -688,8 +688,8 @@ importers:
         specifier: 'catalog:'
         version: 3.3.3
       dotenv-cli:
-        specifier: ^7.3.0
-        version: 7.4.4
+        specifier: 'catalog:'
+        version: 11.0.0
       geist:
         specifier: 'catalog:'
         version: 1.7.0(next@15.5.14(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.60.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))
@@ -1069,8 +1069,8 @@ importers:
         specifier: 'catalog:'
         version: 3.3.3
       dotenv-cli:
-        specifier: ^7.3.0
-        version: 7.4.4
+        specifier: 'catalog:'
+        version: 11.0.0
       geist:
         specifier: 'catalog:'
         version: 1.7.0(next@15.5.14(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.60.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))
@@ -1478,8 +1478,8 @@ importers:
         specifier: workspace:*
         version: link:../shared
       dotenv-cli:
-        specifier: ^7.3.0
-        version: 7.4.4
+        specifier: 'catalog:'
+        version: 11.0.0
       drizzle-orm:
         specifier: 'catalog:'
         version: 0.45.2(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(pg@8.20.0)(postgres@3.4.9)
@@ -6644,14 +6644,6 @@ packages:
   dotenv-cli@11.0.0:
     resolution: {integrity: sha512-r5pA8idbk7GFWuHEU7trSTflWcdBpQEK+Aw17UrSHjS6CReuhrrPcyC3zcQBPQvhArRHnBo/h6eLH1fkCvNlww==}
     hasBin: true
-
-  dotenv-cli@7.4.4:
-    resolution: {integrity: sha512-XkBYCG0tPIes+YZr4SpfFv76SQrV/LeCE8CI7JSEMi3VR9MvTihCGTOtbIexD6i2mXF+6px7trb1imVCXSNMDw==}
-    hasBin: true
-
-  dotenv-expand@10.0.0:
-    resolution: {integrity: sha512-GopVGCpVS1UKH75VKHGuQFqS1Gusej0z4FyQkPdwjil2gNIv+LNsqBlboOzpJFZKVT95GkCyWJbBSdFEFUWI2A==}
-    engines: {node: '>=12'}
 
   dotenv-expand@12.0.3:
     resolution: {integrity: sha512-uc47g4b+4k/M/SeaW1y4OApx+mtLWl92l5LMPP0GNXctZqELk+YGgOPIIC5elYmUH4OuoK3JLhuRUYegeySiFA==}
@@ -14573,15 +14565,6 @@ snapshots:
       dotenv: 17.4.2
       dotenv-expand: 12.0.3
       minimist: 1.2.8
-
-  dotenv-cli@7.4.4:
-    dependencies:
-      cross-spawn: 7.0.6
-      dotenv: 16.6.1
-      dotenv-expand: 10.0.0
-      minimist: 1.2.8
-
-  dotenv-expand@10.0.0: {}
 
   dotenv-expand@12.0.3:
     dependencies:
