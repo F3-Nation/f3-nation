@@ -99,7 +99,7 @@ export function UserSelect({ value, onChange }: UserSelectProps) {
         onKeyDown={handleTriggerKeyDown}
       >
         <span
-          className={`truncate ${value && selectedUser ? "" : "text-muted-foreground"}`}
+          className={`min-w-0 truncate ${value && selectedUser ? "" : "text-muted-foreground"}`}
         >
           {selectedUser ? displayName(selectedUser) : "Select a person..."}
         </span>
