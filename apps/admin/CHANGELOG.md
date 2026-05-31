@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/F3-Nation/f3-nation/compare/admin@1.1.1...admin@1.2.0) (2026-05-31)
+
+
+### Features
+
+* **storage,db,auth,admin:** fixed turbo install, enhanced storage and local seed data ([#334](https://github.com/F3-Nation/f3-nation/issues/334)) ([249039b](https://github.com/F3-Nation/f3-nation/commit/249039b241142bb2a956b23c4f647db561810bba))
+
 ## [1.1.1](https://github.com/F3-Nation/f3-nation/compare/admin@1.1.0...admin@1.1.1) (2026-05-29)
 
 
