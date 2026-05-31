@@ -60,8 +60,7 @@ catalog:
   "@types/google.maps": ^3.64.1
   "@types/lodash": ^4.14.195
   "@types/node": ^24.12.4
-  "@types/nodemailer": ^6.4.17
-  "@types/nodemailer-smtp-transport": ^2.7.8
+  "@types/nodemailer": ^8.0.0
   "@types/pg": ^8.10.9
   "@types/react": ^18.3.1
   "@types/react-dom": ^18.3.1
@@ -71,7 +70,7 @@ catalog:
   "@vitejs/plugin-react": ^5.2.0
   "@vitest/coverage-v8": ^3.2.4
   autoprefixer: ^10.5.0
-  axios: ^1.7.4
+  axios: ^1.16.1
   class-variance-authority: ^0.7.0
   clsx: ^2.1.0
   cmdk: ^0.2.1
@@ -104,11 +103,11 @@ catalog:
   lodash: ^4.17.21
   lottie-react: ^2.4.0
   lucide-react: ^0.557.0
-  next: ^15.3.6
+  next: ^15.5.18
   next-auth: 5.0.0-beta.25
   next-plausible: ^3.12.0
   next-themes: ^0.4.4
-  nodemailer: ^6.10.0
+  nodemailer: ^8.0.10
   pg: ^8.11.3
   postcss: ^8.5.15
   postgres: ^3.4.3
@@ -144,9 +143,11 @@ catalog:
   zod: ^3.25.76
   zustand: ^4.5.2
 overrides:
-  axios: ">=1.7.4"
+  axios: ">=1.16.1"
   braces: ">=3.0.3"
   cross-spawn: ">=7.0.5"
+  fast-uri: ">=3.1.1"
+  next: ">=15.5.18"
   "@vis.gl/react-google-maps": 1.5.2
 peerDependencyRules:
   allowedVersions:
