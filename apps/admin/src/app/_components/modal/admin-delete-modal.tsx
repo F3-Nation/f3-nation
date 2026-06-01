@@ -113,7 +113,9 @@ export default function AdminDeleteModal({
             : `Failed to deactivate ${dataTypeToName(data.type).toLowerCase()}`,
         );
       } else {
-        toast.error(`Failed to deactivate ${data.type}`);
+        toast.error(
+          `Failed to deactivate ${dataTypeToName(data.type).toLowerCase()}`,
+        );
       }
     } finally {
       setIsPending(false);

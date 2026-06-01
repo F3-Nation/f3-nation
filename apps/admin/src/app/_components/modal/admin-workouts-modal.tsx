@@ -159,6 +159,7 @@ export default function AdminWorkoutsModal({
         closeModal();
         toast.success(`Successfully ${actionTextPast} event`);
         router.refresh();
+        setIsSubmitting(false);
       },
       onError: (err) => {
         toast.error(

@@ -210,7 +210,7 @@ const columns: TableOptions<
     cell: (cell) => <Cell {...cell} />,
   },
   {
-    accessorKey: "status",
+    accessorKey: "isActive",
     meta: { name: "Status" },
     header: Header,
     cell: (cell) => {

@@ -170,6 +170,7 @@ export default function AdminLocationsModal({
                   setIsSubmitting(true);
                   if (!data?.regionId) {
                     toast.error("Region not found");
+                    setIsSubmitting(false);
                     return;
                   }
                   await crupdateLocation.mutateAsync({
