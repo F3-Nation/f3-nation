@@ -58,6 +58,13 @@ that app's `AGENTS.md`.
 - Name React components in PascalCase, prefix hooks with `use`, and use kebab-case for files/directories (e.g., `apps/map/src`).
 - Co-locate feature-specific assets and tests near their sources (e.g., `apps/map/src/app/(feature)/`).
 
+## GitHub Actions Conventions
+
+- **Pin third-party actions to a semver tag, not a commit SHA** (e.g. `actions/checkout@v6.0.2`, `pnpm/action-setup@v6.0.8`). Version tags keep workflows readable and let Dependabot/Renovate bump them cleanly. Do not pin to full 40-character commit SHAs.
+- Drive the Node version from `.nvmrc` via `actions/setup-node` (`node-version-file: .nvmrc`) — `.nvmrc` is the single source of truth. Never hardcode `node-version:` in a workflow.
+- Share toolchain setup through the composite action [`.github/actions/setup-node-pnpm`](.github/actions/setup-node-pnpm/action.yml) (pnpm + Node + pnpm-store cache + frozen install) instead of repeating setup steps per job.
+- The five CI check names (`format-check`, `lint`, `typecheck`, `build`, `test-coverage`) are referenced by the `dev` branch ruleset and by `check-regexp` in the deploy workflows — renaming a job requires updating both.
+
 ## Testing Guidelines
 
 - Use Vitest for unit and integration tests; name test files `*.test.ts[x]` and place under or near source code or in `__tests__`.
