@@ -76,7 +76,8 @@
       "dependsOn": ["^topo"]
     },
     "test": {
-      "dependsOn": ["^topo", "reset-test-db", "^reset-test-db"]
+      "dependsOn": ["^topo", "reset-test-db", "^reset-test-db"],
+      "outputs": ["coverage/**"]
     },
     "clean": {
       "cache": false

@@ -10,6 +10,13 @@ concurrency:
 
 env:
   CI: true
+  # Turbo remote cache (Vercel). TURBO_TOKEN is a secret; TURBO_TEAM is the
+  # Vercel team slug (repo variable). With both set, every job/run/rerun shares
+  # task outputs, so unchanged work short-circuits to FULL TURBO. Absent (e.g.
+  # fork PRs without secrets) Turbo silently falls back to local-only caching.
+  TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+  TURBO_TELEMETRY_DISABLED: 1
   # Database (for test jobs - matches PostgreSQL service)
   DATABASE_URL: postgres://postgres:postgres@localhost:5432/f3_test
   TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/f3_test
@@ -37,49 +44,29 @@ jobs:
   format-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v6.4.0
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/setup-node-pnpm
       - run: pnpm format
 
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v6.4.0
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/setup-node-pnpm
       - run: pnpm lint
 
   typecheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v6.4.0
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/setup-node-pnpm
       - run: pnpm typecheck
 
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v6.4.0
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/setup-node-pnpm
       - run: pnpm build
 
   test-coverage:
@@ -99,11 +86,6 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v6.4.0
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/setup-node-pnpm
       - run: pnpm test:coverage
