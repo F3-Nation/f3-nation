@@ -79,7 +79,6 @@
     "@types/lodash": "catalog:",
     "@types/node": "catalog:",
     "@types/nodemailer": "catalog:",
-    "@types/nodemailer-smtp-transport": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@types/supercluster": "catalog:",

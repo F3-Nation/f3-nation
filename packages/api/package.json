@@ -37,7 +37,7 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "next": ">=14 <16",
+    "next": ">=15.5.18 <16",
     "react": ">=18 <19",
     "react-dom": ">=18 <19"
   },
