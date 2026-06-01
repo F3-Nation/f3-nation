@@ -59,12 +59,15 @@ The API (`packages/api`, served via oRPC) defines procedure tiers in
 **most restrictive** tier that fits, and remember what each one actually
 guarantees:
 
-| Procedure            | Guarantee                                                                         |
-| -------------------- | --------------------------------------------------------------------------------- |
-| `publicProcedure`    | No auth. Rate-limited only. Safe for truly public, read-only data.                |
-| `protectedProcedure` | A valid session/credential exists. **Does _not_ check what that user may touch.** |
-| `editorProcedure`    | Caller has editor or admin role (somewhere).                                      |
-| `adminProcedure`     | Caller has admin role.                                                            |
+| Procedure                 | Guarantee                                                                                                                            |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `publicProcedure`         | No auth. Rate-limited only. Safe for truly public, read-only data.                                                                   |
+| `protectedProcedure`      | A valid session/credential exists. **Does _not_ check what that user may touch.**                                                    |
+| `editorProcedure`         | Caller has editor or admin role on **any** org. Resource-scoped auth (`checkHasRoleOnOrg`) is still required for specific resources. |
+| `adminProcedure`          | Caller has admin role on **any** org. Resource-scoped auth still required.                                                           |
+| `nationAdminProcedure`    | Caller has the nation-level admin role specifically.                                                                                 |
+| `revalidateAuthProcedure` | Accepts either a valid `SUPER_ADMIN_API_KEY` header or a nation admin session. Used for cache revalidation.                          |
+| `apiKeyProcedure`         | Accepts a valid API key (`x-api-key` header), either the super-admin key or a DB-registered key.                                     |
 
 ### The critical pitfall: `protectedProcedure` ≠ authorized
 
@@ -159,7 +162,7 @@ credential.
   var and keep credentials out of it entirely.
 - **Never bake secrets into Docker images.** Don't `COPY` a populated `.env` into
   the runner stage and don't `echo` token values during the build. Use build
-  secrets / runtime injection (Doppler at runtime, not baked layers).
+  secrets / runtime injection (GCP Secret Manager surfaced via Cloud Run env vars, not baked layers).
 - **No real PII in the repo** — seed scripts, fixtures, and tests use synthetic
   data (e.g. `dev-admin@f3local.dev`), never real members' emails. The repo is
   public.
@@ -216,34 +219,6 @@ credential.
   only as a best-effort optimization, and must be documented as such.
 - Add timeouts to outbound calls; make webhook/handlers idempotent; paginate or
   bound any "return all" query.
-
----
-
-## Repo conventions (quick reference)
-
-These are enforced; AI-generated changes must comply. Full detail in
-[`AGENTS.md`](../AGENTS.md).
-
-- **Runtime:** Node ≥ 24.14 (`.nvmrc`), pnpm 11, Turborepo. If `pnpm` isn't on
-  `PATH`: `. ~/.nvm/nvm.sh && nvm use`.
-- **Cross-platform:** scripts use `#!/usr/bin/env bash` and must run on macOS and
-  WSL 2. No macOS-only (`brew`, `open`) or Windows-only assumptions without a
-  Linux fallback.
-- **Language & style:** TypeScript with explicit types; Prettier
-  (`@acme/prettier-config`) and ESLint (`@acme/eslint-config`) are the source of
-  truth. Two-space indent. PascalCase components, `use`-prefixed hooks,
-  kebab-case files/dirs. Co-locate tests near sources.
-- **Validation:** Zod schemas in `packages/validators`; every oRPC procedure has
-  an `.input(...)` schema.
-- **Commits:** Conventional Commits with a **required scope**
-  (`<type>(<scope>): <subject>`), enforced by commitlint + Lefthook. Scopes are
-  defined in `commitlint.config.mjs`; add new workspace scopes there.
-- **Tests:** Vitest for unit/integration (`*.test.ts[x]`), Playwright for e2e in
-  `apps/map`. Reset DB before suites that mutate (`pnpm reset-test-db`). Prefer
-  fixtures over live services.
-- **Before a PR:** `pnpm lint`, `pnpm format` (or `format:fix`), `pnpm typecheck`,
-  and relevant `pnpm test` must all pass. Add screenshots for `apps/map` UI
-  changes; call out new migrations/env vars; never commit secrets.
 
 ---
 
