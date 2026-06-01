@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/renovate.json",
-  "extends": ["config:recommended"],
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigests"],
   "enabledManagers": ["github-actions", "npm"],
   "timezone": "America/New_York",
   "schedule": ["before 9am on Monday"],
@@ -11,11 +11,18 @@
   "prConcurrentLimit": 10,
   "packageRules": [
     {
-      "description": "Group all GitHub Actions updates together; auto-merge minor and patch",
-      "groupName": "GitHub Actions",
+      "description": "Group first-party GitHub Actions (actions/*); auto-merge minor and patch — low supply-chain risk",
+      "groupName": "GitHub Actions (first-party)",
       "matchDatasources": ["github-actions"],
+      "matchPackageNames": ["actions/*"],
       "automerge": true,
       "matchUpdateTypes": ["minor", "patch"]
+    },
+    {
+      "description": "Group third-party GitHub Actions; require manual review — these run with deploy secrets",
+      "groupName": "GitHub Actions (third-party)",
+      "matchDatasources": ["github-actions"],
+      "matchPackageNames": ["!actions/*"]
     },
     {
       "description": "Disable noisy peerDependency update PRs",
