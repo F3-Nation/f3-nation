@@ -190,9 +190,11 @@ In GitHub → repo Settings → **Environments**:
 
 ## 6. Add GitHub Environment Variables
 
-In GitHub → repo Settings → **Secrets and variables** → **Actions** → **Variables** tab, add the following to each environment (not repo-level):
+In GitHub → repo Settings → **Secrets and variables** → **Actions** → **Variables** tab, add the following to each environment (not repo-level).
 
-| Environment       | Variable       | Value                                                                                                 |
+> **Before filling in the table:** run the `echo` block at the bottom of this section to resolve the shell variables into their actual values — paste those resolved strings into the GitHub web UI, not the variable names themselves.
+
+| Environment       | Variable       | Value (shell variable — resolve via echo below)                                                       |
 | ----------------- | -------------- | ----------------------------------------------------------------------------------------------------- |
 | `$GH_STAGING_ENV` | `WIF_PROVIDER` | `projects/$WIF_PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions/providers/github` |
 | `$GH_STAGING_ENV` | `WIF_SA`       | `$STAGING_SA`                                                                                         |
