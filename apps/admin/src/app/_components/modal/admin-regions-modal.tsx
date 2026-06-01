@@ -126,8 +126,10 @@ export default function AdminRegionsModal({
   }, [logoPreviewUrl]);
 
   const crupdateRegion = useMutation(orpc.org.crupdate.mutationOptions());
-  const actionText = !!region?.id ? "update" : "add";
-  const actionTextPast = !!region?.id ? "updated" : "added";
+  const isEditing = !!region?.id;
+  const actionText = isEditing ? "update" : "add";
+  const actionTextPast = isEditing ? "updated" : "added";
+  const showDeleteButton = isEditing && region?.isActive !== false;
 
   return (
     <Dialog open={true} onOpenChange={() => closeModal()}>
@@ -500,23 +502,24 @@ export default function AdminRegionsModal({
                     )}
                   </Button>
                 </div>
-                <div className="flex space-x-4 pt-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    // variant="link"
-                    onClick={() => {
-                      closeModal();
-                      openModal(ModalType.ADMIN_DELETE_CONFIRMATION, {
-                        id: region?.id ?? -1,
-                        type: DeleteType.REGION,
-                      });
-                    }}
-                    className="w-full"
-                  >
-                    Delete Region
-                  </Button>
-                </div>
+                {showDeleteButton && (
+                  <div className="flex space-x-4 pt-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        closeModal();
+                        openModal(ModalType.ADMIN_DELETE_CONFIRMATION, {
+                          id: region?.id ?? -1,
+                          type: DeleteType.REGION,
+                        });
+                      }}
+                      className="w-full"
+                    >
+                      Delete Region
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           </form>

@@ -132,6 +132,8 @@ export default function AdminEventTypesModal({
     }
   };
 
+  const showDeleteButton = isEditing && eventType?.isActive !== false;
+
   return (
     <Dialog open={true} onOpenChange={() => closeModal()}>
       <DialogContent
@@ -271,20 +273,22 @@ export default function AdminEventTypesModal({
                   )}
                 </Button>
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  closeModal();
-                  openModal(ModalType.ADMIN_DELETE_CONFIRMATION, {
-                    id: eventType?.id ?? -1,
-                    type: DeleteType.EVENT_TYPE,
-                  });
-                }}
-                className="w-full"
-              >
-                Delete Event
-              </Button>
+              {showDeleteButton ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    closeModal();
+                    openModal(ModalType.ADMIN_DELETE_CONFIRMATION, {
+                      id: eventType?.id ?? -1,
+                      type: DeleteType.EVENT_TYPE,
+                    });
+                  }}
+                  className="w-full"
+                >
+                  Delete Event Type
+                </Button>
+              ) : null}
             </div>
           </div>
         </Form>

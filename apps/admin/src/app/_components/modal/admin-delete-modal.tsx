@@ -66,7 +66,9 @@ export default function AdminDeleteModal({
     setIsPending(true);
     try {
       await mutation({ id });
-      toast.success(`Successfully deleted ${data.type.toLowerCase()}`);
+      toast.success(
+        `Successfully deleted ${dataTypeToName(data.type).toLowerCase()}`,
+      );
 
       // Invalidate queries and wait for completion so the table refreshes
       switch (data.type) {

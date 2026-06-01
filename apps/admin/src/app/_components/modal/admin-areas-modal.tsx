@@ -110,6 +110,7 @@ export default function AdminAreasModal({
   const isEditing = !!area?.id;
   const actionText = isEditing ? "update" : "add";
   const actionTextPast = isEditing ? "updated" : "added";
+  const showDeleteButton = isEditing && area?.isActive !== false;
 
   const crupdateArea = useMutation(
     orpc.org.crupdate.mutationOptions({
@@ -404,23 +405,24 @@ export default function AdminAreasModal({
                     )}
                   </Button>
                 </div>
-                <div className="flex space-x-4 pt-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    // variant="link"
-                    onClick={() => {
-                      closeModal();
-                      openModal(ModalType.ADMIN_DELETE_CONFIRMATION, {
-                        id: area?.id ?? -1,
-                        type: DeleteType.AREA,
-                      });
-                    }}
-                    className="w-full"
-                  >
-                    Delete Area
-                  </Button>
-                </div>
+                {showDeleteButton && (
+                  <div className="flex space-x-4 pt-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        closeModal();
+                        openModal(ModalType.ADMIN_DELETE_CONFIRMATION, {
+                          id: area?.id ?? -1,
+                          type: DeleteType.AREA,
+                        });
+                      }}
+                      className="w-full"
+                    >
+                      Delete Area
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           </form>

@@ -217,6 +217,8 @@ export default function AdminWorkoutsModal({
     });
   };
 
+  const showDeleteButton = isEditing && event?.isActive !== false;
+
   return (
     <Dialog open={true} onOpenChange={() => closeModal()}>
       <DialogContent
@@ -650,7 +652,7 @@ export default function AdminWorkoutsModal({
                     </Button>
                   </div>
                 </div>
-                {event?.id ? (
+                {showDeleteButton ? (
                   <Button
                     type="button"
                     variant="outline"

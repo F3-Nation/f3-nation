@@ -120,6 +120,7 @@ export default function AdminLocationsModal({
   const isEditing = !!location?.id;
   const actionText = isEditing ? "update" : "add";
   const actionTextPast = isEditing ? "updated" : "added";
+  const showDeleteButton = isEditing && location?.isActive !== false;
 
   const crupdateLocation = useMutation(
     orpc.location.crupdate.mutationOptions({
@@ -535,24 +536,26 @@ export default function AdminLocationsModal({
                       </Button>
                     </div>
                   </div>
-                  <div className="w-full px-2">
-                    <div className="flex space-x-4 pt-4">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => {
-                          closeModal();
-                          openModal(ModalType.ADMIN_DELETE_CONFIRMATION, {
-                            id: location?.id ?? -1,
-                            type: DeleteType.LOCATION,
-                          });
-                        }}
-                        className="w-full"
-                      >
-                        Delete Location
-                      </Button>
+                  {showDeleteButton && (
+                    <div className="w-full px-2">
+                      <div className="flex space-x-4 pt-4">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => {
+                            closeModal();
+                            openModal(ModalType.ADMIN_DELETE_CONFIRMATION, {
+                              id: location?.id ?? -1,
+                              type: DeleteType.LOCATION,
+                            });
+                          }}
+                          className="w-full"
+                        >
+                          Delete Location
+                        </Button>
+                      </div>
                     </div>
-                  </div>
+                  )}
                   {!isProd && (
                     <div className="w-full px-2">
                       <div className="flex space-x-4 pt-4">

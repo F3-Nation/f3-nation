@@ -109,6 +109,7 @@ export default function AdminSectorsModal({
   const isEditing = !!sector?.id;
   const actionText = isEditing ? "update" : "add";
   const actionTextPast = isEditing ? "updated" : "added";
+  const showDeleteButton = isEditing && sector?.isActive !== false;
 
   const crupdateSector = useMutation(
     orpc.org.crupdate.mutationOptions({
@@ -408,23 +409,24 @@ export default function AdminSectorsModal({
                     )}
                   </Button>
                 </div>
-                <div className="flex space-x-4 pt-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    // variant="link"
-                    onClick={() => {
-                      closeModal();
-                      openModal(ModalType.ADMIN_DELETE_CONFIRMATION, {
-                        id: sector?.id ?? -1,
-                        type: DeleteType.SECTOR,
-                      });
-                    }}
-                    className="w-full"
-                  >
-                    Delete Sector
-                  </Button>
-                </div>
+                {showDeleteButton && (
+                  <div className="flex space-x-4 pt-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        closeModal();
+                        openModal(ModalType.ADMIN_DELETE_CONFIRMATION, {
+                          id: sector?.id ?? -1,
+                          type: DeleteType.SECTOR,
+                        });
+                      }}
+                      className="w-full"
+                    >
+                      Delete Sector
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           </form>

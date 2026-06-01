@@ -158,6 +158,8 @@ export const PositionsTable = () => {
       id: "actions",
       enableHiding: false,
       cell: ({ row }) => {
+        if (!row.original.isActive) return null;
+
         const isNational = row.original.orgId === null;
         const canEdit =
           isNationAdmin ||

@@ -210,9 +210,27 @@ const columns: TableOptions<
     cell: (cell) => <Cell {...cell} />,
   },
   {
+    accessorKey: "status",
+    meta: { name: "Status" },
+    header: Header,
+    cell: (cell) => {
+      return (
+        <div className="flex items-center justify-start">
+          <span
+            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${cell.row.original.isActive ? "border-green-200 bg-green-100 text-green-700" : "border-red-200 bg-red-100 text-red-700"}`}
+          >
+            {cell.row.original.isActive ? "Active" : "Inactive"}
+          </span>
+        </div>
+      );
+    },
+  },
+  {
     id: "id",
     enableHiding: false,
     cell: ({ row }) => {
+      if (!row.original.isActive) return null;
+
       return (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
