@@ -1,8 +1,8 @@
 import { and, eq } from "..";
 import { schema } from "..";
 import type { AppDb } from "../client";
-import { findOrInsertOrg  } from "./core";
-import type {OrgIds} from "./core";
+import { findOrInsertOrg } from "./core";
+import type { OrgIds } from "./core";
 import { AOS, AREAS, NATION, REGIONS, SECTORS } from "./data";
 
 export async function seedOrgHierarchy(db: AppDb): Promise<OrgIds> {
