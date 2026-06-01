@@ -1,11 +1,33 @@
 # Repository Guidelines
 
+## AI-Assisted Development
+
+Most contributors work with AI assistants. This file (`AGENTS.md`) is the
+**canonical, tool-agnostic source of truth**; each assistant has a thin pointer
+file that routes back here so guidance never drifts:
+
+- **Claude** → [`CLAUDE.md`](CLAUDE.md)
+- **GitHub Copilot** → [`.github/copilot-instructions.md`](.github/copilot-instructions.md)
+- **Cursor** → [`.cursor/rules/f3-project-guidelines.mdc`](.cursor/rules/f3-project-guidelines.mdc)
+
+Deeper guidance lives in `docs/`:
+
+- [`docs/AI_DEVELOPMENT_GUIDE.md`](docs/AI_DEVELOPMENT_GUIDE.md) — secure patterns
+  and pitfalls to avoid (API authorization, auth/tokens, secrets, web security,
+  data layer, multi-instance reliability) with a pre-flight checklist.
+- [`docs/AI_AUDIT_PLAYBOOK.md`](docs/AI_AUDIT_PLAYBOOK.md) — how to run a
+  repository audit and file high-quality issues.
+
+When adding durable guidance, put it in `AGENTS.md` (or `docs/` for deep topics
+and link it) and keep the tool pointer files thin. Per-app specifics belong in
+that app's `AGENTS.md`.
+
 ## Project Structure & Module Organization
 
-- Use Node >=24.14 (see `.nvmrc`), pnpm 10, and Turborepo for workspace orchestration.
-- The `apps/map` directory contains the Next.js 15 map UI (port 3000).
-- Shared code is organized in `packages/`: `api` (tRPC routers), `auth` (auth helpers), `db` (Drizzle schema/migrations), `ui` (shared components), `validators` (Zod schemas), and `shared` (utilities).
-- Configuration files are in `tooling/`; pnpm patches go in `patches/`; Turbo generators live in `turbo/`.
+- Use Node >=24.14 (see `.nvmrc`), pnpm 11, and Turborepo for workspace orchestration.
+- `apps/` holds the deployable Next.js apps: `map` (the Next.js 15 map UI, port 3000), `admin`, `api`, `auth`, `homepage`, and `me`.
+- Shared code is organized in `packages/`: `api` (oRPC routers), `auth` (auth helpers), `db` (Drizzle schema/migrations), `env` (environment validation), `mail` (transactional email), `shared` (utilities), `sso` (single sign-on helpers), `storage` (object storage), `ui` (shared components), and `validators` (Zod schemas).
+- Configuration files are in `tooling/`; Turbo generators live in `turbo/`.
 
 ## Environment Setup
 
@@ -52,7 +74,7 @@
 
 ### Driving auth-bounded flows in local dev
 
-Apps that require sign-in (apps/map, apps/me, pax-vault, the-codex, ...) authenticate via `apps/auth`, which uses email-based MFA. **No real inbox is involved.** In local development, outbound email is captured by one of two backends depending on your setup:
+Apps that require sign-in (e.g. `apps/map`, `apps/me`) authenticate via `apps/auth`, which uses email-based MFA. **No real inbox is involved.** In local development, outbound email is captured by one of two backends depending on your setup:
 
 - **Docker setup (recommended):** Mailpit captures all mail at `http://localhost:8025`. Read MFA codes from the Mailpit web UI or its REST API.
 - **Non-Docker / GCP setup:** The auth server routes mail through [Ethereal](https://ethereal.email/) and emits a public preview URL to its stdout.
@@ -85,9 +107,9 @@ Scopes are defined in `commitlint.config.mjs` and map to monorepo packages:
 
 | Category        | Scopes                                                            |
 | --------------- | ----------------------------------------------------------------- |
-| Apps            | `map`                                                             |
+| Apps            | `admin`, `homepage`, `map`, `me`                                  |
 | Apps & Packages | `api`, `auth` (exist in both `apps/` and `packages/`)             |
-| Packages        | `db`, `env`, `mail`, `shared`, `sso`, `ui`, `validators`          |
+| Packages        | `db`, `env`, `mail`, `shared`, `sso`, `storage`, `ui`, `validators` |
 | Tooling         | `eslint`, `prettier`, `tsconfig`, `scripts`, `github`, `tailwind` |
 | Cross-cutting   | `deps`, `ci`, `repo`, `release`, `dev` (used by Release Please)   |
 
