@@ -95,19 +95,23 @@ export default function AdminNationsModal({
     });
   }, [form, nation]);
 
+  const isEditing = !!nation?.id;
+  const actionText = isEditing ? "update" : "add";
+  const actionTextPast = isEditing ? "updated" : "added";
+
   const crupdateNation = useMutation(
     orpc.org.crupdate.mutationOptions({
       onSuccess: async () => {
         await invalidateQueries("org");
         closeModal();
-        toast.success("Successfully updated nation");
+        toast.success(`Successfully ${actionTextPast} nation`);
         router.refresh();
       },
       onError: (err) => {
         toast.error(
           err instanceof ORPCError && err?.code === "UNAUTHORIZED"
-            ? "You must be logged in to update nations"
-            : "Failed to update nation",
+            ? `You are not authorized to ${actionText} this nation`
+            : `Failed to ${actionText} nation`,
         );
       },
     }),
