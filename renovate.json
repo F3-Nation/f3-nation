@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/renovate.json",
-  "extends": ["config:recommended", "helpers:pinGitHubActionDigests"],
+  "extends": ["config:recommended"],
   "enabledManagers": ["github-actions", "npm"],
   "timezone": "America/New_York",
   "schedule": ["before 9am on Monday"],
