@@ -319,6 +319,8 @@ const columns: TableOptions<
     id: "id",
     enableHiding: false,
     cell: ({ row }) => {
+      if (!row.original.isActive) return null;
+
       return (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -337,7 +339,7 @@ const columns: TableOptions<
                 });
               }}
             >
-              <div>Delete</div>
+              <div>Deactivate</div>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

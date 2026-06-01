@@ -102,6 +102,10 @@ export default function AdminWorkoutsModal({
   );
   const event = eventResponse?.event;
   const isEditing = !!event;
+  const actionText = isEditing ? "update" : "create";
+  const fallbackActionText = isEditing ? "update" : "add";
+  const actionTextPast = isEditing ? "updated" : "added";
+
   const isLoading = gte(data.id, 0) && isLoadingEvent;
   const router = useRouter();
 
@@ -153,17 +157,17 @@ export default function AdminWorkoutsModal({
         await invalidateQueries("map");
         await invalidateQueries("event");
         closeModal();
-        toast.success(
-          isEditing ? "Successfully updated event" : "Successfully added event",
-        );
+        toast.success(`Successfully ${actionTextPast} event`);
         router.refresh();
+        setIsSubmitting(false);
       },
       onError: (err) => {
         toast.error(
           err instanceof ORPCError && err?.code === "UNAUTHORIZED"
-            ? `You must be logged in to ${isEditing ? "update" : "create"} events`
-            : `Failed to ${isEditing ? "update" : "add"} event`,
+            ? `You are not authorized to ${actionText} this event`
+            : `Failed to ${fallbackActionText} event`,
         );
+        setIsSubmitting(false);
       },
     }),
   );
@@ -207,19 +211,14 @@ export default function AdminWorkoutsModal({
     // }
 
     setIsSubmitting(true);
-    try {
-      await crupdateEvent.mutateAsync({
-        ...data,
-        startTime: convertHH_mmToHHmm(startTime),
-        endTime: convertHH_mmToHHmm(endTime),
-      });
-    } catch (error) {
-      toast.error("Failed to update event");
-      console.error(error);
-    } finally {
-      setIsSubmitting(false);
-    }
+    await crupdateEvent.mutateAsync({
+      ...data,
+      startTime: convertHH_mmToHHmm(startTime),
+      endTime: convertHH_mmToHHmm(endTime),
+    });
   };
+
+  const showDeleteButton = isEditing && event?.isActive !== false;
 
   return (
     <Dialog open={true} onOpenChange={() => closeModal()}>
@@ -654,7 +653,7 @@ export default function AdminWorkoutsModal({
                     </Button>
                   </div>
                 </div>
-                {event?.id ? (
+                {showDeleteButton ? (
                   <Button
                     type="button"
                     variant="outline"
@@ -667,7 +666,7 @@ export default function AdminWorkoutsModal({
                     }}
                     className="w-full"
                   >
-                    Delete Event
+                    Deactivate Event
                   </Button>
                 ) : null}
               </div>
