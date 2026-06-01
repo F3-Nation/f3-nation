@@ -179,41 +179,44 @@ gcloud iam service-accounts add-iam-policy-binding "$PROD_SA" \
 
 ---
 
-## 5. Create GitHub Environments
+## 5. Create GitHub Environments and Set Variables
 
-In GitHub → repo Settings → **Environments**:
-
-1. Create **`$GH_STAGING_ENV`** (e.g. `me-staging`) — no protection rules needed.
-2. Create **`$GH_PROD_ENV`** (e.g. `me-production`) — add **Required reviewers** (yourself or your team) so prod deploys require manual approval.
-
----
-
-## 6. Add GitHub Environment Variables
-
-In GitHub → repo Settings → **Secrets and variables** → **Actions** → **Variables** tab, add the following to each environment (not repo-level).
-
-> **Before filling in the table:** run the `echo` block at the bottom of this section to resolve the shell variables into their actual values — paste those resolved strings into the GitHub web UI, not the variable names themselves.
-
-| Environment       | Variable       | Value (shell variable — resolve via echo below)                                                       |
-| ----------------- | -------------- | ----------------------------------------------------------------------------------------------------- |
-| `$GH_STAGING_ENV` | `WIF_PROVIDER` | `projects/$WIF_PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions/providers/github` |
-| `$GH_STAGING_ENV` | `WIF_SA`       | `$STAGING_SA`                                                                                         |
-| `$GH_PROD_ENV`    | `WIF_PROVIDER` | `projects/$WIF_PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions/providers/github` |
-| `$GH_PROD_ENV`    | `WIF_SA`       | `$PROD_SA`                                                                                            |
-
-> These are environment **variables** (referenced as `vars.WIF_PROVIDER`, `vars.WIF_SA` in workflows), not secrets. No credentials are stored in GitHub — auth is via WIF token exchange at runtime.
-
-To get the exact values to paste, run:
+The staging environment needs no protection rules. The prod environment requires a reviewer so deploys need manual approval. Run all of this from inside the repo directory:
 
 ```bash
-echo "WIF_PROVIDER: projects/${WIF_PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-actions/providers/github"
-echo "WIF_SA (staging): ${STAGING_SA}"
-echo "WIF_SA (prod):    ${PROD_SA}"
+GH_REPO=$(gh repo view --json nameWithOwner -q '.nameWithOwner')
+
+# Staging — no protection rules
+gh api "repos/${GH_REPO}/environments/${GH_STAGING_ENV}" --method PUT
+
+# Production — require the current GitHub user as a reviewer before each deploy
+REVIEWER_ID=$(gh api user -q '.id')
+gh api "repos/${GH_REPO}/environments/${GH_PROD_ENV}" \
+  --method PUT \
+  --input - <<EOF
+{
+  "reviewers": [{ "type": "User", "id": ${REVIEWER_ID} }]
+}
+EOF
+```
+
+> To add a team or additional reviewers, repeat the `gh api` call for prod with extra objects in the `reviewers` array (`"type": "Team"`, `"id": <team_id>`).
+
+Now set the environment variables. These are `vars.*` (not secrets) — no credentials are stored in GitHub; auth happens via WIF token exchange at runtime.
+
+```bash
+WIF_PROVIDER_VALUE="projects/${WIF_PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-actions/providers/github"
+
+gh variable set WIF_PROVIDER --env "$GH_STAGING_ENV" --repo "$GH_REPO" --body "$WIF_PROVIDER_VALUE"
+gh variable set WIF_SA       --env "$GH_STAGING_ENV" --repo "$GH_REPO" --body "$STAGING_SA"
+
+gh variable set WIF_PROVIDER --env "$GH_PROD_ENV" --repo "$GH_REPO" --body "$WIF_PROVIDER_VALUE"
+gh variable set WIF_SA       --env "$GH_PROD_ENV" --repo "$GH_REPO" --body "$PROD_SA"
 ```
 
 ---
 
-## 7. Push App Secrets to Cloud Run
+## 6. Push App Secrets to Cloud Run
 
 Each app has its own `.env.cloud-run.example` file and a helper script that pushes env vars to Cloud Run as secrets.
 
@@ -232,7 +235,7 @@ bash "apps/${APP_NAME}/scripts/cloud-run-env.sh" --env prod
 
 ---
 
-## 8. Map Custom Domains
+## 7. Map Custom Domains
 
 ```bash
 gcloud run domain-mappings create \
@@ -252,7 +255,7 @@ Follow the DNS instructions printed by each command. Propagation can take up to 
 
 ---
 
-## 9. Disconnect Firebase App Hosting (if applicable)
+## 8. Disconnect Firebase App Hosting (if applicable)
 
 If the app previously ran on Firebase App Hosting, remove it to stop duplicate auto-deploys:
 
@@ -268,8 +271,7 @@ In the Firebase Console for each project → **App Hosting** → select the back
 - [ ] `f3-github` WIF pool/provider exists (skip creation if already present)
 - [ ] Staging SA created, IAM roles granted, WIF binding added
 - [ ] Prod SA created, IAM roles granted (including cross-project AR read on staging), WIF binding added
-- [ ] GitHub environments created (`$GH_STAGING_ENV`, `$GH_PROD_ENV`) with correct protection rules
-- [ ] `WIF_PROVIDER` and `WIF_SA` set as environment variables in both GitHub environments
+- [ ] GitHub environments created and `WIF_PROVIDER`/`WIF_SA` variables set (step 5)
 - [ ] Cloud Run env vars pushed for staging and prod
 - [ ] Custom domains mapped and DNS updated
 - [ ] Firebase App Hosting disconnected (if applicable)
