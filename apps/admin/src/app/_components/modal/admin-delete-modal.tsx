@@ -112,7 +112,7 @@ export default function AdminDeleteModal({
       const errorMessage =
         err instanceof ORPCError && err.code === "UNAUTHORIZED"
           ? `You are not authorized to deactivate this ${dataTypeName}`
-          : `Failed to deactivate: ${err instanceof Error ? `: ${err.message}` : ""}`;
+          : `Failed to deactivate${err instanceof Error ? `: ${err.message}` : ""}`;
 
       toast.error(errorMessage);
     } finally {
