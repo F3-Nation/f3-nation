@@ -35,7 +35,6 @@
     "@acme/prettier-config": "workspace:^0.1.0",
     "@acme/tsconfig": "workspace:^0.1.0",
     "@types/nodemailer": "catalog:",
-    "@types/nodemailer-smtp-transport": "catalog:",
     "eslint": "catalog:",
     "prettier": "catalog:",
     "tsx": "catalog:",
