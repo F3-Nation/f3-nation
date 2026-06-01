@@ -125,6 +125,7 @@ export default function AdminAOsModal({
   }, [logoPreviewUrl]);
 
   const crupdateAO = useMutation(orpc.org.crupdate.mutationOptions());
+  const showDeactivateButton = ao?.id != null && ao.isActive;
 
   return (
     <Dialog open={true} onOpenChange={() => closeModal()}>
@@ -527,23 +528,24 @@ export default function AdminAOsModal({
                     </Button>
                   ) : null}
                 </div>
-                <div className="flex space-x-4 pt-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    // variant="link"
-                    onClick={() => {
-                      closeModal();
-                      openModal(ModalType.ADMIN_DELETE_CONFIRMATION, {
-                        id: ao?.id ?? -1,
-                        type: DeleteType.AO,
-                      });
-                    }}
-                    className="w-full"
-                  >
-                    Deactivate AO
-                  </Button>
-                </div>
+                {showDeactivateButton ? (
+                  <div className="flex space-x-4 pt-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        closeModal();
+                        openModal(ModalType.ADMIN_DELETE_CONFIRMATION, {
+                          id: ao.id,
+                          type: DeleteType.AO,
+                        });
+                      }}
+                      className="w-full"
+                    >
+                      Deactivate AO
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             </div>
           </form>

@@ -63,6 +63,8 @@ export default function AdminDeleteModal({
   }
 
   const handleDelete = async (id: number) => {
+    if (isPending) return;
+
     setIsPending(true);
     try {
       await mutation({ id });
@@ -106,17 +108,13 @@ export default function AdminDeleteModal({
       closeModal();
     } catch (err) {
       console.error("deactivate-modal err", err);
-      if (err instanceof ORPCError) {
-        toast.error(
-          err?.code === "UNAUTHORIZED"
-            ? `You are not authorized to deactivate this ${dataTypeToName(data.type).toLowerCase()}`
-            : `Failed to deactivate ${dataTypeToName(data.type).toLowerCase()}`,
-        );
-      } else {
-        toast.error(
-          `Failed to deactivate ${dataTypeToName(data.type).toLowerCase()}`,
-        );
-      }
+      const dataTypeName = dataTypeToName(data.type).toLowerCase();
+      const errorMessage =
+        err instanceof ORPCError && err.code === "UNAUTHORIZED"
+          ? `You are not authorized to deactivate this ${dataTypeName}`
+          : `Failed to deactivate: ${err instanceof Error ? `: ${err.message}` : ""}`;
+
+      toast.error(errorMessage);
     } finally {
       setIsPending(false);
     }
@@ -152,6 +150,7 @@ export default function AdminDeleteModal({
               type="submit"
               className="w-full"
               onClick={() => handleDelete(data.id)}
+              disabled={isPending}
             >
               Deactivate
             </Button>
