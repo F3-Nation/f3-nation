@@ -6,7 +6,7 @@
   "schedule": ["before 9am on Monday"],
   "dependencyDashboard": true,
   "dependencyDashboardAutoclose": true,
-  "minimumReleaseAge": "3 days",
+  "minimumReleaseAge": "7 days",
   "labels": ["dependencies"],
   "rangeStrategy": "bump",
   "prConcurrentLimit": 10,
