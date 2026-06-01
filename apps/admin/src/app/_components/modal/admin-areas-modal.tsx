@@ -419,7 +419,7 @@ export default function AdminAreasModal({
                       }}
                       className="w-full"
                     >
-                      Delete Area
+                      Deactivate Area
                     </Button>
                   </div>
                 )}

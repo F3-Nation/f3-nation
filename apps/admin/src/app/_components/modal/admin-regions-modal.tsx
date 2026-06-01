@@ -129,7 +129,7 @@ export default function AdminRegionsModal({
   const isEditing = !!region?.id;
   const actionText = isEditing ? "update" : "add";
   const actionTextPast = isEditing ? "updated" : "added";
-  const showDeleteButton = isEditing && region?.isActive !== false;
+  const showDeactivateButton = isEditing && region?.isActive !== false;
 
   return (
     <Dialog open={true} onOpenChange={() => closeModal()}>
@@ -502,7 +502,7 @@ export default function AdminRegionsModal({
                     )}
                   </Button>
                 </div>
-                {showDeleteButton && (
+                {showDeactivateButton && (
                   <div className="flex space-x-4 pt-4">
                     <Button
                       type="button"
@@ -516,7 +516,7 @@ export default function AdminRegionsModal({
                       }}
                       className="w-full"
                     >
-                      Delete Region
+                      Deactivate Region
                     </Button>
                   </div>
                 )}

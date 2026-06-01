@@ -156,7 +156,7 @@ export default function AdminPositionsModal({
 
   const actionText = isEditing ? "update" : "add";
   const actionTextPast = isEditing ? "updated" : "added";
-  const showDeleteButton = isEditing && position?.isActive !== false;
+  const showDeactivateButton = isEditing && position?.isActive !== false;
 
   const crupdatePosition = useMutation(
     orpc.position.crupdate.mutationOptions({
@@ -352,7 +352,7 @@ export default function AdminPositionsModal({
                   )}
                 </Button>
               </div>
-              {showDeleteButton && (
+              {showDeactivateButton && (
                 <Button
                   type="button"
                   variant="outline"
@@ -365,7 +365,7 @@ export default function AdminPositionsModal({
                   }}
                   className="w-full"
                 >
-                  Delete Position
+                  Deactivate Position
                 </Button>
               )}
             </div>

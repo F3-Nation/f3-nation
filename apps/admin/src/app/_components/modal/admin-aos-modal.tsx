@@ -541,7 +541,7 @@ export default function AdminAOsModal({
                     }}
                     className="w-full"
                   >
-                    Delete AO
+                    Deactivate AO
                   </Button>
                 </div>
               </div>

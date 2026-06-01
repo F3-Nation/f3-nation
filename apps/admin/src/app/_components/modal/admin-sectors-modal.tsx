@@ -109,7 +109,7 @@ export default function AdminSectorsModal({
   const isEditing = !!sector?.id;
   const actionText = isEditing ? "update" : "add";
   const actionTextPast = isEditing ? "updated" : "added";
-  const showDeleteButton = isEditing && sector?.isActive !== false;
+  const showDeactivateButton = isEditing && sector?.isActive !== false;
 
   const crupdateSector = useMutation(
     orpc.org.crupdate.mutationOptions({
@@ -409,7 +409,7 @@ export default function AdminSectorsModal({
                     )}
                   </Button>
                 </div>
-                {showDeleteButton && (
+                {showDeactivateButton && (
                   <div className="flex space-x-4 pt-4">
                     <Button
                       type="button"
@@ -423,7 +423,7 @@ export default function AdminSectorsModal({
                       }}
                       className="w-full"
                     >
-                      Delete Sector
+                      Deactivate Sector
                     </Button>
                   </div>
                 )}

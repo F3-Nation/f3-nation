@@ -286,7 +286,7 @@ export default function AdminEventTypesModal({
                   }}
                   className="w-full"
                 >
-                  Delete Event Type
+                  Deactivate Event Type
                 </Button>
               ) : null}
             </div>

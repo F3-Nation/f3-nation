@@ -279,7 +279,7 @@ const columns: TableOptions<WorkoutEvent>["columns"] = [
                 });
               }}
             >
-              <div>Delete</div>
+              <div>Deactivate</div>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

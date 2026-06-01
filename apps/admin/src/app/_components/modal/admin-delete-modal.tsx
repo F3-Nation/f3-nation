@@ -99,21 +99,21 @@ export default function AdminDeleteModal({
           await invalidateQueries("position");
           break;
         default:
-          throw new Error(`Invalid delete type: ${data.type}`);
+          throw new Error(`Invalid deactivate type: ${data.type}`);
       }
 
       router.refresh();
       closeModal();
     } catch (err) {
-      console.error("delete-modal err", err);
+      console.error("deactivate-modal err", err);
       if (err instanceof ORPCError) {
         toast.error(
           err?.code === "UNAUTHORIZED"
-            ? `You are not authorized to delete this ${dataTypeToName(data.type).toLowerCase()}`
-            : `Failed to delete ${dataTypeToName(data.type).toLowerCase()}`,
+            ? `You are not authorized to deactivate this ${dataTypeToName(data.type).toLowerCase()}`
+            : `Failed to deactivate ${dataTypeToName(data.type).toLowerCase()}`,
         );
       } else {
-        toast.error(`Failed to delete ${data.type}`);
+        toast.error(`Failed to deactivate ${data.type}`);
       }
     } finally {
       setIsPending(false);
@@ -128,12 +128,12 @@ export default function AdminDeleteModal({
       >
         <DialogHeader>
           <DialogTitle className="text-center">
-            Delete {dataTypeToName(data.type)}
+            Deactivate {dataTypeToName(data.type)}
           </DialogTitle>
         </DialogHeader>
 
         <div className="my-6 w-full px-3">
-          {`Are you sure you want to delete this ${dataTypeToName(data.type)}?`}
+          {`Are you sure you want to deactivate this ${dataTypeToName(data.type)}?`}
         </div>
         <div className="mb-2 w-full px-2">
           <div className="flex space-x-4">
@@ -151,7 +151,7 @@ export default function AdminDeleteModal({
               className="w-full"
               onClick={() => handleDelete(data.id)}
             >
-              Delete
+              Deactivate
             </Button>
           </div>
         </div>
@@ -185,6 +185,6 @@ const dataTypeToName = (
     case DeleteType.POSITION:
       return "Position";
     default:
-      throw new Error(`Invalid delete type: ${dataType}`);
+      throw new Error(`Invalid deactivate type: ${dataType}`);
   }
 };

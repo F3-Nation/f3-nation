@@ -196,7 +196,7 @@ export const PositionsTable = () => {
                     });
                   }}
                 >
-                  <div>Delete</div>
+                  <div>Deactivate</div>
                 </DropdownMenuItem>
               )}
             </DropdownMenuContent>

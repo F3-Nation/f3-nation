@@ -191,7 +191,7 @@ const columns: TableOptions<Sector>["columns"] = [
                 });
               }}
             >
-              <div>Delete</div>
+              <div>Deactivate</div>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

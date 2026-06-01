@@ -665,7 +665,7 @@ export default function AdminWorkoutsModal({
                     }}
                     className="w-full"
                   >
-                    Delete Event
+                    Deactivate Event
                   </Button>
                 ) : null}
               </div>

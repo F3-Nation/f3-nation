@@ -551,7 +551,7 @@ export default function AdminLocationsModal({
                           }}
                           className="w-full"
                         >
-                          Delete Location
+                          Deactivate Location
                         </Button>
                       </div>
                     </div>
