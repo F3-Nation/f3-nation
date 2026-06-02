@@ -164,5 +164,3 @@ allowBuilds:
   sharp: true
   unrs-resolver: true
 minimumReleaseAge: 4320
-minimumReleaseAgeExclude:
-  # Renovate security update: dompurify@3.4.0
