@@ -132,7 +132,7 @@ catalog:
   tailwindcss: ^3.4.1
   tailwindcss-animate: ^1.0.7
   tsx: ^4.22.3
-  turbo: ^2.9.14
+  turbo: ^2.9.16
   typescript: ^6.0.3
   typescript-eslint: ^8.60.0
   uuid: ^11.0.5
