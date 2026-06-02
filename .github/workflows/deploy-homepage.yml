@@ -5,6 +5,9 @@ on:
     tags:
       - "homepage@*"
 
+# Single GitHub Pages site: serialize all deploys through one group so a slower
+# older-tag run can't publish after a newer one. (cancel-in-progress: false lets
+# an in-flight production deploy finish.)
 concurrency:
   group: deploy-homepage
   cancel-in-progress: false
@@ -23,7 +26,7 @@ jobs:
         with:
           ref: ${{ github.sha }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-          check-name: "test-coverage"
+          check-regexp: "^(build|lint|typecheck|format-check|test-coverage)$"
           wait-interval: 15
           allowed-conclusions: success
 
@@ -35,28 +38,20 @@ jobs:
       contents: read
       pages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6.0.2
         with:
           persist-credentials: false
 
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-node-pnpm
 
       - name: Build static export
         run: pnpm build --filter f3-homepage
 
       - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: apps/homepage/out
 
@@ -72,5 +67,5 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Deploy to GitHub Pages
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
         id: deployment

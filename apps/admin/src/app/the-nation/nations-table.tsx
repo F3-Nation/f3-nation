@@ -122,7 +122,7 @@ const columns: TableOptions<Nation>["columns"] = [
                 });
               }}
             >
-              <div>Delete</div>
+              <div>Deactivate</div>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

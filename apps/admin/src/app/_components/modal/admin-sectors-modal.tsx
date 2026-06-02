@@ -106,20 +106,26 @@ export default function AdminSectorsModal({
     });
   }, [form, sector]);
 
+  const isEditing = !!sector?.id;
+  const actionText = isEditing ? "update" : "add";
+  const actionTextPast = isEditing ? "updated" : "added";
+  const showDeactivateButton = isEditing && sector?.isActive !== false;
+
   const crupdateSector = useMutation(
     orpc.org.crupdate.mutationOptions({
       onSuccess: async () => {
         await invalidateQueries("org");
         closeModal();
-        toast.success("Successfully updated sector");
+        toast.success(`Successfully ${actionTextPast} sector`);
         router.refresh();
       },
       onError: (err) => {
         toast.error(
           err instanceof ORPCError && err?.code === "UNAUTHORIZED"
-            ? "You must be logged in to update sectors"
-            : "Failed to update sector",
+            ? `You are not authorized to ${actionText} this sector`
+            : `Failed to ${actionText} sector`,
         );
+        setIsSubmitting(false);
       },
     }),
   );
@@ -140,27 +146,13 @@ export default function AdminSectorsModal({
 
         <Form {...form}>
           <form
-            onSubmit={form.handleSubmit(
-              async (data) => {
-                setIsSubmitting(true);
-                try {
-                  await crupdateSector.mutateAsync({
-                    ...data,
-                    orgType: "sector",
-                  });
-                } catch (error) {
-                  toast.error("Failed to update sector");
-                  console.error(error);
-                } finally {
-                  setIsSubmitting(false);
-                }
-              },
-              (error) => {
-                toast.error("Failed to update sector");
-                console.log(error);
-                setIsSubmitting(false);
-              },
-            )}
+            onSubmit={form.handleSubmit(async (data) => {
+              setIsSubmitting(true);
+              await crupdateSector.mutateAsync({
+                ...data,
+                orgType: "sector",
+              });
+            })}
             className="space-y-4"
           >
             <div className="flex flex-wrap">
@@ -417,23 +409,24 @@ export default function AdminSectorsModal({
                     )}
                   </Button>
                 </div>
-                <div className="flex space-x-4 pt-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    // variant="link"
-                    onClick={() => {
-                      closeModal();
-                      openModal(ModalType.ADMIN_DELETE_CONFIRMATION, {
-                        id: sector?.id ?? -1,
-                        type: DeleteType.SECTOR,
-                      });
-                    }}
-                    className="w-full"
-                  >
-                    Delete Sector
-                  </Button>
-                </div>
+                {showDeactivateButton && (
+                  <div className="flex space-x-4 pt-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        closeModal();
+                        openModal(ModalType.ADMIN_DELETE_CONFIRMATION, {
+                          id: sector?.id ?? -1,
+                          type: DeleteType.SECTOR,
+                        });
+                      }}
+                      className="w-full"
+                    >
+                      Deactivate Sector
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           </form>

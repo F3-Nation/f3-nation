@@ -63,10 +63,14 @@ export default function AdminDeleteModal({
   }
 
   const handleDelete = async (id: number) => {
+    if (isPending) return;
+
     setIsPending(true);
     try {
       await mutation({ id });
-      toast.success(`Successfully deleted ${data.type.toLowerCase()}`);
+      toast.success(
+        `Successfully deactivated ${dataTypeToName(data.type).toLowerCase()}`,
+      );
 
       // Invalidate queries and wait for completion so the table refreshes
       switch (data.type) {
@@ -97,18 +101,20 @@ export default function AdminDeleteModal({
           await invalidateQueries("position");
           break;
         default:
-          throw new Error(`Invalid delete type: ${data.type}`);
+          throw new Error(`Invalid deactivate type: ${data.type}`);
       }
 
       router.refresh();
       closeModal();
     } catch (err) {
-      console.error("delete-modal err", err);
-      if (err instanceof ORPCError) {
-        toast.error(err.message);
-      } else {
-        toast.error(`Failed to delete ${data.type}`);
-      }
+      console.error("deactivate-modal err", err);
+      const dataTypeName = dataTypeToName(data.type).toLowerCase();
+      const errorMessage =
+        err instanceof ORPCError && err.code === "UNAUTHORIZED"
+          ? `You are not authorized to deactivate this ${dataTypeName}`
+          : `Failed to deactivate${err instanceof Error ? `: ${err.message}` : ""}`;
+
+      toast.error(errorMessage);
     } finally {
       setIsPending(false);
     }
@@ -122,12 +128,12 @@ export default function AdminDeleteModal({
       >
         <DialogHeader>
           <DialogTitle className="text-center">
-            Delete {dataTypeToName(data.type)}
+            Deactivate {dataTypeToName(data.type)}
           </DialogTitle>
         </DialogHeader>
 
         <div className="my-6 w-full px-3">
-          {`Are you sure you want to delete this ${dataTypeToName(data.type)}?`}
+          {`Are you sure you want to deactivate this ${dataTypeToName(data.type)}?`}
         </div>
         <div className="mb-2 w-full px-2">
           <div className="flex space-x-4">
@@ -144,8 +150,9 @@ export default function AdminDeleteModal({
               type="submit"
               className="w-full"
               onClick={() => handleDelete(data.id)}
+              disabled={isPending}
             >
-              Delete
+              Deactivate
             </Button>
           </div>
         </div>
@@ -179,6 +186,6 @@ const dataTypeToName = (
     case DeleteType.POSITION:
       return "Position";
     default:
-      throw new Error(`Invalid delete type: ${dataType}`);
+      throw new Error(`Invalid deactivate type: ${dataType}`);
   }
 };

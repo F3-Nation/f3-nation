@@ -15,9 +15,9 @@
     "with-env": "dotenv -e .env --"
   },
   "dependencies": {
-    "@t3-oss/env-nextjs": "^0.9.2",
-    "dotenv": "^16.3.2",
-    "zod": "^3.25.8"
+    "@t3-oss/env-nextjs": "catalog:",
+    "dotenv": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@acme/eslint-config": "workspace:^0.2.0",

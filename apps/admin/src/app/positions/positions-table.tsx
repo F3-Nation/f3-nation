@@ -2,7 +2,7 @@
 
 import { DotsHorizontalIcon } from "@radix-ui/react-icons";
 import type { TableOptions } from "@tanstack/react-table";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import type { IsActiveStatus } from "@acme/shared/app/enums";
 import { Button } from "@acme/ui/button";
@@ -72,6 +72,11 @@ export const PositionsTable = () => {
         pageIndex: pagination.pageIndex,
       },
     }),
+  );
+  const { data: accessibleOrgs } = useQuery(orpc.org.accessible.queryOptions());
+  const editableOrgIds = useMemo(
+    () => new Set(accessibleOrgs?.orgs.map((org) => org.id) ?? []),
+    [accessibleOrgs?.orgs],
   );
 
   const handleResetFilters = () => {
@@ -153,8 +158,14 @@ export const PositionsTable = () => {
       id: "actions",
       enableHiding: false,
       cell: ({ row }) => {
+        if (!row.original.isActive) return null;
+
         const isNational = row.original.orgId === null;
-        const canEdit = !isNational || isNationAdmin;
+        const canEdit =
+          isNationAdmin ||
+          (!isNational &&
+            row.original.orgId != null &&
+            editableOrgIds.has(row.original.orgId));
 
         return (
           <DropdownMenu>
@@ -185,7 +196,7 @@ export const PositionsTable = () => {
                     });
                   }}
                 >
-                  <div>Delete</div>
+                  <div>Deactivate</div>
                 </DropdownMenuItem>
               )}
             </DropdownMenuContent>

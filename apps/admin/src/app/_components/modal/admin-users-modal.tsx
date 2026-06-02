@@ -177,15 +177,11 @@ export default function UserModal({
         router.refresh();
       },
       onError: (err) => {
-        if (err instanceof ORPCError) {
-          toast.error(err.message);
-        } else {
-          toast.error(
-            err instanceof ORPCError && err?.code === "UNAUTHORIZED"
-              ? "You must be logged in to update users"
-              : "Failed to update user",
-          );
-        }
+        toast.error(
+          err instanceof ORPCError && err?.code === "UNAUTHORIZED"
+            ? "You are not authorized to update this user"
+            : "Failed to update user",
+        );
       },
     }),
   );
