@@ -77,7 +77,7 @@ catalog:
   commitizen: ^4.3.1
   cross-fetch: ^4.0.0
   dayjs: ^1.11.10
-  dompurify: ^3.1.7
+  dompurify: ^3.4.7
   dotenv: ^16.3.2
   dotenv-cli: ^7.3.0
   drizzle-kit: ^0.31.10
