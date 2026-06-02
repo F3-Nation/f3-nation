@@ -164,6 +164,3 @@ allowBuilds:
   sharp: true
   unrs-resolver: true
 minimumReleaseAge: 4320
-minimumReleaseAgeExclude:
-  # Renovate security update: next-auth@5.0.0-beta.30
-  - next-auth@5.0.0-beta.30
