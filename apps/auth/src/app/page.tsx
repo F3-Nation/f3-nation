@@ -47,10 +47,21 @@ export default async function HomePage({
             {session.user.email}
           </p>
         </div>
-        <p className="text-base text-muted-foreground">
-          Nothing to see here folks. You should have been sent back to where you
-          came from. If not, head back and you should be logged in now.
-        </p>
+        <div className="space-y-2 text-center">
+          <p className="text-base text-muted-foreground">
+            You&rsquo;re signed in. You should have been sent back to where you
+            came from — if not, you&rsquo;re logged in now.
+          </p>
+          <p className="text-base text-muted-foreground">
+            Want to explore the F3 Nation ecosystem?{" "}
+            <a
+              href="https://apps.f3nation.com"
+              className="font-medium text-foreground underline underline-offset-4 hover:text-primary"
+            >
+              apps.f3nation.com
+            </a>
+          </p>
+        </div>
         <SignOutButton />
       </div>
     </div>
