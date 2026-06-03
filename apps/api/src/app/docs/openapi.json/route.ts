@@ -3,7 +3,6 @@ export const dynamic = "force-dynamic";
 import { OpenAPIGenerator } from "@orpc/openapi";
 import { ZodToJsonSchemaConverter } from "@orpc/zod";
 
-import { router } from "@acme/api";
 import { Client, Header } from "@acme/shared/common/enums";
 import packageJson from "../../../../package.json";
 
@@ -42,6 +41,8 @@ interface OpenAPISpec {
 }
 
 export async function GET(request: Request) {
+  const { router } = await import("@acme/api");
+
   const url = new URL(request.url);
   const envBase = process.env.NEXT_PUBLIC_API_URL ?? undefined;
   const forwardedProto = request.headers.get("x-forwarded-proto") ?? undefined;
