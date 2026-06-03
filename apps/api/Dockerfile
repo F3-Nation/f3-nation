@@ -37,15 +37,12 @@
     
     # Copy source and build
     COPY --from=builder /app/out/full/ .
-    COPY --from=builder /app/docker/build.env /tmp/build.env
     
     ENV NODE_ENV=production
     ENV CI=true
     ENV SKIP_ENV_VALIDATION=true
     
-    RUN set -a && . /tmp/build.env && set +a && \
-        pnpm turbo build --filter=f3-api && \
-        rm /tmp/build.env
+    RUN pnpm turbo build --filter=f3-api
     
     # ---------- Stage 3: Production runner ----------
     FROM --platform=linux/amd64 node:24.14.1-alpine AS runner
