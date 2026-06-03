@@ -41,6 +41,7 @@ COPY --from=builder /app/out/full/ .
 ENV NODE_ENV=production
 ENV CI=true
 ENV SKIP_ENV_VALIDATION=true
+ENV SKIP_SSG=1
 
 RUN pnpm turbo build --filter=f3-map
 
