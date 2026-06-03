@@ -34,6 +34,29 @@ export async function GET(request: NextRequest) {
   const codeChallengeMethod =
     searchParams.get("code_challenge_method") ?? "plain";
 
+  // Require PKCE for all authorization requests.
+  // Only S256 is accepted — plain transfers the verifier in the clear and
+  // provides no meaningful protection (RFC 7636 §4.2 / OAuth 2.1 §4.1.1).
+  if (!codeChallenge) {
+    return NextResponse.json(
+      {
+        error: "invalid_request",
+        error_description: "code_challenge is required",
+      },
+      { status: 400 },
+    );
+  }
+  if (codeChallengeMethod !== "S256") {
+    return NextResponse.json(
+      {
+        error: "invalid_request",
+        error_description:
+          "Unsupported code_challenge_method — only S256 is accepted",
+      },
+      { status: 400 },
+    );
+  }
+
   // Validate required params
   if (responseType !== "code") {
     return NextResponse.json(

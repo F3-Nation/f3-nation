@@ -118,19 +118,14 @@ export async function exchangeAuthorizationCode(params: {
   )
     return { error: "invalid_client" as const };
 
-  // PKCE verification
+  // PKCE verification — only S256 is accepted (plain is rejected at authorize)
   if (authCode.codeChallenge) {
     if (!params.codeVerifier) return { error: "invalid_grant" as const };
 
-    let computedChallenge: string;
-    if (authCode.codeChallengeMethod === "S256") {
-      computedChallenge = crypto
-        .createHash("sha256")
-        .update(params.codeVerifier)
-        .digest("base64url");
-    } else {
-      computedChallenge = params.codeVerifier;
-    }
+    const computedChallenge = crypto
+      .createHash("sha256")
+      .update(params.codeVerifier)
+      .digest("base64url");
 
     if (computedChallenge !== authCode.codeChallenge)
       return { error: "invalid_grant" as const };

@@ -2,8 +2,15 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 import { validateAccessToken } from "~/lib/oauth";
+import { rateLimit } from "~/lib/rate-limit";
 
 export async function GET(request: NextRequest) {
+  const ip = request.headers.get("x-forwarded-for") ?? "unknown";
+  const { allowed } = rateLimit(`userinfo:${ip}`, 60, 60 * 1000);
+  if (!allowed) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
   const authHeader = request.headers.get("authorization");
   if (!authHeader?.startsWith("Bearer ")) {
     return NextResponse.json({ error: "invalid_token" }, { status: 401 });
