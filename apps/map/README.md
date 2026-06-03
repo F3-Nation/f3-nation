@@ -43,7 +43,7 @@ This is the F3 Nation Map application, an interactive map for F3 Nation location
 
    ```bash
    # From the monorepo root, start only the map app
-   pnpm dev --filter f3-nation-map
+   pnpm dev --filter f3-map
 
    # Or navigate to the app directory and run directly
    cd apps/map
@@ -67,7 +67,7 @@ Required environment variables (typically provided in env.zip):
 
 ```bash
 # Run all tests for the map app
-pnpm test --filter f3-nation-map
+pnpm test --filter f3-map
 
 # Run specific test suites
 cd apps/map
@@ -79,14 +79,14 @@ pnpm test:unit # Vitest unit tests
 
 ```bash
 # Build the map application
-pnpm build --filter f3-nation-map
+pnpm build --filter f3-map
 ```
 
 ### Linting
 
 ```bash
 # Run linting for the map app
-pnpm lint --filter f3-nation-map
+pnpm lint --filter f3-map
 ```
 
 ## Features
