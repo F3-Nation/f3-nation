@@ -9,7 +9,7 @@
   "packageManager": "pnpm@11.5.0+sha512.dbfcc4f81cf48597afd4bc391ffdf12c11f1a9fb83a395bfa6b0a2d9cc2fd8ffebafdb1ccbd529632153f793904c2615b7f09fe1a345473fd1c35845172a8eb1",
   "scripts": {
     "build": "turbo build",
-    "ci:local": "pnpm format && pnpm lint && pnpm typecheck && pnpm build --filter='!@acme/auth' && pnpm test:coverage",
+    "ci:local": "pnpm format && pnpm lint && pnpm typecheck && pnpm build && pnpm test:coverage",
     "clean:workspaces": "turbo clean && pnpm clean",
     "clean": "rm -rf .turbo node_modules",
     "commit": "cz",
@@ -46,7 +46,7 @@
     "reset-test-db": "turbo run reset-test-db",
     "test:coverage": "turbo test -- --coverage",
     "test": "turbo test",
-    "typecheck": "turbo typecheck --filter='!@acme/auth'",
+    "typecheck": "turbo typecheck",
     "with-env": "dotenv -e .env --"
   },
   "devDependencies": {
