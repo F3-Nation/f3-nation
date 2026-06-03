@@ -52,6 +52,7 @@
     "tailwindcss": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
     "vitest": "catalog:"
   },
   "prettier": "@acme/prettier-config"
