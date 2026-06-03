@@ -18,7 +18,7 @@ Run these in parallel with `block_until_ms: 0` and `working_directory` set to th
 caddy run --config Caddyfile
 
 # 2. API
-PORT=3001 pnpm -F f3-nation-api dev
+PORT=3001 pnpm -F f3-api dev
 
 # 3. Map
 PORT=3000 pnpm -F f3-nation-map dev
@@ -73,7 +73,7 @@ Caddy proxies:
 ### 2. API Server - in `api` terminal
 
 ```bash
-PORT=3001 pnpm -F f3-nation-api dev
+PORT=3001 pnpm -F f3-api dev
 ```
 
 ### 3. Map App - in `map` terminal
@@ -104,7 +104,7 @@ To stop services, use `pkill` (faster than lsof):
 
 ```bash
 pkill -f "caddy run"
-pkill -f "f3-nation-api dev"
+pkill -f "f3-api dev"
 pkill -f "f3-nation-map dev"
 ```
 
