@@ -12,6 +12,7 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],
+      reportsDirectory: "./coverage",
       thresholds: {
         autoUpdate: true,
         statements: 1.82,

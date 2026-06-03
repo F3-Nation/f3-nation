@@ -12,12 +12,13 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],
+      reportsDirectory: "./coverage",
       thresholds: {
         autoUpdate: true,
-        statements: 0,
-        branches: 11.11,
-        functions: 11.11,
-        lines: 0,
+        statements: 2.25,
+        branches: 25,
+        functions: 21.05,
+        lines: 2.25,
       },
     },
     exclude: [
