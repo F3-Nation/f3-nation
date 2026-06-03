@@ -26,7 +26,7 @@ if nc -z localhost 3000 2>/dev/null; then
     echo "✅ Map (port 3000): RUNNING"
 else
     echo "❌ Map (port 3000): NOT RUNNING"
-    echo "   Start with: PORT=3000 pnpm -F f3-nation-map dev"
+    echo "   Start with: PORT=3000 pnpm -F f3-map dev"
 fi
 
 echo ""

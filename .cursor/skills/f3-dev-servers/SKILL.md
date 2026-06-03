@@ -21,7 +21,7 @@ caddy run --config Caddyfile
 PORT=3001 pnpm -F f3-api dev
 
 # 3. Map
-PORT=3000 pnpm -F f3-nation-map dev
+PORT=3000 pnpm -F f3-map dev
 ```
 
 Note: nvm/rbenv/jenv should be auto-loaded via `~/.zshenv` so no prefix needed.
@@ -79,7 +79,7 @@ PORT=3001 pnpm -F f3-api dev
 ### 3. Map App - in `map` terminal
 
 ```bash
-PORT=3000 pnpm -F f3-nation-map dev
+PORT=3000 pnpm -F f3-map dev
 ```
 
 ## Startup Order
@@ -105,7 +105,7 @@ To stop services, use `pkill` (faster than lsof):
 ```bash
 pkill -f "caddy run"
 pkill -f "f3-api dev"
-pkill -f "f3-nation-map dev"
+pkill -f "f3-map dev"
 ```
 
 Or kill by port (slower, lsof takes 30+ seconds on macOS):

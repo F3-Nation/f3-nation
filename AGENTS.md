@@ -40,7 +40,7 @@ that app's `AGENTS.md`.
 - **First-time setup:** `pnpm local:setup` — copies per-directory `.env` files, starts Docker services, runs migrations, and seeds the database. See [docs/LOCAL_DEV_DOCKER.md](docs/LOCAL_DEV_DOCKER.md) for the full guide.
 - **Docker services:** `pnpm docker:up` to start (Postgres, Adminer, GCS emulator, Mailpit), `pnpm docker:down` to stop.
 - Install dependencies with `pnpm install`. You can scope installations with `--filter <workspace>`.
-- Start development: `pnpm dev --filter f3-nation-map` for the map app, or `pnpm dev` to run all watch tasks.
+- Start development: `pnpm dev --filter f3-map` for the map app, or `pnpm dev` to run all watch tasks.
 - Each app and `packages/env` has its own `.env` file (copied from `.env.local.example` by `pnpm local:setup`). Never commit `.env` files.
 - Build with `pnpm build` (or `pnpm build --filter apps/map`), and start production with `pnpm -C apps/map start`.
 - Code quality: always run `pnpm lint` (or `pnpm lint --filter apps/map`) and `pnpm format:fix` to ensure your code passes all lint and formatting checks. Also run `pnpm typecheck` to validate types.
