@@ -41,8 +41,6 @@
     ENV NODE_ENV=production
     ENV CI=true
     ENV SKIP_ENV_VALIDATION=true
-    ENV DATABASE_URL=postgresql://build:build@localhost:5432/build
-    ENV TEST_DATABASE_URL=postgresql://build:build@localhost:5432/build
     
     RUN pnpm turbo build --filter=f3-api
     

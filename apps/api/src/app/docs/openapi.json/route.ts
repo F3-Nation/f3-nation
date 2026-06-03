@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { OpenAPIGenerator } from "@orpc/openapi";
 import { ZodToJsonSchemaConverter } from "@orpc/zod";
 
