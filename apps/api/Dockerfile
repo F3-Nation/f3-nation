@@ -14,7 +14,7 @@
     RUN npm install -g turbo@${TURBO_VERSION}
     
     COPY . .
-    RUN turbo prune f3-nation-api --docker
+    RUN turbo prune f3-api --docker
     
     # ---------- Stage 2: Install + build ----------
     FROM --platform=linux/amd64 node:24.14.1-alpine AS installer
@@ -41,8 +41,10 @@
     ENV NODE_ENV=production
     ENV CI=true
     ENV SKIP_ENV_VALIDATION=true
+    ENV DATABASE_URL=postgresql://build:build@localhost:5432/build
+    ENV TEST_DATABASE_URL=postgresql://build:build@localhost:5432/build
     
-    RUN pnpm turbo build --filter=f3-nation-api
+    RUN pnpm turbo build --filter=f3-api
     
     # ---------- Stage 3: Production runner ----------
     FROM --platform=linux/amd64 node:24.14.1-alpine AS runner
