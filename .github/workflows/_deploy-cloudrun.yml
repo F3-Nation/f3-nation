@@ -68,7 +68,7 @@ jobs:
       checks: read
     steps:
       - name: Wait for CI to pass
-        uses: lewagon/wait-on-check-action@v1.7.0
+        uses: lewagon/wait-on-check-action@9312864dfbc9fd208e9c0417843430751c042800 # v1.7.0
         with:
           ref: ${{ github.sha }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
@@ -88,16 +88,16 @@ jobs:
       image: ${{ steps.meta.outputs.image }}
       version: ${{ steps.meta.outputs.version }}
     steps:
-      - uses: actions/checkout@v6.0.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Authenticate to GCP (staging project for AR)
-        uses: google-github-actions/auth@v3.0.0
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
           workload_identity_provider: ${{ vars.WIF_PROVIDER }}
           service_account: ${{ vars.WIF_SA }}
 
       - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v3.0.1
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
 
       - name: Authorize Docker to Artifact Registry
         run: gcloud auth configure-docker ${{ inputs.region }}-docker.pkg.dev --quiet
@@ -141,13 +141,13 @@ jobs:
       url: ${{ inputs.staging_url }}
     steps:
       - name: Authenticate to GCP (staging)
-        uses: google-github-actions/auth@v3.0.0
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
           workload_identity_provider: ${{ vars.WIF_PROVIDER }}
           service_account: ${{ vars.WIF_SA }}
 
       - name: Deploy to Cloud Run (staging)
-        uses: google-github-actions/deploy-cloudrun@v3.0.1
+        uses: google-github-actions/deploy-cloudrun@2028e2d7d30a78c6910e0632e48dd561b064884d # v3.0.1
         with:
           service: ${{ inputs.service_name }}
           image: ${{ needs.build.outputs.image }}
@@ -169,13 +169,13 @@ jobs:
       url: ${{ inputs.prod_url }}
     steps:
       - name: Authenticate to GCP (staging — pull image from staging AR)
-        uses: google-github-actions/auth@v3.0.0
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
           workload_identity_provider: ${{ vars.WIF_PROVIDER }}
           service_account: ${{ vars.WIF_SA }}
 
       - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v3.0.1
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
 
       - name: Promote image to production Artifact Registry
         env:
@@ -193,7 +193,7 @@ jobs:
           echo "prod_image=${PROD_IMAGE}" >> "$GITHUB_ENV"
 
       - name: Deploy to Cloud Run (prod)
-        uses: google-github-actions/deploy-cloudrun@v3.0.1
+        uses: google-github-actions/deploy-cloudrun@2028e2d7d30a78c6910e0632e48dd561b064884d # v3.0.1
         with:
           service: ${{ inputs.service_name }}
           image: ${{ env.prod_image }}
