@@ -35,6 +35,7 @@ REGION="us-east1"
 # Only genuinely sensitive values go here.
 declare -A SECRET_MAP=(
   [DATABASE_URL]="DATABASE_URL"
+  [TEST_DATABASE_URL]="TEST_DATABASE_URL"
   [AUTH_SECRET]="AUTH_SECRET"
   [API_KEY]="API_KEY"
   [SUPER_ADMIN_API_KEY]="SUPER_ADMIN_API_KEY"
