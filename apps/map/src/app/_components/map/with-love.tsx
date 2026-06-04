@@ -5,7 +5,7 @@ import { VersionInfo } from "../version-info";
 import { env } from "~/env";
 
 export default function WithLove() {
-  const channel = env.F3_CHANNEL;
+  const channel = env.NEXT_PUBLIC_CHANNEL;
 
   return (
     <div className="my-[1px] flex flex-row items-center justify-center gap-4">

@@ -16,6 +16,7 @@ export const env = createEnv({
       "prod",
     ]),
     // GIT items are provided by the next.config.js
+    NEXT_PUBLIC_GIT_COMMIT_HASH: z.string().optional(),
     NEXT_PUBLIC_GIT_BRANCH: z.string().optional(),
     NEXT_PUBLIC_GA_MEASUREMENT_ID: z.string().optional(),
     // Required in non-development environments, optional in development
@@ -35,8 +36,6 @@ export const env = createEnv({
   server: {
     DATABASE_URL: z.string(),
     TEST_DATABASE_URL: z.string(),
-    F3_MAP_BASE_URL: z.string().min(1),
-    F3_CHANNEL: z.enum(["local", "ci", "branch", "dev", "staging", "prod"]),
     F3_COMMIT_HASH: z.string().optional(),
   },
   /**
@@ -47,6 +46,7 @@ export const env = createEnv({
     NEXT_PUBLIC_API_URL: z.string().min(1),
     NEXT_PUBLIC_ADMIN_URL: z.string().min(1).optional(),
     NEXT_PUBLIC_GOOGLE_API_KEY: z.string().min(1),
+    NEXT_PUBLIC_MAP_BASE_URL: z.string().min(1),
   },
   /**
    * Destructure all variables from `process.env` to make sure they aren't tree-shaken away.
@@ -56,9 +56,11 @@ export const env = createEnv({
     NEXT_PUBLIC_GOOGLE_API_KEY: process.env.NEXT_PUBLIC_GOOGLE_API_KEY,
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
     NEXT_PUBLIC_ADMIN_URL: process.env.NEXT_PUBLIC_ADMIN_URL,
+    NEXT_PUBLIC_MAP_BASE_URL: process.env.NEXT_PUBLIC_MAP_BASE_URL,
     VERCEL_ENV: process.env.VERCEL_ENV,
     NODE_ENV: process.env.NODE_ENV,
     NEXT_PUBLIC_CHANNEL: process.env.NEXT_PUBLIC_CHANNEL,
+    NEXT_PUBLIC_GIT_COMMIT_HASH: process.env.NEXT_PUBLIC_GIT_COMMIT_HASH,
     NEXT_PUBLIC_GIT_BRANCH: process.env.NEXT_PUBLIC_GIT_BRANCH,
     NEXT_PUBLIC_GA_MEASUREMENT_ID: process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID,
   },
