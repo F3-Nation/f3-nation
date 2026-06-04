@@ -36,13 +36,13 @@ export const env = createEnv({
   server: {
     DATABASE_URL: z.string(),
     TEST_DATABASE_URL: z.string(),
+    F3_MAP_BASE_URL: z.string().min(1),
   },
   /**
    * Specify your client-side environment variables schema here.
    * For them to be exposed to the client, prefix them with `NEXT_PUBLIC_`.
    */
   client: {
-    NEXT_PUBLIC_MAP_URL: z.string().min(1),
     NEXT_PUBLIC_API_URL: z.string().min(1),
     NEXT_PUBLIC_ADMIN_URL: z.string().min(1).optional(),
     NEXT_PUBLIC_GOOGLE_API_KEY: z.string().min(1),
@@ -53,7 +53,6 @@ export const env = createEnv({
   experimental__runtimeEnv: {
     NEXT_PUBLIC_MAP_API_KEY: process.env.NEXT_PUBLIC_MAP_API_KEY,
     NEXT_PUBLIC_GOOGLE_API_KEY: process.env.NEXT_PUBLIC_GOOGLE_API_KEY,
-    NEXT_PUBLIC_MAP_URL: process.env.NEXT_PUBLIC_MAP_URL,
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
     NEXT_PUBLIC_ADMIN_URL: process.env.NEXT_PUBLIC_ADMIN_URL,
     VERCEL_ENV: process.env.VERCEL_ENV,

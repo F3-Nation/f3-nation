@@ -12,7 +12,7 @@ type Error = "default" | "Configuration" | "AccessDenied" | "Verification";
 export default function ErrorComponent() {
   const searchParams = useSearchParams();
   const error = searchParams?.get("error") ?? "default";
-  const url = new URL(env.NEXT_PUBLIC_MAP_URL);
+  const url = new URL(env.F3_MAP_BASE_URL);
 
   const errors: Record<
     Error,
