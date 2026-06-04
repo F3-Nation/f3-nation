@@ -11,14 +11,9 @@ import packageJson from "../../../package.json";
 
 interface VersionInfoProps extends HTMLAttributes<HTMLSpanElement> {
   channel: string;
-  commitHash?: string | null;
 }
 
-export const VersionInfo = ({
-  channel,
-  commitHash,
-  ...props
-}: VersionInfoProps) => {
+export const VersionInfo = ({ channel, ...props }: VersionInfoProps) => {
   const [clicks, setClicks] = useState(0);
   const { className, ...rest } = props;
 
@@ -42,8 +37,7 @@ export const VersionInfo = ({
         }}
         className="cursor-default"
       >
-        ({channel}
-        {commitHash})
+        ({channel})
       </button>
     </span>
   );
