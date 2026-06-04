@@ -839,7 +839,7 @@ export const eventRouter = {
             (err: unknown) =>
               console.error("maybeNotifyFirstEventForRegion failed", { err }),
           );
-        } else if (existingEvent.recurrencePattern) {
+        } else if (existingEvent.dayOfWeek) {
           // Existing series: check for structural changes
           const existingSeriesData = {
             dayOfWeek: existingEvent.dayOfWeek,
