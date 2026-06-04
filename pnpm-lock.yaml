@@ -219,6 +219,9 @@ catalogs:
     dayjs:
       specifier: ^1.11.10
       version: 1.11.20
+    dompurify:
+      specifier: ^3.4.7
+      version: 3.4.7
     dotenv:
       specifier: ^16.3.2
       version: 16.6.1
@@ -525,7 +528,7 @@ importers:
         version: 1.11.20
       dompurify:
         specifier: 'catalog:'
-        version: 3.4.0
+        version: 3.4.7
       dotenv-cli:
         specifier: 'catalog:'
         version: 7.4.4
@@ -679,7 +682,7 @@ importers:
         version: 1.11.20
       dompurify:
         specifier: 'catalog:'
-        version: 3.4.0
+        version: 3.4.7
       dotenv-cli:
         specifier: 'catalog:'
         version: 7.4.4
@@ -910,6 +913,9 @@ importers:
       '@types/react-dom':
         specifier: 'catalog:'
         version: 18.3.7(@types/react@18.3.28)
+      '@vitest/coverage-v8':
+        specifier: 'catalog:'
+        version: 3.2.4(vitest@3.2.4(@types/node@24.12.4)(jsdom@29.1.1)(terser@5.48.0))
       autoprefixer:
         specifier: 'catalog:'
         version: 10.5.0(postcss@8.5.15)
@@ -1057,7 +1063,7 @@ importers:
         version: 1.11.20
       dompurify:
         specifier: 'catalog:'
-        version: 3.4.0
+        version: 3.4.7
       dotenv-cli:
         specifier: 'catalog:'
         version: 7.4.4
@@ -6445,6 +6451,9 @@ packages:
 
   dompurify@3.4.0:
     resolution: {integrity: sha512-nolgK9JcaUXMSmW+j1yaSvaEaoXYHwWyGJlkoCTghc97KgGDDSnpoU/PlEnw63Ah+TGKFOyY+X5LnxaWbCSfXg==}
+
+  dompurify@3.4.7:
+    resolution: {integrity: sha512-2jBxDJY4RR06tQNy4w5FlFH7kfxsQZlufd0sbv+chfHCxeJwrFw2baUDsSwvBISD4K4RDbd0PTfy3uNXsR6siA==}
 
   domutils@3.2.2:
     resolution: {integrity: sha512-6kZKyUajlDuqlHKVX1w7gyslj9MPIXzIFiz/rGu35uC1wMi+kMhQwGhl4lt9unC9Vb9INnY9Z3/ZA3+FhASLaw==}
@@ -14241,6 +14250,10 @@ snapshots:
       domelementtype: 2.3.0
 
   dompurify@3.4.0:
+    optionalDependencies:
+      '@types/trusted-types': 2.0.7
+
+  dompurify@3.4.7:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
