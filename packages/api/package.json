@@ -12,7 +12,7 @@
     "clean": "rm -rf .turbo node_modules",
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
     "lint": "eslint .",
-    "test": "pnpm with-env vitest --run",
+    "test": "pnpm with-env vitest --run --coverage",
     "test:org-hierarchy": "pnpm with-env tsx src/scripts/test-org-hierarchy.ts",
     "test:watch": "pnpm with-env vitest -w",
     "typecheck": "tsc --noEmit",

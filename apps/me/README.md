@@ -136,7 +136,7 @@ pnpm test
 pnpm test:watch
 
 # Run tests with coverage
-pnpm test:coverage
+pnpm test
 ```
 
 Tests are located in `__tests__/` and cover:
