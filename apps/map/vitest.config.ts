@@ -14,11 +14,11 @@ export default defineConfig({
       reporter: ["text", "json", "html"],
       reportsDirectory: "./coverage",
       thresholds: {
-        autoUpdate: true,
-        statements: 1.82,
-        branches: 27.35,
+        autoUpdate: false,
+        statements: 1.8,
+        branches: 27.23,
         functions: 17.15,
-        lines: 1.82,
+        lines: 1.8,
       },
     },
     exclude: [

@@ -44,6 +44,7 @@
     "@types/pg": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
     "autoprefixer": "catalog:",
     "dotenv-cli": "catalog:",
     "eslint": "catalog:",
@@ -52,7 +53,6 @@
     "tailwindcss": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:",
-    "@vitest/coverage-v8": "catalog:",
     "vitest": "catalog:"
   },
   "prettier": "@acme/prettier-config"
