@@ -129,14 +129,11 @@ Open [https://localhost:3003](https://localhost:3003). Accept the self-signed ce
 ## Testing
 
 ```bash
-# Run all tests
+# Run all tests (coverage always collected)
 pnpm test
 
-# Run tests in watch mode
+# Run tests in watch mode (no coverage)
 pnpm test:watch
-
-# Run tests with coverage
-pnpm test
 ```
 
 Tests are located in `__tests__/` and cover:
