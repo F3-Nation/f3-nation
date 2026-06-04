@@ -38,6 +38,8 @@ import { closeModal, ModalType, openModal } from "~/utils/store/modal";
 import { VersionInfo } from "../version-info";
 
 export default function SettingsModal() {
+  const channel = env.F3_CHANNEL;
+
   const showDebug = mapStore.use.showDebug();
   const mode = appStore.use.mode();
   const tiles = mapStore.use.tiles();
@@ -388,7 +390,10 @@ export default function SettingsModal() {
             </button>
           </div>
           <div className="flex justify-center">
-            <VersionInfo className="text-xs text-foreground/60" />
+            <VersionInfo
+              channel={channel}
+              className="text-xs text-foreground/60"
+            />
           </div>
         </div>
       </DialogContent>

@@ -3,8 +3,11 @@
 import type { SignInComponentProps } from "../components/auth-components";
 import { VersionInfo } from "~/app/_components/version-info";
 import { AuthContent } from "../components/auth-components";
+import { env } from "~/env";
 
 export const SignIn = (params: SignInComponentProps) => {
+  const channel = env.F3_CHANNEL;
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col items-center">
@@ -14,7 +17,7 @@ export const SignIn = (params: SignInComponentProps) => {
       </div>
       <AuthContent callbackUrl={params.callbackUrl} withWrapper={true} />
       <div className="my-4 flex w-full justify-center">
-        <VersionInfo />
+        <VersionInfo channel={channel} />
       </div>
     </div>
   );
