@@ -60,7 +60,7 @@ that app's `AGENTS.md`.
 
 ## GitHub Actions Conventions
 
-- **Pin third-party actions to a semver tag, not a commit SHA** (e.g. `actions/checkout@v6.0.2`, `pnpm/action-setup@v6.0.8`). Version tags keep workflows readable and let Dependabot/Renovate bump them cleanly. Do not pin to full 40-character commit SHAs.
+- **Pin third-party actions to a full commit SHA with a version comment** (e.g. `actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2`). SHAs are immutable — a semver tag can be force-pushed, a SHA cannot. Renovate (`pinDigests: true`) keeps the SHAs up to date automatically.
 - Drive the Node version from `.nvmrc` via `actions/setup-node` (`node-version-file: .nvmrc`) — `.nvmrc` is the single source of truth. Never hardcode `node-version:` in a workflow.
 - Share toolchain setup through the composite action [`.github/actions/setup-node-pnpm`](.github/actions/setup-node-pnpm/action.yml) (pnpm + Node + pnpm-store cache + frozen install) instead of repeating setup steps per job.
 - The five CI check names (`format-check`, `lint`, `typecheck`, `build`, `test-coverage`) are referenced by the `dev` branch ruleset and by `check-regexp` in the deploy workflows — renaming a job requires updating both.
