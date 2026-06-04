@@ -1,13 +1,11 @@
 import Image from "next/image";
 
 import { VersionInfo } from "~/app/_components/version-info";
-import { env } from "~/env";
 import { AuthWrapper } from "../components/auth-components";
 
 export default function VerifyRequestPage() {
-  const url = new URL(env.NEXT_PUBLIC_MAP_BASE_URL);
-  const channel = env.NEXT_PUBLIC_CHANNEL;
-  const commitHashString = env.F3_COMMIT_HASH ?? null;
+  const url = new URL(process.env.NEXT_PUBLIC_MAP_BASE_URL ?? "");
+  const channel = process.env.NEXT_PUBLIC_CHANNEL ?? "";
 
   return (
     <div className="flex flex-col gap-4">
@@ -39,7 +37,7 @@ export default function VerifyRequestPage() {
         </div>
       </AuthWrapper>
       <div className="my-4 flex w-full justify-center">
-        <VersionInfo channel={channel} commitHash={commitHashString} />
+        <VersionInfo channel={channel} />
       </div>
     </div>
   );
