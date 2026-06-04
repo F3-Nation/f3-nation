@@ -30,12 +30,12 @@ const withEditor: MiddlewareFactory = (next: NextMiddleware) => {
       );
     }
 
-    const payload: JWT | null = await getToken({
+    const payload = (await getToken({
       req: request,
       secret,
       salt: cookieToken.name,
       cookieName: cookieToken.name,
-    });
+    })) as JWT | null;
 
     const isEditorOrAdmin = payload?.roles.some(
       (role) => role.roleName === "editor" || role.roleName === "admin",

@@ -4,9 +4,4 @@
 # @pstaylor-patrick — Monorepo/infra expertise
 # @evanpetzoldt  — Creator of the F3 Nation Slack bot; F3 Nation IT lead
 # @taterhead247  — F3 Nation IT Weasel Shaker; ensures product aligns with F3's mission and values
-* @dnishiyama @pstaylor-patrick @evanpetzoldt @taterhead247
-
-# App-specific owners
-# @dnishiyama built the map app from scratch
-/apps/map/** @dnishiyama
-
+* @dnishiyama @pstaylor-patrick @evanpetzoldt @taterhead247 @BigGillyStyle

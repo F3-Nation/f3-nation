@@ -49,14 +49,13 @@ async function proxyRequest(request: NextRequest) {
 
   const method = request.method.toUpperCase();
   const hasBody = method !== "GET" && method !== "HEAD";
+  const body = hasBody ? await request.arrayBuffer() : undefined;
 
   return fetch(getTargetUrl(request), {
     method,
     headers: getForwardedHeaders(request, accessToken),
-    body: hasBody ? request.body : undefined,
-    // Required by fetch when streaming the incoming request body.
-    duplex: hasBody ? "half" : undefined,
-  } as RequestInit & { duplex?: "half" });
+    body,
+  });
 }
 
 export const GET = proxyRequest;
