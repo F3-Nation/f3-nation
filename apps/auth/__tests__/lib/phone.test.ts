@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { detectPhoneCountry } from "./phone";
+import { detectPhoneCountry } from "../../src/lib/phone";
 
 describe("detectPhoneCountry", () => {
   it("uses the locale region when supported", () => {
