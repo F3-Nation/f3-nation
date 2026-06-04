@@ -18,6 +18,7 @@ import {
 import { closeModal, ModalType, openModal } from "~/utils/store/modal";
 import { SubmitBugReportCard } from "../../help/submit-bug-report-card";
 import { VersionInfo } from "../version-info";
+import { env } from "~/env";
 
 const HELP_VIDEOS = [
   {
@@ -35,6 +36,8 @@ const HELP_VIDEOS = [
 ] as const;
 
 export function MapHelpModal() {
+  const channel = env.F3_CHANNEL;
+
   return (
     <Dialog open={true} onOpenChange={closeModal}>
       <DialogContent
@@ -122,7 +125,10 @@ export function MapHelpModal() {
                 <span className="text-xs">F3 FAQs</span>
                 <ArrowRight className="size-3 text-foreground" />
               </Link>
-              <VersionInfo className="text-center text-xs text-foreground/60" />
+              <VersionInfo
+                channel={channel}
+                className="text-center text-xs text-foreground/60"
+              />
             </div>
           </div>
         </div>

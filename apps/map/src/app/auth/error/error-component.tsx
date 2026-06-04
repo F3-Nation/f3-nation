@@ -13,6 +13,7 @@ export default function ErrorComponent() {
   const searchParams = useSearchParams();
   const error = searchParams?.get("error") ?? "default";
   const url = new URL(env.F3_MAP_BASE_URL);
+  const channel = env.F3_CHANNEL;
 
   const errors: Record<
     Error,
@@ -97,7 +98,7 @@ export default function ErrorComponent() {
         </div>
       </AuthWrapper>
       <div className="my-4 flex w-full justify-center">
-        <VersionInfo />
+        <VersionInfo channel={channel} />
       </div>
     </div>
   );

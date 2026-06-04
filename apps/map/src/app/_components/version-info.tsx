@@ -6,17 +6,21 @@ import Link from "next/link";
 
 import { cn } from "@acme/ui";
 
-import { env } from "~/env";
 import { mapStore } from "~/utils/store/map";
 import packageJson from "../../../package.json";
 
-export const VersionInfo = (props: HTMLAttributes<HTMLButtonElement>) => {
+interface VersionInfoProps extends HTMLAttributes<HTMLSpanElement> {
+  channel: string;
+  commitHash?: string | null;
+}
+
+export const VersionInfo = ({
+  channel,
+  commitHash,
+  ...props
+}: VersionInfoProps) => {
   const [clicks, setClicks] = useState(0);
   const { className, ...rest } = props;
-  const channel = env.NEXT_PUBLIC_CHANNEL;
-  const commitHashString = env.NEXT_PUBLIC_GIT_COMMIT_HASH
-    ? ` (${env.NEXT_PUBLIC_GIT_COMMIT_HASH})`
-    : "";
 
   return (
     <span className={cn("inline-flex items-center gap-1", className)}>
@@ -39,7 +43,7 @@ export const VersionInfo = (props: HTMLAttributes<HTMLButtonElement>) => {
         className="cursor-default"
       >
         ({channel}
-        {commitHashString})
+        {commitHash})
       </button>
     </span>
   );
