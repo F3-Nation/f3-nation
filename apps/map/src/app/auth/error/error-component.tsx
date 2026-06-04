@@ -12,7 +12,6 @@ type Error = "default" | "Configuration" | "AccessDenied" | "Verification";
 export default function ErrorComponent() {
   const searchParams = useSearchParams();
   const error = searchParams?.get("error") ?? "default";
-  const url = new URL(env.NEXT_PUBLIC_MAP_URL ?? "");
   const channel = env.NEXT_PUBLIC_CHANNEL;
 
   const errors: Record<
@@ -24,8 +23,8 @@ export default function ErrorComponent() {
       message: (
         <>
           <p>An error occurred while signing in. Please try again.</p>
-          <a href={url.origin} className="hover:underline">
-            {url.host}
+          <a href={"/"} className="hover:underline">
+            Back to the map
           </a>
         </>
       ),

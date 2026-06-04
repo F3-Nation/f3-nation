@@ -42,28 +42,13 @@ const config = {
   /** We already do linting and typechecking as separate tasks in CI */
   eslint: { ignoreDuringBuilds: true },
   typescript: { ignoreBuildErrors: true },
-  redirects: async () => {
-    const adminUrl = (
-      process.env.NEXT_PUBLIC_ADMIN_URL ?? "https://admin.f3nation.com"
-    ).replace(/\/$/, "");
-    return [
-      {
-        source: "/map",
-        destination: "/",
-        permanent: true,
-      },
-      {
-        source: "/admin",
-        destination: adminUrl,
-        permanent: false,
-      },
-      {
-        source: "/admin/:path*",
-        destination: `${adminUrl}/:path*`,
-        permanent: false,
-      },
-    ];
-  },
+  redirects: async () => [
+    {
+      source: "/map",
+      destination: "/",
+      permanent: true,
+    },
+  ],
 };
 
 export default withSentryConfig(config, {

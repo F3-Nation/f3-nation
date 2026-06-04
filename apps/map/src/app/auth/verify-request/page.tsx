@@ -7,7 +7,6 @@ import { env } from "~/env";
 export const dynamic = "force-dynamic";
 
 export default function VerifyRequestPage() {
-  const url = new URL(env.NEXT_PUBLIC_MAP_URL);
   const channel = env.NEXT_PUBLIC_CHANNEL;
 
   return (
@@ -32,10 +31,10 @@ export default function VerifyRequestPage() {
           </p>
 
           <a
-            href={url.toString()}
+            href={"/"}
             className="text-base leading-8 text-muted-foreground no-underline hover:underline"
           >
-            {url.host}
+            Back to the map
           </a>
         </div>
       </AuthWrapper>
