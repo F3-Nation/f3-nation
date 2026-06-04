@@ -4,8 +4,10 @@ import { VersionInfo } from "~/app/_components/version-info";
 import { AuthWrapper } from "../components/auth-components";
 import { env } from "~/env";
 
+export const dynamic = "force-dynamic";
+
 export default function VerifyRequestPage() {
-  const url = new URL(env.NEXT_PUBLIC_MAP_URL ?? "");
+  const url = new URL(env.NEXT_PUBLIC_MAP_URL);
   const channel = env.NEXT_PUBLIC_CHANNEL;
 
   return (
