@@ -38,7 +38,7 @@ import { closeModal, ModalType, openModal } from "~/utils/store/modal";
 import { VersionInfo } from "../version-info";
 
 export default function SettingsModal() {
-  const channel = env.F3_CHANNEL;
+  const channel = env.NEXT_PUBLIC_CHANNEL;
 
   const showDebug = mapStore.use.showDebug();
   const mode = appStore.use.mode();

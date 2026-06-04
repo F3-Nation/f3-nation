@@ -6,7 +6,7 @@ import { AuthContent } from "../components/auth-components";
 import { env } from "~/env";
 
 export const SignIn = (params: SignInComponentProps) => {
-  const channel = env.F3_CHANNEL;
+  const channel = env.NEXT_PUBLIC_CHANNEL;
 
   return (
     <div className="flex flex-col gap-4">

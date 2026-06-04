@@ -36,7 +36,7 @@ const HELP_VIDEOS = [
 ] as const;
 
 export function MapHelpModal() {
-  const channel = env.F3_CHANNEL;
+  const channel = env.NEXT_PUBLIC_CHANNEL;
 
   return (
     <Dialog open={true} onOpenChange={closeModal}>
