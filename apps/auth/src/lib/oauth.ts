@@ -128,7 +128,7 @@ export async function exchangeAuthorizationCode(params: {
     .update(params.codeVerifier)
     .digest("base64url");
 
-  if (computedChallenge !== authCode.codeChallenge)
+  if (!constantTimeEqual(computedChallenge, authCode.codeChallenge))
     return { error: "invalid_grant" as const };
 
   // Look up user email for JWT claims
