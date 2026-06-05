@@ -56,6 +56,8 @@ export default async function HomePage({
             Want to explore the F3 Nation ecosystem?{" "}
             <a
               href="https://apps.f3nation.com"
+              target="_blank"
+              rel="noopener noreferrer"
               className="font-medium text-foreground underline underline-offset-4 hover:text-primary"
             >
               apps.f3nation.com
