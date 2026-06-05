@@ -4,8 +4,6 @@ import type { PlaceResult } from "@acme/shared/app/types";
 import { MAX_PLACES_AUTOCOMPLETE_RADIUS } from "@acme/shared/app/constants";
 import { zoomToRadius } from "@acme/shared/app/functions";
 
-import { env } from "~/env";
-
 // Cache for autocomplete results (key: input+center+zoom, value: results)
 const autocompleteCache = new Map<
   string,
@@ -79,13 +77,14 @@ export async function placesAutocomplete({
         };
 
   try {
+    const googleApiKey = window.__F3_RUNTIME__?.googleApiKey ?? "";
     const response = await axios.post<{ suggestions: PlaceResult[] }>(
       `https://places.googleapis.com/v1/places:autocomplete`,
       { input, locationBias },
       {
         headers: {
           "Content-Type": "application/json",
-          "X-Goog-Api-Key": env.NEXT_PUBLIC_GOOGLE_API_KEY,
+          "X-Goog-Api-Key": googleApiKey,
         },
       },
     );

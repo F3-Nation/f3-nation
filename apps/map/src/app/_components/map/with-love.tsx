@@ -2,18 +2,12 @@
 
 import { ModalType, openModal } from "~/utils/store/modal";
 import { VersionInfo } from "../version-info";
-import { env } from "~/env";
 
 export default function WithLove() {
-  const channel = env.NEXT_PUBLIC_CHANNEL;
-
   return (
     <div className="my-[1px] flex flex-row items-center justify-center gap-4">
       <div className="flex gap-2 whitespace-nowrap text-xs text-foreground opacity-60">
-        <VersionInfo
-          channel={channel}
-          className="text-center text-xs text-foreground/60"
-        />
+        <VersionInfo className="text-center text-xs text-foreground/60" />
         <button
           className="text-foreground underline underline-offset-2"
           onClick={() => {

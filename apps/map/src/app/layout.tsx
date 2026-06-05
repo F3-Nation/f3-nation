@@ -49,8 +49,23 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout(props: { children: React.ReactNode }) {
+  const runtimeConfig = {
+    apiBaseUrl: env.F3_API_BASE_URL,
+    adminUrl: env.F3_ADMIN_URL,
+    mapApiKey: env.F3_MAP_API_KEY,
+    googleApiKey: env.F3_GOOGLE_API_KEY,
+    channel: env.F3_CHANNEL,
+  };
+
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `window.__F3_RUNTIME__=${JSON.stringify(runtimeConfig)}`,
+          }}
+        />
+      </head>
       <body
         className={cn(
           "min-h-dvh w-screen overflow-hidden bg-background font-sans text-foreground antialiased",

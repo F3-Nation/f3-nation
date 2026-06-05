@@ -2,13 +2,10 @@ import Image from "next/image";
 
 import { VersionInfo } from "~/app/_components/version-info";
 import { AuthWrapper } from "../components/auth-components";
-import { env } from "~/env";
 
 export const dynamic = "force-dynamic";
 
 export default function VerifyRequestPage() {
-  const channel = env.NEXT_PUBLIC_CHANNEL;
-
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col items-center">
@@ -39,7 +36,7 @@ export default function VerifyRequestPage() {
         </div>
       </AuthWrapper>
       <div className="my-4 flex w-full justify-center">
-        <VersionInfo channel={channel} />
+        <VersionInfo />
       </div>
     </div>
   );

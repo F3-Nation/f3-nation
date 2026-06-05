@@ -3,8 +3,6 @@ import { useEffect } from "react";
 
 import { DEFAULT_CENTER } from "@acme/shared/app/constants";
 
-import { env } from "~/env";
-
 interface GoogleMapSimpleProps {
   latitude: number | undefined;
   longitude: number | undefined;
@@ -16,8 +14,10 @@ export const GoogleMapSimple = ({
   longitude,
   onCenterChanged,
 }: GoogleMapSimpleProps) => {
+  const googleApiKey = window.__F3_RUNTIME__?.googleApiKey ?? "";
+
   return (
-    <APIProvider apiKey={env.NEXT_PUBLIC_GOOGLE_API_KEY}>
+    <APIProvider apiKey={googleApiKey}>
       <ProvidedGoogleMapSimple
         latitude={latitude}
         longitude={longitude}
