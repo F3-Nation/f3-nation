@@ -50,11 +50,11 @@ export const viewport: Viewport = {
 
 export default function RootLayout(props: { children: React.ReactNode }) {
   const runtimeConfig = {
-    apiBaseUrl: env.F3_API_BASE_URL,
-    adminUrl: env.F3_ADMIN_URL,
-    mapApiKey: env.F3_MAP_API_KEY,
-    googleApiKey: env.F3_GOOGLE_API_KEY,
-    channel: env.F3_CHANNEL,
+    apiBaseUrl: process.env.F3_API_BASE_URL,
+    adminUrl: process.env.F3_ADMIN_URL,
+    mapApiKey: process.env.F3_MAP_API_KEY,
+    googleApiKey: process.env.F3_GOOGLE_API_KEY,
+    channel: process.env.F3_CHANNEL,
   };
 
   return (

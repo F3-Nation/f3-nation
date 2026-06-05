@@ -25,6 +25,8 @@
     "OAUTH_CLIENT_ID",
     "F3_ADMIN_BASE_URL",
     "F3_API_BASE_URL",
+    "F3_ADMIN_URL",
+    "F3_MAP_API_KEY",
     "F3_API_TIMEOUT_MS",
     "F3_CHANNEL",
     "F3_GOOGLE_API_KEY",
