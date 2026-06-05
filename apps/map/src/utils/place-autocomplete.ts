@@ -4,6 +4,8 @@ import type { PlaceResult } from "@acme/shared/app/types";
 import { MAX_PLACES_AUTOCOMPLETE_RADIUS } from "@acme/shared/app/constants";
 import { zoomToRadius } from "@acme/shared/app/functions";
 
+import { getGoogleApiKey } from "./runtime-config";
+
 // Cache for autocomplete results (key: input+center+zoom, value: results)
 const autocompleteCache = new Map<
   string,
@@ -50,6 +52,7 @@ export async function placesAutocomplete({
   center: { lat: number; lng: number };
   zoom: number;
 }): Promise<PlaceResult[]> {
+  const googleApiKey = getGoogleApiKey();
   // Check cache first
   const cacheKey = `${input.toLowerCase().trim()}_${center.lat}_${center.lng}_${zoom}`;
   const cached = autocompleteCache.get(cacheKey);
@@ -77,7 +80,6 @@ export async function placesAutocomplete({
         };
 
   try {
-    const googleApiKey = window.__F3_RUNTIME__?.googleApiKey ?? "";
     const response = await axios.post<{ suggestions: PlaceResult[] }>(
       `https://places.googleapis.com/v1/places:autocomplete`,
       { input, locationBias },

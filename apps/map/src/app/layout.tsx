@@ -10,7 +10,6 @@ import { SessionProvider } from "next-auth/react";
 import { cn } from "@acme/ui";
 import { ThemeProvider } from "@acme/ui/theme";
 import { Toaster } from "@acme/ui/toast";
-import { headers } from "next/headers";
 
 import { env } from "~/env";
 
@@ -51,25 +50,9 @@ export const viewport: Viewport = {
   ],
 };
 
-export default async function RootLayout(props: { children: React.ReactNode }) {
-  await headers();
-  const runtimeConfig = {
-    apiBaseUrl: process.env.F3_API_BASE_URL,
-    adminUrl: process.env.F3_ADMIN_URL,
-    mapApiKey: process.env.F3_MAP_API_KEY,
-    googleApiKey: process.env.F3_GOOGLE_API_KEY,
-    channel: process.env.F3_CHANNEL,
-  };
-
+export default function RootLayout(props: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `window.__F3_RUNTIME__=${JSON.stringify(runtimeConfig)}`,
-          }}
-        />
-      </head>
       <body
         className={cn(
           "min-h-dvh w-screen overflow-hidden bg-background font-sans text-foreground antialiased",
@@ -79,25 +62,21 @@ export default async function RootLayout(props: { children: React.ReactNode }) {
       >
         <GoogleAnalytics />
         <RouteChangeTracker />
-        <DataProvider runtimeConfig={runtimeConfig}>
+        <DataProvider>
           <ElementProvider>{props.children}</ElementProvider>
         </DataProvider>
       </body>
     </html>
   );
 }
-const DataProvider = ({
-  runtimeConfig,
-  children,
-}: {
-  runtimeConfig: Record<string, string | undefined>;
-  children: React.ReactNode;
-}) => {
+
+const DataProvider = ({ children }: { children: React.ReactNode }) => {
   return (
     <SessionProvider>
       <RuntimeConfigProvider
-        channel={runtimeConfig.channel as Channel}
-        googleApiKey={runtimeConfig.googleApiKey ?? ""}
+        channel={(process.env.F3_CHANNEL ?? "local") as Channel}
+        googleApiKey={process.env.F3_GOOGLE_API_KEY ?? ""}
+        adminUrl={process.env.F3_ADMIN_URL ?? ""}
       >
         <OrpcReactProvider>
           <UserLocationProvider>

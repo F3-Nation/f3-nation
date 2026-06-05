@@ -2,39 +2,32 @@
 
 import { createContext, useContext } from "react";
 
-interface F3Runtime {
-  mapApiKey?: string;
-  apiBaseUrl?: string;
-  googleApiKey?: string;
-  adminUrl?: string;
-  channel?: string;
-}
-declare global {
-  interface Window {
-    __F3_RUNTIME__?: F3Runtime;
-  }
-}
-
 export type Channel = "local" | "ci" | "branch" | "dev" | "staging" | "prod";
 
 interface RuntimeConfig {
   channel: Channel;
   googleApiKey: string;
+  adminUrl: string;
 }
 
 const RuntimeConfigContext = createContext<RuntimeConfig | null>(null);
 
+let _runtimeConfig: RuntimeConfig | null = null;
+
 export function RuntimeConfigProvider({
   channel,
   googleApiKey,
+  adminUrl,
   children,
 }: {
   channel: Channel;
   googleApiKey: string;
+  adminUrl: string;
   children: React.ReactNode;
 }) {
+  _runtimeConfig = { channel, googleApiKey, adminUrl };
   return (
-    <RuntimeConfigContext.Provider value={{ channel, googleApiKey }}>
+    <RuntimeConfigContext.Provider value={_runtimeConfig}>
       {children}
     </RuntimeConfigContext.Provider>
   );
@@ -48,4 +41,11 @@ export function useRuntimeConfig(): RuntimeConfig {
     );
   }
   return ctx;
+}
+
+export function getGoogleApiKey(): string {
+  if (!_runtimeConfig) {
+    throw new Error("RuntimeConfigProvider has not rendered yet");
+  }
+  return _runtimeConfig.googleApiKey;
 }
