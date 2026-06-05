@@ -58,6 +58,11 @@ on:
         required: false
         type: string
         default: cloud-run-builds
+      flags:
+        description: "Extra flags passed directly to gcloud run deploy (e.g. --max-instances=1)"
+        required: false
+        type: string
+        default: ""
 
 jobs:
   # ── Gate: wait for the full CI check set to pass on this commit ──
@@ -157,6 +162,7 @@ jobs:
           project_id: ${{ inputs.staging_project }}
           # deploy-cloudrun v3 defaults wait to false; keep waiting for the revision to be healthy
           wait: "true"
+          flags: ${{ inputs.flags }}
           # Env vars are set via Cloud Run secrets / env config (see scripts/cloud-run-env.sh)
 
   # ── Deploy to production (requires approval) ──
@@ -203,3 +209,4 @@ jobs:
           project_id: ${{ inputs.prod_project }}
           # deploy-cloudrun v3 defaults wait to false; keep waiting for the revision to be healthy
           wait: "true"
+          flags: ${{ inputs.flags }}

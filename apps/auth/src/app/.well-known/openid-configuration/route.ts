@@ -22,6 +22,6 @@ export async function GET() {
       "client_secret_basic",
     ],
     claims_supported: ["sub", "name", "email", "email_verified", "picture"],
-    code_challenge_methods_supported: ["S256", "plain"],
+    code_challenge_methods_supported: ["S256"],
   });
 }
