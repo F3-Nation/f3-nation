@@ -2,6 +2,7 @@ import { APIProvider, Map, Marker, useMap } from "@vis.gl/react-google-maps";
 import { useEffect } from "react";
 
 import { DEFAULT_CENTER } from "@acme/shared/app/constants";
+import { useRuntimeConfig } from "~/utils/runtime-config";
 
 interface GoogleMapSimpleProps {
   latitude: number | undefined;
@@ -14,7 +15,7 @@ export const GoogleMapSimple = ({
   longitude,
   onCenterChanged,
 }: GoogleMapSimpleProps) => {
-  const googleApiKey = window.__F3_RUNTIME__?.googleApiKey ?? "";
+  const { googleApiKey } = useRuntimeConfig();
 
   return (
     <APIProvider apiKey={googleApiKey}>

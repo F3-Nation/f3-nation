@@ -10,6 +10,7 @@ import { SessionProvider } from "next-auth/react";
 import { cn } from "@acme/ui";
 import { ThemeProvider } from "@acme/ui/theme";
 import { Toaster } from "@acme/ui/toast";
+import { headers } from "next/headers";
 
 import { env } from "~/env";
 
@@ -22,6 +23,8 @@ import { UserLocationProvider } from "~/app/_components/map/user-location-provid
 import { ModalSwitcher } from "~/app/_components/modal/modal-switcher";
 import { ShadCnContainer } from "~/app/_components/shad-cn-container-ref";
 import { OrpcReactProvider } from "~/orpc/react";
+import type { Channel } from "~/utils/runtime-config";
+import { RuntimeConfigProvider } from "~/utils/runtime-config";
 import { KeyPressProvider } from "~/utils/key-press/provider";
 import { RouteChangeTracker } from "./_components/route-change-tracker";
 
@@ -48,7 +51,8 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout(props: { children: React.ReactNode }) {
+export default async function RootLayout(props: { children: React.ReactNode }) {
+  await headers();
   const runtimeConfig = {
     apiBaseUrl: process.env.F3_API_BASE_URL,
     adminUrl: process.env.F3_ADMIN_URL,
@@ -75,21 +79,32 @@ export default function RootLayout(props: { children: React.ReactNode }) {
       >
         <GoogleAnalytics />
         <RouteChangeTracker />
-        <DataProvider>
+        <DataProvider runtimeConfig={runtimeConfig}>
           <ElementProvider>{props.children}</ElementProvider>
         </DataProvider>
       </body>
     </html>
   );
 }
-const DataProvider = ({ children }: { children: React.ReactNode }) => {
+const DataProvider = ({
+  runtimeConfig,
+  children,
+}: {
+  runtimeConfig: Record<string, string | undefined>;
+  children: React.ReactNode;
+}) => {
   return (
     <SessionProvider>
-      <OrpcReactProvider>
-        <UserLocationProvider>
-          <KeyPressProvider>{children}</KeyPressProvider>
-        </UserLocationProvider>
-      </OrpcReactProvider>
+      <RuntimeConfigProvider
+        channel={runtimeConfig.channel as Channel}
+        googleApiKey={runtimeConfig.googleApiKey ?? ""}
+      >
+        <OrpcReactProvider>
+          <UserLocationProvider>
+            <KeyPressProvider>{children}</KeyPressProvider>
+          </UserLocationProvider>
+        </OrpcReactProvider>
+      </RuntimeConfigProvider>
     </SessionProvider>
   );
 };
