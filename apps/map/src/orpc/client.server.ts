@@ -24,11 +24,8 @@ globalThis.$client = createRouterClient(router, {
       [Header.Client]: Client.ORPC_SSG,
     });
     // Only set Authorization header if API key is configured (not required locally)
-    if (env.NEXT_PUBLIC_MAP_API_KEY) {
-      headers.set(
-        Header.Authorization,
-        `Bearer ${env.NEXT_PUBLIC_MAP_API_KEY}`,
-      );
+    if (env.F3_MAP_API_KEY) {
+      headers.set(Header.Authorization, `Bearer ${env.F3_MAP_API_KEY}`);
     }
     return { reqHeaders: headers };
   },

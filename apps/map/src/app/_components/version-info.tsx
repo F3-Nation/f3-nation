@@ -9,11 +9,8 @@ import { cn } from "@acme/ui";
 import { mapStore } from "~/utils/store/map";
 import packageJson from "../../../package.json";
 
-interface VersionInfoProps extends HTMLAttributes<HTMLSpanElement> {
-  channel: string;
-}
-
-export const VersionInfo = ({ channel, ...props }: VersionInfoProps) => {
+export const VersionInfo = (props: HTMLAttributes<HTMLSpanElement>) => {
+  const channel = window.__F3_RUNTIME__?.channel ?? "";
   const [clicks, setClicks] = useState(0);
   const { className, ...rest } = props;
 

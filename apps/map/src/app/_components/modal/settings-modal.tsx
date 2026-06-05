@@ -30,7 +30,6 @@ import {
 } from "@acme/ui/dialog";
 import { toast } from "@acme/ui/toast";
 
-import { env } from "~/env";
 import { useAuth } from "~/utils/hooks/use-auth";
 import { appStore } from "~/utils/store/app";
 import { mapStore } from "~/utils/store/map";
@@ -38,8 +37,6 @@ import { closeModal, ModalType, openModal } from "~/utils/store/modal";
 import { VersionInfo } from "../version-info";
 
 export default function SettingsModal() {
-  const channel = env.NEXT_PUBLIC_CHANNEL;
-
   const showDebug = mapStore.use.showDebug();
   const mode = appStore.use.mode();
   const tiles = mapStore.use.tiles();
@@ -281,21 +278,35 @@ export default function SettingsModal() {
                     </p>
                   ))}
                 </div>
-                {isEditorOrAdmin ? (
-                  <Link href="/admin" target="_blank" rel="noopener noreferrer">
-                    <button
-                      className={cn(
-                        "flex w-full flex-row items-center justify-center gap-1 rounded-md bg-background p-2 text-foreground shadow-sm hover:bg-accent",
-                      )}
-                      onClick={() => {
-                        closeModal();
-                      }}
-                    >
-                      <Shield className="size-4" />
-                      <span className="text-xs">Admin Portal</span>
-                    </button>
-                  </Link>
-                ) : null}
+                {isEditorOrAdmin &&
+                  (() => {
+                    const adminUrl =
+                      window.__F3_RUNTIME__?.adminUrl ??
+                      (window.__F3_RUNTIME__?.channel === "prod"
+                        ? "https://admin.f3nation.com"
+                        : window.__F3_RUNTIME__?.channel === "staging"
+                          ? "https://staging.admin.f3nation.com"
+                          : undefined);
+                    return adminUrl ? (
+                      <Link
+                        href={adminUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <button
+                          className={cn(
+                            "flex w-full flex-row items-center justify-center gap-1 rounded-md bg-background p-2 text-foreground shadow-sm hover:bg-accent",
+                          )}
+                          onClick={() => {
+                            closeModal();
+                          }}
+                        >
+                          <Shield className="size-4" />
+                          <span className="text-xs">Admin Portal</span>
+                        </button>
+                      </Link>
+                    ) : null;
+                  })()}
                 <Link
                   href={"/api/auth/signout"}
                   onClick={() => {
@@ -376,10 +387,7 @@ export default function SettingsModal() {
             </button>
           </div>
           <div className="flex justify-center">
-            <VersionInfo
-              channel={channel}
-              className="text-xs text-foreground/60"
-            />
+            <VersionInfo className="text-xs text-foreground/60" />
           </div>
         </div>
       </DialogContent>

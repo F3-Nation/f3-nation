@@ -8,7 +8,6 @@ import { BreakPoints, SIDEBAR_WIDTH } from "@acme/shared/app/constants";
 import { TestId } from "@acme/shared/common/enums";
 import { useTheme } from "@acme/ui/theme";
 
-import { env } from "~/env";
 import { useIsMobileWidth } from "~/utils/hooks/use-is-mobile-width";
 import { useUpdateLocSearchParams } from "~/utils/hooks/use-update-loc-search-params";
 import { appStore } from "~/utils/store/app";
@@ -59,8 +58,10 @@ const MAP_CONFIGS: MapConfig[] = [
 
 export const GoogleMapComponent = () => {
   const { initialCenter, initialZoom } = useInitialLocation();
+  const googleApiKey = window.__F3_RUNTIME__?.googleApiKey ?? "";
+
   return (
-    <APIProvider apiKey={env.NEXT_PUBLIC_GOOGLE_API_KEY}>
+    <APIProvider apiKey={googleApiKey}>
       <ProvidedGoogleMapComponent
         defaultZoom={initialZoom}
         defaultCenter={initialCenter}

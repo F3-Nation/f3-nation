@@ -2,8 +2,6 @@ import axios from "axios";
 
 import type { PlaceDetails } from "@acme/shared/app/types";
 
-import { env } from "~/env";
-
 // Cache for place details (placeId -> details)
 const placeDetailsCache = new Map<
   string,
@@ -18,12 +16,13 @@ export async function placesDetails(placeId: string): Promise<PlaceDetails> {
     return cached.details;
   }
 
+  const googleApiKey = window.__F3_RUNTIME__?.googleApiKey ?? "";
   try {
     const response = await axios.get<PlaceDetails>(
       `https://places.googleapis.com/v1/places/${placeId}`,
       {
         headers: {
-          "X-Goog-Api-Key": env.NEXT_PUBLIC_GOOGLE_API_KEY,
+          "X-Goog-Api-Key": googleApiKey,
         },
         params: {
           fields: "id,displayName,location",

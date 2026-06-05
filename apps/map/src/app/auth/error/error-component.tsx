@@ -4,7 +4,6 @@ import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 
 import { VersionInfo } from "~/app/_components/version-info";
-import { env } from "~/env";
 import { AuthWrapper } from "../components/auth-components";
 
 type Error = "default" | "Configuration" | "AccessDenied" | "Verification";
@@ -12,7 +11,6 @@ type Error = "default" | "Configuration" | "AccessDenied" | "Verification";
 export default function ErrorComponent() {
   const searchParams = useSearchParams();
   const error = searchParams?.get("error") ?? "default";
-  const channel = env.NEXT_PUBLIC_CHANNEL;
 
   const errors: Record<
     Error,
@@ -97,7 +95,7 @@ export default function ErrorComponent() {
         </div>
       </AuthWrapper>
       <div className="my-4 flex w-full justify-center">
-        <VersionInfo channel={channel} />
+        <VersionInfo />
       </div>
     </div>
   );

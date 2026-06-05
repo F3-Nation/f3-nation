@@ -6,21 +6,25 @@ import type { router } from "@acme/api";
 import { API_PREFIX_V1 } from "@acme/shared/app/constants";
 import { Client, Header } from "@acme/shared/common/enums";
 
-import { env } from "~/env";
-
 declare global {
   var $client: RouterClient<typeof router> | undefined;
 }
 
+const apiBaseUrl =
+  typeof window !== "undefined" ? window.__F3_RUNTIME__?.apiBaseUrl : undefined;
+
 const link = new RPCLink({
-  url: `${env.NEXT_PUBLIC_API_URL}${API_PREFIX_V1}`,
+  url: `${apiBaseUrl}${API_PREFIX_V1}`,
   // fetch: ensure cookies are sent along for auth
   fetch: (input, init) => {
     input.headers.set(Header.Client, Client.ORPC); // Identifies this as an oRPC client request
 
     // Always include the public API key for map access
     // This allows unauthenticated users to view the map
-    const publicApiKey = env.NEXT_PUBLIC_MAP_API_KEY;
+    const publicApiKey =
+      typeof window !== "undefined"
+        ? window.__F3_RUNTIME__?.mapApiKey
+        : undefined;
     if (publicApiKey) {
       input.headers.set(Header.Authorization, `Bearer ${publicApiKey}`);
     }
