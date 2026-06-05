@@ -5,7 +5,9 @@ import { revokeToken } from "~/lib/oauth";
 import { rateLimit } from "~/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
-  const ip = request.headers.get("x-forwarded-for") ?? "unknown";
+  const ip =
+    request.headers.get("x-forwarded-for")?.split(",").at(-1)?.trim() ??
+    "unknown";
   const { allowed } = rateLimit(`revoke:${ip}`, 30, 60 * 1000);
   if (!allowed) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });

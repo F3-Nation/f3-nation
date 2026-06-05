@@ -5,7 +5,9 @@ import { validateAccessToken } from "~/lib/oauth";
 import { rateLimit } from "~/lib/rate-limit";
 
 export async function GET(request: NextRequest) {
-  const ip = request.headers.get("x-forwarded-for") ?? "unknown";
+  const ip =
+    request.headers.get("x-forwarded-for")?.split(",").at(-1)?.trim() ??
+    "unknown";
   const { allowed } = rateLimit(`userinfo:${ip}`, 60, 60 * 1000);
   if (!allowed) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
