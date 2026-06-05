@@ -12,7 +12,6 @@ import { Input } from "@acme/ui/input";
 import { useOnKeyPress } from "~/utils/hooks/use-on-key-press";
 import { onClickPlaceRowMap } from "~/utils/on-click-place-row-map";
 import { debouncedPlacesAutocomplete } from "~/utils/place-autocomplete";
-import { useRuntimeConfig } from "~/utils/runtime-config";
 import { appStore } from "~/utils/store/app";
 import { mapStore } from "~/utils/store/map";
 import { searchStore } from "~/utils/store/search";
@@ -25,7 +24,6 @@ export function MapSearchBoxMobile({
   ...rest
 }: ComponentProps<"div">) {
   const isMobile = appStore.use.isMobileDeviceWidth();
-  const { googleApiKey } = useRuntimeConfig();
   const text = searchStore.use.text();
   const searchBarFocused = searchStore.use.searchBarFocused();
   const { combinedResults } = useTextSearchResults();
@@ -34,7 +32,7 @@ export function MapSearchBoxMobile({
   const onSubmit = () => {
     const selectedResult = combinedResults[0];
     if (selectedResult && isGeoMapSearchResult(selectedResult)) {
-      onClickPlaceRowMap(selectedResult, googleApiKey);
+      onClickPlaceRowMap(selectedResult);
     }
   };
 
@@ -155,7 +153,6 @@ export function MapSearchBoxMobile({
                     value,
                     center,
                     zoom,
-                    googleApiKey,
                     (results) => {
                       // Only update if the input hasn't changed
                       if (searchStore.get("text") === value) {
