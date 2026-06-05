@@ -83,17 +83,27 @@ The DNS CNAME record for `apps.f3nation.com` must point to `f3-nation.github.io`
 
 ### Adding a new app to the landing page
 
-Edit the `APPS` array in `src/app/page.tsx`:
+Edit the `APP_GROUPS` array in `src/app/page.tsx`. Each group has:
 
 ```ts
 {
-  name: "New App Name",
-  description: "What it does.",
-  href: "https://newapp.f3nation.com",
-  // optional: override the default "Open" link label
-  linkLabel: "Learn More",
+  title: "Group Name",        // rendered as an <h2> section heading
+  description: "Who it's for.",
+  apps: [
+    {
+      name: "New App Name",
+      description: "What it does.",
+      href: "https://newapp.f3nation.com",
+      // optional: only shown in local dev (NEXT_PUBLIC_LOCAL_DEV=true)
+      localHref: "http://localhost:3000",
+      // optional: override the default "Open" link label
+      linkLabel: "Learn More",
+    },
+  ],
 }
 ```
+
+Apps belong to one of three groups: **Everyday Use**, **Region Admins**, or **Developers**.
 
 ### Adding a new route
 

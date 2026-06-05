@@ -141,7 +141,7 @@ function AppCard({ app }: { app: App }) {
   const resolvedHref = isLocal ? (app.localHref ?? app.href) : app.href;
   const inner = (
     <>
-      <h2 className="mb-2 text-lg font-semibold text-foreground">{app.name}</h2>
+      <h3 className="mb-2 text-lg font-semibold text-foreground">{app.name}</h3>
       <p className="mb-4 flex-1 text-sm text-muted-foreground">
         {app.description}
       </p>
