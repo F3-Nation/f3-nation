@@ -12,8 +12,6 @@ interface RuntimeConfig {
 
 const RuntimeConfigContext = createContext<RuntimeConfig | null>(null);
 
-let _runtimeConfig: RuntimeConfig | null = null;
-
 export function RuntimeConfigProvider({
   channel,
   googleApiKey,
@@ -25,9 +23,8 @@ export function RuntimeConfigProvider({
   adminUrl: string;
   children: React.ReactNode;
 }) {
-  _runtimeConfig = { channel, googleApiKey, adminUrl };
   return (
-    <RuntimeConfigContext.Provider value={_runtimeConfig}>
+    <RuntimeConfigContext.Provider value={{ channel, googleApiKey, adminUrl }}>
       {children}
     </RuntimeConfigContext.Provider>
   );
@@ -41,11 +38,4 @@ export function useRuntimeConfig(): RuntimeConfig {
     );
   }
   return ctx;
-}
-
-export function getGoogleApiKey(): string {
-  if (!_runtimeConfig) {
-    throw new Error("RuntimeConfigProvider has not rendered yet");
-  }
-  return _runtimeConfig.googleApiKey;
 }

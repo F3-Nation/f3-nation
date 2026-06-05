@@ -4,8 +4,6 @@ import type { PlaceResult } from "@acme/shared/app/types";
 import { MAX_PLACES_AUTOCOMPLETE_RADIUS } from "@acme/shared/app/constants";
 import { zoomToRadius } from "@acme/shared/app/functions";
 
-import { getGoogleApiKey } from "./runtime-config";
-
 // Cache for autocomplete results (key: input+center+zoom, value: results)
 const autocompleteCache = new Map<
   string,
@@ -47,12 +45,13 @@ export async function placesAutocomplete({
   input,
   center,
   zoom,
+  googleApiKey,
 }: {
   input: string;
   center: { lat: number; lng: number };
   zoom: number;
+  googleApiKey: string;
 }): Promise<PlaceResult[]> {
-  const googleApiKey = getGoogleApiKey();
   // Check cache first
   const cacheKey = `${input.toLowerCase().trim()}_${center.lat}_${center.lng}_${zoom}`;
   const cached = autocompleteCache.get(cacheKey);
@@ -127,6 +126,7 @@ export function debouncedPlacesAutocomplete(
   input: string,
   center: { lat: number; lng: number },
   zoom: number,
+  googleApiKey: string,
   callback: (results: PlaceResult[]) => void,
 ): () => void {
   // Clear existing timer if any (this is the key to proper debouncing)
@@ -137,7 +137,9 @@ export function debouncedPlacesAutocomplete(
   // Set new timer - this will be canceled if function is called again before delay
   autocompleteDebounceTimer = setTimeout(() => {
     autocompleteDebounceTimer = null;
-    void placesAutocomplete({ input, center, zoom }).then(callback);
+    void placesAutocomplete({ input, center, zoom, googleApiKey }).then(
+      callback,
+    );
   }, DEBOUNCE_DELAY);
 
   // Return cleanup function

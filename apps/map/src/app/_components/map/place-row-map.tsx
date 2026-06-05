@@ -7,6 +7,7 @@ import { CardDescription, CardHeader, CardTitle } from "@acme/ui/card";
 
 import type { GeoMapSearchResult } from "~/utils/types";
 import { onClickPlaceRowMap } from "~/utils/on-click-place-row-map";
+import { useRuntimeConfig } from "~/utils/runtime-config";
 
 export const PlaceRowMap = ({
   result,
@@ -15,11 +16,12 @@ export const PlaceRowMap = ({
   result: GeoMapSearchResult;
   focused?: boolean;
 }) => {
+  const { googleApiKey } = useRuntimeConfig();
   return (
     <button
       className="w-full"
       onClick={() => {
-        onClickPlaceRowMap(result);
+        onClickPlaceRowMap(result, googleApiKey);
       }}
     >
       <CardHeader

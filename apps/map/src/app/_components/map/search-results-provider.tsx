@@ -9,6 +9,7 @@ import { isTruthy } from "@acme/shared/common/functions";
 import { orpc, useQuery } from "~/orpc/react";
 import { useIsMobileWidth } from "~/utils/hooks/use-is-mobile-width";
 import { debouncedPlacesAutocomplete } from "~/utils/place-autocomplete";
+import { useRuntimeConfig } from "~/utils/runtime-config";
 import { mapStore } from "~/utils/store/map";
 import { searchStore } from "~/utils/store/search";
 import type {
@@ -55,6 +56,7 @@ export const TextSearchResultsProvider = ({
   const locationIdToRegionNameLookup =
     locationIdToRegionNameLookupResponse?.lookup;
   const isMobileWidth = useIsMobileWidth();
+  const { googleApiKey } = useRuntimeConfig();
   RERENDER_LOGS && console.log("TextSearchResultsProvider rerender");
   const text = searchStore.use.text();
   const { filteredLocationMarkers } = useFilteredMapResults();
@@ -152,6 +154,7 @@ export const TextSearchResultsProvider = ({
       text,
       mapStore.get("center") ?? { lat: 37.7937, lng: -122.3965 },
       mapStore.get("zoom"),
+      googleApiKey,
       (results) => {
         setGeoResults(
           results.map((result) => ({
@@ -179,6 +182,7 @@ export const TextSearchResultsProvider = ({
     text,
     eventIdToRegionNameLookup,
     locationIdToRegionNameLookup,
+    googleApiKey,
   ]);
 
   const combinedResults = useMemo(
