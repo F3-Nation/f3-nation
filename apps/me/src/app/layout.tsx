@@ -5,6 +5,7 @@ import { AuthProvider } from "@/lib/auth/AuthProvider";
 import { Navbar } from "@/components/navbar";
 import { ToastProvider, Toaster } from "@/components/ui/toast";
 import { SaveProvider } from "@/lib/save-context";
+import { GoogleAnalytics } from "@/components/google-analytics";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -25,8 +26,9 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${inter.className} min-h-screen bg-background text-foreground antialiased`}
+        className={`${inter.className} min-h-screen overflow-x-hidden overscroll-y-none bg-background text-foreground antialiased`}
       >
+        <GoogleAnalytics />
         <ToastProvider>
           <AuthProvider>
             <SaveProvider>

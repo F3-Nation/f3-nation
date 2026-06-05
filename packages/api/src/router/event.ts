@@ -817,7 +817,7 @@ export const eventRouter = {
           isActive: result.isActive,
           isPrivate: result.isPrivate,
           highlight: result.highlight,
-          meta: result.meta as Record<string, unknown> | null,
+          meta: result.meta,
           eventTypeIds: eventTypeIds,
           // eventTagId: eventTagIds?.[0], // TODO: event tag support
         };
@@ -830,7 +830,16 @@ export const eventRouter = {
             4,
             seriesData.startDate,
           );
-        } else if (existingEvent.recurrencePattern) {
+
+          // Check if this is the first recurring event for the region and
+          // trigger the "region in a box" notification flow.
+          const { maybeNotifyFirstEventForRegion } =
+            await import("../lib/first-event-service");
+          void maybeNotifyFirstEventForRegion(ctx.db, result.orgId).catch(
+            (err: unknown) =>
+              console.error("maybeNotifyFirstEventForRegion failed", { err }),
+          );
+        } else if (existingEvent.dayOfWeek) {
           // Existing series: check for structural changes
           const existingSeriesData = {
             dayOfWeek: existingEvent.dayOfWeek,
@@ -980,9 +989,8 @@ export const eventRouter = {
         );
 
       // Cascade delete event instances for series events
-      const { softDeleteFutureInstancesForSeries } = await import(
-        "../lib/cascade-service"
-      );
+      const { softDeleteFutureInstancesForSeries } =
+        await import("../lib/cascade-service");
       await softDeleteFutureInstancesForSeries(ctx.db, input.id);
 
       // Notify webhooks and invalidate cache about the event deletion

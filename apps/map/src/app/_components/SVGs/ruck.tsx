@@ -11,7 +11,7 @@ export default function RuckSvgComponent({
   const foreground = isDark ? "#fff" : "#000";
   const background = isDark ? "#000" : "#fff";
 
-  const primaryFill = fill === "background" ? background : fill ?? foreground;
+  const primaryFill = fill === "background" ? background : (fill ?? foreground);
   const secondaryFill = fill === "background" ? foreground : background;
   return (
     <svg

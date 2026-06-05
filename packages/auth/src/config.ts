@@ -1,13 +1,13 @@
+import { eq } from "drizzle-orm";
 import type { NextAuthConfig } from "next-auth";
 import type { Adapter } from "next-auth/adapters";
 import type { Provider } from "next-auth/providers";
-import { eq } from "drizzle-orm";
 import CredentialsProvider from "next-auth/providers/credentials";
 
-import type { UserRole } from "@acme/shared/app/enums";
 import { db } from "@acme/db/client";
 import { orgs } from "@acme/db/schema/schema";
 import { env } from "@acme/env";
+import type { UserRole } from "@acme/shared/app/enums";
 import { COOKIE_NAME } from "@acme/shared/common/constants";
 import { ProviderId } from "@acme/shared/common/enums";
 
@@ -44,17 +44,21 @@ function extractHostname(url: string | undefined): string | undefined {
  * If running in Vercel, use NEXT_PUBLIC_VERCEL_URL if available (or some runtime value if available).
  * Else, fallback to window.location if possible (for client-side usage), or process.env if on server.
  * If all else fails, default to undefined (scopes to current host).
+ *
+ * On the server, prefer NEXT_PUBLIC_ADMIN_URL before API/MAP so the admin app on its own host
+ * (e.g. Cloud Run) does not inherit .f3nation.com from API/MAP and break Set-Cookie.
  */
 function getCookieDomain(): string | undefined {
   const hostname =
     typeof window !== "undefined"
       ? window.location.hostname
       : // Try Vercel env first (it won't have protocol in NEXT_PUBLIC_VERCEL_URL)
-        extractHostname(process.env.NEXT_PUBLIC_VERCEL_URL) ??
+        (extractHostname(process.env.NEXT_PUBLIC_VERCEL_URL) ??
         extractHostname(process.env.VERCEL_URL) ??
+        extractHostname(env.NEXT_PUBLIC_ADMIN_URL) ??
         extractHostname(env.NEXT_PUBLIC_API_URL) ??
         extractHostname(env.NEXT_PUBLIC_MAP_URL) ??
-        undefined;
+        undefined);
 
   if (
     !hostname ||
@@ -62,6 +66,11 @@ function getCookieDomain(): string | undefined {
     hostname === "127.0.0.1"
   ) {
     return undefined; // don't set domain in local dev (scopes to current host)
+  }
+
+  // Cloud Run / Firebase-style hosts: parent suffix is on the public suffix list; use host-only cookies
+  if (hostname.endsWith(".run.app")) {
+    return undefined;
   }
 
   if (hostname.endsWith(".f3nation.com")) return ".f3nation.com";
@@ -88,6 +97,7 @@ function shouldUseSecureCookies(): boolean {
 
   // Check if any URL is HTTPS (for local HTTPS dev with .f3nation.test)
   const urls = [
+    env.NEXT_PUBLIC_ADMIN_URL,
     env.NEXT_PUBLIC_API_URL,
     env.NEXT_PUBLIC_MAP_URL,
     typeof window !== "undefined" ? window.location.href : undefined,

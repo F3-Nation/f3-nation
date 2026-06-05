@@ -1,17 +1,20 @@
-FROM --platform=linux/amd64 node:24-alpine AS builder
+ARG TURBO_VERSION=2
+FROM --platform=linux/amd64 node:24.14.1-alpine AS builder
+ARG TURBO_VERSION
 
 ENV NEXT_TELEMETRY_DISABLED 1
 ENV TURBO_TELEMETRY_DISABLED 1
 
 RUN apk add --no-cache libc6-compat openssl && apk update
 WORKDIR /app
-RUN npm install -g turbo@^1.12.3
+RUN npm install -g turbo@${TURBO_VERSION}
 COPY . .
 
 # Prune the workspace to only include nextjs and its dependencies
 RUN turbo prune f3-nation-api --docker
 
-FROM --platform=linux/amd64 node:24-alpine AS installer
+FROM --platform=linux/amd64 node:24.14.1-alpine AS installer
+ARG TURBO_VERSION
 RUN apk add --no-cache libc6-compat openssl && apk update
 WORKDIR /app
 
@@ -19,7 +22,6 @@ ENV NODE_ENV production
 ENV CI true
 ENV SKIP_ENV_VALIDATION true
 
-RUN npm install -g turbo@^1.12.3
 RUN corepack enable
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 
@@ -58,7 +60,7 @@ RUN doppler setup -p f3-api --token "$DOPPLER_TOKEN"
 RUN doppler secrets download --no-file --format env > /app/apps/api/.env
 RUN doppler run -- sh -c "pnpm turbo build --filter=f3-nation-api && pnpm -F db migrate"
 
-FROM --platform=linux/amd64 node:24-alpine AS runner
+FROM --platform=linux/amd64 node:24.14.1-alpine AS runner
 RUN apk add --no-cache libc6-compat openssl && apk update
 WORKDIR /app
 

@@ -1,0 +1,71 @@
+name: Deploy Homepage
+
+on:
+  push:
+    tags:
+      - "homepage@*"
+
+# Single GitHub Pages site: serialize all deploys through one group so a slower
+# older-tag run can't publish after a newer one. (cancel-in-progress: false lets
+# an in-flight production deploy finish.)
+concurrency:
+  group: deploy-homepage
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  checks: read
+
+jobs:
+  # ── Gate: wait for CI to pass on this commit ──
+  ci-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for CI to pass
+        uses: lewagon/wait-on-check-action@9312864dfbc9fd208e9c0417843430751c042800 # v1.7.0
+        with:
+          ref: ${{ github.sha }}
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          check-regexp: "^(build|lint|typecheck|format-check|test-coverage)$"
+          wait-interval: 15
+          allowed-conclusions: success
+
+  # ── Build static export ──
+  build:
+    needs: ci-check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-node-pnpm
+
+      - name: Build static export
+        run: pnpm build --filter f3-homepage
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
+        with:
+          path: apps/homepage/out
+
+  # ── Deploy to GitHub Pages ──
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5
+        id: deployment

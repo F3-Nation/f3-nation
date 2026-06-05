@@ -31,12 +31,12 @@ const withAdmin: MiddlewareFactory = (next: NextMiddleware) => {
       );
     }
 
-    const payload: JWT | null = await getToken({
+    const payload = (await getToken({
       req: request,
       secret,
       salt: cookieToken.name,
       cookieName: cookieToken.name,
-    });
+    })) as JWT | null;
 
     const isAdmin = payload?.roles.some((role) => role.roleName === "admin");
 

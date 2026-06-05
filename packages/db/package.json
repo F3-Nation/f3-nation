@@ -23,27 +23,28 @@
     "studio": "pnpm with-env drizzle-kit studio",
     "drop": "pnpm with-env drizzle-kit drop",
     "reset-test-db": "SKIP_ENV_VALIDATION=1 NODE_ENV=test pnpm with-env node -r esbuild-register src/utils/run-reset-test-db.ts",
+    "seed:local": "pnpm with-env tsx src/local-seed.ts",
     "typecheck": "tsc --noEmit",
-    "with-env": "dotenv -e ../../.env --",
+    "with-env": "dotenv -e ../env/.env --",
     "update-db": "pnpm with-env node -r esbuild-register src/update-db.ts"
   },
   "dependencies": {
     "@acme/env": "workspace:*",
     "@acme/shared": "workspace:*",
-    "dotenv-cli": "^7.3.0",
-    "drizzle-orm": "^0.45.2",
-    "esbuild-register": "^3.5.0",
-    "pg": "^8.11.3",
-    "postgres": "^3.4.3"
+    "dotenv-cli": "catalog:",
+    "drizzle-orm": "catalog:",
+    "esbuild-register": "catalog:",
+    "pg": "catalog:",
+    "postgres": "catalog:"
   },
   "devDependencies": {
     "@acme/eslint-config": "workspace:*",
     "@acme/prettier-config": "workspace:*",
     "@acme/tsconfig": "workspace:*",
-    "@faker-js/faker": "^8.1.0",
-    "drizzle-kit": "^0.31.10",
+    "@faker-js/faker": "catalog:",
+    "drizzle-kit": "catalog:",
     "eslint": "catalog:",
-    "prettier": "^3.2.5",
+    "prettier": "catalog:",
     "typescript": "catalog:"
   },
   "prettier": "@acme/prettier-config"

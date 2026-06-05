@@ -93,7 +93,7 @@ const SuspendedInitialLocationProvider = (params: { children: ReactNode }) => {
       !!queryLocationId || (queryLat != null && queryLon != null)
       ? CLOSE_ZOOM
       : // Otherwise, use the stored zoom or default zoom
-        mapStore.get("zoom") ?? DEFAULT_ZOOM;
+        (mapStore.get("zoom") ?? DEFAULT_ZOOM);
 
   if (!hasAttemptedSetInitialSelectedItem.current) {
     hasAttemptedSetInitialSelectedItem.current = true;

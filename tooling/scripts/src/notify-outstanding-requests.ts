@@ -58,9 +58,8 @@ async function main() {
   const { env } = await import("@acme/env");
   const { requestTypeToTitle } = await import("@acme/shared/app/functions");
   const { mail, Templates } = await import("@acme/mail");
-  const { getUsersWithRoles } = await import(
-    "@acme/api/services/map-request-notification"
-  );
+  const { getUsersWithRoles } =
+    await import("@acme/api/services/map-request-notification");
 
   console.log("🔍 Finding outstanding requests created after", CUTOFF_DATE);
   console.log(
@@ -158,10 +157,8 @@ async function main() {
   console.log("\n" + "─".repeat(80));
   console.log("\n📬 Email Summary:\n");
 
-  const mapBaseUrl = env.NEXT_PUBLIC_MAP_URL?.endsWith("/")
-    ? env.NEXT_PUBLIC_MAP_URL.slice(0, -1)
-    : env.NEXT_PUBLIC_MAP_URL ?? "";
-  const requestsUrl = `${mapBaseUrl}/admin/requests`;
+  const adminBaseUrl = (env.NEXT_PUBLIC_ADMIN_URL ?? "").replace(/\/$/, "");
+  const requestsUrl = `${adminBaseUrl}/requests`;
 
   // Display and optionally send emails
   let emailsSent = 0;

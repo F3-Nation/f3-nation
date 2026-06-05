@@ -7,15 +7,18 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "jsdom",
+    env: { NODE_ENV: "test" },
     setupFiles: ["__tests__/setup.tsx"],
     coverage: {
       provider: "v8",
-      reporter: ["text", "html"],
+      reporter: ["text", "json", "html"],
+      reportsDirectory: "./coverage",
       thresholds: {
-        statements: 0,
-        branches: 0,
-        functions: 0,
-        lines: 0,
+        autoUpdate: false,
+        statements: 1.8,
+        branches: 27.23,
+        functions: 17.15,
+        lines: 1.8,
       },
     },
     exclude: [

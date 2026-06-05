@@ -3,16 +3,11 @@ import type { Theme } from "@auth/core/types";
 import type { NodemailerConfig } from "next-auth/providers/nodemailer";
 import type SMTPTransport from "nodemailer/lib/smtp-transport";
 import dayjs from "dayjs";
-import {
-  createTestAccount,
-  createTransport,
-  getTestMessageUrl,
-} from "nodemailer";
+import { createTransport } from "nodemailer";
 
 import type { AppDb } from "@acme/db/client";
 import { schema } from "@acme/db";
 import { env } from "@acme/env";
-import { isProduction } from "@acme/shared/common/constants";
 
 import { localEmailProvider } from "./email-provider";
 
@@ -101,17 +96,7 @@ export const sendVerificationRequest: NodemailerConfig["sendVerificationRequest"
       ? `${protocol}${host}/redirect-to-app${search}`
       : undefined;
 
-    // In dev, use ethereal.email as test account
-    const transportOptions: SMTPTransport.Options = isProduction
-      ? (provider.server as SMTPTransport.Options)
-      : await createTestAccount().then(({ user, pass }) => ({
-          host: "smtp.ethereal.email",
-          port: 587,
-          secure: false,
-          auth: { user, pass },
-        }));
-
-    const transport = createTransport(transportOptions);
+    const transport = createTransport(provider.server as SMTPTransport.Options);
     const result = await transport.sendMail({
       to: identifier,
       from: provider.from,
@@ -134,14 +119,6 @@ export const sendVerificationRequest: NodemailerConfig["sendVerificationRequest"
       throw new Error(
         `Email (${failed.map(String).join(", ")}) could not be sent`,
       );
-    }
-
-    if (!isProduction) {
-      console.log("Development email bypass!", {
-        etherealMail: getTestMessageUrl(result),
-        mobileUrl,
-        url,
-      });
     }
   };
 

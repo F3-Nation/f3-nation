@@ -15,7 +15,7 @@ import {
   selectedItemStore,
   setSelectedItem,
 } from "~/utils/store/selected-item";
-import { ImageWithFallback } from "../image-with-fallback";
+import { ImageWithFallback } from "@acme/ui/image-with-fallback";
 import { EventChip } from "./event-chip";
 
 const SHOW_ID = false;

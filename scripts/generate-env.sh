@@ -80,7 +80,7 @@ SECRET_GOOGLE_LOGO_BUCKET_CLIENT_EMAIL=$(pull_secret "google-logo-bucket-client-
 SECRET_GOOGLE_LOGO_BUCKET_BUCKET_NAME=$(pull_secret "google-logo-bucket-bucket-name")
 
 # Log what we got
-for name in DATABASE_USER DATABASE_PASSWORD DATABASE_NAME AUTH_SECRET AUTH_JWT_PRIVATE_KEY API_KEY SENDGRID_API_KEY GOOGLE_MAPS_API_KEY GOOGLE_LOGO_BUCKET_PRIVATE_KEY GOOGLE_LOGO_BUCKET_CLIENT_EMAIL GOOGLE_LOGO_BUCKET_BUCKET_NAME; do
+for name in DATABASE_USER DATABASE_PASSWORD DATABASE_NAME AUTH_SECRET AUTH_JWT_PRIVATE_KEY API_KEY GOOGLE_MAPS_API_KEY GOOGLE_LOGO_BUCKET_PRIVATE_KEY GOOGLE_LOGO_BUCKET_CLIENT_EMAIL GOOGLE_LOGO_BUCKET_BUCKET_NAME; do
   var="SECRET_$name"
   if [[ -n "${!var:-}" ]]; then
     echo "  OK: $name"
@@ -88,6 +88,12 @@ for name in DATABASE_USER DATABASE_PASSWORD DATABASE_NAME AUTH_SECRET AUTH_JWT_P
     echo "  WARN: $name (not found)"
   fi
 done
+# EMAIL_SERVER is derived from the sendgrid-api-key secret
+if [[ -n "${SECRET_SENDGRID_API_KEY:-}" ]]; then
+  echo "  OK: EMAIL_SERVER"
+else
+  echo "  WARN: EMAIL_SERVER (sendgrid-api-key not found)"
+fi
 
 echo ""
 
@@ -100,7 +106,18 @@ DB_NAME="${SECRET_DATABASE_NAME:-f3data}"
 DATABASE_URL="postgresql://${DB_USER}:${DB_PASS}@localhost:5433/${DB_NAME}"
 TEST_DATABASE_URL="postgresql://${DB_USER}:${DB_PASS}@localhost:5433/${DB_NAME}_test"
 
-EMAIL_SERVER="smtp://apikey:${SECRET_SENDGRID_API_KEY:-}@smtp.sendgrid.net:587"
+if [[ -n "${SECRET_SENDGRID_API_KEY:-}" ]]; then
+  EMAIL_SERVER="smtp://apikey:${SECRET_SENDGRID_API_KEY}@smtp.sendgrid.net:587"
+else
+  EMAIL_SERVER=""
+fi
+
+if [[ -z "${EMAIL_SERVER}" ]]; then
+  echo "  ERROR: EMAIL_SERVER could not be resolved (sendgrid-api-key secret not found)"
+  echo "  The auth app requires EMAIL_SERVER. Set the GCP secret and re-run."
+  exit 1
+fi
+
 SUPER_ADMIN_API_KEY="${SECRET_API_KEY:-}"
 
 # --- Generate .env content ----------------------------------------------------
@@ -117,6 +134,7 @@ generate_env() {
 NODE_ENV=development
 
 # -- Local dev server URLs --
+NEXT_PUBLIC_ADMIN_URL=http://localhost:3002
 NEXT_PUBLIC_API_URL=http://localhost:3001
 NEXT_PUBLIC_MAP_URL=http://localhost:3000
 NEXT_PUBLIC_AUTH_URL=http://localhost:3004
@@ -149,7 +167,6 @@ DATABASE_NAME=$DB_NAME
 AUTH_SECRET=${SECRET_AUTH_SECRET:-}
 API_KEY=${SECRET_API_KEY:-}
 SUPER_ADMIN_API_KEY=$SUPER_ADMIN_API_KEY
-SENDGRID_API_KEY=${SECRET_SENDGRID_API_KEY:-}
 EMAIL_SERVER=$EMAIL_SERVER
 
 # -- Auth JWT private key (PEM format, newlines escaped) --

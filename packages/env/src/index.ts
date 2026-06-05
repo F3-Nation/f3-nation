@@ -25,6 +25,7 @@ export const env = createEnv({
       .enum(["development", "production", "test"])
       .default("development"),
     EMAIL_ADMIN_DESTINATIONS: z.string().min(1),
+    EMAIL_REGION_IN_A_BOX_CC: z.string().min(1).optional(),
     GOOGLE_LOGO_BUCKET_PRIVATE_KEY: z.string().min(1),
     GOOGLE_LOGO_BUCKET_CLIENT_EMAIL: z.string().min(1),
     GOOGLE_LOGO_BUCKET_BUCKET_NAME: z.string().min(1),
@@ -32,8 +33,10 @@ export const env = createEnv({
     API_KEY: z.string().min(1),
     SUPER_ADMIN_API_KEY: z.string().min(1),
     NOTIFY_WEBHOOK_URLS_COMMA_SEPARATED: z.string().optional(),
+    GCS_EMULATOR_HOST: z.string().optional(),
   },
   client: {
+    NEXT_PUBLIC_ADMIN_URL: z.string().min(1).optional(),
     NEXT_PUBLIC_API_URL: z.string().min(1),
     NEXT_PUBLIC_AUTH_URL: z.string().url().optional(),
     NEXT_PUBLIC_MAP_URL: z.string().min(1),
@@ -47,6 +50,7 @@ export const env = createEnv({
     ]),
   },
   experimental__runtimeEnv: {
+    NEXT_PUBLIC_ADMIN_URL: process.env.NEXT_PUBLIC_ADMIN_URL,
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
     NEXT_PUBLIC_AUTH_URL: process.env.NEXT_PUBLIC_AUTH_URL,
     NEXT_PUBLIC_MAP_URL: process.env.NEXT_PUBLIC_MAP_URL,

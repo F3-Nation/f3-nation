@@ -1,14 +1,23 @@
 import crypto from "crypto";
 
+import { createTransport } from "nodemailer";
+
 import { and, eq, gt, isNull, sql } from "@acme/db";
 import { emailMfaCodes, users } from "@acme/db/schema/schema";
 
+import { isValidCallbackUrl } from "~/lib/callback-url";
 import { constantTimeEqual } from "~/lib/crypto-utils";
 import { db } from "~/lib/db";
 import { env } from "~/env";
 
 const MAX_ATTEMPTS = 5;
 const CODE_TTL_MINUTES = 10;
+
+let _transporter: ReturnType<typeof createTransport> | null = null;
+function getTransporter() {
+  _transporter ??= createTransport(env.EMAIL_SERVER);
+  return _transporter;
+}
 
 function hashCode(code: string): string {
   return crypto.createHash("sha256").update(code).digest("hex");
@@ -17,8 +26,16 @@ function hashCode(code: string): string {
 /**
  * Generate a 6-digit code, hash-store it, and email it to the user.
  * Invalidates any previous active code for that email.
+ *
+ * @param callbackUrl - Optional URL to redirect to after sign-in via magic link.
  */
-export async function sendEmailCode(email: string): Promise<void> {
+export async function sendEmailCode(
+  email: string,
+  callbackUrl?: string,
+): Promise<void> {
+  // Normalize early so all downstream usage (DB keys, magic link URL) is consistent.
+  const normalizedEmail = email.toLowerCase().trim();
+
   const code = crypto.randomInt(100000, 999999).toString();
   const codeHash = hashCode(code);
   const id = crypto.randomUUID();
@@ -32,7 +49,7 @@ export async function sendEmailCode(email: string): Promise<void> {
     .set({ consumedAt: new Date().toISOString() })
     .where(
       and(
-        eq(emailMfaCodes.email, email.toLowerCase()),
+        eq(emailMfaCodes.email, normalizedEmail),
         isNull(emailMfaCodes.consumedAt),
         gt(emailMfaCodes.expiresAt, new Date().toISOString()),
       ),
@@ -41,40 +58,32 @@ export async function sendEmailCode(email: string): Promise<void> {
   // Insert new code
   await db.insert(emailMfaCodes).values({
     id,
-    email: email.toLowerCase(),
+    email: normalizedEmail,
     codeHash,
     expiresAt,
     attemptCount: 0,
   });
 
-  // Build the magic link
+  // Build the magic link — include callbackUrl so clicking the link lands
+  // back in the originating app, not on the auth homepage.
+  // Only embed the callbackUrl if it is same-origin or a relative path;
+  // this prevents open-redirect attacks via crafted magic links.
   const authUrl = env.NEXT_PUBLIC_AUTH_URL;
-  const magicLink = `${authUrl}/login/email/verify?email=${encodeURIComponent(email)}&code=${code}`;
+  const verifyParams = new URLSearchParams({ email: normalizedEmail, code });
+  if (callbackUrl && isValidCallbackUrl(callbackUrl, authUrl)) {
+    verifyParams.set("callbackUrl", callbackUrl);
+  } else if (callbackUrl) {
+    console.warn("sendEmailCode: dropping invalid callbackUrl", {
+      callbackUrl,
+    });
+  }
+  const magicLink = `${authUrl}/login/email/verify?${verifyParams.toString()}`;
 
-  // Send via SendGrid SMTP
-  const nodemailer = await import("nodemailer");
-  const transporter = nodemailer.createTransport(
-    env.NODE_ENV === "production"
-      ? {
-          host: "smtp.sendgrid.net",
-          port: 587,
-          secure: false,
-          auth: {
-            user: "apikey",
-            pass: env.SENDGRID_API_KEY,
-          },
-        }
-      : await nodemailer.createTestAccount().then(({ user, pass }) => ({
-          host: "smtp.ethereal.email",
-          port: 587,
-          secure: false,
-          auth: { user, pass },
-        })),
-  );
+  const transporter = getTransporter();
 
-  const info = await transporter.sendMail({
+  await transporter.sendMail({
     from: env.EMAIL_FROM,
-    to: email,
+    to: normalizedEmail,
     subject: "Your F3 Nation sign-in code",
     html: `
       <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
@@ -87,13 +96,6 @@ export async function sendEmailCode(email: string): Promise<void> {
       </div>
     `,
   });
-
-  if (env.NODE_ENV !== "production") {
-    const previewUrl = nodemailer.getTestMessageUrl(info);
-    if (previewUrl) {
-      console.log("Preview email:", previewUrl);
-    }
-  }
 }
 
 /**

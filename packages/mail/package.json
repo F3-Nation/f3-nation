@@ -16,15 +16,15 @@
   },
   "dependencies": {
     "@acme/env": "workspace:*",
-    "nodemailer": "^6.10.0"
+    "nodemailer": "catalog:"
   },
   "devDependencies": {
     "@acme/eslint-config": "workspace:^0.2.0",
     "@acme/prettier-config": "workspace:^0.1.0",
     "@acme/tsconfig": "workspace:^0.1.0",
-    "@types/nodemailer": "^6.4.17",
+    "@types/nodemailer": "catalog:",
     "eslint": "catalog:",
-    "prettier": "^3.2.5",
+    "prettier": "catalog:",
     "typescript": "catalog:"
   },
   "prettier": "@acme/prettier-config"

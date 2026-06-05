@@ -40,22 +40,45 @@ export function ProfileForm({ user, regions }: ProfileFormProps) {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-4 pb-12">
-      {/* Header / Avatar */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Profile</CardTitle>
-          <CardDescription>
-            Manage your F3 Nation profile information.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <AvatarUpload
-            currentUrl={form.avatarUrl}
-            fallbackName={form.f3Name || form.firstName}
-            onUploaded={(url) => updateField("avatarUrl", url)}
-          />
-        </CardContent>
-      </Card>
+      {/* Header: Avatar + Ecosystem discovery */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Profile</CardTitle>
+            <CardDescription>
+              Manage your F3 Nation profile information.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <AvatarUpload
+              currentUrl={form.avatarUrl}
+              fallbackName={form.f3Name || form.firstName}
+              onUploaded={(url) => updateField("avatarUrl", url)}
+            />
+          </CardContent>
+        </Card>
+
+        <Card className="flex flex-col justify-between">
+          <CardHeader>
+            <CardTitle>Explore F3 Nation</CardTitle>
+            <CardDescription>
+              F3 Me is one piece of a larger ecosystem. Find workouts near you,
+              connect with your region, and discover everything F3 Nation has
+              built.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <a
+              href="https://apps.f3nation.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              Go to apps.f3nation.com &rarr;
+            </a>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Two-column grid: Personal Info + Emergency Contact side by side on lg */}
       <div className="grid gap-6 lg:grid-cols-2">
@@ -233,7 +256,7 @@ export function ProfileForm({ user, regions }: ProfileFormProps) {
               />
             </div>
           </div>
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className={cn("space-y-2", dc("start_date_override"))}>
               <Label htmlFor="startDate">Start Date</Label>
               <Input

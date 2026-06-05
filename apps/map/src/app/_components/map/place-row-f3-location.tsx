@@ -8,7 +8,7 @@ import { appStore } from "~/utils/store/app";
 import { mapStore } from "~/utils/store/map";
 import { searchStore } from "~/utils/store/search";
 import { setSelectedItem } from "~/utils/store/selected-item";
-import { ImageWithFallback } from "../image-with-fallback";
+import { ImageWithFallback } from "@acme/ui/image-with-fallback";
 
 export const onClickPlaceRowF3Location = (
   result: F3LocationMapSearchResult,

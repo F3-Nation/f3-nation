@@ -260,6 +260,59 @@ export const userRouter = {
         includeListFields: true,
       });
     }),
+  byF3Name: editorProcedure
+    .input(
+      z.object({
+        f3Name: z
+          .string()
+          .describe(
+            "Partial F3 name to search for. Case-insensitive partial matching.",
+          ),
+        pageIndex: z.coerce
+          .number()
+          .int()
+          .min(0)
+          .optional()
+          .default(0)
+          .describe("Zero-based page index for pagination. Defaults to 0."),
+        pageSize: z.coerce
+          .number()
+          .int()
+          .min(1)
+          .max(100)
+          .optional()
+          .default(10)
+          .describe("Number of users per page. Defaults to 10."),
+      }),
+    )
+    .route({
+      method: "GET",
+      path: "/f3name/{f3Name}",
+      tags: ["user"],
+      summary: "Search users by F3 name",
+      description:
+        "Search for users whose F3 name partially matches the input. Supports pagination and includes home region info.",
+    })
+    .output(
+      z.object({
+        users: z.array(userListUserOutputSchema),
+        totalCount: z.number().describe("Total number of users"),
+        includePii: z.boolean().describe("Whether PII fields are included"),
+      }),
+    )
+    .handler(async ({ context: ctx, input }) => {
+      return buildUserListQuery({
+        ctx,
+        input: {
+          searchTerm: input.f3Name,
+          pageIndex: input.pageIndex,
+          pageSize: input.pageSize,
+          sorting: [{ id: "f3Name", desc: false }],
+          includePii: false,
+        },
+        includePii: false,
+      });
+    }),
   crupdate: editorProcedure
     .input(CrupdateUserSchema)
     .route({

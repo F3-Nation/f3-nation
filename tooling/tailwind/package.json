@@ -15,17 +15,17 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "autoprefixer": "^10.4.17",
-    "postcss": "^8.4.35",
-    "tailwindcss": "^3.4.1",
-    "tailwindcss-animate": "^1.0.7"
+    "autoprefixer": "catalog:",
+    "postcss": "catalog:",
+    "tailwindcss": "catalog:",
+    "tailwindcss-animate": "catalog:"
   },
   "devDependencies": {
     "@acme/eslint-config": "workspace:^0.2.0",
     "@acme/prettier-config": "workspace:^0.1.0",
     "@acme/tsconfig": "workspace:^0.1.0",
     "eslint": "catalog:",
-    "prettier": "^3.2.5",
+    "prettier": "catalog:",
     "typescript": "catalog:"
   },
   "prettier": "@acme/prettier-config"

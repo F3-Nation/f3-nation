@@ -1,4 +1,4 @@
-import nodemailer, { createTestAccount } from "nodemailer";
+import nodemailer from "nodemailer";
 import type Mail from "nodemailer/lib/mailer";
 import type SMTPTransport from "nodemailer/lib/smtp-transport";
 
@@ -7,17 +7,16 @@ import { env } from "@acme/env";
 import type { TemplateType } from "./templates";
 import { DefaultSubject, renderTemplate, Templates } from "./templates";
 
-const isLocalDevelopment = process.env.NODE_ENV !== "production";
-
 /**
  * Default recipients for each template
  */
 export const DefaultTo: Partial<Record<Templates, string | string[]>> = {
-  [Templates.feedbackForm]: env.EMAIL_ADMIN_DESTINATIONS.split(","),
+  [Templates.feedbackForm]: env.EMAIL_ADMIN_DESTINATIONS?.split(",") ?? [],
 };
 
 type TemplateMessage<T extends Templates> = TemplateType[T] & {
   to?: string | string[];
+  cc?: string | string[];
   subject?: string;
   from?: string;
 };
@@ -30,7 +29,7 @@ export class MailService {
   private transporter: nodemailer.Transporter<SMTPTransport.SentMessageInfo> | null =
     null;
   templates = Templates;
-  adminDestinations: string[] = env.EMAIL_ADMIN_DESTINATIONS.split(",");
+  adminDestinations: string[] = env.EMAIL_ADMIN_DESTINATIONS?.split(",") ?? [];
 
   constructor() {
     //
@@ -89,19 +88,8 @@ export class MailService {
     return sent;
   }
 
-  private async getTransporter() {
-    if (!this.transporter) {
-      const transporterOptions = isLocalDevelopment
-        ? await createTestAccount().then(({ user, pass }) => ({
-            host: "smtp.ethereal.email",
-            port: 587,
-            secure: false,
-            auth: { user, pass },
-          }))
-        : // Email now comes from F3 sendgrid
-          env.EMAIL_SERVER;
-      this.transporter = nodemailer.createTransport(transporterOptions);
-    }
+  private getTransporter() {
+    this.transporter ??= nodemailer.createTransport(env.EMAIL_SERVER);
     return this.transporter;
   }
 
@@ -132,26 +120,30 @@ export class MailService {
 
     for (const batch of batches) {
       await Promise.all(
-        batch.map((msg) =>
-          this.getTransporter().then((t) =>
-            t
-              ?.sendMail({ ...msg, headers: sendGridHeaders })
-              .then((info) => {
-                sentInfo.push(info);
-                console.log("\x1b[32m", "Message sent successfully!");
-                if (isLocalDevelopment) {
-                  console.log("\x1b[33m", nodemailer.getTestMessageUrl(info));
-                }
-              })
-              .catch((error: Error) => {
-                sentInfo.push(error);
-                console.log("\x1b[31m", "Error occurred!");
-                console.error("error", error.message);
-              }),
-          ),
-        ),
+        batch.map((msg) => {
+          const t = this.getTransporter();
+          return t
+            ?.sendMail({ ...msg, headers: sendGridHeaders })
+            .then((info) => {
+              sentInfo.push(info);
+              console.log("\x1b[32m", "Message sent successfully!");
+            })
+            .catch((error: Error) => {
+              sentInfo.push(error);
+              console.error("Email send failed:", error);
+            });
+        }),
       );
     }
+
+    const errors = sentInfo.filter((r): r is Error => r instanceof Error);
+    if (errors.length > 0) {
+      throw new AggregateError(
+        errors,
+        `${errors.length}/${sentInfo.length} emails failed to send`,
+      );
+    }
+
     return sentInfo;
   }
 }
