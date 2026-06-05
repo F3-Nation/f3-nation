@@ -11,7 +11,7 @@
     "lint": "dotenv -v SKIP_ENV_VALIDATION=1 eslint .",
     "start": "pnpm with-env next start",
     "typecheck": "tsc --noEmit",
-    "test": "SKIP_ENV_VALIDATION=1 pnpm with-env vitest --run \"$@\"",
+    "test": "SKIP_ENV_VALIDATION=1 pnpm with-env vitest --run --coverage \"$@\"",
     "test:watch": "SKIP_ENV_VALIDATION=1 pnpm with-env vitest -w \"$@\"",
     "test:e2e": "pnpm with-env playwright test",
     "test:e2e:staging": "pnpm with-env playwright test --config=playwright.staging.config.ts",

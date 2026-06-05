@@ -110,4 +110,4 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-node-pnpm
-      - run: pnpm test:coverage
+      - run: pnpm test
