@@ -10,6 +10,7 @@ import { SessionProvider } from "next-auth/react";
 import { cn } from "@acme/ui";
 import { ThemeProvider } from "@acme/ui/theme";
 import { Toaster } from "@acme/ui/toast";
+import { headers } from "next/headers";
 
 import { env } from "~/env";
 
@@ -50,7 +51,8 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout(props: { children: React.ReactNode }) {
+export default async function RootLayout(props: { children: React.ReactNode }) {
+  await headers();
   return (
     <html lang="en" suppressHydrationWarning>
       <body
