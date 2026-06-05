@@ -1,16 +1,15 @@
-"use client";
-
 import type { HTMLAttributes } from "react";
 import { useState } from "react";
 import Link from "next/link";
 
 import { cn } from "@acme/ui";
 
+import { useRuntimeConfig } from "~/utils/runtime-config";
 import { mapStore } from "~/utils/store/map";
 import packageJson from "../../../package.json";
 
 export const VersionInfo = (props: HTMLAttributes<HTMLSpanElement>) => {
-  const channel = window.__F3_RUNTIME__?.channel ?? "";
+  const { channel } = useRuntimeConfig();
   const [clicks, setClicks] = useState(0);
   const { className, ...rest } = props;
 
