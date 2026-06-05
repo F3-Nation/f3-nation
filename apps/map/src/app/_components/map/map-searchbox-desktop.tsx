@@ -22,6 +22,7 @@ import { useOnKeyPress } from "~/utils/hooks/use-on-key-press";
 import { useKeyPress } from "~/utils/key-press/hook";
 import { onClickPlaceRowMap } from "~/utils/on-click-place-row-map";
 import { debouncedPlacesAutocomplete } from "~/utils/place-autocomplete";
+import { useRuntimeConfig } from "~/utils/runtime-config";
 import { mapStore } from "~/utils/store/map";
 import { searchStore } from "~/utils/store/search";
 import {
@@ -55,6 +56,7 @@ export function MapSearchBox({
     orpc.map.location.workoutCount.queryOptions({ input: undefined }),
   );
   const { combinedResults } = useTextSearchResults();
+  const { googleApiKey } = useRuntimeConfig();
   const [focusedIndex, setFocusedIndex] = useState(0);
   const shouldRedirectOnResult = useRef(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -76,7 +78,7 @@ export function MapSearchBox({
       if (isF3LocationMapSearchResult(selectedResult)) {
         onClickPlaceRowF3Location(selectedResult);
       } else if (isGeoMapSearchResult(selectedResult)) {
-        onClickPlaceRowMap(selectedResult);
+        onClickPlaceRowMap(selectedResult, googleApiKey);
       } else if (isF3RegionMapSearchResult(selectedResult)) {
         onClickF3RegionRow(selectedResult);
       }
@@ -85,7 +87,7 @@ export function MapSearchBox({
         inputRef.current.blur();
       }
     }
-  }, [combinedResults, focusedIndex, inputRef]);
+  }, [combinedResults, focusedIndex, inputRef, googleApiKey]);
 
   useEffect(() => {
     if (pressedKeys.has("Escape")) {
@@ -161,6 +163,7 @@ export function MapSearchBox({
                       lng: DEFAULT_CENTER[1] ?? -122.3965,
                     },
                     mapStore.get("zoom"),
+                    googleApiKey,
                     (results) => {
                       setIsLoading(false);
                       // Only update if the input hasn't changed

@@ -2,8 +2,6 @@ import axios from "axios";
 
 import type { PlaceDetails } from "@acme/shared/app/types";
 
-import { getGoogleApiKey } from "./runtime-config";
-
 // Cache for place details (placeId -> details)
 const placeDetailsCache = new Map<
   string,
@@ -11,8 +9,10 @@ const placeDetailsCache = new Map<
 >();
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours (place details don't change often)
 
-export async function placesDetails(placeId: string): Promise<PlaceDetails> {
-  const googleApiKey = getGoogleApiKey();
+export async function placesDetails(
+  placeId: string,
+  googleApiKey: string,
+): Promise<PlaceDetails> {
   // Check cache first
   const cached = placeDetailsCache.get(placeId);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {

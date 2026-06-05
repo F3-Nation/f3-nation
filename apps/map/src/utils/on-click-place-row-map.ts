@@ -6,10 +6,13 @@ import { mapStore } from "./store/map";
 import { searchStore } from "./store/search";
 import { setSelectedItem } from "./store/selected-item";
 
-export const onClickPlaceRowMap = (result: GeoMapSearchResult) => {
+export const onClickPlaceRowMap = (
+  result: GeoMapSearchResult,
+  googleApiKey: string,
+) => {
   searchStore.setState({ shouldShowResults: false });
   setSelectedItem({ locationId: null, eventId: null, showPanel: false });
-  void placesDetails(result.destination.placeId).then((place) => {
+  void placesDetails(result.destination.placeId, googleApiKey).then((place) => {
     const latitude = place.location.latitude;
     const longitude = place.location.longitude;
     mapStore.setState({
