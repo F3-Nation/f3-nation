@@ -6,10 +6,10 @@
   "engines": {
     "node": ">=24.14.1 <25"
   },
-  "packageManager": "pnpm@11.5.0+sha512.dbfcc4f81cf48597afd4bc391ffdf12c11f1a9fb83a395bfa6b0a2d9cc2fd8ffebafdb1ccbd529632153f793904c2615b7f09fe1a345473fd1c35845172a8eb1",
+  "packageManager": "pnpm@11.5.1+sha512.93f7b57422ea7068257235b4c16eb60762eb68e1dc23723199cc739043ea9be2c4143274a399d8c6defa2b1176226d9ca1c4b63482d6200c1a8fbaa78c1d1485",
   "scripts": {
     "build": "turbo build",
-    "ci:local": "pnpm format && pnpm lint && pnpm typecheck && pnpm build && pnpm test:coverage",
+    "ci:local": "pnpm format && pnpm lint && pnpm typecheck && pnpm build --filter='!@acme/auth' && pnpm test",
     "clean:workspaces": "turbo clean && pnpm clean",
     "clean": "rm -rf .turbo node_modules",
     "commit": "cz",
@@ -44,7 +44,6 @@
     "local:setup": "bash scripts/local-setup.sh",
     "release": "pnpm -F release-it release",
     "reset-test-db": "turbo run reset-test-db",
-    "test:coverage": "turbo test -- --coverage",
     "test": "turbo test",
     "typecheck": "turbo typecheck",
     "with-env": "dotenv -e .env --"

@@ -37,6 +37,7 @@ const APPS: App[] = [
       "Administrative portal for region and group leadership. Manage locations, events, and organization settings.",
     href: "https://admin.f3nation.com",
     localHref: "http://localhost:3002",
+    linkLabel: "Open (region admins only)",
   },
   {
     name: "PAX Vault",
