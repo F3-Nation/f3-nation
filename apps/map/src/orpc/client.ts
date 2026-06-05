@@ -10,11 +10,12 @@ declare global {
   var $client: RouterClient<typeof router> | undefined;
 }
 
-const apiBaseUrl =
-  typeof window !== "undefined" ? window.__F3_RUNTIME__?.apiBaseUrl : undefined;
-
 const link = new RPCLink({
-  url: `${apiBaseUrl}${API_PREFIX_V1}`,
+  url: () => {
+    const apiBaseUrl = window.__F3_RUNTIME__?.apiBaseUrl;
+    if (!apiBaseUrl) throw new Error("F3_API_BASE_URL is required");
+    return `${apiBaseUrl}${API_PREFIX_V1}`;
+  },
   // fetch: ensure cookies are sent along for auth
   fetch: (input, init) => {
     input.headers.set(Header.Client, Client.ORPC); // Identifies this as an oRPC client request
