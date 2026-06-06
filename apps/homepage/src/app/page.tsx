@@ -1,17 +1,31 @@
 import Image from "next/image";
 
-interface App {
+/** App with a production URL — renders as a clickable card. */
+interface NavigableApp {
   name: string;
   description: string;
-  href?: string;
+  href: string;
+  /** Local dev URL override; falls back to `href` when absent. */
   localHref?: string;
+  /** Link button label. Defaults to "Open". */
   linkLabel?: string;
 }
+
+/** App with no link — renders as a non-clickable informational card in both dev and prod. */
+interface InformationalApp {
+  name: string;
+  description: string;
+  href?: never;
+  linkLabel?: never;
+}
+
+type App = NavigableApp | InformationalApp;
 
 interface AppGroup {
   title: string;
   description: string;
-  apps: App[];
+  /** At least one app is required — an empty group renders a heading with no cards. */
+  apps: [App, ...App[]];
 }
 
 const isLocal = process.env.NEXT_PUBLIC_LOCAL_DEV === "true";
@@ -116,6 +130,19 @@ const APP_GROUPS: AppGroup[] = [
   },
 ];
 
+if (process.env.NODE_ENV === "development") {
+  const titles = APP_GROUPS.map((g) => g.title);
+  if (new Set(titles).size !== titles.length)
+    throw new Error("Duplicate AppGroup title — titles are used as React keys");
+  for (const group of APP_GROUPS) {
+    const names = group.apps.map((a) => a.name);
+    if (new Set(names).size !== names.length)
+      throw new Error(
+        `Duplicate app name in group "${group.title}" — names are used as React keys`,
+      );
+  }
+}
+
 function ArrowIcon() {
   return (
     <svg
@@ -138,7 +165,11 @@ function ArrowIcon() {
 
 function AppCard({ app }: { app: App }) {
   const label = app.linkLabel ?? "Open";
-  const resolvedHref = isLocal ? (app.localHref ?? app.href) : app.href;
+  const resolvedHref = app.href
+    ? isLocal
+      ? (app.localHref ?? app.href)
+      : app.href
+    : undefined;
   const inner = (
     <>
       <h3 className="mb-2 text-lg font-semibold text-foreground">{app.name}</h3>
