@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { and, eq, ilike, inArray, isNotNull, or, schema } from "@acme/db";
+import { and, eq, ilike, inArray, isNotNull, or, schema, sql } from "@acme/db";
 import { SlackSettingsSchema, SlackUserUpsertSchema } from "@acme/validators";
 
 import { apiKeyProcedure, withSessionAndDb } from "../shared";
@@ -8,7 +8,7 @@ import { apiKeyProcedure, withSessionAndDb } from "../shared";
 const publicProcedure = withSessionAndDb;
 
 export const slackRouter = {
-  getSpace: publicProcedure
+  getSpace: apiKeyProcedure
     .input(z.object({ teamId: z.string() }))
     .route({
       method: "GET",
@@ -41,24 +41,17 @@ export const slackRouter = {
       description: "Update settings for a specific Slack workspace",
     })
     .handler(async ({ context: ctx, input }) => {
-      const [space] = await ctx.db
-        .select()
-        .from(schema.slackSpaces)
-        .where(eq(schema.slackSpaces.teamId, input.teamId));
+      const result = await ctx.db
+        .update(schema.slackSpaces)
+        .set({
+          settings: sql`(COALESCE(${schema.slackSpaces.settings}::jsonb, '{}'::jsonb) || ${JSON.stringify(input.settings)}::jsonb)`,
+        })
+        .where(eq(schema.slackSpaces.teamId, input.teamId))
+        .returning({ teamId: schema.slackSpaces.teamId });
 
-      if (!space) {
+      if (result.length === 0) {
         throw new Error("Slack space not found");
       }
-
-      const updatedSettings = {
-        ...(space.settings as Record<string, unknown>),
-        ...input.settings,
-      };
-
-      await ctx.db
-        .update(schema.slackSpaces)
-        .set({ settings: updatedSettings })
-        .where(eq(schema.slackSpaces.teamId, input.teamId));
 
       return { success: true };
     }),
