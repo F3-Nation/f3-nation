@@ -116,7 +116,12 @@ export const slackRouter = {
       const [existing] = await ctx.db
         .select()
         .from(schema.slackUsers)
-        .where(eq(schema.slackUsers.slackId, input.slackId));
+        .where(
+          and(
+            eq(schema.slackUsers.slackId, input.slackId),
+            eq(schema.slackUsers.slackTeamId, input.teamId),
+          ),
+        );
 
       if (existing) {
         await ctx.db
@@ -129,7 +134,12 @@ export const slackRouter = {
             isOwner: input.isOwner,
             isBot: input.isBot,
           })
-          .where(eq(schema.slackUsers.slackId, input.slackId));
+          .where(
+            and(
+              eq(schema.slackUsers.slackId, input.slackId),
+              eq(schema.slackUsers.slackTeamId, input.teamId),
+            ),
+          );
         return { success: true, action: "updated" };
       }
 
@@ -211,7 +221,12 @@ export const slackRouter = {
       const [existing] = await ctx.db
         .select()
         .from(schema.slackUsers)
-        .where(eq(schema.slackUsers.slackId, input.slackId));
+        .where(
+          and(
+            eq(schema.slackUsers.slackId, input.slackId),
+            eq(schema.slackUsers.slackTeamId, input.teamId),
+          ),
+        );
 
       if (existing) {
         return existing;
@@ -411,7 +426,12 @@ export const slackRouter = {
       const [slackUser] = await ctx.db
         .select()
         .from(schema.slackUsers)
-        .where(eq(schema.slackUsers.slackId, input.slackId));
+        .where(
+          and(
+            eq(schema.slackUsers.slackId, input.slackId),
+            eq(schema.slackUsers.slackTeamId, input.teamId),
+          ),
+        );
 
       if (!slackUser?.userId) {
         return {
@@ -572,7 +592,12 @@ export const slackRouter = {
       const [slackUser] = await ctx.db
         .select()
         .from(schema.slackUsers)
-        .where(eq(schema.slackUsers.slackId, input.slackId));
+        .where(
+          and(
+            eq(schema.slackUsers.slackId, input.slackId),
+            eq(schema.slackUsers.slackTeamId, input.teamId),
+          ),
+        );
 
       if (!slackUser?.userId) {
         return {

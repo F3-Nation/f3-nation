@@ -311,4 +311,277 @@ describe("Slack Router", () => {
       expect(user?.isAdmin).toBe(false);
     });
   });
+
+  describe("composite slackId and teamId scoping", () => {
+    const sharedSlackId = `U${uniqueId()}`;
+    const teamA = uniqueId();
+    const teamB = uniqueId();
+
+    let orgAId: number;
+    let orgBId: number;
+    let slackSpaceAId: number;
+    let slackSpaceBId: number;
+    let userAId: number;
+    let userBId: number;
+
+    beforeAll(async () => {
+      const [adminRole] = await db
+        .select({ id: schema.roles.id })
+        .from(schema.roles)
+        .where(eq(schema.roles.name, "admin"));
+
+      if (!adminRole) {
+        throw new Error("Admin role not found");
+      }
+
+      const [orgA] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Composite Org A-${teamA}`,
+          orgType: "region",
+          isActive: true,
+        })
+        .returning();
+      const [orgB] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Composite Org B-${teamB}`,
+          orgType: "region",
+          isActive: true,
+        })
+        .returning();
+
+      orgAId = orgA!.id;
+      orgBId = orgB!.id;
+
+      const [spaceA] = await db
+        .insert(schema.slackSpaces)
+        .values({
+          teamId: teamA,
+          workspaceName: "Composite Workspace A",
+          settings: {
+            welcome_dm_enable: true,
+            welcome_dm_template: "Hello A",
+          },
+        })
+        .returning();
+      const [spaceB] = await db
+        .insert(schema.slackSpaces)
+        .values({
+          teamId: teamB,
+          workspaceName: "Composite Workspace B",
+          settings: {
+            welcome_dm_enable: true,
+            welcome_dm_template: "Hello B",
+          },
+        })
+        .returning();
+
+      slackSpaceAId = spaceA!.id;
+      slackSpaceBId = spaceB!.id;
+
+      await db.insert(schema.orgsXSlackSpaces).values([
+        { orgId: orgAId, slackSpaceId: slackSpaceAId },
+        { orgId: orgBId, slackSpaceId: slackSpaceBId },
+      ]);
+
+      const [userA] = await db
+        .insert(schema.users)
+        .values({
+          email: `composite-a-${uniqueId()}@example.com`,
+          firstName: "Composite",
+          lastName: "A",
+          f3Name: "Composite A",
+        })
+        .returning();
+      const [userB] = await db
+        .insert(schema.users)
+        .values({
+          email: `composite-b-${uniqueId()}@example.com`,
+          firstName: "Composite",
+          lastName: "B",
+          f3Name: "Composite B",
+        })
+        .returning();
+
+      userAId = userA!.id;
+      userBId = userB!.id;
+
+      await db.insert(schema.slackUsers).values([
+        {
+          slackId: sharedSlackId,
+          userName: "team-a-user",
+          email: "team-a@example.com",
+          slackTeamId: teamA,
+          userId: userAId,
+          isAdmin: false,
+          isOwner: false,
+          isBot: false,
+        },
+        {
+          slackId: sharedSlackId,
+          userName: "team-b-user",
+          email: "team-b@example.com",
+          slackTeamId: teamB,
+          userId: userBId,
+          isAdmin: false,
+          isOwner: false,
+          isBot: false,
+        },
+      ]);
+
+      await db.insert(schema.rolesXUsersXOrg).values({
+        userId: userAId,
+        orgId: orgAId,
+        roleId: adminRole.id,
+      });
+    });
+
+    afterAll(async () => {
+      await db
+        .delete(schema.rolesXUsersXOrg)
+        .where(eq(schema.rolesXUsersXOrg.userId, userAId));
+      await db
+        .delete(schema.slackUsers)
+        .where(eq(schema.slackUsers.slackId, sharedSlackId));
+      await db
+        .delete(schema.orgsXSlackSpaces)
+        .where(
+          or(
+            eq(schema.orgsXSlackSpaces.slackSpaceId, slackSpaceAId),
+            eq(schema.orgsXSlackSpaces.slackSpaceId, slackSpaceBId),
+          ),
+        );
+      await db
+        .delete(schema.slackSpaces)
+        .where(
+          or(
+            eq(schema.slackSpaces.id, slackSpaceAId),
+            eq(schema.slackSpaces.id, slackSpaceBId),
+          ),
+        );
+      await db
+        .delete(schema.users)
+        .where(or(eq(schema.users.id, userAId), eq(schema.users.id, userBId)));
+      await db
+        .delete(schema.orgs)
+        .where(or(eq(schema.orgs.id, orgAId), eq(schema.orgs.id, orgBId)));
+    });
+
+    it("scopes getUserBySlackId to the requested team", async () => {
+      const client = createTestClient();
+
+      const teamAUser = await client.slack.getUserBySlackId({
+        slackId: sharedSlackId,
+        teamId: teamA,
+      });
+      const teamBUser = await client.slack.getUserBySlackId({
+        slackId: sharedSlackId,
+        teamId: teamB,
+      });
+
+      expect(teamAUser).not.toBeNull();
+      expect(teamAUser?.slackTeamId).toBe(teamA);
+      expect(teamAUser?.userName).toBe("team-a-user");
+      expect(teamAUser?.email).toBe("team-a@example.com");
+
+      expect(teamBUser).not.toBeNull();
+      expect(teamBUser?.slackTeamId).toBe(teamB);
+      expect(teamBUser?.userName).toBe("team-b-user");
+      expect(teamBUser?.email).toBe("team-b@example.com");
+    });
+
+    it("scopes getOrCreateUser to the requested team", async () => {
+      const client = createTestClient("test-admin-key");
+
+      const result = await client.slack.getOrCreateUser({
+        slackId: sharedSlackId,
+        teamId: teamB,
+        userName: "ignored-user",
+        email: "ignored@example.com",
+      });
+
+      expect(result).not.toBeNull();
+      expect(result?.slackTeamId).toBe(teamB);
+      expect(result?.userName).toBe("team-b-user");
+      expect(result?.email).toBe("team-b@example.com");
+    });
+
+    it("scopes upsertUser to the requested team", async () => {
+      const client = createTestClient("test-admin-key");
+
+      const result = await client.slack.upsertUser({
+        slackId: sharedSlackId,
+        userName: "team-b-updated",
+        email: "team-b-updated@example.com",
+        teamId: teamB,
+        isAdmin: false,
+        isOwner: false,
+        isBot: false,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.action).toBe("updated");
+
+      const teamAUser = await client.slack.getUserBySlackId({
+        slackId: sharedSlackId,
+        teamId: teamA,
+      });
+      const teamBUser = await client.slack.getUserBySlackId({
+        slackId: sharedSlackId,
+        teamId: teamB,
+      });
+
+      expect(teamAUser?.userName).toBe("team-a-user");
+      expect(teamAUser?.email).toBe("team-a@example.com");
+      expect(teamBUser?.userName).toBe("team-b-updated");
+      expect(teamBUser?.email).toBe("team-b-updated@example.com");
+    });
+
+    it("scopes role lookups to the requested team", async () => {
+      const client = createTestClient("test-admin-key");
+
+      const teamAHasRole = await client.slack.checkUserRole({
+        slackId: sharedSlackId,
+        teamId: teamA,
+      });
+      const teamBHasRole = await client.slack.checkUserRole({
+        slackId: sharedSlackId,
+        teamId: teamB,
+      });
+
+      expect(teamAHasRole.hasRole).toBe(true);
+      expect(teamAHasRole.userId).toBe(userAId);
+      expect(teamAHasRole.orgId).toBe(orgAId);
+
+      expect(teamBHasRole.hasRole).toBe(false);
+      expect(teamBHasRole.userId).toBe(userBId);
+      expect(teamBHasRole.orgId).toBe(orgBId);
+
+      const teamARoles = await client.slack.getUserRoles({
+        slackId: sharedSlackId,
+        teamId: teamA,
+      });
+      const teamBRoles = await client.slack.getUserRoles({
+        slackId: sharedSlackId,
+        teamId: teamB,
+      });
+
+      expect(teamARoles.userId).toBe(userAId);
+      expect(teamARoles.regionOrgId).toBe(orgAId);
+      expect(teamARoles.isAdmin).toBe(true);
+      expect(teamARoles.isEditor).toBe(true);
+      expect(teamARoles.roles).toHaveLength(1);
+      expect(teamARoles.roles[0]).toMatchObject({
+        orgId: orgAId,
+        roleName: "admin",
+      });
+
+      expect(teamBRoles.userId).toBe(userBId);
+      expect(teamBRoles.regionOrgId).toBe(orgBId);
+      expect(teamBRoles.isAdmin).toBe(false);
+      expect(teamBRoles.isEditor).toBe(false);
+      expect(teamBRoles.roles).toHaveLength(0);
+    });
+  });
 });
