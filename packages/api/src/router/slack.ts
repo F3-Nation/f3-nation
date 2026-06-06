@@ -167,15 +167,6 @@ export const slackRouter = {
         "Retrieve slack space settings or create a new record if it doesn't exist",
     })
     .handler(async ({ context: ctx, input }) => {
-      const [space] = await ctx.db
-        .select()
-        .from(schema.slackSpaces)
-        .where(eq(schema.slackSpaces.teamId, input.teamId));
-
-      if (space) {
-        return space;
-      }
-
       const [newSpace] = await ctx.db
         .insert(schema.slackSpaces)
         .values({
@@ -184,9 +175,19 @@ export const slackRouter = {
           botToken: input.botToken ?? null,
           settings: {},
         })
+        .onConflictDoNothing()
         .returning();
 
-      return newSpace;
+      if (newSpace) {
+        return newSpace;
+      }
+
+      const [space] = await ctx.db
+        .select()
+        .from(schema.slackSpaces)
+        .where(eq(schema.slackSpaces.teamId, input.teamId));
+
+      return space ?? null;
     }),
 
   getOrCreateUser: apiKeyProcedure
@@ -1181,15 +1182,7 @@ export const slackRouter = {
       }
 
       // Build update object with only provided fields
-      const updateData: Partial<{
-        f3Name: string;
-        homeRegionId: number;
-        avatarUrl: string;
-        emergencyContact: string;
-        emergencyPhone: string;
-        emergencyNotes: string;
-        meta: Record<string, unknown>;
-      }> = {};
+      const updateData: Record<string, unknown> = {};
 
       if (input.f3Name !== undefined) {
         updateData.f3Name = input.f3Name;
@@ -1210,16 +1203,9 @@ export const slackRouter = {
         updateData.emergencyNotes = input.emergencyNotes;
       }
       if (input.meta !== undefined) {
-        // Merge with existing meta
-        const [existingUser] = await ctx.db
-          .select({ meta: schema.users.meta })
-          .from(schema.users)
-          .where(eq(schema.users.id, slackUser.userId));
-
-        updateData.meta = {
-          ...(existingUser?.meta as Record<string, unknown> | undefined),
-          ...input.meta,
-        };
+        // Merge meta at the SQL layer so the update stays atomic with the
+        // rest of the profile fields and avoids lost updates under concurrency.
+        updateData.meta = sql`(COALESCE(${schema.users.meta}::jsonb, '{}'::jsonb) || ${JSON.stringify(input.meta)}::jsonb)`;
       }
 
       if (Object.keys(updateData).length === 0) {

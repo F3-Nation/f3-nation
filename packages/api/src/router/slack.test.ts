@@ -140,6 +140,37 @@ describe("Slack Router", () => {
         .delete(schema.slackSpaces)
         .where(eq(schema.slackSpaces.id, result!.id));
     });
+
+    it("should return a single canonical row under concurrent creates", async () => {
+      const newTeamId = uniqueId();
+      const client = createTestClient("test-admin-key");
+
+      const [first, second] = await Promise.all([
+        client.slack.getOrCreateSpace({
+          teamId: newTeamId,
+          workspaceName: "Concurrent Space",
+        }),
+        client.slack.getOrCreateSpace({
+          teamId: newTeamId,
+          workspaceName: "Concurrent Space",
+        }),
+      ]);
+
+      expect(first).not.toBeNull();
+      expect(second).not.toBeNull();
+      expect(first!.id).toBe(second!.id);
+
+      const rows = await db
+        .select({ id: schema.slackSpaces.id })
+        .from(schema.slackSpaces)
+        .where(eq(schema.slackSpaces.teamId, newTeamId));
+
+      expect(rows).toHaveLength(1);
+
+      await db
+        .delete(schema.slackSpaces)
+        .where(eq(schema.slackSpaces.teamId, newTeamId));
+    });
   });
 
   describe("updateSpaceSettings", () => {
