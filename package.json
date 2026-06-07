@@ -40,6 +40,7 @@
     "format": "turbo format --continue",
     "lint:fix": "turbo lint --continue -- --fix --cache --cache-location node_modules/.cache/.eslintcache",
     "lint:ws": "pnpm dlx sherif@1.1.0",
+    "lint:unused": "knip",
     "lint": "turbo run lint --continue -- --cache --cache-location node_modules/.cache/.eslintcache; pnpm run lint:ws",
     "local:setup": "bash scripts/local-setup.sh",
     "release": "pnpm -F release-it release",
@@ -50,19 +51,17 @@
   },
   "devDependencies": {
     "@acme/prettier-config": "workspace:^0.1.0",
-    "@acme/release-it": "workspace:*",
     "@commitlint/cli": "catalog:",
     "@commitlint/config-conventional": "catalog:",
     "@commitlint/cz-commitlint": "catalog:",
     "@turbo/gen": "catalog:",
     "commitizen": "catalog:",
-    "eslint-config-turbo": "catalog:",
     "inquirer": "catalog:",
+    "knip": "catalog:",
     "lefthook": "catalog:",
     "prettier": "catalog:",
     "turbo": "catalog:",
-    "typescript": "catalog:",
-    "typescript-eslint": "catalog:"
+    "typescript": "catalog:"
   },
   "config": {
     "commitizen": {

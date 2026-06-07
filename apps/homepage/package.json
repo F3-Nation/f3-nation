@@ -28,7 +28,6 @@
     "autoprefixer": "catalog:",
     "postcss": "catalog:",
     "tailwindcss": "catalog:",
-    "tailwindcss-animate": "catalog:",
     "typescript": "catalog:"
   },
   "prettier": "@acme/prettier-config"
