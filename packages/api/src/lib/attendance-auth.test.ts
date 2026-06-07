@@ -1,4 +1,3 @@
-import { ORPCError } from "@orpc/server";
 import { describe, expect, it, vi } from "vitest";
 
 import type { Context } from "../shared";
@@ -87,6 +86,6 @@ describe("assertSelfOrEditorOnEventOrg", () => {
         eventInstanceId: 1,
         targetUserId: 2,
       }),
-    ).rejects.toThrow(ORPCError);
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
 });

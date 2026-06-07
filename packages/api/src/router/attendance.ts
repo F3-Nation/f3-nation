@@ -44,9 +44,9 @@ export const attendanceRouter = {
    * Get all attendance records for an event instance.
    * Includes user info and attendance types.
    *
-   * Any authenticated user may read HC/Q lists (f3Name, types) for preblast
-   * visibility. Attendee email is PII and is only included when the caller has
-   * editor (or admin) role on the event's org.
+   * Any authenticated user may read planned HC/Q lists (f3Name, types) for
+   * preblast visibility. Actual attendance requires editor role on the event's
+   * org. Attendee email is PII and is only included for editors.
    */
   getForEventInstance: protectedProcedure
     .input(
@@ -74,6 +74,14 @@ export const attendanceRouter = {
         "Get all attendance records for an event instance with user info and types",
     })
     .handler(async ({ context: ctx, input }) => {
+      if (!input.isPlanned) {
+        await assertEditorOnEventOrg({
+          ctx,
+          eventInstanceId: input.eventInstanceId,
+          message: "You are not authorized to view actual attendance",
+        });
+      }
+
       const orgId = await requireEventInstanceOrgId(
         ctx.db,
         input.eventInstanceId,

@@ -450,6 +450,41 @@ describe("Attendance Router", () => {
       expect(result.attendance[0]?.user?.f3Name).toBe(user.f3Name);
       expect(result.attendance[0]?.user).not.toHaveProperty("email");
     });
+
+    it("should reject actual attendance reads for users without editor role", async () => {
+      const { ao } = await createTestAO();
+      if (!ao) return;
+
+      const eventInstance = await createTestEventInstance(ao.id);
+      if (!eventInstance) return;
+
+      const user = await createTestUser();
+      if (!user) return;
+
+      const [attendance] = await db
+        .insert(schema.attendance)
+        .values({
+          eventInstanceId: eventInstance.id,
+          userId: user.id,
+          isPlanned: false,
+        })
+        .returning();
+
+      if (attendance) {
+        createdAttendanceIds.push(attendance.id);
+      }
+
+      const noPermSession = createNoPermissionSession();
+      await mockAuthWithSession(noPermSession);
+
+      const client = createTestClient();
+      await expect(
+        client.attendance.getForEventInstance({
+          eventInstanceId: eventInstance.id,
+          isPlanned: false,
+        }),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    });
   });
 
   describe("createPlanned", () => {
