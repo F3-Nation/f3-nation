@@ -2,7 +2,10 @@ name: CI
 
 on:
   push:
+    branches: [dev]
+  pull_request:
     branches: ["**"]
+    types: [opened, synchronize, reopened]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
