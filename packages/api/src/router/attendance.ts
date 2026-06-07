@@ -4,6 +4,12 @@ import { z } from "zod";
 import { and, eq, inArray, schema, sql } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 
+import {
+  assertEditorOnEventOrg,
+  assertSelfOrEditorOnEventOrg,
+  canViewAttendancePii,
+  requireEventInstanceOrgId,
+} from "../lib/attendance-auth";
 import { protectedProcedure } from "../shared";
 
 /**
@@ -35,8 +41,12 @@ async function getAttendanceTypeIds(db: AppDb) {
  */
 export const attendanceRouter = {
   /**
-   * Get all attendance records for an event instance
-   * Includes user info and attendance types
+   * Get all attendance records for an event instance.
+   * Includes user info and attendance types.
+   *
+   * Any authenticated user may read HC/Q lists (f3Name, types) for preblast
+   * visibility. Attendee email is PII and is only included when the caller has
+   * editor (or admin) role on the event's org.
    */
   getForEventInstance: protectedProcedure
     .input(
@@ -64,6 +74,12 @@ export const attendanceRouter = {
         "Get all attendance records for an event instance with user info and types",
     })
     .handler(async ({ context: ctx, input }) => {
+      const orgId = await requireEventInstanceOrgId(
+        ctx.db,
+        input.eventInstanceId,
+      );
+      const includePii = await canViewAttendancePii(ctx, orgId);
+
       // Get attendance records with user info
       const attendanceRecords = await ctx.db
         .select({
@@ -120,7 +136,18 @@ export const attendanceRouter = {
           schema.users.email,
         );
 
-      return { attendance: attendanceRecords };
+      return {
+        attendance: attendanceRecords.map((record) => ({
+          ...record,
+          user: record.user
+            ? {
+                id: record.user.id,
+                f3Name: record.user.f3Name,
+                ...(includePii ? { email: record.user.email } : {}),
+              }
+            : record.user,
+        })),
+      };
     }),
 
   /**
@@ -144,17 +171,12 @@ export const attendanceRouter = {
         "Create a new planned attendance record with specified attendance types",
     })
     .handler(async ({ context: ctx, input }) => {
-      // Verify event instance exists and get orgId
-      const [eventInstance] = await ctx.db
-        .select({ orgId: schema.eventInstances.orgId })
-        .from(schema.eventInstances)
-        .where(eq(schema.eventInstances.id, input.eventInstanceId));
-
-      if (!eventInstance) {
-        throw new ORPCError("NOT_FOUND", {
-          message: "Event instance not found",
-        });
-      }
+      await assertSelfOrEditorOnEventOrg({
+        ctx,
+        eventInstanceId: input.eventInstanceId,
+        targetUserId: input.userId,
+        message: "You are not authorized to create planned attendance",
+      });
 
       // Check if user already has attendance for this event
       const existingAttendance = await ctx.db
@@ -234,17 +256,11 @@ export const attendanceRouter = {
         "Create a new actual attendance record (for backblast submissions)",
     })
     .handler(async ({ context: ctx, input }) => {
-      // Verify event instance exists
-      const [eventInstance] = await ctx.db
-        .select({ id: schema.eventInstances.id })
-        .from(schema.eventInstances)
-        .where(eq(schema.eventInstances.id, input.eventInstanceId));
-
-      if (!eventInstance) {
-        throw new ORPCError("NOT_FOUND", {
-          message: "Event instance not found",
-        });
-      }
+      await assertEditorOnEventOrg({
+        ctx,
+        eventInstanceId: input.eventInstanceId,
+        message: "You are not authorized to create actual attendance",
+      });
 
       // Check if user already has actual attendance for this event
       const existingAttendance = await ctx.db
@@ -322,6 +338,12 @@ export const attendanceRouter = {
         "Delete all actual attendance records for an event (for backblast re-submission)",
     })
     .handler(async ({ context: ctx, input }) => {
+      await assertEditorOnEventOrg({
+        ctx,
+        eventInstanceId: input.eventInstanceId,
+        message: "You are not authorized to delete actual attendance",
+      });
+
       // Get all actual attendance IDs for this event
       const actualAttendance = await ctx.db
         .select({ id: schema.attendance.id })
@@ -379,6 +401,13 @@ export const attendanceRouter = {
       description: "Remove planned attendance record for a user",
     })
     .handler(async ({ context: ctx, input }) => {
+      await assertSelfOrEditorOnEventOrg({
+        ctx,
+        eventInstanceId: input.eventInstanceId,
+        targetUserId: input.userId,
+        message: "You are not authorized to remove planned attendance",
+      });
+
       // Find and delete the attendance record
       const deleted = await ctx.db
         .delete(schema.attendance)
@@ -417,9 +446,12 @@ export const attendanceRouter = {
         "Update the attendance types for an existing attendance record",
     })
     .handler(async ({ context: ctx, input }) => {
-      // Verify attendance exists
       const [attendance] = await ctx.db
-        .select({ id: schema.attendance.id })
+        .select({
+          id: schema.attendance.id,
+          userId: schema.attendance.userId,
+          eventInstanceId: schema.attendance.eventInstanceId,
+        })
         .from(schema.attendance)
         .where(eq(schema.attendance.id, input.attendanceId));
 
@@ -428,6 +460,13 @@ export const attendanceRouter = {
           message: "Attendance record not found",
         });
       }
+
+      await assertSelfOrEditorOnEventOrg({
+        ctx,
+        eventInstanceId: attendance.eventInstanceId,
+        targetUserId: attendance.userId,
+        message: "You are not authorized to update attendance types",
+      });
 
       // Delete existing type links
       await ctx.db
@@ -471,6 +510,13 @@ export const attendanceRouter = {
       description: "Sign up as Q (primary workout leader) for an event",
     })
     .handler(async ({ context: ctx, input }) => {
+      await assertSelfOrEditorOnEventOrg({
+        ctx,
+        eventInstanceId: input.eventInstanceId,
+        targetUserId: input.userId,
+        message: "You are not authorized to take Q for this event",
+      });
+
       const ATTENDANCE_TYPE_IDS = await getAttendanceTypeIds(ctx.db);
 
       // Check if there's already a Q for this event
@@ -586,6 +632,13 @@ export const attendanceRouter = {
       description: "Remove Q status from attendance (keeps HC status)",
     })
     .handler(async ({ context: ctx, input }) => {
+      await assertSelfOrEditorOnEventOrg({
+        ctx,
+        eventInstanceId: input.eventInstanceId,
+        targetUserId: input.userId,
+        message: "You are not authorized to remove Q status",
+      });
+
       const ATTENDANCE_TYPE_IDS = await getAttendanceTypeIds(ctx.db);
 
       // Find the attendance record
@@ -644,8 +697,15 @@ export const attendanceRouter = {
         "Assign a Q and optional Co-Qs to an event, demoting existing Q/Co-Qs to HC",
     })
     .handler(async ({ context: ctx, input }) => {
-      const ATTENDANCE_TYPE_IDS = await getAttendanceTypeIds(ctx.db);
       const { eventInstanceId, qUserId, coQUserIds } = input;
+
+      await assertEditorOnEventOrg({
+        ctx,
+        eventInstanceId,
+        message: "You are not authorized to assign Q and Co-Qs",
+      });
+
+      const ATTENDANCE_TYPE_IDS = await getAttendanceTypeIds(ctx.db);
 
       // Get all existing planned attendance for this event
       const existingAttendance = await ctx.db

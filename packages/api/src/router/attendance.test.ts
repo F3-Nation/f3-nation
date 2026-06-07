@@ -22,7 +22,10 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   cleanup,
   createAdminSession,
+  createEditorSession,
+  createNoPermissionSession,
   createTestClient,
+  createUserSession,
   db,
   getOrCreateF3NationOrg,
   mockAuthWithSession,
@@ -330,6 +333,123 @@ describe("Attendance Router", () => {
       });
       expect(actualResult.attendance.length).toBe(0);
     });
+
+    it("should omit attendee email for users without editor role", async () => {
+      const { ao } = await createTestAO();
+      if (!ao) return;
+
+      const eventInstance = await createTestEventInstance(ao.id);
+      if (!eventInstance) return;
+
+      const user = await createTestUser();
+      if (!user) return;
+
+      const [attendance] = await db
+        .insert(schema.attendance)
+        .values({
+          eventInstanceId: eventInstance.id,
+          userId: user.id,
+          isPlanned: true,
+        })
+        .returning();
+
+      if (attendance) {
+        createdAttendanceIds.push(attendance.id);
+      }
+
+      const noPermSession = createNoPermissionSession();
+      await mockAuthWithSession(noPermSession);
+
+      const client = createTestClient();
+      const result = await client.attendance.getForEventInstance({
+        eventInstanceId: eventInstance.id,
+        isPlanned: true,
+      });
+
+      expect(result.attendance.length).toBe(1);
+      expect(result.attendance[0]?.user?.f3Name).toBe(user.f3Name);
+      expect(result.attendance[0]?.user).not.toHaveProperty("email");
+    });
+
+    it("should include attendee email for editors on the event org", async () => {
+      const { ao } = await createTestAO();
+      if (!ao) return;
+
+      const eventInstance = await createTestEventInstance(ao.id);
+      if (!eventInstance) return;
+
+      const user = await createTestUser();
+      if (!user) return;
+
+      const [attendance] = await db
+        .insert(schema.attendance)
+        .values({
+          eventInstanceId: eventInstance.id,
+          userId: user.id,
+          isPlanned: true,
+        })
+        .returning();
+
+      if (attendance) {
+        createdAttendanceIds.push(attendance.id);
+      }
+
+      const editorSession = createEditorSession({
+        orgId: ao.id,
+        orgName: ao.name,
+      });
+      await mockAuthWithSession(editorSession);
+
+      const client = createTestClient();
+      const result = await client.attendance.getForEventInstance({
+        eventInstanceId: eventInstance.id,
+        isPlanned: true,
+      });
+
+      expect(result.attendance.length).toBe(1);
+      expect(result.attendance[0]?.user?.email).toBe(user.email);
+    });
+
+    it("should omit attendee email for editors on a different AO", async () => {
+      const { ao: eventAo } = await createTestAO();
+      const { ao: editorAo } = await createTestAO();
+      if (!eventAo || !editorAo) return;
+
+      const eventInstance = await createTestEventInstance(eventAo.id);
+      if (!eventInstance) return;
+
+      const user = await createTestUser();
+      if (!user) return;
+
+      const [attendance] = await db
+        .insert(schema.attendance)
+        .values({
+          eventInstanceId: eventInstance.id,
+          userId: user.id,
+          isPlanned: true,
+        })
+        .returning();
+
+      if (attendance) {
+        createdAttendanceIds.push(attendance.id);
+      }
+
+      const editorSession = createEditorSession({
+        orgId: editorAo.id,
+        orgName: editorAo.name,
+      });
+      await mockAuthWithSession(editorSession);
+
+      const client = createTestClient();
+      const result = await client.attendance.getForEventInstance({
+        eventInstanceId: eventInstance.id,
+        isPlanned: true,
+      });
+
+      expect(result.attendance.length).toBe(1);
+      expect(result.attendance[0]?.user?.f3Name).toBe(user.f3Name);
+      expect(result.attendance[0]?.user).not.toHaveProperty("email");
+    });
   });
 
   describe("createPlanned", () => {
@@ -425,6 +545,93 @@ describe("Attendance Router", () => {
         }),
       ).rejects.toThrow();
     });
+
+    it("should allow users to create planned attendance for themselves", async () => {
+      const { ao } = await createTestAO();
+      if (!ao) return;
+
+      const eventInstance = await createTestEventInstance(ao.id);
+      if (!eventInstance) return;
+
+      const user = await createTestUser();
+      if (!user) return;
+
+      const userSession = createUserSession({
+        userId: user.id,
+        email: user.email,
+        f3Name: user.f3Name ?? undefined,
+      });
+      await mockAuthWithSession(userSession);
+
+      const client = createTestClient();
+      const result = await client.attendance.createPlanned({
+        eventInstanceId: eventInstance.id,
+        userId: user.id,
+        attendanceTypeIds: [ATTENDANCE_TYPE_IDS!.PAX],
+      });
+
+      expect(result.success).toBe(true);
+      if (result.attendanceId) {
+        createdAttendanceIds.push(result.attendanceId);
+      }
+    });
+
+    it("should allow users with string session id to create planned attendance for themselves", async () => {
+      const { ao } = await createTestAO();
+      if (!ao) return;
+
+      const eventInstance = await createTestEventInstance(ao.id);
+      if (!eventInstance) return;
+
+      const user = await createTestUser();
+      if (!user) return;
+
+      const userSession = createUserSession({
+        userId: user.id,
+        email: user.email,
+        f3Name: user.f3Name ?? undefined,
+      });
+      await mockAuthWithSession({
+        ...userSession,
+        // NextAuth stores user ids as strings on session.id
+        id: String(user.id) as unknown as typeof userSession.id,
+      });
+
+      const client = createTestClient();
+      const result = await client.attendance.createPlanned({
+        eventInstanceId: eventInstance.id,
+        userId: user.id,
+        attendanceTypeIds: [ATTENDANCE_TYPE_IDS!.PAX],
+      });
+
+      expect(result.success).toBe(true);
+      if (result.attendanceId) {
+        createdAttendanceIds.push(result.attendanceId);
+      }
+    });
+
+    it("should reject creating planned attendance for another user", async () => {
+      const { ao } = await createTestAO();
+      if (!ao) return;
+
+      const eventInstance = await createTestEventInstance(ao.id);
+      if (!eventInstance) return;
+
+      const targetUser = await createTestUser();
+      if (!targetUser) return;
+
+      const noPermSession = createNoPermissionSession();
+      await mockAuthWithSession(noPermSession);
+
+      const client = createTestClient();
+      await expect(
+        client.attendance.createPlanned({
+          eventInstanceId: eventInstance.id,
+          userId: targetUser.id,
+          attendanceTypeIds: [ATTENDANCE_TYPE_IDS!.PAX],
+        }),
+      ).rejects.toThrow();
+    });
   });
 
   describe("createActual", () => {
@@ -462,6 +669,56 @@ describe("Attendance Router", () => {
         .where(eq(schema.attendance.id, result.attendanceId));
 
       expect(created?.isPlanned).toBe(false);
+    });
+
+    it("should reject creating actual attendance without editor role", async () => {
+      const { ao } = await createTestAO();
+      if (!ao) return;
+
+      const eventInstance = await createTestEventInstance(ao.id);
+      if (!eventInstance) return;
+
+      const targetUser = await createTestUser();
+      if (!targetUser) return;
+
+      const noPermSession = createNoPermissionSession();
+      await mockAuthWithSession(noPermSession);
+
+      const client = createTestClient();
+      await expect(
+        client.attendance.createActual({
+          eventInstanceId: eventInstance.id,
+          userId: targetUser.id,
+          attendanceTypeIds: [ATTENDANCE_TYPE_IDS!.PAX],
+        }),
+      ).rejects.toThrow();
+    });
+
+    it("should reject creating actual attendance for self without editor role", async () => {
+      const { ao } = await createTestAO();
+      if (!ao) return;
+
+      const eventInstance = await createTestEventInstance(ao.id);
+      if (!eventInstance) return;
+
+      const user = await createTestUser();
+      if (!user) return;
+
+      const userSession = createUserSession({
+        userId: user.id,
+        email: user.email,
+        f3Name: user.f3Name ?? undefined,
+      });
+      await mockAuthWithSession(userSession);
+
+      const client = createTestClient();
+      await expect(
+        client.attendance.createActual({
+          eventInstanceId: eventInstance.id,
+          userId: user.id,
+          attendanceTypeIds: [ATTENDANCE_TYPE_IDS!.PAX],
+        }),
+      ).rejects.toThrow();
     });
   });
 
@@ -514,6 +771,41 @@ describe("Attendance Router", () => {
         );
 
       expect(remaining.length).toBe(0);
+    });
+
+    it("should reject removing another user's planned attendance", async () => {
+      const { ao } = await createTestAO();
+      if (!ao) return;
+
+      const eventInstance = await createTestEventInstance(ao.id);
+      if (!eventInstance) return;
+
+      const targetUser = await createTestUser();
+      if (!targetUser) return;
+
+      const [attendance] = await db
+        .insert(schema.attendance)
+        .values({
+          eventInstanceId: eventInstance.id,
+          userId: targetUser.id,
+          isPlanned: true,
+        })
+        .returning();
+
+      if (attendance) {
+        createdAttendanceIds.push(attendance.id);
+      }
+
+      const noPermSession = createNoPermissionSession();
+      await mockAuthWithSession(noPermSession);
+
+      const client = createTestClient();
+      await expect(
+        client.attendance.removePlanned({
+          eventInstanceId: eventInstance.id,
+          userId: targetUser.id,
+        }),
+      ).rejects.toThrow();
     });
   });
 
@@ -595,6 +887,28 @@ describe("Attendance Router", () => {
         }),
       ).rejects.toThrow();
     });
+
+    it("should reject taking Q for another user without editor role", async () => {
+      const { ao } = await createTestAO();
+      if (!ao) return;
+
+      const eventInstance = await createTestEventInstance(ao.id);
+      if (!eventInstance) return;
+
+      const targetUser = await createTestUser();
+      if (!targetUser) return;
+
+      const noPermSession = createNoPermissionSession();
+      await mockAuthWithSession(noPermSession);
+
+      const client = createTestClient();
+      await expect(
+        client.attendance.takeQ({
+          eventInstanceId: eventInstance.id,
+          userId: targetUser.id,
+        }),
+      ).rejects.toThrow();
+    });
   });
 
   describe("removeQ", () => {
@@ -644,6 +958,82 @@ describe("Attendance Router", () => {
 
       const typeIds = attendanceTypes.map((at) => at.attendanceTypeId);
       expect(typeIds).not.toContain(ATTENDANCE_TYPE_IDS!.Q); // Q should be removed
+    });
+
+    it("should reject removing Q for another user without editor role", async () => {
+      const { ao } = await createTestAO();
+      if (!ao) return;
+
+      const eventInstance = await createTestEventInstance(ao.id);
+      if (!eventInstance) return;
+
+      const targetUser = await createTestUser();
+      if (!targetUser) return;
+
+      const [attendance] = await db
+        .insert(schema.attendance)
+        .values({
+          eventInstanceId: eventInstance.id,
+          userId: targetUser.id,
+          isPlanned: true,
+        })
+        .returning();
+
+      if (attendance) {
+        createdAttendanceIds.push(attendance.id);
+        await db.insert(schema.attendanceXAttendanceTypes).values({
+          attendanceId: attendance.id,
+          attendanceTypeId: ATTENDANCE_TYPE_IDS!.Q,
+        });
+      }
+
+      const noPermSession = createNoPermissionSession();
+      await mockAuthWithSession(noPermSession);
+
+      const client = createTestClient();
+      await expect(
+        client.attendance.removeQ({
+          eventInstanceId: eventInstance.id,
+          userId: targetUser.id,
+        }),
+      ).rejects.toThrow();
+    });
+  });
+
+  describe("updateAttendanceTypes", () => {
+    it("should reject updating attendance types without editor role", async () => {
+      const { ao } = await createTestAO();
+      if (!ao) return;
+
+      const eventInstance = await createTestEventInstance(ao.id);
+      if (!eventInstance) return;
+
+      const targetUser = await createTestUser();
+      if (!targetUser) return;
+
+      const [attendance] = await db
+        .insert(schema.attendance)
+        .values({
+          eventInstanceId: eventInstance.id,
+          userId: targetUser.id,
+          isPlanned: true,
+        })
+        .returning();
+
+      if (attendance) {
+        createdAttendanceIds.push(attendance.id);
+      }
+
+      const noPermSession = createNoPermissionSession();
+      await mockAuthWithSession(noPermSession);
+
+      const client = createTestClient();
+      await expect(
+        client.attendance.updateAttendanceTypes({
+          attendanceId: attendance!.id,
+          attendanceTypeIds: [ATTENDANCE_TYPE_IDS!.Q],
+        }),
+      ).rejects.toThrow();
     });
   });
 
@@ -722,6 +1112,29 @@ describe("Attendance Router", () => {
         expect(coQTypeIds).toContain(ATTENDANCE_TYPE_IDS!.COQ); // Co-Q type
       }
     });
+
+    it("should reject assigning Q and Co-Qs without editor role", async () => {
+      const { ao } = await createTestAO();
+      if (!ao) return;
+
+      const eventInstance = await createTestEventInstance(ao.id);
+      if (!eventInstance) return;
+
+      const qUser = await createTestUser();
+      if (!qUser) return;
+
+      const noPermSession = createNoPermissionSession();
+      await mockAuthWithSession(noPermSession);
+
+      const client = createTestClient();
+      await expect(
+        client.attendance.assignQAndCoQs({
+          eventInstanceId: eventInstance.id,
+          qUserId: qUser.id,
+          coQUserIds: [],
+        }),
+      ).rejects.toThrow();
+    });
   });
 
   describe("deleteActualForEvent", () => {
@@ -780,6 +1193,40 @@ describe("Attendance Router", () => {
         );
 
       expect(remaining.length).toBe(0);
+    });
+
+    it("should reject deleting actual attendance without editor role", async () => {
+      const { ao } = await createTestAO();
+      if (!ao) return;
+
+      const eventInstance = await createTestEventInstance(ao.id);
+      if (!eventInstance) return;
+
+      const user = await createTestUser();
+      if (!user) return;
+
+      const [attendance] = await db
+        .insert(schema.attendance)
+        .values({
+          eventInstanceId: eventInstance.id,
+          userId: user.id,
+          isPlanned: false,
+        })
+        .returning();
+
+      if (attendance) {
+        createdAttendanceIds.push(attendance.id);
+      }
+
+      const noPermSession = createNoPermissionSession();
+      await mockAuthWithSession(noPermSession);
+
+      const client = createTestClient();
+      await expect(
+        client.attendance.deleteActualForEvent({
+          eventInstanceId: eventInstance.id,
+        }),
+      ).rejects.toThrow();
     });
   });
 });
