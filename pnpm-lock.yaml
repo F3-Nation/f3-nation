@@ -162,6 +162,9 @@ catalogs:
     '@types/geojson':
       specifier: ^7946.0.16
       version: 7946.0.16
+    '@types/google.maps':
+      specifier: ^3.64.1
+      version: 3.65.0
     '@types/lodash':
       specifier: ^4.14.195
       version: 4.17.24
@@ -744,6 +747,9 @@ importers:
       '@testing-library/react':
         specifier: 'catalog:'
         version: 15.0.7(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@types/google.maps':
+        specifier: 'catalog:'
+        version: 3.65.0
       '@types/node':
         specifier: 'catalog:'
         version: 24.12.4
@@ -1101,6 +1107,9 @@ importers:
       '@types/geojson':
         specifier: 'catalog:'
         version: 7946.0.16
+      '@types/google.maps':
+        specifier: 'catalog:'
+        version: 3.65.0
       '@types/lodash':
         specifier: 'catalog:'
         version: 4.17.24
@@ -5496,6 +5505,9 @@ packages:
 
   '@types/google.maps@3.58.1':
     resolution: {integrity: sha512-X9QTSvGJ0nCfMzYOnaVs/k6/4L+7F5uCS+4iUmkLEls6J9S/Phv+m/i3mDeyc49ZBgwab3EFO1HEoBY7k98EGQ==}
+
+  '@types/google.maps@3.65.0':
+    resolution: {integrity: sha512-u4SHiRC3m27lPa4vDBxh2AI7mDcHcheX6GSHn1Mwi0Gap8/uhM2kFppiFTnWASXLHZO+1ahHciLeEIV+Sjqk/A==}
 
   '@types/inquirer@6.5.0':
     resolution: {integrity: sha512-rjaYQ9b9y/VFGOpqBEXRavc3jh0a+e6evAbI31tMda8VlPaSy0AZJfXsvmIe3wklc7W6C3zCSfleuMXR7NOyXw==}
@@ -13376,6 +13388,8 @@ snapshots:
       '@types/node': 25.9.1
 
   '@types/google.maps@3.58.1': {}
+
+  '@types/google.maps@3.65.0': {}
 
   '@types/inquirer@6.5.0':
     dependencies:
