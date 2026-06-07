@@ -8,7 +8,7 @@ import { apiKeyProcedure, withSessionAndDb } from "../shared";
 const publicProcedure = withSessionAndDb;
 
 export const slackRouter = {
-  getSpace: apiKeyProcedure
+  getSpace: publicProcedure
     .input(z.object({ teamId: z.string() }))
     .route({
       method: "GET",
