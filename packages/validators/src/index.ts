@@ -251,11 +251,18 @@ export const twitterUrlSchema = z
     },
   );
 
+export const orgPhoneSchema = z
+  .string()
+  .max(50, { message: "Phone number is too long" })
+  .or(z.literal(""))
+  .nullable();
+
 // NATION SCHEMA
 export const NationInsertSchema = createInsertSchema(orgs, {
   name: (s: z.ZodString) => s.min(1, { message: "Name is required" }),
   email: (s: z.ZodString) =>
     s.email({ message: "Invalid email format" }).or(z.literal("")).nullable(),
+  phone: orgPhoneSchema,
   description: (s: z.ZodString) => s.nullable(),
   website: websiteUrlSchema.nullable(),
   twitter: twitterUrlSchema.nullable(),
@@ -273,6 +280,7 @@ export const SectorInsertSchema = createInsertSchema(orgs, {
     .nonnegative({ message: "Invalid selection" }),
   email: (s: z.ZodString) =>
     s.email({ message: "Invalid email format" }).or(z.literal("")).nullable(),
+  phone: orgPhoneSchema,
   description: (s: z.ZodString) => s.nullable(),
   website: websiteUrlSchema.nullable(),
   twitter: twitterUrlSchema.nullable(),
@@ -289,6 +297,7 @@ export const AreaInsertSchema = createInsertSchema(orgs, {
     .nonnegative({ message: "Invalid selection" }),
   email: (s: z.ZodString) =>
     s.email({ message: "Invalid email format" }).or(z.literal("")).nullable(),
+  phone: orgPhoneSchema,
   description: (s: z.ZodString) => s.nullable(),
   website: websiteUrlSchema.nullable(),
   twitter: twitterUrlSchema.nullable(),
@@ -305,6 +314,7 @@ export const RegionInsertSchema = createInsertSchema(orgs, {
     .nonnegative({ message: "Invalid selection" }),
   email: (s: z.ZodString) =>
     s.email({ message: "Invalid email format" }).or(z.literal("")).nullable(),
+  phone: orgPhoneSchema,
   description: (s: z.ZodString) => s.nullable(),
   website: websiteUrlSchema.nullable(),
   twitter: twitterUrlSchema.nullable(),
@@ -321,6 +331,7 @@ export const AOInsertSchema = createInsertSchema(orgs, {
     .nonnegative({ message: "Invalid selection" }),
   email: (s: z.ZodString) =>
     s.email({ message: "Invalid email format" }).or(z.literal("")).nullable(),
+  phone: orgPhoneSchema,
   description: (s: z.ZodString) => s.nullable(),
   website: websiteUrlSchema.nullable(),
   twitter: twitterUrlSchema.nullable(),
@@ -339,6 +350,7 @@ export const OrgInsertSchema = createInsertSchema(orgs, {
   description: (s: z.ZodString) => s.nullable(),
   email: (s: z.ZodString) =>
     s.email({ message: "Invalid email format" }).or(z.literal("")).nullable(),
+  phone: orgPhoneSchema,
   website: websiteUrlSchema.nullable(),
   twitter: twitterUrlSchema.nullable(),
   facebook: facebookUrlSchema.nullable(),

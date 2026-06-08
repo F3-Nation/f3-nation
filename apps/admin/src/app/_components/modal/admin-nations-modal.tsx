@@ -70,6 +70,7 @@ export default function AdminNationsModal({
       description: nation?.description ?? "",
       website: nation?.website ?? null,
       email: nation?.email ?? null,
+      phone: nation?.phone ?? null,
       twitter: nation?.twitter ?? null,
       facebook: nation?.facebook ?? null,
       instagram: nation?.instagram ?? null,
@@ -87,6 +88,7 @@ export default function AdminNationsModal({
       description: nation?.description ?? "",
       website: nation?.website ?? null,
       email: nation?.email ?? null,
+      phone: nation?.phone ?? null,
       twitter: nation?.twitter ?? null,
       facebook: nation?.facebook ?? null,
       instagram: nation?.instagram ?? null,
@@ -219,6 +221,26 @@ export default function AdminNationsModal({
                       <FormControl>
                         <Input
                           placeholder="Email"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="mb-4 w-1/2 px-2">
+                <FormField
+                  control={form.control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Phone</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="Phone"
+                          type="tel"
                           {...field}
                           value={field.value ?? ""}
                         />

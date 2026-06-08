@@ -80,6 +80,7 @@ export default function AdminAreasModal({
       logoUrl: area?.logoUrl ?? null,
       website: area?.website ?? null,
       email: area?.email ?? null,
+      phone: area?.phone ?? null,
       twitter: area?.twitter ?? null,
       facebook: area?.facebook ?? null,
       instagram: area?.instagram ?? null,
@@ -99,6 +100,7 @@ export default function AdminAreasModal({
       logoUrl: area?.logoUrl ?? null,
       website: area?.website ?? null,
       email: area?.email ?? null,
+      phone: area?.phone ?? null,
       twitter: area?.twitter ?? null,
       facebook: area?.facebook ?? null,
       instagram: area?.instagram ?? null,
@@ -251,6 +253,26 @@ export default function AdminAreasModal({
                       <FormControl>
                         <Input
                           placeholder="Email"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="mb-4 w-full px-2 sm:w-1/2">
+                <FormField
+                  control={form.control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Phone</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="Phone"
+                          type="tel"
                           {...field}
                           value={field.value ?? ""}
                         />
