@@ -12,7 +12,7 @@ catalog:
   "@faker-js/faker": ^10.4.0
   "@formkit/auto-animate": ^0.8.1
   "@google-cloud/storage": ^7.19.0
-  "@hookform/resolvers": ^3.3.4
+  "@hookform/resolvers": ^3.10.0
   "@ianvs/prettier-plugin-sort-imports": ^4.1.1
   "@next/eslint-plugin-next": ^16.2.3
   "@orpc/client": ^1.8.8
