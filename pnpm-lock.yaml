@@ -28,7 +28,7 @@ catalogs:
       specifier: ^0.8.1
       version: 0.8.4
     '@google-cloud/storage':
-      specifier: ^7.14.0
+      specifier: ^7.19.0
       version: 7.19.0
     '@hookform/resolvers':
       specifier: ^3.3.4
