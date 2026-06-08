@@ -163,7 +163,7 @@ catalogs:
       specifier: ^7946.0.16
       version: 7946.0.16
     '@types/google.maps':
-      specifier: ^3.64.1
+      specifier: ^3.65.0
       version: 3.65.0
     '@types/lodash':
       specifier: ^4.14.195
