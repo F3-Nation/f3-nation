@@ -6,13 +6,13 @@ packages:
 catalog:
   "@auth/core": 0.37.2
   "@auth/drizzle-adapter": ^0.6.3
-  "@commitlint/cli": ^21.0.1
-  "@commitlint/config-conventional": ^21.0.1
-  "@commitlint/cz-commitlint": ^21.0.1
+  "@commitlint/cli": ^21.0.2
+  "@commitlint/config-conventional": ^21.0.2
+  "@commitlint/cz-commitlint": ^21.0.2
   "@faker-js/faker": ^10.4.0
   "@formkit/auto-animate": ^0.8.1
-  "@google-cloud/storage": ^7.14.0
-  "@hookform/resolvers": ^3.3.4
+  "@google-cloud/storage": ^7.19.0
+  "@hookform/resolvers": ^3.10.0
   "@ianvs/prettier-plugin-sort-imports": ^4.1.1
   "@next/eslint-plugin-next": ^16.2.3
   "@orpc/client": ^1.8.8
@@ -56,7 +56,7 @@ catalog:
   "@testing-library/react": ^15.0.7
   "@turbo/gen": ^1.12.3
   "@types/geojson": ^7946.0.16
-  "@types/google.maps": ^3.64.1
+  "@types/google.maps": ^3.65.0
   "@types/lodash": ^4.14.195
   "@types/node": ^24.12.4
   "@types/nodemailer": ^8.0.0
