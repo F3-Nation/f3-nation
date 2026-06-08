@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/F3-Nation/f3-nation/compare/me@1.3.0...me@1.3.1) (2026-06-08)
+
+
+### Bug Fixes
+
+* **me:** verify JWT signature at handler layer and fix refresh-rotation race ([#400](https://github.com/F3-Nation/f3-nation/issues/400)) ([853eed5](https://github.com/F3-Nation/f3-nation/commit/853eed58d3d1596a3f03b613b517436af871822f))
+
 ## [1.3.0](https://github.com/F3-Nation/f3-nation/compare/me@1.2.1...me@1.3.0) (2026-05-31)
 
 
