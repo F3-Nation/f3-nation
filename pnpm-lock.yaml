@@ -206,7 +206,7 @@ catalogs:
       version: 1.11.20
     dompurify:
       specifier: ^3.4.7
-      version: 3.4.8
+      version: 3.4.7
     dotenv:
       specifier: ^16.3.2
       version: 16.6.1
@@ -504,7 +504,7 @@ importers:
         version: 1.11.20
       dompurify:
         specifier: 'catalog:'
-        version: 3.4.8
+        version: 3.4.7
       dotenv-cli:
         specifier: 'catalog:'
         version: 7.4.4
@@ -658,7 +658,7 @@ importers:
         version: 1.11.20
       dompurify:
         specifier: 'catalog:'
-        version: 3.4.8
+        version: 3.4.7
       dotenv-cli:
         specifier: 'catalog:'
         version: 7.4.4
@@ -1006,7 +1006,7 @@ importers:
         version: 1.11.20
       dompurify:
         specifier: 'catalog:'
-        version: 3.4.8
+        version: 3.4.7
       dotenv-cli:
         specifier: 'catalog:'
         version: 7.4.4
@@ -6284,7 +6284,7 @@ packages:
     resolution: {integrity: sha512-cgwlv/1iFQiFnU96XXgROh8xTeetsnJiDsTc7TYCLFd9+/WNkIqPTxiM/8pSd8VIrhXGTf1Ny1q1hquVqDJB5w==}
     engines: {node: '>= 4'}
 
-  dompurify@3.4.8:
+  dompurify@3.4.7:
     resolution: {integrity: sha512-yb1cEmaOum7wFvOCSQxyfgVlv5D47Rc30iZWoMpbDIWTnJ6grDDQyu2KFJzB2k7u0pMuJcQ1zphH//fFnw2tjQ==}
 
   dot-case@2.1.1:
@@ -13650,7 +13650,7 @@ snapshots:
     dependencies:
       domelementtype: 2.3.0
 
-  dompurify@3.4.8:
+  dompurify@3.4.7:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
