@@ -81,7 +81,7 @@ describe("Slack Router", () => {
 
   describe("getSpace", () => {
     it("should return space settings for a team", async () => {
-      const client = createTestClient();
+      const client = createTestClient("test-admin-key");
       const result = await client.slack.getSpace({ teamId });
       expect(result).not.toBeNull();
       expect(result?.teamId).toBe(teamId);
@@ -92,7 +92,7 @@ describe("Slack Router", () => {
     });
 
     it("should return null for non-existent team", async () => {
-      const client = createTestClient();
+      const client = createTestClient("test-admin-key");
       const result = await client.slack.getSpace({ teamId: "non-existent" });
       expect(result).toBeNull();
     });
@@ -227,7 +227,7 @@ describe("Slack Router", () => {
     });
 
     it("should find a user by slackId", async () => {
-      const client = createTestClient();
+      const client = createTestClient("test-admin-key");
       const result = await client.slack.getUserBySlackId({ slackId, teamId });
       expect(result).not.toBeNull();
       expect(result?.slackId).toBe(slackId);
@@ -500,7 +500,7 @@ describe("Slack Router", () => {
     });
 
     it("scopes getUserBySlackId to the requested team", async () => {
-      const client = createTestClient();
+      const client = createTestClient("test-admin-key");
 
       const teamAUser = await client.slack.getUserBySlackId({
         slackId: sharedSlackId,

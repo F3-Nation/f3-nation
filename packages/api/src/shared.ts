@@ -156,6 +156,23 @@ export const revalidateAuthProcedure = withSessionAndDb.use(
   },
 );
 
+export const slackBotProcedure = withSessionAndDb.use(({ context, next }) => {
+  const apiKey = context.reqHeaders?.get("x-api-key") ?? "";
+
+  if (!apiKey) {
+    throw new ORPCError("UNAUTHORIZED");
+  }
+
+  if (
+    (env.SLACKBOT_API_KEY && apiKey === env.SLACKBOT_API_KEY) ||
+    (env.SUPER_ADMIN_API_KEY && apiKey === env.SUPER_ADMIN_API_KEY)
+  ) {
+    return next({ context });
+  }
+
+  throw new ORPCError("UNAUTHORIZED");
+});
+
 export const nationAdminProcedure = withSessionAndDb.use(
   ({ context, next }) => {
     if (!isNationAdminFromSession(context.session)) {

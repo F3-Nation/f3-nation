@@ -3,12 +3,10 @@ import { z } from "zod";
 import { and, eq, ilike, inArray, isNotNull, or, schema, sql } from "@acme/db";
 import { SlackSettingsSchema, SlackUserUpsertSchema } from "@acme/validators";
 
-import { apiKeyProcedure, withSessionAndDb } from "../shared";
-
-const publicProcedure = withSessionAndDb;
+import { slackBotProcedure } from "../shared";
 
 export const slackRouter = {
-  getSpace: publicProcedure
+  getSpace: slackBotProcedure
     .input(z.object({ teamId: z.string() }))
     .route({
       method: "GET",
@@ -26,7 +24,7 @@ export const slackRouter = {
       return space ?? null;
     }),
 
-  updateSpaceSettings: apiKeyProcedure
+  updateSpaceSettings: slackBotProcedure
     .input(
       z.object({
         teamId: z.string(),
@@ -56,7 +54,7 @@ export const slackRouter = {
       return { success: true };
     }),
 
-  getUserBySlackId: publicProcedure
+  getUserBySlackId: slackBotProcedure
     .input(
       z.object({
         slackId: z.string(),
@@ -96,7 +94,7 @@ export const slackRouter = {
       return slackUser;
     }),
 
-  upsertUser: apiKeyProcedure
+  upsertUser: slackBotProcedure
     .input(SlackUserUpsertSchema)
     .route({
       method: "PUT",
@@ -150,7 +148,7 @@ export const slackRouter = {
       return { success: true, action: "created" };
     }),
 
-  getOrCreateSpace: apiKeyProcedure
+  getOrCreateSpace: slackBotProcedure
     .input(
       z.object({
         teamId: z.string(),
@@ -190,7 +188,7 @@ export const slackRouter = {
       return space ?? null;
     }),
 
-  getOrCreateUser: apiKeyProcedure
+  getOrCreateUser: slackBotProcedure
     .input(
       z.object({
         slackId: z.string(),
@@ -249,7 +247,7 @@ export const slackRouter = {
    * If the F3 user doesn't exist for the email, creates it.
    * Always returns a Slack user with a valid userId linking to an F3 user.
    */
-  getOrCreateLinkedUser: apiKeyProcedure
+  getOrCreateLinkedUser: slackBotProcedure
     .input(
       z.object({
         slackId: z.string(),
@@ -357,7 +355,7 @@ export const slackRouter = {
    * Get the org associated with a Slack workspace.
    * The org can be any type (region, area, etc.) depending on how the workspace was configured.
    */
-  getOrg: publicProcedure
+  getOrg: slackBotProcedure
     .input(z.object({ teamId: z.string() }))
     .route({
       method: "GET",
@@ -396,7 +394,7 @@ export const slackRouter = {
    * Check if a Slack user has a specific role on the region org associated with their Slack workspace.
    * This checks the F3 role system (rolesXUsersXOrg), not Slack's admin/owner flags.
    */
-  checkUserRole: apiKeyProcedure
+  checkUserRole: slackBotProcedure
     .input(
       z.object({
         slackId: z.string(),
@@ -566,7 +564,7 @@ export const slackRouter = {
    * Get all F3 roles for a Slack user on the region org.
    * Returns role names the user has on the region and any ancestor orgs.
    */
-  getUserRoles: apiKeyProcedure
+  getUserRoles: slackBotProcedure
     .input(
       z.object({
         slackId: z.string(),
@@ -685,7 +683,7 @@ export const slackRouter = {
    * Connect a Slack workspace to an F3 org (region, area, etc.)
    * Creates or finds the org and links it to the Slack space via orgsXSlackSpaces.
    */
-  connectSpaceToOrg: apiKeyProcedure
+  connectSpaceToOrg: slackBotProcedure
     .input(
       z.object({
         teamId: z.string(),
@@ -771,7 +769,7 @@ export const slackRouter = {
    * Get admin users for an org that have linked Slack accounts.
    * Returns userId + slackId pairs for populating the admin multi-user select.
    */
-  getOrgAdmins: apiKeyProcedure
+  getOrgAdmins: slackBotProcedure
     .input(
       z.object({
         orgId: z.coerce.number(),
@@ -827,7 +825,7 @@ export const slackRouter = {
    * Only removes admin roles for users that have Slack accounts in the given team,
    * preserving admins added through other channels (e.g., Maps UI).
    */
-  setOrgAdmins: apiKeyProcedure
+  setOrgAdmins: slackBotProcedure
     .input(
       z.object({
         orgId: z.number(),
@@ -915,7 +913,7 @@ export const slackRouter = {
    * Typeahead search for users by f3Name, firstName, or lastName.
    * Used for Slack external_select elements.
    */
-  searchUsers: apiKeyProcedure
+  searchUsers: slackBotProcedure
     .input(
       z.object({
         searchTerm: z.string().min(1).describe("Search query for user name"),
@@ -972,7 +970,7 @@ export const slackRouter = {
    * Get users by their IDs with home region info.
    * Used for displaying downrange PAX in backblasts.
    */
-  getUsersByIds: apiKeyProcedure
+  getUsersByIds: slackBotProcedure
     .input(
       z.object({
         userIds: z
@@ -1012,7 +1010,7 @@ export const slackRouter = {
    * Typeahead search for regions by name.
    * Used for Slack external_select elements.
    */
-  searchRegions: apiKeyProcedure
+  searchRegions: slackBotProcedure
     .input(
       z.object({
         searchTerm: z.string().min(1).describe("Search query for region name"),
@@ -1059,7 +1057,7 @@ export const slackRouter = {
    * Get the current user's full F3 profile.
    * Includes home region information for populating the user profile form.
    */
-  getSelfProfile: apiKeyProcedure
+  getSelfProfile: slackBotProcedure
     .input(
       z.object({
         teamId: z.string().describe("Slack workspace ID"),
@@ -1127,7 +1125,7 @@ export const slackRouter = {
    * This allows users to update their profile without admin rights.
    * Only updates non-role fields for the linked users table entry.
    */
-  updateSelfProfile: apiKeyProcedure
+  updateSelfProfile: slackBotProcedure
     .input(
       z.object({
         teamId: z.string().describe("Slack workspace ID"),

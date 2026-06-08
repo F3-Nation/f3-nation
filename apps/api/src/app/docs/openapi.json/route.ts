@@ -54,6 +54,7 @@ export async function GET(request: Request) {
   });
 
   const spec = (await generator.generate(router, {
+    filter: ({ path }) => path[0] !== "slack",
     info: {
       title: "F3 Nation API",
       version: packageJson.version,
@@ -106,6 +107,7 @@ API keys inherit the roles and permissions of their owner. Access levels include
 - **Editor**: Can view and modify data within assigned organizations
 - **Admin**: Same permissions as Editor, plus the ability to add/remove other Admins and Editors
 
+
 As of February 1, 2026, regional admins can only create read-only API keys. If you want an API Key edit access to your region, you will need to contact an F3 Nation admin. Right now, regional edit access is highly restrcited. This is because the API is still new and there are almost certainly gaps in security - meaning that a region has the potential to mess up data for other regions.
 
 ## Best Practices
@@ -119,6 +121,7 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
 - **401 Unauthorized**: Missing, invalid, revoked, or expired API key
 - **403 Forbidden**: Valid API key but insufficient permissions for the requested resource
 - **429 Too Many Requests**: Rate limit exceeded (200 requests per 60 seconds)`,
+
       contact: {
         name: "F3 Nation",
         url: "https://f3nation.com",
@@ -156,10 +159,6 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
       {
         name: "Me",
         tags: ["Me"],
-      },
-      {
-        name: "Slack",
-        tags: ["slack"],
       },
     ],
     tags: [
@@ -207,11 +206,6 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
         description: "Map event/workout endpoints for filtering and querying",
       },
       { name: "revalidate", description: "Cache revalidation for map data" },
-      {
-        name: "slack",
-        description:
-          "Slack workspace integration endpoints for user/space management and org linking",
-      },
     ],
 
     components: {

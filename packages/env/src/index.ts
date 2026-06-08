@@ -32,6 +32,7 @@ export const env = createEnv({
     TEST_DATABASE_URL: z.string().min(1),
     API_KEY: z.string().min(1),
     SUPER_ADMIN_API_KEY: z.string().min(1),
+    SLACKBOT_API_KEY: z.string().min(1),
     NOTIFY_WEBHOOK_URLS_COMMA_SEPARATED: z.string().optional(),
     GCS_EMULATOR_HOST: z.string().optional(),
   },

@@ -90,5 +90,14 @@ describe("docs routes", () => {
     expect(spec.paths?.["/v1/ping"]?.post?.parameters?.[0]).toMatchObject({
       $ref: "#/components/parameters/ClientHeader",
     });
+
+    const generateCalls = generateMock.mock.calls as unknown[][];
+    const generateOptions = generateCalls[0]?.[1] as
+      | { filter?: (args: { path: string[] }) => boolean }
+      | undefined;
+
+    expect(generateOptions?.filter).toBeTypeOf("function");
+    expect(generateOptions?.filter?.({ path: ["slack"] })).toBe(false);
+    expect(generateOptions?.filter?.({ path: ["ping"] })).toBe(true);
   });
 });
