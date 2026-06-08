@@ -9,5 +9,8 @@ export default defineConfig({
     setupFiles: ["./src/__tests__/setup.ts"],
     fileParallelism: false,
     env: { NODE_ENV: "test", SLACKBOT_API_KEY: "test-slackbot-api-key" },
+    coverage: {
+      provider: "v8",
+    },
   },
 });
