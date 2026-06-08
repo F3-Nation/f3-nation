@@ -6,9 +6,9 @@ packages:
 catalog:
   "@auth/core": 0.37.2
   "@auth/drizzle-adapter": ^0.6.3
-  "@commitlint/cli": ^21.0.1
-  "@commitlint/config-conventional": ^21.0.1
-  "@commitlint/cz-commitlint": ^21.0.1
+  "@commitlint/cli": ^21.0.2
+  "@commitlint/config-conventional": ^21.0.2
+  "@commitlint/cz-commitlint": ^21.0.2
   "@faker-js/faker": ^10.4.0
   "@formkit/auto-animate": ^0.8.1
   "@google-cloud/storage": ^7.14.0
