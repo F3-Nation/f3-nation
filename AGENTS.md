@@ -46,7 +46,7 @@ that app's `AGENTS.md`.
 - Code quality: always run `pnpm lint` (or `pnpm lint --filter apps/map`) and `pnpm format:fix` to ensure your code passes all lint and formatting checks. Also run `pnpm typecheck` to validate types.
 - Testing:
   - Run all tests with `pnpm test` (via the Turbo pipeline).
-  - Run targeted tests: `pnpm -C apps/map test`, `pnpm -C apps/map test:e2e`.
+  - Run targeted tests: `pnpm -C apps/map test`.
   - Database helpers: `pnpm db:pull`, `pnpm db:push`, and `pnpm reset-test-db`.
 
 ## Coding Style & Naming Conventions
@@ -68,7 +68,6 @@ that app's `AGENTS.md`.
 ## Testing Guidelines
 
 - Use Vitest for unit and integration tests; name test files `*.test.ts[x]` and place under or near source code or in `__tests__`.
-- Use Playwright for e2e in `apps/map`; generate reports via `pnpm -C apps/map test:e2e:report`.
 - Reset databases before any suite that mutates data (`pnpm reset-test-db` or `pnpm -C packages/db reset-test-db`).
 - Prefer fixtures in `apps/map/tests` or `packages/*/__mocks__` instead of live service calls.
 

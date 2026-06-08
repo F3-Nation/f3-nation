@@ -58,10 +58,6 @@ yarn-error.log*
 # db exports
 .data
 
-# playwright
-test-results/
-.auth
-
 # sentry
 .env.sentry-build-plugin 
 
