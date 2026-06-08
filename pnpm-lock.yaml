@@ -31,7 +31,7 @@ catalogs:
       specifier: ^7.14.0
       version: 7.19.0
     '@hookform/resolvers':
-      specifier: ^3.3.4
+      specifier: ^3.10.0
       version: 3.10.0
     '@ianvs/prettier-plugin-sort-imports':
       specifier: ^4.1.1
