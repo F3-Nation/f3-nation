@@ -16,6 +16,8 @@ export const env = createEnv({
    * This way you can ensure the app isn't built with invalid env vars.
    */
   server: {
+    DATABASE_URL: z.string().min(1).optional(),
+    TEST_DATABASE_URL: z.string().min(1).optional(),
     F3_ADMIN_URL: z.string().url().optional(),
     F3_API_BASE_URL: z.string().url(),
     F3_CHANNEL: z.enum(["local", "ci", "branch", "dev", "staging", "prod"]),
