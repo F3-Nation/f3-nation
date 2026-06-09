@@ -18,7 +18,6 @@ export const env = createEnv({
     // GIT items are provided by the next.config.js
     NEXT_PUBLIC_GIT_COMMIT_HASH: z.string().optional(),
     NEXT_PUBLIC_GIT_BRANCH: z.string().optional(),
-    NEXT_PUBLIC_GA_MEASUREMENT_ID: z.string().optional(),
   },
   /**
    * Specify your server-side environment variables schema here.
@@ -39,21 +38,18 @@ export const env = createEnv({
    */
   client: {
     NEXT_PUBLIC_API_URL: z.string().min(1),
-    NEXT_PUBLIC_GOOGLE_API_KEY: z.string().min(1),
     // NEXT_PUBLIC_CLIENTVAR: z.string(),
   },
   /**
    * Destructure all variables from `process.env` to make sure they aren't tree-shaken away.
    */
   experimental__runtimeEnv: {
-    NEXT_PUBLIC_GOOGLE_API_KEY: process.env.NEXT_PUBLIC_GOOGLE_API_KEY,
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
     VERCEL_ENV: process.env.VERCEL_ENV,
     NODE_ENV: process.env.NODE_ENV,
     NEXT_PUBLIC_CHANNEL: process.env.NEXT_PUBLIC_CHANNEL,
     NEXT_PUBLIC_GIT_COMMIT_HASH: process.env.NEXT_PUBLIC_GIT_COMMIT_HASH,
     NEXT_PUBLIC_GIT_BRANCH: process.env.NEXT_PUBLIC_GIT_BRANCH,
-    NEXT_PUBLIC_GA_MEASUREMENT_ID: process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID,
   },
   skipValidation:
     !!process.env.CI ||
