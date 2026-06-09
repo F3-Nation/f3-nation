@@ -19,7 +19,6 @@
     "@acme/api": "workspace:^0.2.0",
     "@acme/auth": "workspace:^0.1.0",
     "@acme/db": "workspace:^0.1.0",
-    "@acme/env": "workspace:^0.1.0",
     "@acme/shared": "workspace:^0.1.0",
     "@acme/tailwind-config": "workspace:^0.1.0",
     "@acme/ui": "workspace:^0.1.0",

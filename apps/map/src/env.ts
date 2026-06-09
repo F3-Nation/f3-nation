@@ -17,9 +17,9 @@ export const env = createEnv({
    */
   server: {
     F3_ADMIN_URL: z.string().url().optional(),
+    F3_API_BASE_URL: z.string().url(),
     F3_CHANNEL: z.enum(["local", "ci", "branch", "dev", "staging", "prod"]),
-    DATABASE_URL: z.string(),
-    TEST_DATABASE_URL: z.string(),
+    F3_GOOGLE_API_KEY: z.string().min(1),
     // Required in non-development environments, optional in development
     F3_MAP_API_KEY: z
       .string()
@@ -29,8 +29,11 @@ export const env = createEnv({
         (val) => process.env.NODE_ENV === "development" || val !== undefined,
         { message: "Required in non-development environments" },
       ),
-    F3_API_BASE_URL: z.string().url(),
-    F3_GOOGLE_API_KEY: z.string().min(1),
+    GCS_EMULATOR_HOST: z.string().optional(),
+    GOOGLE_LOGO_BUCKET_BUCKET_NAME: z.string().min(1),
+    GOOGLE_LOGO_BUCKET_CLIENT_EMAIL: z.string().min(1),
+    GOOGLE_LOGO_BUCKET_PRIVATE_KEY: z.string().min(1),
+    SUPER_ADMIN_API_KEY: z.string().min(1),
   },
   /**
    * Specify your client-side environment variables schema here.

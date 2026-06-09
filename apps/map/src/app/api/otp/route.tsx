@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import type { SendVerificationRequestServerParams } from "@acme/auth/lib/send-otp-verification-request-server";
-import { env } from "@acme/env";
+import { env } from "~/env";
 
 import { sendVerificationRequest } from "./send-verification-request";
 
