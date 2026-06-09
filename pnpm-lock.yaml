@@ -596,9 +596,6 @@ importers:
       '@acme/auth':
         specifier: workspace:^0.1.0
         version: link:../../packages/auth
-      '@acme/db':
-        specifier: workspace:^0.1.0
-        version: link:../../packages/db
       '@acme/shared':
         specifier: workspace:^0.1.0
         version: link:../../packages/shared
@@ -941,9 +938,6 @@ importers:
       '@acme/auth':
         specifier: workspace:^0.1.0
         version: link:../../packages/auth
-      '@acme/db':
-        specifier: workspace:^0.1.0
-        version: link:../../packages/db
       '@acme/mail':
         specifier: workspace:*
         version: link:../../packages/mail
