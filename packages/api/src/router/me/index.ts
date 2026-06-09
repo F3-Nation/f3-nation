@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { and, asc, eq, ilike, schema, sql } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
+import { isAllowedAvatarUrl } from "@acme/shared/app/avatar";
 
 import { protectedProcedure } from "../../shared";
 
@@ -13,6 +14,10 @@ import { protectedProcedure } from "../../shared";
  * other users), these endpoints let an authenticated user manage their own
  * profile, positions, and roles with only protectedProcedure auth.
  */
+
+// avatarUrl write-path validation uses the shared allowlist
+// (@acme/shared/app/avatar) so the API and the backfill migration in
+// packages/db enforce exactly the same canonical-host rule.
 
 const profileUpdateSchema = z
   .object({
@@ -49,9 +54,13 @@ const profileUpdateSchema = z
     avatarUrl: z
       .string()
       .url()
+      .refine(isAllowedAvatarUrl, "avatarUrl must be a GCS public-image URL")
       .nullable()
       .optional()
-      .describe("URL of the user's avatar image."),
+      .describe(
+        "URL of the user's avatar image. Must be a GCS public-image URL " +
+          "(storage.googleapis.com/f3-public-images[-staging]/...).",
+      ),
     emergencyContact: z
       .string()
       .max(200)

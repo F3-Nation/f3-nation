@@ -5,13 +5,7 @@ import { requireAuth } from "@/lib/auth/server";
 import { getMyProfile, updateMyProfile } from "@/lib/api/client";
 import type { UserMeta } from "@/lib/types";
 import { logError } from "@/lib/logging";
-
-// Enforce avatar host allow-list at this boundary so malformed avatarUrl
-// values are rejected with a 400 before calling the underlying API.
-const ALLOWED_AVATAR_HOST_PATTERN =
-  /^https:\/\/storage\.googleapis\.com\/f3-public-images(-staging)?\//;
-const isAllowedAvatarUrl = (url: string): boolean =>
-  ALLOWED_AVATAR_HOST_PATTERN.test(url);
+import { isAllowedAvatarUrl } from "@acme/shared/app/avatar";
 
 const profileUpdateSchema = z
   .object({

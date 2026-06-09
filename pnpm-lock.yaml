@@ -1419,6 +1419,9 @@ importers:
       '@acme/shared':
         specifier: workspace:*
         version: link:../shared
+      '@acme/storage':
+        specifier: workspace:*
+        version: link:../storage
       dotenv-cli:
         specifier: 'catalog:'
         version: 7.4.4
