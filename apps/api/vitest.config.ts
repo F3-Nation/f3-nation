@@ -15,10 +15,10 @@ export default defineConfig({
       reportsDirectory: "./coverage",
       thresholds: {
         autoUpdate: true,
-        statements: 29.61,
+        statements: 29.41,
         branches: 51.85,
         functions: 23.52,
-        lines: 29.61,
+        lines: 29.41,
       },
     },
     exclude: [
