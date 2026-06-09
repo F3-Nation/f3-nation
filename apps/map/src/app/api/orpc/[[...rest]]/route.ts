@@ -27,9 +27,10 @@ function getTargetUrl(request: NextRequest): URL {
 
 function getForwardedHeaders(request: NextRequest): Headers {
   const headers = new Headers(request.headers);
-  headers.delete("cookie");
   headers.delete("host");
   headers.delete("content-length");
+  headers.delete("authorization");
+  headers.delete("x-api-key");
   headers.set(Header.Client, Client.ORPC);
 
   const mapApiKey = process.env.F3_MAP_API_KEY;
