@@ -31,7 +31,7 @@ import { RouteChangeTracker } from "./_components/route-change-tracker";
 export const metadata: Metadata = {
   metadataBase: new URL(
     env.VERCEL_ENV === "production"
-      ? "https://maps.f3nation.com"
+      ? "https://map.f3nation.com"
       : "http://localhost:3000",
   ),
   title: "F3 Nation Map",
@@ -39,7 +39,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "F3 Nation Map",
     description: "Find F3 locations near you",
-    url: "https://maps.f3nation.com",
+    url: "https://map.f3nation.com",
     siteName: "F3 Nation Map",
   },
 };

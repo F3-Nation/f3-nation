@@ -6,7 +6,7 @@ import * as Sentry from "@sentry/nextjs";
 
 function getSentryEnvironment(): string {
   const hostname = window.location.hostname;
-  if (hostname === "maps.f3nation.com") return "production";
+  if (hostname === "map.f3nation.com") return "production";
   if (hostname.includes("staging")) return "staging";
   return "development";
 }
