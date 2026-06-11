@@ -531,7 +531,8 @@ def handle_event_instance_edit_delete(
     user_id = safe_get(body, "user", "id") or safe_get(body, "user_id")
 
     section_block_id = safe_get(body, "actions", 0, "block_id")
-    section_block = next((b for b in safe_get(body, "view", "blocks") if b["block_id"] == section_block_id), None)
+    view_blocks = safe_get(body, "view", "blocks") or []
+    section_block = next((b for b in view_blocks if b.get("block_id") == section_block_id), None)
     event_title = safe_get(section_block, "text", "text") or "an event"
 
     service = _build_event_instance_service()

@@ -202,16 +202,18 @@ class PositionViewsBuildListModalTest(unittest.TestCase):
 
 class BuildConfigSltFormTest(unittest.TestCase):
     @patch("features.positions._build_position_service")
-    @patch("features.positions.DbManager")
+    @patch("features.positions._build_ao_service")
     @patch("features.positions._user_id_to_slack_id_map", return_value={})
     @patch("features.positions.PositionViews.build_slt_modal")
     def test_build_config_slt_form_posts_modal(
-        self, mock_build_modal, mock_uid_map, mock_dbmanager, mock_build_service
+        self, mock_build_modal, mock_uid_map, mock_build_ao_service, mock_build_service
     ):
         mock_service = MagicMock()
         mock_build_service.return_value = mock_service
         mock_service.get_positions_with_assignments.return_value = []
-        mock_dbmanager.find_records.return_value = []
+        mock_ao_service = MagicMock()
+        mock_build_ao_service.return_value = mock_ao_service
+        mock_ao_service.get_region_aos.return_value = []
         mock_build_modal.return_value = MagicMock()
 
         body = {"trigger_id": "T1"}
@@ -224,16 +226,18 @@ class BuildConfigSltFormTest(unittest.TestCase):
         mock_build_modal.return_value.post_modal.assert_called_once()
 
     @patch("features.positions._build_position_service")
-    @patch("features.positions.DbManager")
+    @patch("features.positions._build_ao_service")
     @patch("features.positions._user_id_to_slack_id_map", return_value={})
     @patch("features.positions.PositionViews.build_slt_modal")
     def test_build_config_slt_form_updates_on_level_change(
-        self, mock_build_modal, mock_uid_map, mock_dbmanager, mock_build_service
+        self, mock_build_modal, mock_uid_map, mock_build_ao_service, mock_build_service
     ):
         mock_service = MagicMock()
         mock_build_service.return_value = mock_service
         mock_service.get_positions_with_assignments.return_value = []
-        mock_dbmanager.find_records.return_value = []
+        mock_ao_service = MagicMock()
+        mock_build_ao_service.return_value = mock_ao_service
+        mock_ao_service.get_region_aos.return_value = []
         mock_build_modal.return_value = MagicMock()
 
         body = {
