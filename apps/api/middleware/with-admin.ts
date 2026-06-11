@@ -7,7 +7,6 @@ import { ADMIN_PATHS, routes } from "@acme/shared/app/constants";
 import { COOKIE_NAME } from "@acme/shared/common/constants";
 
 import type { MiddlewareFactory } from "./types";
-import { env } from "~/env";
 
 const withAdmin: MiddlewareFactory = (next: NextMiddleware) => {
   return async (request: NextRequest, _next: NextFetchEvent) => {
@@ -22,7 +21,7 @@ const withAdmin: MiddlewareFactory = (next: NextMiddleware) => {
       .filter((o) => o.name.includes(`${COOKIE_NAME}.session-token`));
 
     // Must use process.env so that we don't try to validate all the other envs
-    const secret = env.AUTH_SECRET;
+    const secret = process.env.AUTH_SECRET;
     if (!secret) throw new Error("AUTH_SECRET is not set");
 
     if (!cookieToken) {

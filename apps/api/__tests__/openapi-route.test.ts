@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const generateMock = vi.fn<(...args: unknown[]) => Promise<unknown>>();
 
@@ -30,10 +30,20 @@ describe("docs openapi route", () => {
     };
   };
 
+  const originalNextPublicApiUrl = process.env.NEXT_PUBLIC_API_URL;
+
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
     process.env.NEXT_PUBLIC_API_URL = "";
+  });
+
+  afterAll(() => {
+    if (originalNextPublicApiUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_API_URL;
+      return;
+    }
+    process.env.NEXT_PUBLIC_API_URL = originalNextPublicApiUrl;
   });
 
   it("uses NEXT_PUBLIC_API_URL when set and injects ClientHeader for operations", async () => {
