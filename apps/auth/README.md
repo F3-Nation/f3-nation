@@ -821,10 +821,6 @@ The current rate limiter is in-memory (suitable for single Cloud Run instances).
 - **Production**: SendGrid SMTP (`smtp.sendgrid.net:587`)
 - **Development**: Ethereal (auto-generated test account, preview URLs logged to console). See [Local QA / Email Preview](#local-qa--email-preview) and [`AGENTS.md`](AGENTS.md) for the full automation recipe.
 
-### CI Exclusion
-
-`@acme/auth` is excluded from the root `lint:ws`, `typecheck`, and `ci:local` scripts because next-auth v5 (beta) has transient build/type issues when hoisted into the Turborepo workspace graph. The auth server has its own lint/typecheck commands (`pnpm -C apps/auth lint`, `pnpm -C apps/auth typecheck`) and is validated in its own CI workflow. This exclusion should be removed once the next-auth v5 stable release resolves the workspace compatibility issues.
-
 ### Security Features
 
 - PKCE support (S256 and plain methods)

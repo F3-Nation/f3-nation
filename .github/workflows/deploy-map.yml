@@ -1,0 +1,34 @@
+name: Deploy Map
+
+on:
+  push:
+    tags:
+      - "map@*"
+
+# Prevent concurrent deploys of the same tag
+concurrency:
+  group: deploy-map-${{ github.ref_name }}
+  cancel-in-progress: false
+
+# Reusable workflows can't elevate GITHUB_TOKEN beyond what the caller grants.
+# id-token: write -> GCP OIDC (google-github-actions/auth); checks: read -> CI gate.
+permissions:
+  contents: read
+  id-token: write
+  checks: read
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/_deploy-cloudrun.yml
+    with:
+      image_name: f3-map
+      service_name: f3-map
+      staging_project: f3-map-app-staging
+      prod_project: f3-map-app
+      tag_prefix: map@
+      dockerfile: apps/map/Dockerfile
+      staging_environment: map-staging
+      prod_environment: map-production
+      # TODO: Update these URLs to the URLs of the staging and production services when domains are set up
+      staging_url: https://f3-map-1054072148233.us-east1.run.app
+      prod_url: https://f3-map-836482382930.us-east1.run.app

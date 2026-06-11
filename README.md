@@ -33,10 +33,10 @@ PNPM provides powerful filtering capabilities to target specific workspaces:
 pnpm install
 
 # Install dependencies for a specific app
-pnpm install --filter f3-nation-map
+pnpm install --filter f3-map
 
 # Install dependencies for multiple specific apps
-pnpm install --filter f3-nation-map --filter another-app
+pnpm install --filter f3-map --filter another-app
 
 # Install dependencies for all apps
 pnpm install
@@ -49,10 +49,10 @@ pnpm install
 pnpm dev
 
 # Start development server for specific app
-pnpm dev --filter f3-nation-map
+pnpm dev --filter f3-map
 
 # Start development server with custom turbo flags
-pnpm dev --filter f3-nation-map -- --port 3001
+pnpm dev --filter f3-map -- --port 3001
 ```
 
 #### Build Filtering
@@ -62,17 +62,17 @@ pnpm dev --filter f3-nation-map -- --port 3001
 pnpm build
 
 # Build specific app
-pnpm build --filter f3-nation-map
+pnpm build --filter f3-map
 ```
 
 #### Other Useful Filter Patterns
 
 ```bash
 # Run tests for specific workspace
-pnpm test --filter f3-nation-map
+pnpm test --filter f3-map
 
 # Run linting for specific workspace
-pnpm lint --filter f3-nation-map
+pnpm lint --filter f3-map
 
 ```
 
@@ -129,7 +129,7 @@ The monorepo leverages Turbo's caching system:
    pnpm dev
 
    # Start specific app only
-   pnpm dev --filter f3-nation-map
+   pnpm dev --filter f3-map
    ```
 
 ## Application Registry

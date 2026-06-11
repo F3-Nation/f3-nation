@@ -9,18 +9,13 @@ import {
   REFRESH_TOKEN_COOKIE_NAME,
 } from "./constants";
 import type { AdminSession } from "./session";
-import { parseAccessTokenPayload } from "./tokens";
+import { verifyAccessTokenPayload } from "./tokens";
 import { getMyProfile } from "~/lib/api/client";
 
 const NO_ADMIN_ACCESS_PATH = `${routes.admin.noAccess.__path}?reason=no-admin-access`;
 
-const getCachedSessionPayload = cache((accessToken: string) => {
-  let payload: ReturnType<typeof parseAccessTokenPayload>;
-  try {
-    payload = parseAccessTokenPayload(accessToken);
-  } catch {
-    return null;
-  }
+const getCachedSessionPayload = cache(async (accessToken: string) => {
+  const payload = await verifyAccessTokenPayload(accessToken);
 
   if (!payload?.sub || !payload.email) return null;
 
@@ -46,16 +41,16 @@ export async function getRefreshToken(): Promise<string | null> {
   return cookieStore.get(REFRESH_TOKEN_COOKIE_NAME)?.value ?? null;
 }
 
-export function getSessionFromAccessToken(
+export async function getSessionFromAccessToken(
   accessToken: string,
-): AdminSession | null {
+): Promise<AdminSession | null> {
   return getCachedSessionPayload(accessToken);
 }
 
 export async function getSessionUser(): Promise<AdminSession | null> {
   const accessToken = await getAccessToken();
   if (!accessToken) return null;
-  const session = getSessionFromAccessToken(accessToken);
+  const session = await getSessionFromAccessToken(accessToken);
   if (!session) return null;
 
   try {
@@ -106,7 +101,7 @@ export async function requireAdminPortalAccess(
 
 export async function requireAccessToken(): Promise<string> {
   const accessToken = await getAccessToken();
-  if (!accessToken || !getSessionFromAccessToken(accessToken)) {
+  if (!accessToken || !(await getSessionFromAccessToken(accessToken))) {
     redirect("/api/auth/login");
   }
 

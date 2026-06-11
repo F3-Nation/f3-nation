@@ -31,3 +31,8 @@ jobs:
       prod_environment: auth-production
       staging_url: https://staging.auth.f3nation.com
       prod_url: https://auth.f3nation.com
+      # Stop-gap for in-memory rate limiter: pin to a single instance so the
+      # per-process Map store is authoritative across all requests.  When the
+      # limiter is migrated to a shared store (Redis/Upstash) this flag can be
+      # removed or raised.  See #356.
+      flags: "--min-instances=1 --max-instances=1"

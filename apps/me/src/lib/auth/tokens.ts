@@ -120,3 +120,43 @@ export async function verifyAccessToken(token: string): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Verify an access token's RS256 signature and return the decoded claims on
+ * success, or null on any failure (invalid sig, expired, JWKS unavailable).
+ * Used by route handlers that need the payload after verifying (#371).
+ */
+export async function verifyAccessTokenPayload(
+  token: string,
+): Promise<AccessTokenPayload | null> {
+  if (isAccessTokenExpired(token)) return null;
+
+  const issuer = process.env.AUTH_PROVIDER_URL;
+  const clientId = process.env.OAUTH_CLIENT_ID;
+  if (!issuer) throw new Error("AUTH_PROVIDER_URL is required");
+  if (!clientId) throw new Error("OAUTH_CLIENT_ID is required");
+
+  try {
+    const { payload } = await jwtVerify(token, getRemoteJWKS(), {
+      algorithms: ["RS256"],
+      issuer,
+      audience: clientId,
+    });
+    if (typeof payload.sub !== "string") return null;
+    return payload as unknown as AccessTokenPayload;
+  } catch {
+    // Fall back: some tokens carry client_id instead of aud.
+  }
+
+  try {
+    const { payload } = await jwtVerify(token, getRemoteJWKS(), {
+      algorithms: ["RS256"],
+      issuer,
+    });
+    if (payload.client_id !== clientId) return null;
+    if (typeof payload.sub !== "string") return null;
+    return payload as unknown as AccessTokenPayload;
+  } catch {
+    return null;
+  }
+}

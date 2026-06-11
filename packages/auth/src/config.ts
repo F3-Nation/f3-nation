@@ -208,7 +208,7 @@ export const authConfig: NextAuthConfig = {
       }
 
       if (trigger === "update" && session && "roles" in session) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
         token.roles = session.roles;
       }
 

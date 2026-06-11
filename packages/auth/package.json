@@ -37,7 +37,6 @@
     "@types/nodemailer": "catalog:",
     "eslint": "catalog:",
     "prettier": "catalog:",
-    "tsx": "catalog:",
     "typescript": "catalog:"
   },
   "prettier": "@acme/prettier-config"

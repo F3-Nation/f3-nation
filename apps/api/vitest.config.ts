@@ -11,12 +11,14 @@ export default defineConfig({
     setupFiles: ["__tests__/setup.tsx"],
     coverage: {
       provider: "v8",
-      reporter: ["text", "html"],
+      reporter: ["text", "json", "html"],
+      reportsDirectory: "./coverage",
       thresholds: {
-        statements: 0,
-        branches: 0,
-        functions: 0,
-        lines: 0,
+        autoUpdate: true,
+        statements: 29.41,
+        branches: 51.85,
+        functions: 23.52,
+        lines: 29.41,
       },
     },
     exclude: [

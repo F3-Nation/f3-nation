@@ -40,13 +40,13 @@ that app's `AGENTS.md`.
 - **First-time setup:** `pnpm local:setup` — copies per-directory `.env` files, starts Docker services, runs migrations, and seeds the database. See [docs/LOCAL_DEV_DOCKER.md](docs/LOCAL_DEV_DOCKER.md) for the full guide.
 - **Docker services:** `pnpm docker:up` to start (Postgres, Adminer, GCS emulator, Mailpit), `pnpm docker:down` to stop.
 - Install dependencies with `pnpm install`. You can scope installations with `--filter <workspace>`.
-- Start development: `pnpm dev --filter f3-nation-map` for the map app, or `pnpm dev` to run all watch tasks.
+- Start development: `pnpm dev --filter f3-map` for the map app, or `pnpm dev` to run all watch tasks.
 - Each app and `packages/env` has its own `.env` file (copied from `.env.local.example` by `pnpm local:setup`). Never commit `.env` files.
 - Build with `pnpm build` (or `pnpm build --filter apps/map`), and start production with `pnpm -C apps/map start`.
 - Code quality: always run `pnpm lint` (or `pnpm lint --filter apps/map`) and `pnpm format:fix` to ensure your code passes all lint and formatting checks. Also run `pnpm typecheck` to validate types.
 - Testing:
   - Run all tests with `pnpm test` (via the Turbo pipeline).
-  - Run targeted tests: `pnpm -C apps/map test`, `pnpm -C apps/map test:e2e`.
+  - Run targeted tests: `pnpm -C apps/map test`.
   - Database helpers: `pnpm db:pull`, `pnpm db:push`, and `pnpm reset-test-db`.
 
 ## Coding Style & Naming Conventions
@@ -60,7 +60,7 @@ that app's `AGENTS.md`.
 
 ## GitHub Actions Conventions
 
-- **Pin third-party actions to a semver tag, not a commit SHA** (e.g. `actions/checkout@v6.0.2`, `pnpm/action-setup@v6.0.8`). Version tags keep workflows readable and let Dependabot/Renovate bump them cleanly. Do not pin to full 40-character commit SHAs.
+- **Pin third-party actions to a full commit SHA with a version comment** (e.g. `actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2`). SHAs are immutable — a semver tag can be force-pushed, a SHA cannot. Renovate (`pinDigests: true`) keeps the SHAs up to date automatically.
 - Drive the Node version from `.nvmrc` via `actions/setup-node` (`node-version-file: .nvmrc`) — `.nvmrc` is the single source of truth. Never hardcode `node-version:` in a workflow.
 - Share toolchain setup through the composite action [`.github/actions/setup-node-pnpm`](.github/actions/setup-node-pnpm/action.yml) (pnpm + Node + pnpm-store cache + frozen install) instead of repeating setup steps per job.
 - The five CI check names (`format-check`, `lint`, `typecheck`, `build`, `test-coverage`) are referenced by the `dev` branch ruleset and by `check-regexp` in the deploy workflows — renaming a job requires updating both.
@@ -68,7 +68,6 @@ that app's `AGENTS.md`.
 ## Testing Guidelines
 
 - Use Vitest for unit and integration tests; name test files `*.test.ts[x]` and place under or near source code or in `__tests__`.
-- Use Playwright for e2e in `apps/map`; generate reports via `pnpm -C apps/map test:e2e:report`.
 - Reset databases before any suite that mutates data (`pnpm reset-test-db` or `pnpm -C packages/db reset-test-db`).
 - Prefer fixtures in `apps/map/tests` or `packages/*/__mocks__` instead of live service calls.
 

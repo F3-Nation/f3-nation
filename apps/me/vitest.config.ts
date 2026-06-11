@@ -12,6 +12,13 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "json", "html"],
       reportsDirectory: "./coverage",
+      thresholds: {
+        autoUpdate: true,
+        statements: 23.14,
+        branches: 77.77,
+        functions: 43.67,
+        lines: 23.14,
+      },
     },
     setupFiles: ["./vitest.setup.ts"],
   },
