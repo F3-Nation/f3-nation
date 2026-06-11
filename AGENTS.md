@@ -25,7 +25,7 @@ that app's `AGENTS.md`.
 ## Project Structure & Module Organization
 
 - Use Node >=24.14 (see `.nvmrc`), pnpm 11, and Turborepo for workspace orchestration.
-- `apps/` holds the deployable Next.js apps: `map` (the Next.js 15 map UI, port 3000), `admin`, `api`, `auth`, `homepage`, and `me`.
+- `apps/` holds the deployable apps: Next.js apps `map` (port 3000), `admin`, `api`, `auth`, `homepage`, and `me`; plus the Python Slack app `slackbot` (port 3006).
 - Shared code is organized in `packages/`: `api` (oRPC routers), `auth` (auth helpers), `db` (Drizzle schema/migrations), `env` (environment validation), `mail` (transactional email), `shared` (utilities), `sso` (single sign-on helpers), `storage` (object storage), `ui` (shared components), and `validators` (Zod schemas).
 - Configuration files are in `tooling/`; Turbo generators live in `turbo/`.
 
@@ -40,7 +40,7 @@ that app's `AGENTS.md`.
 - **First-time setup:** `pnpm local:setup` — copies per-directory `.env` files, starts Docker services, runs migrations, and seeds the database. See [docs/LOCAL_DEV_DOCKER.md](docs/LOCAL_DEV_DOCKER.md) for the full guide.
 - **Docker services:** `pnpm docker:up` to start (Postgres, Adminer, GCS emulator, Mailpit), `pnpm docker:down` to stop.
 - Install dependencies with `pnpm install`. You can scope installations with `--filter <workspace>`.
-- Start development: `pnpm dev --filter f3-nation-map` for the map app, or `pnpm dev` to run all watch tasks.
+- Start development: `pnpm dev --filter f3-nation-map` for the map app, `pnpm dev --filter slack-bot` for slackbot only, or `pnpm dev` to run all watch tasks.
 - Each app and `packages/env` has its own `.env` file (copied from `.env.local.example` by `pnpm local:setup`). Never commit `.env` files.
 - Build with `pnpm build` (or `pnpm build --filter apps/map`), and start production with `pnpm -C apps/map start`.
 - Code quality: always run `pnpm lint` (or `pnpm lint --filter apps/map`) and `pnpm format:fix` to ensure your code passes all lint and formatting checks. Also run `pnpm typecheck` to validate types.
@@ -105,13 +105,13 @@ Use standard Conventional Commit types: `feat`, `fix`, `chore`, `docs`, `style`,
 
 Scopes are defined in `commitlint.config.mjs` and map to monorepo packages:
 
-| Category        | Scopes                                                            |
-| --------------- | ----------------------------------------------------------------- |
-| Apps            | `admin`, `homepage`, `map`, `me`                                  |
-| Apps & Packages | `api`, `auth` (exist in both `apps/` and `packages/`)             |
+| Category        | Scopes                                                              |
+| --------------- | ------------------------------------------------------------------- |
+| Apps            | `admin`, `homepage`, `map`, `me`                                    |
+| Apps & Packages | `api`, `auth` (exist in both `apps/` and `packages/`)               |
 | Packages        | `db`, `env`, `mail`, `shared`, `sso`, `storage`, `ui`, `validators` |
-| Tooling         | `eslint`, `prettier`, `tsconfig`, `scripts`, `github`, `tailwind` |
-| Cross-cutting   | `deps`, `ci`, `repo`, `release`, `dev` (used by Release Please)   |
+| Tooling         | `eslint`, `prettier`, `tsconfig`, `scripts`, `github`, `tailwind`   |
+| Cross-cutting   | `deps`, `ci`, `repo`, `release`, `dev` (used by Release Please)     |
 
 **Choosing a scope:**
 

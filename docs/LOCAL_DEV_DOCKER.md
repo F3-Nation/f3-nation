@@ -161,7 +161,7 @@ pnpm local:setup
 This script does everything automatically:
 
 - Copies each directory's `.env.local.example` → `.env` (skips any that already exist):
-  `apps/api`, `apps/auth`, `apps/map`, `apps/me`, `apps/admin`, and `packages/env`
+  `apps/api`, `apps/auth`, `apps/map`, `apps/me`, `apps/admin`, `apps/slackbot`, and `packages/env`
 - Starts the four Docker containers
 - Waits for Postgres to be ready
 - Creates the `f3-public-images` bucket in the GCS emulator
@@ -216,6 +216,7 @@ pnpm dev
 | Me       | http://localhost:3003 |
 | Auth     | http://localhost:3004 |
 | Homepage | http://localhost:3005 |
+| Slackbot | http://localhost:3006 |
 
 ---
 
@@ -255,14 +256,15 @@ The Docker containers save their data in named volumes (`postgres_data`, `gcs_da
 
 Each app and shared package has its own `.env` file, copied from a `.env.local.example` template during `pnpm local:setup`. All template values work out-of-the-box with Docker — you don't need to edit anything to get started.
 
-| Directory           | Purpose                                                            |
-| ------------------- | ------------------------------------------------------------------ |
-| `apps/api/.env`     | API app (Next.js on port 3001)                                     |
-| `apps/auth/.env`    | Auth app (Next.js on port 3004)                                    |
-| `apps/map/.env`     | Map app (Next.js on port 3000)                                     |
-| `apps/admin/.env`   | Admin app (Next.js on port 3002)                                   |
-| `apps/me/.env`      | Me app (Next.js on port 3003)                                      |
-| `packages/env/.env` | Shared backend env root (used by `packages/db` and `packages/api`) |
+| Directory            | Purpose                                                            |
+| -------------------- | ------------------------------------------------------------------ |
+| `apps/api/.env`      | API app (Next.js on port 3001)                                     |
+| `apps/auth/.env`     | Auth app (Next.js on port 3004)                                    |
+| `apps/map/.env`      | Map app (Next.js on port 3000)                                     |
+| `apps/admin/.env`    | Admin app (Next.js on port 3002)                                   |
+| `apps/me/.env`       | Me app (Next.js on port 3003)                                      |
+| `apps/slackbot/.env` | Slackbot app (Python Socket Mode app on port 3006)                 |
+| `packages/env/.env`  | Shared backend env root (used by `packages/db` and `packages/api`) |
 
 Here's what each variable means:
 

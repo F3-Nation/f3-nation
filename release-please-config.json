@@ -37,6 +37,11 @@
       "component": "auth",
       "changelog-path": "CHANGELOG.md",
       "path": "apps/auth"
+    },
+    "apps/slackbot": {
+      "component": "slackbot",
+      "changelog-path": "CHANGELOG.md",
+      "path": "apps/slackbot"
     }
   }
 }

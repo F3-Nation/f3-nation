@@ -1262,6 +1262,8 @@ importers:
         specifier: 'catalog:'
         version: 3.2.4(@types/node@24.12.4)(jsdom@29.1.1)(terser@5.48.0)
 
+  apps/slackbot: {}
+
   packages/api:
     dependencies:
       '@acme/auth':

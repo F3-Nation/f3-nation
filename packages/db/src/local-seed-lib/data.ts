@@ -207,6 +207,12 @@ export const LOCAL_API_KEYS = [
     description: "Used by apps/map for read-only API access",
     role: "user" as const,
   },
+  {
+    key: "local-slackbot-key",
+    name: "Slackbot (local dev)",
+    description: "Used by apps/slackbot for full Admin access",
+    role: "admin" as const,
+  },
 ];
 
 // ---------------------------------------------------------------------------
