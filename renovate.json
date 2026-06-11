@@ -83,7 +83,6 @@
         "vitest",
         "@vitest/*",
         "@testing-library/*",
-        "@playwright/test",
         "jsdom",
         "vitest-canvas-mock"
       ]

@@ -1,5 +1,5 @@
 {
-  "name": "f3-nation-map",
+  "name": "f3-map",
   "version": "4.2.3",
   "private": true,
   "type": "module",
@@ -13,18 +13,12 @@
     "typecheck": "tsc --noEmit",
     "test": "SKIP_ENV_VALIDATION=1 pnpm with-env vitest --run --coverage \"$@\"",
     "test:watch": "SKIP_ENV_VALIDATION=1 pnpm with-env vitest -w \"$@\"",
-    "test:e2e": "pnpm with-env playwright test",
-    "test:e2e:staging": "pnpm with-env playwright test --config=playwright.staging.config.ts",
-    "test:e2e:debug": "pnpm with-env playwright test --debug",
-    "test:e2e:ui": "pnpm with-env playwright test --ui",
-    "test:e2e:report": "pnpm with-env playwright show-report",
     "with-env": "dotenv -e .env --"
   },
   "dependencies": {
     "@acme/api": "workspace:^0.2.0",
     "@acme/auth": "workspace:^0.1.0",
     "@acme/db": "workspace:^0.1.0",
-    "@acme/env": "workspace:^0.1.0",
     "@acme/mail": "workspace:*",
     "@acme/shared": "workspace:^0.1.0",
     "@acme/tailwind-config": "workspace:^0.1.0",
@@ -71,7 +65,6 @@
     "@acme/eslint-config": "workspace:^0.2.0",
     "@acme/prettier-config": "workspace:^0.1.0",
     "@acme/tsconfig": "workspace:*",
-    "@playwright/test": "catalog:",
     "@testing-library/jest-dom": "catalog:",
     "@testing-library/react": "catalog:",
     "@types/geojson": "catalog:",

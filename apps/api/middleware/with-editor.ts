@@ -3,10 +3,10 @@ import type { NextFetchEvent, NextMiddleware, NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 
-import { env } from "@acme/env";
 import { EDITOR_PATHS, routes } from "@acme/shared/app/constants";
 
 import type { MiddlewareFactory } from "./types";
+import { env } from "~/env";
 
 const withEditor: MiddlewareFactory = (next: NextMiddleware) => {
   return async (request: NextRequest, _next: NextFetchEvent) => {

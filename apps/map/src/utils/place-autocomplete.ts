@@ -4,7 +4,7 @@ import type { PlaceResult } from "@acme/shared/app/types";
 import { MAX_PLACES_AUTOCOMPLETE_RADIUS } from "@acme/shared/app/constants";
 import { zoomToRadius } from "@acme/shared/app/functions";
 
-import { env } from "~/env";
+import { getGoogleApiKey } from "./runtime-config";
 
 // Cache for autocomplete results (key: input+center+zoom, value: results)
 const autocompleteCache = new Map<
@@ -52,6 +52,7 @@ export async function placesAutocomplete({
   center: { lat: number; lng: number };
   zoom: number;
 }): Promise<PlaceResult[]> {
+  const googleApiKey = getGoogleApiKey();
   // Check cache first
   const cacheKey = `${input.toLowerCase().trim()}_${center.lat}_${center.lng}_${zoom}`;
   const cached = autocompleteCache.get(cacheKey);
@@ -85,7 +86,7 @@ export async function placesAutocomplete({
       {
         headers: {
           "Content-Type": "application/json",
-          "X-Goog-Api-Key": env.NEXT_PUBLIC_GOOGLE_API_KEY,
+          "X-Goog-Api-Key": googleApiKey,
         },
       },
     );
