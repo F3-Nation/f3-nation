@@ -7,6 +7,8 @@ import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 import { SessionProvider } from "next-auth/react";
 
+import { headers } from "next/headers";
+
 import { cn } from "@acme/ui";
 import { ThemeProvider } from "@acme/ui/theme";
 import { Toaster } from "@acme/ui/toast";
@@ -50,7 +52,10 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout(props: { children: React.ReactNode }) {
+export default async function RootLayout(props: { children: React.ReactNode }) {
+  // Opt into per-request rendering so runtime env (e.g. F3_GOOGLE_API_KEY) is
+  // read at request time, not baked in at build (which breaks Maps in staging/prod).
+  await headers();
   return (
     <html lang="en" suppressHydrationWarning>
       <body
