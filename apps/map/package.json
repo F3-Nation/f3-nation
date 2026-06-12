@@ -53,6 +53,7 @@
     "next-auth": "catalog:",
     "next-plausible": "catalog:",
     "next-themes": "catalog:",
+    "nodemailer": "catalog:",
     "react": "catalog:",
     "react-div-100vh": "catalog:",
     "react-dom": "catalog:",
