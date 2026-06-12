@@ -161,7 +161,7 @@ pnpm local:setup
 This script does everything automatically:
 
 - Copies each directory's `.env.example` → `.env` (skips any that already exist):
-  `apps/api`, `apps/auth`, `apps/map`, `apps/me`, `apps/admin`, and `packages/env`
+  `apps/api`, `apps/auth`, `apps/homepage`, `apps/map`, `apps/me`, `apps/admin`, and `packages/env`
 - Starts the four Docker containers
 - Waits for Postgres to be ready
 - Creates the `f3-public-images` bucket in the GCS emulator
