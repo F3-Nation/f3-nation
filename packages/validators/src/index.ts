@@ -254,7 +254,7 @@ export const twitterUrlSchema = z
 export const orgPhoneSchema = z
   .string()
   .max(50, { message: "Phone number is too long" })
-  .or(z.literal(""))
+  .transform(normalizeOptionalUrl)
   .nullable();
 
 // NATION SCHEMA
