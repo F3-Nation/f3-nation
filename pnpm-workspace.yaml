@@ -4,7 +4,7 @@ packages:
   - tooling/*
 
 catalog:
-  "@auth/core": 0.37.2
+  "@auth/core": 0.41.0
   "@auth/drizzle-adapter": ^0.6.3
   "@commitlint/cli": ^21.0.2
   "@commitlint/config-conventional": ^21.0.2
@@ -50,6 +50,7 @@ catalog:
   "@tanstack/react-query-devtools": 5.90.2
   "@tanstack/react-table": ^8.20.5
   "@tanstack/react-virtual": ^3.13.6
+  "@tanstack/table-core": ^8.21.3
   "@testing-library/jest-dom": ^6.4.2
   "@testing-library/react": ^15.0.7
   "@turbo/gen": ^1.12.3
@@ -105,6 +106,7 @@ catalog:
   next-themes: ^0.4.4
   nodemailer: ^8.0.10
   pg: ^8.11.3
+  pg-connection-string: ^2.12.0
   postcss: ^8.5.15
   postgres: ^3.4.3
   prettier: ^3.8.3
@@ -143,13 +145,13 @@ overrides:
   cross-spawn: ">=7.0.5"
   fast-uri: ">=3.1.1"
   next: "^15.5.18"
+  "@auth/core": "0.41.0"
   "@vis.gl/react-google-maps": 1.5.2
 peerDependencyRules:
   allowedVersions:
     eslint-plugin-react>eslint: "10"
     eslint-plugin-react-hooks>eslint: "10"
     eslint-plugin-jsx-a11y>eslint: "10"
-nodeLinker: hoisted
 allowBuilds:
   "@sentry/cli": true
   core-js: true
@@ -159,3 +161,16 @@ allowBuilds:
   sharp: true
   unrs-resolver: true
 minimumReleaseAge: 10080
+catalogMode: strict
+cleanupUnusedCatalogs: true
+# sharp ships its native binary as platform-specific @img/* optional deps. Under
+# the isolated linker those live only in the virtual store, where Next.js'
+# standalone output tracer cannot resolve them at runtime. Hoist sharp + its
+# binaries to the root node_modules so they load natively. (The first two
+# patterns are pnpm's defaults, preserved here since setting this key overrides
+# them.)
+publicHoistPattern:
+  - "*eslint*"
+  - "*prettier*"
+  - "sharp"
+  - "@img/*"

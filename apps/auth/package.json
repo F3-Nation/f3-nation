@@ -46,6 +46,7 @@
     "@types/react-dom": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "autoprefixer": "catalog:",
+    "dotenv": "catalog:",
     "dotenv-cli": "catalog:",
     "eslint": "catalog:",
     "postcss": "catalog:",

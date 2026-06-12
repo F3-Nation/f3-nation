@@ -30,6 +30,7 @@
     "@orpc/server": "catalog:",
     "axios": "catalog:",
     "dayjs": "catalog:",
+    "drizzle-orm": "catalog:",
     "google-auth-library": "catalog:",
     "jose": "catalog:",
     "lodash": "catalog:",
@@ -45,10 +46,13 @@
     "@acme/eslint-config": "workspace:^0.2.0",
     "@acme/prettier-config": "workspace:^0.1.0",
     "@acme/tsconfig": "workspace:^0.1.0",
+    "@types/lodash": "catalog:",
     "@vitest/coverage-v8": "catalog:",
+    "dotenv-cli": "catalog:",
     "eslint": "catalog:",
     "prettier": "catalog:",
     "typescript": "catalog:",
+    "vite-tsconfig-paths": "catalog:",
     "vitest": "catalog:"
   },
   "prettier": "@acme/prettier-config"
