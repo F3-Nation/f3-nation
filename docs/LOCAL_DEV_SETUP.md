@@ -91,7 +91,7 @@ Construct `DATABASE_URL` from the individual fields:
 DATABASE_URL=postgresql://<DATABASE_USER>:<DATABASE_PASSWORD>@localhost:5433/<DATABASE_NAME>
 ```
 
-See `.env.example` at the repo root for a complete template with placeholder values.
+See each app's `.env.example` (e.g., `apps/api/.env.example`, `apps/map/.env.example`) for a complete template with placeholder values.
 
 </details>
 
