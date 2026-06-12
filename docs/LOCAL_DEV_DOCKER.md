@@ -160,7 +160,7 @@ pnpm local:setup
 
 This script does everything automatically:
 
-- Copies each directory's `.env.local.example` → `.env` (skips any that already exist):
+- Copies each directory's `.env.example` → `.env` (skips any that already exist):
   `apps/api`, `apps/auth`, `apps/map`, `apps/me`, `apps/admin`, and `packages/env`
 - Starts the four Docker containers
 - Waits for Postgres to be ready
@@ -253,7 +253,7 @@ The Docker containers save their data in named volumes (`postgres_data`, `gcs_da
 
 ## Understanding the .env files
 
-Each app and shared package has its own `.env` file, copied from a `.env.local.example` template during `pnpm local:setup`. All template values work out-of-the-box with Docker — you don't need to edit anything to get started.
+Each app and shared package has its own `.env` file, copied from a `.env.example` template during `pnpm local:setup`. All template values work out-of-the-box with Docker — you don't need to edit anything to get started.
 
 | Directory           | Purpose                                                            |
 | ------------------- | ------------------------------------------------------------------ |
@@ -533,8 +533,8 @@ pnpm local:setup
 Or manually re-copy an individual app:
 
 ```bash
-cp apps/api/.env.local.example apps/api/.env
-cp apps/map/.env.local.example apps/map/.env
+cp apps/api/.env.example apps/api/.env
+cp apps/map/.env.example apps/map/.env
 # etc.
 ```
 
