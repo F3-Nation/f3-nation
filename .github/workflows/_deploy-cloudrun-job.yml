@@ -1,19 +1,21 @@
-name: Reusable Cloud Run Deploy
+name: Reusable Cloud Run Job Deploy
 
-# Reusable pipeline shared by every Cloud Run app (me, admin, auth, ...).
-# ci-gate -> build image once -> deploy staging -> promote + deploy prod.
-# Callers (deploy-*.yml) only pass app-specific inputs; behavior stays identical
-# across apps so the workflows can never drift again.
+# Reusable pipeline for Cloud Run Jobs (batch/cron workloads).
+# ci-gate -> build image once -> deploy staging job -> promote + deploy prod job.
 
 on:
   workflow_call:
     inputs:
       image_name:
-        description: "Artifact Registry image name (e.g. f3-me)"
+        description: "Artifact Registry image name (e.g. f3-bot-scripts)"
         required: true
         type: string
-      service_name:
-        description: "Cloud Run service name"
+      job_name_staging:
+        description: "Staging Cloud Run Job name"
+        required: true
+        type: string
+      job_name_prod:
+        description: "Production Cloud Run Job name"
         required: true
         type: string
       staging_project:
@@ -25,11 +27,11 @@ on:
         required: true
         type: string
       tag_prefix:
-        description: "Tag prefix to strip for the image version (e.g. me@)"
+        description: "Tag prefix to strip for the image version (e.g. slackbot@)"
         required: true
         type: string
       dockerfile:
-        description: "Path to the app Dockerfile"
+        description: "Path to the Dockerfile"
         required: true
         type: string
       build_context:
@@ -45,16 +47,6 @@ on:
         description: "GitHub Environment name for production"
         required: true
         type: string
-      staging_url:
-        description: "Public staging URL"
-        required: false
-        type: string
-        default: ""
-      prod_url:
-        description: "Public production URL"
-        required: false
-        type: string
-        default: ""
       region:
         description: "GCP region"
         required: false
@@ -66,13 +58,12 @@ on:
         type: string
         default: cloud-run-builds
       flags:
-        description: "Extra flags passed directly to gcloud run deploy (e.g. --max-instances=1)"
+        description: "Extra flags passed directly to gcloud run jobs deploy"
         required: false
         type: string
         default: ""
 
 jobs:
-  # ── Gate: wait for the full CI check set to pass on this commit ──
   ci-gate:
     runs-on: ubuntu-latest
     permissions:
@@ -88,7 +79,6 @@ jobs:
           wait-interval: 15
           allowed-conclusions: success
 
-  # ── Build container image (once) ──
   build:
     needs: ci-gate
     runs-on: ubuntu-latest
@@ -125,8 +115,8 @@ jobs:
           AR_REPO: ${{ inputs.ar_repo }}
           IMAGE_NAME: ${{ inputs.image_name }}
         run: |
-          TAG="${GITHUB_REF_NAME}"          # e.g. me@1.2.3
-          VERSION="${TAG#"${TAG_PREFIX}"}"  # e.g. 1.2.3
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#"${TAG_PREFIX}"}"
           IMAGE="${REGION}-docker.pkg.dev/${STAGING_PROJECT}/${AR_REPO}/${IMAGE_NAME}:${VERSION}"
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
@@ -144,7 +134,6 @@ jobs:
             "${BUILD_CONTEXT}"
           docker push "${{ steps.meta.outputs.image }}"
 
-  # ── Deploy to staging ──
   deploy-staging:
     needs: build
     runs-on: ubuntu-latest
@@ -153,7 +142,6 @@ jobs:
       id-token: write
     environment:
       name: ${{ inputs.staging_environment }}
-      url: ${{ inputs.staging_url }}
     steps:
       - name: Authenticate to GCP (staging)
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
@@ -161,19 +149,30 @@ jobs:
           workload_identity_provider: ${{ vars.WIF_PROVIDER }}
           service_account: ${{ vars.WIF_SA }}
 
-      - name: Deploy to Cloud Run (staging)
-        uses: google-github-actions/deploy-cloudrun@2028e2d7d30a78c6910e0632e48dd561b064884d # v3.0.1
-        with:
-          service: ${{ inputs.service_name }}
-          image: ${{ needs.build.outputs.image }}
-          region: ${{ inputs.region }}
-          project_id: ${{ inputs.staging_project }}
-          # deploy-cloudrun v3 defaults wait to false; keep waiting for the revision to be healthy
-          wait: "true"
-          flags: ${{ inputs.flags }}
-          # Env vars are set via Cloud Run secrets / env config (see scripts/cloud-run-env.sh)
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
 
-  # ── Deploy to production (requires approval) ──
+      - name: Deploy Cloud Run Job (staging)
+        env:
+          JOB_NAME: ${{ inputs.job_name_staging }}
+          IMAGE: ${{ needs.build.outputs.image }}
+          REGION: ${{ inputs.region }}
+          PROJECT_ID: ${{ inputs.staging_project }}
+          FLAGS: ${{ inputs.flags }}
+        run: |
+          if [[ -n "${FLAGS}" ]]; then
+            # shellcheck disable=SC2206
+            extra_flags=(${FLAGS})
+          else
+            extra_flags=()
+          fi
+
+          gcloud run jobs deploy "${JOB_NAME}" \
+            --image "${IMAGE}" \
+            --region "${REGION}" \
+            --project "${PROJECT_ID}" \
+            "${extra_flags[@]}"
+
   deploy-prod:
     needs: [build, deploy-staging]
     runs-on: ubuntu-latest
@@ -182,7 +181,6 @@ jobs:
       id-token: write
     environment:
       name: ${{ inputs.prod_environment }}
-      url: ${{ inputs.prod_url }}
     steps:
       - name: Authenticate to GCP (staging — pull image from staging AR)
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
@@ -208,13 +206,23 @@ jobs:
           docker push "${PROD_IMAGE}"
           echo "prod_image=${PROD_IMAGE}" >> "$GITHUB_ENV"
 
-      - name: Deploy to Cloud Run (prod)
-        uses: google-github-actions/deploy-cloudrun@2028e2d7d30a78c6910e0632e48dd561b064884d # v3.0.1
-        with:
-          service: ${{ inputs.service_name }}
-          image: ${{ env.prod_image }}
-          region: ${{ inputs.region }}
-          project_id: ${{ inputs.prod_project }}
-          # deploy-cloudrun v3 defaults wait to false; keep waiting for the revision to be healthy
-          wait: "true"
-          flags: ${{ inputs.flags }}
+      - name: Deploy Cloud Run Job (prod)
+        env:
+          JOB_NAME: ${{ inputs.job_name_prod }}
+          IMAGE: ${{ env.prod_image }}
+          REGION: ${{ inputs.region }}
+          PROJECT_ID: ${{ inputs.prod_project }}
+          FLAGS: ${{ inputs.flags }}
+        run: |
+          if [[ -n "${FLAGS}" ]]; then
+            # shellcheck disable=SC2206
+            extra_flags=(${FLAGS})
+          else
+            extra_flags=()
+          fi
+
+          gcloud run jobs deploy "${JOB_NAME}" \
+            --image "${IMAGE}" \
+            --region "${REGION}" \
+            --project "${PROJECT_ID}" \
+            "${extra_flags[@]}"

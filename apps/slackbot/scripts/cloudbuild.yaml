@@ -1,3 +1,6 @@
+# Legacy Cloud Build config retained temporarily during GitHub Actions deploy cutover.
+# Primary deployment path is now tag-based workflows in .github/workflows/deploy-slackbot.yml.
+
 steps:
   - name: gcr.io/cloud-builders/gcloud
     id: prepare-context

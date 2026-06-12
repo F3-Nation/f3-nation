@@ -79,3 +79,37 @@ pnpm lint
 - `utilities/slack/orm.py`: legacy custom Slack UI helper layer
 
 Data access currently uses SQLAlchemy/f3-data-models (`packages/db-python`) while API migration work continues.
+
+## Deployment
+
+Slackbot deploys via tag-based GitHub Actions, similar to the other monorepo apps.
+
+### Release trigger
+
+- Tag format: `slackbot@MAJOR.MINOR.PATCH` (example: `slackbot@1.14.0`)
+- Trigger workflow: `.github/workflows/deploy-slackbot.yml`
+
+### What deploys
+
+One tag deploys two runtimes:
+
+1. Main app as Cloud Run service
+2. Scripts workload as Cloud Run Job (for scheduler-driven runs)
+
+### Environments and runtime targets
+
+- GitHub environments: `slackbot-staging`, `slackbot-production`
+- GCP project: `f3slackbot`
+- Region: `us-central1`
+- Main service (both stages via reusable workflow): `f3-nation-slack-bot`
+- Scripts job (staging): `f3-bot-scripts-test`
+- Scripts job (prod): `f3-bot-scripts-prod`
+
+### Flow
+
+1. Push `slackbot@X.Y.Z` tag
+2. Workflow waits for CI checks on that commit (`build`, `lint`, `typecheck`, `format-check`, `test-coverage`)
+3. Builds and pushes staging images
+4. Deploys staging main service and staging scripts job
+5. Waits for production environment approval
+6. Promotes images and deploys production service and production job
