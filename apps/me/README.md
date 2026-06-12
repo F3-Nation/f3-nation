@@ -97,8 +97,8 @@ apps/me/
 cd apps/me
 
 # Copy and populate env file
-cp .env.local.example .env.local
-# Edit .env.local with actual values (get from team via Slack)
+cp .env.example .env
+# Edit .env with actual values (get from team via Slack)
 
 # Install dependencies (from monorepo root)
 cd ../..
