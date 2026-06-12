@@ -7,8 +7,6 @@ import type { AppDb } from "@acme/db/client";
 import {
   assertEditorOnEventOrg,
   assertSelfOrEditorOnEventOrg,
-  canViewAttendancePii,
-  requireEventInstanceOrgId,
 } from "../lib/attendance-auth";
 import { protectedProcedure } from "../shared";
 
@@ -42,11 +40,11 @@ async function getAttendanceTypeIds(db: AppDb) {
 export const attendanceRouter = {
   /**
    * Get all attendance records for an event instance.
-   * Includes user info and attendance types.
+   * Includes user info (f3Name) and attendance types.
    *
    * Any authenticated user may read planned HC/Q lists (f3Name, types) for
    * preblast visibility. Actual attendance requires editor role on the event's
-   * org. Attendee email is PII and is only included for editors.
+   * org.
    */
   getForEventInstance: protectedProcedure
     .input(
@@ -82,12 +80,6 @@ export const attendanceRouter = {
         });
       }
 
-      const orgId = await requireEventInstanceOrgId(
-        ctx.db,
-        input.eventInstanceId,
-      );
-      const includePii = await canViewAttendancePii(ctx, orgId);
-
       // Get attendance records with user info
       const attendanceRecords = await ctx.db
         .select({
@@ -100,7 +92,6 @@ export const attendanceRouter = {
           user: {
             id: schema.users.id,
             f3Name: schema.users.f3Name,
-            email: schema.users.email,
           },
           attendanceTypes: sql<{ id: number; type: string }[]>`COALESCE(
             json_agg(
@@ -137,12 +128,7 @@ export const attendanceRouter = {
             eq(schema.attendance.isPlanned, input.isPlanned),
           ),
         )
-        .groupBy(
-          schema.attendance.id,
-          schema.users.id,
-          schema.users.f3Name,
-          schema.users.email,
-        );
+        .groupBy(schema.attendance.id, schema.users.id, schema.users.f3Name);
 
       return {
         attendance: attendanceRecords.map((record) => ({
@@ -151,7 +137,6 @@ export const attendanceRouter = {
             ? {
                 id: record.user.id,
                 f3Name: record.user.f3Name,
-                ...(includePii ? { email: record.user.email } : {}),
               }
             : record.user,
         })),

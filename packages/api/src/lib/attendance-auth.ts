@@ -32,20 +32,6 @@ export async function requireEventInstanceOrgId(
   return orgId;
 }
 
-export async function canViewAttendancePii(
-  ctx: Context,
-  orgId: number,
-): Promise<boolean> {
-  const { success } = await checkHasRoleOnOrg({
-    session: ctx.session,
-    orgId,
-    db: ctx.db,
-    roleName: "editor",
-  });
-
-  return success;
-}
-
 export async function assertEditorOnEventOrg({
   ctx,
   eventInstanceId,

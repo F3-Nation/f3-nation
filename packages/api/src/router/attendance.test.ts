@@ -334,7 +334,7 @@ describe("Attendance Router", () => {
       expect(actualResult.attendance.length).toBe(0);
     });
 
-    it("should omit attendee email for users without editor role", async () => {
+    it("should not return attendee email in responses", async () => {
       const { ao } = await createTestAO();
       if (!ao) return;
 
@@ -371,46 +371,7 @@ describe("Attendance Router", () => {
       expect(result.attendance[0]?.user).not.toHaveProperty("email");
     });
 
-    it("should include attendee email for editors on the event org", async () => {
-      const { ao } = await createTestAO();
-      if (!ao) return;
-
-      const eventInstance = await createTestEventInstance(ao.id);
-      if (!eventInstance) return;
-
-      const user = await createTestUser();
-      if (!user) return;
-
-      const [attendance] = await db
-        .insert(schema.attendance)
-        .values({
-          eventInstanceId: eventInstance.id,
-          userId: user.id,
-          isPlanned: true,
-        })
-        .returning();
-
-      if (attendance) {
-        createdAttendanceIds.push(attendance.id);
-      }
-
-      const editorSession = createEditorSession({
-        orgId: ao.id,
-        orgName: ao.name,
-      });
-      await mockAuthWithSession(editorSession);
-
-      const client = createTestClient();
-      const result = await client.attendance.getForEventInstance({
-        eventInstanceId: eventInstance.id,
-        isPlanned: true,
-      });
-
-      expect(result.attendance.length).toBe(1);
-      expect(result.attendance[0]?.user?.email).toBe(user.email);
-    });
-
-    it("should omit attendee email for editors on a different AO", async () => {
+    it("should not return attendee email for editors on a different AO", async () => {
       const { ao: eventAo } = await createTestAO();
       const { ao: editorAo } = await createTestAO();
       if (!eventAo || !editorAo) return;
