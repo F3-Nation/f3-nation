@@ -275,7 +275,9 @@ export const apiKeyRouter = {
           // Verify all roles exist
           for (const roleName of roleNames) {
             if (!roleMap.has(roleName)) {
-              throw new Error(`Role "${roleName}" not found`);
+              throw new ORPCError("BAD_REQUEST", {
+                message: `Role "${roleName}" not found`,
+              });
             }
           }
 
@@ -284,7 +286,9 @@ export const apiKeyRouter = {
             roles.map((role) => {
               const roleId = roleMap.get(role.roleName);
               if (!roleId) {
-                throw new Error(`Role "${role.roleName}" not found`);
+                throw new ORPCError("BAD_REQUEST", {
+                  message: `Role "${role.roleName}" not found`,
+                });
               }
               return {
                 roleId,
@@ -307,7 +311,9 @@ export const apiKeyRouter = {
         throw error;
       }
 
-      throw new Error("Unable to generate unique API key");
+      throw new ORPCError("INTERNAL_SERVER_ERROR", {
+        message: "Unable to generate unique API key",
+      });
     }),
   revoke: adminProcedure
     .input(revokeApiKeySchema)
