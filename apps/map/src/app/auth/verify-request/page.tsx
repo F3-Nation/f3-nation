@@ -1,13 +1,11 @@
-"use client";
-
 import Image from "next/image";
 
 import { VersionInfo } from "~/app/_components/version-info";
-import { env } from "~/env";
 import { AuthWrapper } from "../components/auth-components";
 
+export const dynamic = "force-dynamic";
+
 export default function VerifyRequestPage() {
-  const url = new URL(env.NEXT_PUBLIC_MAP_URL);
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col items-center">
@@ -30,10 +28,10 @@ export default function VerifyRequestPage() {
           </p>
 
           <a
-            href={url.toString()}
+            href={"/"}
             className="text-base leading-8 text-muted-foreground no-underline hover:underline"
           >
-            {url.host}
+            Back to the map
           </a>
         </div>
       </AuthWrapper>

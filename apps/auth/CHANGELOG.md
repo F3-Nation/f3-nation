@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/F3-Nation/f3-nation/compare/auth@1.2.0...auth@1.2.1) (2026-06-11)
+
+
+### Bug Fixes
+
+* **auth:** pin max-instances, enforce S256 PKCE, rate-limit userinfo/revoke ([#399](https://github.com/F3-Nation/f3-nation/issues/399)) ([0a7c904](https://github.com/F3-Nation/f3-nation/commit/0a7c904c6c21a3b99342b448f764614e3f87bde5))
+
 ## [1.2.0](https://github.com/F3-Nation/f3-nation/compare/auth@1.1.5...auth@1.2.0) (2026-05-31)
 
 

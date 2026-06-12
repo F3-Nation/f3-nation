@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/F3-Nation/f3-nation/compare/homepage@1.0.0...homepage@1.1.0) (2026-06-11)
+
+
+### Features
+
+* **homepage:** grouping apps by role ([#408](https://github.com/F3-Nation/f3-nation/issues/408)) ([9a3d91f](https://github.com/F3-Nation/f3-nation/commit/9a3d91f5fde962b2121bd80681da414bf82401a0))
+
 ## 1.0.0 (2026-05-31)
 
 
