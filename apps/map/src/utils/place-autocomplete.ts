@@ -43,7 +43,7 @@ function checkRateLimit(): boolean {
   return true;
 }
 
-export async function placesAutocomplete({
+async function placesAutocomplete({
   input,
   center,
   zoom,

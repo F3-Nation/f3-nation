@@ -21,9 +21,7 @@ function decodeBase64Url(value: string): string {
   return Buffer.from(padded, "base64").toString("utf-8");
 }
 
-export function parseAccessTokenPayload(
-  token: string,
-): AccessTokenPayload | null {
+function parseAccessTokenPayload(token: string): AccessTokenPayload | null {
   const parts = token.split(".");
   if (parts.length !== 3) return null;
 
@@ -46,7 +44,7 @@ export function parseAccessTokenPayload(
   }
 }
 
-export function isAccessTokenExpired(token: string, skewSeconds = 60): boolean {
+function isAccessTokenExpired(token: string, skewSeconds = 60): boolean {
   const payload = parseAccessTokenPayload(token);
   if (typeof payload?.exp !== "number" || !Number.isFinite(payload.exp)) {
     return true;
@@ -122,10 +120,6 @@ export async function verifyAccessTokenPayload(
   } catch {
     return null;
   }
-}
-
-export async function verifyAccessToken(token: string): Promise<boolean> {
-  return Boolean(await verifyAccessTokenPayload(token));
 }
 
 function parseAccessTokenPayloadFromClaims(

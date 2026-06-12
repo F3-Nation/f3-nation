@@ -18,7 +18,7 @@ const TouchDeviceContext = createContext<TouchDeviceContextType | undefined>(
   undefined,
 );
 
-export const touchState = new ZustandStore({
+const touchState = new ZustandStore({
   initialState: {
     isTouchDevice: false,
     hasTouched: false,

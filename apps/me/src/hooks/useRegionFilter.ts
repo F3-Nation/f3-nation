@@ -9,7 +9,7 @@ import type { Region } from "@/lib/types";
  * Filter regions: include active regions plus the currently-selected region
  * (even if inactive), then apply an optional search term.
  */
-export function filterRegions(
+function filterRegions(
   regions: Region[],
   selectedId: number | null,
   search: string,
@@ -21,7 +21,7 @@ export function filterRegions(
 }
 
 /** Find a region by id. */
-export function findRegionById(
+function findRegionById(
   regions: Region[],
   id: number | null,
 ): Region | undefined {

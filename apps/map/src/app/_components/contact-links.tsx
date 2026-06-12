@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { cn } from "@acme/ui";
 
-export interface ContactInfo {
+interface ContactInfo {
   website?: string | null;
   email?: string | null;
   twitter?: string | null;

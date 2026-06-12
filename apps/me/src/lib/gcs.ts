@@ -1,5 +1,5 @@
 import "server-only";
-import { deleteFile, prepareImageForStorage, uploadFile } from "@acme/storage";
+import { prepareImageForStorage, uploadFile } from "@acme/storage";
 
 export async function uploadAvatar(
   userId: number,
@@ -9,8 +9,4 @@ export async function uploadAvatar(
   return uploadFile(`user-avatars/${userId}.jpg`, jpeg, "image/jpeg", {
     cacheControl: "public, max-age=300",
   });
-}
-
-export async function deleteAvatar(userId: number): Promise<void> {
-  await deleteFile(`user-avatars/${userId}.jpg`);
 }
