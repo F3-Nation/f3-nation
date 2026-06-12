@@ -28,7 +28,6 @@
     "@orpc/client": "catalog:",
     "@orpc/experimental-ratelimit": "catalog:",
     "@orpc/server": "catalog:",
-    "axios": "catalog:",
     "dayjs": "catalog:",
     "google-auth-library": "catalog:",
     "jose": "catalog:",
