@@ -243,184 +243,21 @@ git log me@1.0.0..me@1.1.0 --oneline -- apps/me/
 
 ### First-Time Setup
 
-These steps only need to be done once when setting up the CI/CD pipeline.
-
-#### 1. Create GCP Artifact Registry repositories
-
-Each project gets its own Artifact Registry. The build pushes to staging; the deploy-prod job copies the image to prod's registry.
+See [docs/GCP_APP_SETUP.md](../../docs/GCP_APP_SETUP.md) for the full generalized walkthrough. Use these values in the variables block at the top of that doc:
 
 ```bash
-# Staging
-gcloud artifacts repositories create cloud-run-builds \
-  --repository-format=docker \
-  --location=us-east1 \
-  --project=f3-me-app-staging
-
-# Production
-gcloud artifacts repositories create cloud-run-builds \
-  --repository-format=docker \
-  --location=us-east1 \
-  --project=f3-me-app
+APP_NAME="me"
+CLOUDRUN_SERVICE="f3-me"
+GCP_REGION="us-east1"
+GCP_STAGING_PROJECT="f3-me-app-staging"
+GCP_PROD_PROJECT="f3-me-app"
+STAGING_DOMAIN="staging.me.f3nation.com"
+PROD_DOMAIN="me.f3nation.com"
+GH_STAGING_ENV="me-staging"
+GH_PROD_ENV="me-production"
 ```
 
-#### 2. Create Cloud Run services
-
-```bash
-# Staging — deploy a placeholder first (Cloud Run needs an initial image)
-gcloud run deploy f3-me \
-  --image=us-docker.pkg.dev/cloudrun/container/hello \
-  --region=us-east1 \
-  --project=f3-me-app-staging \
-  --allow-unauthenticated
-
-# Production
-gcloud run deploy f3-me \
-  --image=us-docker.pkg.dev/cloudrun/container/hello \
-  --region=us-east1 \
-  --project=f3-me-app \
-  --allow-unauthenticated
-```
-
-#### 3. Set up Workload Identity Federation (WIF)
-
-This lets GitHub Actions authenticate to GCP without service account keys.
-
-```bash
-# Create the f3-github GCP project (shared CI/CD infrastructure).
-# The WIF pool lives here — decoupled from any app project so it survives
-# if an app project is ever torn down. Other apps can reuse this pool too.
-gcloud projects create f3-github --name="F3 GitHub CI/CD"
-
-# Enable required APIs
-gcloud services enable iam.googleapis.com iamcredentials.googleapis.com \
-  sts.googleapis.com cloudresourcemanager.googleapis.com \
-  --project=f3-github
-
-# Create a Workload Identity Pool
-gcloud iam workload-identity-pools create "github-actions" \
-  --location="global" \
-  --display-name="GitHub Actions" \
-  --project=f3-github
-
-# Create a provider in the pool (attribute-condition restricts to our repo)
-gcloud iam workload-identity-pools providers create-oidc "github" \
-  --location="global" \
-  --workload-identity-pool="github-actions" \
-  --display-name="GitHub" \
-  --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository" \
-  --attribute-condition="attribute.repository==\"F3-Nation/f3-nation\"" \
-  --issuer-uri="https://token.actions.githubusercontent.com" \
-  --project=f3-github
-
-# Get the f3-github project number (used in SA impersonation bindings below)
-gcloud projects describe f3-github --format='value(projectNumber)'
-# ↑ Note this number — referred to as WIF_PROJECT_NUMBER below
-
-# ── Staging SA ──
-gcloud iam service-accounts create github-actions-deploy \
-  --display-name="GitHub Actions Deploy" \
-  --project=f3-me-app-staging
-
-# Grant it Cloud Run + Artifact Registry permissions in the staging project
-gcloud projects add-iam-policy-binding f3-me-app-staging \
-  --member="serviceAccount:github-actions-deploy@f3-me-app-staging.iam.gserviceaccount.com" \
-  --role="roles/run.admin"
-gcloud projects add-iam-policy-binding f3-me-app-staging \
-  --member="serviceAccount:github-actions-deploy@f3-me-app-staging.iam.gserviceaccount.com" \
-  --role="roles/artifactregistry.writer"
-gcloud projects add-iam-policy-binding f3-me-app-staging \
-  --member="serviceAccount:github-actions-deploy@f3-me-app-staging.iam.gserviceaccount.com" \
-  --role="roles/iam.serviceAccountUser"
-
-# Allow GitHub to impersonate the staging SA (pool is in f3-github project)
-gcloud iam service-accounts add-iam-policy-binding \
-  github-actions-deploy@f3-me-app-staging.iam.gserviceaccount.com \
-  --role="roles/iam.workloadIdentityUser" \
-  --member="principalSet://iam.googleapis.com/projects/WIF_PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions/attribute.repository/F3-Nation/f3-nation" \
-  --project=f3-me-app-staging
-
-# ── Production SA ──
-gcloud iam service-accounts create github-actions-deploy \
-  --display-name="GitHub Actions Deploy" \
-  --project=f3-me-app
-
-gcloud projects add-iam-policy-binding f3-me-app \
-  --member="serviceAccount:github-actions-deploy@f3-me-app.iam.gserviceaccount.com" \
-  --role="roles/run.admin"
-gcloud projects add-iam-policy-binding f3-me-app \
-  --member="serviceAccount:github-actions-deploy@f3-me-app.iam.gserviceaccount.com" \
-  --role="roles/iam.serviceAccountUser"
-
-# Prod SA needs AR read on staging (to pull the build image) and AR write on prod (to push the promoted copy)
-gcloud projects add-iam-policy-binding f3-me-app-staging \
-  --member="serviceAccount:github-actions-deploy@f3-me-app.iam.gserviceaccount.com" \
-  --role="roles/artifactregistry.reader"
-gcloud projects add-iam-policy-binding f3-me-app \
-  --member="serviceAccount:github-actions-deploy@f3-me-app.iam.gserviceaccount.com" \
-  --role="roles/artifactregistry.writer"
-
-# Allow GitHub to impersonate the prod SA
-gcloud iam service-accounts add-iam-policy-binding \
-  github-actions-deploy@f3-me-app.iam.gserviceaccount.com \
-  --role="roles/iam.workloadIdentityUser" \
-  --member="principalSet://iam.googleapis.com/projects/WIF_PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions/attribute.repository/F3-Nation/f3-nation" \
-  --project=f3-me-app
-```
-
-Replace `WIF_PROJECT_NUMBER` with the `f3-github` project number from the `gcloud projects describe` command above.
-
-#### 4. Add GitHub Variables
-
-In GitHub → repo Settings → **Secrets and variables** → **Actions** → **Variables** tab, add these variables to the **`me-staging`** and **`me-production`** environments:
-
-| Variable       | Value                                                                                                                                          |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `WIF_PROVIDER` | `projects/WIF_PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions/providers/github`                                           |
-| `WIF_SA`       | `github-actions-deploy@f3-me-app-staging.iam.gserviceaccount.com` (staging) / `github-actions-deploy@f3-me-app.iam.gserviceaccount.com` (prod) |
-
-> **Note:** These are repository/environment **variables** (`vars.WIF_PROVIDER`, `vars.WIF_SA`), not secrets.
-
-#### 5. Create GitHub Environments
-
-In GitHub → repo Settings → **Environments**:
-
-1. Create **`me-staging`** — no special rules needed
-2. Create **`me-production`** — add **Required reviewers** (add yourself or your team)
-
-#### 6. Push secrets to Cloud Run
-
-```bash
-# Copy and populate env files from the example
-cp apps/me/.env.cloud-run.example apps/me/.env.cloud-run.staging
-cp apps/me/.env.cloud-run.example apps/me/.env.cloud-run.prod
-# Edit each with the correct values (same values as the old .env.firebase.* files)
-
-# Push to GCP
-bash apps/me/scripts/cloud-run-env.sh --env staging
-bash apps/me/scripts/cloud-run-env.sh --env prod
-```
-
-#### 7. Map custom domains
-
-```bash
-gcloud run domain-mappings create \
-  --service=f3-me \
-  --domain=staging.me.f3nation.com \
-  --region=us-east1 \
-  --project=f3-me-app-staging
-
-gcloud run domain-mappings create \
-  --service=f3-me \
-  --domain=me.f3nation.com \
-  --region=us-east1 \
-  --project=f3-me-app
-```
-
-Follow the DNS instructions output by the commands.
-
-#### 8. Disconnect Firebase App Hosting (if previously set up)
-
-In the Firebase Console for each project, go to **App Hosting** → select the `f3-me` backend → **Settings** → **Delete backend**. This stops Firebase from auto-deploying on branch pushes.
+App-specific note: F3 Me requires OAuth clients registered in the auth provider — see [OAuth Client Registration](#oauth-client-registration) below.
 
 ### OAuth Client Registration
 
