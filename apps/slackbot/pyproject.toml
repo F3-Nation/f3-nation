@@ -70,30 +70,11 @@ dev = [
     "alembic>=1.13.0,<2.0.0",
     "debugpy>=1.8.17,<2.0.0",
     "commitizen>=4.13.9,<5.0.0",
-    "python-semantic-release>=10.5.3,<11.0.0",
 ]
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
-
-[tool.semantic_release]
-version_toml = ["pyproject.toml:project.version"]
-
-upload_to_release = false
-upload_to_pypi = false
-
-[tool.semantic_release.branches.main]
-match = "prod"
-prerelease = false
-
-[tool.semantic_release.changelog]
-changelog_file = "CHANGELOG.md"
-
-[tool.semantic_release.commit_parser_options]
-# These tags define what triggers a version bump
-minor_tags = ["feat"]
-patch_tags = ["fix", "perf"]
 
 [tool.setuptools]
 include-package-data = true
