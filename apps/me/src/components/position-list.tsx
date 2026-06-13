@@ -69,7 +69,7 @@ export function PositionList({
               <button
                 type="button"
                 className="ml-1 rounded-full p-0.5 hover:bg-foreground/10 disabled:opacity-50"
-                disabled={removing === key}
+                disabled={removing !== null}
                 onClick={() => setPositionToConfirm(pos)}
                 aria-label={`Remove ${pos.positionName} position from ${pos.orgName}`}
               >
@@ -122,8 +122,9 @@ export function PositionList({
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={removing !== null}
               onClick={() => {
-                if (!positionToConfirm) return;
+                if (!positionToConfirm || removing !== null) return;
                 void handleRemove(positionToConfirm);
                 setPositionToConfirm(null);
               }}

@@ -64,7 +64,7 @@ export function RoleList({ roles: initialRoles }: RoleListProps) {
               <button
                 type="button"
                 className="ml-1 rounded-full p-0.5 hover:bg-foreground/10 disabled:opacity-50"
-                disabled={removing === key}
+                disabled={removing !== null}
                 onClick={() => setRoleToConfirm(role)}
                 aria-label={`Remove ${role.roleName} role from ${role.orgName ?? `Org ${role.orgId}`}`}
               >
@@ -117,8 +117,9 @@ export function RoleList({ roles: initialRoles }: RoleListProps) {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={removing !== null}
               onClick={() => {
-                if (!roleToConfirm) return;
+                if (!roleToConfirm || removing !== null) return;
                 void handleRemove(roleToConfirm);
                 setRoleToConfirm(null);
               }}
