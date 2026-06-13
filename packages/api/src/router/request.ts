@@ -1090,7 +1090,7 @@ export const requestRouter = {
     }),
 };
 
-export const applyDeleteRequest = async (
+const applyDeleteRequest = async (
   ctx: Context,
   deleteRequest: Partial<z.infer<typeof RequestInsertSchema>>,
 ): Promise<DeleteRequestResponse> => {
@@ -1128,7 +1128,7 @@ export const applyDeleteRequest = async (
   };
 };
 
-export const applyUpdateRequest = async (
+const applyUpdateRequest = async (
   ctx: Context,
   updateRequest: Omit<
     z.infer<typeof RequestInsertSchema>,

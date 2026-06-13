@@ -2,7 +2,6 @@ import lt from "lodash/lt";
 import { X } from "lucide-react";
 import { useMemo } from "react";
 import { Controller } from "react-hook-form";
-import { z } from "zod";
 
 import { EVENT_CATEGORY_LABEL_MAP } from "@acme/shared/app/constants";
 import { DayOfWeek } from "@acme/shared/app/enums";
@@ -14,7 +13,6 @@ import { MultiSelect } from "@acme/ui/multi-select";
 import { ControlledSelect } from "@acme/ui/select";
 import { Textarea } from "@acme/ui/textarea";
 import { toast } from "@acme/ui/toast";
-import { RequestInsertSchema } from "@acme/validators";
 
 import { orpc, useQuery } from "~/orpc/react";
 import { useUpdateLocationFormContext } from "~/utils/forms";
@@ -25,12 +23,6 @@ import { DebouncedImage } from "../debounced-image";
 import { CountrySelect } from "../modal/country-select";
 import { ControlledTimeInput } from "../time-input";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
-
-export const UpdateLocationSchema = RequestInsertSchema.extend({
-  badImage: z.boolean().default(false),
-});
-
-type UpdateLocationSchema = z.infer<typeof UpdateLocationSchema>;
 
 export const LocationEventForm = ({
   isAdminForm = false,
