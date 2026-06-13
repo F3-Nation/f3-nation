@@ -170,12 +170,12 @@ minimumReleaseAgeExclude:
   - "@esbuild/*"
 catalogMode: strict
 cleanupUnusedCatalogs: true
-# sharp ships its native binary as platform-specific @img/* optional deps. Under
-# the isolated linker those live only in the virtual store, where Next.js'
-# standalone output tracer cannot resolve them at runtime. Hoist sharp + its
-# binaries to the root node_modules so they load natively. (The first two
-# patterns are pnpm's defaults, preserved here since setting this key overrides
-# them.)
+# pnpm's publicHoistPattern defaults to [] (nothing is hoisted), so every pattern
+# here is opted in deliberately. eslint/prettier are hoisted so their configs and
+# plugins resolve from the root under the isolated linker. sharp ships its native
+# binary as platform-specific @img/* optional deps that live only in the virtual
+# store, where Next.js' standalone output tracer can't resolve them at runtime;
+# hoisting sharp + its binaries to the root node_modules lets them load natively.
 publicHoistPattern:
   - "*eslint*"
   - "*prettier*"
