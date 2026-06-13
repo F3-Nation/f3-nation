@@ -4,5 +4,10 @@
   "version": "0.1.0",
   "files": [
     "base.json"
-  ]
+  ],
+  "peerDependencies": {
+    "@auth/core": "catalog:",
+    "@tanstack/table-core": "catalog:",
+    "next-auth": "catalog:"
+  }
 }
