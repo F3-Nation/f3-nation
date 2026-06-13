@@ -26,6 +26,8 @@
     "@acme/prettier-config": "workspace:*",
     "@acme/shared": "workspace:*",
     "@acme/tsconfig": "workspace:*",
+    "dotenv-cli": "catalog:",
+    "drizzle-orm": "catalog:",
     "eslint": "catalog:",
     "prettier": "catalog:",
     "tsx": "catalog:",

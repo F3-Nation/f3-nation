@@ -31,10 +31,12 @@
   "dependencies": {
     "@acme/env": "workspace:*",
     "@acme/shared": "workspace:*",
+    "dayjs": "catalog:",
     "dotenv-cli": "catalog:",
     "drizzle-orm": "catalog:",
     "esbuild-register": "catalog:",
     "pg": "catalog:",
+    "pg-connection-string": "catalog:",
     "postgres": "catalog:"
   },
   "devDependencies": {
