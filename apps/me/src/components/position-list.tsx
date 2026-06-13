@@ -1,6 +1,18 @@
 "use client";
 
+import { useState } from "react";
+
 import { Badge } from "@acme/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@acme/ui/alert-dialog";
 import { useToast } from "@/components/ui/toast";
 import { useRemovableList, compositeKey } from "@/hooks/useRemovableList";
 import type { UserPosition } from "@/lib/types";
@@ -13,6 +25,8 @@ export function PositionList({
   positions: initialPositions,
 }: PositionListProps) {
   const { toast } = useToast();
+  const [positionToConfirm, setPositionToConfirm] =
+    useState<UserPosition | null>(null);
   const {
     items: positions,
     removing,
@@ -56,7 +70,7 @@ export function PositionList({
                 type="button"
                 className="ml-1 rounded-full p-0.5 hover:bg-foreground/10 disabled:opacity-50"
                 disabled={removing === key}
-                onClick={() => handleRemove(pos)}
+                onClick={() => setPositionToConfirm(pos)}
                 aria-label={`Remove ${pos.positionName} position from ${pos.orgName}`}
               >
                 {removing === key ? (
@@ -88,6 +102,37 @@ export function PositionList({
         </a>{" "}
         to find admins.
       </p>
+
+      <AlertDialog
+        open={positionToConfirm !== null}
+        onOpenChange={(open) => {
+          if (!open) setPositionToConfirm(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Position?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {positionToConfirm
+                ? `You are about to remove your ${positionToConfirm.positionName} position from ${positionToConfirm.orgName}.`
+                : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (!positionToConfirm) return;
+                void handleRemove(positionToConfirm);
+                setPositionToConfirm(null);
+              }}
+            >
+              Remove Position
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

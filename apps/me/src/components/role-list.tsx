@@ -1,6 +1,18 @@
 "use client";
 
+import { useState } from "react";
+
 import { Badge } from "@acme/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@acme/ui/alert-dialog";
 import { useToast } from "@/components/ui/toast";
 import { useRemovableList, compositeKey } from "@/hooks/useRemovableList";
 import type { UserRole } from "@/lib/types";
@@ -11,6 +23,7 @@ interface RoleListProps {
 
 export function RoleList({ roles: initialRoles }: RoleListProps) {
   const { toast } = useToast();
+  const [roleToConfirm, setRoleToConfirm] = useState<UserRole | null>(null);
   const {
     items: roles,
     removing,
@@ -52,7 +65,7 @@ export function RoleList({ roles: initialRoles }: RoleListProps) {
                 type="button"
                 className="ml-1 rounded-full p-0.5 hover:bg-foreground/10 disabled:opacity-50"
                 disabled={removing === key}
-                onClick={() => handleRemove(role)}
+                onClick={() => setRoleToConfirm(role)}
                 aria-label={`Remove ${role.roleName} role from ${role.orgName ?? `Org ${role.orgId}`}`}
               >
                 {removing === key ? (
@@ -84,6 +97,37 @@ export function RoleList({ roles: initialRoles }: RoleListProps) {
         </a>{" "}
         to find admins.
       </p>
+
+      <AlertDialog
+        open={roleToConfirm !== null}
+        onOpenChange={(open) => {
+          if (!open) setRoleToConfirm(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Role?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {roleToConfirm
+                ? `You are about to remove your ${roleToConfirm.roleName} role from ${roleToConfirm.orgName ?? `Org ${roleToConfirm.orgId}`}.`
+                : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (!roleToConfirm) return;
+                void handleRemove(roleToConfirm);
+                setRoleToConfirm(null);
+              }}
+            >
+              Remove Role
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
