@@ -67,7 +67,6 @@ catalog:
   "@vitejs/plugin-react": ^5.2.0
   "@vitest/coverage-v8": ^3.2.4
   autoprefixer: ^10.5.0
-  axios: ^1.16.1
   class-variance-authority: ^0.7.0
   clsx: ^2.1.0
   cmdk: ^0.2.1
@@ -140,7 +139,6 @@ catalog:
   zod: ^3.25.76
   zustand: ^4.5.2
 overrides:
-  axios: ">=1.16.1"
   braces: ">=3.0.3"
   cross-spawn: ">=7.0.5"
   fast-uri: ">=3.1.1"
