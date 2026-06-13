@@ -161,6 +161,13 @@ allowBuilds:
   sharp: true
   unrs-resolver: true
 minimumReleaseAge: 10080
+# esbuild 0.28.1 patches GHSA-gv7w-rqvm-qjhr but was published <7 days ago; exempt
+# it from the release-age gate so the security patch is adopted now. @esbuild/*
+# covers its platform-specific binary optional deps, which are age-gated too.
+# Remove once the gate naturally allows 0.28.1 (~2026-06-19) — tracked by issue #435.
+minimumReleaseAgeExclude:
+  - esbuild
+  - "@esbuild/*"
 catalogMode: strict
 cleanupUnusedCatalogs: true
 # sharp ships its native binary as platform-specific @img/* optional deps. Under
