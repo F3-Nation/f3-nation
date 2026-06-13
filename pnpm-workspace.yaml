@@ -4,7 +4,7 @@ packages:
   - tooling/*
 
 catalog:
-  "@auth/core": 0.37.2
+  "@auth/core": 0.41.0
   "@auth/drizzle-adapter": ^0.6.3
   "@commitlint/cli": ^21.0.2
   "@commitlint/config-conventional": ^21.0.2
@@ -50,6 +50,7 @@ catalog:
   "@tanstack/react-query-devtools": 5.90.2
   "@tanstack/react-table": ^8.20.5
   "@tanstack/react-virtual": ^3.13.6
+  "@tanstack/table-core": ^8.21.3
   "@testing-library/jest-dom": ^6.4.2
   "@testing-library/react": ^15.0.7
   "@turbo/gen": ^1.12.3
@@ -66,7 +67,6 @@ catalog:
   "@vitejs/plugin-react": ^5.2.0
   "@vitest/coverage-v8": ^3.2.4
   autoprefixer: ^10.5.0
-  axios: ^1.16.1
   class-variance-authority: ^0.7.0
   clsx: ^2.1.0
   cmdk: ^0.2.1
@@ -105,6 +105,7 @@ catalog:
   next-themes: ^0.4.4
   nodemailer: ^8.0.10
   pg: ^8.11.3
+  pg-connection-string: ^2.12.0
   postcss: ^8.5.15
   postgres: ^3.4.3
   prettier: ^3.8.3
@@ -138,18 +139,17 @@ catalog:
   zod: ^3.25.76
   zustand: ^4.5.2
 overrides:
-  axios: ">=1.16.1"
   braces: ">=3.0.3"
   cross-spawn: ">=7.0.5"
   fast-uri: ">=3.1.1"
   next: "^15.5.18"
+  "@auth/core": "0.41.0"
   "@vis.gl/react-google-maps": 1.5.2
 peerDependencyRules:
   allowedVersions:
     eslint-plugin-react>eslint: "10"
     eslint-plugin-react-hooks>eslint: "10"
     eslint-plugin-jsx-a11y>eslint: "10"
-nodeLinker: hoisted
 allowBuilds:
   "@sentry/cli": true
   core-js: true
@@ -159,3 +159,22 @@ allowBuilds:
   sharp: true
   unrs-resolver: true
 minimumReleaseAge: 10080
+# esbuild 0.28.1 patches GHSA-gv7w-rqvm-qjhr but was published <7 days ago; exempt
+# it from the release-age gate so the security patch is adopted now. @esbuild/*
+# covers its platform-specific binary optional deps, which are age-gated too.
+# Remove once the gate naturally allows 0.28.1 (~2026-06-19) — tracked by issue #435.
+minimumReleaseAgeExclude:
+  - esbuild
+  - "@esbuild/*"
+catalogMode: strict
+cleanupUnusedCatalogs: true
+# pnpm's publicHoistPattern defaults to [] (nothing is hoisted); the patterns below
+# are opted in deliberately. sharp ships its native binary as platform-specific
+# @img/* optional deps that live only in the virtual store, where Next.js'
+# standalone output tracer can't resolve them at runtime; hoisting sharp + its
+# binaries to the root node_modules lets them load natively. (eslint/prettier do
+# not need hoisting: flat config resolves plugins through @acme/eslint-config and
+# the binaries resolve from each package's own node_modules.)
+publicHoistPattern:
+  - "sharp"
+  - "@img/*"

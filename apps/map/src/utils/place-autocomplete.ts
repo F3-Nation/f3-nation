@@ -1,5 +1,3 @@
-import axios from "axios";
-
 import type { PlaceResult } from "@acme/shared/app/types";
 import { MAX_PLACES_AUTOCOMPLETE_RADIUS } from "@acme/shared/app/constants";
 import { zoomToRadius } from "@acme/shared/app/functions";
@@ -43,7 +41,7 @@ function checkRateLimit(): boolean {
   return true;
 }
 
-export async function placesAutocomplete({
+async function placesAutocomplete({
   input,
   center,
   zoom,
@@ -80,18 +78,24 @@ export async function placesAutocomplete({
         };
 
   try {
-    const response = await axios.post<{ suggestions: PlaceResult[] }>(
+    const response = await fetch(
       `https://places.googleapis.com/v1/places:autocomplete`,
-      { input, locationBias },
       {
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
           "X-Goog-Api-Key": googleApiKey,
         },
+        body: JSON.stringify({ input, locationBias }),
       },
     );
 
-    const results = response.data.suggestions;
+    if (!response.ok) {
+      throw new Error(`Places Autocomplete API error: ${response.status}`);
+    }
+
+    const results = ((await response.json()) as { suggestions: PlaceResult[] })
+      .suggestions;
 
     // Cache the results
     autocompleteCache.set(cacheKey, {

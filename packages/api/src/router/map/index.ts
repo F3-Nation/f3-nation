@@ -8,7 +8,7 @@ import { protectedProcedure, revalidateAuthProcedure } from "../../shared";
 import { mapEventRouter } from "./event";
 import { mapLocationRouter } from "./location";
 
-export const feedbackSchema = z.object({
+const feedbackSchema = z.object({
   type: z.string(),
   subject: z.string(),
   email: z.string(),

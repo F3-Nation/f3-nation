@@ -58,22 +58,3 @@ export interface UserListItem {
   homeRegionName: string | null;
   status: "active" | "inactive";
 }
-
-/** Fields editable on the profile form */
-export interface ProfileUpdatePayload {
-  f3Name?: string;
-  firstName?: string | null;
-  lastName?: string;
-  phone?: string | null;
-  homeRegionId?: number | null;
-  avatarUrl?: string | null;
-  emergencyContact?: string | null;
-  emergencyPhone?: string | null;
-  emergencyNotes?: string | null;
-  // Meta sub-fields (handled separately)
-  f3_name_origin?: string;
-  my_f3_why?: string;
-  user_emergency_info_dr_sharing?: boolean;
-  start_date_override?: string;
-  brought_by?: number | null;
-}

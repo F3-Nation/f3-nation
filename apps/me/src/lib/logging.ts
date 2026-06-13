@@ -42,7 +42,7 @@ export function logWarn(event: string, context: LogContext = {}) {
   emit("WARNING", event, context);
 }
 
-export function serializeError(err: unknown): LogContext {
+function serializeError(err: unknown): LogContext {
   if (err instanceof Error) {
     return {
       errorName: err.name,

@@ -1,4 +1,4 @@
-import type { NextRequest, NextResponse } from "next/server";
+import type { NextResponse } from "next/server";
 
 import {
   ACCESS_TOKEN_COOKIE_NAME,
@@ -23,16 +23,8 @@ function getAuthCookieOptions(maxAge: number) {
   };
 }
 
-export function getClearAuthCookieOptions() {
+function getClearAuthCookieOptions() {
   return getAuthCookieOptions(0);
-}
-
-export function getAccessTokenCookie(request: NextRequest): string | null {
-  return request.cookies.get(ACCESS_TOKEN_COOKIE_NAME)?.value ?? null;
-}
-
-export function getRefreshTokenCookie(request: NextRequest): string | null {
-  return request.cookies.get(REFRESH_TOKEN_COOKIE_NAME)?.value ?? null;
 }
 
 export function setAccessTokenCookie(

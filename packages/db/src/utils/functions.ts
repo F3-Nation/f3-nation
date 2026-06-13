@@ -7,7 +7,7 @@ import { isTest } from "@acme/shared/common/constants";
 
 import { schema } from "..";
 
-export const getDatabaseNameFromUri = (uri: string) => {
+const getDatabaseNameFromUri = (uri: string) => {
   const databaseNameRegex = /\/([^/?]+)(\?|$)/;
   const databaseNameMatch = databaseNameRegex.exec(uri);
   return databaseNameMatch ? databaseNameMatch[1] : undefined;

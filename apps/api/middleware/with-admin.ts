@@ -1,4 +1,3 @@
-import type { JWT } from "next-auth";
 import type { NextFetchEvent, NextMiddleware, NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
@@ -30,12 +29,12 @@ const withAdmin: MiddlewareFactory = (next: NextMiddleware) => {
       );
     }
 
-    const payload = (await getToken({
+    const payload = await getToken({
       req: request,
       secret,
       salt: cookieToken.name,
       cookieName: cookieToken.name,
-    })) as JWT | null;
+    });
 
     const isAdmin = payload?.roles.some((role) => role.roleName === "admin");
 

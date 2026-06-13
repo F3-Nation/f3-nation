@@ -6,7 +6,9 @@ declare module "next-auth" {
   }
 }
 
-declare module "next-auth/jwt" {
+// next-auth/jwt re-exports JWT from @auth/core/jwt (no own interface), so the
+// augmentation must target @auth/core/jwt to merge — matching type-extensions.d.ts.
+declare module "@auth/core/jwt" {
   interface JWT {
     userId?: number;
     onboardingCompleted?: boolean;

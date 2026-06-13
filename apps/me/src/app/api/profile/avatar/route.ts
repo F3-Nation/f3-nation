@@ -90,11 +90,9 @@ export async function POST(request: NextRequest) {
     try {
       await updateMyProfile({ avatarUrl });
     } catch (profileErr) {
-      // Do NOT delete the GCS object on failure: uploadAvatar writes to a
-      // stable path (user-avatars/{userId}.jpg), so calling deleteAvatar here
-      // would remove the user's existing avatar. The new GCS content is
-      // already at the canonical path; if the DB update failed the user
-      // simply retrying will succeed without data loss.
+      // uploadAvatar writes to a stable path (user-avatars/{userId}.jpg),
+      // The new GCS content is already at the canonical path;
+      // if the DB update failed the user simply retrying will succeed without data loss.
       throw profileErr;
     }
 
