@@ -43,7 +43,7 @@ interface HomeRegionSummary {
 }
 
 // Shared function to build user select fields
-export const buildUserSelect = ({
+const buildUserSelect = ({
   includePii,
   includeEmail = false,
   includeListFields = false,

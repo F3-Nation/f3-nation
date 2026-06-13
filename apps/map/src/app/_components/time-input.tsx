@@ -32,7 +32,7 @@ type ControlledTimeInputProps<T extends FieldValues> = Omit<
   disabled?: boolean;
 };
 
-export const TimeInput = ({ label, id, value, onChange }: TimeInputProps) => {
+const TimeInput = ({ label, id, value, onChange }: TimeInputProps) => {
   return (
     <Input
       type="time"

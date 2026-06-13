@@ -1,10 +1,7 @@
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import {
-  ACCESS_TOKEN_COOKIE_NAME,
-  REFRESH_TOKEN_COOKIE_NAME,
-} from "@/lib/auth/constants";
+import { ACCESS_TOKEN_COOKIE_NAME } from "@/lib/auth/constants";
 import { verifyAccessTokenPayload } from "@/lib/auth/tokens";
 
 export interface SessionPayload {
@@ -38,14 +35,9 @@ const getCachedSessionPayload = cache(async (accessToken: string) => {
   } satisfies SessionPayload;
 });
 
-export async function getAccessToken(): Promise<string | null> {
+async function getAccessToken(): Promise<string | null> {
   const cookieStore = await cookies();
   return cookieStore.get(ACCESS_TOKEN_COOKIE_NAME)?.value ?? null;
-}
-
-export async function getRefreshToken(): Promise<string | null> {
-  const cookieStore = await cookies();
-  return cookieStore.get(REFRESH_TOKEN_COOKIE_NAME)?.value ?? null;
 }
 
 export async function getSessionUser(): Promise<SessionPayload | null> {
@@ -60,18 +52,4 @@ export async function requireAuth(): Promise<SessionPayload> {
     redirect("/");
   }
   return user;
-}
-
-export async function requireAccessToken(): Promise<string> {
-  const accessToken = await getAccessToken();
-  if (!accessToken) {
-    redirect("/");
-  }
-
-  const user = await getCachedSessionPayload(accessToken);
-  if (!user) {
-    redirect("/");
-  }
-
-  return accessToken;
 }
