@@ -14,14 +14,9 @@ import { ControlledInput, Input } from "@acme/ui/input";
 import { Loader } from "@acme/ui/loader";
 import { toast } from "@acme/ui/toast";
 
-export type AuthStatus =
-  | "idle"
-  | "loading"
-  | "verify-email"
-  | "verify-code"
-  | "error";
+type AuthStatus = "idle" | "loading" | "verify-email" | "verify-code" | "error";
 
-export const authStore = new ZustandStore({
+const authStore = new ZustandStore({
   initialState: {
     email: "",
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
@@ -37,7 +32,7 @@ export const authStore = new ZustandStore({
   },
 });
 
-export const SignInFormSchema = z.object({
+const SignInFormSchema = z.object({
   email: z.string().email(),
 });
 
@@ -65,7 +60,7 @@ export const AuthWrapper = ({
   );
 };
 
-export const Loading = ({ text }: { text: string }) => {
+const Loading = ({ text }: { text: string }) => {
   return (
     <div className="flex h-32 w-full flex-col items-center justify-center gap-4">
       <p className="text-center text-lg text-muted-foreground">{text}</p>
@@ -74,7 +69,7 @@ export const Loading = ({ text }: { text: string }) => {
   );
 };
 
-export const AuthForm = () => {
+const AuthForm = () => {
   const email = authStore.use.email();
 
   const form = useForm({
@@ -200,7 +195,7 @@ export const AuthForm = () => {
   );
 };
 
-export const VerifyEmail = () => {
+const VerifyEmail = () => {
   const email = authStore.use.email();
 
   return (
@@ -231,7 +226,7 @@ export const VerifyEmail = () => {
   );
 };
 
-export const VerifyCode = () => {
+const VerifyCode = () => {
   const email = authStore.use.email();
   const callbackUrl = authStore.use.callbackUrl();
   const [code, setCode] = useState("");
@@ -283,7 +278,7 @@ export const VerifyCode = () => {
   );
 };
 
-export const ErrorCard = () => {
+const ErrorCard = () => {
   return (
     <div className="flex h-32 w-full flex-col items-center justify-center gap-4">
       <p className="text-lg text-muted-foreground">Error</p>

@@ -2,14 +2,11 @@
 
 import type { DayOfWeek } from "@acme/shared/app/enums";
 import { START_END_TIME_DB_FORMAT } from "@acme/shared/app/constants";
-import isWithinRadius from "@acme/shared/app/functions";
 import { isTruthy } from "@acme/shared/common/functions";
 
 import type { FiltersType } from "./store/filter";
-import type { LocationMarkerWithDistance } from "~/app/_components/map/filtered-map-results-provider";
 import { dayjs } from "./frontendDayjs";
-import { filterStore, TimeSelection } from "./store/filter";
-import { mapStore } from "./store/map";
+import { TimeSelection } from "./store/filter";
 
 export const filterData = <
   T extends {
@@ -106,48 +103,4 @@ export const filterData = <
   });
 
   return filteredLocationMarkers.filter(isTruthy);
-};
-
-export const filterDataWithinMiles = ({
-  data,
-  miles = 20,
-}: {
-  data: LocationMarkerWithDistance[] | undefined;
-  miles?: number;
-}) => {
-  if (!data) {
-    return [];
-  }
-
-  const filteredLocationMarkers = data.map((locationMarker) => {
-    let location = mapStore?.get("userGpsLocation");
-    const filterPosition = filterStore?.get("position");
-
-    if (filterPosition) {
-      location = {
-        latitude: filterPosition.latitude,
-        longitude: filterPosition.longitude,
-      };
-    }
-
-    const includeThisLocationMarkerOnRadius = isWithinRadius({
-      miles,
-      checkPosition: {
-        lat: locationMarker.lat ?? 0,
-        long: locationMarker.lon ?? 0,
-      },
-      basePosition: {
-        lat: location?.latitude ?? 0,
-        long: location?.longitude ?? 0,
-      },
-    });
-
-    return includeThisLocationMarkerOnRadius;
-  });
-
-  return filteredLocationMarkers.filter(isTruthy);
-};
-
-export const getNextDay = (currentDay: number) => {
-  return currentDay === 6 ? 0 : currentDay + 1;
 };

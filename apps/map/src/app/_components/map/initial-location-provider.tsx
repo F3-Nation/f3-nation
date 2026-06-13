@@ -11,14 +11,9 @@ import {
 } from "@acme/shared/app/constants";
 import { safeParseFloat, safeParseInt } from "@acme/shared/common/functions";
 
-import type { SparseF3Marker } from "~/utils/types";
 import { getQueryData, orpc } from "~/orpc/react";
 import { mapStore } from "~/utils/store/map";
 import { setSelectedItem } from "~/utils/store/selected-item";
-
-export type LocationMarkerWithDistance = SparseF3Marker & {
-  distance: number | null;
-};
 
 const InitialLocationContext = createContext<{
   initialCenter: google.maps.LatLngLiteral;

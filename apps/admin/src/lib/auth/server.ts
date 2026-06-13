@@ -4,10 +4,7 @@ import { redirect } from "next/navigation";
 
 import { routes } from "@acme/shared/app/constants";
 
-import {
-  ACCESS_TOKEN_COOKIE_NAME,
-  REFRESH_TOKEN_COOKIE_NAME,
-} from "./constants";
+import { ACCESS_TOKEN_COOKIE_NAME } from "./constants";
 import type { AdminSession } from "./session";
 import { verifyAccessTokenPayload } from "./tokens";
 import { getMyProfile } from "~/lib/api/client";
@@ -36,12 +33,7 @@ export async function getAccessToken(): Promise<string | null> {
   return cookieStore.get(ACCESS_TOKEN_COOKIE_NAME)?.value ?? null;
 }
 
-export async function getRefreshToken(): Promise<string | null> {
-  const cookieStore = await cookies();
-  return cookieStore.get(REFRESH_TOKEN_COOKIE_NAME)?.value ?? null;
-}
-
-export async function getSessionFromAccessToken(
+async function getSessionFromAccessToken(
   accessToken: string,
 ): Promise<AdminSession | null> {
   return getCachedSessionPayload(accessToken);
@@ -69,15 +61,6 @@ export async function getSessionUser(): Promise<AdminSession | null> {
     console.warn("Failed to hydrate admin roles from API", error);
     return session;
   }
-}
-
-export async function requireAuth(): Promise<AdminSession> {
-  const user = await getSessionUser();
-  if (!user) {
-    redirect("/api/auth/login");
-  }
-
-  return user;
 }
 
 export async function requireAdminPortalAccess(
