@@ -10,10 +10,7 @@ import { env } from "@/env";
 
 function buildAuthConfig(): AuthClientConfig {
   const authServerUrl = env.AUTH_PROVIDER_URL;
-  if (
-    process.env.NODE_ENV === "production" &&
-    !authServerUrl.startsWith("https://")
-  ) {
+  if (env.NODE_ENV === "production" && !authServerUrl.startsWith("https://")) {
     throw new Error("AUTH_PROVIDER_URL must use HTTPS in production");
   }
   return {
