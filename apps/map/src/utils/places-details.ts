@@ -1,5 +1,3 @@
-import axios from "axios";
-
 import type { PlaceDetails } from "@acme/shared/app/types";
 
 import { getGoogleApiKey } from "./runtime-config";
@@ -20,19 +18,21 @@ export async function placesDetails(placeId: string): Promise<PlaceDetails> {
   }
 
   try {
-    const response = await axios.get<PlaceDetails>(
-      `https://places.googleapis.com/v1/places/${placeId}`,
+    const params = new URLSearchParams({ fields: "id,displayName,location" });
+    const response = await fetch(
+      `https://places.googleapis.com/v1/places/${placeId}?${params.toString()}`,
       {
         headers: {
           "X-Goog-Api-Key": googleApiKey,
         },
-        params: {
-          fields: "id,displayName,location",
-        },
       },
     );
 
-    const details = response.data;
+    if (!response.ok) {
+      throw new Error(`Places API error: ${response.status}`);
+    }
+
+    const details = (await response.json()) as PlaceDetails;
 
     // Cache the result
     placeDetailsCache.set(placeId, {

@@ -36,7 +36,6 @@
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-query-devtools": "catalog:",
     "@vis.gl/react-google-maps": "catalog:",
-    "axios": "catalog:",
     "dayjs": "catalog:",
     "dompurify": "catalog:",
     "dotenv-cli": "catalog:",
