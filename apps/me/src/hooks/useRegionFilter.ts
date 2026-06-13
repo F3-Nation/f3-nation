@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import type { Region } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
-// Pure helpers (exported for direct unit testing)
+// Pure helpers
 // ---------------------------------------------------------------------------
 
 /**
