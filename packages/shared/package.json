@@ -20,12 +20,23 @@
     "lint:fix": "yarn lint --fix",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "lodash": "catalog:",
+    "next-auth": "catalog:",
+    "zod": "catalog:",
+    "zustand": "catalog:"
+  },
+  "peerDependencies": {
+    "react": ">=18 <19"
+  },
   "devDependencies": {
     "@acme/eslint-config": "workspace:^0.2.0",
     "@acme/prettier-config": "workspace:^0.1.0",
     "@acme/tsconfig": "workspace:^0.1.0",
     "@faker-js/faker": "catalog:",
+    "@types/lodash": "catalog:",
     "@types/node": "catalog:",
+    "@types/react": "catalog:",
     "eslint": "catalog:",
     "typescript": "catalog:"
   },

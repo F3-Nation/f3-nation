@@ -43,6 +43,7 @@
     "@tanstack/react-query-devtools": "catalog:",
     "@tanstack/react-table": "catalog:",
     "@tanstack/react-virtual": "catalog:",
+    "@tanstack/table-core": "catalog:",
     "class-variance-authority": "catalog:",
     "clsx": "catalog:",
     "cmdk": "catalog:",
