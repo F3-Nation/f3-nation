@@ -185,7 +185,7 @@ You should see output ending with:
 The app will start without this, but the map tiles won't render. To get one:
 
 1. Go to [console.cloud.google.com/google/maps-apis](https://console.cloud.google.com/google/maps-apis/)
-2. Create a project and enable **Maps JavaScript API**
+2. Create a project and enable **Maps JavaScript API** and **Places API (New)**
 3. Create an API key
 4. Set the key in both `apps/map/.env` and `apps/api/.env`:
    `NEXT_PUBLIC_GOOGLE_API_KEY=your-key-here`
