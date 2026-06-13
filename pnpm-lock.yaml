@@ -948,9 +948,15 @@ importers:
       autoprefixer:
         specifier: 'catalog:'
         version: 10.5.0(postcss@8.5.15)
+      eslint:
+        specifier: 'catalog:'
+        version: 10.4.0(jiti@2.7.0)
       postcss:
         specifier: 'catalog:'
         version: 8.5.15
+      prettier:
+        specifier: 'catalog:'
+        version: 3.8.3
       tailwindcss:
         specifier: 'catalog:'
         version: 3.4.19(tsx@4.22.3)(yaml@2.9.0)
