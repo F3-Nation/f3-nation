@@ -11,10 +11,9 @@ export const env = createEnv({
     // apps/*/.env.example) to avoid a startup failure.
     GCS_CREDENTIALS: z.string().min(1),
   },
-  experimental__runtimeEnv: {
-    GCS_BUCKET: process.env.GCS_BUCKET,
-    GCS_CREDENTIALS: process.env.GCS_CREDENTIALS,
-  },
+  // Only client/shared vars need destructuring here; the server-only GCS vars
+  // resolve from process.env automatically (matches apps/me and apps/admin).
+  experimental__runtimeEnv: {},
   emptyStringAsUndefined: true,
   // Eager validation would break the emulator tests, which set GCS_BUCKET but
   // not GCS_CREDENTIALS. Skip in test/CI; consumers retain their own guards.
