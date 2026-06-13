@@ -276,3 +276,25 @@ In the Firebase Console for each project → **App Hosting** → select the back
 - [ ] Custom domains mapped and DNS updated
 - [ ] Firebase App Hosting disconnected (if applicable)
 - [ ] OAuth clients registered with auth provider (if the app uses F3 SSO — see app README)
+
+---
+
+## Slackbot Notes
+
+Slackbot follows the same setup flow, but it is a Python app and also deploys a separate Cloud Run Job for scripts.
+
+```bash
+APP_NAME="slackbot"
+CLOUDRUN_SERVICE="f3-slackbot"
+GCP_REGION="us-central1"
+GCP_STAGING_PROJECT="f3-slackbot-staging"
+GCP_PROD_PROJECT="f3-slackbot"
+GH_STAGING_ENV="slackbot-staging"
+GH_PROD_ENV="slackbot-production"
+```
+
+Additional runtime target:
+
+- Scripts Cloud Run Job: `f3-slackbot-scripts`
+
+Use the same WIF, environment, secret, and domain-mapping flow above. The main service and scripts job each deploy from the same tag stream via GitHub Actions.

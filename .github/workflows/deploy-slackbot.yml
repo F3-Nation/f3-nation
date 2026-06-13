@@ -22,9 +22,9 @@ jobs:
     uses: ./.github/workflows/_deploy-cloudrun.yml
     with:
       image_name: f3-slackbot
-      service_name: f3-nation-slack-bot
-      staging_project: f3slackbot
-      prod_project: f3slackbot
+      service_name: f3-slackbot
+      staging_project: f3-slackbot-staging
+      prod_project: f3-slackbot
       tag_prefix: slackbot@
       dockerfile: apps/slackbot/Dockerfile
       build_context: apps/slackbot
@@ -36,11 +36,10 @@ jobs:
   deploy-scripts:
     uses: ./.github/workflows/_deploy-cloudrun-job.yml
     with:
-      image_name: f3-bot-scripts
-      job_name_staging: f3-bot-scripts-test
-      job_name_prod: f3-bot-scripts-prod
-      staging_project: f3slackbot
-      prod_project: f3slackbot
+      image_name: f3-slackbot-scripts
+      job_name: f3-slackbot-scripts
+      staging_project: f3-slackbot-staging
+      prod_project: f3-slackbot
       tag_prefix: slackbot@
       dockerfile: apps/slackbot/scripts/Dockerfile
       build_context: apps/slackbot

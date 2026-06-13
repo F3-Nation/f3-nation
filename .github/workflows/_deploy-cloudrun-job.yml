@@ -10,12 +10,8 @@ on:
         description: "Artifact Registry image name (e.g. f3-bot-scripts)"
         required: true
         type: string
-      job_name_staging:
-        description: "Staging Cloud Run Job name"
-        required: true
-        type: string
-      job_name_prod:
-        description: "Production Cloud Run Job name"
+      job_name:
+        description: "Cloud Run Job name"
         required: true
         type: string
       staging_project:
@@ -154,7 +150,7 @@ jobs:
 
       - name: Deploy Cloud Run Job (staging)
         env:
-          JOB_NAME: ${{ inputs.job_name_staging }}
+          JOB_NAME: ${{ inputs.job_name }}
           IMAGE: ${{ needs.build.outputs.image }}
           REGION: ${{ inputs.region }}
           PROJECT_ID: ${{ inputs.staging_project }}
@@ -208,7 +204,7 @@ jobs:
 
       - name: Deploy Cloud Run Job (prod)
         env:
-          JOB_NAME: ${{ inputs.job_name_prod }}
+          JOB_NAME: ${{ inputs.job_name }}
           IMAGE: ${{ env.prod_image }}
           REGION: ${{ inputs.region }}
           PROJECT_ID: ${{ inputs.prod_project }}

@@ -11,6 +11,8 @@ This directory contains the scripts and automation jobs for the F3 Nation Slack 
 
 ## How to Build the Scripts Image
 
+Primary deployment now happens through GitHub Actions tag releases in [`.github/workflows/deploy-slackbot.yml`](../../../.github/workflows/deploy-slackbot.yml). The Cloud Build config is retained only as a temporary migration path.
+
 1. **Navigate to this directory:**
 
    ```sh
@@ -18,12 +20,13 @@ This directory contains the scripts and automation jobs for the F3 Nation Slack 
    ```
 
 2. **Build the Docker image:**
+
    ```sh
    gcloud builds submit --tag us-central1-docker.pkg.dev/<PROJECT>/<REPO>/<IMAGE>:<TAG> .
    ```
 
    - Replace `<PROJECT>`, `<REPO>`, `<IMAGE>`, and `<TAG>` with your GCP project, Artifact Registry repo, image name, and tag.
-   - I used `gcloud builds submit --tag us-central1-docker.pkg.dev/f3slackbot/f3-bot-scripts/f3-bot-scripts:v0.1.0 .`
+   - With the GitHub Actions flow, the scripts image is published as `us-central1-docker.pkg.dev/<PROJECT>/<REPO>/f3-slackbot-scripts:<TAG>`.
 
 ## How to Run Locally
 
@@ -32,6 +35,7 @@ This directory contains the scripts and automation jobs for the F3 Nation Slack 
    pip install -r requirements.txt
    ```
 2. **Run the hourly runner:**
+
    ```sh
    python -m scripts.hourly_runner
    ```

@@ -88,8 +88,8 @@ Each deploy workflow:
 
 For `slackbot@*`, the workflow runs two deploy tracks from one tag:
 
-1. Main Slackbot Cloud Run service deploy (single reusable `service_name` input across stages)
-2. Scripts Cloud Run Job deploy (`f3-bot-scripts-test` staging, `f3-bot-scripts-prod` prod)
+1. Main Slackbot Cloud Run service deploy (`f3-slackbot` in `f3-slackbot-staging` and `f3-slackbot`)
+2. Scripts Cloud Run Job deploy (`f3-slackbot-scripts` in `f3-slackbot-staging` and `f3-slackbot`)
 
 ---
 

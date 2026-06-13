@@ -99,11 +99,10 @@ One tag deploys two runtimes:
 ### Environments and runtime targets
 
 - GitHub environments: `slackbot-staging`, `slackbot-production`
-- GCP project: `f3slackbot`
+- GCP projects: `f3-slackbot-staging` and `f3-slackbot`
 - Region: `us-central1`
-- Main service (both stages via reusable workflow): `f3-nation-slack-bot`
-- Scripts job (staging): `f3-bot-scripts-test`
-- Scripts job (prod): `f3-bot-scripts-prod`
+- Main service (both stages via reusable workflow): `f3-slackbot`
+- Scripts job (both stages via reusable workflow): `f3-slackbot-scripts`
 
 ### Flow
 
