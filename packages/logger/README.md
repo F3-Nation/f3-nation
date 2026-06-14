@@ -11,7 +11,7 @@ a free-text message.
 - [The `event` naming convention](#the-event-naming-convention)
 - [`ctx` and `err`: where the variable data goes](#ctx-and-err-where-the-variable-data-goes)
 - [Log levels](#log-levels)
-- [Request-scoped child loggers](#request-scoped-child-loggers)
+- [Helpers vs. the raw `logger`](#helpers-vs-the-raw-logger)
 - [Sentry / error reporting](#sentry--error-reporting)
 - [Environment behavior](#environment-behavior)
 - [API Reference](#api-reference)
@@ -48,8 +48,8 @@ Do **not** call `createLogger` more than once per service — import the existin
 
 ## The `event` naming convention
 
-The first argument to `logInfo` / `logWarn` / `logError` is an **event
-identifier**, not a human message. It becomes pino's message key (the logger
+The first argument to every `log*` helper is an **event identifier**, not a
+human message. It becomes pino's message key (the logger
 sets `messageKey: "event"`), so every line carries `"event": "..."` — a field
 you group, count, and alert on in Google Cloud Logging.
 
@@ -77,7 +77,7 @@ Examples from the codebase:
 
 - **`ctx`** (second arg) — a flat object of structured key/values for this
   occurrence (`{ userId, orgId, durationMs }`). Merged into the log line.
-- **`err`** (third arg, `logError` only) — the actual thrown value. It is
+- **`err`** (third arg, `logError` / `logFatal` only) — the actual thrown value. It is
   serialized via pino's `err` serializer (name, message, stack) and, when a
   Sentry reporter is registered, sent as the captured exception.
 
@@ -88,24 +88,43 @@ Examples from the codebase:
 
 ## Log levels
 
-| Function   | Level   | Use for                                                       |
-| ---------- | ------- | ------------------------------------------------------------- |
-| `logInfo`  | `info`  | Normal lifecycle events worth keeping.                        |
-| `logWarn`  | `warn`  | Recoverable / unexpected-but-handled conditions.              |
-| `logError` | `error` | Failures. Also fans out to the Sentry reporter if registered. |
+There is one helper per pino level. All take the `event` identifier first; the
+two failure levels also accept a trailing `err`.
 
-The level is `LOG_LEVEL` (env) or `info` by default.
+| Function   | Level   | Use for                                                          |
+| ---------- | ------- | ---------------------------------------------------------------- |
+| `logTrace` | `trace` | Very fine-grained tracing; off unless `LOG_LEVEL=trace`.         |
+| `logDebug` | `debug` | Developer diagnostics; off in prod (default `info`), on locally. |
+| `logInfo`  | `info`  | Normal lifecycle events worth keeping.                           |
+| `logWarn`  | `warn`  | Recoverable / unexpected-but-handled conditions.                 |
+| `logError` | `error` | Failures. Also fans out to the Sentry reporter if registered.    |
+| `logFatal` | `fatal` | Unrecoverable failures. Also fans out to the Sentry reporter.    |
 
-## Request-scoped child loggers
+The active level is `LOG_LEVEL` (env) or `info` by default — anything below it is
+dropped. Local `.env` defaults to `debug`; Cloud Run to `info`.
 
-For correlated logs within one request, branch the raw pino instance:
+## Helpers vs. the raw `logger`
+
+**Default to the `log*` helpers for all event logging**, including debug/trace.
+They take the `event` identifier **first** (`logDebug("api.user.update_set", { updateSet })`).
+
+Reach for the raw `logger` only when a helper can't express what you need — in
+practice, **request-scoped child loggers**. Note that pino's native methods take
+the context object **first** (the opposite order), so don't mix the styles by
+habit:
 
 ```ts
 import { logger } from "~/lib/logging";
 
-const reqLog = logger.child({ requestId });
-reqLog.info({ path }, "api.request.received");
+const reqLog = logger.child({ requestId }); // helpers can't carry per-request bindings
+reqLog.info({ path }, "api.request.received"); // pino order: (ctx, event)
 ```
+
+> [!WARNING]
+> Calling the raw instance with the helper's argument order —
+> `logger.debug("api.user.update_set", { updateSet })` — makes pino treat the
+> string as the message and **silently drop `{ updateSet }`** as a printf arg.
+> If you're not creating a child logger, use `logDebug` instead.
 
 ## Sentry / error reporting
 
@@ -144,15 +163,17 @@ Sentry tag for triage.
 createLogger(service: string, options?: { level?: string }): AppLogger
 ```
 
-Returns `{ logger, logInfo, logWarn, logError }`. `service` is stamped on every
-line as `base.service`.
+Returns an `AppLogger`. `service` is stamped on every line as `base.service`.
 
 ```ts
 interface AppLogger {
   logger: Logger; // raw pino instance — for `.child({ ... })`
+  logTrace: (event: string, ctx?: LogContext) => void;
+  logDebug: (event: string, ctx?: LogContext) => void;
   logInfo: (event: string, ctx?: LogContext) => void;
   logWarn: (event: string, ctx?: LogContext) => void;
   logError: (event: string, ctx?: LogContext, err?: unknown) => void;
+  logFatal: (event: string, ctx?: LogContext, err?: unknown) => void;
 }
 
 setErrorReporter(fn: (event, ctx, err?) => void): void

@@ -60,9 +60,13 @@ that app's `AGENTS.md`.
 
 ## Logging
 
-- Log through the shared [`@acme/logger`](packages/logger/README.md) package
-  (`logInfo` / `logWarn` / `logError`), imported from the app's `lib/logging`
-  module — never `console.*`.
+- Log through the shared [`@acme/logger`](packages/logger/README.md) package,
+  imported from the app's `lib/logging` module — never `console.*`. There is one
+  helper per level: `logTrace` / `logDebug` / `logInfo` / `logWarn` / `logError`
+  / `logFatal`. Prefer these for all event logging; reach for the raw `logger`
+  only for request-scoped children (`logger.child({ requestId })`). The helpers
+  take the `event` **first**; pino's native methods take the context object
+  first — don't mix the orders.
 - The **first argument is a dot-namespaced `event` identifier**, not a sentence:
   `<area>.<feature>.<outcome>`, lowercase with `snake_case` segments (e.g.
   `auth.register.f3_api_error`, `me.avatar.upload_failed`). Keep it a fixed

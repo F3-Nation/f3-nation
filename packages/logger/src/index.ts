@@ -45,11 +45,20 @@ export function setErrorReporter(
 }
 
 export interface AppLogger {
-  /** Raw pino instance — use for request-scoped children: `logger.child({ requestId })`. */
+  /**
+   * Raw pino instance. Reach for this only when the helpers can't express what
+   * you need — e.g. request-scoped children (`logger.child({ requestId })`).
+   * For ordinary event logging prefer the `log*` helpers below: they take the
+   * `event` identifier first (pino's native methods take the context object
+   * first), so mixing the two styles is an easy footgun.
+   */
   logger: Logger;
+  logTrace: (event: string, ctx?: LogContext) => void;
+  logDebug: (event: string, ctx?: LogContext) => void;
   logInfo: (event: string, ctx?: LogContext) => void;
   logWarn: (event: string, ctx?: LogContext) => void;
   logError: (event: string, ctx?: LogContext, err?: unknown) => void;
+  logFatal: (event: string, ctx?: LogContext, err?: unknown) => void;
 }
 
 export function createLogger(
@@ -90,13 +99,22 @@ export function createLogger(
     );
   }
 
+  // error and fatal share the same shape: attach the optional `err` and fan
+  // out to the process-global error sink (Sentry) so nothing is lost.
+  const reportable =
+    (level: "error" | "fatal") =>
+    (event: string, ctx: LogContext = {}, err?: unknown) => {
+      logger[level]({ ...ctx, ...(err !== undefined ? { err } : {}) }, event);
+      if (errorReporter) errorReporter(event, ctx, err);
+    };
+
   return {
     logger,
+    logTrace: (event, ctx = {}) => logger.trace(ctx, event),
+    logDebug: (event, ctx = {}) => logger.debug(ctx, event),
     logInfo: (event, ctx = {}) => logger.info(ctx, event),
     logWarn: (event, ctx = {}) => logger.warn(ctx, event),
-    logError: (event, ctx = {}, err?) => {
-      logger.error({ ...ctx, ...(err !== undefined ? { err } : {}) }, event);
-      if (errorReporter) errorReporter(event, ctx, err);
-    },
+    logError: reportable("error"),
+    logFatal: reportable("fatal"),
   };
 }
