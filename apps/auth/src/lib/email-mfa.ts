@@ -74,8 +74,18 @@ export async function sendEmailCode(
   if (callbackUrl && isValidCallbackUrl(callbackUrl, authUrl)) {
     verifyParams.set("callbackUrl", callbackUrl);
   } else if (callbackUrl) {
+    // Log only origin + path of the rejected URL — enough for open-redirect
+    // forensics, without persisting any query/fragment that could carry
+    // injected tokens or PII.
+    let sanitizedCallbackUrl: string;
+    try {
+      const parsed = new URL(callbackUrl, authUrl);
+      sanitizedCallbackUrl = `${parsed.origin}${parsed.pathname}`;
+    } catch {
+      sanitizedCallbackUrl = "unparseable";
+    }
     logWarn("auth.email_mfa.invalid_callback_url", {
-      callbackUrl,
+      callbackUrl: sanitizedCallbackUrl,
     });
   }
   const magicLink = `${authUrl}/login/email/verify?${verifyParams.toString()}`;

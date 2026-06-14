@@ -83,7 +83,11 @@ export async function POST(request: NextRequest) {
 
     if (!res.ok) {
       const text = await res.text();
-      logError("auth.register.f3_api_failed", { responseText: text });
+      logError("auth.register.f3_api_failed", {
+        status: res.status,
+        statusText: res.statusText,
+        responseText: text.slice(0, 500),
+      });
       return NextResponse.json(
         { error: "Failed to create account. Please try again." },
         { status: 502 },

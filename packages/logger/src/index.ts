@@ -105,7 +105,19 @@ export function createLogger(
     (level: "error" | "fatal") =>
     (event: string, ctx: LogContext = {}, err?: unknown) => {
       logger[level]({ ...ctx, ...(err !== undefined ? { err } : {}) }, event);
-      if (errorReporter) errorReporter(event, ctx, err);
+      // Never let a failing reporter (e.g. the Sentry bridge) throw out of a
+      // log call and break request flow. Report the failure via raw pino so we
+      // don't re-enter the reporter.
+      if (errorReporter) {
+        try {
+          errorReporter(event, ctx, err);
+        } catch (reporterErr) {
+          logger.error(
+            { err: reporterErr, event },
+            "logger.error_reporter_failed",
+          );
+        }
+      }
     };
 
   return {

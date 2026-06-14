@@ -1178,7 +1178,10 @@ const applyUpdateRequest = async (
   // AO
   if (updateRequest.aoId == undefined) {
     // INSERT AO
-    logDebug("api.request.inserting_ao", { updateRequest });
+    logDebug("api.request.inserting_ao", {
+      regionId: updateRequest.regionId,
+      locationId: updateRequest.locationId,
+    });
     const [ao] = await ctx.db
       .insert(schema.orgs)
       .values({
@@ -1250,7 +1253,11 @@ const applyUpdateRequest = async (
     }
     eventId = _updated.id;
   } else {
-    logDebug("api.request.inserting_event", { updateRequest });
+    logDebug("api.request.inserting_event", {
+      aoId: updateRequest.aoId,
+      eventId: updateRequest.eventId,
+      locationId: updateRequest.locationId,
+    });
     const newEvent: typeof schema.events.$inferInsert = {
       name: updateRequest.eventName,
       locationId: updateRequest.locationId,

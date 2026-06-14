@@ -238,13 +238,13 @@ export const notifyMapChangeRequest = async ({
       });
 
       logInfo("api.map_request_notification.email_sent", {
-        recipient: recipient.email,
+        recipientUserId: recipient.userId,
         requestId,
       });
     } catch (error) {
       logError(
         "api.map_request_notification.email_failed",
-        { recipient: recipient.email, requestId },
+        { recipientUserId: recipient.userId, requestId },
         error,
       );
     }

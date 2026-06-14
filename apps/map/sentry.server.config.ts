@@ -35,7 +35,11 @@ if (env.NODE_ENV === "production") {
     if (err !== undefined) {
       Sentry.captureException(err, { tags: { event }, extra: ctx });
     } else {
-      Sentry.captureMessage(event, { level: "error", extra: ctx });
+      Sentry.captureMessage(event, {
+        level: "error",
+        tags: { event },
+        extra: ctx,
+      });
     }
   });
 }

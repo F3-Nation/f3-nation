@@ -458,7 +458,7 @@ export const userRouter = {
       // Normalize email for case-insensitive storage and lookup
       const normalizedEmail = _email ? normalizeEmail(_email) : _email;
 
-      logDebug("api.user.update_set", { updateSet });
+      logDebug("api.user.update_set", { updateFields: Object.keys(updateSet) });
 
       let user: typeof schema.users.$inferSelect;
 
@@ -502,7 +502,7 @@ export const userRouter = {
         }
       }
 
-      logDebug("api.user.resolved_user", { user });
+      logDebug("api.user.resolved_user", { userId: user.id });
 
       const dbRoles = await ctx.db.select().from(schema.roles);
 
