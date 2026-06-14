@@ -1,9 +1,19 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   isAccessTokenExpired,
   parseAccessTokenPayload,
   verifyAccessTokenPayload,
 } from "@/lib/auth/tokens";
+
+// tokens.ts reads credentials from the validated `@/env` module, which
+// @t3-oss/env-nextjs evaluates from process.env once at import time. Mock it so
+// the values are deterministic (and to bypass import-time env validation).
+vi.mock("@/env", () => ({
+  env: {
+    AUTH_PROVIDER_URL: "https://auth.test.com",
+    OAUTH_CLIENT_ID: "test-client-id",
+  },
+}));
 
 vi.mock("jose", () => ({
   createRemoteJWKSet: vi.fn(() => vi.fn()),
@@ -78,19 +88,8 @@ describe("auth tokens", () => {
 });
 
 describe("verifyAccessTokenPayload", () => {
-  const originalEnv = process.env;
-
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env = {
-      ...originalEnv,
-      AUTH_PROVIDER_URL: "https://auth.test.com",
-      OAUTH_CLIENT_ID: "test-client-id",
-    };
-  });
-
-  afterEach(() => {
-    process.env = originalEnv;
   });
 
   it("returns null for an expired token without calling jwtVerify", async () => {
@@ -98,20 +97,6 @@ describe("verifyAccessTokenPayload", () => {
     const result = await verifyAccessTokenPayload(expiredToken);
     expect(result).toBeNull();
     expect(jwtVerify).not.toHaveBeenCalled();
-  });
-
-  it("throws when AUTH_PROVIDER_URL is not set", async () => {
-    delete process.env.AUTH_PROVIDER_URL;
-    await expect(verifyAccessTokenPayload(createValidToken())).rejects.toThrow(
-      "AUTH_PROVIDER_URL is required",
-    );
-  });
-
-  it("throws when OAUTH_CLIENT_ID is not set", async () => {
-    delete process.env.OAUTH_CLIENT_ID;
-    await expect(verifyAccessTokenPayload(createValidToken())).rejects.toThrow(
-      "OAUTH_CLIENT_ID is required",
-    );
   });
 
   it("returns payload when strict verify (aud claim) succeeds", async () => {
