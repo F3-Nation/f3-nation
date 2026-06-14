@@ -94,6 +94,7 @@ export const WorkoutDetailsContent = ({
         ? {
             website: location.parentWebsite,
             email: location.parentEmail,
+            phone: location.parentPhone,
             twitter: location.parentTwitter,
             facebook: location.parentFacebook,
             instagram: location.parentInstagram,
@@ -107,6 +108,7 @@ export const WorkoutDetailsContent = ({
       aoContact &&
       (aoContact.website ??
         aoContact.email ??
+        aoContact.phone ??
         aoContact.twitter ??
         aoContact.facebook ??
         aoContact.instagram),
@@ -163,6 +165,7 @@ export const WorkoutDetailsContent = ({
         ? {
             website: location.regionWebsite,
             email: location.regionEmail,
+            phone: location.regionPhone,
             twitter: location.regionTwitter,
             facebook: location.regionFacebook,
             instagram: location.regionInstagram,
@@ -176,6 +179,7 @@ export const WorkoutDetailsContent = ({
       regionContact &&
       (regionContact.website ??
         regionContact.email ??
+        regionContact.phone ??
         regionContact.twitter ??
         regionContact.facebook ??
         regionContact.instagram),

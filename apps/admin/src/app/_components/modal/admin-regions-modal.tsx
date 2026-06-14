@@ -89,6 +89,7 @@ export default function AdminRegionsModal({
       logoUrl: region?.logoUrl ?? null,
       website: region?.website ?? null,
       email: region?.email ?? null,
+      phone: region?.phone ?? null,
       twitter: region?.twitter ?? null,
       facebook: region?.facebook ?? null,
       instagram: region?.instagram ?? null,
@@ -109,6 +110,7 @@ export default function AdminRegionsModal({
       logoUrl: region?.logoUrl ?? null,
       website: region?.website ?? null,
       email: region?.email ?? null,
+      phone: region?.phone ?? null,
       twitter: region?.twitter ?? null,
       facebook: region?.facebook ?? null,
       instagram: region?.instagram ?? null,
@@ -348,6 +350,26 @@ export default function AdminRegionsModal({
                       <FormControl>
                         <Input
                           placeholder="Email"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="mb-4 w-full px-2 sm:w-1/2">
+                <FormField
+                  control={form.control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Phone</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="Phone"
+                          type="tel"
                           {...field}
                           value={field.value ?? ""}
                         />
