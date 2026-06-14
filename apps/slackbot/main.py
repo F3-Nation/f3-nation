@@ -63,10 +63,13 @@ else:
     handler = StructuredLogHandler()
     setup_logging(handler, log_level=logging_level)
 
-app = App(
-    process_before_response=process_before_response,
-    oauth_settings=get_oauth_settings(),
-)
+try:
+    app = App(
+        process_before_response=process_before_response,
+        oauth_settings=get_oauth_settings(),
+    )
+except Exception as exc:
+    print(f"Error initializing Slackbot: you may need to set up your .env file with the appropriate Slack credentials. Exception: {exc}")
 
 # ----------------------------------------
 # Production Mode: Google Cloud Function HTTP Handler
@@ -154,18 +157,20 @@ def main_response(body: dict, logger: logging.Logger, client: WebClient, ack: Ac
             f"{safe_get(safe_get(MAIN_MAPPER, request_type), request_id) or request_type + ', ' + request_id}"
         )
 
+try:
+    ARGS = [main_response]
+    LAZY_KWARGS = {}
 
-ARGS = [main_response]
-LAZY_KWARGS = {}
-
-MATCH_ALL_PATTERN = re.compile(".*")
-app.action(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
-app.view(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
-app.command(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
-app.view_closed(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
-app.event(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
-app.options(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
-app.shortcut(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
+    MATCH_ALL_PATTERN = re.compile(".*")
+    app.action(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
+    app.view(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
+    app.command(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
+    app.view_closed(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
+    app.event(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
+    app.options(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
+    app.shortcut(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
+except Exception as exc:
+    pass
 
 
 def start_local_health_server(port: int):
@@ -191,6 +196,12 @@ if __name__ == "__main__":
 
     if LOCAL_DEVELOPMENT and not SOCKET_MODE:
         raise RuntimeError("Local development requires SOCKET_MODE=true.")
+    
+    # Ensure SLACK_APP_TOKEN is present
+    app_token = os.environ.get("SLACK_APP_TOKEN")
+    if not app_token:
+        print("Error: SLACK_APP_TOKEN is required to run the Slackbot. Please set it in your .env file.")
+        exit(1)
 
     if not SOCKET_MODE:
         try:
@@ -205,11 +216,6 @@ if __name__ == "__main__":
             print(f"Local HTTP health server listening on http://localhost:{local_http_port}", flush=True)
 
         print("Running in local Socket Mode.", flush=True)
-
-        # Ensure SLACK_APP_TOKEN is present
-        app_token = os.environ.get("SLACK_APP_TOKEN")
-        if not app_token:
-            raise RuntimeError("SLACK_APP_TOKEN missing. Check your .env file.")
 
         handler = SocketModeHandler(app, app_token)
         handler.start()
