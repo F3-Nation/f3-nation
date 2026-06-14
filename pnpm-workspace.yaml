@@ -166,6 +166,8 @@ minimumReleaseAge: 10080
 minimumReleaseAgeExclude:
   - esbuild
   - "@esbuild/*"
+  # Renovate security update: uuid@11.1.1
+  - uuid@11.1.1
 catalogMode: strict
 cleanupUnusedCatalogs: true
 # pnpm's publicHoistPattern defaults to [] (nothing is hoisted); the patterns below
