@@ -1249,6 +1249,9 @@ importers:
       '@testing-library/jest-dom':
         specifier: 'catalog:'
         version: 6.9.1
+      '@testing-library/react':
+        specifier: 'catalog:'
+        version: 15.0.7(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@types/node':
         specifier: 'catalog:'
         version: 24.12.4

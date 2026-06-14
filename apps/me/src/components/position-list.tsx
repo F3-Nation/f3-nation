@@ -3,18 +3,9 @@
 import { useState } from "react";
 
 import { Badge } from "@acme/ui/badge";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@acme/ui/alert-dialog";
 import { useToast } from "@/components/ui/toast";
 import { useRemovableList, compositeKey } from "@/hooks/useRemovableList";
+import { ConfirmRemoveDialog } from "./confirm-remove-dialog";
 import type { UserPosition } from "@/lib/types";
 
 interface PositionListProps {
@@ -103,37 +94,24 @@ export function PositionList({
         to find admins.
       </p>
 
-      <AlertDialog
+      <ConfirmRemoveDialog
         open={positionToConfirm !== null}
         onOpenChange={(open) => {
           if (!open) setPositionToConfirm(null);
         }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remove Position?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {positionToConfirm
-                ? `You are about to remove your ${positionToConfirm.positionName} position from ${positionToConfirm.orgName}.`
-                : ""}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              disabled={removing !== null}
-              onClick={() => {
-                if (!positionToConfirm || removing !== null) return;
-                void handleRemove(positionToConfirm);
-                setPositionToConfirm(null);
-              }}
-            >
-              Remove Position
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        title="Remove Position?"
+        description={
+          positionToConfirm
+            ? `You are about to remove your ${positionToConfirm.positionName} position from ${positionToConfirm.orgName}.`
+            : ""
+        }
+        actionText="Remove Position"
+        onConfirm={() => {
+          if (!positionToConfirm) return;
+          void handleRemove(positionToConfirm);
+          setPositionToConfirm(null);
+        }}
+      />
     </div>
   );
 }

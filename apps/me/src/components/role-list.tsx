@@ -3,18 +3,9 @@
 import { useState } from "react";
 
 import { Badge } from "@acme/ui/badge";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@acme/ui/alert-dialog";
 import { useToast } from "@/components/ui/toast";
 import { useRemovableList, compositeKey } from "@/hooks/useRemovableList";
+import { ConfirmRemoveDialog } from "./confirm-remove-dialog";
 import type { UserRole } from "@/lib/types";
 
 interface RoleListProps {
@@ -98,37 +89,24 @@ export function RoleList({ roles: initialRoles }: RoleListProps) {
         to find admins.
       </p>
 
-      <AlertDialog
+      <ConfirmRemoveDialog
         open={roleToConfirm !== null}
         onOpenChange={(open) => {
           if (!open) setRoleToConfirm(null);
         }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remove Role?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {roleToConfirm
-                ? `You are about to remove your ${roleToConfirm.roleName} role from ${roleToConfirm.orgName ?? `Org ${roleToConfirm.orgId}`}.`
-                : ""}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              disabled={removing !== null}
-              onClick={() => {
-                if (!roleToConfirm || removing !== null) return;
-                void handleRemove(roleToConfirm);
-                setRoleToConfirm(null);
-              }}
-            >
-              Remove Role
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        title="Remove Role?"
+        description={
+          roleToConfirm
+            ? `You are about to remove your ${roleToConfirm.roleName} role from ${roleToConfirm.orgName ?? `Org ${roleToConfirm.orgId}`}.`
+            : ""
+        }
+        actionText="Remove Role"
+        onConfirm={() => {
+          if (!roleToConfirm) return;
+          void handleRemove(roleToConfirm);
+          setRoleToConfirm(null);
+        }}
+      />
     </div>
   );
 }
