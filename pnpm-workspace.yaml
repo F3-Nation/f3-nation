@@ -166,6 +166,8 @@ minimumReleaseAge: 10080
 minimumReleaseAgeExclude:
   - esbuild
   - "@esbuild/*"
+  # Renovate security update: vitest@3.2.6
+  - vitest@3.2.6
 catalogMode: strict
 cleanupUnusedCatalogs: true
 # pnpm's publicHoistPattern defaults to [] (nothing is hoisted); the patterns below
