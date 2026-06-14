@@ -58,6 +58,19 @@ that app's `AGENTS.md`.
 - Name React components in PascalCase, prefix hooks with `use`, and use kebab-case for files/directories (e.g., `apps/map/src`).
 - Co-locate feature-specific assets and tests near their sources (e.g., `apps/map/src/app/(feature)/`).
 
+## Logging
+
+- Log through the shared [`@acme/logger`](packages/logger/README.md) package
+  (`logInfo` / `logWarn` / `logError`), imported from the app's `lib/logging`
+  module — never `console.*`.
+- The **first argument is a dot-namespaced `event` identifier**, not a sentence:
+  `<area>.<feature>.<outcome>`, lowercase with `snake_case` segments (e.g.
+  `auth.register.f3_api_error`, `me.avatar.upload_failed`). Keep it a fixed
+  string literal — never interpolate variable data into it.
+- Put per-occurrence data in the structured `ctx` object (second arg) and the
+  thrown value in `err` (third arg of `logError`): `logError("api.rpc.handler_error", { orgId }, err)`.
+- Never log secrets or PII — see [`docs/AI_DEVELOPMENT_GUIDE.md`](docs/AI_DEVELOPMENT_GUIDE.md#secrets--sensitive-data).
+
 ## GitHub Actions Conventions
 
 - **Pin third-party actions to a full commit SHA with a version comment** (e.g. `actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2`). SHAs are immutable — a semver tag can be force-pushed, a SHA cannot. Renovate (`pinDigests: true`) keeps the SHAs up to date automatically.
@@ -104,13 +117,13 @@ Use standard Conventional Commit types: `feat`, `fix`, `chore`, `docs`, `style`,
 
 Scopes are defined in `commitlint.config.mjs` and map to monorepo packages:
 
-| Category        | Scopes                                                            |
-| --------------- | ----------------------------------------------------------------- |
-| Apps            | `admin`, `homepage`, `map`, `me`                                  |
-| Apps & Packages | `api`, `auth` (exist in both `apps/` and `packages/`)             |
+| Category        | Scopes                                                              |
+| --------------- | ------------------------------------------------------------------- |
+| Apps            | `admin`, `homepage`, `map`, `me`                                    |
+| Apps & Packages | `api`, `auth` (exist in both `apps/` and `packages/`)               |
 | Packages        | `db`, `env`, `mail`, `shared`, `sso`, `storage`, `ui`, `validators` |
-| Tooling         | `eslint`, `prettier`, `tsconfig`, `scripts`, `github`, `tailwind` |
-| Cross-cutting   | `deps`, `ci`, `repo`, `release`, `dev` (used by Release Please)   |
+| Tooling         | `eslint`, `prettier`, `tsconfig`, `scripts`, `github`, `tailwind`   |
+| Cross-cutting   | `deps`, `ci`, `repo`, `release`, `dev` (used by Release Please)     |
 
 **Choosing a scope:**
 
