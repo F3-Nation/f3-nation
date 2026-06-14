@@ -31,6 +31,7 @@ from utilities.helper_functions import (
     update_local_region_records,
 )
 from utilities.slack.actions import LOADING_ID
+from utilities.constants import LOCAL_DEVELOPMENT
 
 CONNECT_EXISTING_REGION = "connect_existing_region"
 CREATE_NEW_REGION = "create_new_region"
@@ -162,10 +163,28 @@ def handle_existing_region_selection(
     state = ViewState(**safe_get(body, "view", "state"))
     region_select = state.values.get(SELECT_REGION).get(SELECT_REGION)
     date_select = state.values.get(MIGRATION_DATE).get(MIGRATION_DATE)
-    user_info = client.users_info(user=safe_get(body, "user", "id"))
-    user_name = safe_get(user_info, "user", "profile", "display_name") or safe_get(user_info, "user", "name")
+    user_id = safe_get(body, "user", "id")
+    user_info = client.users_info(user=user_id)
     team_id = safe_get(body, "team", "id")
+    user_name = safe_get(user_info, "user", "profile", "display_name") or safe_get(user_info, "user", "name")
     region_record = region_record or get_region_record(team_id, body, context, client, logger)
+    metadata = {
+        "event_type": "region_connection_request",
+        "event_payload": {
+            "user_id": safe_get(body, "user", "id"),
+            "requestor_bot_token": region_record.bot_token,
+            "region_id": region_select.selected_option.get("value"),
+            "region_name": region_select.selected_option.get("text").get("text"),
+            "migration_date": date_select.selected_date,
+            "team_id": team_id,
+        },
+    }
+
+    if LOCAL_DEVELOPMENT:
+        body["message"] = {"metadata": metadata}
+        handle_approve_connection(body, client, logger, context, region_record)
+        return
+
     blocks = [
         HeaderBlock(text="Region Connection Request"),
         RichTextBlock(
@@ -235,17 +254,6 @@ def handle_existing_region_selection(
             ]
         ),
     ]
-    metadata = {
-        "event_type": "region_connection_request",
-        "event_payload": {
-            "user_id": safe_get(body, "user", "id"),
-            "requestor_bot_token": region_record.bot_token,
-            "region_id": region_select.selected_option.get("value"),
-            "region_name": region_select.selected_option.get("text").get("text"),
-            "migration_date": date_select.selected_date,
-            "team_id": team_id,
-        },
-    }  # noqa
     ssl_context = ssl.create_default_context()
     ssl_context.check_hostname = False
     ssl_context.verify_mode = ssl.CERT_NONE

@@ -358,17 +358,7 @@ def get_region_record(team_id: str, body, context, client, logger) -> SlackSetti
             "workspace_name": team_name,
         }
         region_record = SlackSettings(**settings_starters)
-        if not org_record:
-            if LOCAL_DEVELOPMENT:
-                org_record = DbManager.create_record(
-                    Org(
-                        name="My Region",
-                        org_type=Org_Type.region,
-                        is_active=True,
-                    )
-                )
-                region_record.org_id = org_record.id
-        else:
+        if org_record:
             settings_starters.update({"org_id": org_record.id})
             region_record = SlackSettings(**settings_starters)
 
