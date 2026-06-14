@@ -46,7 +46,7 @@ def build_db_admin_form(
     message: str = None,
 ):
     update_view_id = update_view_id or safe_get(body, actions.LOADING_ID)
-    if body.get("text") == os.environ.get("DB_ADMIN_PASSWORD") or message:
+    if body.get("text") == os.environ.get("SECRET_ADMIN_PASSWORD") or message:
         form = copy.deepcopy(DB_ADMIN_FORM)
         # form.blocks[-1].label = message or " "
     else:
@@ -71,7 +71,7 @@ def handle_db_admin_upgrade(
     alembic_cfg = config.Config("alembic.ini")
     command.upgrade(alembic_cfg, "head")
     view_id = safe_get(body, "view", "id")
-    body["text"] = os.environ.get("DB_ADMIN_PASSWORD")
+    body["text"] = os.environ.get("SECRET_ADMIN_PASSWORD")
     build_db_admin_form(
         body, client, logger, context, region_record, update_view_id=view_id, message="Database upgraded!"
     )
@@ -88,7 +88,7 @@ def handle_db_admin_reset(
     command.downgrade(alembic_cfg, "base")
     command.upgrade(alembic_cfg, "head")
     view_id = safe_get(body, "view", "id")
-    body["text"] = os.environ.get("DB_ADMIN_PASSWORD")
+    body["text"] = os.environ.get("SECRET_ADMIN_PASSWORD")
     build_db_admin_form(body, client, logger, context, region_record, update_view_id=view_id, message="Database reset!")
 
 

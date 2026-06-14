@@ -24,7 +24,7 @@ from utilities.slack import actions, forms
 def build_config_form(body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings):
     user_id = safe_get(body, "user_id") or safe_get(body, "user", "id")
     update_view_id = safe_get(body, actions.LOADING_ID)
-    if body.get("text") == os.environ.get("DB_ADMIN_PASSWORD"):
+    if body.get("text") == os.environ.get("SECRET_ADMIN_PASSWORD"):
         db_admin.build_db_admin_form(body, client, logger, context, region_record, update_view_id)
     else:
         if ALL_USERS_ARE_ADMINS:
