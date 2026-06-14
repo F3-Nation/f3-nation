@@ -1,5 +1,7 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
 
+import { env } from "@/env";
+
 interface AccessTokenPayload {
   sub: string;
   email?: string;
@@ -65,9 +67,7 @@ let _jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
 
 function getRemoteJWKS(): ReturnType<typeof createRemoteJWKSet> {
   if (!_jwks) {
-    const base = process.env.AUTH_PROVIDER_URL;
-    if (!base) throw new Error("AUTH_PROVIDER_URL is required");
-    const authUrl = new URL(base);
+    const authUrl = new URL(env.AUTH_PROVIDER_URL);
     const isLocalhost =
       authUrl.hostname === "localhost" || authUrl.hostname === "127.0.0.1";
     if (authUrl.protocol !== "https:" && !isLocalhost) {
@@ -90,10 +90,8 @@ export async function verifyAccessToken(token: string): Promise<boolean> {
   // Fast pre-flight: skip the JWKS network call for obviously-expired tokens.
   if (isAccessTokenExpired(token)) return false;
 
-  const issuer = process.env.AUTH_PROVIDER_URL;
-  const clientId = process.env.OAUTH_CLIENT_ID;
-  if (!issuer) throw new Error("AUTH_PROVIDER_URL is required");
-  if (!clientId) throw new Error("OAUTH_CLIENT_ID is required");
+  const issuer = env.AUTH_PROVIDER_URL;
+  const clientId = env.OAUTH_CLIENT_ID;
 
   // Try strict validation: signature + issuer + audience.
   try {
@@ -131,10 +129,8 @@ export async function verifyAccessTokenPayload(
 ): Promise<AccessTokenPayload | null> {
   if (isAccessTokenExpired(token)) return null;
 
-  const issuer = process.env.AUTH_PROVIDER_URL;
-  const clientId = process.env.OAUTH_CLIENT_ID;
-  if (!issuer) throw new Error("AUTH_PROVIDER_URL is required");
-  if (!clientId) throw new Error("OAUTH_CLIENT_ID is required");
+  const issuer = env.AUTH_PROVIDER_URL;
+  const clientId = env.OAUTH_CLIENT_ID;
 
   try {
     const { payload } = await jwtVerify(token, getRemoteJWKS(), {

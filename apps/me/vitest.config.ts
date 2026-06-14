@@ -14,10 +14,10 @@ export default defineConfig({
       reportsDirectory: "./coverage",
       thresholds: {
         autoUpdate: true,
-        statements: 23.84,
+        statements: 24.37,
         branches: 81.77,
-        functions: 46.66,
-        lines: 23.84,
+        functions: 46.91,
+        lines: 24.37,
       },
     },
     setupFiles: ["./vitest.setup.ts"],
