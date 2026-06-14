@@ -6,7 +6,6 @@ set -Eeu -o pipefail
 # Simple supervisor that keeps the local server running in Socket Mode.
 APP_PID=""
 STOPPING=false
-TEMPLATE_FILE="app_manifest.template.json"
 ENV_FILE=".env"
 SOCKET_MODE_VAR="SOCKET_MODE"
 LOCAL_HTTP_PORT_VAR="LOCAL_HTTP_PORT"
@@ -56,23 +55,6 @@ ensure_local_http_port() {
   fi
 }
 
-generate_manifest() {
-  local host="$1"
-  echo "Generating app_manifest.json for host: ${host}"
-  if [[ ! -f "${TEMPLATE_FILE}" ]]; then
-    echo "Template file not found: ${TEMPLATE_FILE}"
-    exit 1
-  fi
-  # First apply HOST-PLACEHOLDER substitution
-  sed "s|HOST-PLACEHOLDER|${host}|g" "${TEMPLATE_FILE}" > app_manifest.json
-
-  tmp_file="app_manifest.tmp.json"
-  sed '/"url": "https:\/\//d' app_manifest.json > "${tmp_file}"
-  sed 's/"socket_mode_enabled": false/"socket_mode_enabled": true/' "${tmp_file}" > app_manifest.json
-  rm -f "${tmp_file}"
-  echo "Generated app_manifest.json for SOCKET_MODE (no slash command URLs, socket_mode_enabled=true)"
-}
-
 start_app() {
   echo "Starting the app with watchfiles..."
   ( watchfiles --filter python 'dotenv -f .env run -- python main.py' ) &
@@ -101,7 +83,6 @@ if [[ "${SOCKET_MODE}" != "true" ]]; then
 fi
 
 echo "SOCKET_MODE=true; localtunnel is disabled."
-generate_manifest "localhost:3006"
 
 while true; do
   start_app

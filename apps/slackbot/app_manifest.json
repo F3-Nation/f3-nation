@@ -44,44 +44,38 @@
     "slash_commands": [
       {
         "command": "/preblast",
-        "url": "https://HOST-PLACEHOLDER/slack/events",
         "description": "Launch preblast form",
         "should_escape": false
       },
       {
         "command": "/f3-nation-settings",
-        "url": "https://HOST-PLACEHOLDER/slack/events",
         "description": "Managers your region's settings for F3 Nation, including your schedule",
         "should_escape": false
       },
       {
         "command": "/backblast",
-        "url": "https://HOST-PLACEHOLDER/slack/events",
         "description": "Launch backblast form",
         "should_escape": false
       },
       {
         "command": "/tag-achievement",
-        "url": "https://HOST-PLACEHOLDER/slack/events",
         "description": "Lauches a form for manually tagging achievements",
         "should_escape": false
       },
       {
         "command": "/f3-calendar",
-        "url": "https://HOST-PLACEHOLDER/slack/events",
         "description": "Opens the event calendar",
         "should_escape": false
       },
       {
         "command": "/help",
-        "url": "https://HOST-PLACEHOLDER/slack/events",
         "description": "Opens a help menu",
         "should_escape": false
       }
     ]
   },
   "oauth_config": {
-    "redirect_urls": ["https://HOST-PLACEHOLDER/slack/install"],
+    "redirect_urls": ["https://localhost:3006/slack/install"],
     "scopes": {
       "user": ["files:write"],
       "bot": [
@@ -140,13 +134,13 @@
   },
   "settings": {
     "event_subscriptions": {
-      "request_url": "https://HOST-PLACEHOLDER/slack/events",
+      "request_url": "https://localhost:3006/slack/events",
       "bot_events": ["app_mention", "team_join"]
     },
     "interactivity": {
       "is_enabled": true,
-      "request_url": "https://HOST-PLACEHOLDER/slack/events",
-      "message_menu_options_url": "https://HOST-PLACEHOLDER/slack/events"
+      "request_url": "https://localhost:3006/slack/events",
+      "message_menu_options_url": "https://localhost:3006/slack/events"
     },
     "org_deploy_enabled": false,
     "socket_mode_enabled": false,
