@@ -9,7 +9,7 @@ import { normalizeEmail } from "@acme/shared/common/functions";
 import { ilike } from "drizzle-orm";
 import { schema, sql } from "@acme/db";
 
-import { logger } from "../logger";
+import { logDebug } from "../logger";
 
 const {
   users,
@@ -35,7 +35,7 @@ const getUser = async (
   data: { id: number } | { email: string },
   client: InstanceType<typeof PgDatabase>,
 ) => {
-  logger.debug({ data }, "auth.adapter.getUser");
+  logDebug("auth.adapter.getUser", { data });
   const user = await client
     .select({
       id: users.id,
@@ -86,7 +86,7 @@ export function MDPGDrizzleAdapter(
 ): MdAdapter {
   return {
     async createUser(data) {
-      logger.debug({ data }, "auth.adapter.createUser");
+      logDebug("auth.adapter.createUser", { data });
       const { id: userId } = await client
         .insert(users)
         .values({
@@ -105,15 +105,15 @@ export function MDPGDrizzleAdapter(
       return user;
     },
     async getUser(data) {
-      logger.debug({ data }, "auth.adapter.getUser");
+      logDebug("auth.adapter.getUser", { data });
       return await getUser({ id: data }, client);
     },
     async getUserByEmail(data) {
-      logger.debug({ data }, "auth.adapter.getUserByEmail");
+      logDebug("auth.adapter.getUserByEmail", { data });
       return await getUser({ email: normalizeEmail(data) }, client);
     },
     async createSession(data) {
-      logger.debug({ data }, "auth.adapter.createSession");
+      logDebug("auth.adapter.createSession", { data });
       const [session] = await client
         .insert(sessions)
         .values({ ...data, expires: data.expires.toISOString() })
@@ -124,7 +124,7 @@ export function MDPGDrizzleAdapter(
       return { ...session, expires: new Date(session.expires) };
     },
     async getSessionAndUser(data) {
-      logger.debug({ data }, "auth.adapter.getSessionAndUser");
+      logDebug("auth.adapter.getSessionAndUser", { data });
       const [session] = await client
         .select()
         .from(sessions)
@@ -143,7 +143,7 @@ export function MDPGDrizzleAdapter(
       };
     },
     async updateUser(data) {
-      logger.debug({ data }, "auth.adapter.updateUser");
+      logDebug("auth.adapter.updateUser", { data });
       if (!data.id) {
         throw new Error("No user id.");
       }
@@ -163,7 +163,7 @@ export function MDPGDrizzleAdapter(
       return user;
     },
     async updateSession(data) {
-      logger.debug({ data }, "auth.adapter.updateSession");
+      logDebug("auth.adapter.updateSession", { data });
       const [session] = await client
         .update(sessions)
         .set({ ...data, expires: data.expires?.toISOString() })
@@ -178,7 +178,7 @@ export function MDPGDrizzleAdapter(
       };
     },
     async linkAccount(rawAccount) {
-      logger.debug({ rawAccount }, "auth.adapter.linkAccount");
+      logDebug("auth.adapter.linkAccount", { rawAccount });
       return stripUndefined(
         await client
           .insert(accounts)
@@ -189,7 +189,7 @@ export function MDPGDrizzleAdapter(
       );
     },
     async getUserByAccount(account) {
-      logger.debug({ account }, "auth.adapter.getUserByAccount");
+      logDebug("auth.adapter.getUserByAccount", { account });
       const userId = await client
         .select({ userId: accounts.userId })
         .from(accounts)
@@ -206,7 +206,7 @@ export function MDPGDrizzleAdapter(
       return await getUser({ id: userId }, client);
     },
     async deleteSession(sessionToken) {
-      logger.debug({ sessionToken }, "auth.adapter.deleteSession");
+      logDebug("auth.adapter.deleteSession", { sessionToken });
       const [session] = await client
         .delete(sessions)
         .where(eq(sessions.sessionToken, sessionToken))
@@ -217,7 +217,7 @@ export function MDPGDrizzleAdapter(
         : null;
     },
     async createVerificationToken(data) {
-      logger.debug({ data }, "auth.adapter.createVerificationToken");
+      logDebug("auth.adapter.createVerificationToken", { data });
 
       // Normalize email identifier for consistent storage (defensive)
       const normalizedData = {
@@ -236,7 +236,7 @@ export function MDPGDrizzleAdapter(
     },
     async useVerificationToken(data) {
       try {
-        logger.debug({ data }, "auth.adapter.useVerificationToken");
+        logDebug("auth.adapter.useVerificationToken", { data });
 
         // Normalize email to lowercase for case-insensitive matching
         // Fixes intermittent OTP failures when users type email with different casing
@@ -260,7 +260,7 @@ export function MDPGDrizzleAdapter(
       }
     },
     async deleteUser(id) {
-      logger.debug({ id }, "auth.adapter.deleteUser");
+      logDebug("auth.adapter.deleteUser", { id });
       await client
         .delete(users)
         .where(eq(users.id, id))
@@ -268,7 +268,7 @@ export function MDPGDrizzleAdapter(
         .then((res) => res[0] ?? null);
     },
     async unlinkAccount(account) {
-      logger.debug({ account }, "auth.adapter.unlinkAccount");
+      logDebug("auth.adapter.unlinkAccount", { account });
       const { type, provider, providerAccountId, userId } = await client
         .delete(accounts)
         .where(

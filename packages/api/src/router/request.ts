@@ -28,7 +28,7 @@ import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
 import { notifyMapDataChange } from "../lib/webhook-events";
-import { logError, logger } from "../logger";
+import { logError, logDebug } from "../logger";
 import { notifyMapChangeRequest } from "../services/map-request-notification";
 import type { Context } from "../shared";
 import { editorProcedure, protectedProcedure } from "../shared";
@@ -1178,7 +1178,7 @@ const applyUpdateRequest = async (
   // AO
   if (updateRequest.aoId == undefined) {
     // INSERT AO
-    logger.debug({ updateRequest }, "api.request.inserting_ao");
+    logDebug("api.request.inserting_ao", { updateRequest });
     const [ao] = await ctx.db
       .insert(schema.orgs)
       .values({
@@ -1250,7 +1250,7 @@ const applyUpdateRequest = async (
     }
     eventId = _updated.id;
   } else {
-    logger.debug({ updateRequest }, "api.request.inserting_event");
+    logDebug("api.request.inserting_event", { updateRequest });
     const newEvent: typeof schema.events.$inferInsert = {
       name: updateRequest.eventName,
       locationId: updateRequest.locationId,

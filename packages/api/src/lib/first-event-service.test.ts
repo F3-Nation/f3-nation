@@ -34,17 +34,12 @@ vi.mock("../logger", () => ({
   logError: vi.fn(),
   logWarn: vi.fn(),
   logInfo: vi.fn(),
-  logger: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
+  logDebug: vi.fn(),
 }));
 
 import { eq, schema } from "@acme/db";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { logger, logWarn } from "../logger";
+import { logDebug, logWarn } from "../logger";
 import { db, getOrCreateF3NationOrg, uniqueId } from "../__tests__/test-utils";
 import { maybeNotifyFirstEventForRegion } from "./first-event-service";
 
@@ -156,9 +151,9 @@ describe("First Event Service", () => {
           ?.firstEventNotificationSent,
       ).toBe(true);
 
-      expect(logger.debug).toHaveBeenCalledWith(
-        expect.objectContaining({ regionName: region.name }),
+      expect(logDebug).toHaveBeenCalledWith(
         "api.first_event.email_sent",
+        expect.objectContaining({ regionName: region.name }),
       );
     });
 
@@ -221,9 +216,9 @@ describe("First Event Service", () => {
 
       // An "already notified" debug message should appear
       const skippedLogs = (
-        logger.debug as ReturnType<typeof vi.fn>
+        logDebug as ReturnType<typeof vi.fn>
       ).mock.calls.filter(
-        (args) => args[1] === "api.first_event.already_notified",
+        (args) => args[0] === "api.first_event.already_notified",
       );
       expect(skippedLogs.length).toBeGreaterThan(0);
 

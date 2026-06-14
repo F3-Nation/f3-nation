@@ -13,7 +13,7 @@ interface RoleInput {
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
-import { logger } from "../logger";
+import { logDebug } from "../logger";
 import {
   buildSingleUserQuery,
   buildUserListQuery,
@@ -458,7 +458,7 @@ export const userRouter = {
       // Normalize email for case-insensitive storage and lookup
       const normalizedEmail = _email ? normalizeEmail(_email) : _email;
 
-      logger.debug({ updateSet }, "api.user.update_set");
+      logDebug("api.user.update_set", { updateSet });
 
       let user: typeof schema.users.$inferSelect;
 
@@ -502,7 +502,7 @@ export const userRouter = {
         }
       }
 
-      logger.debug({ user }, "api.user.resolved_user");
+      logDebug("api.user.resolved_user", { user });
 
       const dbRoles = await ctx.db.select().from(schema.roles);
 
@@ -520,7 +520,7 @@ export const userRouter = {
         .select()
         .from(schema.rolesXUsersXOrg)
         .where(eq(schema.rolesXUsersXOrg.userId, user.id));
-      logger.debug({ existingRoles }, "api.user.existing_roles");
+      logDebug("api.user.existing_roles", { existingRoles });
 
       const newRolesToInsert = roles.filter(
         (role) =>
@@ -530,7 +530,7 @@ export const userRouter = {
               existingRole.orgId === role.orgId,
           ),
       );
-      logger.debug({ newRolesToInsert }, "api.user.new_roles_to_insert");
+      logDebug("api.user.new_roles_to_insert", { newRolesToInsert });
 
       for (const role of newRolesToInsert) {
         const { success } = await checkHasRoleOnOrg({
@@ -554,7 +554,7 @@ export const userRouter = {
               role.orgId === existingRole.orgId,
           ),
       );
-      logger.debug({ rolesToDelete }, "api.user.roles_to_delete");
+      logDebug("api.user.roles_to_delete", { rolesToDelete });
 
       for (const role of rolesToDelete) {
         const { success } = await checkHasRoleOnOrg({
@@ -596,7 +596,7 @@ export const userRouter = {
         );
       }
 
-      logger.debug({ newRolesToInsert }, "api.user.new_roles_to_insert");
+      logDebug("api.user.new_roles_to_insert", { newRolesToInsert });
       const updatedRoles = await ctx.db
         .select({
           orgId: schema.rolesXUsersXOrg.orgId,

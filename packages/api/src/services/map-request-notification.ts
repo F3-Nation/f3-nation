@@ -8,7 +8,7 @@ import { requestTypeToTitle } from "@acme/shared/app/functions";
 
 import { mail, Templates } from "@acme/mail";
 
-import { logError, logger, logInfo } from "../logger";
+import { logError, logDebug, logInfo } from "../logger";
 
 /**
  * Interface for the notification parameters
@@ -113,7 +113,7 @@ export const notifyMapChangeRequest = async ({
   db,
   requestId,
 }: NotifyMapChangeRequestParams): Promise<void> => {
-  logger.debug({ requestId }, "api.map_request_notification.start");
+  logDebug("api.map_request_notification.start", { requestId });
 
   // Get request details
   const [request] = await db

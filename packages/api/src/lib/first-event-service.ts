@@ -23,7 +23,7 @@ import type { AppDb } from "@acme/db/client";
 import { env } from "@acme/env";
 import { mail, Templates } from "@acme/mail";
 
-import { logError, logger, logWarn } from "../logger";
+import { logError, logDebug, logWarn } from "../logger";
 import { getUsersWithRoles } from "../services/map-request-notification";
 
 /**
@@ -50,7 +50,7 @@ export async function maybeNotifyFirstEventForRegion(
     .limit(1);
 
   if (!ao?.parentId) {
-    logger.debug({ aoId }, "api.first_event.no_parent_org");
+    logDebug("api.first_event.no_parent_org", { aoId });
     return;
   }
 
@@ -70,25 +70,25 @@ export async function maybeNotifyFirstEventForRegion(
     .limit(1);
 
   if (!region) {
-    logger.debug({ regionId }, "api.first_event.parent_org_not_found");
+    logDebug("api.first_event.parent_org_not_found", { regionId });
     return;
   }
 
   if (region.orgType !== "region") {
-    logger.debug(
-      { regionId, orgType: region.orgType },
-      "api.first_event.parent_not_region",
-    );
+    logDebug("api.first_event.parent_not_region", {
+      regionId,
+      orgType: region.orgType,
+    });
     return;
   }
 
   // Step 3: skip if we have already fired for this region
   const meta = (region.meta ?? {}) as Record<string, unknown>;
   if (meta.firstEventNotificationSent === true) {
-    logger.debug(
-      { regionId, regionName: region.name },
-      "api.first_event.already_notified",
-    );
+    logDebug("api.first_event.already_notified", {
+      regionId,
+      regionName: region.name,
+    });
     return;
   }
 
@@ -151,8 +151,5 @@ export async function maybeNotifyFirstEventForRegion(
     .set({ meta: updatedMeta })
     .where(eq(schema.orgs.id, regionId));
 
-  logger.debug(
-    { regionId, regionName: region.name },
-    "api.first_event.email_sent",
-  );
+  logDebug("api.first_event.email_sent", { regionId, regionName: region.name });
 }

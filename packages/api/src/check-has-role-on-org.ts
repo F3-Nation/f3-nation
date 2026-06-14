@@ -6,7 +6,7 @@ import {
   isTestNodeEnv,
 } from "@acme/shared/common/constants";
 
-import { logWarn, logger } from "./logger";
+import { logWarn, logDebug } from "./logger";
 import type { Context } from "./shared";
 
 const ALLOW_MTNDEV_OVERRIDE = false as boolean;
@@ -36,10 +36,12 @@ export const checkHasRoleOnOrg = async ({
     };
   }
 
-  logger.debug(
-    { userId: session.id, orgId, roleName, roles: session.roles },
-    "api.role_check.checking",
-  );
+  logDebug("api.role_check.checking", {
+    userId: session.id,
+    orgId,
+    roleName,
+    roles: session.roles,
+  });
 
   // F3 Nation
   if (
