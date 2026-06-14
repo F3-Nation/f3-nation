@@ -4,6 +4,8 @@
 
 import * as Sentry from "@sentry/nextjs";
 
+import { setErrorReporter } from "@acme/logger";
+
 import { env } from "~/env";
 
 if (env.NODE_ENV === "production") {
@@ -23,5 +25,17 @@ if (env.NODE_ENV === "production") {
         : channel === "staging"
           ? "staging"
           : "development",
+  });
+
+  // Forward errors logged via @acme/logger (pino → stdout) to Sentry so error
+  // alerting is preserved for code that has migrated off console.error. Keep the
+  // event name + context so Sentry events stay triageable, and report err-less
+  // error logs (config/validation failures) the same way console.error used to.
+  setErrorReporter((event, ctx, err) => {
+    if (err !== undefined) {
+      Sentry.captureException(err, { tags: { event }, extra: ctx });
+    } else {
+      Sentry.captureMessage(event, { level: "error", extra: ctx });
+    }
   });
 }

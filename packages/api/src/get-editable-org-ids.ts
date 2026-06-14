@@ -1,6 +1,7 @@
 import { aliasedTable, and, eq, inArray, not, schema } from "@acme/db";
 
 import type { OrgType } from "../../shared/src/app/enums";
+import { logger } from "./logger";
 import type { Context } from "./shared";
 
 /**
@@ -118,12 +119,9 @@ export const getEditableOrgIdsForUser = async (
       return found === idx;
     });
 
-  console.log(
-    "getEditableOrgIdsForUser",
-    JSON.stringify({
-      editableOrgs,
-      editableOrgsCount: editableOrgs.length,
-    }),
+  logger.debug(
+    { editableOrgs, editableOrgsCount: editableOrgs.length },
+    "api.get_editable_org_ids",
   );
 
   return {

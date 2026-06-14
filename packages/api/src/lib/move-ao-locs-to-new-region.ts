@@ -3,6 +3,7 @@ import { ORPCError } from "@orpc/server";
 import { eq, inArray, schema } from "@acme/db";
 import { isTruthy } from "@acme/shared/common/functions";
 
+import { logger } from "../logger";
 import type { Context } from "../shared";
 
 /**
@@ -27,7 +28,7 @@ export const moveAOLocsToNewRegion = async (
   },
 ) => {
   const newLocationIds: number[] = [];
-  console.log("moveAOToNewRegion", JSON.stringify(input));
+  logger.debug({ input }, "api.move_ao_locs.start");
   const { aoId, oldRegionId, newRegionId } = input;
 
   const aoEvents = await ctx.db
@@ -35,7 +36,10 @@ export const moveAOLocsToNewRegion = async (
     .from(schema.events)
     .where(eq(schema.events.orgId, aoId));
 
-  console.log("aoEvents", aoEvents.length);
+  logger.debug(
+    { aoEventsCount: aoEvents.length },
+    "api.move_ao_locs.ao_events",
+  );
 
   const aoEventIds = aoEvents.map((e) => e.id);
 
@@ -50,7 +54,10 @@ export const moveAOLocsToNewRegion = async (
         .where(inArray(schema.locations.id, aoEventsLocationIds))
     : [];
 
-  console.log("aoEventsLocations", aoEventsLocations.length);
+  logger.debug(
+    { aoEventsLocationsCount: aoEventsLocations.length },
+    "api.move_ao_locs.ao_event_locations",
+  );
 
   for (const aoEventLocation of aoEventsLocations) {
     if (aoEventLocation.orgId !== oldRegionId) {
@@ -75,7 +82,10 @@ export const moveAOLocsToNewRegion = async (
       });
     }
     newLocationIds.push(newLocation.id);
-    console.log("created newLocation", newLocation.id);
+    logger.debug(
+      { newLocationId: newLocation.id },
+      "api.move_ao_locs.created_location",
+    );
     // 1b. move the ao's events to the new location
     const updatedEvents = await ctx.db
       .update(schema.events)
@@ -83,14 +93,20 @@ export const moveAOLocsToNewRegion = async (
       .where(inArray(schema.events.id, aoEventIds))
       .returning();
 
-    console.log("moved events to new location", updatedEvents.length);
+    logger.debug(
+      { movedEventsCount: updatedEvents.length },
+      "api.move_ao_locs.moved_events",
+    );
 
     const remainingLocationEvents = await ctx.db
       .select()
       .from(schema.events)
       .where(eq(schema.events.locationId, aoEventLocation.id));
 
-    console.log("remainingLocationEvents", remainingLocationEvents.length);
+    logger.debug(
+      { remainingLocationEventsCount: remainingLocationEvents.length },
+      "api.move_ao_locs.remaining_events",
+    );
 
     if (!remainingLocationEvents?.length) {
       // 1c. Delete the old location if it has no other events
@@ -99,7 +115,10 @@ export const moveAOLocsToNewRegion = async (
         .set({ isActive: false })
         .where(eq(schema.locations.id, aoEventLocation.id));
 
-      console.log("deleted old location", aoEventLocation.id);
+      logger.debug(
+        { oldLocationId: aoEventLocation.id },
+        "api.move_ao_locs.deleted_location",
+      );
     }
   }
 

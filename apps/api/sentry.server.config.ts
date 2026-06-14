@@ -5,6 +5,8 @@
 import * as Sentry from "@sentry/nextjs";
 import { captureConsoleIntegration } from "@sentry/nextjs";
 
+import { setErrorReporter } from "@acme/logger";
+
 import { env } from "~/env";
 
 if (env.NODE_ENV === "production") {
@@ -28,5 +30,19 @@ if (env.NODE_ENV === "production") {
     // Capture console.error calls and send them to Sentry
     // This ensures caught errors that are logged still get reported
     integrations: [captureConsoleIntegration({ levels: ["error"] })],
+  });
+
+  // Errors logged via @acme/logger's logError go to stdout (pino), not
+  // console.error, so captureConsoleIntegration would miss them. Forward them to
+  // Sentry explicitly to preserve error alerting as code migrates off console.*.
+  // Keep the event name + context so Sentry events stay triageable, and report
+  // err-less error logs (config/validation failures) the same way console.error
+  // used to.
+  setErrorReporter((event, ctx, err) => {
+    if (err !== undefined) {
+      Sentry.captureException(err, { tags: { event }, extra: ctx });
+    } else {
+      Sentry.captureMessage(event, { level: "error", extra: ctx });
+    }
   });
 }

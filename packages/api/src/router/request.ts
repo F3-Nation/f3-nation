@@ -28,6 +28,7 @@ import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
 import { notifyMapDataChange } from "../lib/webhook-events";
+import { logError, logger } from "../logger";
 import { notifyMapChangeRequest } from "../services/map-request-notification";
 import type { Context } from "../shared";
 import { editorProcedure, protectedProcedure } from "../shared";
@@ -672,7 +673,7 @@ export const requestRouter = {
             requestId: request.id,
           });
         } catch (error) {
-          console.error("Failed to send notification", { error });
+          logError("api.request.notification_failed", {}, error);
           // Don't fail the request if notification fails
         }
       }
@@ -845,7 +846,7 @@ export const requestRouter = {
             requestId: inserted.id,
           });
         } catch (error) {
-          console.error("Failed to send notification", { error });
+          logError("api.request.notification_failed", {}, error);
           // Don't fail the request if notification fails
         }
       }
@@ -1177,7 +1178,7 @@ const applyUpdateRequest = async (
   // AO
   if (updateRequest.aoId == undefined) {
     // INSERT AO
-    console.log("inserting ao", JSON.stringify(updateRequest));
+    logger.debug({ updateRequest }, "api.request.inserting_ao");
     const [ao] = await ctx.db
       .insert(schema.orgs)
       .values({
@@ -1249,7 +1250,7 @@ const applyUpdateRequest = async (
     }
     eventId = _updated.id;
   } else {
-    console.log("inserting event", JSON.stringify(updateRequest));
+    logger.debug({ updateRequest }, "api.request.inserting_event");
     const newEvent: typeof schema.events.$inferInsert = {
       name: updateRequest.eventName,
       locationId: updateRequest.locationId,

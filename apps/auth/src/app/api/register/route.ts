@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+import { logError } from "~/lib/logging";
 import { env } from "~/env";
 import { rateLimit } from "~/lib/rate-limit";
 
@@ -82,7 +83,7 @@ export async function POST(request: NextRequest) {
 
     if (!res.ok) {
       const text = await res.text();
-      console.error("Failed to create user via F3 API:", text);
+      logError("auth.register.f3_api_failed", { responseText: text });
       return NextResponse.json(
         { error: "Failed to create account. Please try again." },
         { status: 502 },
@@ -91,7 +92,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ created: true });
   } catch (err) {
-    console.error("Error calling F3 API:", err);
+    logError("auth.register.f3_api_error", {}, err);
     return NextResponse.json(
       { error: "Unable to reach the registration service. Please try again." },
       { status: 502 },
