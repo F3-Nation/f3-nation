@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
 import { ConfirmRemoveDialog } from "../confirm-remove-dialog";
 
@@ -15,11 +16,11 @@ describe("ConfirmRemoveDialog", () => {
       />,
     );
 
-    expect(screen.getByText("Test Title")).toBeDefined();
-    expect(screen.getByText("Test Description")).toBeDefined();
+    expect(screen.getByText("Test Title")).toBeInTheDocument();
+    expect(screen.getByText("Test Description")).toBeInTheDocument();
   });
 
-  it("calls onConfirm when action button is clicked", () => {
+  it("calls onConfirm when action button is clicked", async () => {
     const onConfirm = vi.fn();
     render(
       <ConfirmRemoveDialog
@@ -33,7 +34,7 @@ describe("ConfirmRemoveDialog", () => {
     );
 
     const confirmButton = screen.getByRole("button", { name: "Confirm" });
-    confirmButton.click();
+    await userEvent.click(confirmButton);
 
     expect(onConfirm).toHaveBeenCalledTimes(1);
   });
