@@ -22,6 +22,7 @@
     "@acme/auth": "workspace:^0.1.0",
     "@acme/db": "workspace:^0.1.0",
     "@acme/env": "workspace:^0.1.0",
+    "@acme/logger": "workspace:*",
     "@acme/mail": "workspace:*",
     "@acme/shared": "workspace:^0.1.0",
     "@acme/validators": "workspace:^0.1.0",

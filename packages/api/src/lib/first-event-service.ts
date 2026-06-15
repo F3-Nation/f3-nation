@@ -23,6 +23,7 @@ import type { AppDb } from "@acme/db/client";
 import { env } from "@acme/env";
 import { mail, Templates } from "@acme/mail";
 
+import { logError, logDebug, logWarn } from "../logger";
 import { getUsersWithRoles } from "../services/map-request-notification";
 
 /**
@@ -49,9 +50,7 @@ export async function maybeNotifyFirstEventForRegion(
     .limit(1);
 
   if (!ao?.parentId) {
-    console.debug(
-      `[first-event-service] AO ${aoId} has no parent org; skipping notification`,
-    );
+    logDebug("api.first_event.no_parent_org", { aoId });
     return;
   }
 
@@ -71,25 +70,25 @@ export async function maybeNotifyFirstEventForRegion(
     .limit(1);
 
   if (!region) {
-    console.debug(
-      `[first-event-service] Parent org ${regionId} not found; skipping notification`,
-    );
+    logDebug("api.first_event.parent_org_not_found", { regionId });
     return;
   }
 
   if (region.orgType !== "region") {
-    console.debug(
-      `[first-event-service] Parent org ${regionId} is type "${region.orgType}", not "region"; skipping notification`,
-    );
+    logDebug("api.first_event.parent_not_region", {
+      regionId,
+      orgType: region.orgType,
+    });
     return;
   }
 
   // Step 3: skip if we have already fired for this region
   const meta = (region.meta ?? {}) as Record<string, unknown>;
   if (meta.firstEventNotificationSent === true) {
-    console.debug(
-      `[first-event-service] Region ${regionId} ("${region.name}") already notified; skipping`,
-    );
+    logDebug("api.first_event.already_notified", {
+      regionId,
+      regionName: region.name,
+    });
     return;
   }
 
@@ -110,9 +109,10 @@ export async function maybeNotifyFirstEventForRegion(
     // No recipients yet — intentionally leave the flag unset so that the next
     // event creation will retry. This handles the common case where admins are
     // assigned after the first event is already created.
-    console.warn(
-      `[first-event-service] Region "${region.name}" (id: ${regionId}) has no contact email and no admins — deferring "region in a box" email until admins are assigned.`,
-    );
+    logWarn("api.first_event.no_recipients", {
+      regionId,
+      regionName: region.name,
+    });
     return;
   }
 
@@ -132,8 +132,9 @@ export async function maybeNotifyFirstEventForRegion(
       regionName: region.name,
     });
   } catch (err) {
-    console.error(
-      `[first-event-service] Failed to send "region in a box" email for region "${region.name}" (id: ${regionId}):`,
+    logError(
+      "api.first_event.email_failed",
+      { regionId, regionName: region.name },
       err,
     );
     throw err;
@@ -150,7 +151,5 @@ export async function maybeNotifyFirstEventForRegion(
     .set({ meta: updatedMeta })
     .where(eq(schema.orgs.id, regionId));
 
-  console.debug(
-    `[first-event-service] "Region in a box" email sent for region "${region.name}" (id: ${regionId}).`,
-  );
+  logDebug("api.first_event.email_sent", { regionId, regionName: region.name });
 }

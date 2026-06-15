@@ -58,6 +58,26 @@ that app's `AGENTS.md`.
 - Name React components in PascalCase, prefix hooks with `use`, and use kebab-case for files/directories (e.g., `apps/map/src`).
 - Co-locate feature-specific assets and tests near their sources (e.g., `apps/map/src/app/(feature)/`).
 
+## Logging
+
+- Log through the shared [`@acme/logger`](packages/logger/README.md) package,
+  imported from the app's `lib/logging` module — never `console.*`. There is one
+  helper per level: `logTrace` / `logDebug` / `logInfo` / `logWarn` / `logError`
+  / `logFatal`. Prefer these for all event logging; reach for the raw `logger`
+  only for request-scoped children (`logger.child({ requestId })`). The helpers
+  take the `event` **first**; pino's native methods take the context object
+  first — don't mix the orders.
+- The **first argument is a dot-namespaced `event` identifier**, not a sentence:
+  `<area>.<feature>.<outcome>`, lowercase with `snake_case` segments (e.g.
+  `auth.register.f3_api_error`, `me.avatar.upload_failed`). Keep it a fixed
+  string literal — never interpolate variable data into it.
+- Put per-occurrence data in the structured `ctx` object (second arg) and the
+  thrown value in `err` (third arg of `logError`): `logError("api.rpc.handler_error", { orgId }, err)`.
+- Never log secrets or PII — see [`docs/AI_DEVELOPMENT_GUIDE.md`](docs/AI_DEVELOPMENT_GUIDE.md#secrets--sensitive-data).
+- New to the logging setup? [`docs/LOGGING.md`](docs/LOGGING.md) is the
+  human-facing primer (why pino, how to use it, controlling `LOG_LEVEL`);
+  [`packages/logger/README.md`](packages/logger/README.md) is the full API reference.
+
 ## GitHub Actions Conventions
 
 - **Pin third-party actions to a full commit SHA with a version comment** (e.g. `actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2`). SHAs are immutable — a semver tag can be force-pushed, a SHA cannot. Renovate (`pinDigests: true`) keeps the SHAs up to date automatically.

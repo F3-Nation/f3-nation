@@ -19,6 +19,7 @@
     "@acme/api": "workspace:^0.2.0",
     "@acme/auth": "workspace:^0.1.0",
     "@acme/db": "workspace:^0.1.0",
+    "@acme/logger": "workspace:*",
     "@acme/mail": "workspace:*",
     "@acme/shared": "workspace:^0.1.0",
     "@acme/tailwind-config": "workspace:^0.1.0",
@@ -63,7 +64,6 @@
     "server-only": "catalog:",
     "supercluster": "catalog:",
     "superjson": "catalog:",
-    "uuid": "catalog:",
     "vaul": "catalog:",
     "zod": "catalog:",
     "zustand": "catalog:"
