@@ -151,8 +151,6 @@ ACTION_MAPPER = {
     actions.BACKBLAST_NEW_BLANK_BUTTON: (backblast.build_backblast_form, True),
     actions.REGION_INFO_BUTTON: (region.build_region_form, False),
     actions.CONFIG_SPECIAL_EVENTS: (special_events.build_special_settings_form, False),
-    actions.DB_ADMIN_UPGRADE: (db_admin.handle_db_admin_upgrade, False),
-    actions.DB_ADMIN_RESET: (db_admin.handle_db_admin_reset, False),
     actions.SECRET_MENU_CALENDAR_IMAGES: (db_admin.handle_calendar_image_refresh, False),
     actions.CONFIG_SLT: (positions.build_config_slt_form, True),
     actions.SLT_LEVEL_SELECT: (positions.build_config_slt_form, False),
