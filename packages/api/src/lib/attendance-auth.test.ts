@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { Context } from "../shared";
-import { assertSelfOrEditorOnEventOrg } from "./attendance-auth";
+import {
+  assertEditorOnEventOrg,
+  assertSelfOrEditorOnEventOrg,
+} from "./attendance-auth";
 
 vi.mock("../check-has-role-on-org", () => ({
   checkHasRoleOnOrg: vi.fn(),
@@ -85,6 +88,68 @@ describe("assertSelfOrEditorOnEventOrg", () => {
         },
         eventInstanceId: 1,
         targetUserId: 2,
+      }),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  });
+});
+
+describe("assertEditorOnEventOrg", () => {
+  it("resolves with orgId when user has editor role", async () => {
+    mockCheckHasRoleOnOrg.mockResolvedValue({
+      success: true,
+      orgId: 10,
+      roleName: "editor",
+      mode: "direct-permission",
+    });
+
+    await expect(
+      assertEditorOnEventOrg({
+        ctx: {
+          ...baseCtx,
+          session: {
+            id: 1,
+            email: "editor@example.com",
+            roles: [],
+            user: {
+              id: "1",
+              email: "editor@example.com",
+              name: "Editor User",
+              roles: [],
+            },
+            expires: new Date().toISOString(),
+          },
+        },
+        eventInstanceId: 1,
+      }),
+    ).resolves.toEqual({ orgId: 10 });
+  });
+
+  it("throws UNAUTHORIZED when user lacks editor role", async () => {
+    mockCheckHasRoleOnOrg.mockResolvedValue({
+      success: false,
+      orgId: null,
+      roleName: null,
+      mode: "no-permission",
+    });
+
+    await expect(
+      assertEditorOnEventOrg({
+        ctx: {
+          ...baseCtx,
+          session: {
+            id: 1,
+            email: "user@example.com",
+            roles: [],
+            user: {
+              id: "1",
+              email: "user@example.com",
+              name: "Regular User",
+              roles: [],
+            },
+            expires: new Date().toISOString(),
+          },
+        },
+        eventInstanceId: 1,
       }),
     ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });

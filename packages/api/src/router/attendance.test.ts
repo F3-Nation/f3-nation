@@ -446,6 +446,45 @@ describe("Attendance Router", () => {
         }),
       ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     });
+
+    it("should reject actual attendance reads for an editor on a different org (cross-org IDOR)", async () => {
+      const { ao: eventAo } = await createTestAO();
+      const { ao: editorAo } = await createTestAO();
+      if (!eventAo || !editorAo) return;
+
+      const eventInstance = await createTestEventInstance(eventAo.id);
+      if (!eventInstance) return;
+
+      const user = await createTestUser();
+      if (!user) return;
+
+      const [attendance] = await db
+        .insert(schema.attendance)
+        .values({
+          eventInstanceId: eventInstance.id,
+          userId: user.id,
+          isPlanned: false,
+        })
+        .returning();
+
+      if (attendance) {
+        createdAttendanceIds.push(attendance.id);
+      }
+
+      const editorSession = createEditorSession({
+        orgId: editorAo.id,
+        orgName: editorAo.name,
+      });
+      await mockAuthWithSession(editorSession);
+
+      const client = createTestClient();
+      await expect(
+        client.attendance.getForEventInstance({
+          eventInstanceId: eventInstance.id,
+          isPlanned: false,
+        }),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    });
   });
 
   describe("createPlanned", () => {
@@ -997,7 +1036,46 @@ describe("Attendance Router", () => {
   });
 
   describe("updateAttendanceTypes", () => {
-    it("should reject updating attendance types without editor role", async () => {
+    it("should allow a user to update attendance types for their own attendance", async () => {
+      const { ao } = await createTestAO();
+      if (!ao) return;
+
+      const eventInstance = await createTestEventInstance(ao.id);
+      if (!eventInstance) return;
+
+      const user = await createTestUser();
+      if (!user) return;
+
+      const [attendance] = await db
+        .insert(schema.attendance)
+        .values({
+          eventInstanceId: eventInstance.id,
+          userId: user.id,
+          isPlanned: true,
+        })
+        .returning();
+
+      if (attendance) {
+        createdAttendanceIds.push(attendance.id);
+      }
+
+      const userSession = createUserSession({
+        userId: user.id,
+        email: user.email,
+        f3Name: user.f3Name ?? undefined,
+      });
+      await mockAuthWithSession(userSession);
+
+      const client = createTestClient();
+      const result = await client.attendance.updateAttendanceTypes({
+        attendanceId: attendance!.id,
+        attendanceTypeIds: [ATTENDANCE_TYPE_IDS!.PAX],
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it("should reject updating attendance types for another user without editor role", async () => {
       const { ao } = await createTestAO();
       if (!ao) return;
 
@@ -1029,7 +1107,7 @@ describe("Attendance Router", () => {
           attendanceId: attendance!.id,
           attendanceTypeIds: [ATTENDANCE_TYPE_IDS!.Q],
         }),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     });
   });
 
