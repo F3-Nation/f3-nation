@@ -63,7 +63,6 @@
     "server-only": "catalog:",
     "supercluster": "catalog:",
     "superjson": "catalog:",
-    "uuid": "catalog:",
     "vaul": "catalog:",
     "zod": "catalog:",
     "zustand": "catalog:"
