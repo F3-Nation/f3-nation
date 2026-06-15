@@ -4,6 +4,8 @@ import { z } from "zod";
 
 import { env } from "@acme/env";
 import { mail, Templates } from "@acme/mail";
+
+import { logError } from "../logger";
 import { nationAdminProcedure } from "../shared";
 
 /**
@@ -119,7 +121,7 @@ export const mailRouter = {
           message: `Test email sent to ${to}`,
         };
       } catch (error) {
-        console.error("Failed to send test email", { error, template, to });
+        logError("api.mail.test_email_failed", { template, to }, error);
         return {
           success: false,
           message:

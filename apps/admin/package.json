@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@acme/api": "workspace:^0.2.0",
+    "@acme/logger": "workspace:*",
     "@acme/mail": "workspace:*",
     "@acme/shared": "workspace:^0.1.0",
     "@acme/sso": "workspace:*",
