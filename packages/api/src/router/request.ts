@@ -534,12 +534,7 @@ export const requestRouter = {
     .handler(async ({ context: ctx, input }) => {
       let results: {
         success: boolean;
-        mode:
-          | "public"
-          | "org-admin"
-          | "mtndev-override"
-          | "direct-permission"
-          | "no-permission";
+        mode: "public" | "org-admin" | "direct-permission" | "no-permission";
         orgId: number | null;
         roleName: UserRole | null;
       }[] = [];
