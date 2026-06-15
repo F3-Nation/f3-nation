@@ -74,6 +74,9 @@ that app's `AGENTS.md`.
 - Put per-occurrence data in the structured `ctx` object (second arg) and the
   thrown value in `err` (third arg of `logError`): `logError("api.rpc.handler_error", { orgId }, err)`.
 - Never log secrets or PII — see [`docs/AI_DEVELOPMENT_GUIDE.md`](docs/AI_DEVELOPMENT_GUIDE.md#secrets--sensitive-data).
+- New to the logging setup? [`docs/LOGGING.md`](docs/LOGGING.md) is the
+  human-facing primer (why pino, how to use it, controlling `LOG_LEVEL`);
+  [`packages/logger/README.md`](packages/logger/README.md) is the full API reference.
 
 ## GitHub Actions Conventions
 
