@@ -24,9 +24,14 @@ const config = {
     "@acme/api",
     "@acme/auth",
     "@acme/db",
+    "@acme/logger",
     "@acme/ui",
     "@acme/validators",
   ],
+
+  // pino-pretty relies on worker threads (thread-stream); keep pino external so
+  // Next.js does not try to bundle it.
+  serverExternalPackages: ["pino", "pino-pretty", "thread-stream"],
 
   images: {
     remotePatterns: [

@@ -13,6 +13,8 @@ import { isNationAdminFromSession } from "@acme/shared/app/role-checks";
 import { isDevelopmentNodeEnv } from "@acme/shared/common/constants";
 import { Client, Header } from "@acme/shared/common/enums";
 
+import { logWarn } from "./logger";
+
 type BaseContext = RequestHeadersPluginContext;
 
 export interface Context {
@@ -238,14 +240,10 @@ const getSession = async ({ context }: { context: BaseContext }) => {
     );
 
   if (!apiKeyRecord) {
-    console.log(
-      "getSession",
-      JSON.stringify({
-        apiKey: `${bearerToken.slice(0, 4)}...${bearerToken.slice(-4)}`,
-        appClient,
-        message: "API key not found in database or invalid",
-      }),
-    );
+    logWarn("api.auth.api_key_not_found", {
+      apiKey: `${bearerToken.slice(0, 4)}...${bearerToken.slice(-4)}`,
+      appClient,
+    });
     return null;
   }
 

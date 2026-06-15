@@ -1,5 +1,7 @@
 import { env } from "@acme/env";
 
+import { logError, logInfo } from "../logger";
+
 /**
  * Triggers the Map app's cache revalidation via HTTP.
  * API and Map are separate Next.js instances, so the Map app must be notified explicitly.
@@ -17,7 +19,7 @@ export const triggerMapAppRevalidation = (context?: {
     : env.NEXT_PUBLIC_MAP_URL;
 
   if (!mapUrl || !env.SUPER_ADMIN_API_KEY) {
-    console.error("Cannot revalidate Map app - missing config", {
+    logError("api.map_revalidate.missing_config", {
       mapUrl: !!mapUrl,
       superAdminKeyExists: !!env.SUPER_ADMIN_API_KEY,
     });
@@ -30,21 +32,22 @@ export const triggerMapAppRevalidation = (context?: {
   })
     .then((response) => {
       if (!response.ok) {
-        console.error("Failed to revalidate Map app cache", {
+        logError("api.map_revalidate.failed", {
           status: response.status,
           statusText: response.statusText,
-          event: context?.event,
+          revalidationEvent: context?.event,
         });
       } else {
-        console.log("Map app cache revalidated successfully", {
-          event: context?.event,
+        logInfo("api.map_revalidate.success", {
+          revalidationEvent: context?.event,
         });
       }
     })
     .catch((error: unknown) => {
-      console.error("Error calling Map app revalidation endpoint", {
+      logError(
+        "api.map_revalidate.error",
+        { revalidationEvent: context?.event },
         error,
-        event: context?.event,
-      });
+      );
     });
 };
