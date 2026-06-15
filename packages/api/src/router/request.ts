@@ -673,7 +673,11 @@ export const requestRouter = {
             requestId: request.id,
           });
         } catch (error) {
-          logError("api.request.notification_failed", {}, error);
+          logError(
+            "api.request.notification_failed",
+            { requestId: request.id, flow: "submit_delete_request" },
+            error,
+          );
           // Don't fail the request if notification fails
         }
       }
@@ -846,7 +850,11 @@ export const requestRouter = {
             requestId: inserted.id,
           });
         } catch (error) {
-          logError("api.request.notification_failed", {}, error);
+          logError(
+            "api.request.notification_failed",
+            { requestId: inserted.id, flow: "submit_update_request" },
+            error,
+          );
           // Don't fail the request if notification fails
         }
       }
