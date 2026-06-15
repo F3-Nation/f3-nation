@@ -136,7 +136,7 @@ catalog:
   uuid: ^11.0.5
   vaul: ^0.9.0
   vite-tsconfig-paths: ^6.1.1
-  vitest: ^3.2.4
+  vitest: ^3.2.6
   vitest-canvas-mock: ^1.1.4
   zod: ^3.25.76
   zustand: ^4.5.2
