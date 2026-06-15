@@ -18,6 +18,7 @@
   "dependencies": {
     "@acme/db": "workspace:^0.1.0",
     "@acme/env": "workspace:^0.1.0",
+    "@acme/logger": "workspace:*",
     "@acme/shared": "workspace:^0.1.0",
     "@auth/core": "catalog:",
     "@auth/drizzle-adapter": "catalog:",

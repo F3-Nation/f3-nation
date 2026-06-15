@@ -8,4 +8,4 @@ export const {
   logError,
   logFatal,
   logger,
-} = createLogger("f3-me");
+} = createLogger("acme-api");
