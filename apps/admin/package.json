@@ -47,7 +47,6 @@
     "react-qr-code": "catalog:",
     "server-only": "catalog:",
     "superjson": "catalog:",
-    "uuid": "catalog:",
     "zod": "catalog:",
     "zustand": "catalog:"
   },
