@@ -1,11 +1,15 @@
 import { Storage } from "@google-cloud/storage";
 
+import { env } from "./env";
+
 let storageClient: Storage | null = null;
 
 export function getStorage(): Storage {
   if (storageClient) return storageClient;
 
-  const credsBase64 = process.env.GCS_CREDENTIALS;
+  // Validated eagerly in non-test/CI environments via ./env; this guard still
+  // applies when validation is skipped (tests assert this message).
+  const credsBase64 = env.GCS_CREDENTIALS;
   if (!credsBase64) throw new Error("GCS_CREDENTIALS is not set");
 
   let creds: { client_email: string; private_key: string };
@@ -30,7 +34,7 @@ export function getStorage(): Storage {
 }
 
 export function getBucketName(): string {
-  const bucketName = process.env.GCS_BUCKET;
+  const bucketName = env.GCS_BUCKET;
   if (!bucketName) throw new Error("GCS_BUCKET is not set");
   return bucketName;
 }
