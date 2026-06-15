@@ -24,6 +24,9 @@ export const env = createEnv({
     NODE_ENV: z
       .enum(["development", "production", "test"])
       .default("development"),
+    LOG_LEVEL: z
+      .enum(["trace", "debug", "info", "warn", "error", "fatal"])
+      .default("info"),
     EMAIL_ADMIN_DESTINATIONS: z.string().min(1),
     EMAIL_REGION_IN_A_BOX_CC: z.string().min(1).optional(),
     GOOGLE_LOGO_BUCKET_PRIVATE_KEY: z.string().min(1),

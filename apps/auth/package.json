@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@acme/db": "workspace:*",
+    "@acme/logger": "workspace:*",
     "@acme/shared": "workspace:*",
     "@auth/core": "catalog:",
     "@t3-oss/env-nextjs": "catalog:",
