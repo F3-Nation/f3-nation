@@ -67,7 +67,6 @@ dev = [
     "playwright>=1.44.0,<2.0.0",
     "dataframe-image>=0.2.7,<0.3.0",
     "pandas>=2.2.2,<3.0.0",
-    "alembic>=1.13.0,<2.0.0",
     "debugpy>=1.8.17,<2.0.0",
     "commitizen>=4.13.9,<5.0.0",
 ]

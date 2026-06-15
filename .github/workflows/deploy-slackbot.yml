@@ -27,7 +27,7 @@ jobs:
       prod_project: f3-slackbot
       tag_prefix: slackbot@
       dockerfile: apps/slackbot/Dockerfile
-      build_context: apps/slackbot
+      build_context: .
       staging_environment: slackbot-staging
       prod_environment: slackbot-production
       region: us-central1
@@ -42,7 +42,7 @@ jobs:
       prod_project: f3-slackbot
       tag_prefix: slackbot@
       dockerfile: apps/slackbot/scripts/Dockerfile
-      build_context: apps/slackbot
+      build_context: .
       staging_environment: slackbot-staging
       prod_environment: slackbot-production
       region: us-central1

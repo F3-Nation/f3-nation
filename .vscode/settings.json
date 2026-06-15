@@ -23,5 +23,7 @@
   "typescript.tsdk": "node_modules/typescript/lib",
   "[toml]": {
     "editor.defaultFormatter": "tamasfe.even-better-toml"
-  }
+  },
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "python.analysis.extraPaths": ["${workspaceFolder}/packages/db-python"]
 }

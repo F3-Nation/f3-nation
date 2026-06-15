@@ -6,12 +6,6 @@ F3 Nation Slack Bot runs inside the monorepo and now follows the same local work
 
 ## Local development (monorepo)
 
-### Prerequisites
-
-1. Docker running locally
-2. Node and pnpm installed for the monorepo
-3. `uv` available for Python dependency/runtime management
-
 ### One-time setup
 
 From the repo root:
@@ -22,13 +16,15 @@ pnpm local:setup
 
 This creates `apps/slackbot/.env` from `apps/slackbot/.env.local.example`, then starts shared Docker services and runs DB migration/seed steps.
 
-### Configure Slack credentials
+### Create Slack app and configure Slack credentials
 
-Edit `apps/slackbot/.env` and set at minimum:
+1. **Initialize and install your local Slack app**: I recommend you use your own private Slack workspace for this. Open [Slack's app console](https://api.slack.com/apps), click Create New App->from manifest, then paste in the contents from `app_manifest.json`. After you install to your workspace, gather the Signing Secret from the Basic Information tab and the Bot User OAuth Token from the OAuth & Permissions tab. For the app-level token, you will need to generate this from the Basic Information tab.
+
+2. **Copy to `.env`**: edit `apps/slackbot/.env` and set:
 
 - `SLACK_SIGNING_SECRET`
 - `SLACK_BOT_TOKEN`
-- `SLACK_APP_TOKEN` (required for Socket Mode)
+- `SLACK_APP_TOKEN`
 
 ### Start all local apps
 
@@ -38,21 +34,9 @@ From the repo root:
 pnpm dev
 ```
 
-Slackbot starts automatically with the rest of the workspace apps.
+Slackbot starts automatically with the rest of the monorepo apps.
 
 - Slackbot local URL: http://localhost:3006
-- Connection mode: Socket Mode only (no localtunnel)
-
-## Slack app manifest workflow
-
-At startup, `app_startup.sh` regenerates `app_manifest.json` from `app_manifest.template.json`.
-
-1. Start dev (`pnpm dev`) so `app_manifest.json` is generated.
-2. In Slack app settings, open **App Manifest**.
-3. Replace the manifest with `apps/slackbot/app_manifest.json`.
-4. Save and reinstall if prompted.
-
-The generated manifest enables Socket Mode and removes slash command URLs that are only needed for tunnel-based HTTP event delivery.
 
 ## Step debugging
 

@@ -3,8 +3,6 @@ import os
 import ssl
 from logging import Logger
 
-from alembic import command, config, script
-from alembic.runtime import migration
 from f3_data_models.models import Org, Org_Type, Org_x_SlackSpace, Role, Role_x_User_x_Org, SlackSpace
 from f3_data_models.utils import DbManager
 from slack_sdk.web import WebClient
@@ -26,14 +24,6 @@ from utilities.helper_functions import (
     trigger_map_revalidation,
 )
 from utilities.slack import actions, orm
-
-
-def check_current_head(alembic_cfg: config.Config, connectable: engine.Engine) -> bool:
-    # type: (config.Config, engine.Engine) -> bool
-    directory = script.ScriptDirectory.from_config(alembic_cfg)
-    with connectable.begin() as connection:
-        context = migration.MigrationContext.configure(connection)
-        return set(context.get_current_heads()) == set(directory.get_heads())
 
 
 def build_db_admin_form(
@@ -59,37 +49,6 @@ def build_db_admin_form(
         title_text="DB Admin",
         submit_button_text="Send Announcement",
     )
-
-
-def handle_db_admin_upgrade(
-    body: dict,
-    client: WebClient,
-    logger: Logger,
-    context: dict,
-    region_record: SlackSettings,
-):
-    alembic_cfg = config.Config("alembic.ini")
-    command.upgrade(alembic_cfg, "head")
-    view_id = safe_get(body, "view", "id")
-    body["text"] = os.environ.get("SECRET_ADMIN_PASSWORD")
-    build_db_admin_form(
-        body, client, logger, context, region_record, update_view_id=view_id, message="Database upgraded!"
-    )
-
-
-def handle_db_admin_reset(
-    body: dict,
-    client: WebClient,
-    logger: Logger,
-    context: dict,
-    region_record: SlackSettings,
-):
-    alembic_cfg = config.Config("alembic.ini")
-    command.downgrade(alembic_cfg, "base")
-    command.upgrade(alembic_cfg, "head")
-    view_id = safe_get(body, "view", "id")
-    body["text"] = os.environ.get("SECRET_ADMIN_PASSWORD")
-    build_db_admin_form(body, client, logger, context, region_record, update_view_id=view_id, message="Database reset!")
 
 
 def handle_calendar_image_refresh(
