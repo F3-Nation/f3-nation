@@ -34,9 +34,13 @@ From the repo root:
 pnpm dev
 ```
 
-Slackbot starts automatically with the rest of the monorepo apps.
+Slackbot starts automatically with the rest of the monorepo apps. At the very least, you will need to also run the API app.
 
 - Slackbot local URL: http://localhost:3006
+
+### First steps
+
+Once the app is running, you will want to connect your local app to one of the seeded regions. To do this, use the `/f3-nation-settings` command, click on `Migration Settings`, then search for a seeded region (F3 Charlotte is one). You will be automatically "approved" when in local development.
 
 ## Step debugging
 

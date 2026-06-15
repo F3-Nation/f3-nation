@@ -183,6 +183,16 @@ def handle_existing_region_selection(
     if LOCAL_DEVELOPMENT:
         body["message"] = {"metadata": metadata}
         handle_approve_connection(body, client, logger, context, region_record)
+        view: View = View(
+            type="modal",
+            title="Connect existing region",
+            blocks=[
+                SectionBlock(
+                    text="Since this is a local development environment, the connection request has been automatically approved. You can close this window!",  # noqa
+                )
+            ],
+        )
+        client.views_update(view_id=safe_get(body, "view", "previous_view_id"), view=view)
         return
 
     blocks = [
@@ -268,6 +278,19 @@ def handle_existing_region_selection(
             )
         except Exception as e:
             logger.error(f"Error sending region connection request: {e}")
+    
+    # update modal to indicate that the request has been submitted and is pending review
+    
+    form: View = View(
+        type="modal",
+        title="Connect existing region",
+        blocks=[
+            SectionBlock(
+                text="Your connection request has been submitted and is pending review by the F3 Nation Admins. I will send you a direct message when the review is complete.",  # noqa
+            ),
+        ],
+    )
+    client.views_update(view_id=safe_get(body, "view", "previous_view_id"), view=form)
 
 
 def handle_new_region_creation(
@@ -336,7 +359,7 @@ def handle_approve_connection(
     blocks = [
         HeaderBlock(text="Region Connection Request Approved"),
         SectionBlock(
-            text=f"Your region connection request was approved by the F3 Nation Admins! Your slack space is now connected to {metadata.get('region_name')}. Events have been created starting on {metadata.get('migration_date')}, and your PAX can start signing up to Q through the `/f3-calendar` command."  # noqa
+            text=f"Your region connection request was approved by the F3 Nation Admins! Your slack space is now connected to {metadata.get('region_name')}. Your PAX can start signing up to Q through the `/f3-calendar` command."  # noqa
         ),
     ]
     ssl_context = ssl.create_default_context()
