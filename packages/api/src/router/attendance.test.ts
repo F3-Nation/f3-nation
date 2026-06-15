@@ -578,7 +578,7 @@ describe("Attendance Router", () => {
           userId: user.id,
           attendanceTypeIds: [ATTENDANCE_TYPE_IDS!.PAX],
         }),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
     });
 
     it("should allow users to create planned attendance for themselves", async () => {
@@ -665,7 +665,7 @@ describe("Attendance Router", () => {
           userId: targetUser.id,
           attendanceTypeIds: [ATTENDANCE_TYPE_IDS!.PAX],
         }),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     });
   });
 
@@ -726,7 +726,7 @@ describe("Attendance Router", () => {
           userId: targetUser.id,
           attendanceTypeIds: [ATTENDANCE_TYPE_IDS!.PAX],
         }),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     });
 
     it("should reject creating actual attendance for self without editor role", async () => {
@@ -753,7 +753,34 @@ describe("Attendance Router", () => {
           userId: user.id,
           attendanceTypeIds: [ATTENDANCE_TYPE_IDS!.PAX],
         }),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    });
+
+    it("should reject creating actual attendance as editor on a different org (cross-org IDOR)", async () => {
+      const { ao: eventAo } = await createTestAO();
+      const { ao: editorAo } = await createTestAO();
+      if (!eventAo || !editorAo) return;
+
+      const eventInstance = await createTestEventInstance(eventAo.id);
+      if (!eventInstance) return;
+
+      const targetUser = await createTestUser();
+      if (!targetUser) return;
+
+      const editorSession = createEditorSession({
+        orgId: editorAo.id,
+        orgName: editorAo.name,
+      });
+      await mockAuthWithSession(editorSession);
+
+      const client = createTestClient();
+      await expect(
+        client.attendance.createActual({
+          eventInstanceId: eventInstance.id,
+          userId: targetUser.id,
+          attendanceTypeIds: [ATTENDANCE_TYPE_IDS!.PAX],
+        }),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     });
   });
 
@@ -840,7 +867,7 @@ describe("Attendance Router", () => {
           eventInstanceId: eventInstance.id,
           userId: targetUser.id,
         }),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     });
   });
 
@@ -920,7 +947,7 @@ describe("Attendance Router", () => {
           eventInstanceId: eventInstance.id,
           userId: user2.id,
         }),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({ code: "CONFLICT" });
     });
 
     it("should reject taking Q for another user without editor role", async () => {
@@ -942,7 +969,7 @@ describe("Attendance Router", () => {
           eventInstanceId: eventInstance.id,
           userId: targetUser.id,
         }),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     });
   });
 
@@ -1031,7 +1058,7 @@ describe("Attendance Router", () => {
           eventInstanceId: eventInstance.id,
           userId: targetUser.id,
         }),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     });
   });
 
@@ -1207,7 +1234,34 @@ describe("Attendance Router", () => {
           qUserId: qUser.id,
           coQUserIds: [],
         }),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    });
+
+    it("should reject assigning Q as editor on a different org (cross-org IDOR)", async () => {
+      const { ao: eventAo } = await createTestAO();
+      const { ao: editorAo } = await createTestAO();
+      if (!eventAo || !editorAo) return;
+
+      const eventInstance = await createTestEventInstance(eventAo.id);
+      if (!eventInstance) return;
+
+      const qUser = await createTestUser();
+      if (!qUser) return;
+
+      const editorSession = createEditorSession({
+        orgId: editorAo.id,
+        orgName: editorAo.name,
+      });
+      await mockAuthWithSession(editorSession);
+
+      const client = createTestClient();
+      await expect(
+        client.attendance.assignQAndCoQs({
+          eventInstanceId: eventInstance.id,
+          qUserId: qUser.id,
+          coQUserIds: [],
+        }),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     });
   });
 
@@ -1300,7 +1354,29 @@ describe("Attendance Router", () => {
         client.attendance.deleteActualForEvent({
           eventInstanceId: eventInstance.id,
         }),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    });
+
+    it("should reject deleting actual attendance as editor on a different org (cross-org IDOR)", async () => {
+      const { ao: eventAo } = await createTestAO();
+      const { ao: editorAo } = await createTestAO();
+      if (!eventAo || !editorAo) return;
+
+      const eventInstance = await createTestEventInstance(eventAo.id);
+      if (!eventInstance) return;
+
+      const editorSession = createEditorSession({
+        orgId: editorAo.id,
+        orgName: editorAo.name,
+      });
+      await mockAuthWithSession(editorSession);
+
+      const client = createTestClient();
+      await expect(
+        client.attendance.deleteActualForEvent({
+          eventInstanceId: eventInstance.id,
+        }),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     });
   });
 });

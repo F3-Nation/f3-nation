@@ -94,6 +94,23 @@ describe("assertSelfOrEditorOnEventOrg", () => {
 });
 
 describe("assertEditorOnEventOrg", () => {
+  it("throws NOT_FOUND when event instance does not exist", async () => {
+    const notFoundDb = {
+      select: vi.fn().mockReturnValue({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([]),
+        }),
+      }),
+    } as unknown as Context["db"];
+
+    await expect(
+      assertEditorOnEventOrg({
+        ctx: { ...baseCtx, db: notFoundDb },
+        eventInstanceId: 999999,
+      }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
   it("resolves with orgId when user has editor role", async () => {
     mockCheckHasRoleOnOrg.mockResolvedValue({
       success: true,
