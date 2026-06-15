@@ -105,7 +105,11 @@ export async function seedApiKeys(
 
     if (keyId) {
       const roleId =
-        apiKey.role === "editor" ? roleIds.editorId : roleIds.userId;
+        apiKey.role === "admin"
+          ? roleIds.adminId
+          : apiKey.role === "editor"
+            ? roleIds.editorId
+            : roleIds.userId;
       await db
         .insert(schema.rolesXApiKeysXOrg)
         .values({ apiKeyId: keyId, roleId, orgId: nationId })

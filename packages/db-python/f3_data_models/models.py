@@ -453,6 +453,7 @@ class Org(Base):
         ao_count (int): The number of AOs associated with the organization. Defaults to 0, will be updated by triggers.
         created (datetime): The timestamp when the record was created.
         updated (datetime): The timestamp when the record was last updated.
+        phone (Optional[str]): The organization's phone number.
 
         locations (Optional[List[Location]]): The locations associated with the organization. Probably only relevant for regions.
         event_types (Optional[List[EventType]]): The event types associated with the organization. Used to control which event types are available for selection at the region level.
@@ -482,6 +483,7 @@ class Org(Base):
     ao_count: Mapped[Optional[int]] = mapped_column(Integer, default=0, nullable=True)
     created: Mapped[dt_create]
     updated: Mapped[dt_update]
+    phone: Mapped[Optional[str]]
 
     __table_args__ = (
         Index("idx_orgs_parent_id", "parent_id"),

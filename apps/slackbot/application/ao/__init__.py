@@ -11,3 +11,4 @@ class AoData(BaseModel):
     default_location_id: int | None = None
     logo_url: str | None = None
     meta: dict | None = None
+    phone: str | None = None

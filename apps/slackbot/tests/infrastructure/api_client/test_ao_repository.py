@@ -131,6 +131,7 @@ class ApiAoRepositoryTest(unittest.TestCase):
                 "twitter": "",
                 "facebook": "",
                 "instagram": "",
+                "phone": "",
             },
         )
         self.assertEqual(result.id, 20)
@@ -179,6 +180,7 @@ class ApiAoRepositoryTest(unittest.TestCase):
                 "twitter": "",
                 "facebook": "",
                 "instagram": "",
+                "phone": "",
             },
         )
 

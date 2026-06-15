@@ -25,6 +25,7 @@ def _parse_ao(raw: dict) -> AoData:
         default_location_id=raw.get("defaultLocationId", raw.get("default_location_id")),
         logo_url=raw.get("logoUrl", raw.get("logo_url")),
         meta=raw.get("meta"),
+        phone=raw.get("phone"),
     )
 
 
@@ -71,6 +72,7 @@ class ApiAoRepository:
             "facebook": "",
             "instagram": "",
             "meta": {"slack_channel_id": slack_channel_id} if slack_channel_id else {},
+            "phone": "",
         }
         if description is not None:
             payload["description"] = description
@@ -102,6 +104,7 @@ class ApiAoRepository:
             "facebook": "",
             "instagram": "",
             "meta": {"slack_channel_id": slack_channel_id} if slack_channel_id else {},
+            "phone": "",
         }
         if description is not None:
             payload["description"] = description
