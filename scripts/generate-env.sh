@@ -141,9 +141,9 @@ NEXT_PUBLIC_AUTH_URL=http://localhost:3004
 NEXT_PUBLIC_CHANNEL=local
 
 # -- Google Maps API key (from GCP Secret Manager) --
-# Note: In production, this key is set directly in Vercel's environment variables.
-# We mirror it in GCP Secret Manager so this script can pull it automatically,
-# keeping the local dev setup as frictionless as possible.
+# In production, this key is set via Cloud Run environment configuration.
+# GCP Secret Manager stores the canonical value so this script can pull it
+# automatically, keeping the local dev setup as frictionless as possible.
 NEXT_PUBLIC_GOOGLE_API_KEY=${SECRET_GOOGLE_MAPS_API_KEY:-}
 
 # -- Email --

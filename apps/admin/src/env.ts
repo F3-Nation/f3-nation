@@ -6,7 +6,6 @@ export const env = createEnv({
     NODE_ENV: z
       .enum(["development", "production", "test"])
       .default("development"),
-    VERCEL_ENV: z.enum(["development", "preview", "production"]).optional(),
   },
   server: {
     F3_CHANNEL: z.enum(["local", "ci", "branch", "dev", "staging", "prod"]),
@@ -25,7 +24,6 @@ export const env = createEnv({
   // need destructuring; server vars resolve from process.env automatically.
   experimental__runtimeEnv: {
     NODE_ENV: process.env.NODE_ENV,
-    VERCEL_ENV: process.env.VERCEL_ENV,
   },
   skipValidation:
     !!process.env.CI ||

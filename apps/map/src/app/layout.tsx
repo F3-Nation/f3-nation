@@ -31,7 +31,7 @@ import { RouteChangeTracker } from "./_components/route-change-tracker";
 
 export const metadata: Metadata = {
   metadataBase: new URL(
-    env.VERCEL_ENV === "production"
+    env.F3_CHANNEL === "prod"
       ? "https://map.f3nation.com"
       : "http://localhost:3000",
   ),
