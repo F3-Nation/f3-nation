@@ -37,6 +37,16 @@
       "component": "auth",
       "changelog-path": "CHANGELOG.md",
       "path": "apps/auth"
+    },
+    "apps/map": {
+      "component": "map",
+      "changelog-path": "CHANGELOG.md",
+      "path": "apps/map"
+    },
+    "apps/api": {
+      "component": "api",
+      "changelog-path": "CHANGELOG.md",
+      "path": "apps/api"
     }
   }
 }

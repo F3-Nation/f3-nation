@@ -80,6 +80,7 @@ export default function AdminSectorsModal({
       description: sector?.description ?? "",
       website: sector?.website ?? null,
       email: sector?.email ?? null,
+      phone: sector?.phone ?? null,
       twitter: sector?.twitter ?? null,
       facebook: sector?.facebook ?? null,
       instagram: sector?.instagram ?? null,
@@ -98,6 +99,7 @@ export default function AdminSectorsModal({
       description: sector?.description ?? "",
       website: sector?.website ?? null,
       email: sector?.email ?? null,
+      phone: sector?.phone ?? null,
       twitter: sector?.twitter ?? null,
       facebook: sector?.facebook ?? null,
       instagram: sector?.instagram ?? null,
@@ -255,6 +257,26 @@ export default function AdminSectorsModal({
                       <FormControl>
                         <Input
                           placeholder="Email"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="mb-4 w-full px-2 sm:w-1/2">
+                <FormField
+                  control={form.control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Phone</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="Phone"
+                          type="tel"
                           {...field}
                           value={field.value ?? ""}
                         />

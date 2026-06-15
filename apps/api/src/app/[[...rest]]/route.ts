@@ -7,6 +7,8 @@ import { router } from "@acme/api";
 import { API_PREFIX_V1 } from "@acme/shared/app/constants";
 import { Client, Header } from "@acme/shared/common/enums";
 
+import { logError } from "~/lib/logging";
+
 const corsPlugin = new CORSPlugin({
   origin: (origin) => origin,
   allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
@@ -19,12 +21,7 @@ const handler = new RPCHandler(router, {
   plugins: [corsPlugin, new RequestHeadersPlugin()],
   interceptors: [
     onError((error) => {
-      const typedError = error as { message?: string; stack?: string };
-      console.error("RPC handler error", {
-        error,
-        message: typedError?.message,
-        stack: typedError?.stack,
-      });
+      logError("api.rpc.handler_error", {}, error);
     }),
   ],
 });
@@ -33,7 +30,7 @@ const openAPIHandler = new OpenAPIHandler(router, {
   plugins: [corsPlugin, new RequestHeadersPlugin()],
   interceptors: [
     onError((error) => {
-      console.error(error);
+      logError("api.openapi.handler_error", {}, error);
     }),
   ],
 });

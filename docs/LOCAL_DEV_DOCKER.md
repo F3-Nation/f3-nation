@@ -160,8 +160,8 @@ pnpm local:setup
 
 This script does everything automatically:
 
-- Copies each directory's `.env.local.example` → `.env` (skips any that already exist):
-  `apps/api`, `apps/auth`, `apps/map`, `apps/me`, `apps/admin`, and `packages/env`
+- Copies each directory's `.env.example` → `.env` (skips any that already exist):
+  `apps/api`, `apps/auth`, `apps/homepage`, `apps/map`, `apps/me`, `apps/admin`, and `packages/env`
 - Starts the four Docker containers
 - Waits for Postgres to be ready
 - Creates the `f3-public-images` bucket in the GCS emulator
@@ -185,7 +185,7 @@ You should see output ending with:
 The app will start without this, but the map tiles won't render. To get one:
 
 1. Go to [console.cloud.google.com/google/maps-apis](https://console.cloud.google.com/google/maps-apis/)
-2. Create a project and enable **Maps JavaScript API**
+2. Create a project and enable **Maps JavaScript API** and **Places API (New)**
 3. Create an API key
 4. Set the key in both `apps/map/.env` and `apps/api/.env`:
    `NEXT_PUBLIC_GOOGLE_API_KEY=your-key-here`
@@ -253,7 +253,7 @@ The Docker containers save their data in named volumes (`postgres_data`, `gcs_da
 
 ## Understanding the .env files
 
-Each app and shared package has its own `.env` file, copied from a `.env.local.example` template during `pnpm local:setup`. All template values work out-of-the-box with Docker — you don't need to edit anything to get started.
+Each app and shared package has its own `.env` file, copied from a `.env.example` template during `pnpm local:setup`. All template values work out-of-the-box with Docker — you don't need to edit anything to get started.
 
 | Directory           | Purpose                                                            |
 | ------------------- | ------------------------------------------------------------------ |
@@ -533,8 +533,8 @@ pnpm local:setup
 Or manually re-copy an individual app:
 
 ```bash
-cp apps/api/.env.local.example apps/api/.env
-cp apps/map/.env.local.example apps/map/.env
+cp apps/api/.env.example apps/api/.env
+cp apps/map/.env.example apps/map/.env
 # etc.
 ```
 

@@ -13,9 +13,6 @@ import { constantTimeEqual } from "~/lib/crypto-utils";
 import { db } from "~/lib/db";
 import { getJWKS, signAccessToken } from "~/lib/jwt";
 
-// Re-export so any external consumers still find it here
-export { constantTimeEqual };
-
 function generateOpaqueToken(): string {
   return crypto.randomBytes(32).toString("base64url");
 }

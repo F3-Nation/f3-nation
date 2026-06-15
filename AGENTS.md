@@ -40,13 +40,13 @@ that app's `AGENTS.md`.
 - **First-time setup:** `pnpm local:setup` — copies per-directory `.env` files, starts Docker services, runs migrations, and seeds the database. See [docs/LOCAL_DEV_DOCKER.md](docs/LOCAL_DEV_DOCKER.md) for the full guide.
 - **Docker services:** `pnpm docker:up` to start (Postgres, Adminer, GCS emulator, Mailpit), `pnpm docker:down` to stop.
 - Install dependencies with `pnpm install`. You can scope installations with `--filter <workspace>`.
-- Start development: `pnpm dev --filter f3-nation-map` for the map app, or `pnpm dev` to run all watch tasks.
-- Each app and `packages/env` has its own `.env` file (copied from `.env.local.example` by `pnpm local:setup`). Never commit `.env` files.
+- Start development: `pnpm dev --filter f3-map` for the map app, or `pnpm dev` to run all watch tasks.
+- Each app and `packages/env` has its own `.env` file (copied from `.env.example` by `pnpm local:setup`). Never commit `.env` files.
 - Build with `pnpm build` (or `pnpm build --filter apps/map`), and start production with `pnpm -C apps/map start`.
 - Code quality: always run `pnpm lint` (or `pnpm lint --filter apps/map`) and `pnpm format:fix` to ensure your code passes all lint and formatting checks. Also run `pnpm typecheck` to validate types.
 - Testing:
   - Run all tests with `pnpm test` (via the Turbo pipeline).
-  - Run targeted tests: `pnpm -C apps/map test`, `pnpm -C apps/map test:e2e`.
+  - Run targeted tests: `pnpm -C apps/map test`.
   - Database helpers: `pnpm db:pull`, `pnpm db:push`, and `pnpm reset-test-db`.
 
 ## Coding Style & Naming Conventions
@@ -58,6 +58,26 @@ that app's `AGENTS.md`.
 - Name React components in PascalCase, prefix hooks with `use`, and use kebab-case for files/directories (e.g., `apps/map/src`).
 - Co-locate feature-specific assets and tests near their sources (e.g., `apps/map/src/app/(feature)/`).
 
+## Logging
+
+- Log through the shared [`@acme/logger`](packages/logger/README.md) package,
+  imported from the app's `lib/logging` module — never `console.*`. There is one
+  helper per level: `logTrace` / `logDebug` / `logInfo` / `logWarn` / `logError`
+  / `logFatal`. Prefer these for all event logging; reach for the raw `logger`
+  only for request-scoped children (`logger.child({ requestId })`). The helpers
+  take the `event` **first**; pino's native methods take the context object
+  first — don't mix the orders.
+- The **first argument is a dot-namespaced `event` identifier**, not a sentence:
+  `<area>.<feature>.<outcome>`, lowercase with `snake_case` segments (e.g.
+  `auth.register.f3_api_error`, `me.avatar.upload_failed`). Keep it a fixed
+  string literal — never interpolate variable data into it.
+- Put per-occurrence data in the structured `ctx` object (second arg) and the
+  thrown value in `err` (third arg of `logError`): `logError("api.rpc.handler_error", { orgId }, err)`.
+- Never log secrets or PII — see [`docs/AI_DEVELOPMENT_GUIDE.md`](docs/AI_DEVELOPMENT_GUIDE.md#secrets--sensitive-data).
+- New to the logging setup? [`docs/LOGGING.md`](docs/LOGGING.md) is the
+  human-facing primer (why pino, how to use it, controlling `LOG_LEVEL`);
+  [`packages/logger/README.md`](packages/logger/README.md) is the full API reference.
+
 ## GitHub Actions Conventions
 
 - **Pin third-party actions to a full commit SHA with a version comment** (e.g. `actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2`). SHAs are immutable — a semver tag can be force-pushed, a SHA cannot. Renovate (`pinDigests: true`) keeps the SHAs up to date automatically.
@@ -68,7 +88,6 @@ that app's `AGENTS.md`.
 ## Testing Guidelines
 
 - Use Vitest for unit and integration tests; name test files `*.test.ts[x]` and place under or near source code or in `__tests__`.
-- Use Playwright for e2e in `apps/map`; generate reports via `pnpm -C apps/map test:e2e:report`.
 - Reset databases before any suite that mutates data (`pnpm reset-test-db` or `pnpm -C packages/db reset-test-db`).
 - Prefer fixtures in `apps/map/tests` or `packages/*/__mocks__` instead of live service calls.
 
@@ -105,13 +124,13 @@ Use standard Conventional Commit types: `feat`, `fix`, `chore`, `docs`, `style`,
 
 Scopes are defined in `commitlint.config.mjs` and map to monorepo packages:
 
-| Category        | Scopes                                                            |
-| --------------- | ----------------------------------------------------------------- |
-| Apps            | `admin`, `homepage`, `map`, `me`                                  |
-| Apps & Packages | `api`, `auth` (exist in both `apps/` and `packages/`)             |
+| Category        | Scopes                                                              |
+| --------------- | ------------------------------------------------------------------- |
+| Apps            | `admin`, `homepage`, `map`, `me`                                    |
+| Apps & Packages | `api`, `auth` (exist in both `apps/` and `packages/`)               |
 | Packages        | `db`, `env`, `mail`, `shared`, `sso`, `storage`, `ui`, `validators` |
-| Tooling         | `eslint`, `prettier`, `tsconfig`, `scripts`, `github`, `tailwind` |
-| Cross-cutting   | `deps`, `ci`, `repo`, `release`, `dev` (used by Release Please)   |
+| Tooling         | `eslint`, `prettier`, `tsconfig`, `scripts`, `github`, `tailwind`   |
+| Cross-cutting   | `deps`, `ci`, `repo`, `release`, `dev` (used by Release Please)     |
 
 **Choosing a scope:**
 

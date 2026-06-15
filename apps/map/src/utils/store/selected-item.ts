@@ -43,10 +43,6 @@ const incrementPendingDeselectId = () => {
   });
 };
 
-export const hideSelectedItem = () => {
-  selectedItemStore.setState({ hideSelectedItem: true });
-};
-
 export const clearSelectedItem = () => {
   if (isDevelopment) {
     const stackTrace = new Error().stack;

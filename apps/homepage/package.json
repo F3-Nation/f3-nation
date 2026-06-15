@@ -1,15 +1,15 @@
 {
   "name": "f3-homepage",
   "type": "module",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev --port 3005",
     "build": "next build",
     "start": "npx serve out -l 3005",
     "lint": "eslint . --max-warnings 0",
-    "format:check": "prettier --check .",
-    "format": "prettier --write .",
+    "format:check": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
+    "format": "prettier --write . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -26,7 +26,9 @@
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "autoprefixer": "catalog:",
+    "eslint": "catalog:",
     "postcss": "catalog:",
+    "prettier": "catalog:",
     "tailwindcss": "catalog:",
     "typescript": "catalog:"
   },

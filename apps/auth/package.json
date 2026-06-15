@@ -1,6 +1,6 @@
 {
   "name": "f3-auth",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@acme/db": "workspace:*",
+    "@acme/logger": "workspace:*",
     "@acme/shared": "workspace:*",
     "@auth/core": "catalog:",
     "@t3-oss/env-nextjs": "catalog:",
@@ -46,6 +47,7 @@
     "@types/react-dom": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "autoprefixer": "catalog:",
+    "dotenv": "catalog:",
     "dotenv-cli": "catalog:",
     "eslint": "catalog:",
     "postcss": "catalog:",

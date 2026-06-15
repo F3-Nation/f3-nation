@@ -1,8 +1,6 @@
-import axios from "axios";
-
 import type { PlaceDetails } from "@acme/shared/app/types";
 
-import { env } from "~/env";
+import { getGoogleApiKey } from "./runtime-config";
 
 // Cache for place details (placeId -> details)
 const placeDetailsCache = new Map<
@@ -12,6 +10,7 @@ const placeDetailsCache = new Map<
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours (place details don't change often)
 
 export async function placesDetails(placeId: string): Promise<PlaceDetails> {
+  const googleApiKey = getGoogleApiKey();
   // Check cache first
   const cached = placeDetailsCache.get(placeId);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
@@ -19,19 +18,21 @@ export async function placesDetails(placeId: string): Promise<PlaceDetails> {
   }
 
   try {
-    const response = await axios.get<PlaceDetails>(
-      `https://places.googleapis.com/v1/places/${placeId}`,
+    const params = new URLSearchParams({ fields: "id,displayName,location" });
+    const response = await fetch(
+      `https://places.googleapis.com/v1/places/${placeId}?${params.toString()}`,
       {
         headers: {
-          "X-Goog-Api-Key": env.NEXT_PUBLIC_GOOGLE_API_KEY,
-        },
-        params: {
-          fields: "id,displayName,location",
+          "X-Goog-Api-Key": googleApiKey,
         },
       },
     );
 
-    const details = response.data;
+    if (!response.ok) {
+      throw new Error(`Places API error: ${response.status}`);
+    }
+
+    const details = (await response.json()) as PlaceDetails;
 
     // Cache the result
     placeDetailsCache.set(placeId, {

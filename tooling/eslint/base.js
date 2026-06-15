@@ -43,6 +43,18 @@ export default tseslint.config(
         "error",
         { allowShortCircuit: true, allowTernary: true },
       ],
+      // Steer event logging through the @acme/logger helpers (logDebug, logInfo,
+      // …), which keep the event-first signature and the Sentry fan-out. The
+      // raw pino instance is reserved for `logger.child()`.
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "CallExpression[callee.object.name='logger'][callee.property.name=/^(trace|debug|info|warn|error|fatal)$/]",
+          message:
+            "Use the log* helpers (logDebug/logInfo/logError/…) instead of the raw pino logger. Reserve `logger` for `logger.child()`.",
+        },
+      ],
     },
     linterOptions: {
       reportUnusedDisableDirectives: true,

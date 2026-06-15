@@ -1,10 +1,8 @@
-import axios from "axios";
-
 import type { PlaceResult } from "@acme/shared/app/types";
 import { MAX_PLACES_AUTOCOMPLETE_RADIUS } from "@acme/shared/app/constants";
 import { zoomToRadius } from "@acme/shared/app/functions";
 
-import { env } from "~/env";
+import { getGoogleApiKey } from "./runtime-config";
 
 // Cache for autocomplete results (key: input+center+zoom, value: results)
 const autocompleteCache = new Map<
@@ -43,7 +41,7 @@ function checkRateLimit(): boolean {
   return true;
 }
 
-export async function placesAutocomplete({
+async function placesAutocomplete({
   input,
   center,
   zoom,
@@ -52,6 +50,7 @@ export async function placesAutocomplete({
   center: { lat: number; lng: number };
   zoom: number;
 }): Promise<PlaceResult[]> {
+  const googleApiKey = getGoogleApiKey();
   // Check cache first
   const cacheKey = `${input.toLowerCase().trim()}_${center.lat}_${center.lng}_${zoom}`;
   const cached = autocompleteCache.get(cacheKey);
@@ -79,18 +78,24 @@ export async function placesAutocomplete({
         };
 
   try {
-    const response = await axios.post<{ suggestions: PlaceResult[] }>(
+    const response = await fetch(
       `https://places.googleapis.com/v1/places:autocomplete`,
-      { input, locationBias },
       {
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Goog-Api-Key": env.NEXT_PUBLIC_GOOGLE_API_KEY,
+          "X-Goog-Api-Key": googleApiKey,
         },
+        body: JSON.stringify({ input, locationBias }),
       },
     );
 
-    const results = response.data.suggestions;
+    if (!response.ok) {
+      throw new Error(`Places Autocomplete API error: ${response.status}`);
+    }
+
+    const results = ((await response.json()) as { suggestions: PlaceResult[] })
+      .suggestions;
 
     // Cache the results
     autocompleteCache.set(cacheKey, {

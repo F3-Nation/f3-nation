@@ -9,8 +9,8 @@ import { sendVerificationRequest } from "./utils";
 export const emailProvider = Email({
   id: ProviderId.EMAIL, // needed to allow signIn("email")
   name: "Email", // Changes text on default sign in button
-  server: env.EMAIL_SERVER,
-  from: env.EMAIL_FROM,
+  server: env.EMAIL_SERVER ?? "smtp://build-placeholder:1025",
+  from: env.EMAIL_FROM ?? "noreply@f3nation.com",
   sendVerificationRequest,
   normalizeIdentifier: normalizeEmail,
 });

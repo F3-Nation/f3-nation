@@ -17,7 +17,9 @@
   },
   "dependencies": {
     "@google-cloud/storage": "catalog:",
-    "sharp": "catalog:"
+    "@t3-oss/env-nextjs": "catalog:",
+    "sharp": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@acme/eslint-config": "workspace:^0.2.0",

@@ -1,5 +1,7 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
 
+import { env } from "~/env";
+
 export interface AccessTokenPayload {
   sub: string;
   email?: string;
@@ -21,9 +23,7 @@ function decodeBase64Url(value: string): string {
   return Buffer.from(padded, "base64").toString("utf-8");
 }
 
-export function parseAccessTokenPayload(
-  token: string,
-): AccessTokenPayload | null {
+function parseAccessTokenPayload(token: string): AccessTokenPayload | null {
   const parts = token.split(".");
   if (parts.length !== 3) return null;
 
@@ -46,7 +46,7 @@ export function parseAccessTokenPayload(
   }
 }
 
-export function isAccessTokenExpired(token: string, skewSeconds = 60): boolean {
+function isAccessTokenExpired(token: string, skewSeconds = 60): boolean {
   const payload = parseAccessTokenPayload(token);
   if (typeof payload?.exp !== "number" || !Number.isFinite(payload.exp)) {
     return true;
@@ -67,10 +67,7 @@ let jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
 
 function getRemoteJWKS(): ReturnType<typeof createRemoteJWKSet> {
   if (!jwks) {
-    const base = process.env.AUTH_PROVIDER_URL;
-    if (!base) throw new Error("AUTH_PROVIDER_URL is required");
-
-    const authUrl = new URL(base);
+    const authUrl = new URL(env.AUTH_PROVIDER_URL);
     const isLocalhost =
       authUrl.hostname === "localhost" || authUrl.hostname === "127.0.0.1";
     if (authUrl.protocol !== "https:" && !isLocalhost) {
@@ -95,10 +92,8 @@ export async function verifyAccessTokenPayload(
 ): Promise<AccessTokenPayload | null> {
   if (isAccessTokenExpired(token)) return null;
 
-  const issuer = process.env.AUTH_PROVIDER_URL;
-  const clientId = process.env.OAUTH_CLIENT_ID;
-  if (!issuer) throw new Error("AUTH_PROVIDER_URL is required");
-  if (!clientId) throw new Error("OAUTH_CLIENT_ID is required");
+  const issuer = env.AUTH_PROVIDER_URL;
+  const clientId = env.OAUTH_CLIENT_ID;
 
   try {
     const { payload } = await jwtVerify(token, getRemoteJWKS(), {
@@ -122,10 +117,6 @@ export async function verifyAccessTokenPayload(
   } catch {
     return null;
   }
-}
-
-export async function verifyAccessToken(token: string): Promise<boolean> {
-  return Boolean(await verifyAccessTokenPayload(token));
 }
 
 function parseAccessTokenPayloadFromClaims(

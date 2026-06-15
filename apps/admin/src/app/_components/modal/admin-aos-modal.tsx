@@ -87,6 +87,7 @@ export default function AdminAOsModal({
       logoUrl: ao?.logoUrl ?? null,
       website: ao?.website ?? null,
       email: ao?.email ?? null,
+      phone: ao?.phone ?? null,
       twitter: ao?.twitter ?? null,
       facebook: ao?.facebook ?? null,
       instagram: ao?.instagram ?? null,
@@ -108,6 +109,7 @@ export default function AdminAOsModal({
       logoUrl: ao?.logoUrl ?? null,
       website: ao?.website ?? null,
       email: ao?.email ?? null,
+      phone: ao?.phone ?? null,
       twitter: ao?.twitter ?? null,
       facebook: ao?.facebook ?? null,
       instagram: ao?.instagram ?? null,
@@ -295,6 +297,26 @@ export default function AdminAOsModal({
                       <FormControl>
                         <Input
                           placeholder="Email"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="mb-4 w-full px-2 sm:w-1/2">
+                <FormField
+                  control={form.control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Phone</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="Phone"
+                          type="tel"
                           {...field}
                           value={field.value ?? ""}
                         />

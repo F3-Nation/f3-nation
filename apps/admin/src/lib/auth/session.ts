@@ -1,4 +1,4 @@
-export type AdminRoleName = "admin" | "editor" | "user";
+type AdminRoleName = "admin" | "editor" | "user";
 
 export interface AdminSessionRole {
   roleId?: number;

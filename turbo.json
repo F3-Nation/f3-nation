@@ -4,6 +4,7 @@
   "globalEnv": [
     "CI",
     "NODE_ENV",
+    "LOG_LEVEL",
     "SKIP_ENV_VALIDATION",
     "SKIP_SSG",
     "DATABASE_URL",
@@ -23,8 +24,12 @@
     "AUTH_REDIRECT_PROXY_URL",
     "AUTH_SECRET",
     "OAUTH_CLIENT_ID",
+    "OAUTH_CLIENT_SECRET",
+    "OAUTH_REDIRECT_URI",
     "F3_ADMIN_BASE_URL",
     "F3_API_BASE_URL",
+    "F3_ADMIN_URL",
+    "F3_MAP_API_KEY",
     "F3_API_TIMEOUT_MS",
     "F3_CHANNEL",
     "F3_GOOGLE_API_KEY",
@@ -41,7 +46,8 @@
     "NEXT_PUBLIC_CHANNEL",
     "GCS_BUCKET",
     "GCS_CREDENTIALS",
-    "GCS_EMULATOR_HOST"
+    "GCS_EMULATOR_HOST",
+    "NODE_TLS_REJECT_UNAUTHORIZED"
   ],
   "tasks": {
     "topo": {
