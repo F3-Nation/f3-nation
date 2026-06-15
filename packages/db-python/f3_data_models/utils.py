@@ -375,20 +375,3 @@ class DbManager:
             return records
 
 
-def create_diagram():
-    from pydot import Dot
-    from sqlalchemy_schemadisplay import create_schema_graph
-
-    graph: Dot = create_schema_graph(
-        engine=get_engine(),
-        metadata=Base.metadata,
-        show_datatypes=True,
-        show_indexes=True,
-        rankdir="LR",
-        show_column_keys=True,
-    )
-    graph.write_png("docs/_static/schema_diagram.png")
-
-
-if __name__ == "__main__":
-    create_diagram()
