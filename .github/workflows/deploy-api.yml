@@ -29,6 +29,5 @@ jobs:
       dockerfile: apps/api/Dockerfile
       staging_environment: api-staging
       prod_environment: api-production
-      # TODO: Update these URLs to the URLs of the staging and production services when domains are set up
       staging_url: https://staging.api.f3nation.com
       prod_url: https://api.f3nation.com

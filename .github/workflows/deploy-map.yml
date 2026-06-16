@@ -29,6 +29,5 @@ jobs:
       dockerfile: apps/map/Dockerfile
       staging_environment: map-staging
       prod_environment: map-production
-      # TODO: Update these URLs to the URLs of the staging and production services when domains are set up
       staging_url: https://staging.map.f3nation.com
       prod_url: https://map.f3nation.com
