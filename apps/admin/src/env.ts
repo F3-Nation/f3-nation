@@ -6,13 +6,12 @@ export const env = createEnv({
     NODE_ENV: z
       .enum(["development", "production", "test"])
       .default("development"),
-    VERCEL_ENV: z.enum(["development", "preview", "production"]).optional(),
   },
   server: {
     F3_CHANNEL: z.enum(["local", "ci", "branch", "dev", "staging", "prod"]),
-    F3_MAP_BASE_URL: z.string().min(1),
-    F3_API_BASE_URL: z.string().min(1),
-    F3_ADMIN_BASE_URL: z.string().min(1),
+    F3_MAP_BASE_URL: z.string().url(),
+    F3_API_BASE_URL: z.string().url(),
+    F3_ADMIN_BASE_URL: z.string().url(),
     F3_GOOGLE_API_KEY: z.string().min(1),
     // F3 SSO OAuth — http://localhost allowed; https enforced in code/prod.
     AUTH_PROVIDER_URL: z.string().url(),
@@ -25,7 +24,6 @@ export const env = createEnv({
   // need destructuring; server vars resolve from process.env automatically.
   experimental__runtimeEnv: {
     NODE_ENV: process.env.NODE_ENV,
-    VERCEL_ENV: process.env.VERCEL_ENV,
   },
   skipValidation:
     !!process.env.CI ||
