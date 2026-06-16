@@ -3,7 +3,7 @@ import type { UserRole } from "@acme/shared/app/enums";
 import { aliasedTable, eq, schema } from "@acme/db";
 import type { Context } from "./shared";
 
-const LOG = false as boolean;
+import { logDebug } from "./logger";
 
 export const checkHasRoleOnOrg = async ({
   session,
@@ -30,15 +30,12 @@ export const checkHasRoleOnOrg = async ({
     };
   }
 
-  if (LOG)
-    console.log(
-      "Checking if user has role on org",
-      session.id,
-      orgId,
-      roleName,
-      "roles",
-      session.roles,
-    );
+  logDebug("api.role_check.checking", {
+    userId: session.id,
+    orgId,
+    roleName,
+    roles: session.roles,
+  });
 
   const hasDirectAccessForThisOrg = session.roles?.some(
     (r) =>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+import { logError } from "~/lib/logging";
 import { sendEmailCode, verifyEmailCode } from "~/lib/email-mfa";
 import { rateLimit } from "~/lib/rate-limit";
 import { env } from "~/env";
@@ -47,12 +48,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ sent: true });
     } catch (err: unknown) {
       // Log the real error for GCP observability
-      console.error(
-        JSON.stringify({
-          error: err instanceof Error ? err.message : "Unknown error",
-          stack: err instanceof Error ? err.stack : undefined,
-        }),
-      );
+      logError("auth.verify_email.send_failed", {}, err);
       // Return a generic message to avoid leaking internal details
       return NextResponse.json(
         {

@@ -28,6 +28,7 @@ import { EventInsertSchema } from "@acme/validators";
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
+import { logError } from "../logger";
 import { notifyMapDataChange } from "../lib/webhook-events";
 import type { Context } from "../shared";
 import { editorProcedure, protectedProcedure } from "../shared";
@@ -837,7 +838,7 @@ export const eventRouter = {
             await import("../lib/first-event-service");
           void maybeNotifyFirstEventForRegion(ctx.db, result.orgId).catch(
             (err: unknown) =>
-              console.error("maybeNotifyFirstEventForRegion failed", { err }),
+              logError("api.event.first_event_notify_failed", {}, err),
           );
         } else if (existingEvent.dayOfWeek) {
           // Existing series: check for structural changes

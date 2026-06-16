@@ -30,15 +30,16 @@ vi.mock("@acme/mail", async (importOriginal) => {
   };
 });
 
+vi.mock("../logger", () => ({
+  logError: vi.fn(),
+  logWarn: vi.fn(),
+  logInfo: vi.fn(),
+  logDebug: vi.fn(),
+}));
+
 import { eq, schema } from "@acme/db";
-import {
-  afterAll,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi as vitest,
-} from "vitest";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { logDebug, logWarn } from "../logger";
 import { db, getOrCreateF3NationOrg, uniqueId } from "../__tests__/test-utils";
 import { maybeNotifyFirstEventForRegion } from "./first-event-service";
 
@@ -134,10 +135,6 @@ describe("First Event Service", () => {
 
   describe("maybeNotifyFirstEventForRegion", () => {
     it("sets flag and logs when first event is created for a region", async () => {
-      const debugSpy = vitest
-        .spyOn(console, "debug")
-        .mockImplementation(() => undefined);
-
       const region = await createTestRegion();
       const ao = await createTestAO(region.id);
       await createTestEvent(ao.id);
@@ -154,11 +151,10 @@ describe("First Event Service", () => {
           ?.firstEventNotificationSent,
       ).toBe(true);
 
-      expect(debugSpy).toHaveBeenCalledWith(
-        expect.stringContaining(region.name),
+      expect(logDebug).toHaveBeenCalledWith(
+        "api.first_event.email_sent",
+        expect.objectContaining({ regionName: region.name }),
       );
-
-      debugSpy.mockRestore();
     });
 
     it("sends notification even when multiple events exist, as long as flag is not set", async () => {
@@ -205,10 +201,6 @@ describe("First Event Service", () => {
     });
 
     it("skips when the flag is already set on the region (deduplication)", async () => {
-      const debugSpy = vitest
-        .spyOn(console, "debug")
-        .mockImplementation(() => undefined);
-
       // Region already has the flag set from a prior notification
       const region = await createTestRegion({
         meta: { firstEventNotificationSent: true },
@@ -218,27 +210,23 @@ describe("First Event Service", () => {
 
       // eslint-disable-next-line @typescript-eslint/unbound-method
       const mailMock = (await import("@acme/mail")).mail
-        .sendTemplateMessages as ReturnType<typeof vitest.fn>;
+        .sendTemplateMessages as ReturnType<typeof vi.fn>;
 
       await maybeNotifyFirstEventForRegion(db, ao.id);
 
-      // A "already notified" debug message should appear
-      const skippedLogs = debugSpy.mock.calls.filter((args) =>
-        String(args[0]).includes("already notified"),
+      // An "already notified" debug message should appear
+      const skippedLogs = (
+        logDebug as ReturnType<typeof vi.fn>
+      ).mock.calls.filter(
+        (args) => args[0] === "api.first_event.already_notified",
       );
       expect(skippedLogs.length).toBeGreaterThan(0);
 
       // Mail should not be called since we skip early
       expect(mailMock).not.toHaveBeenCalled();
-
-      debugSpy.mockRestore();
     });
 
     it("defers notification (leaves flag unset) when region has no contact email and no admins", async () => {
-      const warnSpy = vitest
-        .spyOn(console, "warn")
-        .mockImplementation(() => undefined);
-
       // Region with no contact email and no admin users assigned
       const region = await createTestRegion({ email: null });
       const ao = await createTestAO(region.id);
@@ -246,7 +234,7 @@ describe("First Event Service", () => {
 
       // eslint-disable-next-line @typescript-eslint/unbound-method
       const mailMock = (await import("@acme/mail")).mail
-        .sendTemplateMessages as ReturnType<typeof vitest.fn>;
+        .sendTemplateMessages as ReturnType<typeof vi.fn>;
 
       await maybeNotifyFirstEventForRegion(db, ao.id);
 
@@ -264,12 +252,10 @@ describe("First Event Service", () => {
       expect(mailMock).not.toHaveBeenCalled();
 
       // A deferral warning should have been logged.
-      const warnCalls = warnSpy.mock.calls.filter((args) =>
-        String(args[0]).includes(region.name),
+      expect(logWarn).toHaveBeenCalledWith(
+        "api.first_event.no_recipients",
+        expect.objectContaining({ regionName: region.name }),
       );
-      expect(warnCalls.length).toBeGreaterThan(0);
-
-      warnSpy.mockRestore();
     });
 
     it("handles an AO with no parent gracefully without throwing", async () => {
