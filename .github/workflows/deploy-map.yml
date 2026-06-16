@@ -30,5 +30,5 @@ jobs:
       staging_environment: map-staging
       prod_environment: map-production
       # TODO: Update these URLs to the URLs of the staging and production services when domains are set up
-      staging_url: https://f3-map-1054072148233.us-east1.run.app
-      prod_url: https://f3-map-836482382930.us-east1.run.app
+      staging_url: https://staging.map.f3nation.com
+      prod_url: https://map.f3nation.com
