@@ -14,7 +14,7 @@ Fill these in and paste the whole block into your terminal. Every subsequent com
 # ── App identity ─────────────────────────────────────────────────────────────
 APP_NAME="me"                            # short identifier: me | map | api | auth | admin
 CLOUDRUN_SERVICE="f3-me"                 # Cloud Run service name (usually f3-$APP_NAME)
-GCP_REGION="us-east1"                   # GCP region for Cloud Run and Artifact Registry
+GCP_REGION="us-central1"                 # GCP region for Cloud Run and Artifact Registry
 
 # ── GCP projects ─────────────────────────────────────────────────────────────
 GCP_STAGING_PROJECT="f3-me-app-staging"  # staging GCP project ID

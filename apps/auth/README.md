@@ -553,13 +553,13 @@ Each project gets its own Artifact Registry. The build pushes to staging; the de
 # Staging
 gcloud artifacts repositories create cloud-run-builds \
   --repository-format=docker \
-  --location=us-east1 \
+  --location=us-central1 \
   --project=f3-authentication-staging
 
 # Production
 gcloud artifacts repositories create cloud-run-builds \
   --repository-format=docker \
-  --location=us-east1 \
+  --location=us-central1 \
   --project=f3-authentication
 ```
 
@@ -571,7 +571,7 @@ gcloud artifacts repositories create cloud-run-builds \
 # Staging
 gcloud run deploy f3-auth \
   --image=us-docker.pkg.dev/cloudrun/container/hello \
-  --region=us-east1 \
+  --region=us-central1 \
   --project=f3-authentication-staging \
   --add-cloudsql-instances=f3data:us-central1:f3data-nonprod \
   --allow-unauthenticated
@@ -579,7 +579,7 @@ gcloud run deploy f3-auth \
 # Production
 gcloud run deploy f3-auth \
   --image=us-docker.pkg.dev/cloudrun/container/hello \
-  --region=us-east1 \
+  --region=us-central1 \
   --project=f3-authentication \
   --add-cloudsql-instances=f3data:us-central1:f3data \
   --allow-unauthenticated
@@ -703,13 +703,13 @@ bash apps/auth/scripts/cloud-run-env.sh --env prod
 gcloud run domain-mappings create \
   --service=f3-auth \
   --domain=staging.auth.f3nation.com \
-  --region=us-east1 \
+  --region=us-central1 \
   --project=f3-authentication-staging
 
 gcloud run domain-mappings create \
   --service=f3-auth \
   --domain=auth.f3nation.com \
-  --region=us-east1 \
+  --region=us-central1 \
   --project=f3-authentication
 ```
 
@@ -723,12 +723,12 @@ Get the service accounts Cloud Run is using. You will need to use the output to 
 
 ```bash
 gcloud run services describe f3-auth \
-  --region=us-east1 \
+  --region=us-central1 \
   --project=f3-authentication-staging \
   --format="value(spec.template.spec.serviceAccountName)"
 
 gcloud run services describe f3-auth \
-  --region=us-east1 \
+  --region=us-central1 \
   --project=f3-authentication \
   --format="value(spec.template.spec.serviceAccountName)"
 ```
@@ -779,7 +779,7 @@ Triggered by tags matching `auth@*` (e.g. `auth@1.0.0`).
 - GCP Workload Identity Federation for keyless auth (shared `WIF_PROVIDER`, per-app `WIF_SA_AUTH_*` variables)
 - GCP project IDs hardcoded in workflow `env:` block (no GitHub variables needed)
 - Artifact Registry for container images
-- Cloud Run (us-east1) for compute
+- Cloud Run (us-central1) for compute
 - GCP Secret Manager for secrets (see `scripts/cloud-run-env.sh`)
 
 ### GCP Secret Management
