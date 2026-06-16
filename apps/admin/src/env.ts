@@ -9,9 +9,9 @@ export const env = createEnv({
   },
   server: {
     F3_CHANNEL: z.enum(["local", "ci", "branch", "dev", "staging", "prod"]),
-    F3_MAP_BASE_URL: z.string().min(1),
-    F3_API_BASE_URL: z.string().min(1),
-    F3_ADMIN_BASE_URL: z.string().min(1),
+    F3_MAP_BASE_URL: z.string().url(),
+    F3_API_BASE_URL: z.string().url(),
+    F3_ADMIN_BASE_URL: z.string().url(),
     F3_GOOGLE_API_KEY: z.string().min(1),
     // F3 SSO OAuth — http://localhost allowed; https enforced in code/prod.
     AUTH_PROVIDER_URL: z.string().url(),

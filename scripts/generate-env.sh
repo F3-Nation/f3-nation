@@ -155,6 +155,11 @@ F3_API_BASE_URL=http://localhost:3001
 F3_MAP_BASE_URL=http://localhost:3000
 F3_CHANNEL=local
 
+# F3_MAP_API_KEY authenticates in-process router calls during static generation
+# (\`next build\`/SSG). Optional in dev, but required for builds. Must match a key
+# in the local DB — \`pnpm db:seed:local\` inserts "local-map-key".
+F3_MAP_API_KEY=local-map-key
+
 # -- Google Maps API key (from GCP Secret Manager) --
 # In production, this key is set via Cloud Run environment configuration.
 # GCP Secret Manager stores the canonical value so this script can pull it
