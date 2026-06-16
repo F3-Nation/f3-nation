@@ -67,7 +67,7 @@ Pull secrets manually and map them to env vars. The canonical mapping is:
 | `api-key`                         | `API_KEY`                             |                                                                           |
 | `super-admin-api-key`             | `SUPER_ADMIN_API_KEY`                 |                                                                           |
 | `sendgrid-api-key`                | `EMAIL_SERVER`                        | SMTP connection string (e.g. `smtp://apikey:<key>@smtp.sendgrid.net:587`) |
-| `google-maps-api-key`             | `NEXT_PUBLIC_GOOGLE_API_KEY`          | Google Maps JS API key; required by map + api apps.                       |
+| `google-maps-api-key`             | `NEXT_PUBLIC_GOOGLE_API_KEY`          | Google Maps JS API key; required by map + api + admin apps.               |
 | _(set manually)_                  | `EMAIL_FROM`                          | Sender address (e.g. `noreply@f3nation.com`)                              |
 | _(set manually)_                  | `EMAIL_ADMIN_DESTINATIONS`            | Comma-separated admin email addresses                                     |
 | `google-logo-bucket-private-key`  | `GOOGLE_LOGO_BUCKET_PRIVATE_KEY`      | GCS service account private key                                           |

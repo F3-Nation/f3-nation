@@ -30,17 +30,13 @@ import { KeyPressProvider } from "~/utils/key-press/provider";
 import { RouteChangeTracker } from "./_components/route-change-tracker";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(
-    env.F3_CHANNEL === "prod"
-      ? "https://map.f3nation.com"
-      : "http://localhost:3000",
-  ),
+  metadataBase: new URL(env.F3_MAP_BASE_URL),
   title: "F3 Nation Map",
   description: "Find F3 locations near you",
   openGraph: {
     title: "F3 Nation Map",
     description: "Find F3 locations near you",
-    url: "https://map.f3nation.com",
+    url: new URL(env.F3_MAP_BASE_URL),
     siteName: "F3 Nation Map",
   },
 };

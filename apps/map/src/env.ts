@@ -28,6 +28,7 @@ export const env = createEnv({
         (val) => process.env.NODE_ENV === "development" || val !== undefined,
         { message: "Required in non-development environments" },
       ),
+    F3_MAP_BASE_URL: z.string().url(),
     GCS_EMULATOR_HOST: z.string().optional(),
     GOOGLE_LOGO_BUCKET_BUCKET_NAME: z.string().min(1),
     GOOGLE_LOGO_BUCKET_CLIENT_EMAIL: z.string().min(1),
