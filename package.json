@@ -31,7 +31,6 @@
     "docker:down": "docker compose -f docker-compose.yml down",
     "docker:up": "docker compose -f docker-compose.yml up -d",
     "docker:up:logs": "docker compose -f docker-compose.yml up",
-    "doppler": "pnpm exec ./tooling/scripts/doppler.sh",
     "env:delete": "bash scripts/delete-env-files.sh",
     "env:generate:dry-run": "bash scripts/generate-env.sh --dry-run",
     "env:generate": "bash scripts/generate-env.sh",
