@@ -1,3 +1,4 @@
+import { coverageExclude } from "@acme/vitest-config";
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import path from "path";
@@ -12,12 +13,15 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "json", "html"],
       reportsDirectory: "./coverage",
+      // Exclude non-testable bootstrap/config files so they don't sit in the
+      // coverage denominator at 0% and break the autoUpdate thresholds on edit.
+      exclude: coverageExclude,
       thresholds: {
         autoUpdate: true,
-        statements: 24.37,
-        branches: 79.66,
-        functions: 46.91,
-        lines: 24.37,
+        statements: 25.68,
+        branches: 82.81,
+        functions: 47.88,
+        lines: 25.68,
       },
     },
     setupFiles: ["./vitest.setup.ts"],

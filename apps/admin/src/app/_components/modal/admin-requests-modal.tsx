@@ -2,7 +2,6 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { v4 as uuid } from "uuid";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
 import {
@@ -56,7 +55,7 @@ export default function AdminRequestsModal({
   );
   const request = requestResponse?.request;
   const form = useUpdateLocationForm({
-    defaultValues: { id: request?.id ?? uuid() },
+    defaultValues: { id: request?.id ?? crypto.randomUUID() },
   });
 
   const formId = form.watch("id");
