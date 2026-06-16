@@ -38,7 +38,6 @@
       "matchPackageNames": [
         "next",
         "next-auth",
-        "next-plausible",
         "next-themes",
         "@sentry/nextjs",
         "@scalar/nextjs-api-reference",
@@ -49,7 +48,12 @@
       "description": "Group React core packages",
       "groupName": "React",
       "matchDepTypes": ["pnpm.catalog.default"],
-      "matchPackageNames": ["react", "react-dom", "@types/react", "@types/react-dom"]
+      "matchPackageNames": [
+        "react",
+        "react-dom",
+        "@types/react",
+        "@types/react-dom"
+      ]
     },
     {
       "description": "Group all @radix-ui/* packages",

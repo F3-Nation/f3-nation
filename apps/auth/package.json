@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@acme/db": "workspace:*",
+    "@acme/logger": "workspace:*",
     "@acme/shared": "workspace:*",
     "@auth/core": "catalog:",
     "@t3-oss/env-nextjs": "catalog:",
@@ -25,7 +26,6 @@
     "libphonenumber-js": "catalog:",
     "next": "catalog:",
     "next-auth": "catalog:",
-    "next-themes": "catalog:",
     "nodemailer": "catalog:",
     "pg": "catalog:",
     "postgres": "catalog:",

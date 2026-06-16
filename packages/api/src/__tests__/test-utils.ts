@@ -131,6 +131,29 @@ export const createEditorSession = (params: {
 };
 
 /**
+ * Creates a mock session for a regular user with no org roles
+ */
+export const createUserSession = (params: {
+  userId: number;
+  email: string;
+  f3Name?: string;
+}): Session => {
+  const email = params.email;
+  return {
+    id: params.userId,
+    email,
+    user: {
+      id: String(params.userId),
+      email,
+      name: params.f3Name ?? "Test User",
+      roles: [],
+    },
+    roles: [],
+    expires: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
+  };
+};
+
+/**
  * Creates a session with no permissions (for testing unauthorized access)
  */
 export const createNoPermissionSession = (): Session => {

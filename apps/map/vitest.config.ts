@@ -1,3 +1,4 @@
+import { coverageExclude } from "@acme/vitest-config";
 import react from "@vitejs/plugin-react";
 import tsconfigPaths from "vite-tsconfig-paths";
 import { defineConfig } from "vitest/config";
@@ -13,6 +14,9 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "json", "html"],
       reportsDirectory: "./coverage",
+      // Exclude non-testable bootstrap/config files (defensive; map uses static
+      // thresholds, so this only keeps the denominator consistent with other apps).
+      exclude: coverageExclude,
       thresholds: {
         autoUpdate: false,
         statements: 1.8,

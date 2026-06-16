@@ -4,6 +4,7 @@
   "globalEnv": [
     "CI",
     "NODE_ENV",
+    "LOG_LEVEL",
     "SKIP_ENV_VALIDATION",
     "SKIP_SSG",
     "DATABASE_URL",
