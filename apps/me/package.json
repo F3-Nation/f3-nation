@@ -52,6 +52,7 @@
     "tailwindcss": "catalog:",
     "tailwindcss-animate": "catalog:",
     "typescript": "catalog:",
+    "vite": "catalog:",
     "vitest": "catalog:"
   }
 }

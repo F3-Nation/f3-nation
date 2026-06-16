@@ -1,4 +1,4 @@
-import { coverageExclude } from "@acme/vitest-config";
+import { coverageExclude, coverageInclude } from "@acme/vitest-config";
 import react from "@vitejs/plugin-react";
 import tsconfigPaths from "vite-tsconfig-paths";
 import { defineConfig } from "vitest/config";
@@ -14,14 +14,20 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "json", "html"],
       reportsDirectory: "./coverage",
-      // Exclude non-testable bootstrap/config files (defensive; map uses static
-      // thresholds, so this only keeps the denominator consistent with other apps).
+      // Measure all of src (Vitest 4 otherwise only counts imported files), minus
+      // non-testable bootstrap/config files (defensive; map uses static thresholds,
+      // so this only keeps the denominator consistent with other apps).
+      include: coverageInclude,
       exclude: coverageExclude,
       thresholds: {
         autoUpdate: false,
         statements: 1.8,
-        branches: 27.23,
-        functions: 17.15,
+        // Vitest 4's AST-aware v8 remapping counts branches/functions more
+        // granularly, so whole-src branch/function coverage measures lower than
+        // under v3. Floors lowered to sit just under the v4 baseline (branches
+        // ~4.4%, functions ~7.7%) while still guarding against regressions.
+        branches: 4,
+        functions: 7,
         lines: 1.8,
       },
     },

@@ -12,9 +12,9 @@ import { vi } from "vitest";
 const mockLimit = vi.hoisted(() => vi.fn());
 
 vi.mock("@orpc/experimental-ratelimit/memory", () => ({
-  MemoryRatelimiter: vi.fn().mockImplementation(() => ({
-    limit: mockLimit,
-  })),
+  MemoryRatelimiter: vi.fn(function () {
+    return { limit: mockLimit };
+  }),
 }));
 
 import { and, eq, inArray, schema } from "@acme/db";

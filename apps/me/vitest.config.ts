@@ -1,4 +1,4 @@
-import { coverageExclude } from "@acme/vitest-config";
+import { coverageExclude, coverageInclude } from "@acme/vitest-config";
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import path from "path";
@@ -13,15 +13,17 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "json", "html"],
       reportsDirectory: "./coverage",
-      // Exclude non-testable bootstrap/config files so they don't sit in the
-      // coverage denominator at 0% and break the autoUpdate thresholds on edit.
+      // Measure all of src (Vitest 4 otherwise only counts imported files), minus
+      // non-testable bootstrap/config files that would sit in the denominator at 0%
+      // and break the autoUpdate thresholds on edit.
+      include: coverageInclude,
       exclude: coverageExclude,
       thresholds: {
         autoUpdate: true,
-        statements: 25.68,
-        branches: 82.81,
-        functions: 47.88,
-        lines: 25.68,
+        statements: 31.17,
+        branches: 34.83,
+        functions: 17.07,
+        lines: 32,
       },
     },
     setupFiles: ["./vitest.setup.ts"],

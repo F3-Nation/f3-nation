@@ -83,6 +83,7 @@
     "prettier": "catalog:",
     "tailwindcss": "catalog:",
     "typescript": "catalog:",
+    "vite": "catalog:",
     "vite-tsconfig-paths": "catalog:",
     "vitest": "catalog:",
     "vitest-canvas-mock": "catalog:"

@@ -17,9 +17,9 @@ import { vi } from "vitest";
 const mockLimit = vi.hoisted(() => vi.fn());
 
 vi.mock("@orpc/experimental-ratelimit/memory", () => ({
-  MemoryRatelimiter: vi.fn().mockImplementation(() => ({
-    limit: mockLimit,
-  })),
+  MemoryRatelimiter: vi.fn(function () {
+    return { limit: mockLimit };
+  }),
 }));
 
 import type { Session } from "@acme/auth";
