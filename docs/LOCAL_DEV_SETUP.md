@@ -216,13 +216,13 @@ This applies all pending Drizzle migrations. On first setup you may need to run 
 
 Other useful database commands:
 
-| Command            | Description                                  |
-| ------------------ | -------------------------------------------- |
-| `pnpm db:migrate`  | Apply pending migrations                     |
-| `pnpm db:generate` | Generate a new migration from schema changes |
-| `pnpm db:studio`   | Open Drizzle Studio (DB browser)             |
-| `pnpm db:seed`     | Seed the database with test data             |
-| `pnpm db:reset`    | Reset the database (destructive!)            |
+| Command              | Description                                            |
+| -------------------- | ------------------------------------------------------ |
+| `pnpm db:migrate`    | Apply pending migrations                               |
+| `pnpm db:generate`   | Generate a new migration from schema changes           |
+| `pnpm db:studio`     | Open Drizzle Studio (DB browser)                       |
+| `pnpm db:seed:local` | Seed the local database with dev data (safe to re-run) |
+| `pnpm db:reset`      | Reset the database (destructive!)                      |
 
 ## 6. Start dev servers
 

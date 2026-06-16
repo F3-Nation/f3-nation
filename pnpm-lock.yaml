@@ -18,9 +18,6 @@ catalogs:
     '@commitlint/cz-commitlint':
       specifier: ^21.0.2
       version: 21.0.2
-    '@faker-js/faker':
-      specifier: ^10.4.0
-      version: 10.4.0
     '@google-cloud/storage':
       specifier: ^7.19.0
       version: 7.19.0
@@ -1533,9 +1530,6 @@ importers:
       '@acme/tsconfig':
         specifier: workspace:^0.1.0
         version: link:../../tooling/typescript
-      '@faker-js/faker':
-        specifier: 'catalog:'
-        version: 10.4.0
       '@types/lodash':
         specifier: 'catalog:'
         version: 4.17.24
@@ -2883,10 +2877,6 @@ packages:
     peerDependenciesMeta:
       '@noble/hashes':
         optional: true
-
-  '@faker-js/faker@10.4.0':
-    resolution: {integrity: sha512-sDBWI3yLy8EcDzgobvJTWq1MJYzAkQdpjXuPukga9wXonhpMRvd1Izuo2Qgwey2OiEoRIBr35RMU9HJRoOHzpw==}
-    engines: {node: ^20.19.0 || ^22.13.0 || ^23.5.0 || >=24.0.0, npm: '>=10'}
 
   '@floating-ui/core@1.7.5':
     resolution: {integrity: sha512-1Ih4WTWyw0+lKyFMcBHGbb5U5FtuHJuujoyyr5zTaWS5EYMeT6Jb2AuDeftsCsEuchO+mM2ij5+q9crhydzLhQ==}
@@ -10044,8 +10034,6 @@ snapshots:
       levn: 0.4.1
 
   '@exodus/bytes@1.15.1': {}
-
-  '@faker-js/faker@10.4.0': {}
 
   '@floating-ui/core@1.7.5':
     dependencies:
