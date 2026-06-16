@@ -215,7 +215,7 @@ A finding is only real if you can answer all of these from the code:
 - **What is the impact?** Data exposure, data tampering, auth bypass, outage,
   cost, or just tech debt?
 - **Are there compensating controls?** A separate middleware, a guard, an env
-  gate (`isProductionNodeEnv`), or an allow-list might already mitigate it. Check
+  gate (`isProduction`), or an allow-list might already mitigate it. Check
   before filing, and describe them honestly in the issue.
 
 If you previously recorded something as a "verified non-finding," and new
