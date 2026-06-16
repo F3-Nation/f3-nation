@@ -13,7 +13,7 @@ import {
   or,
   schema,
 } from "@acme/db";
-import type { OrgType, UserRole } from "@acme/shared/app/enums";
+import type { OrgType } from "@acme/shared/app/enums";
 import { DayOfWeek } from "@acme/shared/app/enums";
 import { RequestType, UpdateRequestStatus } from "@acme/shared/app/enums";
 import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
@@ -533,33 +533,18 @@ export const requestRouter = {
         "Check if the current user has editor permissions for specified organizations",
     })
     .handler(async ({ context: ctx, input }) => {
-      let results: {
-        success: boolean;
-        mode: "public" | "org-admin" | "direct-permission" | "no-permission";
-        orgId: number | null;
-        roleName: UserRole | null;
-      }[] = [];
-
-      const session = ctx.session;
-      if (!session) {
-        results = input.orgIds.map((orgId) => ({
-          success: false,
-          mode: "public",
-          orgId,
-          roleName: "editor" as const,
-        }));
-      } else {
-        results = await Promise.all(
-          input.orgIds.map((orgId) =>
-            checkHasRoleOnOrg({
-              orgId,
-              session,
-              db: ctx.db,
-              roleName: "editor" as const,
-            }),
-          ),
-        );
-      }
+      // protectedProcedure guarantees an authenticated session, so every result
+      // comes from checkHasRoleOnOrg (modes: direct-permission/org-admin/no-permission).
+      const results = await Promise.all(
+        input.orgIds.map((orgId) =>
+          checkHasRoleOnOrg({
+            orgId,
+            session: ctx.session,
+            db: ctx.db,
+            roleName: "editor" as const,
+          }),
+        ),
+      );
       return { results };
     }),
   submitDeleteRequest: protectedProcedure
