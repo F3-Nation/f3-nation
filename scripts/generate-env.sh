@@ -118,6 +118,12 @@ if [[ -z "${EMAIL_SERVER}" ]]; then
   exit 1
 fi
 
+if [[ -z "${SECRET_GOOGLE_MAPS_API_KEY:-}" ]]; then
+  echo "  ERROR: F3_GOOGLE_API_KEY could not be resolved (google-maps-api-key secret not found)"
+  echo "  The map app requires a non-empty F3_GOOGLE_API_KEY. Set the GCP secret and re-run."
+  exit 1
+fi
+
 SUPER_ADMIN_API_KEY="${SECRET_API_KEY:-}"
 
 # --- Generate .env content ----------------------------------------------------
