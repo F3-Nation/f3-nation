@@ -248,7 +248,7 @@ See [docs/GCP_APP_SETUP.md](../../docs/GCP_APP_SETUP.md) for the full generalize
 ```bash
 APP_NAME="me"
 CLOUDRUN_SERVICE="f3-me"
-GCP_REGION="us-east1"
+GCP_REGION="us-central1"
 GCP_STAGING_PROJECT="f3-me-app-staging"
 GCP_PROD_PROJECT="f3-me-app"
 STAGING_DOMAIN="staging.me.f3nation.com"
