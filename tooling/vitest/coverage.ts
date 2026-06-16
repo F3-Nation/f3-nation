@@ -12,9 +12,9 @@ export const bootstrapCoverageExclude = [
   "**/next.config.{js,ts,mjs}",
   "**/instrumentation.ts",
   "**/instrumentation-client.ts",
-  "**/tailwind.config.ts",
-  "**/postcss.config.{cjs,mjs}",
-  "**/middleware.ts",
+  "**/tailwind.config.{js,ts,cjs,mjs}",
+  "**/postcss.config.{js,ts,cjs,mjs}",
+  "**/middleware.{js,ts}",
 ];
 
 /**
