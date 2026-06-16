@@ -1948,10 +1948,6 @@ importers:
         version: 5.0.0-beta.30(next@15.5.18(@opentelemetry/api@1.9.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(nodemailer@8.0.10)(react@18.3.1)
 
   tooling/vitest:
-    dependencies:
-      vitest:
-        specifier: 'catalog:'
-        version: 3.2.6(@types/node@25.9.2)(jsdom@29.1.1)(terser@5.48.0)
     devDependencies:
       '@acme/eslint-config':
         specifier: workspace:^0.2.0
@@ -1971,6 +1967,9 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 3.2.6(@types/node@25.9.2)(jsdom@29.1.1)(terser@5.48.0)
 
 packages:
 
