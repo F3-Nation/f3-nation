@@ -32,8 +32,6 @@ export const LocationEventForm = ({
   const formRegionId = form.watch("regionId");
   const formLocationId = form.watch("locationId");
   const formAoId = form.watch("aoId");
-  console.log("form eventTypeIds", form.getValues().eventTypeIds);
-
   // Get form values
   const { data: regionsResponse } = useQuery(
     orpc.map.location.regions.queryOptions(),
@@ -150,7 +148,6 @@ export const LocationEventForm = ({
             control={form.control}
             name="eventTypeIds"
             render={({ field, fieldState }) => {
-              console.log("eventTypes", eventTypes, field.value);
               return (
                 <div>
                   <MultiSelect

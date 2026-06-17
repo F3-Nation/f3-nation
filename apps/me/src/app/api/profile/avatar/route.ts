@@ -24,7 +24,10 @@ function mapAvatarUploadError(err: unknown): { status: number; error: string } {
     };
   }
 
-  if (lower.includes("gcs_credentials is not set")) {
+  if (
+    lower.includes("invalid gcs_credentials payload") ||
+    lower.includes("gcs_credentials is missing required")
+  ) {
     return {
       status: 500,
       error: "Avatar storage is not configured. Set GCS_CREDENTIALS.",

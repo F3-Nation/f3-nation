@@ -76,11 +76,13 @@ describe("uploadOrgLogo (emulator mode)", () => {
   afterEach(() => {
     delete process.env.GCS_EMULATOR_HOST;
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("uploads to prod bucket and returns canonical URL", async () => {
-    globalThis.fetch = vi.fn(() =>
-      Promise.resolve(new Response("{}", { status: 200 })),
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(new Response("{}", { status: 200 }))),
     );
 
     const storage = createPublicImageStorage({
@@ -94,8 +96,9 @@ describe("uploadOrgLogo (emulator mode)", () => {
   });
 
   it("uploads to staging bucket and returns canonical URL", async () => {
-    globalThis.fetch = vi.fn(() =>
-      Promise.resolve(new Response("{}", { status: 200 })),
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(new Response("{}", { status: 200 }))),
     );
 
     const storage = createPublicImageStorage({
@@ -109,8 +112,11 @@ describe("uploadOrgLogo (emulator mode)", () => {
   });
 
   it("throws when emulator returns non-2xx", async () => {
-    globalThis.fetch = vi.fn(() =>
-      Promise.resolve(new Response("bucket not found", { status: 404 })),
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(new Response("bucket not found", { status: 404 })),
+      ),
     );
 
     const storage = createPublicImageStorage({
@@ -131,6 +137,7 @@ describe("uploadOrgLogo (production mode)", () => {
   afterEach(() => {
     delete process.env.GCS_EMULATOR_HOST;
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("throws when credentials JSON is missing required fields", async () => {
@@ -159,20 +166,24 @@ describe("uploadUserAvatar (emulator mode)", () => {
   afterEach(() => {
     delete process.env.GCS_EMULATOR_HOST;
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("uploads to correct path and returns canonical URL", async () => {
     const requestedUrls: string[] = [];
-    globalThis.fetch = vi.fn((input: RequestInfo | URL) => {
-      requestedUrls.push(
-        typeof input === "string"
-          ? input
-          : input instanceof URL
-            ? input.href
-            : input.url,
-      );
-      return Promise.resolve(new Response("{}", { status: 200 }));
-    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        requestedUrls.push(
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.href
+              : input.url,
+        );
+        return Promise.resolve(new Response("{}", { status: 200 }));
+      }),
+    );
 
     const storage = createPublicImageStorage({
       channel: "staging",
@@ -199,11 +210,13 @@ describe("deleteOrgLogo (emulator mode)", () => {
   afterEach(() => {
     delete process.env.GCS_EMULATOR_HOST;
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("does not throw when emulator returns 404", async () => {
-    globalThis.fetch = vi.fn(() =>
-      Promise.resolve(new Response(null, { status: 404 })),
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(new Response(null, { status: 404 }))),
     );
 
     const storage = createPublicImageStorage({
@@ -214,8 +227,11 @@ describe("deleteOrgLogo (emulator mode)", () => {
   });
 
   it("throws when emulator returns non-404 error", async () => {
-    globalThis.fetch = vi.fn(() =>
-      Promise.resolve(new Response("internal error", { status: 500 })),
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(new Response("internal error", { status: 500 })),
+      ),
     );
 
     const storage = createPublicImageStorage({
@@ -240,11 +256,13 @@ describe("deleteUserAvatar (emulator mode)", () => {
   afterEach(() => {
     delete process.env.GCS_EMULATOR_HOST;
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("resolves on 200", async () => {
-    globalThis.fetch = vi.fn(() =>
-      Promise.resolve(new Response(null, { status: 200 })),
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(new Response(null, { status: 200 }))),
     );
 
     const storage = createPublicImageStorage({
@@ -256,16 +274,19 @@ describe("deleteUserAvatar (emulator mode)", () => {
 
   it("uses correct path in delete request", async () => {
     const requestedUrls: string[] = [];
-    globalThis.fetch = vi.fn((input: RequestInfo | URL) => {
-      requestedUrls.push(
-        typeof input === "string"
-          ? input
-          : input instanceof URL
-            ? input.href
-            : input.url,
-      );
-      return Promise.resolve(new Response(null, { status: 200 }));
-    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        requestedUrls.push(
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.href
+              : input.url,
+        );
+        return Promise.resolve(new Response(null, { status: 200 }));
+      }),
+    );
 
     const storage = createPublicImageStorage({
       channel: "prod",
