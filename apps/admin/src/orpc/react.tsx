@@ -5,7 +5,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { QueryClientProvider } from "@tanstack/react-query";
 import React, { Suspense, useEffect, useState } from "react";
 
-import { isDevelopmentNodeEnv } from "@acme/shared/common/constants";
+import { isDevelopment } from "@acme/shared/common/constants";
 
 import { createQueryClient } from "~/orpc/query-client";
 import { client } from "./client";
@@ -29,7 +29,7 @@ const ReactQueryDevtoolsProduction = React.lazy(() =>
 
 export function OrpcReactProvider(props: { children: React.ReactNode }) {
   const queryClient = getQueryClient();
-  const [showDevtools, setShowDevtools] = useState(isDevelopmentNodeEnv);
+  const [showDevtools, setShowDevtools] = useState(isDevelopment);
 
   useEffect(() => {
     // @ts-expect-error -- add toggleDevtools to window
