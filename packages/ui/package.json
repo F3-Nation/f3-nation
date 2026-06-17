@@ -37,15 +37,11 @@
     "@radix-ui/react-slot": "catalog:",
     "@radix-ui/react-switch": "catalog:",
     "@radix-ui/react-tabs": "catalog:",
-    "@radix-ui/react-toast": "catalog:",
     "@radix-ui/react-tooltip": "catalog:",
-    "@tanstack/react-query": "catalog:",
-    "@tanstack/react-query-devtools": "catalog:",
     "@tanstack/react-table": "catalog:",
     "@tanstack/react-virtual": "catalog:",
     "@tanstack/table-core": "catalog:",
     "class-variance-authority": "catalog:",
-    "clsx": "catalog:",
     "cmdk": "catalog:",
     "lodash": "catalog:",
     "lucide-react": "catalog:",
@@ -54,7 +50,6 @@
     "react-hook-form": "catalog:",
     "sonner": "catalog:",
     "tailwind-merge": "catalog:",
-    "tailwindcss-animate": "catalog:",
     "vaul": "catalog:"
   },
   "devDependencies": {

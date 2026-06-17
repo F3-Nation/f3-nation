@@ -6,9 +6,6 @@ export const env = createEnv({
     NODE_ENV: z
       .enum(["development", "production", "test"])
       .default("development"),
-    VERCEL_ENV: z.enum(["development", "preview", "production"]).optional(),
-    // GIT items are provided by the next.config.js
-    NEXT_PUBLIC_GIT_BRANCH: z.string().optional(),
     NEXT_PUBLIC_GA_MEASUREMENT_ID: z.string().optional(),
   },
   /**
@@ -31,6 +28,7 @@ export const env = createEnv({
         (val) => process.env.NODE_ENV === "development" || val !== undefined,
         { message: "Required in non-development environments" },
       ),
+    F3_MAP_BASE_URL: z.string().url(),
     GCS_EMULATOR_HOST: z.string().optional(),
     GOOGLE_LOGO_BUCKET_BUCKET_NAME: z.string().min(1),
     GOOGLE_LOGO_BUCKET_CLIENT_EMAIL: z.string().min(1),
@@ -46,9 +44,7 @@ export const env = createEnv({
    * Destructure all variables from `process.env` to make sure they aren't tree-shaken away.
    */
   experimental__runtimeEnv: {
-    VERCEL_ENV: process.env.VERCEL_ENV,
     NODE_ENV: process.env.NODE_ENV,
-    NEXT_PUBLIC_GIT_BRANCH: process.env.NEXT_PUBLIC_GIT_BRANCH,
     NEXT_PUBLIC_GA_MEASUREMENT_ID: process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID,
   },
   skipValidation:
