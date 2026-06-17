@@ -3,7 +3,9 @@ import { z } from "zod";
 
 export const env = createEnv({
   server: {
-    GCS_BUCKET: z.string().min(1),
+    // Used only by the low-level uploadFile/deleteFile helpers. Apps using
+    // createPublicImageStorage derive the bucket from channel and do not set this.
+    GCS_BUCKET: z.string().min(1).optional(),
     // Base64-encoded service-account JSON. Shape (client_email / private_key)
     // is validated when the client is constructed in ./client. Eager validation
     // here is only skipped for test/CI (not GCS_EMULATOR_HOST), so emulator/local
