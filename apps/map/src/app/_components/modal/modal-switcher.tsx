@@ -18,6 +18,8 @@ import SettingsModal from "./settings-modal";
 import SignInModal from "./sign-in-modal";
 import { CreateAOAndLocationAndEventModal } from "./update/create-ao-and-location-and-event-modal";
 import { CreateEventModal } from "./update/create-event-modal";
+import { DeleteAoModal } from "./update/delete-ao-modal";
+import { DeleteEventModal } from "./update/delete-event-modal";
 import { EditAoAndLocationModal } from "./update/edit-ao-and-location-modal";
 import { EditEventModal } from "./update/edit-event-modal";
 import { MoveAOToDifferentLocationModal } from "./update/move-ao-to-different-location-modal";
@@ -95,6 +97,12 @@ export const ModalSwitcher = () => {
           data={data as DataType[ModalType.MOVE_EVENT_TO_NEW_AO]}
         />
       );
+    case ModalType.DELETE_EVENT:
+      return (
+        <DeleteEventModal data={data as DataType[ModalType.DELETE_EVENT]} />
+      );
+    case ModalType.DELETE_AO:
+      return <DeleteAoModal data={data as DataType[ModalType.DELETE_AO]} />;
     case ModalType.WORKOUT_DETAILS:
       return width >= Number(BreakPoints.LG) ? null : (
         <WorkoutDetailsModal

@@ -131,6 +131,27 @@ const normalizeAdminRequestInput = (input: Record<string, unknown>) => {
     normalized.newRegionId ??= meta.newRegionId ?? normalized.regionId;
   }
 
+  if (normalized.requestType === "move_event_to_new_location") {
+    normalized.originalRegionId ??=
+      meta.originalRegionId ?? normalized.regionId;
+    normalized.originalEventId ??= meta.originalEventId ?? normalized.eventId;
+    normalized.originalLocationId ??=
+      meta.originalLocationId ?? normalized.locationId;
+    normalized.currentValues ??= {};
+  }
+
+  if (normalized.requestType === "delete_event") {
+    normalized.originalRegionId ??=
+      meta.originalRegionId ?? normalized.regionId;
+    normalized.originalEventId ??= meta.originalEventId ?? normalized.eventId;
+  }
+
+  if (normalized.requestType === "delete_ao") {
+    normalized.originalRegionId ??=
+      meta.originalRegionId ?? normalized.regionId;
+    normalized.originalAoId ??= meta.originalAoId ?? normalized.aoId;
+  }
+
   if (usesCurrentValues) {
     normalized.currentValues ??= {};
   }

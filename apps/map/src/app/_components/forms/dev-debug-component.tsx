@@ -1,27 +1,85 @@
 import { useFormContext } from "react-hook-form";
 
+import type { RequestType } from "@acme/shared/app/enums";
 import { Button } from "@acme/ui/button";
 
 interface DevLoadTestDataValues {
   id: string;
+  requestType: RequestType;
+  submittedBy: string;
   eventName: string;
   eventDayOfWeek: string;
-  submittedBy: string;
-  aoLogo: string;
+  eventStartTime: string;
+  eventEndTime: string;
+  eventDescription: string;
+  eventTypeIds: number[];
   aoName: string;
+  aoLogo: string;
+  aoWebsite: string;
   locationAddress: string;
   locationAddress2: string;
   locationCity: string;
   locationState: string;
   locationZip: string;
   locationCountry: string;
-  eventTypeIds: number[];
-  eventStartTime: string;
-  eventEndTime: string;
-  eventDescription: string;
   locationDescription: string;
-  aoWebsite: string;
 }
+
+type FieldGroup = "event" | "ao" | "location";
+
+const FIELD_GROUPS_BY_REQUEST_TYPE: Partial<Record<RequestType, FieldGroup[]>> =
+  {
+    create_ao_and_location_and_event: ["event", "ao", "location"],
+    move_event_to_new_ao: ["event", "ao", "location"],
+    create_event: ["event"],
+    edit_event: ["event"],
+    edit_ao_and_location: ["ao", "location"],
+    move_ao_to_new_location: ["location"],
+    move_event_to_new_location: ["location"],
+  };
+
+function applyEventTestData(
+  form: ReturnType<typeof useFormContext<DevLoadTestDataValues>>,
+  values: DevLoadTestDataValues,
+) {
+  !values.eventName && form.setValue("eventName", "Test Event");
+  !values.eventDayOfWeek && form.setValue("eventDayOfWeek", "monday");
+  !values.eventStartTime && form.setValue("eventStartTime", "0530");
+  !values.eventEndTime && form.setValue("eventEndTime", "0615");
+  !values.eventDescription &&
+    form.setValue("eventDescription", "Test Description");
+  !values.eventTypeIds?.length && form.setValue("eventTypeIds", [1]);
+}
+
+function applyAoTestData(
+  form: ReturnType<typeof useFormContext<DevLoadTestDataValues>>,
+  values: DevLoadTestDataValues,
+) {
+  !values.aoName && form.setValue("aoName", "Test AO");
+  !values.aoLogo && form.setValue("aoLogo", "https://placehold.co/640x640");
+  !values.aoWebsite && form.setValue("aoWebsite", "https://test.com");
+}
+
+function applyLocationTestData(
+  form: ReturnType<typeof useFormContext<DevLoadTestDataValues>>,
+  values: DevLoadTestDataValues,
+) {
+  !values.locationAddress && form.setValue("locationAddress", "123 Test St");
+  !values.locationAddress2 && form.setValue("locationAddress2", "Apt 1");
+  !values.locationCity && form.setValue("locationCity", "Test City");
+  !values.locationState && form.setValue("locationState", "CA");
+  !values.locationZip && form.setValue("locationZip", "12345");
+  !values.locationCountry && form.setValue("locationCountry", "United States");
+  !values.locationDescription &&
+    form.setValue("locationDescription", "Test Location Description");
+}
+
+const GROUP_APPLIERS: Record<FieldGroup, typeof applyEventTestData> = {
+  event: applyEventTestData,
+  ao: applyAoTestData,
+  location: applyLocationTestData,
+};
+
 export const DevLoadTestData = <_T extends DevLoadTestDataValues>() => {
   const form = useFormContext<DevLoadTestDataValues>();
   return (
@@ -30,28 +88,12 @@ export const DevLoadTestData = <_T extends DevLoadTestDataValues>() => {
       variant="outline"
       onClick={() => {
         const values = form.getValues();
-        !values.eventName && form.setValue("eventName", "Test Event");
-        !values.eventDayOfWeek && form.setValue("eventDayOfWeek", "monday");
         !values.submittedBy && form.setValue("submittedBy", "test@test.com");
-        !values.aoLogo &&
-          form.setValue("aoLogo", "https://placehold.co/640x640");
-        !values.aoName && form.setValue("aoName", "Test AO");
-        !values.locationAddress &&
-          form.setValue("locationAddress", "123 Test St");
-        !values.locationAddress2 && form.setValue("locationAddress2", "Apt 1");
-        !values.locationCity && form.setValue("locationCity", "Test City");
-        !values.locationState && form.setValue("locationState", "CA");
-        !values.locationZip && form.setValue("locationZip", "12345");
-        !values.locationCountry &&
-          form.setValue("locationCountry", "United States");
-        !values.eventTypeIds?.length && form.setValue("eventTypeIds", [1]);
-        !values.eventStartTime && form.setValue("eventStartTime", "0530");
-        !values.eventEndTime && form.setValue("eventEndTime", "0615");
-        !values.eventDescription &&
-          form.setValue("eventDescription", "Test Description");
-        !values.locationDescription &&
-          form.setValue("locationDescription", "Test Location Description");
-        !values.aoWebsite && form.setValue("aoWebsite", "https://test.com");
+
+        const groups = FIELD_GROUPS_BY_REQUEST_TYPE[values.requestType] ?? [];
+        for (const group of groups) {
+          GROUP_APPLIERS[group](form, values);
+        }
       }}
     >
       (DEV) Load Test Data

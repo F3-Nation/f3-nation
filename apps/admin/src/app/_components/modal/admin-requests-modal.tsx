@@ -7,6 +7,7 @@ import { Z_INDEX } from "@acme/shared/app/constants";
 import {
   convertHH_mmToHHmm,
   convertHHmmToHH_mm,
+  requestTypeToTitle,
 } from "@acme/shared/app/functions";
 import { isProd } from "@acme/shared/common/constants";
 import { Button } from "@acme/ui/button";
@@ -42,6 +43,9 @@ import { MoveAoToDifferentLocationRequestForm } from "../forms/move-ao-to-differ
 import { MoveAoToDifferentRegionRequestForm } from "../forms/move-ao-to-different-region-request-form";
 import { MoveAoToNewLocationRequestForm } from "../forms/move-ao-to-new-location-request-form";
 import { MoveEventToDifferentAoRequestForm } from "../forms/move-event-to-different-ao-request-form";
+import { MoveEventToNewLocationRequestForm } from "../forms/move-event-to-new-location-request-form";
+import { DeleteEventRequestForm } from "../forms/delete-event-request-form";
+import { DeleteAoRequestForm } from "../forms/delete-ao-request-form";
 
 const REQUEST_FORM_MAP: Partial<
   Record<RequestType, React.ComponentType<AdminRequestFormProps>>
@@ -55,6 +59,9 @@ const REQUEST_FORM_MAP: Partial<
   move_ao_to_new_location: MoveAoToNewLocationRequestForm,
   move_event_to_different_ao: MoveEventToDifferentAoRequestForm,
   move_event_to_new_ao: MoveEventToDifferentAoRequestForm,
+  move_event_to_new_location: MoveEventToNewLocationRequestForm,
+  delete_event: DeleteEventRequestForm,
+  delete_ao: DeleteAoRequestForm,
 };
 
 export default function AdminRequestsModal({
@@ -241,7 +248,7 @@ export default function AdminRequestsModal({
             <form className="w-[inherit] overflow-x-hidden" onSubmit={onSubmit}>
               <DialogHeader>
                 <DialogTitle className="text-2xl font-bold sm:text-4xl">
-                  Edit Request
+                  {requestTypeToTitle(request.requestType)}
                   {!isProd && <FormDebugData />}
                 </DialogTitle>
               </DialogHeader>

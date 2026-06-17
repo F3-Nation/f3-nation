@@ -23,6 +23,106 @@ import { createAO, updateAO } from "./ao-handlers";
 import { insertEvent, updateEvent, updateEventTypes } from "./event-handlers";
 import { insertLocation, updateLocation } from "./location-handlers";
 
+const PRESERVED_META_FIELDS = [
+  "originalRegionId",
+  "originalAoId",
+  "originalLocationId",
+  "originalEventId",
+  "newRegionId",
+  "newAoId",
+  "newLocationId",
+  "newEventId",
+] as const;
+
+/**
+ * Copies the request's original/new id fields into meta, since some of them
+ * don't have dedicated DB columns. Mutates and returns the meta object.
+ */
+const buildMeta = (req: Record<string, unknown>): UpdateRequestMeta => {
+  const meta: UpdateRequestMeta =
+    "meta" in req && req.meta ? (req.meta as UpdateRequestMeta) : {};
+  for (const field of PRESERVED_META_FIELDS) {
+    const val = req[field];
+    if (val !== undefined && val !== null) {
+      meta[field] = val;
+    }
+  }
+  return meta;
+};
+
+/**
+ * Fetches the destination AO (and its default location) so a
+ * move_event_to_different_ao request can be recorded with the target's details.
+ */
+const hydrateDestinationAo = async (ctx: Context, newAoId: number) => {
+  const [destinationAo] = await ctx.db
+    .select({
+      name: schema.orgs.name,
+      logoUrl: schema.orgs.logoUrl,
+      website: schema.orgs.website,
+      locationId: schema.orgs.defaultLocationId,
+      locationAddress: schema.locations.addressStreet,
+      locationAddress2: schema.locations.addressStreet2,
+      locationCity: schema.locations.addressCity,
+      locationState: schema.locations.addressState,
+      locationZip: schema.locations.addressZip,
+      locationCountry: schema.locations.addressCountry,
+      locationLat: schema.locations.latitude,
+      locationLng: schema.locations.longitude,
+      locationDescription: schema.locations.description,
+    })
+    .from(schema.orgs)
+    .leftJoin(
+      schema.locations,
+      eq(schema.locations.id, schema.orgs.defaultLocationId),
+    )
+    .where(eq(schema.orgs.id, newAoId));
+  return destinationAo;
+};
+
+/**
+ * Backfills the request's event fields from the existing event row so a
+ * move_event_to_new_location request preserves the (unchanged) event details.
+ * Mutates `req` in place, never overwriting values already present.
+ */
+const hydrateEventFields = async (
+  ctx: Context,
+  req: Record<string, unknown>,
+  eventId: number,
+) => {
+  const [existingEvent] = await ctx.db
+    .select({
+      name: schema.events.name,
+      dayOfWeek: schema.events.dayOfWeek,
+      startTime: schema.events.startTime,
+      endTime: schema.events.endTime,
+      startDate: schema.events.startDate,
+      endDate: schema.events.endDate,
+      description: schema.events.description,
+    })
+    .from(schema.events)
+    .where(eq(schema.events.id, eventId));
+
+  if (existingEvent) {
+    req.eventName ??= existingEvent.name;
+    req.eventDayOfWeek ??= existingEvent.dayOfWeek;
+    req.eventStartTime ??= existingEvent.startTime;
+    req.eventEndTime ??= existingEvent.endTime;
+    req.eventStartDate ??= existingEvent.startDate;
+    req.eventEndDate ??= existingEvent.endDate;
+    req.eventDescription ??= existingEvent.description;
+  }
+
+  const eventTypeRows = await ctx.db
+    .select({ eventTypeId: schema.eventsXEventTypes.eventTypeId })
+    .from(schema.eventsXEventTypes)
+    .where(eq(schema.eventsXEventTypes.eventId, eventId));
+
+  if (eventTypeRows.length > 0 && !req.eventTypeIds) {
+    req.eventTypeIds = eventTypeRows.map((r) => r.eventTypeId);
+  }
+};
+
 /**
  * Records an update request in the database
  */
@@ -36,28 +136,7 @@ export const recordUpdateRequest = async (params: {
 
   const req: Record<string, unknown> = { ...params.updateRequest };
 
-  const meta: UpdateRequestMeta =
-    "meta" in req && req.meta ? (req.meta as UpdateRequestMeta) : {};
-
-  // Helper to preserve original/new fields in meta since they might not be in DB columns
-  const preserveField = (field: string) => {
-    if (field in req) {
-      const val = req[field];
-      if (val !== undefined && val !== null) {
-        meta[field] = val;
-      }
-    }
-  };
-
-  preserveField("originalRegionId");
-  preserveField("originalAoId");
-  preserveField("originalLocationId");
-  preserveField("originalEventId");
-
-  preserveField("newRegionId");
-  preserveField("newAoId");
-  preserveField("newLocationId");
-  preserveField("newEventId");
+  const meta = buildMeta(req);
 
   // Map to DB columns safely
   const getVal = (key: string) => req[key] as number | undefined;
@@ -70,33 +149,15 @@ export const recordUpdateRequest = async (params: {
     getVal("originalLocationId") ??
     getVal("locationId");
   const eventId = getVal("originalEventId") ?? getVal("eventId");
-  const shouldHydrateDestinationAo =
-    req.requestType === "move_event_to_different_ao" && getVal("newAoId");
 
-  const [destinationAo] = shouldHydrateDestinationAo
-    ? await params.ctx.db
-        .select({
-          name: schema.orgs.name,
-          logoUrl: schema.orgs.logoUrl,
-          website: schema.orgs.website,
-          locationId: schema.orgs.defaultLocationId,
-          locationAddress: schema.locations.addressStreet,
-          locationAddress2: schema.locations.addressStreet2,
-          locationCity: schema.locations.addressCity,
-          locationState: schema.locations.addressState,
-          locationZip: schema.locations.addressZip,
-          locationCountry: schema.locations.addressCountry,
-          locationLat: schema.locations.latitude,
-          locationLng: schema.locations.longitude,
-          locationDescription: schema.locations.description,
-        })
-        .from(schema.orgs)
-        .leftJoin(
-          schema.locations,
-          eq(schema.locations.id, schema.orgs.defaultLocationId),
-        )
-        .where(eq(schema.orgs.id, getVal("newAoId")!))
-    : [];
+  const destinationAo =
+    req.requestType === "move_event_to_different_ao" && getVal("newAoId")
+      ? await hydrateDestinationAo(params.ctx, getVal("newAoId")!)
+      : undefined;
+
+  if (req.requestType === "move_event_to_new_location" && eventId) {
+    await hydrateEventFields(params.ctx, req, eventId);
+  }
 
   if (!regionId) {
     console.error("Region ID missing in update request", params.updateRequest);
