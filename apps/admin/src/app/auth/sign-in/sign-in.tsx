@@ -11,7 +11,7 @@ export const SignIn = ({ channel }: { channel: string }) => {
     searchParams.get("callbackUrl") ?? searchParams.get("returnTo") ?? "/";
 
   return (
-    <div className="flex max-w-md flex-col gap-4 mx-auto">
+    <div className="mx-auto flex max-w-md flex-col gap-4">
       <div className="flex flex-col items-center">
         <h2 className="mt-2 text-center text-3xl font-semibold">
           Sign in to F3 Nation Admin
