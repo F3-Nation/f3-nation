@@ -28,6 +28,13 @@ vi.mock("next-auth", () => ({
   default: vi.fn(),
 }));
 
+// Mock the Map app revalidation helper so mutation tests never make a real
+// outbound HTTP request (and never log api.map_revalidate.* noise). The
+// revalidation is fire-and-forget and not asserted by any test.
+vi.mock("../lib/revalidate-map", () => ({
+  triggerMapAppRevalidation: vi.fn().mockResolvedValue(undefined),
+}));
+
 // Mock @acme/auth to avoid Next.js dependencies
 // Return a default session with admin role for tests (admin can do everything)
 const defaultSession: Session = {
