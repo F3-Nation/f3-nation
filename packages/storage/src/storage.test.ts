@@ -184,6 +184,10 @@ describe("deleteFile (emulator mode)", () => {
 // ---------------------------------------------------------------------------
 
 describe("getStorage", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
   afterEach(() => {
     delete process.env.GCS_CREDENTIALS;
     vi.resetModules();

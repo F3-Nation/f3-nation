@@ -130,8 +130,16 @@ export function createPublicImageStorage(config: {
     return false;
   }
 
+  function assertPositiveIntegerId(label: "orgId" | "userId", value: number) {
+    if (!Number.isInteger(value) || value <= 0) {
+      throw new Error(`${label} must be a positive integer`);
+    }
+    return value;
+  }
+
   return {
     async uploadOrgLogo(orgId, file, options) {
+      assertPositiveIntegerId("orgId", orgId);
       const size = options?.size ?? 640;
       const jpg = await prepareImageForStorage(file, {
         width: size,
@@ -141,10 +149,12 @@ export function createPublicImageStorage(config: {
     },
 
     async deleteOrgLogo(orgId) {
+      assertPositiveIntegerId("orgId", orgId);
       await deleteFromBucket(`org-logos/${orgId}.jpg`);
     },
 
     async uploadUserAvatar(userId, file, options) {
+      assertPositiveIntegerId("userId", userId);
       const size = options?.size ?? 512;
       const jpg = await prepareImageForStorage(file, {
         width: size,
@@ -154,6 +164,7 @@ export function createPublicImageStorage(config: {
     },
 
     async deleteUserAvatar(userId) {
+      assertPositiveIntegerId("userId", userId);
       await deleteFromBucket(`user-avatars/${userId}.jpg`);
     },
 
