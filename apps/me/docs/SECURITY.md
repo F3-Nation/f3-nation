@@ -113,16 +113,16 @@ There is no app-specific bearer secret and no `X-User-Id` override in this flow.
 
 ### apps/me
 
-| Variable               | Purpose                         | Sensitivity |
-| ---------------------- | ------------------------------- | ----------- |
-| `OAUTH_CLIENT_ID`      | OAuth client identifier         | Low         |
-| `OAUTH_CLIENT_SECRET`  | OAuth client secret             | High        |
-| `OAUTH_REDIRECT_URI`   | OAuth callback URL              | Low         |
-| `AUTH_PROVIDER_URL`    | Auth provider base URL          | Low         |
-| `F3_API_BASE_URL`      | API base URL                    | Low         |
-| `NEXT_PUBLIC_SITE_URL` | Public app origin               | Low         |
-| `GCS_BUCKET`           | Avatar upload bucket            | Medium      |
-| `GCS_CREDENTIALS`      | GCS service account credentials | Critical    |
+| Variable               | Purpose                                | Sensitivity |
+| ---------------------- | -------------------------------------- | ----------- |
+| `OAUTH_CLIENT_ID`      | OAuth client identifier                | Low         |
+| `OAUTH_CLIENT_SECRET`  | OAuth client secret                    | High        |
+| `OAUTH_REDIRECT_URI`   | OAuth callback URL                     | Low         |
+| `AUTH_PROVIDER_URL`    | Auth provider base URL                 | Low         |
+| `F3_API_BASE_URL`      | API base URL                           | Low         |
+| `NEXT_PUBLIC_SITE_URL` | Public app origin                      | Low         |
+| `F3_CHANNEL`           | Channel (`prod` / `staging` / `local`) | Medium      |
+| `GCS_CREDENTIALS`      | GCS service account credentials        | Critical    |
 
 Legacy variables removed from apps/me:
 

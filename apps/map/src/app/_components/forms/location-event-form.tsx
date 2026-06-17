@@ -16,7 +16,6 @@ import { toast } from "@acme/ui/toast";
 
 import { orpc, useQuery } from "~/orpc/react";
 import { useUpdateLocationFormContext } from "~/utils/forms";
-import { scaleAndCropImage } from "~/utils/image/scale-and-crop-image";
 import { uploadLogo } from "~/utils/image/upload-logo";
 import { mapStore } from "~/utils/store/map";
 import { DebouncedImage } from "../debounced-image";
@@ -30,7 +29,6 @@ export const LocationEventForm = ({
   isAdminForm?: boolean;
 }) => {
   const form = useUpdateLocationFormContext();
-  const formId = form.watch("id");
   const formRegionId = form.watch("regionId");
   const formLocationId = form.watch("locationId");
   const formAoId = form.watch("aoId");
@@ -432,27 +430,14 @@ export const LocationEventForm = ({
                         toast.error("Please select a region first");
                         return;
                       }
-                      console.log("files", e.target.files);
                       const file = e.target.files?.[0];
                       if (!file) return;
 
-                      const blob640 = await scaleAndCropImage(file, 640, 640);
-                      if (!blob640) return;
-                      const url640 = await uploadLogo({
-                        file: blob640,
+                      const url = await uploadLogo({
+                        file,
                         orgId: formRegionId,
-                        requestId: formId,
                       });
-                      onChange(url640);
-                      const blob64 = await scaleAndCropImage(file, 64, 64);
-                      if (blob64) {
-                        await uploadLogo({
-                          file: blob64,
-                          orgId: formRegionId,
-                          requestId: formId,
-                          size: 64,
-                        });
-                      }
+                      onChange(url);
                     }}
                     disabled={lt(formRegionId, 0)}
                     className="flex-1"
