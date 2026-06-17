@@ -1,0 +1,279 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("./resize", () => ({
+  prepareImageForStorage: vi.fn(() => Promise.resolve(Buffer.from("fakejpeg"))),
+}));
+
+import { createPublicImageStorage } from "./public-images";
+
+const EMULATOR_HOST = "localhost:4443";
+const FAKE_CREDENTIALS = Buffer.from(
+  JSON.stringify({
+    client_email: "svc@proj.iam.gserviceaccount.com",
+    private_key:
+      "-----BEGIN RSA PRIVATE KEY-----\nfake\n-----END RSA PRIVATE KEY-----",
+  }),
+).toString("base64");
+
+// ---------------------------------------------------------------------------
+// isAllowedPublicImageUrl
+// ---------------------------------------------------------------------------
+
+describe("isAllowedPublicImageUrl", () => {
+  const storage = createPublicImageStorage({
+    channel: "staging",
+    credentials: FAKE_CREDENTIALS,
+  });
+
+  it("allows prod bucket URLs", () => {
+    expect(
+      storage.isAllowedPublicImageUrl(
+        "https://storage.googleapis.com/f3-public-images/org-logos/1.jpg",
+      ),
+    ).toBe(true);
+  });
+
+  it("allows staging bucket URLs", () => {
+    expect(
+      storage.isAllowedPublicImageUrl(
+        "https://storage.googleapis.com/f3-public-images-staging/user-avatars/2.jpg",
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects other GCS URLs", () => {
+    expect(
+      storage.isAllowedPublicImageUrl(
+        "https://storage.googleapis.com/some-other-bucket/file.jpg",
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects non-GCS URLs", () => {
+    expect(
+      storage.isAllowedPublicImageUrl("https://example.com/avatar.jpg"),
+    ).toBe(false);
+  });
+
+  it("rejects URLs that use prod bucket name as a prefix trick", () => {
+    expect(
+      storage.isAllowedPublicImageUrl(
+        "https://storage.googleapis.com/f3-public-images-evil/file.jpg",
+      ),
+    ).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// uploadOrgLogo — emulator mode (prod channel)
+// ---------------------------------------------------------------------------
+
+describe("uploadOrgLogo (emulator mode)", () => {
+  beforeEach(() => {
+    process.env.GCS_EMULATOR_HOST = EMULATOR_HOST;
+  });
+
+  afterEach(() => {
+    delete process.env.GCS_EMULATOR_HOST;
+    vi.restoreAllMocks();
+  });
+
+  it("uploads to prod bucket and returns canonical URL", async () => {
+    globalThis.fetch = vi.fn(() =>
+      Promise.resolve(new Response("{}", { status: 200 })),
+    );
+
+    const storage = createPublicImageStorage({
+      channel: "prod",
+      credentials: FAKE_CREDENTIALS,
+    });
+    const url = await storage.uploadOrgLogo(123, Buffer.from("img"));
+    expect(url).toBe(
+      `http://${EMULATOR_HOST}/f3-public-images/org-logos/123.jpg`,
+    );
+  });
+
+  it("uploads to staging bucket and returns canonical URL", async () => {
+    globalThis.fetch = vi.fn(() =>
+      Promise.resolve(new Response("{}", { status: 200 })),
+    );
+
+    const storage = createPublicImageStorage({
+      channel: "staging",
+      credentials: FAKE_CREDENTIALS,
+    });
+    const url = await storage.uploadOrgLogo(42, Buffer.from("img"));
+    expect(url).toBe(
+      `http://${EMULATOR_HOST}/f3-public-images-staging/org-logos/42.jpg`,
+    );
+  });
+
+  it("throws when emulator returns non-2xx", async () => {
+    globalThis.fetch = vi.fn(() =>
+      Promise.resolve(new Response("bucket not found", { status: 404 })),
+    );
+
+    const storage = createPublicImageStorage({
+      channel: "staging",
+      credentials: FAKE_CREDENTIALS,
+    });
+    await expect(storage.uploadOrgLogo(1, Buffer.from("img"))).rejects.toThrow(
+      "GCS emulator upload failed: HTTP 404 bucket not found",
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// uploadOrgLogo — production mode (credentials validation)
+// ---------------------------------------------------------------------------
+
+describe("uploadOrgLogo (production mode)", () => {
+  afterEach(() => {
+    delete process.env.GCS_EMULATOR_HOST;
+    vi.restoreAllMocks();
+  });
+
+  it("throws when credentials JSON is missing required fields", async () => {
+    const badCreds = Buffer.from(JSON.stringify({ client_email: "" })).toString(
+      "base64",
+    );
+    const storage = createPublicImageStorage({
+      channel: "staging",
+      credentials: badCreds,
+    });
+    await expect(storage.uploadOrgLogo(1, Buffer.from("img"))).rejects.toThrow(
+      "GCS_CREDENTIALS is missing required service account fields",
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// uploadUserAvatar — emulator mode
+// ---------------------------------------------------------------------------
+
+describe("uploadUserAvatar (emulator mode)", () => {
+  beforeEach(() => {
+    process.env.GCS_EMULATOR_HOST = EMULATOR_HOST;
+  });
+
+  afterEach(() => {
+    delete process.env.GCS_EMULATOR_HOST;
+    vi.restoreAllMocks();
+  });
+
+  it("uploads to correct path and returns canonical URL", async () => {
+    const requestedUrls: string[] = [];
+    globalThis.fetch = vi.fn((input: RequestInfo | URL) => {
+      requestedUrls.push(
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.href
+            : input.url,
+      );
+      return Promise.resolve(new Response("{}", { status: 200 }));
+    });
+
+    const storage = createPublicImageStorage({
+      channel: "staging",
+      credentials: FAKE_CREDENTIALS,
+    });
+    const url = await storage.uploadUserAvatar(7, Buffer.from("img"));
+
+    expect(url).toBe(
+      `http://${EMULATOR_HOST}/f3-public-images-staging/user-avatars/7.jpg`,
+    );
+    expect(requestedUrls[0]).toContain("name=user-avatars%2F7.jpg");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// deleteOrgLogo — emulator mode
+// ---------------------------------------------------------------------------
+
+describe("deleteOrgLogo (emulator mode)", () => {
+  beforeEach(() => {
+    process.env.GCS_EMULATOR_HOST = EMULATOR_HOST;
+  });
+
+  afterEach(() => {
+    delete process.env.GCS_EMULATOR_HOST;
+    vi.restoreAllMocks();
+  });
+
+  it("does not throw when emulator returns 404", async () => {
+    globalThis.fetch = vi.fn(() =>
+      Promise.resolve(new Response(null, { status: 404 })),
+    );
+
+    const storage = createPublicImageStorage({
+      channel: "staging",
+      credentials: FAKE_CREDENTIALS,
+    });
+    await expect(storage.deleteOrgLogo(5)).resolves.toBeUndefined();
+  });
+
+  it("throws when emulator returns non-404 error", async () => {
+    globalThis.fetch = vi.fn(() =>
+      Promise.resolve(new Response("internal error", { status: 500 })),
+    );
+
+    const storage = createPublicImageStorage({
+      channel: "prod",
+      credentials: FAKE_CREDENTIALS,
+    });
+    await expect(storage.deleteOrgLogo(5)).rejects.toThrow(
+      "GCS emulator delete failed: HTTP 500 internal error",
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// deleteUserAvatar — emulator mode
+// ---------------------------------------------------------------------------
+
+describe("deleteUserAvatar (emulator mode)", () => {
+  beforeEach(() => {
+    process.env.GCS_EMULATOR_HOST = EMULATOR_HOST;
+  });
+
+  afterEach(() => {
+    delete process.env.GCS_EMULATOR_HOST;
+    vi.restoreAllMocks();
+  });
+
+  it("resolves on 200", async () => {
+    globalThis.fetch = vi.fn(() =>
+      Promise.resolve(new Response(null, { status: 200 })),
+    );
+
+    const storage = createPublicImageStorage({
+      channel: "staging",
+      credentials: FAKE_CREDENTIALS,
+    });
+    await expect(storage.deleteUserAvatar(3)).resolves.toBeUndefined();
+  });
+
+  it("uses correct path in delete request", async () => {
+    const requestedUrls: string[] = [];
+    globalThis.fetch = vi.fn((input: RequestInfo | URL) => {
+      requestedUrls.push(
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.href
+            : input.url,
+      );
+      return Promise.resolve(new Response(null, { status: 200 }));
+    });
+
+    const storage = createPublicImageStorage({
+      channel: "prod",
+      credentials: FAKE_CREDENTIALS,
+    });
+    await storage.deleteUserAvatar(9);
+    expect(requestedUrls[0]).toContain(
+      `/f3-public-images/o/user-avatars%2F9.jpg`,
+    );
+  });
+});

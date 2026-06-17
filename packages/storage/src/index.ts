@@ -3,3 +3,5 @@ export type { UploadFileOptions } from "./upload";
 export { deleteFile } from "./delete";
 export { prepareImageForStorage } from "./resize";
 export type { PrepareImageForStorageOptions } from "./resize";
+export { createPublicImageStorage } from "./public-images";
+export type { PublicImageStorage } from "./public-images";

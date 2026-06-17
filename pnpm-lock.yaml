@@ -888,6 +888,9 @@ importers:
       '@acme/shared':
         specifier: workspace:^0.1.0
         version: link:../../packages/shared
+      '@acme/storage':
+        specifier: workspace:^0.2.0
+        version: link:../../packages/storage
       '@acme/tailwind-config':
         specifier: workspace:^0.1.0
         version: link:../../tooling/tailwind

@@ -296,14 +296,13 @@ All outbound emails are captured by [Mailpit](https://mailpit.axllent.org/) — 
 
 ### Google Cloud Storage (GCS emulator)
 
-| Variable                          | Value                   | Meaning                                                             |
-| --------------------------------- | ----------------------- | ------------------------------------------------------------------- |
-| `GCS_EMULATOR_HOST`               | `localhost:9023`        | Tells the app to use the local emulator instead of real GCS         |
-| `GOOGLE_LOGO_BUCKET_PRIVATE_KEY`  | `local-placeholder-...` | Required by env validation, but **ignored** when emulator is active |
-| `GOOGLE_LOGO_BUCKET_CLIENT_EMAIL` | `local@local.local`     | Same — ignored when emulator is active                              |
-| `GOOGLE_LOGO_BUCKET_BUCKET_NAME`  | `f3-public-images`      | The bucket name used by both the emulator and real GCS              |
+| Variable            | Value                                      | Meaning                                                             |
+| ------------------- | ------------------------------------------ | ------------------------------------------------------------------- |
+| `GCS_EMULATOR_HOST` | `localhost:9023`                           | Tells the app to use the local emulator instead of real GCS         |
+| `GCS_CREDENTIALS`   | `local-placeholder-not-used-with-emulator` | Required by env validation, but **ignored** when emulator is active |
+| `F3_CHANNEL`        | `local`                                    | Selects staging bucket (`f3-public-images-staging`) for local dev   |
 
-When `GCS_EMULATOR_HOST` is set, the upload route skips Google authentication entirely and sends files directly to the local fake-gcs-server. Uploaded logos are stored in a Docker volume and served at `http://localhost:9023/f3-public-images/<filename>`.
+When `GCS_EMULATOR_HOST` is set, the upload route skips Google authentication entirely and sends files directly to the local fake-gcs-server. Uploaded logos are stored in a Docker volume at canonical paths such as `org-logos/{orgId}.jpg` and served at `http://localhost:9023/f3-public-images-staging/<path>`.
 
 ### Client-side URLs
 
@@ -377,8 +376,8 @@ Logo uploads in the Map app are handled by the GCS emulator (`fake-gcs-server`) 
 
 1. When you upload a logo, the Map app sends the image to its `/api/upload-logo` route
 2. The route detects `GCS_EMULATOR_HOST` in the env and calls the emulator instead of real GCS
-3. The emulator stores the file in the `f3-public-images` bucket
-4. The returned public URL points to `http://localhost:9023/f3-public-images/<filename>`
+3. The emulator stores the file in the `f3-public-images-staging` bucket (local `F3_CHANNEL`)
+4. The returned public URL points to `http://localhost:9023/f3-public-images-staging/org-logos/<orgId>.jpg`
 
 ### Browsing stored files
 
