@@ -64,6 +64,12 @@ async function loadLoggingModule() {
   return import("@/lib/logging");
 }
 
+async function loadRealLoggingModule() {
+  vi.doUnmock("@acme/logger");
+  vi.resetModules();
+  return import("@/lib/logging");
+}
+
 describe("logging", () => {
   afterEach(() => {
     vi.doUnmock("@acme/logger");
@@ -142,5 +148,23 @@ describe("logging", () => {
         ctx: { circularContext },
       },
     ]);
+  });
+
+  it("real logger handles Error and circular payloads for error/fatal", async () => {
+    const { logError, logFatal } = await loadRealLoggingModule();
+
+    const err = new Error("boom");
+    (err as Error & { cause?: unknown }).cause = { reason: "root-cause" };
+
+    const circularContext: Record<string, unknown> = {};
+    circularContext.self = circularContext;
+
+    const circularValue: Record<string, unknown> = {};
+    circularValue.self = circularValue;
+
+    expect(() => {
+      logError("me.test.real.error", { circularContext }, err);
+      logFatal("me.test.real.fatal", { sessionUserId: 42 }, circularValue);
+    }).not.toThrow();
   });
 });
