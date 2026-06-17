@@ -167,6 +167,8 @@ minimumReleaseAgeExclude:
   - esbuild
   - "@esbuild/*"
   - form-data@2.5.6
+  # Renovate security update: dompurify@3.4.9
+  - dompurify@3.4.9
 catalogMode: strict
 cleanupUnusedCatalogs: true
 # pnpm's publicHoistPattern defaults to [] (nothing is hoisted); the patterns below
