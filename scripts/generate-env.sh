@@ -118,6 +118,12 @@ if [[ -z "${EMAIL_SERVER}" ]]; then
   exit 1
 fi
 
+if [[ -z "${SECRET_GOOGLE_MAPS_API_KEY:-}" ]]; then
+  echo "  ERROR: F3_GOOGLE_API_KEY could not be resolved (google-maps-api-key secret not found)"
+  echo "  The map app requires a non-empty F3_GOOGLE_API_KEY. Set the GCP secret and re-run."
+  exit 1
+fi
+
 SUPER_ADMIN_API_KEY="${SECRET_API_KEY:-}"
 
 # --- Generate .env content ----------------------------------------------------
@@ -140,11 +146,26 @@ NEXT_PUBLIC_MAP_URL=http://localhost:3000
 NEXT_PUBLIC_AUTH_URL=http://localhost:3004
 NEXT_PUBLIC_CHANNEL=local
 
+# -- Map app server runtime vars (read at request time, not the NEXT_PUBLIC_* ones) --
+# The map app validates these F3_* names in apps/map/src/env.ts and does NOT
+# read the NEXT_PUBLIC_* equivalents above. Without them, env validation fails
+# on `pnpm dev`.
+F3_ADMIN_URL=http://localhost:3002
+F3_API_BASE_URL=http://localhost:3001
+F3_MAP_BASE_URL=http://localhost:3000
+F3_CHANNEL=local
+
+# F3_MAP_API_KEY authenticates in-process router calls during static generation
+# (\`next build\`/SSG). Optional in dev, but required for builds. Must match a key
+# in the local DB — \`pnpm db:seed:local\` inserts "local-map-key".
+F3_MAP_API_KEY=local-map-key
+
 # -- Google Maps API key (from GCP Secret Manager) --
-# Note: In production, this key is set directly in Vercel's environment variables.
-# We mirror it in GCP Secret Manager so this script can pull it automatically,
-# keeping the local dev setup as frictionless as possible.
+# In production, this key is set via Cloud Run environment configuration.
+# GCP Secret Manager stores the canonical value so this script can pull it
+# automatically, keeping the local dev setup as frictionless as possible.
 NEXT_PUBLIC_GOOGLE_API_KEY=${SECRET_GOOGLE_MAPS_API_KEY:-}
+F3_GOOGLE_API_KEY=${SECRET_GOOGLE_MAPS_API_KEY:-}
 
 # -- Email --
 EMAIL_FROM=noreply@f3nation.com

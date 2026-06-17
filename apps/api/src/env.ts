@@ -6,7 +6,6 @@ export const env = createEnv({
     NODE_ENV: z
       .enum(["development", "production", "test"])
       .default("development"),
-    VERCEL_ENV: z.enum(["development", "preview", "production"]).optional(),
     NEXT_PUBLIC_CHANNEL: z.enum([
       "local",
       "ci",
@@ -15,9 +14,6 @@ export const env = createEnv({
       "staging",
       "prod",
     ]),
-    // GIT items are provided by the next.config.js
-    NEXT_PUBLIC_GIT_COMMIT_HASH: z.string().optional(),
-    NEXT_PUBLIC_GIT_BRANCH: z.string().optional(),
   },
   /**
    * Specify your server-side environment variables schema here.
@@ -44,11 +40,8 @@ export const env = createEnv({
    */
   experimental__runtimeEnv: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
-    VERCEL_ENV: process.env.VERCEL_ENV,
     NODE_ENV: process.env.NODE_ENV,
     NEXT_PUBLIC_CHANNEL: process.env.NEXT_PUBLIC_CHANNEL,
-    NEXT_PUBLIC_GIT_COMMIT_HASH: process.env.NEXT_PUBLIC_GIT_COMMIT_HASH,
-    NEXT_PUBLIC_GIT_BRANCH: process.env.NEXT_PUBLIC_GIT_BRANCH,
   },
   skipValidation:
     !!process.env.CI ||
