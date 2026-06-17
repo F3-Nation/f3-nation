@@ -459,6 +459,25 @@ export default function AdminRegionsModal({
               <div className="mb-4 w-full px-2 sm:w-1/2">
                 <FormField
                   control={form.control}
+                  name="meta.region_location_short_description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Short Location Description</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="e.g. Denver, CO"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="mb-4 w-full px-2 sm:w-1/2">
+                <FormField
+                  control={form.control}
                   name="isActive"
                   render={({ field }) => (
                     <FormItem>
