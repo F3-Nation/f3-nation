@@ -58,9 +58,8 @@ async function main() {
   const { env } = await import("@acme/env");
   const { requestTypeToTitle } = await import("@acme/shared/app/functions");
   const { mail, Templates } = await import("@acme/mail");
-  const { getUsersWithRoles } = await import(
-    "@acme/api/services/map-request-notification"
-  );
+  const { getUsersWithRoles } =
+    await import("@acme/api/services/map-request-notification");
 
   console.log("🔍 Finding outstanding requests created after", CUTOFF_DATE);
   console.log(

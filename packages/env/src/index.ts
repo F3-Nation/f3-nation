@@ -1,18 +1,14 @@
 import { createEnv } from "@t3-oss/env-nextjs";
 import { z } from "zod";
 
-import { isProductionNodeEnv, vercelInfo } from "@acme/shared/common/constants";
+// Only override DATABASE_URL from --url flag if in non-production (i.e., development or test) environment
 
-// Don't override DATABASE_URL if it's already set by vercelInfo
-if (
-  !isProductionNodeEnv &&
-  !vercelInfo &&
-  typeof process.argv !== "undefined"
-) {
-  const args = process.argv;
-  const urlFlagIndex = args.indexOf("--url");
-  if (urlFlagIndex !== -1 && args[urlFlagIndex + 1]) {
-    process.env.DATABASE_URL = args[urlFlagIndex + 1];
+const nodeEnv = process.env.NODE_ENV || "development";
+if (nodeEnv !== "production") {
+  const args = process.argv as string[] | undefined;
+  const urlFlagIndex = args?.indexOf("--url") ?? -1;
+  if (urlFlagIndex !== -1 && args?.[urlFlagIndex + 1]) {
+    process.env.DATABASE_URL = args?.[urlFlagIndex + 1];
   }
 }
 
@@ -22,32 +18,23 @@ export const env = createEnv({
       process.env.NODE_ENV === "production"
         ? z.string().min(1)
         : z.string().min(1).optional(),
-    DATABASE_URL: z
-      .string()
-      .min(1)
-      .transform((val) => {
-        if (vercelInfo?.isPreviewDeployment && vercelInfo.gitCommitRef) {
-          console.log(
-            "Overriding DATABASE_URL with vercel.databaseUrl",
-            vercelInfo.databaseUrl,
-          );
-          return vercelInfo.databaseUrl;
-        } else {
-          return val;
-        }
-      }),
+    DATABASE_URL: z.string().min(1).optional(),
     EMAIL_SERVER: z.string().min(1),
     EMAIL_FROM: z.string().min(1),
     NODE_ENV: z
       .enum(["development", "production", "test"])
       .default("development"),
+    LOG_LEVEL: z
+      .enum(["trace", "debug", "info", "warn", "error", "fatal"])
+      .default("info"),
     EMAIL_ADMIN_DESTINATIONS: z.string().min(1),
+    EMAIL_REGION_IN_A_BOX_CC: z.string().min(1).optional(),
     GOOGLE_LOGO_BUCKET_PRIVATE_KEY: z.string().min(1),
     GOOGLE_LOGO_BUCKET_CLIENT_EMAIL: z.string().min(1),
     GOOGLE_LOGO_BUCKET_BUCKET_NAME: z.string().min(1),
-    TEST_DATABASE_URL: z.string().min(1),
+    TEST_DATABASE_URL: z.string().min(1).optional(),
     API_KEY: z.string().min(1),
-    SUPER_ADMIN_API_KEY: z.string().min(1),
+    SUPER_ADMIN_API_KEY: z.string().min(1).optional(),
     NOTIFY_WEBHOOK_URLS_COMMA_SEPARATED: z.string().optional(),
     GCS_EMULATOR_HOST: z.string().optional(),
   },

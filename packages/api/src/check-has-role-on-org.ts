@@ -6,11 +6,10 @@ import {
   isTestNodeEnv,
 } from "@acme/shared/common/constants";
 
+import { logWarn, logDebug } from "./logger";
 import type { Context } from "./shared";
 
 const ALLOW_MTNDEV_OVERRIDE = false as boolean;
-
-const LOG = false as boolean;
 
 export const checkHasRoleOnOrg = async ({
   session,
@@ -37,15 +36,12 @@ export const checkHasRoleOnOrg = async ({
     };
   }
 
-  if (LOG)
-    console.log(
-      "Checking if user has role on org",
-      session.id,
-      orgId,
-      roleName,
-      "roles",
-      session.roles,
-    );
+  logDebug("api.role_check.checking", {
+    userId: session.id,
+    orgId,
+    roleName,
+    roles: session.roles,
+  });
 
   // F3 Nation
   if (
@@ -56,7 +52,11 @@ export const checkHasRoleOnOrg = async ({
       .select()
       .from(schema.orgs)
       .where(eq(schema.orgs.orgType, "nation"));
-    console.log("OVERRIDING ROLE DUE TO MTNDEV OVERRIDE (OR DEV)");
+    logWarn("api.role_check.mtndev_override", {
+      userId: session.id,
+      orgId,
+      roleName,
+    });
     if (nations.find((n) => n.id === orgId)) {
       return {
         success: true,

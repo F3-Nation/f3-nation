@@ -1,5 +1,5 @@
 {
-  "id": "f5861081-abde-49e0-b77b-0475335d1f6d",
+  "id": "2f88060c-ded2-4895-93bb-95f6ce597256",
   "prevId": "774daecc-cd7e-4b93-b3cb-ae3eebaf77eb",
   "version": "7",
   "dialect": "postgresql",
@@ -2490,6 +2490,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "phone": {
+          "name": "phone",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
         "twitter": {
           "name": "twitter",
           "type": "varchar",
@@ -3475,7 +3481,7 @@
           "name": "event_name",
           "type": "varchar",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "event_description": {
           "name": "event_description",
@@ -3920,19 +3926,10 @@
       "name": "request_type",
       "schema": "public",
       "values": [
-        "create_ao_and_location_and_event",
+        "create_location",
         "create_event",
-        "edit_event",
-        "edit_ao_and_location",
-        "move_ao_to_different_region",
-        "move_ao_to_new_location",
-        "move_ao_to_different_location",
-        "move_event_to_different_ao",
-        "move_event_to_new_location",
-        "move_event_to_new_ao",
-        "delete_event",
-        "delete_ao",
-        "edit"
+        "edit",
+        "delete_event"
       ]
     },
     "public.series_exception": {

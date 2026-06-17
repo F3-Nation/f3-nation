@@ -4,6 +4,7 @@
 node_modules
 .pnp
 .pnp.js
+.pnpm-store/
 
 # testing
 coverage
@@ -40,9 +41,6 @@ yarn-error.log*
 .env*
 !.env*.example
 
-# vercel
-.vercel
-
 # typescript
 *.tsbuildinfo
 
@@ -56,10 +54,6 @@ yarn-error.log*
 
 # db exports
 .data
-
-# playwright
-test-results/
-.auth
 
 # sentry
 .env.sentry-build-plugin 

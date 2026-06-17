@@ -13,6 +13,8 @@ import { isNationAdminFromSession } from "@acme/shared/app/role-checks";
 import { isDevelopmentNodeEnv } from "@acme/shared/common/constants";
 import { Client, Header } from "@acme/shared/common/enums";
 
+import { logWarn } from "./logger";
+
 type BaseContext = RequestHeadersPluginContext;
 
 export interface Context {
@@ -97,7 +99,7 @@ const base = os.$context<BaseContext>().use(async ({ context, next }) => {
   return next({ context });
 });
 
-export const withSessionAndDb = base.use(async ({ context, next }) => {
+const withSessionAndDb = base.use(async ({ context, next }) => {
   const session = await getSession({ context });
   const newContext: Context = { ...context, session, db };
   return next({ context: newContext });
@@ -167,42 +169,7 @@ export const nationAdminProcedure = withSessionAndDb.use(
   },
 );
 
-export const apiKeyProcedure = withSessionAndDb.use(
-  async ({ context, next }) => {
-    const apiKey = context.reqHeaders?.get("x-api-key") ?? "";
-
-    if (!apiKey) {
-      throw new ORPCError("UNAUTHORIZED");
-    }
-
-    if (env.SUPER_ADMIN_API_KEY && apiKey === env.SUPER_ADMIN_API_KEY) {
-      return next({ context });
-    }
-
-    const [dbKey] = await context.db
-      .select({ id: schema.apiKeys.id })
-      .from(schema.apiKeys)
-      .where(
-        and(
-          eq(schema.apiKeys.key, apiKey),
-          isNull(schema.apiKeys.revokedAt),
-          or(
-            isNull(schema.apiKeys.expiresAt),
-            gt(schema.apiKeys.expiresAt, DB_NOW),
-          ),
-        ),
-      )
-      .limit(1);
-
-    if (!dbKey) {
-      throw new ORPCError("UNAUTHORIZED");
-    }
-
-    return next({ context });
-  },
-);
-
-export const getSession = async ({ context }: { context: BaseContext }) => {
+const getSession = async ({ context }: { context: BaseContext }) => {
   let session: Session | null = null;
 
   // Skip auth() call for SSG requests to allow static generation
@@ -273,14 +240,10 @@ export const getSession = async ({ context }: { context: BaseContext }) => {
     );
 
   if (!apiKeyRecord) {
-    console.log(
-      "getSession",
-      JSON.stringify({
-        apiKey: `${bearerToken.slice(0, 4)}...${bearerToken.slice(-4)}`,
-        appClient,
-        message: "API key not found in database or invalid",
-      }),
-    );
+    logWarn("api.auth.api_key_not_found", {
+      apiKey: `${bearerToken.slice(0, 4)}...${bearerToken.slice(-4)}`,
+      appClient,
+    });
     return null;
   }
 

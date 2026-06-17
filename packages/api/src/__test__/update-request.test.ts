@@ -52,34 +52,13 @@ const {
   mockUpdateEvent,
   mockUpdateEventTypes,
 } = vi.hoisted(() => ({
-  mockInsertLocation: vi.fn<
-    Parameters<typeof locationHandlers.insertLocation>,
-    ReturnType<typeof locationHandlers.insertLocation>
-  >(),
-  mockUpdateLocation: vi.fn<
-    Parameters<typeof locationHandlers.updateLocation>,
-    ReturnType<typeof locationHandlers.updateLocation>
-  >(),
-  mockCreateAO: vi.fn<
-    Parameters<typeof aoHandlers.createAO>,
-    ReturnType<typeof aoHandlers.createAO>
-  >(),
-  mockUpdateAO: vi.fn<
-    Parameters<typeof aoHandlers.updateAO>,
-    ReturnType<typeof aoHandlers.updateAO>
-  >(),
-  mockInsertEvent: vi.fn<
-    Parameters<typeof eventHandlers.insertEvent>,
-    ReturnType<typeof eventHandlers.insertEvent>
-  >(),
-  mockUpdateEvent: vi.fn<
-    Parameters<typeof eventHandlers.updateEvent>,
-    ReturnType<typeof eventHandlers.updateEvent>
-  >(),
-  mockUpdateEventTypes: vi.fn<
-    Parameters<typeof eventHandlers.updateEventTypes>,
-    ReturnType<typeof eventHandlers.updateEventTypes>
-  >(),
+  mockInsertLocation: vi.fn<typeof locationHandlers.insertLocation>(),
+  mockUpdateLocation: vi.fn<typeof locationHandlers.updateLocation>(),
+  mockCreateAO: vi.fn<typeof aoHandlers.createAO>(),
+  mockUpdateAO: vi.fn<typeof aoHandlers.updateAO>(),
+  mockInsertEvent: vi.fn<typeof eventHandlers.insertEvent>(),
+  mockUpdateEvent: vi.fn<typeof eventHandlers.updateEvent>(),
+  mockUpdateEventTypes: vi.fn<typeof eventHandlers.updateEventTypes>(),
 }));
 
 type InsertLocationResult = Awaited<

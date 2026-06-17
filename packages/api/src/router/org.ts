@@ -214,6 +214,7 @@ export const orgRouter = {
             logoUrl: z.string().nullable().describe("Organization logo URL"),
             website: z.string().nullable().describe("Organization website"),
             email: z.string().nullable().describe("Organization email"),
+            phone: z.string().nullable().describe("Organization phone number"),
             twitter: z
               .string()
               .nullable()
@@ -305,6 +306,7 @@ export const orgRouter = {
         logoUrl: org.logoUrl,
         website: org.website,
         email: org.email,
+        phone: org.phone,
         twitter: org.twitter,
         facebook: org.facebook,
         instagram: org.instagram,
@@ -656,6 +658,7 @@ export const orgRouter = {
             logoUrl: z.string().nullable().describe("Organization logo URL"),
             website: z.string().nullable().describe("Organization website"),
             email: z.string().nullable().describe("Organization email"),
+            phone: z.string().nullable().describe("Organization phone number"),
             twitter: z
               .string()
               .nullable()
@@ -732,6 +735,7 @@ export const orgRouter = {
             logoUrl: z.string().nullable().describe("Organization logo URL"),
             website: z.string().nullable().describe("Organization website"),
             email: z.string().nullable().describe("Organization email"),
+            phone: z.string().nullable().describe("Organization phone number"),
             twitter: z
               .string()
               .nullable()

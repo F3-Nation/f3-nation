@@ -18,7 +18,7 @@ if nc -z localhost 3001 2>/dev/null; then
     echo "✅ API (port 3001): RUNNING"
 else
     echo "❌ API (port 3001): NOT RUNNING"
-    echo "   Start with: PORT=3001 pnpm -F f3-nation-api dev"
+    echo "   Start with: PORT=3001 pnpm -F f3-api dev"
 fi
 
 # Check Map (port 3000)
@@ -26,7 +26,7 @@ if nc -z localhost 3000 2>/dev/null; then
     echo "✅ Map (port 3000): RUNNING"
 else
     echo "❌ Map (port 3000): NOT RUNNING"
-    echo "   Start with: PORT=3000 pnpm -F f3-nation-map dev"
+    echo "   Start with: PORT=3000 pnpm -F f3-map dev"
 fi
 
 echo ""

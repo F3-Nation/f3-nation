@@ -13,6 +13,7 @@ interface RoleInput {
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
+import { logDebug } from "../logger";
 import {
   buildSingleUserQuery,
   buildUserListQuery,
@@ -263,7 +264,26 @@ export const userRouter = {
   byF3Name: editorProcedure
     .input(
       z.object({
-        f3Name: z.string().describe("The F3 name of the user to retrieve"),
+        f3Name: z
+          .string()
+          .describe(
+            "Partial F3 name to search for. Case-insensitive partial matching.",
+          ),
+        pageIndex: z.coerce
+          .number()
+          .int()
+          .min(0)
+          .optional()
+          .default(0)
+          .describe("Zero-based page index for pagination. Defaults to 0."),
+        pageSize: z.coerce
+          .number()
+          .int()
+          .min(1)
+          .max(100)
+          .optional()
+          .default(10)
+          .describe("Number of users per page. Defaults to 10."),
       }),
     )
     .route({
@@ -272,7 +292,7 @@ export const userRouter = {
       tags: ["user"],
       summary: "Search users by F3 name",
       description:
-        "Search for users whose F3 name partially matches the input. Returns up to 10 results with home region info.",
+        "Search for users whose F3 name partially matches the input. Supports pagination and includes home region info.",
     })
     .output(
       z.object({
@@ -286,8 +306,8 @@ export const userRouter = {
         ctx,
         input: {
           searchTerm: input.f3Name,
-          pageIndex: 0,
-          pageSize: 10,
+          pageIndex: input.pageIndex,
+          pageSize: input.pageSize,
           sorting: [{ id: "f3Name", desc: false }],
           includePii: false,
         },
@@ -438,7 +458,7 @@ export const userRouter = {
       // Normalize email for case-insensitive storage and lookup
       const normalizedEmail = _email ? normalizeEmail(_email) : _email;
 
-      console.log("Update set", JSON.stringify(updateSet));
+      logDebug("api.user.update_set", { updateFields: Object.keys(updateSet) });
 
       let user: typeof schema.users.$inferSelect;
 
@@ -482,7 +502,7 @@ export const userRouter = {
         }
       }
 
-      console.log("User", JSON.stringify(user));
+      logDebug("api.user.resolved_user", { userId: user.id });
 
       const dbRoles = await ctx.db.select().from(schema.roles);
 
@@ -500,7 +520,7 @@ export const userRouter = {
         .select()
         .from(schema.rolesXUsersXOrg)
         .where(eq(schema.rolesXUsersXOrg.userId, user.id));
-      console.log("Existing roles", JSON.stringify(existingRoles));
+      logDebug("api.user.existing_roles", { existingRoles });
 
       const newRolesToInsert = roles.filter(
         (role) =>
@@ -510,7 +530,7 @@ export const userRouter = {
               existingRole.orgId === role.orgId,
           ),
       );
-      console.log("New roles to insert", JSON.stringify(newRolesToInsert));
+      logDebug("api.user.new_roles_to_insert", { newRolesToInsert });
 
       for (const role of newRolesToInsert) {
         const { success } = await checkHasRoleOnOrg({
@@ -534,7 +554,7 @@ export const userRouter = {
               role.orgId === existingRole.orgId,
           ),
       );
-      console.log("Roles to delete", JSON.stringify(rolesToDelete));
+      logDebug("api.user.roles_to_delete", { rolesToDelete });
 
       for (const role of rolesToDelete) {
         const { success } = await checkHasRoleOnOrg({
@@ -576,7 +596,7 @@ export const userRouter = {
         );
       }
 
-      console.log("New roles to insert", JSON.stringify(newRolesToInsert));
+      logDebug("api.user.new_roles_to_insert", { newRolesToInsert });
       const updatedRoles = await ctx.db
         .select({
           orgId: schema.rolesXUsersXOrg.orgId,
