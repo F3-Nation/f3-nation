@@ -16,10 +16,10 @@ permissions:
 
 env:
   CI: true
-  # Turbo remote cache (Vercel). TURBO_TOKEN is a secret; TURBO_TEAM is the
-  # Vercel team slug (repo variable). With both set, every job/run/rerun shares
-  # task outputs, so unchanged work short-circuits to FULL TURBO. Absent (e.g.
-  # fork PRs without secrets) Turbo silently falls back to local-only caching.
+  # Turborepo Remote Cache. TURBO_TOKEN is a secret; TURBO_TEAM is the
+  # remote-cache team slug (repo variable). With both set, every job/run/rerun
+  # shares task outputs, so unchanged work short-circuits to FULL TURBO.
+  # Absent (e.g. fork PRs without secrets) Turbo silently falls back to local-only caching.
   TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
   TURBO_TEAM: ${{ vars.TURBO_TEAM }}
   TURBO_TELEMETRY_DISABLED: 1

@@ -1,8 +1,11 @@
 "use client";
 
+import { useState } from "react";
+
 import { Badge } from "@acme/ui/badge";
 import { useToast } from "@/components/ui/toast";
 import { useRemovableList, compositeKey } from "@/hooks/useRemovableList";
+import { ConfirmRemoveDialog } from "./confirm-remove-dialog";
 import type { UserPosition } from "@/lib/types";
 
 interface PositionListProps {
@@ -13,6 +16,8 @@ export function PositionList({
   positions: initialPositions,
 }: PositionListProps) {
   const { toast } = useToast();
+  const [positionToConfirm, setPositionToConfirm] =
+    useState<UserPosition | null>(null);
   const {
     items: positions,
     removing,
@@ -55,8 +60,8 @@ export function PositionList({
               <button
                 type="button"
                 className="ml-1 rounded-full p-0.5 hover:bg-foreground/10 disabled:opacity-50"
-                disabled={removing === key}
-                onClick={() => handleRemove(pos)}
+                disabled={removing !== null}
+                onClick={() => setPositionToConfirm(pos)}
                 aria-label={`Remove ${pos.positionName} position from ${pos.orgName}`}
               >
                 {removing === key ? (
@@ -88,6 +93,25 @@ export function PositionList({
         </a>{" "}
         to find admins.
       </p>
+
+      <ConfirmRemoveDialog
+        open={positionToConfirm !== null}
+        onOpenChange={(open) => {
+          if (!open) setPositionToConfirm(null);
+        }}
+        title="Remove Position?"
+        description={
+          positionToConfirm
+            ? `You are about to remove your ${positionToConfirm.positionName} position from ${positionToConfirm.orgName}.`
+            : ""
+        }
+        actionText="Remove Position"
+        onConfirm={() => {
+          if (!positionToConfirm) return;
+          void handleRemove(positionToConfirm);
+          setPositionToConfirm(null);
+        }}
+      />
     </div>
   );
 }

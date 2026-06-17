@@ -1,8 +1,11 @@
 "use client";
 
+import { useState } from "react";
+
 import { Badge } from "@acme/ui/badge";
 import { useToast } from "@/components/ui/toast";
 import { useRemovableList, compositeKey } from "@/hooks/useRemovableList";
+import { ConfirmRemoveDialog } from "./confirm-remove-dialog";
 import type { UserRole } from "@/lib/types";
 
 interface RoleListProps {
@@ -11,6 +14,7 @@ interface RoleListProps {
 
 export function RoleList({ roles: initialRoles }: RoleListProps) {
   const { toast } = useToast();
+  const [roleToConfirm, setRoleToConfirm] = useState<UserRole | null>(null);
   const {
     items: roles,
     removing,
@@ -51,8 +55,8 @@ export function RoleList({ roles: initialRoles }: RoleListProps) {
               <button
                 type="button"
                 className="ml-1 rounded-full p-0.5 hover:bg-foreground/10 disabled:opacity-50"
-                disabled={removing === key}
-                onClick={() => handleRemove(role)}
+                disabled={removing !== null}
+                onClick={() => setRoleToConfirm(role)}
                 aria-label={`Remove ${role.roleName} role from ${role.orgName ?? `Org ${role.orgId}`}`}
               >
                 {removing === key ? (
@@ -84,6 +88,25 @@ export function RoleList({ roles: initialRoles }: RoleListProps) {
         </a>{" "}
         to find admins.
       </p>
+
+      <ConfirmRemoveDialog
+        open={roleToConfirm !== null}
+        onOpenChange={(open) => {
+          if (!open) setRoleToConfirm(null);
+        }}
+        title="Remove Role?"
+        description={
+          roleToConfirm
+            ? `You are about to remove your ${roleToConfirm.roleName} role from ${roleToConfirm.orgName ?? `Org ${roleToConfirm.orgId}`}.`
+            : ""
+        }
+        actionText="Remove Role"
+        onConfirm={() => {
+          if (!roleToConfirm) return;
+          void handleRemove(roleToConfirm);
+          setRoleToConfirm(null);
+        }}
+      />
     </div>
   );
 }
