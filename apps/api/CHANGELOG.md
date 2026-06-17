@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.1.0](https://github.com/F3-Nation/f3-nation/compare/api@5.0.0...api@5.1.0) (2026-06-17)
+
+
+### Features
+
+* **repo:** triggering release ([b5e1415](https://github.com/F3-Nation/f3-nation/commit/b5e1415682df6abc3cdfa8653bc3658954fa7d0c))
+
 ## [5.0.0](https://github.com/F3-Nation/f3-nation/compare/api@4.3.2...api@5.0.0) (2026-06-11)
 
 

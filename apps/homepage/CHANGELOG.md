@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/F3-Nation/f3-nation/compare/homepage@1.1.0...homepage@1.2.0) (2026-06-17)
+
+
+### Features
+
+* **repo:** triggering release ([b5e1415](https://github.com/F3-Nation/f3-nation/commit/b5e1415682df6abc3cdfa8653bc3658954fa7d0c))
+
 ## [1.1.0](https://github.com/F3-Nation/f3-nation/compare/homepage@1.0.0...homepage@1.1.0) (2026-06-11)
 
 

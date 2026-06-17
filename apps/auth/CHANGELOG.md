@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/F3-Nation/f3-nation/compare/auth@1.2.1...auth@1.3.0) (2026-06-17)
+
+
+### Features
+
+* **repo:** triggering release ([b5e1415](https://github.com/F3-Nation/f3-nation/commit/b5e1415682df6abc3cdfa8653bc3658954fa7d0c))
+
 ## [1.2.1](https://github.com/F3-Nation/f3-nation/compare/auth@1.2.0...auth@1.2.1) (2026-06-11)
 
 

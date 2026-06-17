@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.1.0](https://github.com/F3-Nation/f3-nation/compare/map@5.0.0...map@5.1.0) (2026-06-17)
+
+
+### Features
+
+* **db:** add phone field to orgs table ([#414](https://github.com/F3-Nation/f3-nation/issues/414)) ([28890b6](https://github.com/F3-Nation/f3-nation/commit/28890b6d306589d34b8570b75108b5b21bbe13b8))
+* **repo:** triggering release ([b5e1415](https://github.com/F3-Nation/f3-nation/commit/b5e1415682df6abc3cdfa8653bc3658954fa7d0c))
+
 ## [5.0.0](https://github.com/F3-Nation/f3-nation/compare/map@4.2.3...map@5.0.0) (2026-06-11)
 
 
