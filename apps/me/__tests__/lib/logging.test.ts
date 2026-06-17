@@ -1,83 +1,146 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { logError, logInfo, logWarn } from "@/lib/logging";
 
-function getLoggedJson(spy: ReturnType<typeof vi.spyOn>, callIndex = 0) {
-  const payload = spy.mock.calls[callIndex]?.[0];
-  expect(typeof payload).toBe("string");
-  return JSON.parse(payload as string) as Record<string, unknown>;
+interface LoggedCall {
+  level: string;
+  ctx: Record<string, unknown>;
+  event: string;
+}
+
+let loggedCalls: LoggedCall[] = [];
+let createLoggerArgs: unknown[] = [];
+
+async function loadLoggingModule() {
+  loggedCalls = [];
+  createLoggerArgs = [];
+
+  vi.resetModules();
+  vi.doMock("@acme/logger", () => {
+    const loggerApi = {
+      logger: { child: vi.fn() },
+      logTrace: (event: string, ctx: Record<string, unknown> = {}) => {
+        loggedCalls.push({ level: "trace", ctx, event });
+      },
+      logDebug: (event: string, ctx: Record<string, unknown> = {}) => {
+        loggedCalls.push({ level: "debug", ctx, event });
+      },
+      logInfo: (event: string, ctx: Record<string, unknown> = {}) => {
+        loggedCalls.push({ level: "info", ctx, event });
+      },
+      logWarn: (event: string, ctx: Record<string, unknown> = {}) => {
+        loggedCalls.push({ level: "warn", ctx, event });
+      },
+      logError: (
+        event: string,
+        ctx: Record<string, unknown> = {},
+        err?: unknown,
+      ) => {
+        loggedCalls.push({
+          level: "error",
+          ctx: { ...ctx, ...(err !== undefined ? { err } : {}) },
+          event,
+        });
+      },
+      logFatal: (
+        event: string,
+        ctx: Record<string, unknown> = {},
+        err?: unknown,
+      ) => {
+        loggedCalls.push({
+          level: "fatal",
+          ctx: { ...ctx, ...(err !== undefined ? { err } : {}) },
+          event,
+        });
+      },
+    };
+
+    return {
+      createLogger: vi.fn((...args: unknown[]) => {
+        createLoggerArgs = args;
+        return loggerApi;
+      }),
+    };
+  });
+
+  return import("@/lib/logging");
 }
 
 describe("logging", () => {
   afterEach(() => {
+    vi.doUnmock("@acme/logger");
+    vi.resetModules();
     vi.restoreAllMocks();
   });
 
-  it("logs INFO with context to console.log", () => {
-    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+  it("logs INFO with context", async () => {
+    const { logInfo } = await loadLoggingModule();
 
     logInfo("me.test.info", { requestId: "abc123" });
 
-    expect(logSpy).toHaveBeenCalledTimes(1);
-    const parsed = getLoggedJson(logSpy);
-    expect(parsed.severity).toBe("INFO");
-    expect(parsed.event).toBe("me.test.info");
-    expect(parsed.service).toBe("f3-me");
-    expect(parsed.requestId).toBe("abc123");
+    expect(loggedCalls).toEqual([
+      {
+        level: "info",
+        event: "me.test.info",
+        ctx: { requestId: "abc123" },
+      },
+    ]);
+    expect(createLoggerArgs).toEqual(["f3-me"]);
   });
 
-  it("logs WARNING via console.log", () => {
-    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+  it("logs WARNING", async () => {
+    const { logWarn } = await loadLoggingModule();
 
     logWarn("me.test.warn");
 
-    expect(logSpy).toHaveBeenCalledTimes(1);
-    const parsed = getLoggedJson(logSpy);
-    expect(parsed.severity).toBe("WARNING");
-    expect(parsed.event).toBe("me.test.warn");
+    expect(loggedCalls).toEqual([
+      {
+        level: "warn",
+        event: "me.test.warn",
+        ctx: {},
+      },
+    ]);
   });
 
-  it("logs ERROR with serialized Error details", () => {
-    const errorSpy = vi
-      .spyOn(console, "error")
-      .mockImplementation(() => undefined);
+  it("logs ERROR with error context", async () => {
+    const { logError } = await loadLoggingModule();
     const err = new Error("boom");
     (err as Error & { cause?: unknown }).cause = "root-cause";
 
     logError("me.test.error", { sessionUserId: 42 }, err);
 
-    expect(errorSpy).toHaveBeenCalledTimes(1);
-    const parsed = getLoggedJson(errorSpy);
-    expect(parsed.severity).toBe("ERROR");
-    expect(parsed.event).toBe("me.test.error");
-    expect(parsed.sessionUserId).toBe(42);
-    expect(parsed.errorName).toBe("Error");
-    expect(parsed.errorMessage).toBe("boom");
-    expect(parsed.errorCause).toBe("root-cause");
+    expect(loggedCalls).toHaveLength(1);
+    expect(loggedCalls[0]?.level).toBe("error");
+    expect(loggedCalls[0]?.event).toBe("me.test.error");
+    expect(loggedCalls[0]?.ctx.sessionUserId).toBe(42);
+    expect(loggedCalls[0]?.ctx.err).toBe(err);
   });
 
-  it("serializes non-Error circular values safely", () => {
-    const errorSpy = vi
-      .spyOn(console, "error")
-      .mockImplementation(() => undefined);
+  it("accepts non-Error circular values without throwing", async () => {
+    const { logError } = await loadLoggingModule();
     const circular: Record<string, unknown> = {};
     circular.self = circular;
 
-    logError("me.test.circular", {}, circular);
+    expect(() => logError("me.test.circular", {}, circular)).not.toThrow();
 
-    const parsed = getLoggedJson(errorSpy);
-    expect(parsed.errorValue).toBe("[Circular]");
+    expect(loggedCalls).toHaveLength(1);
+    expect(loggedCalls[0]?.level).toBe("error");
+    expect(loggedCalls[0]?.ctx.err).toBe(circular);
   });
 
-  it("falls back when context cannot be JSON-stringified", () => {
-    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+  it("accepts circular context without throwing", async () => {
+    const { logInfo } = await loadLoggingModule();
     const circularContext: Record<string, unknown> = {};
     circularContext.self = circularContext;
 
-    logInfo("me.test.context.circular", { circularContext });
+    expect(() =>
+      logInfo("me.test.context.circular", { circularContext }),
+    ).not.toThrow();
 
-    const parsed = getLoggedJson(logSpy);
-    expect(parsed.severity).toBe("INFO");
-    expect(parsed.event).toBe("me.test.context.circular");
-    expect(parsed.serializeError).toBe("payload had circular references");
+    expect(loggedCalls).toEqual([
+      {
+        level: "info",
+        event: "me.test.context.circular",
+        ctx: { circularContext },
+      },
+    ]);
   });
 });
