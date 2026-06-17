@@ -29,7 +29,7 @@ declare -A PROJECT_MAP=(
 )
 
 SERVICE_NAME="f3-admin"
-REGION="us-east1"
+REGION="us-central1"
 
 # Env vars that map to GCP secrets (var name -> secret ID).
 # Only genuinely sensitive values go here.

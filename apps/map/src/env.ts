@@ -6,21 +6,21 @@ export const env = createEnv({
     NODE_ENV: z
       .enum(["development", "production", "test"])
       .default("development"),
-    VERCEL_ENV: z.enum(["development", "preview", "production"]).optional(),
-    NEXT_PUBLIC_CHANNEL: z.enum([
-      "local",
-      "ci",
-      "branch",
-      "dev",
-      "staging",
-      "prod",
-    ]),
-    // GIT items are provided by the next.config.js
-    NEXT_PUBLIC_GIT_COMMIT_HASH: z.string().optional(),
-    NEXT_PUBLIC_GIT_BRANCH: z.string().optional(),
     NEXT_PUBLIC_GA_MEASUREMENT_ID: z.string().optional(),
+  },
+  /**
+   * Specify your server-side environment variables schema here.
+   * This way you can ensure the app isn't built with invalid env vars.
+   */
+  server: {
+    DATABASE_URL: z.string().min(1).optional(),
+    TEST_DATABASE_URL: z.string().min(1).optional(),
+    F3_ADMIN_URL: z.string().url().optional(),
+    F3_API_BASE_URL: z.string().url(),
+    F3_CHANNEL: z.enum(["local", "ci", "branch", "dev", "staging", "prod"]),
+    F3_GOOGLE_API_KEY: z.string().min(1),
     // Required in non-development environments, optional in development
-    NEXT_PUBLIC_MAP_API_KEY: z
+    F3_MAP_API_KEY: z
       .string()
       .min(1)
       .optional()
@@ -28,39 +28,23 @@ export const env = createEnv({
         (val) => process.env.NODE_ENV === "development" || val !== undefined,
         { message: "Required in non-development environments" },
       ),
-  },
-  /**
-   * Specify your server-side environment variables schema here.
-   * This way you can ensure the app isn't built with invalid env vars.
-   */
-  server: {
-    DATABASE_URL: z.string(),
-    TEST_DATABASE_URL: z.string(),
+    F3_MAP_BASE_URL: z.string().url(),
+    GCS_EMULATOR_HOST: z.string().optional(),
+    GOOGLE_LOGO_BUCKET_BUCKET_NAME: z.string().min(1),
+    GOOGLE_LOGO_BUCKET_CLIENT_EMAIL: z.string().min(1),
+    GOOGLE_LOGO_BUCKET_PRIVATE_KEY: z.string().min(1),
+    SUPER_ADMIN_API_KEY: z.string().min(1),
   },
   /**
    * Specify your client-side environment variables schema here.
    * For them to be exposed to the client, prefix them with `NEXT_PUBLIC_`.
    */
-  client: {
-    NEXT_PUBLIC_MAP_URL: z.string().min(1),
-    NEXT_PUBLIC_API_URL: z.string().min(1),
-    NEXT_PUBLIC_ADMIN_URL: z.string().min(1).optional(),
-    NEXT_PUBLIC_GOOGLE_API_KEY: z.string().min(1),
-  },
+  client: {},
   /**
    * Destructure all variables from `process.env` to make sure they aren't tree-shaken away.
    */
   experimental__runtimeEnv: {
-    NEXT_PUBLIC_MAP_API_KEY: process.env.NEXT_PUBLIC_MAP_API_KEY,
-    NEXT_PUBLIC_GOOGLE_API_KEY: process.env.NEXT_PUBLIC_GOOGLE_API_KEY,
-    NEXT_PUBLIC_MAP_URL: process.env.NEXT_PUBLIC_MAP_URL,
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
-    NEXT_PUBLIC_ADMIN_URL: process.env.NEXT_PUBLIC_ADMIN_URL,
-    VERCEL_ENV: process.env.VERCEL_ENV,
     NODE_ENV: process.env.NODE_ENV,
-    NEXT_PUBLIC_CHANNEL: process.env.NEXT_PUBLIC_CHANNEL,
-    NEXT_PUBLIC_GIT_COMMIT_HASH: process.env.NEXT_PUBLIC_GIT_COMMIT_HASH,
-    NEXT_PUBLIC_GIT_BRANCH: process.env.NEXT_PUBLIC_GIT_BRANCH,
     NEXT_PUBLIC_GA_MEASUREMENT_ID: process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID,
   },
   skipValidation:

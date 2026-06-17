@@ -80,6 +80,7 @@ export default function AdminAreasModal({
       logoUrl: area?.logoUrl ?? null,
       website: area?.website ?? null,
       email: area?.email ?? null,
+      phone: area?.phone ?? null,
       twitter: area?.twitter ?? null,
       facebook: area?.facebook ?? null,
       instagram: area?.instagram ?? null,
@@ -99,6 +100,7 @@ export default function AdminAreasModal({
       logoUrl: area?.logoUrl ?? null,
       website: area?.website ?? null,
       email: area?.email ?? null,
+      phone: area?.phone ?? null,
       twitter: area?.twitter ?? null,
       facebook: area?.facebook ?? null,
       instagram: area?.instagram ?? null,
@@ -107,20 +109,26 @@ export default function AdminAreasModal({
     });
   }, [form, area]);
 
+  const isEditing = !!area?.id;
+  const actionText = isEditing ? "update" : "add";
+  const actionTextPast = isEditing ? "updated" : "added";
+  const showDeleteButton = isEditing && area?.isActive !== false;
+
   const crupdateArea = useMutation(
     orpc.org.crupdate.mutationOptions({
       onSuccess: async () => {
         await invalidateQueries("org");
         closeModal();
-        toast.success("Successfully updated area");
+        toast.success(`Successfully ${actionTextPast} area`);
         router.refresh();
       },
       onError: (err) => {
         toast.error(
           err instanceof ORPCError && err?.code === "UNAUTHORIZED"
-            ? "You must be logged in to update areas"
-            : "Failed to update area",
+            ? `You are not authorized to ${actionText} this area`
+            : `Failed to ${actionText} area`,
         );
+        setIsSubmitting(false);
       },
     }),
   );
@@ -141,24 +149,10 @@ export default function AdminAreasModal({
 
         <Form {...form}>
           <form
-            onSubmit={form.handleSubmit(
-              async (data) => {
-                setIsSubmitting(true);
-                try {
-                  await crupdateArea.mutateAsync({ ...data, orgType: "area" });
-                } catch (error) {
-                  toast.error("Failed to update area");
-                  console.error(error);
-                } finally {
-                  setIsSubmitting(false);
-                }
-              },
-              (error) => {
-                toast.error("Failed to update area");
-                console.log(error);
-                setIsSubmitting(false);
-              },
-            )}
+            onSubmit={form.handleSubmit(async (data) => {
+              setIsSubmitting(true);
+              await crupdateArea.mutateAsync({ ...data, orgType: "area" });
+            })}
             className="space-y-4"
           >
             <div className="flex flex-wrap">
@@ -259,6 +253,26 @@ export default function AdminAreasModal({
                       <FormControl>
                         <Input
                           placeholder="Email"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="mb-4 w-full px-2 sm:w-1/2">
+                <FormField
+                  control={form.control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Phone</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="Phone"
+                          type="tel"
                           {...field}
                           value={field.value ?? ""}
                         />
@@ -413,23 +427,24 @@ export default function AdminAreasModal({
                     )}
                   </Button>
                 </div>
-                <div className="flex space-x-4 pt-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    // variant="link"
-                    onClick={() => {
-                      closeModal();
-                      openModal(ModalType.ADMIN_DELETE_CONFIRMATION, {
-                        id: area?.id ?? -1,
-                        type: DeleteType.AREA,
-                      });
-                    }}
-                    className="w-full"
-                  >
-                    Delete Area
-                  </Button>
-                </div>
+                {showDeleteButton && (
+                  <div className="flex space-x-4 pt-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        closeModal();
+                        openModal(ModalType.ADMIN_DELETE_CONFIRMATION, {
+                          id: area?.id ?? -1,
+                          type: DeleteType.AREA,
+                        });
+                      }}
+                      className="w-full"
+                    >
+                      Deactivate Area
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           </form>

@@ -1,5 +1,9 @@
 import { useMemo } from "react";
 
+/**
+ * Maps a list of items into memoized `{ value, label }` options for use with
+ * `VirtualizedCombobox`. Returns an empty array when `items` is undefined.
+ */
 export const useOptions = <T>(
   data: T[] | undefined,
   label: (item: T) => string,

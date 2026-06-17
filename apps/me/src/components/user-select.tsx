@@ -20,8 +20,6 @@ export function UserSelect({ value, onChange }: UserSelectProps) {
     open,
     search,
   });
-  // TODO: dropdownRef — reserved for click-outside detection or focus management
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
@@ -89,7 +87,7 @@ export function UserSelect({ value, onChange }: UserSelectProps) {
   );
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div className="relative">
       <Button
         variant="outline"
         type="button"
@@ -101,7 +99,7 @@ export function UserSelect({ value, onChange }: UserSelectProps) {
         onKeyDown={handleTriggerKeyDown}
       >
         <span
-          className={`truncate ${value && selectedUser ? "" : "text-muted-foreground"}`}
+          className={`min-w-0 truncate ${value && selectedUser ? "" : "text-muted-foreground"}`}
         >
           {selectedUser ? displayName(selectedUser) : "Select a person..."}
         </span>
@@ -125,6 +123,11 @@ export function UserSelect({ value, onChange }: UserSelectProps) {
       {open && (
         <div
           id="user-list"
+          role="listbox"
+          tabIndex={0}
+          aria-activedescendant={
+            focusedIndex >= 0 ? `user-option-${focusedIndex}` : undefined
+          }
           className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md"
           onKeyDown={handleListKeyDown}
         >
@@ -148,6 +151,9 @@ export function UserSelect({ value, onChange }: UserSelectProps) {
               <>
                 {value !== null && (
                   <button
+                    id="user-option-0"
+                    role="option"
+                    aria-selected={false}
                     ref={(el) => {
                       itemRefs.current[0] = el;
                     }}
@@ -174,6 +180,9 @@ export function UserSelect({ value, onChange }: UserSelectProps) {
                 {results.map((user: UserListItem, idx: number) => (
                   <button
                     key={user.id}
+                    id={`user-option-${clearOffset + idx}`}
+                    role="option"
+                    aria-selected={user.id === value}
                     ref={(el) => {
                       itemRefs.current[clearOffset + idx] = el;
                     }}

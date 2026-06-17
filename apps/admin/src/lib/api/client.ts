@@ -24,24 +24,22 @@ function requireApiBaseUrl(): string {
     : `${normalized}${API_PREFIX_V1}`;
 }
 
-export const getApiClient = cache(
-  async (): Promise<RouterClient<typeof router>> => {
-    const cookieStore = await cookies();
-    const accessToken = cookieStore.get(ACCESS_TOKEN_COOKIE_NAME)?.value;
-    if (!accessToken) throw new Error("Missing access token");
+const getApiClient = cache(async (): Promise<RouterClient<typeof router>> => {
+  const cookieStore = await cookies();
+  const accessToken = cookieStore.get(ACCESS_TOKEN_COOKIE_NAME)?.value;
+  if (!accessToken) throw new Error("Missing access token");
 
-    const link = new RPCLink({
-      url: requireApiBaseUrl(),
-      fetch: async (input, init) => {
-        input.headers.set(Header.Client, Client.ORPC);
-        input.headers.set(Header.Authorization, `Bearer ${accessToken}`);
-        return fetch(input, init);
-      },
-    });
+  const link = new RPCLink({
+    url: requireApiBaseUrl(),
+    fetch: async (input, init) => {
+      input.headers.set(Header.Client, Client.ORPC);
+      input.headers.set(Header.Authorization, `Bearer ${accessToken}`);
+      return fetch(input, init);
+    },
+  });
 
-    return createORPCClient<RouterClient<typeof router>>(link);
-  },
-);
+  return createORPCClient<RouterClient<typeof router>>(link);
+});
 
 export async function getMyProfile() {
   const client = await getApiClient();

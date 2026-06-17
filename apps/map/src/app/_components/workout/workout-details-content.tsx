@@ -71,6 +71,7 @@ export const WorkoutDetailsContent = ({
         ? {
             website: location.parentWebsite,
             email: location.parentEmail,
+            phone: location.parentPhone,
             twitter: location.parentTwitter,
             facebook: location.parentFacebook,
             instagram: location.parentInstagram,
@@ -84,6 +85,7 @@ export const WorkoutDetailsContent = ({
       aoContact &&
       (aoContact.website ??
         aoContact.email ??
+        aoContact.phone ??
         aoContact.twitter ??
         aoContact.facebook ??
         aoContact.instagram),

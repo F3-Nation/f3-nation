@@ -1,7 +1,6 @@
 /**
- * v0 by Vercel.
+ * Generated with v0.
  * @see https://v0.dev/t/1U7tA9qTarA
- * Documentation: https://v0.dev/docs#integrating-generated-code-into-your-nextjs-app
  */
 import type { Control, FieldValues, Path } from "react-hook-form";
 
@@ -32,7 +31,7 @@ type ControlledTimeInputProps<T extends FieldValues> = Omit<
   disabled?: boolean;
 };
 
-export const TimeInput = ({ label, id, value, onChange }: TimeInputProps) => {
+const TimeInput = ({ label, id, value, onChange }: TimeInputProps) => {
   return (
     <Input
       type="time"

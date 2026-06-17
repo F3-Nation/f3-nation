@@ -1,5 +1,3 @@
-import axios from "axios";
-
 export const uploadLogo = async ({
   file,
   orgId,
@@ -19,16 +17,16 @@ export const uploadLogo = async ({
     formData.append("size", size.toString());
   }
 
-  const response = await axios.post<{ url: string }>(
-    "/api/upload-logo",
-    formData,
-  );
+  const response = await fetch("/api/upload-logo", {
+    method: "POST",
+    body: formData,
+  });
 
-  if (response.status !== 200) {
+  if (!response.ok) {
     throw new Error("Failed to upload logo");
   }
   console.log("response", response);
 
-  const { url } = response.data;
+  const { url } = (await response.json()) as { url: string };
   return url;
 };

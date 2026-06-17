@@ -89,6 +89,7 @@ export default function AdminRegionsModal({
       logoUrl: region?.logoUrl ?? null,
       website: region?.website ?? null,
       email: region?.email ?? null,
+      phone: region?.phone ?? null,
       twitter: region?.twitter ?? null,
       facebook: region?.facebook ?? null,
       instagram: region?.instagram ?? null,
@@ -109,6 +110,7 @@ export default function AdminRegionsModal({
       logoUrl: region?.logoUrl ?? null,
       website: region?.website ?? null,
       email: region?.email ?? null,
+      phone: region?.phone ?? null,
       twitter: region?.twitter ?? null,
       facebook: region?.facebook ?? null,
       instagram: region?.instagram ?? null,
@@ -126,6 +128,10 @@ export default function AdminRegionsModal({
   }, [logoPreviewUrl]);
 
   const crupdateRegion = useMutation(orpc.org.crupdate.mutationOptions());
+  const isEditing = !!region?.id;
+  const actionText = isEditing ? "update" : "add";
+  const actionTextPast = isEditing ? "updated" : "added";
+  const showDeactivateButton = isEditing && region?.isActive !== false;
 
   return (
     <Dialog open={true} onOpenChange={() => closeModal()}>
@@ -177,13 +183,13 @@ export default function AdminRegionsModal({
 
                   await invalidateQueries("org");
                   closeModal();
-                  toast.success("Successfully updated region");
+                  toast.success(`Successfully ${actionTextPast} region`);
                   router.refresh();
                 } catch (error) {
                   toast.error(
                     error instanceof ORPCError && error?.code === "UNAUTHORIZED"
-                      ? "You must be logged in to update regions"
-                      : "Failed to update region",
+                      ? `You are not authorized to ${actionText} this region`
+                      : `Failed to ${actionText} region`,
                   );
                   console.error(error);
                 } finally {
@@ -356,6 +362,26 @@ export default function AdminRegionsModal({
               <div className="mb-4 w-full px-2 sm:w-1/2">
                 <FormField
                   control={form.control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Phone</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="Phone"
+                          type="tel"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="mb-4 w-full px-2 sm:w-1/2">
+                <FormField
+                  control={form.control}
                   name="twitter"
                   render={({ field }) => (
                     <FormItem>
@@ -498,23 +524,24 @@ export default function AdminRegionsModal({
                     )}
                   </Button>
                 </div>
-                <div className="flex space-x-4 pt-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    // variant="link"
-                    onClick={() => {
-                      closeModal();
-                      openModal(ModalType.ADMIN_DELETE_CONFIRMATION, {
-                        id: region?.id ?? -1,
-                        type: DeleteType.REGION,
-                      });
-                    }}
-                    className="w-full"
-                  >
-                    Delete Region
-                  </Button>
-                </div>
+                {showDeactivateButton && (
+                  <div className="flex space-x-4 pt-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        closeModal();
+                        openModal(ModalType.ADMIN_DELETE_CONFIRMATION, {
+                          id: region?.id ?? -1,
+                          type: DeleteType.REGION,
+                        });
+                      }}
+                      className="w-full"
+                    >
+                      Deactivate Region
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           </form>

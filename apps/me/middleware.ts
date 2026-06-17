@@ -45,6 +45,14 @@ export async function middleware(request: NextRequest) {
   }
 
   if (refreshTokenCookie) {
+    // Only clear auth cookies on navigation requests when refresh fails.
+    // Concurrent sub-resource requests (API fetches, RSC prefetches) race to
+    // redeem the same refresh token; all but one lose with invalid_grant.
+    // If we clear cookies on every losing response we log the user out even
+    // though the winning request may have already set fresh tokens (#375).
+    const isNavigationRequest =
+      request.headers.get("sec-fetch-mode") === "navigate";
+
     try {
       const tokens = await refreshToken({ refreshToken: refreshTokenCookie });
       if (tokens.accessToken) {
@@ -97,7 +105,15 @@ export async function middleware(request: NextRequest) {
         return response;
       }
     } catch {
-      // Fall through to clearing cookies + redirect.
+      // Non-navigation requests (API, prefetch): return 401 without touching
+      // cookies so the winning rotation's Set-Cookie headers are not clobbered.
+      if (!isNavigationRequest) {
+        if (pathname.startsWith("/api/")) {
+          return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+        }
+        return NextResponse.next();
+      }
+      // Navigation request: refresh genuinely dead — fall through to clear + redirect.
     }
   }
 

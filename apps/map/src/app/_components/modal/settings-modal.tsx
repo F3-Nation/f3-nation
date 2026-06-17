@@ -30,8 +30,8 @@ import {
 } from "@acme/ui/dialog";
 import { toast } from "@acme/ui/toast";
 
-import { env } from "~/env";
 import { useAuth } from "~/utils/hooks/use-auth";
+import { useRuntimeConfig } from "~/utils/runtime-config";
 import { appStore } from "~/utils/store/app";
 import { mapStore } from "~/utils/store/map";
 import { closeModal, ModalType, openModal } from "~/utils/store/modal";
@@ -43,6 +43,7 @@ export default function SettingsModal() {
   const tiles = mapStore.use.tiles();
   const { theme, setTheme } = useTheme();
   const { session, isNationAdmin, isEditorOrAdmin } = useAuth();
+  const { adminUrl: configAdminUrl, channel } = useRuntimeConfig();
   const center = mapStore.use.center();
   const zoom = mapStore.use.zoom();
 
@@ -282,10 +283,10 @@ export default function SettingsModal() {
                 {isEditorOrAdmin &&
                   (() => {
                     const adminUrl =
-                      env.NEXT_PUBLIC_ADMIN_URL ??
-                      (env.NEXT_PUBLIC_CHANNEL === "prod"
+                      configAdminUrl ||
+                      (channel === "prod"
                         ? "https://admin.f3nation.com"
-                        : env.NEXT_PUBLIC_CHANNEL === "staging"
+                        : channel === "staging"
                           ? "https://staging.admin.f3nation.com"
                           : undefined);
                     return adminUrl ? (

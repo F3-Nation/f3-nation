@@ -1,26 +1,17 @@
 "use client";
 
-import type { InferRouterInputs, InferRouterOutputs } from "@orpc/server";
 import { createTanstackQueryUtils } from "@orpc/tanstack-query";
-import type {
-  InferDataFromTag,
-  QueryClient,
-  QueryKey,
-} from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
 import { QueryClientProvider } from "@tanstack/react-query";
 import React, { Suspense, useEffect, useState } from "react";
 
-import type { router } from "@acme/api";
 import { isDevelopmentNodeEnv } from "@acme/shared/common/constants";
 
 import { createQueryClient } from "~/orpc/query-client";
 import { client } from "./client";
 
-export type Outputs = InferRouterOutputs<typeof router>;
-export type Inputs = InferRouterInputs<typeof router>;
-
 let clientQueryClientSingleton: QueryClient | undefined = undefined;
-export const getQueryClient = () => {
+const getQueryClient = () => {
   if (typeof window === "undefined") {
     return createQueryClient();
   } else {
@@ -78,12 +69,4 @@ export function invalidateQueries(
     });
   }
   return getQueryClient().invalidateQueries(keyOrOptions);
-}
-
-export function getQueryData<
-  TQueryFnData = unknown,
-  TTaggedQueryKey extends QueryKey = QueryKey,
-  TInferredQueryFnData = InferDataFromTag<TQueryFnData, TTaggedQueryKey>,
->(queryKey: TTaggedQueryKey): TInferredQueryFnData | undefined {
-  return getQueryClient().getQueryData(queryKey);
 }

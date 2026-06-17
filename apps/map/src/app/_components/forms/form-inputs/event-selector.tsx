@@ -4,8 +4,8 @@ import { Controller, useFormContext } from "react-hook-form";
 import { dayOfWeekToShortDayOfWeek } from "@acme/shared/app/functions";
 
 import { orpc, useQuery } from "~/orpc/react";
-import { useOptions } from "~/utils/use-options";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
+import { useOptions } from "~/utils/use-options";
 
 interface EventSelectorProps {
   label?: string;

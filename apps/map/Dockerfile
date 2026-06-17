@@ -1,82 +1,67 @@
-FROM --platform=linux/amd64 node:24-alpine AS builder
+# ---------- Stage 1: Prune monorepo ----------
+ARG TURBO_VERSION=2
+FROM --platform=linux/amd64 node:24.14.1-alpine AS builder
+ARG TURBO_VERSION
 
-ENV NEXT_TELEMETRY_DISABLED 1
-ENV TURBO_TELEMETRY_DISABLED 1
-
-RUN apk add --no-cache libc6-compat openssl && apk update
-WORKDIR /app
-RUN npm install -g turbo@^1.12.3
-COPY . .
-
-# Prune the workspace to only include nextjs and its dependencies
-RUN turbo prune f3-nation-map --docker
-
-FROM --platform=linux/amd64 node:24-alpine AS installer
-RUN apk add --no-cache libc6-compat openssl && apk update
-WORKDIR /app
-
-ENV NODE_ENV production
-ENV CI true
-ENV SKIP_ENV_VALIDATION true
-
-RUN npm install -g turbo@^1.12.3
-RUN corepack enable
+ENV TURBO_TELEMETRY_DISABLED=1
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+RUN apk add --no-cache libc6-compat && apk update
+WORKDIR /app
 
-# Copy the pruned workspace
-COPY .gitignore .gitignore
+RUN corepack enable
+RUN npm install -g turbo@${TURBO_VERSION}
+
+COPY . .
+RUN turbo prune f3-map --docker
+
+# ---------- Stage 2: Install + build ----------
+FROM --platform=linux/amd64 node:24.14.1-alpine AS installer
+ARG TURBO_VERSION
+
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV TURBO_TELEMETRY_DISABLED=1
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+RUN apk add --no-cache libc6-compat openssl && apk update
+WORKDIR /app
+
+RUN corepack enable
+
+# Install dependencies from pruned lockfile
 COPY --from=builder /app/out/json/ .
 COPY --from=builder /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
-
-# Install dependencies (pnpm version from root package.json "packageManager")
 RUN pnpm install --frozen-lockfile
 
+# Copy source and build
 COPY --from=builder /app/out/full/ .
 
-RUN wget -q -t3 'https://packages.doppler.com/public/cli/rsa.8004D9FF50437357.key' -O /etc/apk/keys/cli@doppler-8004D9FF50437357.rsa.pub && \
-    echo 'https://packages.doppler.com/public/cli/alpine/any-version/main' | tee -a /etc/apk/repositories && \
-    apk add doppler
+ENV NODE_ENV=production
+ENV CI=true
+ENV SKIP_ENV_VALIDATION=true
+ENV SKIP_SSG=1
 
-ARG DOPPLER_TOKEN
-ARG ENVIRONMENT
-RUN echo "Received DOPPLER_TOKEN (first 5 chars): ${DOPPLER_TOKEN:0:5}"
+RUN pnpm turbo build --filter=f3-map
 
-ENV DOPPLER_TOKEN=${DOPPLER_TOKEN}
-RUN echo "Set ENV DOPPLER_TOKEN (first 5 chars): ${DOPPLER_TOKEN:0:5}"
+# ---------- Stage 3: Production runner ----------
+FROM --platform=linux/amd64 node:24.14.1-alpine AS runner
 
-# Debug steps to verify the token
-RUN echo "Received DOPPLER_TOKEN (first 5 chars): ${DOPPLER_TOKEN:0:5}" && \
-    if [ -z "$DOPPLER_TOKEN" ]; then \
-        echo "Error: DOPPLER_TOKEN is not set"; \
-        exit 1; \
-    fi && \
-    echo "Using token starting with: ${DOPPLER_TOKEN:0:5}"
-
-# Use the token explicitly
-RUN doppler setup -p f3-map --token "$DOPPLER_TOKEN"
-    
-RUN doppler secrets download --no-file --format env > /app/apps/map/.env
-RUN doppler run -- sh -c "pnpm turbo build --filter=f3-nation-map && pnpm -F db migrate"
-
-FROM --platform=linux/amd64 node:24-alpine AS runner
 RUN apk add --no-cache libc6-compat openssl && apk update
 WORKDIR /app
 
-# Don't run production as root
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 map
-USER map
-EXPOSE 3000
-ENV PORT 3000
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 map
 
-ENV NODE_ENV production
-
-COPY --from=installer /app/apps/map/next.config.js ./
-COPY --from=installer /app/apps/map/package.json ./
-
-COPY --from=installer --chown=map:nodejs /app/apps/map/.env ./apps/map/.env
+# Copy standalone output
 COPY --from=installer --chown=map:nodejs /app/apps/map/.next/standalone ./
 COPY --from=installer --chown=map:nodejs /app/apps/map/.next/static ./apps/map/.next/static
 COPY --from=installer --chown=map:nodejs /app/apps/map/public ./apps/map/public
 
-CMD node apps/map/server.js
+USER map
+
+ENV PORT=8080
+EXPOSE 8080
+
+CMD ["node", "apps/map/server.js"]

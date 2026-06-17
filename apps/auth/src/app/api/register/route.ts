@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+import { logError } from "~/lib/logging";
 import { env } from "~/env";
 import { rateLimit } from "~/lib/rate-limit";
 
@@ -14,6 +15,13 @@ interface RegisterBody {
   emergencyContact?: string;
   emergencyPhone?: string;
   emergencyNotes?: string;
+}
+
+/** Strip the +1 country code from US E.164 numbers — most users are US-based
+ *  and the DB stores bare 10-digit numbers for domestic numbers. */
+function normalizePhone(phone: string | undefined): string | undefined {
+  if (!phone) return undefined;
+  return phone.startsWith("+1") ? phone.slice(2).trim() : phone;
 }
 
 export async function POST(request: NextRequest) {
@@ -45,17 +53,20 @@ export async function POST(request: NextRequest) {
     lastName: body.lastName.trim(),
     ...(body.f3Name?.trim() && { f3Name: body.f3Name.trim() }),
     ...(body.homeRegionId && { homeRegionId: body.homeRegionId }),
-    ...(body.phone?.trim() && { phone: body.phone.trim() }),
+    ...(body.phone?.trim() && { phone: normalizePhone(body.phone.trim()) }),
     ...(body.emergencyContact?.trim() && {
       emergencyContact: body.emergencyContact.trim(),
     }),
     ...(body.emergencyPhone?.trim() && {
-      emergencyPhone: body.emergencyPhone.trim(),
+      emergencyPhone: normalizePhone(body.emergencyPhone.trim()),
     }),
     ...(body.emergencyNotes?.trim() && {
       emergencyNotes: body.emergencyNotes.trim(),
     }),
     emailVerified: new Date().toISOString(),
+    // Mark onboarding complete at creation time so the OAuth authorize flow
+    // never redirects a newly registered user to /onboarding.
+    meta: { onboarding_completed: true },
     roles: [],
   };
 
@@ -72,7 +83,11 @@ export async function POST(request: NextRequest) {
 
     if (!res.ok) {
       const text = await res.text();
-      console.error("Failed to create user via F3 API:", text);
+      logError("auth.register.f3_api_failed", {
+        status: res.status,
+        statusText: res.statusText,
+        responseText: text.slice(0, 500),
+      });
       return NextResponse.json(
         { error: "Failed to create account. Please try again." },
         { status: 502 },
@@ -81,7 +96,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ created: true });
   } catch (err) {
-    console.error("Error calling F3 API:", err);
+    logError("auth.register.f3_api_error", {}, err);
     return NextResponse.json(
       { error: "Unable to reach the registration service. Please try again." },
       { status: 502 },

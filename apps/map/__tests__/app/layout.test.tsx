@@ -5,6 +5,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import RootLayout from "../../src/app/layout";
 
+vi.mock("next/headers", () => ({
+  headers: vi.fn().mockResolvedValue(new Headers()),
+}));
+
 vi.mock("geist/font/mono", () => ({
   GeistMono: {
     variable: vi.fn(),
@@ -70,11 +74,8 @@ Object.defineProperty(window, "matchMedia", {
 
 describe("layout app router", () => {
   it("should render layout", async () => {
-    const { container } = render(
-      <RootLayout>
-        <div />
-      </RootLayout>,
-    );
+    const layoutResult = await RootLayout({ children: <div /> });
+    const { container } = render(layoutResult);
     expect(container.querySelector("body")).toHaveClass(
       "min-h-dvh w-screen bg-background font-sans text-foreground antialiased",
     );

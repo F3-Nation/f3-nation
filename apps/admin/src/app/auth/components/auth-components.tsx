@@ -30,14 +30,6 @@ export const AuthWrapper = ({
   );
 };
 
-export const Loading = ({ text }: { text: string }) => {
-  return (
-    <div className="flex h-32 w-full flex-col items-center justify-center gap-4">
-      <p className="text-center text-lg text-muted-foreground">{text}</p>
-    </div>
-  );
-};
-
 export const AuthContent = ({
   callbackUrl,
   withWrapper = true,

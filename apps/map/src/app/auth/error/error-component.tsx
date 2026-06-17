@@ -4,7 +4,6 @@ import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 
 import { VersionInfo } from "~/app/_components/version-info";
-import { env } from "~/env";
 import { AuthWrapper } from "../components/auth-components";
 
 type Error = "default" | "Configuration" | "AccessDenied" | "Verification";
@@ -12,7 +11,6 @@ type Error = "default" | "Configuration" | "AccessDenied" | "Verification";
 export default function ErrorComponent() {
   const searchParams = useSearchParams();
   const error = searchParams?.get("error") ?? "default";
-  const url = new URL(env.NEXT_PUBLIC_MAP_URL);
 
   const errors: Record<
     Error,
@@ -23,8 +21,8 @@ export default function ErrorComponent() {
       message: (
         <>
           <p>An error occurred while signing in. Please try again.</p>
-          <a href={url.origin} className="hover:underline">
-            {url.host}
+          <a href={"/"} className="hover:underline">
+            Back to the map
           </a>
         </>
       ),

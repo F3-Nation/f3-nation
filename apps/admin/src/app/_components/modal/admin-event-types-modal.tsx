@@ -103,8 +103,7 @@ export default function AdminEventTypesModal({
       onError: (err) => {
         toast.error(
           err instanceof ORPCError && err?.code === "UNAUTHORIZED"
-            ? err.message ??
-                `You are not authorized to ${actionText} this Event Type`
+            ? `You are not authorized to ${actionText} this event type`
             : `Failed to ${actionText} event type`,
         );
       },
@@ -132,6 +131,8 @@ export default function AdminEventTypesModal({
       setIsSubmitting(false);
     }
   };
+
+  const showDeleteButton = isEditing && eventType?.isActive !== false;
 
   return (
     <Dialog open={true} onOpenChange={() => closeModal()}>
@@ -272,20 +273,22 @@ export default function AdminEventTypesModal({
                   )}
                 </Button>
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  closeModal();
-                  openModal(ModalType.ADMIN_DELETE_CONFIRMATION, {
-                    id: eventType?.id ?? -1,
-                    type: DeleteType.EVENT_TYPE,
-                  });
-                }}
-                className="w-full"
-              >
-                Delete Event
-              </Button>
+              {showDeleteButton ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    closeModal();
+                    openModal(ModalType.ADMIN_DELETE_CONFIRMATION, {
+                      id: eventType?.id ?? -1,
+                      type: DeleteType.EVENT_TYPE,
+                    });
+                  }}
+                  className="w-full"
+                >
+                  Deactivate Event Type
+                </Button>
+              ) : null}
             </div>
           </div>
         </Form>
