@@ -139,6 +139,9 @@ jobs:
         with:
           context: .
           file: apps/${{ matrix.app }}/Dockerfile
+          # Cloud Run only runs linux/amd64. The Dockerfile FROM lines no longer
+          # pin --platform (BuildKit lint), so the target arch is set here.
+          platforms: linux/amd64
           push: false
           cache-from: type=gha,scope=docker-${{ matrix.app }}
           cache-to: type=gha,mode=max,scope=docker-${{ matrix.app }}
