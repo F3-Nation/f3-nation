@@ -7,7 +7,7 @@ This is the F3 Nation Map application, an interactive map for F3 Nation location
 - **Port**: 3000
 - **Framework**: Next.js
 - **TypeScript**: Yes
-- **Testing**: Playwright, Vitest
+- **Testing**: Vitest
 
 ## Setup
 
@@ -71,7 +71,6 @@ pnpm test --filter f3-map
 
 # Run specific test suites
 cd apps/map
-pnpm test:e2e  # Playwright end-to-end tests
 pnpm test:unit # Vitest unit tests
 ```
 
@@ -106,7 +105,6 @@ This application is built with:
 - **Tailwind CSS** for styling
 - **oRPC** for type-safe API calls
 - **Drizzle ORM** for database operations
-- **Playwright** for end-to-end testing
 - **Vitest** for unit testing
 
 ## Related Documentation

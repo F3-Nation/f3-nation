@@ -58,7 +58,7 @@ The dev email (`apps/auth/src/lib/email-mfa.ts`) renders this HTML:
 The two extraction targets for an automation agent are:
 
 1. **6-digit code** -- the `<p style="...letter-spacing: 8px;">` element. Use this for headless flows: feed it to `/api/auth/callback/credentials` with a CSRF token (recipe below). **This is the canonical path for autonomous QA.**
-2. **Magic link** -- `<a href="${authUrl}/login/email/verify?email=<urlencoded>&code=<6 digits>">...</a>`. The page at that URL is a **client component** -- it calls `signIn("email-mfa", ...)` from a React `useEffect`. A raw `curl` GET only returns HTML and never executes the sign-in. Use this only when driving a JS-capable browser (Playwright, CDP).
+2. **Magic link** -- `<a href="${authUrl}/login/email/verify?email=<urlencoded>&code=<6 digits>">...</a>`. The page at that URL is a **client component** -- it calls `signIn("email-mfa", ...)` from a React `useEffect`. A raw `curl` GET only returns HTML and never executes the sign-in. Use this only when driving a JS-capable browser (e.g. CDP).
 
 Both are stable across dev runs. Neither depends on parsing arbitrary email-rendering quirks.
 
@@ -162,27 +162,27 @@ curl -sb /tmp/jar http://localhost:3003/api/auth/me
 # -> {"user":{"id":...,"email":"qa-bot@f3nation.test",...}}
 ```
 
-### Form mode -- submit the code through the verify page UI (Playwright/CDP)
+### Form mode -- submit the code through the verify page UI (browser automation / CDP)
 
 When you're driving a real browser and want to exercise the verify form's UI itself:
 
 ```bash
 # Drive the browser to /login/email, submit the email
-playwright_navigate "http://localhost:3004/login/email"
-playwright_fill "[name=email]" "qa-bot@f3nation.test"
-playwright_click "[type=submit]"
+browser_navigate "http://localhost:3004/login/email"
+browser_fill "[name=email]" "qa-bot@f3nation.test"
+browser_click "[type=submit]"
 
 # Pull the code and submit it to the form
 CODE=$(scripts/qa/extract-mfa-link.sh --code)
-playwright_fill "[name=code]" "$CODE"
-playwright_click "[type=submit]"
+browser_fill "[name=code]" "$CODE"
+browser_click "[type=submit]"
 ```
 
 Or exercise the magic link in a JS-capable browser:
 
 ```bash
 MAGIC_LINK=$(scripts/qa/extract-mfa-link.sh)
-playwright_navigate "$MAGIC_LINK"
+browser_navigate "$MAGIC_LINK"
 # -> page renders, useEffect fires signIn("email-mfa", ...), session cookie is set
 ```
 

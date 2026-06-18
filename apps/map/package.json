@@ -14,7 +14,6 @@
     "typecheck": "tsc --noEmit",
     "test": "SKIP_ENV_VALIDATION=1 pnpm with-env vitest --run --coverage \"$@\"",
     "test:watch": "SKIP_ENV_VALIDATION=1 pnpm with-env vitest -w \"$@\"",
-    "test:e2e": "pnpm with-env playwright test",
     "with-env": "dotenv -e .env --"
   },
   "dependencies": {
@@ -68,7 +67,6 @@
     "@acme/prettier-config": "workspace:^0.1.0",
     "@acme/tsconfig": "workspace:*",
     "@acme/vitest-config": "workspace:^0.1.0",
-    "@playwright/test": "catalog:",
     "@testing-library/jest-dom": "catalog:",
     "@testing-library/react": "catalog:",
     "@types/geojson": "catalog:",

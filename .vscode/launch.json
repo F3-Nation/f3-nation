@@ -38,15 +38,6 @@
       "env": {
         "NODE_OPTIONS": "--inspect"
       }
-    },
-    {
-      "type": "node",
-      "request": "launch",
-      "name": "Debug Playwright Tests",
-      "console": "integratedTerminal",
-      "program": "${workspaceFolder}/node_modules/@playwright/test/cli.js",
-      "args": ["test", "${file}"],
-      "cwd": "${workspaceFolder}"
     }
   ]
 }

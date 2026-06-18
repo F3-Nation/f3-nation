@@ -42,7 +42,7 @@ The cookie jar now holds an authenticated session token against the auth server.
 >
 > The magic link in the email points at `/login/email/verify?email=...&code=...`. That page is a **client component** -- it runs `signIn("email-mfa", ...)` from a `useEffect` after the page renders. A plain `curl` of the magic link returns HTML and never executes the client-side handler, so the cookie jar gets no session. Use the CSRF + callback flow above instead.
 >
-> If you need to exercise the magic link itself (e.g., for browser-based regression testing), use mode B below with Playwright.
+> If you need to exercise the magic link itself (e.g., for browser-based regression testing), use mode B below with a real browser.
 
 ---
 
@@ -139,7 +139,7 @@ Notes:
 - `json=true` makes the callback respond with JSON instead of a redirect, which is easier to assert on in scripts.
 - The session cookie is named `next-auth.session-token` in dev and `__session` in production (see `auth-options.ts`).
 
-### B. Real browser (Playwright / CDP)
+### B. Real browser (CDP / browser automation)
 
 Best for visual regression, screenshot evidence, and form-driven UI verification. This is also the only mode that exercises the magic-link auto-submit path.
 
@@ -147,22 +147,22 @@ Best for visual regression, screenshot evidence, and form-driven UI verification
 # Start the stack as in mode A.
 
 # Drive the browser to the calling app's landing
-playwright_navigate "http://localhost:3003"
-playwright_click "[data-testid=sign-in-button]"
+browser_navigate "http://localhost:3003"
+browser_click "[data-testid=sign-in-button]"
 # -> browser is now on http://localhost:3004/login/email
 
-playwright_fill "[name=email]" "qa-bot@f3nation.test"
-playwright_click "[type=submit]"
+browser_fill "[name=email]" "qa-bot@f3nation.test"
+browser_click "[type=submit]"
 # -> /login/email/verify, waiting for the 6-digit code
 
 # Pull the code (the form-driven path) ...
 CODE=$(scripts/qa/extract-mfa-link.sh --code)
-playwright_fill "[name=code]" "$CODE"
-playwright_click "[type=submit]"
+browser_fill "[name=code]" "$CODE"
+browser_click "[type=submit]"
 
 # ... or pull the magic link and navigate to it (the magic-link path)
 MAGIC_LINK=$(scripts/qa/extract-mfa-link.sh)
-playwright_navigate "$MAGIC_LINK"
+browser_navigate "$MAGIC_LINK"
 # -> page renders, useEffect fires signIn("email-mfa", ...), session cookie is set
 ```
 

@@ -19,7 +19,6 @@ catalog:
   "@orpc/server": ^1.8.8
   "@orpc/tanstack-query": ^1.8.8
   "@orpc/zod": ^1.8.8
-  "@playwright/test": ^1.51.1
   "@radix-ui/react-alert-dialog": ^1.0.4
   "@radix-ui/react-avatar": ^1.0.4
   "@radix-ui/react-checkbox": ^1.0.4
