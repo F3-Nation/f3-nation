@@ -40,12 +40,6 @@ const EVENT_REQUEST_TYPES: RequestType[] = [
   "move_event_to_new_location",
 ];
 
-const AO_UNCHANGED_REQUEST_TYPES: RequestType[] = [
-  "move_ao_to_new_location",
-  "move_ao_to_different_location",
-  "move_event_to_new_location",
-];
-
 const initialState = {
   searchTerm: "",
   onlyMine: true,
@@ -183,13 +177,21 @@ const columns: TableOptions<
     meta: { name: "Region" },
     header: Header,
     cell: ({ row }) => {
+      // An empty newRegionName means the region was not updated, so fall back
+      // to the existing region and treat it as unchanged.
+      const isUnchanged = !row.original.newRegionName;
       const isAnUpdate =
+        !isUnchanged &&
         row.original.oldRegionName !== row.original.newRegionName &&
         row.original.status === "pending";
       return (
         <div className="flex items-center justify-start gap-1">
           <div className="flex flex-col gap-1">
-            <p>{row.original.newRegionName}</p>
+            <p>
+              {isUnchanged
+                ? row.original.oldRegionName
+                : row.original.newRegionName}
+            </p>
             {isAnUpdate ? (
               <p className="line-through">{row.original.oldRegionName}</p>
             ) : null}
@@ -204,18 +206,18 @@ const columns: TableOptions<
     meta: { name: "Location / AO Name" },
     header: Header,
     cell: ({ row }) => {
-      const aoUnchanged = AO_UNCHANGED_REQUEST_TYPES.includes(
-        row.original.requestType as RequestType,
-      );
+      // An empty newAoName means the AO was not updated, so fall back to the
+      // existing AO and treat it as unchanged.
+      const isUnchanged = !row.original.newAoName;
       const isAnUpdate =
-        !aoUnchanged &&
+        !isUnchanged &&
         row.original.oldAoName !== row.original.newAoName &&
         row.original.status === "pending";
       return (
         <div className="flex items-center justify-start gap-1">
           <div className="flex flex-col gap-1">
             <p>
-              {aoUnchanged ? row.original.oldAoName : row.original.newAoName}
+              {isUnchanged ? row.original.oldAoName : row.original.newAoName}
             </p>
             {isAnUpdate ? (
               <p className="line-through">{row.original.oldAoName}</p>
@@ -235,13 +237,21 @@ const columns: TableOptions<
       if (!EVENT_REQUEST_TYPES.includes(rt)) {
         return null;
       }
+      // An empty newWorkoutName means the workout was not updated, so fall
+      // back to the existing workout and treat it as unchanged.
+      const isUnchanged = !row.original.newWorkoutName;
       const isAnUpdate =
+        !isUnchanged &&
         row.original.oldWorkoutName !== row.original.newWorkoutName &&
         row.original.status === "pending";
       return (
         <div className="flex items-center justify-start gap-1">
           <div className="flex flex-col gap-1">
-            <p>{row.original.newWorkoutName}</p>
+            <p>
+              {isUnchanged
+                ? row.original.oldWorkoutName
+                : row.original.newWorkoutName}
+            </p>
             {isAnUpdate ? (
               <p className="line-through">{row.original.oldWorkoutName}</p>
             ) : null}
@@ -272,9 +282,6 @@ const columns: TableOptions<
         locationCountry: row.original.oldLocationCountry,
       });
 
-      const coordinatesChanged =
-        row.original.oldLocationLat !== row.original.newLocationLat ||
-        row.original.oldLocationLng !== row.original.newLocationLng;
       const newCoordinates =
         row.original.newLocationLat != null &&
         row.original.newLocationLng != null
@@ -285,18 +292,37 @@ const columns: TableOptions<
         row.original.oldLocationLng != null
           ? `${row.original.oldLocationLat}, ${row.original.oldLocationLng}`
           : null;
+
+      // Empty new values mean that part of the location was not updated, so
+      // fall back to the existing values and treat them as unchanged.
+      const locationUnchanged = !newLocation;
+      const coordinatesUnchanged = !newCoordinates;
+      const displayLocation = locationUnchanged ? oldLocation : newLocation;
+      const displayCoordinates = coordinatesUnchanged
+        ? oldCoordinates
+        : newCoordinates;
+
+      const coordinatesChanged =
+        !coordinatesUnchanged &&
+        (row.original.oldLocationLat !== row.original.newLocationLat ||
+          row.original.oldLocationLng !== row.original.newLocationLng);
       const isAnUpdate =
-        (oldLocation !== newLocation || coordinatesChanged) &&
+        ((!locationUnchanged && oldLocation !== newLocation) ||
+          coordinatesChanged) &&
         row.original.status === "pending";
 
       return (
         <div className="flex items-center justify-start gap-1">
           <div className="flex flex-col gap-1">
-            <p>{newLocation}</p>
-            {coordinatesChanged && newCoordinates ? (
-              <p className="text-xs text-muted-foreground">{newCoordinates}</p>
+            <p>{displayLocation}</p>
+            {displayCoordinates ? (
+              <p className="text-xs text-muted-foreground">
+                {displayCoordinates}
+              </p>
             ) : null}
-            {isAnUpdate ? <p className="line-through">{oldLocation}</p> : null}
+            {isAnUpdate && oldLocation !== newLocation ? (
+              <p className="line-through">{oldLocation}</p>
+            ) : null}
             {isAnUpdate && coordinatesChanged && oldCoordinates ? (
               <p className="text-xs text-muted-foreground line-through">
                 {oldCoordinates}

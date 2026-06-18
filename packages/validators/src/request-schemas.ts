@@ -101,11 +101,7 @@ export const CreateEventSchema = BaseSchema.extend({
   originalAoId: z.number().positive("AO ID is required"),
   originalLocationId: z.number().positive("Location ID is required"),
   originalRegionId: z.number().positive("Region ID is required"),
-})
-  .merge(EventFields)
-  .merge(AOFields.partial())
-  .merge(LocationFields.partial())
-  .merge(RegionFields.partial());
+}).merge(EventFields);
 
 export type CreateEventType = z.infer<typeof CreateEventSchema>;
 

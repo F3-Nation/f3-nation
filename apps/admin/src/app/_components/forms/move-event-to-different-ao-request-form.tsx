@@ -9,11 +9,21 @@ import {
   SubmitterEmailField,
 } from "./admin-request-form-sections";
 
+// Sentinel value for the temporary AO described by a `move_event_to_new_ao`
+// request. The AO does not exist in the DB yet, so it has no real id.
+const NEW_AO_OPTION_VALUE = "__new_ao__";
+
 export const MoveEventToDifferentAoRequestForm = () => {
   const form = useUpdateLocationFormContext();
   const formRegionId = form.watch("regionId");
   const formAoId = form.watch("aoId");
+  const formAoName = form.watch("aoName");
+  const requestType = form.watch("requestType");
   const meta = form.watch("meta");
+
+  // `move_event_to_new_ao` references an AO that hasn't been created yet, so it
+  // only carries an `aoName` (no `aoId`). Surface it as a synthetic option.
+  const isNewAo = requestType === "move_event_to_new_ao";
 
   const { data: regionsResponse } = useQuery(
     orpc.map.location.regions.queryOptions(),
@@ -25,17 +35,37 @@ export const MoveEventToDifferentAoRequestForm = () => {
   const regions = regionsResponse?.regions;
   const aos = useMemo(() => allAoData?.orgs ?? [], [allAoData]);
   const destinationAoOptions = useMemo(() => {
-    return aos
+    const existing = aos
       .filter((ao) => !formRegionId || ao.parentId === formRegionId)
       .map((ao) => ({
-        label: `${ao.name} (${ao.parentOrgName})`,
+        label: ao.name,
         value: ao.id.toString(),
       }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [aos, formRegionId]);
+
+    if (isNewAo && formAoName) {
+      return [
+        { label: `${formAoName} (New AO)`, value: NEW_AO_OPTION_VALUE },
+        ...existing,
+      ];
+    }
+    return existing;
+  }, [aos, formRegionId, isNewAo, formAoName]);
 
   const originalEventId = meta?.originalEventId;
   const originalAoId = meta?.originalAoId;
+
+  // For a `move_event_to_new_ao` request the stored `aoId` is the event's
+  // current (source) AO, since the destination AO doesn't exist yet. Treat that
+  // as "new AO selected" unless the admin actively picks a different existing AO.
+  const destinationAoValue =
+    isNewAo && (formAoId == null || formAoId === originalAoId)
+      ? formAoName
+        ? NEW_AO_OPTION_VALUE
+        : undefined
+      : formAoId != null
+        ? formAoId.toString()
+        : undefined;
 
   return (
     <>
@@ -93,10 +123,17 @@ export const MoveEventToDifferentAoRequestForm = () => {
             Destination AO
           </div>
           <VirtualizedCombobox
-            key={`${formRegionId ?? "all"}-${formAoId ?? "none"}`}
+            key={`${formRegionId ?? "all"}-${formAoId ?? destinationAoValue ?? "none"}`}
             options={destinationAoOptions}
-            value={formAoId?.toString()}
+            value={destinationAoValue}
             onSelect={(item) => {
+              // Re-selecting the temporary new AO keeps the request's new AO
+              // details (name/logo/website) and leaves it without an id.
+              if (item === NEW_AO_OPTION_VALUE) {
+                form.setValue("aoId", null);
+                return;
+              }
+
               const ao = aos.find((ao) => ao.id.toString() === item);
               form.setValue("aoId", ao?.id ?? null);
               form.setValue("locationId", ao?.defaultLocationId ?? null);
