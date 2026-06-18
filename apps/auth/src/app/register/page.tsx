@@ -175,7 +175,7 @@ function RegisterForm() {
               priority
             />
             <h1 className="text-3xl font-bold">Create Your Account</h1>
-            <p className="text-base text-muted-foreground text-center">
+            <p className="text-center text-base text-muted-foreground">
               Welcome to F3 Nation! Fill in your details to get started.
             </p>
             <p className="text-base font-medium">{email}</p>
@@ -186,7 +186,7 @@ function RegisterForm() {
               <div>
                 <label
                   htmlFor="firstName"
-                  className="block text-base font-medium mb-2"
+                  className="mb-2 block text-base font-medium"
                 >
                   First Name <span className="text-destructive">*</span>
                 </label>
@@ -203,7 +203,7 @@ function RegisterForm() {
               <div>
                 <label
                   htmlFor="lastName"
-                  className="block text-base font-medium mb-2"
+                  className="mb-2 block text-base font-medium"
                 >
                   Last Name <span className="text-destructive">*</span>
                 </label>
@@ -222,7 +222,7 @@ function RegisterForm() {
             <div>
               <label
                 htmlFor="f3Name"
-                className="block text-base font-medium mb-2"
+                className="mb-2 block text-base font-medium"
               >
                 F3 Name
               </label>
@@ -239,7 +239,7 @@ function RegisterForm() {
             <div ref={regionRef} className="relative">
               <label
                 htmlFor="homeRegion"
-                className="block text-base font-medium mb-2"
+                className="mb-2 block text-base font-medium"
               >
                 Home Region
               </label>
@@ -290,7 +290,7 @@ function RegisterForm() {
                           setRegionSearch(r.name);
                           setRegionDropdownOpen(false);
                         }}
-                        className="w-full px-4 py-2 text-left text-base hover:bg-accent transition-colors"
+                        className="w-full px-4 py-2 text-left text-base transition-colors hover:bg-accent"
                       >
                         {r.name}
                       </button>
@@ -327,7 +327,7 @@ function RegisterForm() {
               <button
                 type="button"
                 onClick={() => setShowEmergency(!showEmergency)}
-                className="text-base text-muted-foreground hover:text-foreground transition-colors"
+                className="text-base text-muted-foreground transition-colors hover:text-foreground"
               >
                 {showEmergency ? "▾" : "▸"} Emergency Contact Info
               </button>
@@ -338,7 +338,7 @@ function RegisterForm() {
                 <div>
                   <label
                     htmlFor="emergencyContact"
-                    className="block text-base font-medium mb-2"
+                    className="mb-2 block text-base font-medium"
                   >
                     Emergency Contact Name
                   </label>
@@ -363,7 +363,7 @@ function RegisterForm() {
                 <div>
                   <label
                     htmlFor="emergencyNotes"
-                    className="block text-base font-medium mb-2"
+                    className="mb-2 block text-base font-medium"
                   >
                     Notes
                   </label>
@@ -384,7 +384,7 @@ function RegisterForm() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-md bg-primary px-4 py-3 text-base font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+              className="w-full rounded-md bg-primary px-4 py-3 text-base font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
             >
               {loading ? "Creating Account..." : "Create Account"}
             </button>

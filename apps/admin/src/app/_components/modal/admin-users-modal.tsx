@@ -518,7 +518,7 @@ export default function UserModal({
                         <UserPlus className="mr-2 h-4 w-4" />
                         Manage Access
                       </Button>
-                      <p className="text-xs text-muted-foreground text-center">
+                      <p className="text-center text-xs text-muted-foreground">
                         Progress here will be lost
                       </p>
                     </div>

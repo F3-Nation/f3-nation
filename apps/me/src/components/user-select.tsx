@@ -128,7 +128,7 @@ export function UserSelect({ value, onChange }: UserSelectProps) {
           aria-activedescendant={
             focusedIndex >= 0 ? `user-option-${focusedIndex}` : undefined
           }
-          className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md"
+          className="bg-popover absolute z-50 mt-1 w-full rounded-md border shadow-md"
           onKeyDown={handleListKeyDown}
         >
           <div className="p-2">
@@ -144,7 +144,7 @@ export function UserSelect({ value, onChange }: UserSelectProps) {
           </div>
           <div className="max-h-60 overflow-y-auto p-1">
             {loading ? (
-              <p className="px-2 py-4 text-center text-sm text-muted-foreground">
+              <p className="text-muted-foreground px-2 py-4 text-center text-sm">
                 Loading...
               </p>
             ) : (
@@ -158,7 +158,7 @@ export function UserSelect({ value, onChange }: UserSelectProps) {
                       itemRefs.current[0] = el;
                     }}
                     type="button"
-                    className="relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm text-muted-foreground outline-none hover:bg-accent"
+                    className="text-muted-foreground hover:bg-accent relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none"
                     onClick={() => {
                       onChange(null);
                       setSelectedUser(null);
@@ -169,11 +169,11 @@ export function UserSelect({ value, onChange }: UserSelectProps) {
                   </button>
                 )}
                 {showPrompt ? (
-                  <p className="px-2 py-4 text-center text-sm text-muted-foreground">
+                  <p className="text-muted-foreground px-2 py-4 text-center text-sm">
                     Type at least 2 characters to search.
                   </p>
                 ) : results.length === 0 ? (
-                  <p className="px-2 py-4 text-center text-sm text-muted-foreground">
+                  <p className="text-muted-foreground px-2 py-4 text-center text-sm">
                     No users found.
                   </p>
                 ) : null}
@@ -187,7 +187,7 @@ export function UserSelect({ value, onChange }: UserSelectProps) {
                       itemRefs.current[clearOffset + idx] = el;
                     }}
                     type="button"
-                    className={`relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent ${
+                    className={`hover:bg-accent relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none ${
                       user.id === value ? "bg-accent font-medium" : ""
                     }${user.status !== "active" ? " opacity-50" : ""}`}
                     onClick={() => {
@@ -199,7 +199,7 @@ export function UserSelect({ value, onChange }: UserSelectProps) {
                     <span className="truncate">
                       {displayName(user)}
                       {user.status !== "active" && (
-                        <span className="ml-1 text-xs text-muted-foreground">
+                        <span className="text-muted-foreground ml-1 text-xs">
                           (Inactive)
                         </span>
                       )}

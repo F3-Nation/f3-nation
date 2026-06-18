@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.3.1](https://github.com/F3-Nation/f3-nation/compare/auth@1.3.0...auth@1.3.1) (2026-06-18)
+
+
+### Bug Fixes
+
+* **repo:** updated to code were blocking deployment ([3b0e947](https://github.com/F3-Nation/f3-nation/commit/3b0e947cb9d3a2de2566058d8921ce058499acc7))
+
+## [1.3.0](https://github.com/F3-Nation/f3-nation/compare/auth@1.2.1...auth@1.3.0) (2026-06-17)
+
+
+### Features
+
+* **repo:** triggering release ([b5e1415](https://github.com/F3-Nation/f3-nation/commit/b5e1415682df6abc3cdfa8653bc3658954fa7d0c))
+
 ## [1.2.1](https://github.com/F3-Nation/f3-nation/compare/auth@1.2.0...auth@1.2.1) (2026-06-11)
 
 

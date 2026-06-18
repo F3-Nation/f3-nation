@@ -350,7 +350,7 @@ export const MDTable = <T,>(params: MDTableProps<T>) => {
           </TableBody>
         </Table>
         {pagination ? (
-          <div className="flex flex-wrap items-center justify-between lg:px-3 gap-3 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 py-4 lg:px-3">
             <div className="flex flex-row items-center gap-1 sm:gap-2">
               <Button
                 variant="ghost"

@@ -53,7 +53,7 @@ export function Navbar() {
               variant="ghost"
               size="sm"
               onClick={signOut}
-              className="text-[#f8f4ea]/70 hover:text-[#f8f4ea] hover:bg-white/10"
+              className="text-[#f8f4ea]/70 hover:bg-white/10 hover:text-[#f8f4ea]"
             >
               Sign out
             </Button>

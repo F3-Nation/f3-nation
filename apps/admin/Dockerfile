@@ -42,6 +42,13 @@ ENV NODE_ENV=production
 ENV CI=true
 ENV SKIP_ENV_VALIDATION=true
 
+# `turbo prune` copies the full catalog into pnpm-workspace.yaml but only this
+# app's subset into the pruned lockfile. pnpm's verify-deps-before-run check (run
+# by `pnpm run build`) flags that as catalog drift under strict catalogMode and
+# fails the frozen install. Deps are already installed via the explicit frozen
+# install above, so skip the redundant pre-run verification.
+RUN printf '\nverifyDepsBeforeRun: false\n' >> pnpm-workspace.yaml
+
 RUN pnpm turbo build --filter=f3-admin
 
 # ---------- Stage 3: Production runner ----------

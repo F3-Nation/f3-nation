@@ -1,5 +1,19 @@
 # Changelog
 
+## [5.1.1](https://github.com/F3-Nation/f3-nation/compare/api@5.1.0...api@5.1.1) (2026-06-18)
+
+
+### Bug Fixes
+
+* **repo:** updated to code were blocking deployment ([3b0e947](https://github.com/F3-Nation/f3-nation/commit/3b0e947cb9d3a2de2566058d8921ce058499acc7))
+
+## [5.1.0](https://github.com/F3-Nation/f3-nation/compare/api@5.0.0...api@5.1.0) (2026-06-17)
+
+
+### Features
+
+* **repo:** triggering release ([b5e1415](https://github.com/F3-Nation/f3-nation/commit/b5e1415682df6abc3cdfa8653bc3658954fa7d0c))
+
 ## [5.0.0](https://github.com/F3-Nation/f3-nation/compare/api@4.3.2...api@5.0.0) (2026-06-11)
 
 
