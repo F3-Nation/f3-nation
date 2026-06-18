@@ -65,9 +65,36 @@ export const createMockDb = () => {
   const mockSet = vi.fn().mockReturnValue({ where: mockWhere });
   const mockUpdate = vi.fn().mockReturnValue({ set: mockSet });
 
-  const mockFrom = vi.fn().mockImplementation(() => {
-    return Promise.resolve(Array.from(mockDatabase.values()));
-  });
+  // Resolves a select query to the current contents of the mock database.
+  const resolveSelectRows = () =>
+    Promise.resolve(Array.from(mockDatabase.values()));
+
+  // Builds a chainable, awaitable select builder so handlers can compose
+  // `.from().leftJoin().where()` (and plain `.from()` awaited directly) the
+  // same way Drizzle's query builder does.
+  const createSelectChain = () => {
+    const chain = {
+      leftJoin: vi.fn(() => chain),
+      innerJoin: vi.fn(() => chain),
+      rightJoin: vi.fn(() => chain),
+      fullJoin: vi.fn(() => chain),
+      orderBy: vi.fn(() => chain),
+      groupBy: vi.fn(() => chain),
+      limit: vi.fn(() => resolveSelectRows()),
+      where: vi.fn(() => resolveSelectRows()),
+      then: <TResult1 = unknown[], TResult2 = never>(
+        onfulfilled?:
+          | ((value: unknown[]) => TResult1 | PromiseLike<TResult1>)
+          | null,
+        onrejected?:
+          | ((reason: unknown) => TResult2 | PromiseLike<TResult2>)
+          | null,
+      ) => resolveSelectRows().then(onfulfilled, onrejected),
+    };
+    return chain;
+  };
+
+  const mockFrom = vi.fn().mockImplementation(() => createSelectChain());
   const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
 
   const mockDelete = vi.fn().mockReturnValue({ where: mockWhere });
@@ -85,6 +112,8 @@ export const createMockDb = () => {
       mockUpdate,
       mockSet,
       mockWhere,
+      mockSelect,
+      mockFrom,
     },
     // Expose the database for assertions
     _database: mockDatabase,
