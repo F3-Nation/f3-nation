@@ -35,6 +35,12 @@ vi.mock("../lib/revalidate-map", () => ({
   triggerMapAppRevalidation: vi.fn().mockResolvedValue(undefined),
 }));
 
+// Mock the webhook HTTP client so tests never make real outbound fetch calls
+// (and never log api.webhook.notify_failed noise in CI).
+vi.mock("../lib/notify-webhooks", () => ({
+  notifyWebhooks: vi.fn().mockResolvedValue(undefined),
+}));
+
 // Mock @acme/auth to avoid Next.js dependencies
 // Return a default session with admin role for tests (admin can do everything)
 const defaultSession: Session = {
