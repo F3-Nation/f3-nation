@@ -55,8 +55,10 @@
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
+    "autoprefixer": "catalog:",
     "eslint": "catalog:",
     "jiti": "catalog:",
+    "postcss": "catalog:",
     "prettier": "catalog:",
     "tailwindcss": "catalog:",
     "typescript": "catalog:"
