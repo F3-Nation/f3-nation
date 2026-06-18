@@ -1,0 +1,31 @@
+name: PR Title
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  lint-title:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-node-pnpm
+      # Squash-merge builds the squash commit subject from the PR title, and
+      # release-please parses that subject to decide version bumps. The local
+      # commit-msg hook never sees the PR title, so validate it here against the
+      # same commitlint.config.mjs used for commits (single source of truth).
+      #
+      # Exempt release-please's own bot PRs: their titles (e.g. "chore: release
+      # dev") intentionally omit a scope and are committed via the API. Gate the
+      # STEP (not the job) so a skipped run still reports green and never blocks
+      # branch protection on the bot's release PRs.
+      - name: Lint PR title with commitlint
+        if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: echo "$PR_TITLE" | pnpm exec commitlint
