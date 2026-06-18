@@ -115,3 +115,30 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-node-pnpm
       - run: pnpm test
+
+  # Builds each app's deploy image the same way the release pipeline does
+  # (turbo prune -> frozen install -> turbo build). The `build` job above only
+  # covers the full-workspace `pnpm build`; it cannot catch breakage that is
+  # specific to the pruned Docker context (e.g. catalog mismatches or deps that
+  # resolve transitively in the full install but not under the isolated linker).
+  # This surfaces those at PR time instead of at release. No push — building the
+  # image is the validation. buildx layer cache (scoped per app) keeps the heavy
+  # pnpm install layer warm between runs.
+  docker-build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [admin, api, auth, map, me]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+      - uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          push: false
+          cache-from: type=gha,scope=docker-${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=docker-${{ matrix.app }}
