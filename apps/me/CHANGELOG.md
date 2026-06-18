@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.1](https://github.com/F3-Nation/f3-nation/compare/me@1.4.0...me@1.4.1) (2026-06-18)
+
+
+### Bug Fixes
+
+* **repo:** updated to code were blocking deployment ([3b0e947](https://github.com/F3-Nation/f3-nation/commit/3b0e947cb9d3a2de2566058d8921ce058499acc7))
+
 ## [1.4.0](https://github.com/F3-Nation/f3-nation/compare/me@1.3.1...me@1.4.0) (2026-06-17)
 
 
