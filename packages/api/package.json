@@ -26,12 +26,10 @@
     "@acme/mail": "workspace:*",
     "@acme/shared": "workspace:^0.1.0",
     "@acme/validators": "workspace:^0.1.0",
-    "@orpc/client": "catalog:",
     "@orpc/experimental-ratelimit": "catalog:",
     "@orpc/server": "catalog:",
     "dayjs": "catalog:",
     "drizzle-orm": "catalog:",
-    "google-auth-library": "catalog:",
     "jose": "catalog:",
     "lodash": "catalog:",
     "zod": "catalog:"

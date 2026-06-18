@@ -5,7 +5,6 @@ packages:
 
 catalog:
   "@auth/core": 0.41.0
-  "@auth/drizzle-adapter": ^0.6.3
   "@commitlint/cli": ^21.0.2
   "@commitlint/config-conventional": ^21.0.2
   "@commitlint/cz-commitlint": ^21.0.2
@@ -50,6 +49,7 @@ catalog:
   "@tanstack/table-core": ^8.21.3
   "@testing-library/jest-dom": ^6.4.2
   "@testing-library/react": ^15.0.7
+  "@testing-library/user-event": ^14.6.1
   "@turbo/gen": ^1.12.3
   "@types/geojson": ^7946.0.16
   "@types/google.maps": ^3.65.0
@@ -85,7 +85,6 @@ catalog:
   geist: ^1.2.2
   google-auth-library: ^10.3.0
   handlebars: ^4.7.8
-  handlebars-loader: ^1.7.3
   inquirer: ^12.11.1
   jiti: ^2.7.0
   jose: ^6.2.1

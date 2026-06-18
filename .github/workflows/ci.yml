@@ -16,10 +16,10 @@ permissions:
 
 env:
   CI: true
-  # Turbo remote cache (Vercel). TURBO_TOKEN is a secret; TURBO_TEAM is the
-  # Vercel team slug (repo variable). With both set, every job/run/rerun shares
-  # task outputs, so unchanged work short-circuits to FULL TURBO. Absent (e.g.
-  # fork PRs without secrets) Turbo silently falls back to local-only caching.
+  # Turborepo Remote Cache. TURBO_TOKEN is a secret; TURBO_TEAM is the
+  # remote-cache team slug (repo variable). With both set, every job/run/rerun
+  # shares task outputs, so unchanged work short-circuits to FULL TURBO.
+  # Absent (e.g. fork PRs without secrets) Turbo silently falls back to local-only caching.
   TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
   TURBO_TEAM: ${{ vars.TURBO_TEAM }}
   TURBO_TELEMETRY_DISABLED: 1
@@ -97,7 +97,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:18@sha256:8ff36f3c66371cba71d20ceedccfc3de9669a68737607888c4ef0af93abe8e39
+        image: postgres:18@sha256:29ee7bb30d804447dc9a91fd0d74322ae1dc3a4072cc6346f70a5ed6e783b565
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -115,3 +115,30 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-node-pnpm
       - run: pnpm test
+
+  # Builds each app's deploy image the same way the release pipeline does
+  # (turbo prune -> frozen install -> turbo build). The `build` job above only
+  # covers the full-workspace `pnpm build`; it cannot catch breakage that is
+  # specific to the pruned Docker context (e.g. catalog mismatches or deps that
+  # resolve transitively in the full install but not under the isolated linker).
+  # This surfaces those at PR time instead of at release. No push — building the
+  # image is the validation. buildx layer cache (scoped per app) keeps the heavy
+  # pnpm install layer warm between runs.
+  docker-build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [admin, api, auth, map, me]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+      - uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          push: false
+          cache-from: type=gha,scope=docker-${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=docker-${{ matrix.app }}

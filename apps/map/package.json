@@ -1,6 +1,6 @@
 {
   "name": "f3-map",
-  "version": "5.0.0",
+  "version": "5.1.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -41,7 +41,6 @@
     "geist": "catalog:",
     "google-auth-library": "catalog:",
     "handlebars": "catalog:",
-    "handlebars-loader": "catalog:",
     "lodash": "catalog:",
     "lottie-react": "catalog:",
     "lucide-react": "catalog:",
@@ -77,9 +76,11 @@
     "@types/supercluster": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "@vitest/coverage-v8": "catalog:",
+    "autoprefixer": "catalog:",
     "eslint": "catalog:",
     "jiti": "catalog:",
     "jsdom": "catalog:",
+    "postcss": "catalog:",
     "prettier": "catalog:",
     "tailwindcss": "catalog:",
     "typescript": "catalog:",
