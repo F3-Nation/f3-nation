@@ -505,7 +505,7 @@ importers:
         version: 7.4.4
       geist:
         specifier: 'catalog:'
-        version: 1.7.0(next@15.5.18(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))
+        version: 1.7.0(next@15.5.18(@opentelemetry/api@1.9.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))
       jose:
         specifier: 'catalog:'
         version: 6.2.2
@@ -944,7 +944,7 @@ importers:
         version: 7.4.4
       geist:
         specifier: 'catalog:'
-        version: 1.7.0(next@15.5.18(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))
+        version: 1.7.0(next@15.5.18(@opentelemetry/api@1.9.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))
       google-auth-library:
         specifier: 'catalog:'
         version: 10.6.2
@@ -14253,7 +14253,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  geist@1.7.0(next@15.5.18(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)):
+  geist@1.7.0(next@15.5.18(@opentelemetry/api@1.9.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)):
     dependencies:
       next: 15.5.18(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
 
@@ -15184,13 +15184,11 @@ snapshots:
 
   netmask@2.1.0: {}
 
-  next-auth@5.0.0-beta.30(next@15.5.18(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(nodemailer@8.0.10)(react@18.3.1):
+  next-auth@5.0.0-beta.30(next@15.5.18(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1):
     dependencies:
       '@auth/core': 0.41.0(nodemailer@8.0.10)
       next: 15.5.18(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react: 18.3.1
-    optionalDependencies:
-      nodemailer: 8.0.10
 
   next-auth@5.0.0-beta.30(next@15.5.18(@opentelemetry/api@1.9.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(nodemailer@8.0.10)(react@18.3.1):
     dependencies:
