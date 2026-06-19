@@ -6,6 +6,7 @@ import { orpc, useQuery } from "~/orpc/react";
 import { useUpdateLocationFormContext } from "~/utils/forms";
 import {
   DevMetaSummary,
+  LocationDetailsFields,
   SubmitterEmailField,
 } from "./admin-request-form-sections";
 
@@ -152,6 +153,8 @@ export const MoveEventToDifferentAoRequestForm = () => {
           </p>
         </div>
       </div>
+
+      {isNewAo && <LocationDetailsFields />}
 
       <SubmitterEmailField />
     </>

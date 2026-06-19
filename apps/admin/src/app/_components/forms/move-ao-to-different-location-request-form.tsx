@@ -10,16 +10,30 @@ import {
   SubmitterEmailField,
 } from "./admin-request-form-sections";
 
+const NEW_LOCATION_OPTION_VALUE = "__new_location__";
+
 export const MoveAoToDifferentLocationRequestForm = () => {
   const form = useUpdateLocationFormContext();
   const formRegionId = form.watch("regionId");
   const formLocationId = form.watch("locationId");
+  const formLocationAddress = form.watch("locationAddress");
   const meta = form.watch("meta");
+
+  const originalAoId = meta?.originalAoId;
+  const originalLocationId = meta?.originalLocationId;
+
+  // When the user submitted "Create new location" from the map, the location
+  // doesn't exist yet. The stored `locationId` falls back to `originalLocationId`
+  // but `locationAddress` carries the new address details.
+  const isNewLocation =
+    formLocationId != null &&
+    formLocationId === originalLocationId &&
+    !!formLocationAddress;
 
   const { data: locations } = useQuery(orpc.location.all.queryOptions());
 
   const locationOptions = useMemo(() => {
-    return (
+    const existing =
       locations?.locations
         .filter(
           (location) => !formRegionId || location.regionId === formRegionId,
@@ -52,12 +66,29 @@ export const MoveAoToDifferentLocationRequestForm = () => {
             .filter(isTruthy)
             .join(", ")}`,
           value: location.id.toString(),
-        })) ?? []
-    );
-  }, [locations?.locations, formRegionId]);
+        })) ?? [];
 
-  const originalAoId = meta?.originalAoId;
-  const originalLocationId = meta?.originalLocationId;
+    if (isNewLocation) {
+      return [
+        {
+          label: `${formLocationAddress} (New Location)`,
+          value: NEW_LOCATION_OPTION_VALUE,
+        },
+        ...existing,
+      ];
+    }
+    return existing;
+  }, [locations?.locations, formRegionId, isNewLocation, formLocationAddress]);
+
+  const destinationLocationValue =
+    isNewLocation &&
+    (formLocationId == null || formLocationId === originalLocationId)
+      ? formLocationAddress
+        ? NEW_LOCATION_OPTION_VALUE
+        : undefined
+      : formLocationId != null
+        ? formLocationId.toString()
+        : undefined;
 
   return (
     <>
@@ -75,13 +106,18 @@ export const MoveAoToDifferentLocationRequestForm = () => {
       <div className="grid grid-cols-1 gap-4">
         <div className="space-y-2">
           <div className="text-sm font-medium text-muted-foreground">
-            Existing Location
+            Destination Location
           </div>
           <VirtualizedCombobox
-            key={formLocationId?.toString()}
+            key={`${formRegionId ?? "all"}-${formLocationId ?? destinationLocationValue ?? "none"}`}
             options={locationOptions}
-            value={formLocationId?.toString()}
+            value={destinationLocationValue}
             onSelect={(item) => {
+              if (item === NEW_LOCATION_OPTION_VALUE) {
+                form.setValue("locationId", null);
+                return;
+              }
+
               const location = locations?.locations.find(
                 ({ id }) => id.toString() === item,
               );

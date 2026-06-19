@@ -24,9 +24,6 @@ export const MoveEventToDifferentAoModal = ({
     defaultValues: data,
   });
 
-  console.log("MoveEventToDifferentAoModal data", data);
-  console.log("MoveEventToDifferentAoModal form", form.watch());
-
   return (
     <BaseModal title="Move Event to Different AO">
       <Form {...form}>

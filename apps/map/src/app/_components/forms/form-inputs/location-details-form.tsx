@@ -116,12 +116,10 @@ export const LocationDetailsForm = <_T extends LocationDetailsFormValues>() => {
           <div className="text-sm font-medium text-muted-foreground">
             Location Description
           </div>
-          <div className="px-1">
-            <Textarea
-              {...form.register("locationDescription")}
-              placeholder="Provide additional details about the meet-up location (e.g. 'Meet at the south entrance', 'The corner of Main and Oak St')"
-            />
-          </div>
+          <Textarea
+            {...form.register("locationDescription")}
+            placeholder="Provide additional details about the meet-up location (e.g. 'Meet at the south entrance', 'The corner of Main and Oak St')"
+          />
           <p className="text-xs text-destructive">
             {form.formState.errors.locationDescription?.message?.toString()}
           </p>

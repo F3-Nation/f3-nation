@@ -163,11 +163,11 @@ export const MoveAOToDifferentLocationSchema = BaseSchema.extend({
   requestType: z.literal("move_ao_to_different_location"),
   originalAoId: z.number().positive("Original AO ID is required"),
   originalLocationId: z.number().positive("Original location ID is required"),
-  newLocationId: z.number().positive("Target location ID is required"),
-})
-  .merge(EventFields.partial())
-  .merge(AOFields.partial())
-  .merge(LocationFields.partial());
+  newLocationId: z
+    .number()
+    .positive("Target location ID is required")
+    .nullable(),
+}).merge(LocationFields.partial());
 
 export type MoveAOToDifferentLocationType = z.infer<
   typeof MoveAOToDifferentLocationSchema

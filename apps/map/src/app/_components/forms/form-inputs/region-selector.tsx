@@ -61,7 +61,7 @@ export function RegionSelector<_T extends RegionSelectorFormValues>({
   const { aoField, eventField } = getDependentFields();
 
   return (
-    <div className="flex-1">
+    <div className="flex-1 space-y-2">
       <div className="text-sm font-medium text-muted-foreground">{label}</div>
       <Controller
         control={form.control}

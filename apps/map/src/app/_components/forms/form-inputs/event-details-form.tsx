@@ -133,7 +133,7 @@ export const EventDetailsForm = <_T extends EventDetailsFormValues>() => {
               </p>
             )}
         </div>
-        <div className="space-y-2">
+        <div className="space-y-2 sm:col-span-2">
           <div className="text-sm font-medium text-muted-foreground">
             Event Types
           </div>
@@ -182,7 +182,7 @@ export const EventDetailsForm = <_T extends EventDetailsFormValues>() => {
             )}
         </div>
 
-        <div className="mx-2 space-y-2 sm:col-span-2">
+        <div className="space-y-2 sm:col-span-2">
           <div className="text-sm font-medium text-muted-foreground">
             Event Description
           </div>

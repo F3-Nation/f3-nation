@@ -114,6 +114,11 @@ const normalizeAdminRequestInput = (input: Record<string, unknown>) => {
     normalized.originalAoId ??= meta.originalAoId ?? normalized.aoId;
     normalized.originalLocationId ??= meta.originalLocationId;
     normalized.newLocationId ??= meta.newLocationId ?? normalized.locationId;
+    // When newLocationId equals originalLocationId, the admin is approving a
+    // "new location" request without overriding — signal the handler to create.
+    if (normalized.newLocationId === normalized.originalLocationId) {
+      normalized.newLocationId = null;
+    }
   }
 
   if (normalized.requestType === "move_ao_to_new_location") {

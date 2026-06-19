@@ -210,6 +210,19 @@ export const openRequestModal = async (params: {
       }
       openModal(ModalType.MOVE_EVENT_TO_NEW_AO, {
         ...formValues,
+        aoName: "",
+        aoLogo: null,
+        aoWebsite: null,
+        locationAddress: "",
+        locationAddress2: "",
+        locationCity: "",
+        locationState: "",
+        locationZip: "",
+        locationCountry: "United States",
+        locationDescription: "",
+        locationLat: formValues.locationLat,
+        locationLng: formValues.locationLng,
+        newLocationId: null,
         requestType,
         ...params.meta,
       });

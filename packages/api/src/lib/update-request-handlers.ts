@@ -81,6 +81,28 @@ const hydrateDestinationAo = async (ctx: Context, newAoId: number) => {
 };
 
 /**
+ * Fetches the destination location so a move_ao_to_different_location request
+ * can be recorded with the target location's address details.
+ */
+const hydrateDestinationLocation = async (ctx: Context, locationId: number) => {
+  const [location] = await ctx.db
+    .select({
+      locationAddress: schema.locations.addressStreet,
+      locationAddress2: schema.locations.addressStreet2,
+      locationCity: schema.locations.addressCity,
+      locationState: schema.locations.addressState,
+      locationZip: schema.locations.addressZip,
+      locationCountry: schema.locations.addressCountry,
+      locationLat: schema.locations.latitude,
+      locationLng: schema.locations.longitude,
+      locationDescription: schema.locations.description,
+    })
+    .from(schema.locations)
+    .where(eq(schema.locations.id, locationId));
+  return location;
+};
+
+/**
  * Backfills the request's event fields from the existing event row so a
  * move_event_to_new_location request preserves the (unchanged) event details.
  * Mutates `req` in place, never overwriting values already present.
@@ -90,18 +112,25 @@ const hydrateEventFields = async (
   req: Record<string, unknown>,
   eventId: number,
 ) => {
-  const [existingEvent] = await ctx.db
-    .select({
-      name: schema.events.name,
-      dayOfWeek: schema.events.dayOfWeek,
-      startTime: schema.events.startTime,
-      endTime: schema.events.endTime,
-      startDate: schema.events.startDate,
-      endDate: schema.events.endDate,
-      description: schema.events.description,
-    })
-    .from(schema.events)
-    .where(eq(schema.events.id, eventId));
+  // These two queries are independent, so run them concurrently.
+  const [[existingEvent], eventTypeRows] = await Promise.all([
+    ctx.db
+      .select({
+        name: schema.events.name,
+        dayOfWeek: schema.events.dayOfWeek,
+        startTime: schema.events.startTime,
+        endTime: schema.events.endTime,
+        startDate: schema.events.startDate,
+        endDate: schema.events.endDate,
+        description: schema.events.description,
+      })
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId)),
+    ctx.db
+      .select({ eventTypeId: schema.eventsXEventTypes.eventTypeId })
+      .from(schema.eventsXEventTypes)
+      .where(eq(schema.eventsXEventTypes.eventId, eventId)),
+  ]);
 
   if (existingEvent) {
     req.eventName ??= existingEvent.name;
@@ -112,11 +141,6 @@ const hydrateEventFields = async (
     req.eventEndDate ??= existingEvent.endDate;
     req.eventDescription ??= existingEvent.description;
   }
-
-  const eventTypeRows = await ctx.db
-    .select({ eventTypeId: schema.eventsXEventTypes.eventTypeId })
-    .from(schema.eventsXEventTypes)
-    .where(eq(schema.eventsXEventTypes.eventId, eventId));
 
   if (eventTypeRows.length > 0 && !req.eventTypeIds) {
     req.eventTypeIds = eventTypeRows.map((r) => r.eventTypeId);
@@ -141,18 +165,24 @@ export const recordUpdateRequest = async (params: {
   // Map to DB columns safely
   const getVal = (key: string) => req[key] as number | undefined;
 
+  const newAoId = getVal("newAoId");
+  const newLocationId = getVal("newLocationId");
+
   const regionId =
     getVal("newRegionId") ?? getVal("originalRegionId") ?? getVal("regionId");
-  const aoId = getVal("newAoId") ?? getVal("originalAoId") ?? getVal("aoId");
+  const aoId = newAoId ?? getVal("originalAoId") ?? getVal("aoId");
   const locationId =
-    getVal("newLocationId") ??
-    getVal("originalLocationId") ??
-    getVal("locationId");
+    newLocationId ?? getVal("originalLocationId") ?? getVal("locationId");
   const eventId = getVal("originalEventId") ?? getVal("eventId");
 
   const destinationAo =
-    req.requestType === "move_event_to_different_ao" && getVal("newAoId")
-      ? await hydrateDestinationAo(params.ctx, getVal("newAoId")!)
+    req.requestType === "move_event_to_different_ao" && newAoId
+      ? await hydrateDestinationAo(params.ctx, newAoId)
+      : undefined;
+
+  const destinationLocation =
+    req.requestType === "move_ao_to_different_location" && newLocationId
+      ? await hydrateDestinationLocation(params.ctx, newLocationId)
       : undefined;
 
   if (req.requestType === "move_event_to_new_location" && eventId) {
@@ -174,16 +204,42 @@ export const recordUpdateRequest = async (params: {
     aoLogo: destinationAo?.logoUrl ?? req.aoLogo,
     aoWebsite: destinationAo?.website ?? req.aoWebsite,
     locationId: destinationAo?.locationId ?? locationId,
-    locationAddress: destinationAo?.locationAddress ?? req.locationAddress,
-    locationAddress2: destinationAo?.locationAddress2 ?? req.locationAddress2,
-    locationCity: destinationAo?.locationCity ?? req.locationCity,
-    locationState: destinationAo?.locationState ?? req.locationState,
-    locationZip: destinationAo?.locationZip ?? req.locationZip,
-    locationCountry: destinationAo?.locationCountry ?? req.locationCountry,
-    locationLat: destinationAo?.locationLat ?? req.locationLat,
-    locationLng: destinationAo?.locationLng ?? req.locationLng,
+    locationAddress:
+      destinationAo?.locationAddress ??
+      destinationLocation?.locationAddress ??
+      req.locationAddress,
+    locationAddress2:
+      destinationAo?.locationAddress2 ??
+      destinationLocation?.locationAddress2 ??
+      req.locationAddress2,
+    locationCity:
+      destinationAo?.locationCity ??
+      destinationLocation?.locationCity ??
+      req.locationCity,
+    locationState:
+      destinationAo?.locationState ??
+      destinationLocation?.locationState ??
+      req.locationState,
+    locationZip:
+      destinationAo?.locationZip ??
+      destinationLocation?.locationZip ??
+      req.locationZip,
+    locationCountry:
+      destinationAo?.locationCountry ??
+      destinationLocation?.locationCountry ??
+      req.locationCountry,
+    locationLat:
+      destinationAo?.locationLat ??
+      destinationLocation?.locationLat ??
+      req.locationLat,
+    locationLng:
+      destinationAo?.locationLng ??
+      destinationLocation?.locationLng ??
+      req.locationLng,
     locationDescription:
-      destinationAo?.locationDescription ?? req.locationDescription,
+      destinationAo?.locationDescription ??
+      destinationLocation?.locationDescription ??
+      req.locationDescription,
     eventId,
     status: params.status,
     reviewedAt,
@@ -390,9 +446,28 @@ export const handleMoveAOToDifferentLocation = async (
   ctx: Context,
   request: MoveAOToDifferentLocationType,
 ) => {
+  let locationId = request.newLocationId;
+
+  if (!locationId) {
+    const location = await insertLocation(ctx, {
+      regionId: request.originalRegionId,
+      locationName: undefined,
+      locationLat: request.locationLat,
+      locationLng: request.locationLng,
+      locationAddress: request.locationAddress,
+      locationAddress2: request.locationAddress2,
+      locationCity: request.locationCity,
+      locationState: request.locationState,
+      locationZip: request.locationZip,
+      locationCountry: request.locationCountry,
+      locationDescription: request.locationDescription,
+    });
+    locationId = location.id;
+  }
+
   await ctx.db
     .update(schema.events)
-    .set({ locationId: request.newLocationId })
+    .set({ locationId })
     .where(eq(schema.events.orgId, request.originalAoId));
 };
 

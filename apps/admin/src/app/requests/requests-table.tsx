@@ -93,6 +93,13 @@ export const RequestsTable = () => {
       requestTableStore.setState({ [key]: newValue });
     };
 
+  const getRequestTypeColor = (requestType: RequestType) => {
+    if (requestType === "delete_event" || requestType === "delete_ao") {
+      return "bg-red-100";
+    }
+    return "";
+  };
+
   return (
     <MDTable
       data={requests?.requests}
@@ -115,9 +122,9 @@ export const RequestsTable = () => {
         }
       }}
       rowClassName={(row) =>
-        `${row.original.status !== "pending" ? "opacity-30" : ""} ${
-          row.original.requestType === "delete_event" ? "bg-red-100" : ""
-        }`
+        `${row.original.status !== "pending" ? "opacity-30" : ""} ${getRequestTypeColor(
+          row.original.requestType as RequestType,
+        )}`
       }
       searchTerm={searchTerm}
       setSearchTerm={setValue("searchTerm")}
@@ -203,7 +210,7 @@ const columns: TableOptions<
   },
   {
     accessorKey: "aoName",
-    meta: { name: "Location / AO Name" },
+    meta: { name: "AO Name" },
     header: Header,
     cell: ({ row }) => {
       // An empty newAoName means the AO was not updated, so fall back to the
@@ -310,6 +317,15 @@ const columns: TableOptions<
         ((!locationUnchanged && oldLocation !== newLocation) ||
           coordinatesChanged) &&
         row.original.status === "pending";
+
+      console.log("displayLocation", displayLocation);
+      console.log("displayCoordinates", displayCoordinates);
+      console.log("isAnUpdate", isAnUpdate);
+      console.log("oldLocation", oldLocation);
+      console.log("newLocation", newLocation);
+      console.log("coordinatesChanged", coordinatesChanged);
+      console.log("oldCoordinates", oldCoordinates);
+      console.log("newCoordinates", newCoordinates);
 
       return (
         <div className="flex items-center justify-start gap-1">

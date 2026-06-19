@@ -67,7 +67,7 @@ export function EventSelector<_T extends EventSelectorFormValues>({
   }, [events, selectedEventId, fieldName, form]);
 
   return (
-    <div className="flex-1">
+    <div className="flex-1 space-y-2">
       <div className="text-sm font-medium text-muted-foreground">{label}</div>
       <Controller
         control={form.control}

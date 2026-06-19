@@ -70,7 +70,7 @@ export function AOSelector<_T extends AOSelectorFormValues>({
   const eventField = getEventField();
 
   return (
-    <div className="flex-1">
+    <div className="flex-1 space-y-2">
       <div className="text-sm font-medium text-muted-foreground">{label}</div>
       <Controller
         control={form.control}

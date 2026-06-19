@@ -22,7 +22,6 @@ export const CreateAOAndLocationAndEventModal = ({
 }: {
   data: DataType[ModalType.CREATE_AO_AND_LOCATION_AND_EVENT];
 }) => {
-  console.log("CreateAOAndLocationAndEventModal data", data);
   const form = useForm<CreateAOAndLocationAndEventType>({
     resolver: zodResolver(CreateAOAndLocationAndEventSchema),
     defaultValues: data,

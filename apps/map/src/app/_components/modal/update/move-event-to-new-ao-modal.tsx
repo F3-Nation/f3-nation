@@ -35,10 +35,15 @@ export const MoveEventToNewAoModal = ({
         <form className="w-[inherit] overflow-x-hidden p-0.5">
           {!isProductionNodeEnv && <FormDebugData />}
 
-          <RegionSelector<MoveEventToNewAOType>
-            label="Destination Region:"
-            fieldName="newRegionId"
-          />
+          <h2 className="mb-2 mt-4 text-xl font-semibold text-muted-foreground">
+            Destination Region:
+          </h2>
+          <div className="flex flex-row flex-wrap gap-4">
+            <RegionSelector<MoveEventToNewAOType>
+              label="Region"
+              fieldName="newRegionId"
+            />
+          </div>
           <AODetailsForm<MoveEventToNewAOType> />
           <ExistingLocationPickerForm<MoveEventToNewAOType> region="newRegion" />
           {!formNewLocationId && <LocationDetailsForm<MoveEventToNewAOType> />}

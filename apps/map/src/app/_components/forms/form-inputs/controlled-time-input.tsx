@@ -23,7 +23,7 @@ export const ControlledTimeInput = <T extends FieldValues>({
       name={name}
       render={({ field }) => (
         <FormItem>
-          <FormLabel>{label}</FormLabel>
+          <FormLabel className="text-muted-foreground">{label}</FormLabel>
           <FormControl>
             <Input
               type="time"

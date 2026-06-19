@@ -30,12 +30,6 @@ export const MoveAOToDifferentRegionModal = ({
       <Form {...form}>
         <form className="w-[inherit] overflow-x-hidden p-0.5">
           {!isProductionNodeEnv && <FormDebugData />}
-          {/* TODO: Show the information about the ao that is being moved */}
-          <div>
-            <p>Moving AO ID: {data?.originalAoId}</p>
-            <p>From Region ID: {data?.originalRegionId}</p>
-            <p>To Region ID: {data?.newRegionId}</p>
-          </div>
           <h2 className="mb-2 mt-4 text-xl font-semibold text-muted-foreground">
             Region Details:
           </h2>

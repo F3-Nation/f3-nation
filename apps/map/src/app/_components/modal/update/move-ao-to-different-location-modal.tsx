@@ -12,6 +12,7 @@ import { BaseModal } from "~/app/_components/modal/base-modal";
 import { isProductionNodeEnv } from "@acme/shared/common/constants";
 import { client } from "~/orpc/client";
 import { ExistingLocationPickerForm } from "../../forms/form-inputs/existing-location-picker-form";
+import { LocationDetailsForm } from "../../forms/form-inputs/location-details-form";
 import { SubmitSection } from "../../forms/submit-section";
 
 export const MoveAOToDifferentLocationModal = ({
@@ -25,19 +26,17 @@ export const MoveAOToDifferentLocationModal = ({
     mode: "onBlur",
   });
 
-  // TODO: Show the information about the ao that is being moved
+  const formNewLocationId = form.watch("newLocationId");
+
   return (
     <BaseModal title="Move AO to Different Location">
       <Form {...form}>
         <form className="w-[inherit] overflow-x-hidden p-0.5">
           {!isProductionNodeEnv && <FormDebugData />}
-          <div>
-            <p>From Location ID: {data?.originalLocationId}</p>
-            <p>To Location ID: {data?.newLocationId}</p>
-            <p>Original Region ID: {data?.originalRegionId}</p>
-            <p>Original AO ID: {data?.originalAoId}</p>
-          </div>
           <ExistingLocationPickerForm<MoveAOToDifferentLocationType> region="originalRegion" />
+          {!formNewLocationId && (
+            <LocationDetailsForm<MoveAOToDifferentLocationType> />
+          )}
           <ContactDetailsForm<MoveAOToDifferentLocationType> />
           <SubmitSection<MoveAOToDifferentLocationType>
             mutationFn={(values) =>

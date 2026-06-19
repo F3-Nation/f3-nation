@@ -25,25 +25,27 @@ export const AODetailsForm = <_T extends AODetailsFormValues>() => {
         New AO Details:
       </h2>
 
-      <div className="space-y-2">
-        <div className="text-sm font-medium text-muted-foreground">AO Name</div>
-        <Input {...form.register("aoName")} />
-        <p className="text-xs text-destructive">
-          {form.formState.errors.aoName?.message?.toString()}
-        </p>
-      </div>
-
-      <div className="space-y-2">
-        <div className="text-sm font-medium text-muted-foreground">
-          AO Website
+      <div className="grid grid-cols-1 gap-4">
+        <div className="space-y-2">
+          <div className="text-sm font-medium text-muted-foreground">
+            AO Name
+          </div>
+          <Input {...form.register("aoName")} />
+          <p className="text-xs text-destructive">
+            {form.formState.errors.aoName?.message?.toString()}
+          </p>
         </div>
-        <Input {...form.register("aoWebsite")} placeholder="https://" />
-        <p className="text-xs text-destructive">
-          {form.formState.errors.aoWebsite?.message?.toString()}
-        </p>
-      </div>
 
-      <div className="space-y-4">
+        <div className="space-y-2">
+          <div className="text-sm font-medium text-muted-foreground">
+            AO Website
+          </div>
+          <Input {...form.register("aoWebsite")} placeholder="https://" />
+          <p className="text-xs text-destructive">
+            {form.formState.errors.aoWebsite?.message?.toString()}
+          </p>
+        </div>
+
         <div className="space-y-2">
           <div className="text-sm font-medium text-muted-foreground">
             AO Logo

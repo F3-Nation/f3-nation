@@ -29,7 +29,7 @@ export const InRegionForm = <_T extends InRegionFormValues>() => {
         In Region:
       </h2>
       <div className="flex flex-row flex-wrap gap-4">
-        <div className="flex-1">
+        <div className="flex-1 space-y-2">
           <div className="text-sm font-medium text-muted-foreground">
             Region:
           </div>
