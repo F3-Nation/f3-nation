@@ -154,17 +154,6 @@ allowBuilds:
   lefthook: true
   sharp: true
   unrs-resolver: true
-minimumReleaseAge: 10080
-# esbuild 0.28.1 patches GHSA-gv7w-rqvm-qjhr but was published <7 days ago; exempt
-# it from the release-age gate so the security patch is adopted now. @esbuild/*
-# covers its platform-specific binary optional deps, which are age-gated too.
-# Remove once the gate naturally allows 0.28.1 (~2026-06-19) — tracked by issue #435.
-# form-data 2.5.6 patches GHSA-hmw2-7cc7-3qxx (CRLF injection); published 2026-06-12.
-# Remove once the gate naturally allows 2.5.6 (~2026-06-19).
-minimumReleaseAgeExclude:
-  - esbuild
-  - "@esbuild/*"
-  - form-data@2.5.6
 catalogMode: strict
 cleanupUnusedCatalogs: true
 # pnpm's publicHoistPattern defaults to [] (nothing is hoisted); the patterns below
