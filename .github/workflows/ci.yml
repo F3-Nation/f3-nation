@@ -72,7 +72,6 @@ jobs:
     permissions:
       contents: read
       issues: write
-      pull-requests: write
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -240,9 +239,7 @@ jobs:
             const marker = '<!-- recent-package-watch -->';
             const body = `${process.env.COMMENT_BODY}`;
             const actor = (process.env.GITHUB_ACTOR ?? context.actor ?? '').toLowerCase();
-
-            const { data: authenticatedUser } = await github.rest.users.getAuthenticated();
-            const botLogin = (authenticatedUser?.login ?? '').toLowerCase();
+            const botLogin = 'github-actions[bot]';
 
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner: context.repo.owner,
