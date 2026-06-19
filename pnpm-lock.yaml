@@ -196,8 +196,8 @@ catalogs:
       specifier: ^1.11.10
       version: 1.11.20
     dompurify:
-      specifier: ^3.4.7
-      version: 3.4.7
+      specifier: ^3.4.9
+      version: 3.4.9
     dotenv:
       specifier: ^16.3.2
       version: 16.6.1
@@ -935,7 +935,7 @@ importers:
         version: 1.11.20
       dompurify:
         specifier: 'catalog:'
-        version: 3.4.7
+        version: 3.4.9
       dotenv-cli:
         specifier: 'catalog:'
         version: 7.4.4
@@ -6252,8 +6252,8 @@ packages:
   dom-accessibility-api@0.6.3:
     resolution: {integrity: sha512-7ZgogeTnjuHbo+ct10G9Ffp0mif17idi0IyWNVA/wcwcm7NPOD/WEHVP3n7n3MhXqxoIYm8d6MuZohYWIZ4T3w==}
 
-  dompurify@3.4.7:
-    resolution: {integrity: sha512-2jBxDJY4RR06tQNy4w5FlFH7kfxsQZlufd0sbv+chfHCxeJwrFw2baUDsSwvBISD4K4RDbd0PTfy3uNXsR6siA==}
+  dompurify@3.4.9:
+    resolution: {integrity: sha512-4dPSRMRDqHvs0V4YDFCsaIZo4if5u0xM+llyxiM2fwuZFdKArUBAF3VtI2+n8NKg9P870WMdYk0UhqQNoWXbfQ==}
 
   dot-case@2.1.1:
     resolution: {integrity: sha512-HnM6ZlFqcajLsyudHq7LeeLDr2rFAVYtDv/hV5qchQEidSck8j9OPUsXY9KwJv/lHMtYlX4DjRQqwFYa+0r8Ug==}
@@ -13526,7 +13526,7 @@ snapshots:
 
   dom-accessibility-api@0.6.3: {}
 
-  dompurify@3.4.7:
+  dompurify@3.4.9:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
