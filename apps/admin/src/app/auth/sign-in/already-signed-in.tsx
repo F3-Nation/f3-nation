@@ -9,7 +9,7 @@ import { AuthWrapper } from "../components/auth-components";
 export const AlreadySignedIn = ({ session }: { session: AdminSession }) => {
   const router = useRouter();
   return (
-    <AuthWrapper className="max-w-md mx-auto">
+    <AuthWrapper className="mx-auto max-w-md">
       <h2 className="mt-2 text-2xl font-semibold">
         {`You're already signed in as ${session.email}`}
       </h2>

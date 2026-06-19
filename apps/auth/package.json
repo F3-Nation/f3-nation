@@ -1,6 +1,6 @@
 {
   "name": "f3-auth",
-  "version": "1.2.1",
+  "version": "1.3.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -26,7 +26,6 @@
     "libphonenumber-js": "catalog:",
     "next": "catalog:",
     "next-auth": "catalog:",
-    "next-themes": "catalog:",
     "nodemailer": "catalog:",
     "pg": "catalog:",
     "postgres": "catalog:",

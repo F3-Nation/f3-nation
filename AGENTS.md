@@ -161,7 +161,7 @@ chore(repo): configure turborepo remote caching
   - Include a clear summary, any related issue(s), commands run, and impact to DB/env.
   - Add screenshots or screen recordings for UI changes in `apps/map`.
   - Highlight any new migrations or environment variables.
-  - Never include secrets; share them using Slack or Doppler scripts, not via git.
+  - Never include secrets.
 - Before opening a pull request, ensure both `pnpm lint` and `pnpm format` pass with no errors or changes required.
 
 ## Security & Environment

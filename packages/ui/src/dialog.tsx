@@ -50,7 +50,7 @@ const DialogContent = React.forwardRef<
         className={cn(
           "my-6",
           "relative grid w-full max-w-[calc(min(90%,768px))] gap-4 bg-muted p-6 shadow-lg sm:rounded-lg md:w-full",
-          "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 duration-200",
+          "duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
           className,
         )}
         {...props}

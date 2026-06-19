@@ -21,7 +21,6 @@
     "@acme/logger": "workspace:*",
     "@acme/shared": "workspace:^0.1.0",
     "@auth/core": "catalog:",
-    "@auth/drizzle-adapter": "catalog:",
     "dayjs": "catalog:",
     "drizzle-orm": "catalog:",
     "lodash": "catalog:",
@@ -29,8 +28,7 @@
     "next-auth": "catalog:",
     "nodemailer": "catalog:",
     "react": "catalog:",
-    "react-dom": "catalog:",
-    "zod": "catalog:"
+    "react-dom": "catalog:"
   },
   "devDependencies": {
     "@acme/eslint-config": "workspace:^0.2.0",

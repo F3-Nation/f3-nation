@@ -1,6 +1,6 @@
 {
   "name": "f3-admin",
-  "version": "1.2.2",
+  "version": "1.3.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -31,10 +31,8 @@
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-query-devtools": "catalog:",
     "@tanstack/react-table": "catalog:",
-    "@tanstack/react-virtual": "catalog:",
     "@vis.gl/react-google-maps": "catalog:",
     "dayjs": "catalog:",
-    "dompurify": "catalog:",
     "dotenv-cli": "catalog:",
     "geist": "catalog:",
     "jose": "catalog:",
@@ -46,9 +44,7 @@
     "react-hook-form": "catalog:",
     "react-qr-code": "catalog:",
     "server-only": "catalog:",
-    "superjson": "catalog:",
-    "zod": "catalog:",
-    "zustand": "catalog:"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@acme/eslint-config": "workspace:^0.2.0",
@@ -59,8 +55,10 @@
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
+    "autoprefixer": "catalog:",
     "eslint": "catalog:",
     "jiti": "catalog:",
+    "postcss": "catalog:",
     "prettier": "catalog:",
     "tailwindcss": "catalog:",
     "typescript": "catalog:"

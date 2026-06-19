@@ -59,7 +59,7 @@ on:
         description: "GCP region"
         required: false
         type: string
-        default: us-east1
+        default: us-central1
       ar_repo:
         description: "Artifact Registry repository"
         required: false

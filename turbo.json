@@ -35,8 +35,6 @@
     "F3_GOOGLE_API_KEY",
     "F3_MAP_BASE_URL",
     "PORT",
-    "VERCEL_ENV",
-    "VERCEL_URL",
     "NEXT_RUNTIME",
     "npm_lifecycle_event",
     "NEXT_PUBLIC_ADMIN_URL",
@@ -60,8 +58,7 @@
         "!.next/cache/**",
         "next-env.d.ts",
         ".expo/**",
-        ".output/**",
-        ".vercel/output/**"
+        ".output/**"
       ]
     },
     "dev": {
