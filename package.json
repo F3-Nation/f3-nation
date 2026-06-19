@@ -28,7 +28,7 @@
     "db:seed": "pnpm -F db seed",
     "db:studio": "pnpm -F db studio",
     "db:update-db": "pnpm -F db update-db",
-    "dev": "turbo dev",
+    "dev": "bash scripts/dev.sh",
     "docker:down": "docker compose -f docker-compose.yml down",
     "docker:up": "docker compose -f docker-compose.yml up -d",
     "docker:up:logs": "docker compose -f docker-compose.yml up",

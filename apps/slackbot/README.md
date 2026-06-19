@@ -26,15 +26,15 @@ This creates `apps/slackbot/.env` from `apps/slackbot/.env.local.example`, then 
 - `SLACK_BOT_TOKEN`
 - `SLACK_APP_TOKEN`
 
-### Start all local apps
+### Start the local apps with Slackbot
 
 From the repo root:
 
 ```bash
-pnpm dev
+pnpm dev --include-py
 ```
 
-Slackbot starts automatically with the rest of the monorepo apps. At the very least, you will need to also run the API app.
+Slackbot is opt-in for root dev startup because it needs the Python environment and Slack credentials. At the very least, you will need to also run the API app.
 
 - Slackbot local URL: http://localhost:3006
 
@@ -45,7 +45,7 @@ Once the app is running, you will want to connect your local app to one of the s
 ## Step debugging
 
 1. Set `ENABLE_DEBUGGING=true` in `apps/slackbot/.env`.
-2. Start dev with `pnpm dev`.
+2. Start dev with `pnpm dev --include-py`.
 3. Attach VS Code debugger to `debugpy` on port `5678`.
 
 ## Scripts
