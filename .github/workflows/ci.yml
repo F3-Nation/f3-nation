@@ -66,6 +66,216 @@ jobs:
       - uses: ./.github/actions/setup-node-pnpm
       - run: pnpm audit --prod --audit-level=high
 
+  recent-package-watch:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-node-pnpm
+      - name: Build recent release report
+        id: report
+        shell: bash
+        run: |
+          node <<'NODE' >> "$GITHUB_OUTPUT"
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const cp = require('node:child_process');
+
+          const importers = JSON.parse(
+            cp.execFileSync('pnpm', ['list', '--json', '--depth', '0', '--prod', '--dev'], {
+              encoding: 'utf8',
+              maxBuffer: 20 * 1024 * 1024,
+            }),
+          );
+
+          const workspaceRefs = new Map();
+
+          for (const importer of importers) {
+            const references = [
+              ...(importer.dependencies ? Object.values(importer.dependencies) : []),
+              ...(importer.unsavedDependencies ? Object.values(importer.unsavedDependencies) : []),
+            ];
+
+            for (const dependency of references) {
+              const dependencyPath = dependency?.path;
+
+              if (
+                typeof dependencyPath !== 'string' ||
+                !dependencyPath.includes(`${path.sep}node_modules${path.sep}.pnpm${path.sep}`)
+              ) {
+                continue;
+              }
+
+              let packageJson;
+
+              try {
+                packageJson = JSON.parse(fs.readFileSync(path.join(dependencyPath, 'package.json'), 'utf8'));
+              } catch {
+                continue;
+              }
+
+              if (!packageJson?.name || !packageJson?.version) {
+                continue;
+              }
+
+              const packageKey = `${packageJson.name}@${packageJson.version}`;
+              const referencesForPackage = workspaceRefs.get(packageKey) ?? {
+                name: packageJson.name,
+                version: packageJson.version,
+                workspaces: new Set(),
+              };
+
+              referencesForPackage.workspaces.add(importer.name ?? importer.path ?? 'workspace');
+              workspaceRefs.set(packageKey, referencesForPackage);
+            }
+          }
+
+          const cutoffTime = Date.now() - 3 * 24 * 60 * 60 * 1000;
+          const recentPackages = [];
+          const failedChecks = [];
+
+          for (const { name, version, workspaces } of workspaceRefs.values()) {
+            let timeData;
+
+            try {
+              timeData = JSON.parse(  
+                cp.execFileSync('npm', ['view', `${name}@${version}`, 'time', '--json'], {  
+                  encoding: 'utf8',  
+                  timeout: 15000,  
+                  maxBuffer: 2 * 1024 * 1024,  
+                }),  
+              );  
+            } catch (error) {
+              const timedOut =
+                error?.code === 'ETIMEDOUT' ||
+                error?.signal === 'SIGTERM' ||
+                /timed out/i.test(String(error?.message ?? ''));
+
+              failedChecks.push({
+                name,
+                version,
+                reason: timedOut ? 'timeout' : `error (${error?.code ?? 'unknown'})`,
+              });
+
+              continue;
+            }
+
+            const publishedAt = timeData?.[version];
+
+            if (!publishedAt) {
+              continue;
+            }
+
+            const publishedTime = Date.parse(publishedAt);
+
+            if (!Number.isFinite(publishedTime) || publishedTime < cutoffTime) {
+              continue;
+            }
+
+            recentPackages.push({
+              name,
+              version,
+              publishedAt,
+              workspaces: Array.from(workspaces).sort((left, right) => left.localeCompare(right)),
+            });
+          }
+
+          recentPackages.sort(
+            (left, right) => Date.parse(right.publishedAt) - Date.parse(left.publishedAt) || left.name.localeCompare(right.name),
+          );
+
+          const lines = [
+            '<!-- recent-package-watch -->',
+            '### Recently published dependencies',
+            '',
+          ];
+
+          if (recentPackages.length === 0) {
+            lines.push('No workspace dependency versions were published in the last 3 days.');
+          } else {
+            lines.push(`Found ${recentPackages.length} package${recentPackages.length === 1 ? '' : 's'} published in the last 3 days:`);
+            lines.push('');
+
+            for (const packageEntry of recentPackages) {
+              lines.push(
+                `- \`${packageEntry.name}@${packageEntry.version}\` published ${packageEntry.publishedAt.slice(0, 10)} in ${packageEntry.workspaces.join(', ')}`,
+              );
+            }
+          }
+
+          lines.push('');
+          lines.push('### Publish-time check health');
+          lines.push('');
+
+          if (failedChecks.length === 0) {
+            lines.push('All package publish-time checks completed successfully.');
+          } else {
+            lines.push(
+              `Failed to fetch publish-time metadata for ${failedChecks.length} package${failedChecks.length === 1 ? '' : 's'}:`,
+            );
+            lines.push('');
+
+            for (const failure of failedChecks) {
+              lines.push(`- \`${failure.name}@${failure.version}\`: ${failure.reason}`);
+            }
+          }
+
+          lines.push('');
+
+          const body = lines.join('\n');
+          const delimiter = 'EOF';
+
+          process.stdout.write(`comment_body<<${delimiter}\n${body}\n${delimiter}\n`);
+          NODE
+      - name: Upsert PR comment
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const marker = '<!-- recent-package-watch -->';
+            const body = `${process.env.COMMENT_BODY}`;
+            const actor = (process.env.GITHUB_ACTOR ?? context.actor ?? '').toLowerCase();
+            const botLogin = 'github-actions[bot]';
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+
+            const existingComment = comments.find((comment) => {
+              const commentAuthor = (comment.user?.login ?? '').toLowerCase();
+
+              return (
+                comment.body?.includes(marker) &&
+                (commentAuthor === botLogin || commentAuthor === actor)
+              );
+            });
+
+            if (existingComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+        env:
+          COMMENT_BODY: ${{ steps.report.outputs.comment_body }}
+
   lint:
     runs-on: ubuntu-latest
     steps:
