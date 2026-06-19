@@ -318,15 +318,6 @@ const columns: TableOptions<
           coordinatesChanged) &&
         row.original.status === "pending";
 
-      console.log("displayLocation", displayLocation);
-      console.log("displayCoordinates", displayCoordinates);
-      console.log("isAnUpdate", isAnUpdate);
-      console.log("oldLocation", oldLocation);
-      console.log("newLocation", newLocation);
-      console.log("coordinatesChanged", coordinatesChanged);
-      console.log("oldCoordinates", oldCoordinates);
-      console.log("newCoordinates", newCoordinates);
-
       return (
         <div className="flex items-center justify-start gap-1">
           <div className="flex flex-col gap-1">

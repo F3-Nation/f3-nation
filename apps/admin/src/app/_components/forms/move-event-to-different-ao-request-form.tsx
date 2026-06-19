@@ -10,8 +10,7 @@ import {
   SubmitterEmailField,
 } from "./admin-request-form-sections";
 
-// Sentinel value for the temporary AO described by a `move_event_to_new_ao`
-// request. The AO does not exist in the DB yet, so it has no real id.
+// Synthetic option for the not-yet-created AO.
 const NEW_AO_OPTION_VALUE = "__new_ao__";
 
 export const MoveEventToDifferentAoRequestForm = () => {
@@ -22,8 +21,7 @@ export const MoveEventToDifferentAoRequestForm = () => {
   const requestType = form.watch("requestType");
   const meta = form.watch("meta");
 
-  // `move_event_to_new_ao` references an AO that hasn't been created yet, so it
-  // only carries an `aoName` (no `aoId`). Surface it as a synthetic option.
+  // New AO hasn't been created yet — only has a name, no id.
   const isNewAo = requestType === "move_event_to_new_ao";
 
   const { data: regionsResponse } = useQuery(
@@ -56,9 +54,7 @@ export const MoveEventToDifferentAoRequestForm = () => {
   const originalEventId = meta?.originalEventId;
   const originalAoId = meta?.originalAoId;
 
-  // For a `move_event_to_new_ao` request the stored `aoId` is the event's
-  // current (source) AO, since the destination AO doesn't exist yet. Treat that
-  // as "new AO selected" unless the admin actively picks a different existing AO.
+  // Default to the synthetic "New AO" option unless the admin picks a different one.
   const destinationAoValue =
     isNewAo && (formAoId == null || formAoId === originalAoId)
       ? formAoName

@@ -3,14 +3,8 @@ import { X } from "lucide-react";
 import { useMemo } from "react";
 import { Controller } from "react-hook-form";
 
-import { EVENT_CATEGORY_LABEL_MAP } from "@acme/shared/app/constants";
 import type { RequestType } from "@acme/shared/app/enums";
-import { DayOfWeek } from "@acme/shared/app/enums";
-import { Case } from "@acme/shared/common/enums";
-import { convertCase, isTruthy } from "@acme/shared/common/functions";
 import { Input } from "@acme/ui/input";
-import { MultiSelect } from "@acme/ui/multi-select";
-import { ControlledSelect } from "@acme/ui/select";
 import { Textarea } from "@acme/ui/textarea";
 import { toast } from "@acme/ui/toast";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
@@ -19,7 +13,11 @@ import { orpc, useQuery } from "~/orpc/react";
 import { useUpdateLocationFormContext } from "~/utils/forms";
 import { DebouncedImage } from "../debounced-image";
 import { CountrySelect } from "../modal/country-select";
-import { ControlledTimeInput } from "../time-input";
+import {
+  EventDetailsFields,
+  LocationPickerField,
+  RegionSelectField,
+} from "./admin-request-form-sections";
 import { RequestInsertSchema } from "@acme/validators";
 import { z } from "zod";
 
@@ -49,51 +47,15 @@ export const LocationEventForm = ({
 }) => {
   const form = useUpdateLocationFormContext();
   const formRegionId = form.watch("regionId");
-  const formLocationId = form.watch("locationId");
   const formAoId = form.watch("aoId");
 
   const showEventFields =
     !requestType || REQUEST_TYPES_WITH_EVENT_FIELDS.includes(requestType);
 
-  const { data: regionsResponse } = useQuery(
-    orpc.map.location.regions.queryOptions(),
-  );
-  const regions = regionsResponse?.regions;
   const { data: allAoData } = useQuery(
     orpc.org.all.queryOptions({ input: { orgTypes: ["ao"] } }),
   );
-  const { data: locations } = useQuery(orpc.location.all.queryOptions());
-  const { data: eventTypes } = useQuery(
-    orpc.eventType.all.queryOptions({
-      input: {
-        orgIds: formRegionId ? [formRegionId] : [],
-      },
-    }),
-  );
   const aos = useMemo(() => allAoData?.orgs, [allAoData]);
-
-  const sortedRegionLocationOptions = useMemo(() => {
-    return locations?.locations
-      ?.filter((l) => !formRegionId || l.regionId === formRegionId)
-      ?.sort((a, b) =>
-        a.regionId === formRegionId && b.regionId !== formRegionId
-          ? -1
-          : a.regionId !== formRegionId && b.regionId === formRegionId
-            ? 1
-            : a.locationName.localeCompare(b.locationName),
-      )
-      ?.map((l) => ({
-        labelComponent: (
-          <span>
-            {`${l.locationName}${l.regionName ? ` (${l.regionName})` : ""}`}
-            <span className="text-foreground/30">{` ${[l.addressStreet, l.addressStreet2, l.addressCity, l.addressState, l.addressZip, l.addressCountry].filter(isTruthy).join(", ")}`}</span>
-          </span>
-        ),
-        label: `${l.locationName}${l.regionName ? ` (${l.regionName})` : ""} ${[l.addressStreet, l.addressStreet2, l.addressCity, l.addressState, l.addressZip, l.addressCountry].filter(isTruthy).join(", ")}`,
-        value: l.id.toString(),
-        regionId: l.regionId,
-      }));
-  }, [locations, formRegionId]);
 
   const sortedRegionAoOptions = useMemo(() => {
     return (
@@ -109,184 +71,15 @@ export const LocationEventForm = ({
 
   return (
     <>
-      {showEventFields && (
-        <>
-          <h2 className="mb-2 mt-4 text-xl font-semibold text-muted-foreground">
-            Event Details:
-          </h2>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <div className="text-sm font-medium text-muted-foreground">
-                Workout Name
-              </div>
-              <Input {...form.register("eventName")} />
-              <p className="text-xs text-destructive">
-                {form.formState.errors.eventName?.message}
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <div className="text-sm font-medium text-muted-foreground">
-                Day of Week
-              </div>
-              <ControlledSelect
-                control={form.control}
-                name="eventDayOfWeek"
-                options={DayOfWeek.map((day) => ({
-                  value: day,
-                  label: convertCase({
-                    str: day,
-                    fromCase: Case.LowerCase,
-                    toCase: Case.TitleCase,
-                  }),
-                }))}
-                placeholder="Select a day of the week"
-              />
-              <p className="text-xs text-destructive">
-                {form.formState.errors.eventDayOfWeek?.message}
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <ControlledTimeInput
-                control={form.control}
-                name="eventStartTime"
-                id={"eventStartTime"}
-                label={"Start Time"}
-              />
-            </div>
-            <div className="space-y-2">
-              <ControlledTimeInput
-                control={form.control}
-                name="eventEndTime"
-                id={"eventEndTime"}
-                label={"End Time"}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <div className="text-sm font-medium text-muted-foreground">
-                Event Types
-              </div>
-              <Controller
-                control={form.control}
-                name="eventTypeIds"
-                render={({ field, fieldState }) => {
-                  return (
-                    <div>
-                      <MultiSelect
-                        hideSelectAll
-                        defaultValue={(field.value ?? []).map(String)}
-                        value={(field.value ?? []).map(String)}
-                        options={
-                          eventTypes?.eventTypes.map((type) => ({
-                            label: type.eventCategory
-                              ? `${type.name} (${EVENT_CATEGORY_LABEL_MAP[type.eventCategory] ?? type.eventCategory})`
-                              : type.name,
-                            value: type.id.toString(),
-                          })) ?? []
-                        }
-                        onValueChange={(values) =>
-                          field.onChange(values.map(Number))
-                        }
-                        placeholder="Select event types"
-                      />
-                      {fieldState.error && (
-                        <p className="text-xs text-destructive">
-                          You must select at least one event type
-                        </p>
-                      )}
-                    </div>
-                  );
-                }}
-              />
-            </div>
-
-            <div className="mx-2 space-y-2 sm:col-span-2">
-              <div className="text-sm font-medium text-muted-foreground">
-                Event Description
-              </div>
-              <Textarea
-                {...form.register("eventDescription")}
-                placeholder="Tell people if there's anything they need to know prior to showing up to the workout"
-              />
-              <p className="text-xs text-destructive">
-                {form.formState.errors.eventDescription?.message}
-              </p>
-            </div>
-          </div>
-        </>
-      )}
+      {showEventFields && <EventDetailsFields />}
       <h2 className="mb-2 mt-4 text-xl font-semibold text-muted-foreground">
         Physical Location Details:
       </h2>
-      <div className="text-sm font-medium text-muted-foreground">
-        Location Region
+      <div className="mb-3">
+        <RegionSelectField label="Location Region" />
       </div>
       <div className="mb-3">
-        <VirtualizedCombobox
-          key={formRegionId?.toString()}
-          options={
-            regions
-              ?.map((region) => ({
-                label: region.name,
-                value: region.id.toString(),
-              }))
-              .sort((a, b) => a.label.localeCompare(b.label)) ?? []
-          }
-          value={formRegionId?.toString()}
-          onSelect={(item) => {
-            const region = regions?.find(
-              (region) => region.id.toString() === item,
-            );
-            if (region) {
-              form.setValue("regionId", region.id);
-            }
-          }}
-          searchPlaceholder="Select"
-        />
-        <p className="text-xs text-destructive">
-          {form.formState.errors.regionId?.message}
-        </p>
-      </div>
-      <div className="text-sm font-medium text-muted-foreground">
-        Existing location
-      </div>
-      <div className="mb-3">
-        <VirtualizedCombobox
-          key={formLocationId?.toString()}
-          className="w-full"
-          options={sortedRegionLocationOptions ?? []}
-          value={formLocationId?.toString()}
-          onSelect={(item) => {
-            const location = locations?.locations.find(
-              ({ id }) => id.toString() === item,
-            );
-            form.setValue("locationId", location?.id ?? null);
-            if (!location) return;
-
-            form.setValue("locationDescription", location.description ?? "");
-            form.setValue("locationAddress", location.addressStreet);
-            form.setValue("locationAddress2", location.addressStreet2);
-            form.setValue("locationCity", location.addressCity);
-            form.setValue("locationState", location.addressState);
-            form.setValue("locationZip", location.addressZip);
-            form.setValue("locationCountry", location.addressCountry);
-            form.setValue("locationLat", location.latitude);
-            form.setValue("locationLng", location.longitude);
-
-            if (location?.regionId == undefined) {
-              // @ts-expect-error -- must remove regionId from form
-              form.setValue("regionId", null);
-            } else {
-              form.setValue("regionId", location?.regionId);
-            }
-          }}
-          searchPlaceholder="Select"
-        />
-        <div className="mx-3 text-xs text-muted-foreground">
-          Select a location above to move this workout to a different location
-        </div>
+        <LocationPickerField helperText="Select a location above to move this workout to a different location" />
       </div>
       <div className="my-2 text-base font-bold text-foreground">
         The fields below update the location for all associated workouts

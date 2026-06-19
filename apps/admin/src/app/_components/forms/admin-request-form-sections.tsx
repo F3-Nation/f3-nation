@@ -1,11 +1,12 @@
 import { X } from "lucide-react";
+import { useMemo } from "react";
 import { Controller } from "react-hook-form";
 
 import { EVENT_CATEGORY_LABEL_MAP } from "@acme/shared/app/constants";
 import { DayOfWeek } from "@acme/shared/app/enums";
 import { isProd } from "@acme/shared/common/constants";
 import { Case } from "@acme/shared/common/enums";
-import { convertCase } from "@acme/shared/common/functions";
+import { convertCase, isTruthy } from "@acme/shared/common/functions";
 import { Input } from "@acme/ui/input";
 import { MultiSelect } from "@acme/ui/multi-select";
 import { ControlledSelect } from "@acme/ui/select";
@@ -90,7 +91,7 @@ export const EventDetailsFields = () => {
           />
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-2 sm:col-span-2">
           <div className="text-sm font-medium text-muted-foreground">
             Event Types
           </div>
@@ -124,7 +125,7 @@ export const EventDetailsFields = () => {
           />
         </div>
 
-        <div className="mx-2 space-y-2 sm:col-span-2">
+        <div className="space-y-2 sm:col-span-2">
           <div className="text-sm font-medium text-muted-foreground">
             Event Description
           </div>
@@ -275,6 +276,122 @@ export const RegionSelectField = ({
       <p className="text-xs text-destructive">
         {form.formState.errors.regionId?.message}
       </p>
+    </div>
+  );
+};
+
+const NEW_LOCATION_OPTION_VALUE = "__new_location__";
+
+export const LocationPickerField = ({
+  label = "Existing location",
+  searchPlaceholder = "Select",
+  helperText,
+  newLocationLabel,
+}: {
+  label?: string;
+  searchPlaceholder?: string;
+  helperText?: string;
+  newLocationLabel?: string | null;
+}) => {
+  const form = useUpdateLocationFormContext();
+  const formRegionId = form.watch("regionId");
+  const formLocationId = form.watch("locationId");
+
+  const { data: locations } = useQuery(orpc.location.all.queryOptions());
+
+  const locationOptions = useMemo(() => {
+    const existing =
+      locations?.locations
+        .filter((l) => !formRegionId || l.regionId === formRegionId)
+        .sort((a, b) => a.locationName.localeCompare(b.locationName))
+        .map((l) => ({
+          labelComponent: (
+            <span>
+              {`${l.locationName}${l.regionName ? ` (${l.regionName})` : ""}`}
+              <span className="text-foreground/30">{` ${[
+                l.addressStreet,
+                l.addressStreet2,
+                l.addressCity,
+                l.addressState,
+                l.addressZip,
+                l.addressCountry,
+              ]
+                .filter(isTruthy)
+                .join(", ")}`}</span>
+            </span>
+          ),
+          label: `${l.locationName}${l.regionName ? ` (${l.regionName})` : ""} ${[
+            l.addressStreet,
+            l.addressStreet2,
+            l.addressCity,
+            l.addressState,
+            l.addressZip,
+            l.addressCountry,
+          ]
+            .filter(isTruthy)
+            .join(", ")}`,
+          value: l.id.toString(),
+        })) ?? [];
+
+    if (newLocationLabel) {
+      return [
+        {
+          label: `${newLocationLabel} (New Location)`,
+          value: NEW_LOCATION_OPTION_VALUE,
+        },
+        ...existing,
+      ];
+    }
+    return existing;
+  }, [locations?.locations, formRegionId, newLocationLabel]);
+
+  const value =
+    newLocationLabel && formLocationId == null
+      ? NEW_LOCATION_OPTION_VALUE
+      : formLocationId?.toString();
+
+  return (
+    <div className="space-y-2">
+      <div className="text-sm font-medium text-muted-foreground">{label}</div>
+      <VirtualizedCombobox
+        key={`${formRegionId ?? "all"}-${formLocationId ?? value ?? "none"}`}
+        options={locationOptions}
+        value={value}
+        onSelect={(item) => {
+          if (item === NEW_LOCATION_OPTION_VALUE) {
+            form.setValue("locationId", null);
+            return;
+          }
+
+          const location = locations?.locations.find(
+            ({ id }) => id.toString() === item,
+          );
+
+          form.setValue("locationId", location?.id ?? null);
+          if (!location) return;
+
+          form.setValue("locationDescription", location.description ?? "");
+          form.setValue("locationAddress", location.addressStreet);
+          form.setValue("locationAddress2", location.addressStreet2);
+          form.setValue("locationCity", location.addressCity);
+          form.setValue("locationState", location.addressState);
+          form.setValue("locationZip", location.addressZip);
+          form.setValue("locationCountry", location.addressCountry);
+          form.setValue("locationLat", location.latitude);
+          form.setValue("locationLng", location.longitude);
+
+          if (location.regionId != null) {
+            form.setValue("regionId", location.regionId);
+          }
+        }}
+        searchPlaceholder={searchPlaceholder}
+      />
+      <p className="text-xs text-destructive">
+        {form.formState.errors.locationId?.message}
+      </p>
+      {helperText && (
+        <div className="mx-3 text-xs text-muted-foreground">{helperText}</div>
+      )}
     </div>
   );
 };
