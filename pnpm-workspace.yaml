@@ -133,7 +133,7 @@ catalog:
   # explicitly in each vitest package pins a compatible Vite deterministically.
   vite: ^7.3.5
   vite-tsconfig-paths: ^6.1.1
-  vitest: ^4.1.8
+  vitest: ^4.1.9
   vitest-canvas-mock: ^1.1.4
   zod: ^3.25.76
   zustand: ^4.5.2
