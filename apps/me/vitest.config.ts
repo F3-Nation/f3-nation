@@ -13,9 +13,6 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "json", "html"],
       reportsDirectory: "./coverage",
-      // Measure all of src (Vitest 4 otherwise only counts imported files), minus
-      // non-testable bootstrap/config files that would sit in the denominator at 0%
-      // and break the autoUpdate thresholds on edit.
       include: coverageInclude,
       exclude: coverageExclude,
       thresholds: {

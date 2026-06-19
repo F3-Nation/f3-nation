@@ -14,11 +14,6 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "json", "html"],
       reportsDirectory: "./coverage",
-      // Measure all of src (Vitest 4 otherwise only counts imported files), minus
-      // bootstrap/config files that aren't unit-testable (Sentry init, Next config,
-      // instrumentation, styling config). Those otherwise sit in the denominator at
-      // 0% and make every edit to them break the global thresholds. Shared list
-      // keeps vitest's defaults plus the bootstrap globs.
       include: coverageInclude,
       exclude: coverageExclude,
       thresholds: {
