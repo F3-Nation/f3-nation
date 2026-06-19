@@ -1,37 +1,11 @@
-/** @typedef {import("prettier").Config} PrettierConfig */
-
-/** @type { PrettierConfig } */
+/** @type {import("prettier").Config} */
 const config = {
-  // arrowParens: "always",
-  // printWidth: 80,
-  // singleQuote: true,
-  // jsxSingleQuote: true,
-  // semi: false,
-  // trailingComma: "all",
-  // tabWidth: 2,
-  // Plugins temporarily disabled for CI compatibility testing
-  // plugins: [
-  //   "@ianvs/prettier-plugin-sort-imports",
-  //   "prettier-plugin-tailwindcss",
-  // ],
-  // tailwindFunctions: ["cn", "cva"],
-  // importOrder: [
-  //   "<TYPES>",
-  //   "^(react/(.*)$)|^(react$)|^(react-native(.*)$)",
-  //   "^(next/(.*)$)|^(next$)",
-  //   "^(expo(.*)$)|^(expo$)",
-  //   "<THIRD_PARTY_MODULES>",
-  //   "",
-  //   "<TYPES>^@acme",
-  //   "^@acme/(.*)$",
-  //   "",
-  //   "<TYPES>^[.|..|~]",
-  //   "^~/",
-  //   "^[../]",
-  //   "^[./]",
-  // ],
-  // importOrderParserPlugins: ["typescript", "jsx", "decorators-legacy"],
-  // importOrderTypeScriptVersion: "5.3.3",
+  plugins: [
+    // INFO: Enabling this plugin resorts a lot of imports and therefore leads to a lot of file diffs, do in own PR
+    // require.resolve("@ianvs/prettier-plugin-sort-imports"),
+    require.resolve("prettier-plugin-tailwindcss"),
+  ],
+  tailwindFunctions: ["cn", "cva"],
 };
 
 module.exports = config;

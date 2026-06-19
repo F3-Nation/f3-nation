@@ -151,7 +151,7 @@ export default function AdminLocationsModal({
       <DialogContent
         style={{ zIndex: Z_INDEX.HOW_TO_JOIN_MODAL }}
         className={cn(
-          `max-w-[95%] rounded-lg sm:max-w-[90%] lg:max-w-[1024px] max-h-[90vh] overflow-y-auto`,
+          `max-h-[90vh] max-w-[95%] overflow-y-auto rounded-lg sm:max-w-[90%] lg:max-w-[1024px]`,
         )}
       >
         <DialogHeader>

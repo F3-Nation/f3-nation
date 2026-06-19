@@ -18,7 +18,7 @@ export default function AuthLayout(props: { children: ReactNode }) {
       <div
         className={cn(
           "overflow-y-auto",
-          "xs:p-8 xs:flex xs:flex-row xs:justify-center xs:items-start",
+          "xs:flex xs:flex-row xs:items-start xs:justify-center xs:p-8",
         )}
         style={{ height: `calc(100dvh - ${HEADER_HEIGHT}px)` }}
       >

@@ -47,7 +47,7 @@ export const ContactLinks = ({
 
   const iconClass = iconSizes[iconSize];
   const buttonClass = cn(
-    "rounded-full bg-muted hover:bg-muted-foreground/20 transition-colors",
+    "rounded-full bg-muted transition-colors hover:bg-muted-foreground/20",
     buttonSizes[iconSize],
   );
 

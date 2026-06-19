@@ -22,13 +22,13 @@ export default function SignOutButton() {
         <div className="flex gap-3">
           <button
             onClick={handleLogout}
-            className="flex-1 rounded-md bg-primary px-4 py-3 text-base font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+            className="flex-1 rounded-md bg-primary px-4 py-3 text-base font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
             Log Out
           </button>
           <button
             onClick={() => setConfirming(false)}
-            className="flex-1 rounded-md border px-4 py-3 text-base font-medium hover:bg-accent transition-colors"
+            className="flex-1 rounded-md border px-4 py-3 text-base font-medium transition-colors hover:bg-accent"
           >
             Cancel
           </button>
@@ -40,7 +40,7 @@ export default function SignOutButton() {
   return (
     <button
       onClick={() => setConfirming(true)}
-      className="w-full rounded-md bg-primary px-4 py-3 text-base font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+      className="w-full rounded-md bg-primary px-4 py-3 text-base font-medium text-primary-foreground transition-colors hover:bg-primary/90"
     >
       Log Out
     </button>

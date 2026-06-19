@@ -72,7 +72,7 @@ export function ProfileForm({ user, regions }: ProfileFormProps) {
               href="https://apps.f3nation.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 focus-visible:outline-hidden focus-visible:ring-ring inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-offset-2"
             >
               Go to apps.f3nation.com &rarr;
             </a>
@@ -88,18 +88,18 @@ export function ProfileForm({ user, regions }: ProfileFormProps) {
             <CardTitle className="text-lg">Personal Information</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2 pl-2 border-l-[3px] border-l-transparent">
+            <div className="space-y-2 border-l-[3px] border-l-transparent pl-2">
               <Label>Email</Label>
               <Input
                 value={user.email}
                 disabled
                 className="disabled:opacity-70"
               />
-              <p className="text-xs text-muted-foreground">
+              <p className="text-muted-foreground text-xs">
                 Email{" "}
                 <a
                   href="mailto:it@f3nation.com?subject=Need%20to%20change%20F3%20email%20address"
-                  className="text-primary underline hover:text-primary/80"
+                  className="text-primary hover:text-primary/80 underline"
                 >
                   it@f3nation.com
                 </a>{" "}
@@ -209,7 +209,7 @@ export function ProfileForm({ user, regions }: ProfileFormProps) {
                 </Label>
                 <p
                   id="user-emergency-info-dr-sharing-help"
-                  className="text-sm text-muted-foreground"
+                  className="text-muted-foreground text-sm"
                 >
                   If enabled, users can search for your emergency info from
                   other Slack workspaces.

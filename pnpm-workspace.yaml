@@ -5,7 +5,6 @@ packages:
 
 catalog:
   "@auth/core": 0.41.0
-  "@auth/drizzle-adapter": ^0.6.3
   "@commitlint/cli": ^21.0.2
   "@commitlint/config-conventional": ^21.0.2
   "@commitlint/cz-commitlint": ^21.0.2
@@ -51,6 +50,7 @@ catalog:
   "@tanstack/table-core": ^8.21.3
   "@testing-library/jest-dom": ^6.4.2
   "@testing-library/react": ^15.0.7
+  "@testing-library/user-event": ^14.6.1
   "@turbo/gen": ^1.12.3
   "@types/geojson": ^7946.0.16
   "@types/google.maps": ^3.65.0
@@ -70,7 +70,7 @@ catalog:
   cmdk: ^0.2.1
   commitizen: ^4.3.1
   dayjs: ^1.11.10
-  dompurify: ^3.4.7
+  dompurify: ^3.4.9
   dotenv: ^16.3.2
   dotenv-cli: ^7.3.0
   drizzle-kit: ^0.31.10
@@ -86,7 +86,6 @@ catalog:
   geist: ^1.2.2
   google-auth-library: ^10.3.0
   handlebars: ^4.7.8
-  handlebars-loader: ^1.7.3
   inquirer: ^12.11.1
   jiti: ^2.7.0
   jose: ^6.2.1
@@ -100,7 +99,7 @@ catalog:
   next: ^15.5.18
   next-auth: 5.0.0-beta.30
   next-themes: ^0.4.4
-  nodemailer: ^8.0.10
+  nodemailer: ^9.0.1
   pg: ^8.11.3
   pg-connection-string: ^2.12.0
   pino: ^10.3.1
@@ -159,17 +158,6 @@ allowBuilds:
   lefthook: true
   sharp: true
   unrs-resolver: true
-minimumReleaseAge: 10080
-# esbuild 0.28.1 patches GHSA-gv7w-rqvm-qjhr but was published <7 days ago; exempt
-# it from the release-age gate so the security patch is adopted now. @esbuild/*
-# covers its platform-specific binary optional deps, which are age-gated too.
-# Remove once the gate naturally allows 0.28.1 (~2026-06-19) — tracked by issue #435.
-# form-data 2.5.6 patches GHSA-hmw2-7cc7-3qxx (CRLF injection); published 2026-06-12.
-# Remove once the gate naturally allows 2.5.6 (~2026-06-19).
-minimumReleaseAgeExclude:
-  - esbuild
-  - "@esbuild/*"
-  - form-data@2.5.6
 catalogMode: strict
 cleanupUnusedCatalogs: true
 # pnpm's publicHoistPattern defaults to [] (nothing is hoisted); the patterns below

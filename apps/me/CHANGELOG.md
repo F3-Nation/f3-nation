@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.4.1](https://github.com/F3-Nation/f3-nation/compare/me@1.4.0...me@1.4.1) (2026-06-18)
+
+
+### Bug Fixes
+
+* **repo:** updated to code were blocking deployment ([3b0e947](https://github.com/F3-Nation/f3-nation/commit/3b0e947cb9d3a2de2566058d8921ce058499acc7))
+
+## [1.4.0](https://github.com/F3-Nation/f3-nation/compare/me@1.3.1...me@1.4.0) (2026-06-17)
+
+
+### Features
+
+* **me:** add confirmation before removing role or position ([#443](https://github.com/F3-Nation/f3-nation/issues/443)) ([f5f2d0c](https://github.com/F3-Nation/f3-nation/commit/f5f2d0cea4a2066ceca9e2bfde9cbf0b17964014))
+* **repo:** triggering release ([b5e1415](https://github.com/F3-Nation/f3-nation/commit/b5e1415682df6abc3cdfa8653bc3658954fa7d0c))
+
 ## [1.3.1](https://github.com/F3-Nation/f3-nation/compare/me@1.3.0...me@1.3.1) (2026-06-11)
 
 
