@@ -71,6 +71,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      issues: write
       pull-requests: write
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -87,7 +88,7 @@ jobs:
           const cp = require('node:child_process');
 
           const importers = JSON.parse(
-            cp.execFileSync('pnpm', ['list', '--json', '--depth', 'Infinity', '--prod', '--dev'], {
+            cp.execFileSync('pnpm', ['list', '--json', '--depth', '0', '--prod', '--dev'], {
               encoding: 'utf8',
               maxBuffer: 20 * 1024 * 1024,
             }),
@@ -137,15 +138,31 @@ jobs:
 
           const cutoffTime = Date.now() - 3 * 24 * 60 * 60 * 1000;
           const recentPackages = [];
+          const failedChecks = [];
 
           for (const { name, version, workspaces } of workspaceRefs.values()) {
             let timeData;
 
             try {
-              timeData = JSON.parse(cp.execFileSync('npm', ['view', `${name}@${version}`, 'time', '--json'], {
-                encoding: 'utf8',
-              }));
-            } catch {
+              timeData = JSON.parse(  
+                cp.execFileSync('npm', ['view', `${name}@${version}`, 'time', '--json'], {  
+                  encoding: 'utf8',  
+                  timeout: 15000,  
+                  maxBuffer: 2 * 1024 * 1024,  
+                }),  
+              );  
+            } catch (error) {
+              const timedOut =
+                error?.code === 'ETIMEDOUT' ||
+                error?.signal === 'SIGTERM' ||
+                /timed out/i.test(String(error?.message ?? ''));
+
+              failedChecks.push({
+                name,
+                version,
+                reason: timedOut ? 'timeout' : `error (${error?.code ?? 'unknown'})`,
+              });
+
               continue;
             }
 
@@ -193,6 +210,23 @@ jobs:
           }
 
           lines.push('');
+          lines.push('### Publish-time check health');
+          lines.push('');
+
+          if (failedChecks.length === 0) {
+            lines.push('All package publish-time checks completed successfully.');
+          } else {
+            lines.push(
+              `Failed to fetch publish-time metadata for ${failedChecks.length} package${failedChecks.length === 1 ? '' : 's'}:`,
+            );
+            lines.push('');
+
+            for (const failure of failedChecks) {
+              lines.push(`- \`${failure.name}@${failure.version}\`: ${failure.reason}`);
+            }
+          }
+
+          lines.push('');
 
           const body = lines.join('\n');
           const delimiter = 'EOF';
@@ -205,15 +239,26 @@ jobs:
           script: |
             const marker = '<!-- recent-package-watch -->';
             const body = `${process.env.COMMENT_BODY}`;
+            const actor = (process.env.GITHUB_ACTOR ?? context.actor ?? '').toLowerCase();
 
-            const { data: comments } = await github.rest.issues.listComments({
+            const { data: authenticatedUser } = await github.rest.users.getAuthenticated();
+            const botLogin = (authenticatedUser?.login ?? '').toLowerCase();
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
               per_page: 100,
             });
 
-            const existingComment = comments.find((comment) => comment.body?.includes(marker));
+            const existingComment = comments.find((comment) => {
+              const commentAuthor = (comment.user?.login ?? '').toLowerCase();
+
+              return (
+                comment.body?.includes(marker) &&
+                (commentAuthor === botLogin || commentAuthor === actor)
+              );
+            });
 
             if (existingComment) {
               await github.rest.issues.updateComment({
