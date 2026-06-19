@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
-const uploadUserAvatarMock = vi.fn();
+const { uploadUserAvatarMock } = vi.hoisted(() => ({
+  uploadUserAvatarMock: vi.fn(),
+}));
 
 vi.mock("@/lib/storage", () => ({
   storage: {

@@ -63,7 +63,7 @@ catalog:
   "@types/supercluster": ^7.1.3
   "@vis.gl/react-google-maps": ^1.5.2
   "@vitejs/plugin-react": ^5.2.0
-  "@vitest/coverage-v8": ^4.1.8
+  "@vitest/coverage-v8": ^4.1.9
   autoprefixer: ^10.5.0
   class-variance-authority: ^0.7.0
   clsx: ^2.1.0
