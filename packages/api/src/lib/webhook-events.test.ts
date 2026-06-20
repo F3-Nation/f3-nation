@@ -10,9 +10,9 @@ import { vi } from "vitest";
 // Mock the rate limiter before any imports
 const mockLimit = vi.hoisted(() => vi.fn());
 vi.mock("@orpc/experimental-ratelimit/memory", () => ({
-  MemoryRatelimiter: vi.fn().mockImplementation(() => ({
-    limit: mockLimit,
-  })),
+  MemoryRatelimiter: vi.fn(function () {
+    return { limit: mockLimit };
+  }),
 }));
 
 // Mock notifyWebhooks to capture webhook calls

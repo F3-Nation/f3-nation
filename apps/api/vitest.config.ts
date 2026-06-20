@@ -1,4 +1,4 @@
-import { coverageExclude } from "@acme/vitest-config";
+import { coverageExclude, coverageInclude } from "@acme/vitest-config";
 import react from "@vitejs/plugin-react";
 import tsconfigPaths from "vite-tsconfig-paths";
 import { defineConfig } from "vitest/config";
@@ -14,17 +14,14 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "json", "html"],
       reportsDirectory: "./coverage",
-      // Exclude bootstrap/config files that aren't unit-testable (Sentry init,
-      // Next config, instrumentation, styling config). They otherwise sit in the
-      // denominator at 0% and make every edit to them break the global
-      // thresholds. Shared list keeps vitest's defaults plus the bootstrap globs.
+      include: coverageInclude,
       exclude: coverageExclude,
       thresholds: {
         autoUpdate: true,
-        statements: 65.41,
-        branches: 88.88,
-        functions: 50,
-        lines: 65.41,
+        statements: 90.32,
+        branches: 90.9,
+        functions: 77.77,
+        lines: 90.32,
       },
     },
     exclude: [

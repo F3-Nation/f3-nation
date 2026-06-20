@@ -137,7 +137,10 @@ jobs:
           BUILD_CONTEXT: ${{ inputs.build_context }}
         run: |
           TURBO_VERSION=$(grep '^  turbo:' pnpm-workspace.yaml | awk '{print $2}')
+          # Cloud Run only runs linux/amd64. The Dockerfile FROM lines no longer
+          # pin --platform (BuildKit lint), so the target arch is set here.
           docker build \
+            --platform=linux/amd64 \
             --file "${DOCKERFILE}" \
             --build-arg TURBO_VERSION="${TURBO_VERSION}" \
             --tag "${{ steps.meta.outputs.image }}" \
