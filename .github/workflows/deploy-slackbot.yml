@@ -32,6 +32,43 @@ jobs:
       prod_environment: slackbot-production
       region: us-central1
       ar_repo: cloud-run-builds
+      staging_flags: >-
+        --memory=1Gi
+        --cpu=1
+        --min-instances=0
+        --max-instances=2
+        --add-cloudsql-instances=f3-slackbot-staging:us-central1:f3-slackbot-staging
+        --add-cloudsql-instances=f3data:us-central1:f3data
+        --add-volume=name=user-avatars,type=cloud-storage,bucket=f3-public-images-staging/user-avatars
+        --add-volume-mount=volume=user-avatars,mount-path=/mnt/user-avatars
+        --add-volume=name=calendar-images,type=cloud-storage,bucket=f3nation-calendar-images
+        --add-volume-mount=volume=calendar-images,mount-path=/mnt/calendar-images
+        --add-volume=name=oauth_states,type=cloud-storage,bucket=f3nation-bot-oauth-state
+        --add-volume-mount=volume=oauth_states,mount-path=/mnt/oauth_states
+        --add-volume=name=oauth_installations,type=cloud-storage,bucket=f3nation-bot-oauth-installation
+        --add-volume-mount=volume=oauth_installations,mount-path=/mnt/oauth_installations
+        --add-volume=name=event_instance_images,type=cloud-storage,bucket=f3nation-public-images-staging/event-instance-images
+        --add-volume-mount=volume=event_instance_images,mount-path=/mnt/event_instance_images
+        --add-volume=name=org-logos,type=cloud-storage,bucket=f3nation-public-images-staging/org-logos
+        --add-volume-mount=volume=org-logos,mount-path=/mnt/org-logos
+      prod_flags: >-
+        --memory=4Gi
+        --cpu=2
+        --min-instances=1
+        --max-instances=100
+        --add-cloudsql-instances=f3data:us-central1:f3data
+        --add-volume=name=user-avatars,type=cloud-storage,bucket=f3-public-images/user-avatars
+        --add-volume-mount=volume=user-avatars,mount-path=/mnt/user-avatars
+        --add-volume=name=calendar-images,type=cloud-storage,bucket=f3nation-calendar-images
+        --add-volume-mount=volume=calendar-images,mount-path=/mnt/calendar-images
+        --add-volume=name=oauth_states,type=cloud-storage,bucket=f3nation-prod-bot-oauth-state
+        --add-volume-mount=volume=oauth_states,mount-path=/mnt/oauth_states
+        --add-volume=name=oauth_installations,type=cloud-storage,bucket=f3nation-prod-bot-oauth-installation
+        --add-volume-mount=volume=oauth_installations,mount-path=/mnt/oauth_installations
+        --add-volume=name=event_instance_images,type=cloud-storage,bucket=f3nation-public-images/event-instance-images
+        --add-volume-mount=volume=event_instance_images,mount-path=/mnt/event_instance_images
+        --add-volume=name=org-logos,type=cloud-storage,bucket=f3nation-public-images/org-logos
+        --add-volume-mount=volume=org-logos,mount-path=/mnt/org-logos
 
   deploy-scripts:
     uses: ./.github/workflows/_deploy-cloudrun-job.yml
