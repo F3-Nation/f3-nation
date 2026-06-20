@@ -23,12 +23,13 @@ Your app servers (Map, API, Auth) still run natively on your machine with `pnpm 
 
 Install these before starting:
 
-| Tool                       | Install                                                                               | Check            |
-| -------------------------- | ------------------------------------------------------------------------------------- | ---------------- |
-| **Docker Desktop**         | [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/) | `docker version` |
-| **Node.js** (see `.nvmrc`) | `nvm install`                                                                         | `node -v`        |
-| **pnpm** v10+              | `corepack enable && corepack prepare pnpm@latest --activate`                          | `pnpm -v`        |
-| **Git**                    | [git-scm.com](https://git-scm.com)                                                    | `git --version`  |
+| Tool                       | Install                                                                                                   | Check            |
+| -------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------- |
+| **Docker Desktop**         | [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/)                     | `docker version` |
+| **Node.js** (see `.nvmrc`) | `nvm install`                                                                                             | `node -v`        |
+| **pnpm** v10+              | `corepack enable && corepack prepare pnpm@latest --activate`                                              | `pnpm -v`        |
+| **uv**                     | [docs.astral.sh/uv/getting-started/installation](https://docs.astral.sh/uv/getting-started/installation/) | `uv --version`   |
+| **Git**                    | [git-scm.com](https://git-scm.com)                                                                        | `git --version`  |
 
 Make sure Docker Desktop is **running** before you continue.
 
@@ -126,6 +127,27 @@ You will need a code editor in order to edit code! The instructions assume you w
 </details>
 
 <details>
+<summary>uv: Python package manager for Slackbot</summary>
+
+The Slackbot app is a Python app in `apps/slackbot`. The repository root runs `uv sync` during `pnpm install` via the `postinstall` script, so install `uv` before running `pnpm install`.
+
+On macOS or Linux/WSL:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Close and reopen your terminal, then verify:
+
+```bash
+uv --version
+```
+
+If you need to install Node dependencies before installing `uv`, run `pnpm install --ignore-scripts` temporarily. After installing `uv`, run `pnpm install` again so the Slackbot Python dependencies are synced.
+
+</details>
+
+<details>
 <summary>NVM: Node Version Manager</Summary>
 The monorepo is based on Node.js. NVM allows you to install and manage versions of Node on your machine. You will need it installed in order to run the apps.
 
@@ -149,8 +171,11 @@ The following commands will set up the base environment. If any commands fail, l
 git clone https://github.com/F3-Nation/f3-nation.git
 cd f3-nation
 nvm install        # installs the Node version in .nvmrc
+uv --version       # confirm uv is installed for apps/slackbot
 pnpm install
 ```
+
+`pnpm install` runs `uv sync` automatically for the Python Slackbot app. If `uv --version` fails, install `uv` first or run `pnpm install --ignore-scripts` only as a temporary workaround, then rerun `pnpm install` after `uv` is available.
 
 ### 2. Run the one-time setup script
 
@@ -232,8 +257,11 @@ The following commands will set up the base environment. If any commands fail, l
 git clone git@github.com:F3-Nation/f3-nation.git
 cd f3-nation
 nvm install        # installs the Node version in .nvmrc
+uv --version       # confirm uv is installed for apps/slackbot
 pnpm install
 ```
+
+`pnpm install` runs `uv sync` automatically for the Python Slackbot app. If `uv --version` fails, install `uv` first or run `pnpm install --ignore-scripts` only as a temporary workaround, then rerun `pnpm install` after `uv` is available.
 
 ## Daily workflow
 
@@ -435,6 +463,24 @@ The `-v` flag removes the named volumes (`postgres_data`, `gcs_data`). Next time
 ---
 
 ## Troubleshooting
+
+### `pnpm install` fails with `uv: command not found`
+
+Install `uv`, then rerun `pnpm install`:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv --version
+pnpm install
+```
+
+If you need the Node packages immediately before installing `uv`, you can temporarily skip lifecycle scripts:
+
+```bash
+pnpm install --ignore-scripts
+```
+
+Then install `uv` and run `pnpm install` again so `uv sync` installs the Slackbot Python dependencies.
 
 ### Port already in use
 
