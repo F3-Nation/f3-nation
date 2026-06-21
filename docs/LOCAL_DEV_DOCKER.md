@@ -127,7 +127,7 @@ You will need a code editor in order to edit code! The instructions assume you w
 <details>
 <summary>uv: Python package manager for Slackbot</summary>
 
-The Slackbot app is a Python app in `apps/slackbot`. The repository root runs `uv sync` during `pnpm install` via the `postinstall` script, so install `uv` before running `pnpm install`.
+The Slackbot app is a Python app in `apps/slackbot`. The repository root tries to run `uv sync` during `pnpm install` via the `postinstall` script. If `uv` is not installed yet, `pnpm install` will continue with a warning and skip syncing the Slackbot Python dependencies.
 
 On macOS or Linux/WSL:
 
@@ -141,7 +141,7 @@ Close and reopen your terminal, then verify:
 uv --version
 ```
 
-If you need to install Node dependencies before installing `uv`, run `pnpm install --ignore-scripts` temporarily. After installing `uv`, run `pnpm install` again so the Slackbot Python dependencies are synced.
+After installing `uv`, run `pnpm slackbot:sync` to sync the Slackbot Python dependencies. If you need an install to fail when `uv` is missing, run `F3_REQUIRE_UV=1 pnpm install`.
 
 </details>
 
@@ -169,11 +169,11 @@ The following commands will set up the base environment. If any commands fail, l
 git clone https://github.com/F3-Nation/f3-nation.git
 cd f3-nation
 nvm install        # installs the Node version in .nvmrc
-uv --version       # confirm uv is installed for apps/slackbot
+uv --version       # optional here; needed for apps/slackbot
 pnpm install
 ```
 
-`pnpm install` runs `uv sync` automatically for the Python Slackbot app. If `uv --version` fails, install `uv` first or run `pnpm install --ignore-scripts` only as a temporary workaround, then rerun `pnpm install` after `uv` is available.
+`pnpm install` runs `uv sync` automatically for the Python Slackbot app when `uv` is available. If `uv --version` fails, install `uv`, then run `pnpm slackbot:sync`.
 
 ### 2. Run the one-time setup script
 
@@ -255,11 +255,11 @@ The following commands will set up the base environment. If any commands fail, l
 git clone git@github.com:F3-Nation/f3-nation.git
 cd f3-nation
 nvm install        # installs the Node version in .nvmrc
-uv --version       # confirm uv is installed for apps/slackbot
+uv --version       # optional here; needed for apps/slackbot
 pnpm install
 ```
 
-`pnpm install` runs `uv sync` automatically for the Python Slackbot app. If `uv --version` fails, install `uv` first or run `pnpm install --ignore-scripts` only as a temporary workaround, then rerun `pnpm install` after `uv` is available.
+`pnpm install` runs `uv sync` automatically for the Python Slackbot app when `uv` is available. If `uv --version` fails, install `uv`, then run `pnpm slackbot:sync`.
 
 ## Daily workflow
 
@@ -462,23 +462,21 @@ The `-v` flag removes the named volumes (`postgres_data`, `gcs_data`). Next time
 
 ## Troubleshooting
 
-### `pnpm install` fails with `uv: command not found`
+### Slackbot dependencies were skipped because `uv` is missing
 
-Install `uv`, then rerun `pnpm install`:
+Install `uv`, then sync the Slackbot Python dependencies:
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 uv --version
-pnpm install
+pnpm slackbot:sync
 ```
 
-If you need the Node packages immediately before installing `uv`, you can temporarily skip lifecycle scripts:
+By default, `pnpm install` continues with a warning when `uv` is missing so Node dependencies can still be installed. To make missing `uv` fail the install, run:
 
 ```bash
-pnpm install --ignore-scripts
+F3_REQUIRE_UV=1 pnpm install
 ```
-
-Then install `uv` and run `pnpm install` again so `uv sync` installs the Slackbot Python dependencies.
 
 ### Port already in use
 

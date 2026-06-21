@@ -42,8 +42,9 @@
     "lint:unused": "knip",
     "lint": "turbo run lint --continue -- --cache --cache-location node_modules/.cache/.eslintcache; pnpm run lint:ws",
     "local:setup": "bash scripts/local-setup.sh",
-    "postinstall": "uv sync",
+    "postinstall": "bash scripts/postinstall-uv-sync.sh",
     "reset-test-db": "turbo run reset-test-db",
+    "slackbot:sync": "uv sync",
     "test": "turbo test",
     "typecheck": "turbo typecheck",
     "with-env": "dotenv -e .env --"
