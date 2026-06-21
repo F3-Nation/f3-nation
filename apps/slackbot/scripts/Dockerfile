@@ -51,7 +51,7 @@ COPY packages/db-python ./packages/db-python
 COPY apps/slackbot ./apps/slackbot
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --package f3-nation-slack-bot --group dev --no-editable
+    uv sync --locked --package f3-nation-slack-bot --group scripts --no-dev --no-editable
 
 WORKDIR $APP_HOME
 RUN python -m playwright install chromium

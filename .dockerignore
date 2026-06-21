@@ -13,8 +13,6 @@ npm-debug.log
 *Dockerfile*
 docker-compose*
 README.md
-!apps/slackbot/README.md
-!packages/db-python/README.md
 LICENSE
 
 *.swp

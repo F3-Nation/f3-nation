@@ -51,7 +51,8 @@
     "apps/slackbot": {
       "component": "slackbot",
       "changelog-path": "CHANGELOG.md",
-      "path": "apps/slackbot"
+      "path": "apps/slackbot",
+      "release-type": "python"
     }
   }
 }

@@ -1,8 +1,8 @@
 # F3 Nation API Reference
 
-**Live deployed spec**: `https://api.f3nation.com/docs/openapi.json`  
-**Local spec**: `<F3_API_BASE_URL>/docs/openapi.json`  
-**Interactive docs**: `https://api.f3nation.com/docs`  
+**Live deployed spec**: `https://api.f3nation.com/docs/openapi.json`
+**Local spec**: `<F3_API_BASE_URL>/docs/openapi.json`
+**Interactive docs**: `https://api.f3nation.com/docs`
 **API version**: 4.2.2
 
 > This file is a curated summary for AI agents and developers. It covers auth,

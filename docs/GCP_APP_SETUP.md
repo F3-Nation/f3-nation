@@ -281,19 +281,7 @@ In the Firebase Console for each project → **App Hosting** → select the back
 
 ## Slackbot Notes
 
-Slackbot follows the same setup flow, but it is a Python app and also deploys a separate Cloud Run Job for scripts.
-
-```bash
-APP_NAME="slackbot"
-CLOUDRUN_SERVICE="f3-slackbot"
-GCP_REGION="us-central1"
-GCP_STAGING_PROJECT="f3-slackbot-staging"
-GCP_PROD_PROJECT="f3-slackbot"
-GH_STAGING_ENV="slackbot-staging"
-GH_PROD_ENV="slackbot-production"
-```
-
-Additional runtime target:
+Slackbot follows the same setup flow, but it is a Python app and also deploys a separate Cloud Run Job for scripts:
 
 - Scripts Cloud Run Job: `f3-slackbot-scripts`
 
