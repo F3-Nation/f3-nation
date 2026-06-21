@@ -2,8 +2,6 @@
 
 This guide walks through setting up a **fully local** F3 Nation development environment using Docker. You do **not** need any Google Cloud credentials to follow this guide.
 
-> **Recommended path for new contributors.** If you already have GCP access, see [LOCAL_DEV_SETUP.md](LOCAL_DEV_SETUP.md) instead.
-
 ---
 
 ## What you're setting up
