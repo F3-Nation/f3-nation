@@ -111,6 +111,8 @@ class F3ApiClientTest(unittest.TestCase):
                     client.get("/v1/event-tag/id/1")
 
         self.assertEqual(context.exception.status_code, 500)
+        self.assertEqual(context.exception.detail, "server error")
+        self.assertNotIn("server error", str(context.exception))
 
     def test_wraps_network_errors(self):
         with patch("infrastructure.api_client.client.requests.Session") as mock_session_cls:
@@ -124,6 +126,8 @@ class F3ApiClientTest(unittest.TestCase):
                     client.get("/v1/event-tag")
 
         self.assertEqual(context.exception.status_code, 0)
+        self.assertIn("network down", context.exception.detail)
+        self.assertNotIn("network down", str(context.exception))
 
     def test_handles_204_and_non_json_success(self):
         with patch("infrastructure.api_client.client.requests.Session") as mock_session_cls:

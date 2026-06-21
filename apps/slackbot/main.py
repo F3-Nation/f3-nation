@@ -19,6 +19,11 @@ from slack_sdk.web import WebClient
 
 import scripts
 from features import strava
+from infrastructure.api_client.exceptions import (
+    F3ApiAuthError,
+    F3ApiError,
+    F3ApiNotFoundError,
+)
 from utilities.builders import add_debug_form, add_loading_form, send_error_response
 from utilities.constants import ENABLE_DEBUGGING, LOCAL_DEVELOPMENT, SOCKET_MODE
 from utilities.database.orm import SlackSettings
@@ -51,6 +56,20 @@ def setup_debugger():
 setup_debugger()
 
 load_dotenv()
+
+
+def get_user_facing_error_message(exc: Exception) -> str:
+    if isinstance(exc, F3ApiAuthError):
+        return "The Slackbot could not authenticate with the F3 Nation API."
+    if isinstance(exc, F3ApiNotFoundError):
+        return "The requested F3 Nation resource could not be found."
+    if isinstance(exc, F3ApiError):
+        return (
+            "Something went wrong while contacting the F3 Nation API. "
+            "Please try again later."
+        )
+    return "Something went wrong. Please try again later."
+
 
 process_before_response = os.environ.get("PROCESS_BEFORE_RESPONSE", "false").lower() == "true"
 logging_level = logging.DEBUG if os.environ.get("LOG_LEVEL", "INFO").upper() == "DEBUG" else logging.INFO
@@ -148,7 +167,13 @@ def main_response(body: dict, logger: logging.Logger, client: WebClient, ack: Ac
             logger.info(f"Function {run_function.__name__} took {end_time - start_time:.2f} seconds to run.")
         except Exception as exc:
             tb_str = "".join(traceback.format_exception(None, exc, exc.__traceback__))
-            send_error_response(body=body, client=client, error=str(exc)[:3000])
+            send_error_response(
+                body=body,
+                client=client,
+                error=get_user_facing_error_message(exc),
+            )
+            if isinstance(exc, F3ApiError):
+                logger.error(f"F3 API detail: {exc.detail}")
             logger.error(tb_str)
     else:
         ack()

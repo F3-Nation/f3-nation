@@ -3,7 +3,8 @@ class F3ApiError(Exception):
 
     def __init__(self, status_code: int, message: str) -> None:
         self.status_code = status_code
-        super().__init__(f"F3 API error {status_code}: {message}")
+        self.detail = message
+        super().__init__(f"F3 API request failed with status {status_code}.")
 
 
 class F3ApiNotFoundError(F3ApiError):
