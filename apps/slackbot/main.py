@@ -47,7 +47,7 @@ def setup_debugger():
         import debugpy
 
         debugpy.listen(("0.0.0.0", 5678))
-        print("Waiting for debugger attach on port 5678...")
+        logging.getLogger().info("Waiting for debugger attach on port 5678...")
         debugpy.wait_for_client()
     except Exception as exc:  # pragma: no cover - best-effort debug helper
         logging.getLogger().warning(f"Failed to initialize debugpy: {exc}")
@@ -88,7 +88,9 @@ try:
         oauth_settings=get_oauth_settings(),
     )
 except Exception as exc:
-    print(f"Error initializing Slackbot: you may need to set up your .env file with the appropriate Slack credentials. Exception: {exc}")
+    raise RuntimeError(
+        f"Error initializing Slackbot: you may need to set up your .env file with the appropriate Slack credentials. Exception: {exc}"
+    ) from exc
 
 # ----------------------------------------
 # Production Mode: Google Cloud Function HTTP Handler
@@ -225,7 +227,7 @@ if __name__ == "__main__":
     # Ensure SLACK_APP_TOKEN is present
     app_token = os.environ.get("SLACK_APP_TOKEN")
     if not app_token:
-        print("Error: SLACK_APP_TOKEN is required to run the Slackbot. Please set it in your .env file.")
+        logging.getLogger().error("SLACK_APP_TOKEN is required to run the Slackbot. Please set it in your .env file.")
         exit(1)
 
     if not SOCKET_MODE:
@@ -238,9 +240,10 @@ if __name__ == "__main__":
     else:
         if LOCAL_DEVELOPMENT:
             start_local_health_server(local_http_port)
-            print(f"Local HTTP health server listening on http://localhost:{local_http_port}", flush=True)
+            logging.getLogger().info(f"Local HTTP health server listening on http://localhost:{local_http_port}")
+            
 
-        print("Running in local Socket Mode.", flush=True)
+        logging.getLogger().info("Running in local Socket Mode.")
 
         handler = SocketModeHandler(app, app_token)
         handler.start()

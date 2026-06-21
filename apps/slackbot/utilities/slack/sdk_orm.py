@@ -250,4 +250,4 @@ class SdkBlockView:
                 return client.views_update(view_id=view_id, view=view.to_dict())
         except Exception as e:
             # TODO: handle "not found" errors; post new instead of update?
-            print(f"Failed to update modal: {e}")
+            pass

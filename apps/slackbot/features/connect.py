@@ -298,7 +298,6 @@ def handle_new_region_creation(
 ):
     state = ViewState(**safe_get(body, "view", "state"))
     region_name = state.values.get(NEW_REGION_NAME).get(NEW_REGION_NAME)
-    print(f"Creating new region with name {region_name.value}")
 
 
 def handle_approve_connection(

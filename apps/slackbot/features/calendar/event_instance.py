@@ -538,9 +538,7 @@ def handle_event_instance_edit_delete(
     service = _build_event_instance_service()
 
     if action == "Edit":
-        print(f"Editing event instance ID: {event_instance_id}")
         event_instance = service.get_by_id(event_instance_id)
-        print(f"Editing event instance: {event_instance}")
         build_event_instance_add_form(
             body, client, logger, context, region_record, edit_event_instance=event_instance, loading_form=True
         )

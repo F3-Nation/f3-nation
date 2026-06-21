@@ -770,7 +770,6 @@ def handle_backblast_post(body: dict, client: WebClient, logger: Logger, context
         event_type = event.event_types[0].id if event.event_types else None
         event_org = event.org
         backblast_data: dict = backblast_form.get_selected_values(body)
-        print(f"Backblast data from scheduled event: {backblast_data}")
     else:
         event = None
         date = None

@@ -214,7 +214,7 @@ def handle_ao_add(body: dict, client: WebClient, logger: Logger, context: dict, 
                 logo_url=logo_url,
             )
 
-    trigger_map_revalidation(action=map_action, map_update_data=MapUpdateData(orgId=org_id))
+    trigger_map_revalidation(logger=logger,action=map_action, map_update_data=MapUpdateData(orgId=org_id))
 
     action_text = (
         f":pencil2: AO edited: {name} by <@{slack_user_id or 'app'}>"
@@ -295,7 +295,7 @@ def handle_ao_edit_delete(body: dict, client: WebClient, logger: Logger, context
     elif action == "Delete" and ao_id is not None:
         ao = ao_service.get_ao_by_id(ao_id)
         ao_service.delete_ao(ao_id)
-        trigger_map_revalidation(action="map.deleted", map_update_data=MapUpdateData(orgId=ao_id))
+        trigger_map_revalidation(logger=logger, action="map.deleted", map_update_data=MapUpdateData(orgId=ao_id))
         post_bot_log(
             client=client,
             region_record=region_record,

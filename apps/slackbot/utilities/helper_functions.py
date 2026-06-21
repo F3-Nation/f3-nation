@@ -76,7 +76,7 @@ class MapUpdate:
     data: MapUpdateData
 
 
-def trigger_map_revalidation(action: str = None, map_update_data: MapUpdateData = None) -> bool:
+def trigger_map_revalidation(logger: Logger, action: str = None, map_update_data: MapUpdateData = None) -> bool:
     if action and map_update_data:
         update_info = MapUpdate(
             version="1.0",
@@ -89,7 +89,7 @@ def trigger_map_revalidation(action: str = None, map_update_data: MapUpdateData 
         update_info = None
 
     if not os.environ.get("MAP_REVALIDATION_URL"):
-        print(
+        logger.info(
             f"Map revalidation URL not set. Would have sent: {dataclasses.asdict(update_info) if update_info else 'No data'}"  # noqa
         )
         return True

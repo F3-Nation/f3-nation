@@ -101,7 +101,6 @@ def add_loading_form(body: dict, client: WebClient, new_or_add: str = "new") -> 
         )
     # wait 0.1 seconds
     time.sleep(0.3)
-    print(f"loading_form_response: {loading_form_response}")
     return safe_get(loading_form_response, "view", "id")
 
 

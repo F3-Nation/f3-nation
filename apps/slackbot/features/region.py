@@ -31,8 +31,6 @@ def build_region_form(
         # Get current admin users, only those with slack ids
         admin_users = get_admin_users(region_record.org_id, slack_team_id=region_record.team_id)
         admin_user_ids = [u[1].slack_id for u in admin_users if safe_get(u[1], "slack_id")]
-        print("Admin user ids:", admin_user_ids)
-        print("Admin users:", admin_users)
 
         if safe_get(org_meta, actions.REGION_DEFAULT_PV_FILTERS):
             full_pv_filter_url = f"https://pax-vault.f3nation.com/stats/region/{org_record.id}?{org_meta[actions.REGION_DEFAULT_PV_FILTERS]}"

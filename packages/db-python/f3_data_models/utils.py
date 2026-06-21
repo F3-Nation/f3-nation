@@ -225,7 +225,6 @@ class DbManager:
             relationships = mapper.relationships.keys()
             for attr, value in fields.items():
                 key = attr if isinstance(attr, str) else attr.key
-                print(f"key: {key}, value: {value}")
                 if hasattr(cls, key) and key not in relationships:
                     setattr(record, key, value)
                 elif key in relationships:

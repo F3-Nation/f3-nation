@@ -301,7 +301,6 @@ class Base(DeclarativeBase):
             if related_value is not None:
                 if rel.uselist:
                     update_dict[rel] = list(related_value)
-                    print(rel, update_dict[rel])
                 else:
                     update_dict[rel] = related_value
         return update_dict

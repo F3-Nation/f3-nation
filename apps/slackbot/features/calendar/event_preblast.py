@@ -332,7 +332,6 @@ def build_event_preblast_form(
             }
         )
         # if start_date is more than 24 hours away, default to sending 24 hours before
-        print(record.start_date, current_date_cst(), (record.start_date - current_date_cst()).days, record.preblast_ts)  # noqa
         if (
             record.start_date > current_date_cst()
             and (record.start_date - current_date_cst()).days > 1

@@ -954,7 +954,6 @@ class BlockView:
                 res = client.views_update(view_id=view_id, view=view)
         except Exception as e:
             # TODO: handle "not found" errors; post new instead of update?
-            print(f"Failed to update modal: {e}")
             res = None
 
         return res

@@ -157,6 +157,7 @@ def handle_trigger_map_revalidation(
         eventId=42,
     )
     success = trigger_map_revalidation(
+        logger=logger,
         action=action,
         map_update_data=update_data,
     )
@@ -361,38 +362,14 @@ DB_ADMIN_FORM = orm.BlockView(
     blocks=[
         orm.ActionsBlock(
             elements=[
-                # orm.ButtonElement(
-                #     label="AO Lineups",
-                #     action=actions.SECRET_MENU_AO_LINEUPS,
-                # ),
-                # orm.ButtonElement(
-                #     label="Preblast Reminders",
-                #     action=actions.SECRET_MENU_PREBLAST_REMINDERS,
-                # ),
-                # orm.ButtonElement(
-                #     label="Backblast Reminders",
-                #     action=actions.SECRET_MENU_BACKBLAST_REMINDERS,
-                # ),
                 orm.ButtonElement(
                     label="Trigger Map Revalidation",
                     action=actions.SECRET_MENU_TRIGGER_MAP_REVALIDATION,
                 ),
-                # orm.ButtonElement(
-                #     label="Refresh Slack Users",
-                #     action=actions.SECRET_MENU_REFRESH_SLACK_USERS,
-                # ),
                 orm.ButtonElement(
                     label="Update Bot Token",
                     action=actions.SECRET_MENU_UPDATE_BOT_TOKEN,
                 ),
-                # orm.ButtonElement(
-                #     label="Test long run task",
-                #     action=actions.SECRET_MENU_LONG_RUN,
-                # ),
-                # orm.ButtonElement(
-                #     label="Send Auto Preblasts",
-                #     action=actions.SECRET_MENU_SEND_AUTO_PREBLASTS,
-                # ),
                 orm.ButtonElement(
                     label="Refresh Cache",
                     action=actions.SECRET_MENU_REFRESH_CACHE,

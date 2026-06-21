@@ -29,7 +29,6 @@ PAXMINER_CURRENT_MAPPING = "paxminer-current-mapping"
 
 def get_paxminer_mapping_text(channel_id: str) -> str:
     session = get_session()
-    print(channel_id)
     query = (
         session.query(Org.name, func.count(EventInstance.id))
         .join(EventInstance, EventInstance.org_id == Org.id)
@@ -90,7 +89,6 @@ def build_paxminer_mapping_form(
             PAXMINER_ORIGINATING_CHANNEL,
             "selected_channel",
         )
-        print(f"Initial Channel: {initial_channel}")
         initial_org = safe_convert(
             safe_get(body, "view", "state", "values", PAXMINER_REGION, PAXMINER_REGION, "selected_option", "value"), int
         )
@@ -203,7 +201,6 @@ def handle_paxminer_mapping_post(
     body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings
 ):
     data = PAXMINER_MAPPING_FORM.get_selected_values(body)
-    print(data)
     if data.get(PAXMINER_ORIGINATING_CHANNEL) and data.get(PAXMINER_AO) and data.get(PAXMINER_EVENT_TYPE):
         DbManager.update_records(
             EventInstance,

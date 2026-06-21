@@ -312,7 +312,7 @@ def handle_series_add(body: dict, client: WebClient, logger: Logger, context: di
         build_series_list_form(
             body, client, logger, context, region_record, update_view_id=safe_get(body, "view", "previous_view_id")
         )
-        trigger_map_revalidation(action="map.updated", map_update_data=MapUpdateData(eventId=metadata["series_id"]))
+        trigger_map_revalidation(logger=logger, action="map.updated", map_update_data=MapUpdateData(eventId=metadata["series_id"]))
         post_bot_log(
             client=client,
             region_record=region_record,
@@ -353,7 +353,7 @@ def handle_series_add(body: dict, client: WebClient, logger: Logger, context: di
             created_series.append(created)
         # The API cascade automatically creates all future EventInstances; no local create needed.
         for record in created_series:
-            trigger_map_revalidation(action="map.created", map_update_data=MapUpdateData(eventId=record.id))
+            trigger_map_revalidation(logger=logger, action="map.created", map_update_data=MapUpdateData(eventId=record.id))
         post_bot_log(
             client=client,
             region_record=region_record,
@@ -455,7 +455,7 @@ def handle_series_edit_delete(
         series = _build_series_service().get_by_id(series_id)
         _build_series_service().delete_series(series_id)
         # The API cascade automatically soft-deletes all future EventInstances; no local update needed.
-        trigger_map_revalidation(action="map.deleted", map_update_data=MapUpdateData(eventId=series_id))
+        trigger_map_revalidation(logger=logger, action="map.deleted", map_update_data=MapUpdateData(eventId=series_id))
         body["view"]["private_metadata"] = json.dumps({"is_series": "True"})
         build_series_list_form(
             body, client, logger, context, region_record, update_view_id=safe_get(body, "view", "id")

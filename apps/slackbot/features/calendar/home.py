@@ -78,8 +78,6 @@ def build_home_form(
     if user_is_admin is None:
         admin_users = get_admin_users(region_record.org_id, region_record.team_id)
         aoq_users = get_aoq_users(region_record.org_id)
-        print(f"Admin users: {[u[0].id for u in admin_users]}")
-        print(f"AOQ users: {[u.id for u in aoq_users]}")
         if constants.ALL_USERS_ARE_ADMINS:
             user_is_admin = True
         else:
@@ -104,7 +102,7 @@ def build_home_form(
         filters=[or_(EventType.specific_org_id == region_record.org_id, EventType.specific_org_id.is_(None))],
     )
     split_time = time.time()
-    print(f"AO and Event Type time: {split_time - start_time}")
+    logger.debug(f"AO and Event Type query time: {split_time - start_time:.2f} seconds")
     start_time = time.time()
 
     blocks = [
@@ -209,14 +207,14 @@ def build_home_form(
     # Run the query
     # TODO: implement pagination / dynamic limit
     split_time = time.time()
-    print(f"Block building time: {split_time - start_time}")
+    logger.debug(f"Block building time: {split_time - start_time:.2f} seconds")
     start_time = time.time()
     events: list[CalendarHomeQuery] = home_schedule_query(
         user_id, filter, limit=100, open_q_only=open_q_only, only_users_events=only_users_events
     )
 
     split_time = time.time()
-    print(f"Home schedule query: {split_time - start_time}")
+    logger.debug(f"Home schedule query: {split_time - start_time:.2f} seconds")
     start_time = time.time()
 
     # Build the event list
@@ -286,7 +284,7 @@ def build_home_form(
     form.set_initial_values(existing_filter_data)
     view_id = update_view_id or safe_get(body, actions.LOADING_ID) or safe_get(body, "view", "id")
     split_time = time.time()
-    print(f"Block build 2 time: {split_time - start_time}")
+    logger.debug(f"Block build 2 time: {split_time - start_time:.2f} seconds")
     start_time = time.time()
     if view_id:
         form.update_modal(
@@ -307,7 +305,7 @@ def build_home_form(
             parent_metadata=metadata,
         )
     split_time = time.time()
-    print(f"Sending: {split_time - start_time}")
+    logger.debug(f"Sending: {split_time - start_time:.2f} seconds")
     start_time = time.time()
 
 
@@ -438,7 +436,6 @@ def build_assign_q_form(
     existing_q_slack_users = [a.slack_users for a in attendance if any(at.type == "Q" for at in a.attendance_types)]
     if existing_q_slack_users:
         slack_user_id = [su.slack_id for su in existing_q_slack_users[0] if su.slack_team_id == region_record.team_id]
-        print(f"Existing Q slack user: {slack_user_id}")
         form.set_initial_values({actions.CALENDAR_HOME_ASSIGN_Q_USER: slack_user_id[:1] if slack_user_id else None})
     existing_co_q_slack_users = [
         a.slack_users for a in attendance if any(at.type == "Co-Q" for at in a.attendance_types)
@@ -448,7 +445,6 @@ def build_assign_q_form(
         for slack_user in existing_co_q_slack_users:
             slack_user_id = [su.slack_id for su in slack_user if su.slack_team_id == region_record.team_id]
             slack_user_ids.append(safe_get(slack_user_id, 0))
-        print(f"Existing Co-Q slack users: {slack_user_ids}")
         form.set_initial_values({actions.CALENDAR_HOME_ASSIGN_Q_CO_QS: slack_user_ids})
 
     metadata = {
