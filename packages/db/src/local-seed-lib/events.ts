@@ -229,12 +229,12 @@ export async function seedAoLocationsAndEvents(
         }
       }
 
-      const [event] = await db
+      const events = await db
         .select()
         .from(schema.events)
         .where(eq(schema.events.orgId, aoId));
 
-      if (event) {
+      for (const event of events) {
         const insertedInstanceCount = await seedEventInstancesForCurrentYear(
           db,
           event,
