@@ -155,6 +155,7 @@ class ApiAoRepositoryTest(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_update_posts_correct_payload(self):
+        self.client.get.return_value = {"org": _raw_ao(id=7, meta={"foo": "bar"})}
         self.repo.update(
             ao_id=7,
             parent_id=10,
@@ -172,7 +173,7 @@ class ApiAoRepositoryTest(unittest.TestCase):
                 "orgType": "ao",
                 "parentId": 10,
                 "isActive": True,
-                "meta": {"slack_channel_id": "C777"},
+                "meta": {"foo": "bar", "slack_channel_id": "C777"},
                 "description": "New desc",
                 "defaultLocationId": 3,
                 "logoUrl": "http://example.com/new_logo.png",
@@ -195,6 +196,8 @@ class ApiAoRepositoryTest(unittest.TestCase):
         )
         call_kwargs = self.client.post.call_args[1]["json"]
         self.assertNotIn("logoUrl", call_kwargs)
+        self.assertNotIn("meta", call_kwargs)
+        self.client.get.assert_not_called()
 
     # ------------------------------------------------------------------
     # delete

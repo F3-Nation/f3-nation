@@ -103,9 +103,13 @@ class ApiAoRepository:
             "twitter": "",
             "facebook": "",
             "instagram": "",
-            "meta": {"slack_channel_id": slack_channel_id} if slack_channel_id else {},
             "phone": "",
         }
+        if slack_channel_id is not None:
+            current = self.get_by_id(ao_id)
+            meta = current.meta.copy() if current and current.meta else {}
+            meta["slack_channel_id"] = slack_channel_id
+            payload["meta"] = meta
         if description is not None:
             payload["description"] = description
         if default_location_id is not None:
