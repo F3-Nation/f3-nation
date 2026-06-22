@@ -4,7 +4,7 @@ packages:
   - tooling/*
 
 catalog:
-  "@auth/core": 0.41.0
+  "@auth/core": 0.41.2
   "@commitlint/cli": ^21.0.2
   "@commitlint/config-conventional": ^21.0.2
   "@commitlint/cz-commitlint": ^21.0.2
@@ -143,7 +143,7 @@ overrides:
   fast-uri: ">=3.1.1"
   "form-data@>=2.0.0 <2.5.6": "^2.5.6"
   next: "^15.5.18"
-  "@auth/core": "0.41.0"
+  "@auth/core": "0.41.2"
   "@vis.gl/react-google-maps": 1.5.2
 peerDependencyRules:
   allowedVersions:
