@@ -281,8 +281,8 @@ In the Firebase Console for each project → **App Hosting** → select the back
 
 ## Slackbot Notes
 
-Slackbot follows the same setup flow, but it is a Python app and also deploys a separate Cloud Run Job for scripts:
+Even though Slackbot is a Python app, it follows the same setup flow as the other apps for deploying the Cloud Run Service.
 
-- Scripts Cloud Run Job: `f3-slackbot-scripts`
+In addition to the Cloud Run Service, Slackbot has a Cloud Run Job that is used to execute scripts. This is deployed through a separate GitHub Action.
 
 Use the same WIF, environment, secret, and domain-mapping flow above. The main service and scripts job each deploy from the same tag stream via GitHub Actions.
