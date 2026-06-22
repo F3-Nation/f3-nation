@@ -8,6 +8,6 @@ export function parseOptionalSize(
 ): number | undefined | "invalid" {
   if (!sizeRaw) return undefined;
   const parsed = Number(sizeRaw);
-  if (!Number.isFinite(parsed) || parsed <= 0) return "invalid";
+  if (!Number.isInteger(parsed) || parsed <= 0) return "invalid";
   return parsed;
 }
