@@ -430,11 +430,19 @@ export const LocationEventForm = ({
                       const file = e.target.files?.[0];
                       if (!file) return;
 
-                      const url = await uploadLogo({
-                        file,
-                        orgId: formRegionId,
-                      });
-                      onChange(url);
+                      try {
+                        const url = await uploadLogo({
+                          file,
+                          orgId: formRegionId,
+                        });
+                        onChange(url);
+                      } catch (err) {
+                        toast.error(
+                          err instanceof Error
+                            ? err.message
+                            : "Failed to upload logo",
+                        );
+                      }
                     }}
                     disabled={lt(formRegionId, 0)}
                     className="flex-1"
