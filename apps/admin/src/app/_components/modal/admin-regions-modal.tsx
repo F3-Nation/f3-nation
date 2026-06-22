@@ -138,7 +138,7 @@ export default function AdminRegionsModal({
       <DialogContent
         style={{ zIndex: Z_INDEX.HOW_TO_JOIN_MODAL }}
         className={cn(
-          `max-w-[95%] rounded-lg sm:max-w-[90%] lg:max-w-[600px] max-h-[90vh] overflow-y-auto`,
+          `max-h-[90vh] max-w-[95%] overflow-y-auto rounded-lg sm:max-w-[90%] lg:max-w-[600px]`,
         )}
       >
         <DialogHeader>
@@ -447,6 +447,25 @@ export default function AdminRegionsModal({
                         <Input
                           placeholder="Last Annual Review"
                           type="date"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="mb-4 w-full px-2 sm:w-1/2">
+                <FormField
+                  control={form.control}
+                  name="meta.region_location_short_description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Short Location Description</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="e.g. Denver, CO"
                           {...field}
                           value={field.value ?? ""}
                         />

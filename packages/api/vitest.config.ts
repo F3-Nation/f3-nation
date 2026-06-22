@@ -13,6 +13,7 @@ export default defineConfig({
     env: { NODE_ENV: "test" },
     coverage: {
       provider: "v8",
+      include: ["src/**/*.{ts,tsx}"],
     },
   },
 });
