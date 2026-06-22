@@ -456,7 +456,17 @@ export default function AdminEventInstancesModal({
                           options={
                             filteredLocations?.map((location) => ({
                               value: location.id.toString(),
-                              label: location.locationName ?? "",
+                              label:
+                                location.locationName ||
+                                [
+                                  location.addressStreet,
+                                  location.addressCity,
+                                  location.addressState,
+                                  location.addressCountry,
+                                ]
+                                  .filter(Boolean)
+                                  .join(", ") ||
+                                `Location #${location.id}`,
                             })) ?? []
                           }
                           searchPlaceholder="Select a location"
