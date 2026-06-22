@@ -184,7 +184,7 @@ catalogs:
       specifier: ^10.5.0
       version: 10.5.0
     class-variance-authority:
-      specifier: ^0.7.0
+      specifier: ^0.7.1
       version: 0.7.1
     clsx:
       specifier: ^2.1.0
