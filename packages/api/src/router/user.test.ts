@@ -17,9 +17,9 @@ import { vi } from "vitest";
 const mockLimit = vi.hoisted(() => vi.fn());
 
 vi.mock("@orpc/experimental-ratelimit/memory", () => ({
-  MemoryRatelimiter: vi.fn().mockImplementation(() => ({
-    limit: mockLimit,
-  })),
+  MemoryRatelimiter: vi.fn(function () {
+    return { limit: mockLimit };
+  }),
 }));
 
 import type { Session } from "@acme/auth";
@@ -511,6 +511,39 @@ describe("User Router", () => {
           includePii: false,
         }),
       ).rejects.toThrow();
+    });
+  });
+
+  describe("byF3Name", () => {
+    it("should support pagination inputs", async () => {
+      const client = createTestClient();
+      const firstPage = await client.user.byF3Name({
+        f3Name: "o",
+        pageIndex: 0,
+        pageSize: 1,
+      });
+      const secondPage = await client.user.byF3Name({
+        f3Name: "o",
+        pageIndex: 1,
+        pageSize: 1,
+      });
+
+      expect(firstPage.users.length).toBeLessThanOrEqual(1);
+      expect(secondPage.users.length).toBeLessThanOrEqual(1);
+      expect(firstPage.totalCount).toBeGreaterThanOrEqual(
+        firstPage.users.length,
+      );
+      expect(secondPage.totalCount).toBeGreaterThanOrEqual(
+        secondPage.users.length,
+      );
+      expect(secondPage.totalCount).toBe(firstPage.totalCount);
+      if (
+        firstPage.totalCount > 1 &&
+        firstPage.users.length > 0 &&
+        secondPage.users.length > 0
+      ) {
+        expect(firstPage.users[0]?.id).not.toBe(secondPage.users[0]?.id);
+      }
     });
   });
 

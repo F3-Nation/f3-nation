@@ -31,9 +31,9 @@ const revokeApiKeySchema = z.object({
 const isUniqueError = (error: unknown) =>
   Boolean(
     typeof error === "object" &&
-      error &&
-      "code" in error &&
-      (error as { code?: string }).code === "23505",
+    error &&
+    "code" in error &&
+    (error as { code?: string }).code === "23505",
   );
 
 const buildApiKey = () => `f3_${randomBytes(24).toString("hex")}`;

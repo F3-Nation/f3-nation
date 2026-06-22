@@ -12,9 +12,9 @@ const mockLimit = vi.fn();
 const maxRequests = 10;
 
 vi.mock("@orpc/experimental-ratelimit/memory", () => ({
-  MemoryRatelimiter: vi.fn().mockImplementation(() => ({
-    limit: mockLimit,
-  })),
+  MemoryRatelimiter: vi.fn(function () {
+    return { limit: mockLimit };
+  }),
 }));
 
 // Helper to create a test client with custom headers

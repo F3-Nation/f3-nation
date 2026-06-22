@@ -13,7 +13,7 @@ import {
   or,
   schema,
 } from "@acme/db";
-import type { OrgType, UserRole } from "@acme/shared/app/enums";
+import type { OrgType } from "@acme/shared/app/enums";
 import { DayOfWeek } from "@acme/shared/app/enums";
 import { RequestType, UpdateRequestStatus } from "@acme/shared/app/enums";
 import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
@@ -28,6 +28,7 @@ import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
 import { notifyMapDataChange } from "../lib/webhook-events";
+import { logError, logDebug } from "../logger";
 import { notifyMapChangeRequest } from "../services/map-request-notification";
 import type { Context } from "../shared";
 import { editorProcedure, protectedProcedure } from "../shared";
@@ -532,38 +533,18 @@ export const requestRouter = {
         "Check if the current user has editor permissions for specified organizations",
     })
     .handler(async ({ context: ctx, input }) => {
-      let results: {
-        success: boolean;
-        mode:
-          | "public"
-          | "org-admin"
-          | "mtndev-override"
-          | "direct-permission"
-          | "no-permission";
-        orgId: number | null;
-        roleName: UserRole | null;
-      }[] = [];
-
-      const session = ctx.session;
-      if (!session) {
-        results = input.orgIds.map((orgId) => ({
-          success: false,
-          mode: "public",
-          orgId,
-          roleName: "editor" as const,
-        }));
-      } else {
-        results = await Promise.all(
-          input.orgIds.map((orgId) =>
-            checkHasRoleOnOrg({
-              orgId,
-              session,
-              db: ctx.db,
-              roleName: "editor" as const,
-            }),
-          ),
-        );
-      }
+      // protectedProcedure guarantees an authenticated session, so every result
+      // comes from checkHasRoleOnOrg (modes: direct-permission/org-admin/no-permission).
+      const results = await Promise.all(
+        input.orgIds.map((orgId) =>
+          checkHasRoleOnOrg({
+            orgId,
+            session: ctx.session,
+            db: ctx.db,
+            roleName: "editor" as const,
+          }),
+        ),
+      );
       return { results };
     }),
   submitDeleteRequest: protectedProcedure
@@ -672,7 +653,11 @@ export const requestRouter = {
             requestId: request.id,
           });
         } catch (error) {
-          console.error("Failed to send notification", { error });
+          logError(
+            "api.request.notification_failed",
+            { requestId: request.id, flow: "submit_delete_request" },
+            error,
+          );
           // Don't fail the request if notification fails
         }
       }
@@ -845,7 +830,11 @@ export const requestRouter = {
             requestId: inserted.id,
           });
         } catch (error) {
-          console.error("Failed to send notification", { error });
+          logError(
+            "api.request.notification_failed",
+            { requestId: inserted.id, flow: "submit_update_request" },
+            error,
+          );
           // Don't fail the request if notification fails
         }
       }
@@ -1076,7 +1065,7 @@ export const requestRouter = {
     }),
 };
 
-export const applyDeleteRequest = async (
+const applyDeleteRequest = async (
   ctx: Context,
   deleteRequest: Partial<z.infer<typeof RequestInsertSchema>>,
 ): Promise<DeleteRequestResponse> => {
@@ -1112,7 +1101,7 @@ export const applyDeleteRequest = async (
   };
 };
 
-export const applyUpdateRequest = async (
+const applyUpdateRequest = async (
   ctx: Context,
   updateRequest: Omit<
     z.infer<typeof RequestInsertSchema>,
@@ -1177,7 +1166,10 @@ export const applyUpdateRequest = async (
   // AO
   if (updateRequest.aoId == undefined) {
     // INSERT AO
-    console.log("inserting ao", JSON.stringify(updateRequest));
+    logDebug("api.request.inserting_ao", {
+      regionId: updateRequest.regionId,
+      locationId: updateRequest.locationId,
+    });
     const [ao] = await ctx.db
       .insert(schema.orgs)
       .values({
@@ -1249,7 +1241,11 @@ export const applyUpdateRequest = async (
     }
     eventId = _updated.id;
   } else {
-    console.log("inserting event", JSON.stringify(updateRequest));
+    logDebug("api.request.inserting_event", {
+      aoId: updateRequest.aoId,
+      eventId: updateRequest.eventId,
+      locationId: updateRequest.locationId,
+    });
     const newEvent: typeof schema.events.$inferInsert = {
       name: updateRequest.eventName,
       locationId: updateRequest.locationId,

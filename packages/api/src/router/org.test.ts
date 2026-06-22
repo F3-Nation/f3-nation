@@ -12,9 +12,9 @@ import { vi } from "vitest";
 const mockLimit = vi.hoisted(() => vi.fn());
 
 vi.mock("@orpc/experimental-ratelimit/memory", () => ({
-  MemoryRatelimiter: vi.fn().mockImplementation(() => ({
-    limit: mockLimit,
-  })),
+  MemoryRatelimiter: vi.fn(function () {
+    return { limit: mockLimit };
+  }),
 }));
 
 import { and, eq, gte, schema } from "@acme/db";
@@ -222,6 +222,7 @@ describe("Org Router", () => {
         parentId: f3Nation.id,
         isActive: true,
         email: "test@example.com",
+        phone: null,
         description: null,
         website: null,
         twitter: null,
@@ -251,6 +252,7 @@ describe("Org Router", () => {
           orgType: "region",
           isActive: true,
           email: "test@example.com",
+          phone: null,
           description: null,
           website: null,
           twitter: null,
@@ -292,6 +294,7 @@ describe("Org Router", () => {
         parentId: f3Nation.id,
         isActive: true,
         email: "test@example.com",
+        phone: null,
         description: null,
         website: null,
         twitter: null,
@@ -322,6 +325,7 @@ describe("Org Router", () => {
           parentId: f3Nation.id,
           isActive: true,
           email: "test@example.com",
+          phone: null,
           description: null,
           website: null,
           twitter: null,
@@ -392,6 +396,7 @@ describe("Org Router", () => {
           parentId: destinationRegion.id,
           isActive: true,
           email: null,
+          phone: null,
           description: null,
           website: null,
           twitter: null,
@@ -462,6 +467,7 @@ describe("Org Router", () => {
           parentId: destinationSector.id,
           isActive: true,
           email: null,
+          phone: null,
           description: null,
           website: null,
           twitter: null,
@@ -550,6 +556,7 @@ describe("Org Router", () => {
           parentId: zeroRegion.id,
           isActive: true,
           email: null,
+          phone: null,
           description: null,
           website: null,
           twitter: null,

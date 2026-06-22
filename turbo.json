@@ -1,7 +1,53 @@
 {
   "$schema": "https://turborepo.org/schema.json",
   "globalDependencies": ["**/.env"],
-  "pipeline": {
+  "globalEnv": [
+    "CI",
+    "NODE_ENV",
+    "LOG_LEVEL",
+    "SKIP_ENV_VALIDATION",
+    "SKIP_SSG",
+    "DATABASE_URL",
+    "DATABASE_HOST",
+    "DATABASE_PORT",
+    "DATABASE_USER",
+    "DATABASE_PASSWORD",
+    "DATABASE_NAME",
+    "TEST_DATABASE_URL",
+    "SKIP_RESET_TEST_DB",
+    "EMAIL_ADMIN_DESTINATIONS",
+    "EMAIL_FROM",
+    "EMAIL_SERVER",
+    "AUTH_DISCORD_ID",
+    "AUTH_DISCORD_SECRET",
+    "AUTH_PROVIDER_URL",
+    "AUTH_REDIRECT_PROXY_URL",
+    "AUTH_SECRET",
+    "OAUTH_CLIENT_ID",
+    "OAUTH_CLIENT_SECRET",
+    "OAUTH_REDIRECT_URI",
+    "F3_ADMIN_BASE_URL",
+    "F3_API_BASE_URL",
+    "F3_ADMIN_URL",
+    "F3_MAP_API_KEY",
+    "F3_API_TIMEOUT_MS",
+    "F3_CHANNEL",
+    "F3_GOOGLE_API_KEY",
+    "F3_MAP_BASE_URL",
+    "PORT",
+    "NEXT_RUNTIME",
+    "npm_lifecycle_event",
+    "NEXT_PUBLIC_ADMIN_URL",
+    "NEXT_PUBLIC_API_URL",
+    "NEXT_PUBLIC_AUTH_URL",
+    "NEXT_PUBLIC_MAP_URL",
+    "NEXT_PUBLIC_CHANNEL",
+    "GCS_BUCKET",
+    "GCS_CREDENTIALS",
+    "GCS_EMULATOR_HOST",
+    "NODE_TLS_REJECT_UNAUTHORIZED"
+  ],
+  "tasks": {
     "topo": {
       "dependsOn": ["^topo"]
     },
@@ -12,8 +58,7 @@
         "!.next/cache/**",
         "next-env.d.ts",
         ".expo/**",
-        ".output/**",
-        ".vercel/output/**"
+        ".output/**"
       ]
     },
     "dev": {
@@ -22,36 +67,23 @@
     },
     "format": {
       "outputs": [],
-      "outputMode": "full"
-    },
-    "//#lint:ws": {
-      "cache": false
+      "outputLogs": "full"
     },
     "lint": {
-      "dependsOn": ["^topo"],
-      "outputs": ["node_modules/.cache/.eslintcache"]
+      "dependsOn": ["^topo"]
     },
     "reset-test-db": {
-      "cache": false,
-      "outputs": ["./node_modules/.vite/vitest/results.json"]
+      "cache": false
     },
     "typecheck": {
-      "dependsOn": ["^topo"],
-      "outputs": ["node_modules/.cache/tsbuildinfo.json"]
+      "dependsOn": ["^topo"]
     },
     "test": {
       "dependsOn": ["^topo", "reset-test-db", "^reset-test-db"],
-      "outputs": ["node_modules/.cache/test.json"]
+      "outputs": ["coverage/**"]
     },
     "clean": {
       "cache": false
     }
-  },
-  "globalEnv": [
-    "DATABASE_URL",
-    "AUTH_DISCORD_ID",
-    "AUTH_DISCORD_SECRET",
-    "AUTH_REDIRECT_PROXY_URL",
-    "AUTH_SECRET"
-  ]
+  }
 }

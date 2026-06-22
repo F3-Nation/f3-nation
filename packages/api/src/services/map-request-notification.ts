@@ -8,6 +8,8 @@ import { requestTypeToTitle } from "@acme/shared/app/functions";
 
 import { mail, Templates } from "@acme/mail";
 
+import { logError, logDebug, logInfo } from "../logger";
+
 /**
  * Interface for the notification parameters
  */
@@ -111,7 +113,7 @@ export const notifyMapChangeRequest = async ({
   db,
   requestId,
 }: NotifyMapChangeRequestParams): Promise<void> => {
-  console.log("notifyMapChangeRequest", { requestId });
+  logDebug("api.map_request_notification.start", { requestId });
 
   // Get request details
   const [request] = await db
@@ -129,7 +131,7 @@ export const notifyMapChangeRequest = async ({
     .where(eq(schema.updateRequests.id, requestId));
 
   if (!request) {
-    console.log("notifyMapChangeRequest: Request not found", { requestId });
+    logInfo("api.map_request_notification.request_not_found", { requestId });
     return;
   }
 
@@ -235,21 +237,15 @@ export const notifyMapChangeRequest = async ({
         recipientOrg: recipient.orgName ?? "Unknown",
       });
 
-      console.log(
-        "notifyMapChangeRequest: Email sent",
-        JSON.stringify({
-          recipient: recipient.email,
-          requestId,
-        }),
-      );
+      logInfo("api.map_request_notification.email_sent", {
+        recipientUserId: recipient.userId,
+        requestId,
+      });
     } catch (error) {
-      console.error(
-        "notifyMapChangeRequest: Error sending email",
-        JSON.stringify({
-          error,
-          recipient: recipient.email,
-          requestId,
-        }),
+      logError(
+        "api.map_request_notification.email_failed",
+        { recipientUserId: recipient.userId, requestId },
+        error,
       );
     }
   });

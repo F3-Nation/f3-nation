@@ -397,9 +397,9 @@ export const eventTypeRouter = {
         ? nationOrg.id
         : existingEventType
           ? // Updating existing: need permission on the existing org (or nation if already nation-wide)
-            existingEventType.specificOrgId ?? nationOrg.id
+            (existingEventType.specificOrgId ?? nationOrg.id)
           : // Creating new: need permission on the target org (fallback to nation for type safety)
-            input.specificOrgId ?? nationOrg.id;
+            (input.specificOrgId ?? nationOrg.id);
 
       const roleCheckResult = await checkHasRoleOnOrg({
         orgId: orgIdForPermissionCheck,

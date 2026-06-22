@@ -210,7 +210,9 @@ export const eventTagRouter = {
 
       const orgIdForPermissionCheck =
         existingEventTag?.specificOrgId ??
-        (existingEventTag ? nationOrg.id : input.specificOrgId ?? nationOrg.id);
+        (existingEventTag
+          ? nationOrg.id
+          : (input.specificOrgId ?? nationOrg.id));
 
       const roleCheckResult = await checkHasRoleOnOrg({
         orgId: orgIdForPermissionCheck,
