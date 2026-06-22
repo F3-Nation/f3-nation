@@ -1,24 +1,9 @@
 # Overview
 
-This repository defines the F3 data structure, used by the F3 Slack Bot, Maps, etc. The projected uses SQLAlchemy to define the tables / models.
+This package includes `sqlalchemy` ORM models that mirror those used by `drizzle` in `packages/db/drizzle`. These are utilized by `apps/slackbot` for db access management. However, we are in a slow transition to utilizing the F3 API for all db interactions in the app, and may eventually be able to deprecate this package.
 
-# Running Locally
-
-To load the data structure in your database:
-
-1. Set up a local db, update `.env.example` and save as `.env`
-2. Clone the repo, use Poetry to install dependencies:
-
-```sh
-poetry env use 3.12
-poetry install
-```
-
-3. Run the alembic migration:
-
-```sh
-source .env && poetry run alembic upgrade head
-```
+> [!NOTE]
+> This package used to be used to migrate the database; going forward, all migrations should be done via drizzle (with corresponding model changes here)
 
 # Optional BigQuery Sessions
 
