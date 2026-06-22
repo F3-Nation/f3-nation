@@ -11,10 +11,10 @@ export default defineConfig({
       include: ["src/lib/phone.ts"],
       thresholds: {
         autoUpdate: true,
-        statements: 86.95,
-        branches: 72.72,
+        statements: 91.66,
+        branches: 80,
         functions: 100,
-        lines: 86.95,
+        lines: 90.9,
       },
     },
   },

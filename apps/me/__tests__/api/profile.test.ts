@@ -156,6 +156,24 @@ describe("Profile API route", () => {
   });
 
   describe("PATCH /api/profile", () => {
+    it("returns 400 for malformed JSON payload", async () => {
+      vi.mocked(requireAuth).mockResolvedValue(mockSession);
+
+      const { PATCH } = await import("@/app/api/profile/route");
+      const req = new NextRequest("http://localhost/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: "{ bad json",
+      });
+
+      const response = await PATCH(req);
+
+      expect(response.status).toBe(400);
+      const data = (await response.json()) as { error: string };
+      expect(data.error).toBe("Invalid JSON payload");
+      expect(updateMyProfile).not.toHaveBeenCalled();
+    });
+
     it("updates basic fields", async () => {
       vi.mocked(requireAuth).mockResolvedValue(mockSession);
       vi.mocked(updateMyProfile).mockResolvedValue({

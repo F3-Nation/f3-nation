@@ -26,3 +26,12 @@ export const coverageExclude = [
   ...coverageConfigDefaults.exclude,
   ...bootstrapCoverageExclude,
 ];
+
+/**
+ * Whole-`src` coverage measurement. Vitest 4's v8 provider removed `coverage.all`
+ * and only measures files a test actually imports unless `coverage.include` is set.
+ * Setting this explicitly preserves v3's behaviour — untested files stay in the
+ * denominator — so coverage keeps answering "how much of the app is tested" rather
+ * than "how much of what we imported is tested". Pair with `coverageExclude`.
+ */
+export const coverageInclude = ["src/**/*.{ts,tsx}"];

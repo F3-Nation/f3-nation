@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   isAccessTokenExpired,
   parseAccessTokenPayload,
+  verifyAccessToken,
   verifyAccessTokenPayload,
 } from "@/lib/auth/tokens";
 
@@ -171,5 +172,77 @@ describe("verifyAccessTokenPayload", () => {
 
     const result = await verifyAccessTokenPayload(createValidToken());
     expect(result).toBeNull();
+  });
+});
+
+describe("verifyAccessToken", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns false for expired token without calling jwtVerify", async () => {
+    const expiredToken = createToken({ sub: "42", exp: 1 });
+
+    const result = await verifyAccessToken(expiredToken);
+
+    expect(result).toBe(false);
+    expect(jwtVerify).not.toHaveBeenCalled();
+  });
+
+  it("returns true when strict verify succeeds", async () => {
+    vi.mocked(jwtVerify).mockResolvedValueOnce({
+      payload: { sub: "42", exp: Math.floor(Date.now() / 1000) + 3600 },
+      protectedHeader: { alg: "RS256" },
+    } as never);
+
+    const result = await verifyAccessToken(createValidToken());
+
+    expect(result).toBe(true);
+    expect(jwtVerify).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns true when strict verify fails and fallback client_id matches", async () => {
+    vi.mocked(jwtVerify)
+      .mockRejectedValueOnce(new Error("audience mismatch"))
+      .mockResolvedValueOnce({
+        payload: {
+          sub: "42",
+          exp: Math.floor(Date.now() / 1000) + 3600,
+          client_id: "test-client-id",
+        },
+        protectedHeader: { alg: "RS256" },
+      } as never);
+
+    const result = await verifyAccessToken(createValidToken());
+
+    expect(result).toBe(true);
+    expect(jwtVerify).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns false when fallback verify succeeds but client_id mismatches", async () => {
+    vi.mocked(jwtVerify)
+      .mockRejectedValueOnce(new Error("audience mismatch"))
+      .mockResolvedValueOnce({
+        payload: {
+          sub: "42",
+          exp: Math.floor(Date.now() / 1000) + 3600,
+          client_id: "wrong-client",
+        },
+        protectedHeader: { alg: "RS256" },
+      } as never);
+
+    const result = await verifyAccessToken(createValidToken());
+
+    expect(result).toBe(false);
+  });
+
+  it("returns false when both verification attempts throw", async () => {
+    vi.mocked(jwtVerify)
+      .mockRejectedValueOnce(new Error("sig invalid"))
+      .mockRejectedValueOnce(new Error("sig invalid"));
+
+    const result = await verifyAccessToken(createValidToken());
+
+    expect(result).toBe(false);
   });
 });

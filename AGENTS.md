@@ -24,7 +24,7 @@ that app's `AGENTS.md`.
 
 ## Project Structure & Module Organization
 
-- Use Node >=24.14 (see `.nvmrc`), pnpm 11, and Turborepo for workspace orchestration.
+- Use Node >=24.17 (see `.nvmrc`), pnpm 11, and Turborepo for workspace orchestration.
 - `apps/` holds the deployable Next.js apps: `map` (the Next.js 15 map UI, port 3000), `admin`, `api`, `auth`, `homepage`, and `me`.
 - Shared code is organized in `packages/`: `api` (oRPC routers), `auth` (auth helpers), `db` (Drizzle schema/migrations), `env` (environment validation), `mail` (transactional email), `shared` (utilities), `sso` (single sign-on helpers), `storage` (object storage), `ui` (shared components), and `validators` (Zod schemas).
 - Configuration files are in `tooling/`; Turbo generators live in `turbo/`.
@@ -82,6 +82,7 @@ that app's `AGENTS.md`.
 
 - **Pin third-party actions to a full commit SHA with a version comment** (e.g. `actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2`). SHAs are immutable — a semver tag can be force-pushed, a SHA cannot. Renovate (`pinDigests: true`) keeps the SHAs up to date automatically.
 - Drive the Node version from `.nvmrc` via `actions/setup-node` (`node-version-file: .nvmrc`) — `.nvmrc` is the single source of truth. Never hardcode `node-version:` in a workflow.
+- **Set the Docker target platform at build time, not in the `Dockerfile`.** Cloud Run only runs `linux/amd64`. The app `Dockerfile` `FROM` lines must **not** pin `--platform` (BuildKit's `FromPlatformFlagConstDisallowed` lint, and it forces emulation on arm64 dev machines). Instead pass the platform at the build invocation: `platforms: linux/amd64` on `docker/build-push-action` (CI) and `--platform=linux/amd64` on `docker build` (deploy). Building a **deployable** image locally on Apple Silicon therefore requires an explicit `docker build --platform=linux/amd64 …`. Do **not** switch to `$BUILDPLATFORM` cross-builds — `sharp`'s native binaries are platform-specific and would break in the amd64 runtime.
 - Share toolchain setup through the composite action [`.github/actions/setup-node-pnpm`](.github/actions/setup-node-pnpm/action.yml) (pnpm + Node + pnpm-store cache + frozen install) instead of repeating setup steps per job.
 - The five CI check names (`format-check`, `lint`, `typecheck`, `build`, `test-coverage`) are referenced by the `dev` branch ruleset and by `check-regexp` in the deploy workflows — renaming a job requires updating both.
 
@@ -90,6 +91,7 @@ that app's `AGENTS.md`.
 - Use Vitest for unit and integration tests; name test files `*.test.ts[x]` and place under or near source code or in `__tests__`.
 - Reset databases before any suite that mutates data (`pnpm reset-test-db` or `pnpm -C packages/db reset-test-db`).
 - Prefer fixtures in `apps/map/tests` or `packages/*/__mocks__` instead of live service calls.
+- How coverage is measured and why thresholds are set the way they are (Vitest 4's whole-`src` denominator, shared `coverageInclude`/`coverageExclude`): [`docs/testing.md`](docs/testing.md).
 
 ### Driving auth-bounded flows in local dev
 
