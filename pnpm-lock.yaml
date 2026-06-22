@@ -187,7 +187,7 @@ catalogs:
       specifier: ^0.7.0
       version: 0.7.1
     clsx:
-      specifier: ^2.1.0
+      specifier: ^2.1.1
       version: 2.1.1
     cmdk:
       specifier: ^0.2.1
