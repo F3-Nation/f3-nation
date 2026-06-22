@@ -137,10 +137,21 @@ export function createPublicImageStorage(config: {
     return value;
   }
 
+  function assertPositiveIntegerSize(
+    value: number | undefined,
+    fallback: number,
+  ) {
+    const size = value ?? fallback;
+    if (!Number.isInteger(size) || size <= 0) {
+      throw new Error("size must be a positive integer");
+    }
+    return size;
+  }
+
   return {
     async uploadOrgLogo(orgId, file, options) {
       assertPositiveIntegerId("orgId", orgId);
-      const size = options?.size ?? 640;
+      const size = assertPositiveIntegerSize(options?.size, 640);
       const jpg = await prepareImageForStorage(file, {
         width: size,
         height: size,
@@ -155,7 +166,7 @@ export function createPublicImageStorage(config: {
 
     async uploadUserAvatar(userId, file, options) {
       assertPositiveIntegerId("userId", userId);
-      const size = options?.size ?? 512;
+      const size = assertPositiveIntegerSize(options?.size, 512);
       const jpg = await prepareImageForStorage(file, {
         width: size,
         height: size,

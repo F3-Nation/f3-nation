@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 
+import { auth } from "@acme/auth";
+import { parseOptionalSize } from "@acme/storage";
+
 import { logError } from "~/lib/logging";
 import { storage } from "~/lib/storage";
 
@@ -11,16 +14,12 @@ const ALLOWED_TYPES = new Set([
 ]);
 const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
 
-function parseOptionalSize(
-  sizeRaw: FormDataEntryValue | null,
-): number | undefined | "invalid" {
-  if (!sizeRaw) return undefined;
-  const parsed = Number(sizeRaw);
-  if (!Number.isFinite(parsed) || parsed <= 0) return "invalid";
-  return parsed;
-}
-
 export async function POST(request: Request) {
+  const session = await auth();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const formData = await request.formData();
   const file = formData.get("file");
   const orgIdRaw = formData.get("orgId");

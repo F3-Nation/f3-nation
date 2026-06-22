@@ -1,6 +1,8 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
+import { parseOptionalSize } from "@acme/storage";
+
 import { requireAccessToken } from "~/lib/auth/server";
 import { logError } from "~/lib/logging";
 import { storage } from "~/lib/storage";
@@ -12,15 +14,6 @@ const ALLOWED_TYPES = new Set([
   "image/gif",
 ]);
 const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
-
-function parseOptionalSize(
-  sizeRaw: FormDataEntryValue | null,
-): number | undefined | "invalid" {
-  if (!sizeRaw) return undefined;
-  const parsed = Number(sizeRaw);
-  if (!Number.isFinite(parsed) || parsed <= 0) return "invalid";
-  return parsed;
-}
 
 export async function POST(request: NextRequest) {
   await requireAccessToken();

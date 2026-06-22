@@ -33,9 +33,6 @@ env:
   EMAIL_FROM: ci@example.com
   EMAIL_ADMIN_DESTINATIONS: ci@example.com
   # Google (mocks)
-  GOOGLE_LOGO_BUCKET_PRIVATE_KEY: mock-private-key
-  GOOGLE_LOGO_BUCKET_CLIENT_EMAIL: mock@example.iam.gserviceaccount.com
-  GOOGLE_LOGO_BUCKET_BUCKET_NAME: mock-bucket
   GCS_CREDENTIALS: eyJjbGllbnRfZW1haWwiOiJtb2NrQGV4YW1wbGUuaWFtLmdzZXJ2aWNlYWNjb3VudC5jb20iLCJwcml2YXRlX2tleSI6Ii0tLS0tQkVHSU4gUlNBIFBSSVZBVEUgS0VZLS0tLS1cbmZha2Vcbi0tLS0tRU5EIFJTQSBQUklWQVRFIEtFWS0tLS0tIn0=
   # API (mocks)
   API_KEY: ci-api-key-placeholder

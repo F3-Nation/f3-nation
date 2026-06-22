@@ -62,6 +62,41 @@ describe("isAllowedPublicImageUrl", () => {
       ),
     ).toBe(false);
   });
+
+  describe("with GCS_EMULATOR_HOST set", () => {
+    beforeEach(() => {
+      process.env.GCS_EMULATOR_HOST = EMULATOR_HOST;
+    });
+
+    afterEach(() => {
+      delete process.env.GCS_EMULATOR_HOST;
+    });
+
+    it("allows emulator staging bucket URLs", () => {
+      expect(
+        storage.isAllowedPublicImageUrl(
+          `http://${EMULATOR_HOST}/f3-public-images-staging/org-logos/1.jpg`,
+        ),
+      ).toBe(true);
+    });
+
+    it("rejects emulator URLs for other buckets", () => {
+      expect(
+        storage.isAllowedPublicImageUrl(
+          `http://${EMULATOR_HOST}/some-other-bucket/file.jpg`,
+        ),
+      ).toBe(false);
+    });
+
+    it("rejects http URLs when the emulator is not active", () => {
+      delete process.env.GCS_EMULATOR_HOST;
+      expect(
+        storage.isAllowedPublicImageUrl(
+          `http://${EMULATOR_HOST}/f3-public-images-staging/org-logos/1.jpg`,
+        ),
+      ).toBe(false);
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -297,4 +332,57 @@ describe("deleteUserAvatar (emulator mode)", () => {
       `/f3-public-images/o/user-avatars%2F9.jpg`,
     );
   });
+});
+
+// ---------------------------------------------------------------------------
+// id / size validation
+// ---------------------------------------------------------------------------
+
+describe("id and size validation", () => {
+  const storage = createPublicImageStorage({
+    channel: "staging",
+    credentials: FAKE_CREDENTIALS,
+  });
+
+  it.each([0, -1, 1.5, Number.NaN])(
+    "rejects invalid orgId %p",
+    async (orgId) => {
+      await expect(
+        storage.uploadOrgLogo(orgId, Buffer.from("img")),
+      ).rejects.toThrow("orgId must be a positive integer");
+      await expect(storage.deleteOrgLogo(orgId)).rejects.toThrow(
+        "orgId must be a positive integer",
+      );
+    },
+  );
+
+  it.each([0, -1, 2.25, Number.NaN])(
+    "rejects invalid userId %p",
+    async (userId) => {
+      await expect(
+        storage.uploadUserAvatar(userId, Buffer.from("img")),
+      ).rejects.toThrow("userId must be a positive integer");
+      await expect(storage.deleteUserAvatar(userId)).rejects.toThrow(
+        "userId must be a positive integer",
+      );
+    },
+  );
+
+  it.each([0, -1, 1.5, Number.NaN])(
+    "rejects invalid size %p for uploadOrgLogo",
+    async (size) => {
+      await expect(
+        storage.uploadOrgLogo(1, Buffer.from("img"), { size }),
+      ).rejects.toThrow("size must be a positive integer");
+    },
+  );
+
+  it.each([0, -1, 1.5, Number.NaN])(
+    "rejects invalid size %p for uploadUserAvatar",
+    async (size) => {
+      await expect(
+        storage.uploadUserAvatar(1, Buffer.from("img"), { size }),
+      ).rejects.toThrow("size must be a positive integer");
+    },
+  );
 });
