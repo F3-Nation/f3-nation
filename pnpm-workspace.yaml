@@ -53,7 +53,7 @@ catalog:
   "@testing-library/user-event": ^14.6.1
   "@turbo/gen": ^1.12.3
   "@types/geojson": ^7946.0.16
-  "@types/google.maps": ^3.65.0
+  "@types/google.maps": ^3.65.1
   "@types/lodash": ^4.14.195
   "@types/node": ^24.12.4
   "@types/nodemailer": ^8.0.0
