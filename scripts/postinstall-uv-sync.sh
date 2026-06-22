@@ -16,15 +16,10 @@ Install uv:
   curl -LsSf https://astral.sh/uv/install.sh | sh
 
 Then run:
-  pnpm slackbot:sync
+  pnpm python:install
 
 See docs/LOCAL_DEV_DOCKER.md#uv-python-package-manager-for-slackbot
 
 EOF
-
-if [ "${F3_REQUIRE_UV:-}" = "1" ]; then
-  echo "ERROR: F3_REQUIRE_UV=1 is set, so uv is required."
-  exit 1
-fi
 
 exit 0

@@ -141,7 +141,7 @@ Close and reopen your terminal, then verify:
 uv --version
 ```
 
-After installing `uv`, run `pnpm slackbot:sync` to sync the Slackbot Python dependencies. If you need an install to fail when `uv` is missing, run `F3_REQUIRE_UV=1 pnpm install`.
+After installing `uv`, run `pnpm python:install` to sync the Slackbot Python dependencies.
 
 </details>
 
@@ -173,7 +173,7 @@ uv --version       # optional here; needed for apps/slackbot
 pnpm install
 ```
 
-`pnpm install` runs `uv sync` automatically for the Python Slackbot app when `uv` is available. If `uv --version` fails, install `uv`, then run `pnpm slackbot:sync`.
+`pnpm install` runs `uv sync` automatically for the Python Slackbot app when `uv` is available. If `uv --version` fails, install `uv`, then run `pnpm python:install`.
 
 ### 2. Run the one-time setup script
 
@@ -259,7 +259,7 @@ uv --version       # optional here; needed for apps/slackbot
 pnpm install
 ```
 
-`pnpm install` runs `uv sync` automatically for the Python Slackbot app when `uv` is available. If `uv --version` fails, install `uv`, then run `pnpm slackbot:sync`.
+`pnpm install` runs `uv sync` automatically for the Python Slackbot app when `uv` is available. If `uv --version` fails, install `uv`, then run `pnpm python:install`.
 
 ## Daily workflow
 
@@ -469,13 +469,7 @@ Install `uv`, then sync the Slackbot Python dependencies:
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 uv --version
-pnpm slackbot:sync
-```
-
-By default, `pnpm install` continues with a warning when `uv` is missing so Node dependencies can still be installed. To make missing `uv` fail the install, run:
-
-```bash
-F3_REQUIRE_UV=1 pnpm install
+pnpm python:install
 ```
 
 ### Port already in use
