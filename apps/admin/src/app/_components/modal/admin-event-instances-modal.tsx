@@ -220,8 +220,8 @@ export default function AdminEventInstancesModal({
       onError: (err) => {
         toast.error(
           err instanceof ORPCError && err?.code === "UNAUTHORIZED"
-            ? err.message ??
-                "You are not authorized to create or update event instances"
+            ? (err.message ??
+                "You are not authorized to create or update event instances")
             : "Failed to save event instance",
         );
       },
