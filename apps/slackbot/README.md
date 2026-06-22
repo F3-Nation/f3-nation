@@ -40,7 +40,14 @@ Slackbot is opt-in for root dev startup because it needs the Python environment 
 
 ### First steps
 
-Once the app is running, you will want to connect your local app to one of the seeded regions. To do this, use the `/f3-nation-settings` command, click on `Migration Settings`, then search for a seeded region (F3 Charlotte is one). You will be automatically "approved" when in local development.
+Once the app is running, you will want to take some admin actions to make it useful.
+
+1. Use the `/f3-nation-settings` slash command
+2. You should see a button for `Migration Settings` which is present for Slack spaces that haven't yet been connected to a region
+3. Open the menu, then search for a seeded region (F3 Charlotte is one that is seeded by default). You will be automatically "approved" when in local development.
+4. I would recommend that you set channels for preblasts and backblasts. You can do that by either:
+   1. Going to `/f3-nation-settings` -> `Backblast & Preblast Settings` and setting for your whole space
+   2. Setting them individually by AO by going to `/f3-nation-settings` -> `Calendar Management` -> `Manage AOs` -> `Edit` and setting the channel for each
 
 ## Step debugging
 
