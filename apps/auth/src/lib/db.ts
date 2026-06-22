@@ -3,6 +3,7 @@ import postgres from "postgres";
 
 import { schema } from "@acme/db";
 
+import { logError } from "~/lib/logging";
 import { env } from "~/env";
 
 const databaseHost = env.DATABASE_HOST;
@@ -27,17 +28,9 @@ function createDb() {
   try {
     return drizzle(client, { schema });
   } catch (err) {
-    // Only log safe error details, never the connection string or env
-    const safeMessage = err instanceof Error ? err.message : String(err);
-    // Optionally, log err.stack if needed for debugging
-    const safeStack = err instanceof Error ? err.stack : undefined;
-    console.error(
-      JSON.stringify({
-        error: "Database connection error",
-        message: safeMessage,
-        stack: safeStack,
-      }),
-    );
+    // Pino's err serializer extracts message/stack/cause; it never logs the
+    // connection string or env.
+    logError("auth.db.connection_error", {}, err);
     throw new Error(
       "Failed to connect to the database. Check configuration and connectivity.",
     );

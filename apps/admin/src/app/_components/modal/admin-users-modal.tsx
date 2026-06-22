@@ -177,15 +177,11 @@ export default function UserModal({
         router.refresh();
       },
       onError: (err) => {
-        if (err instanceof ORPCError) {
-          toast.error(err.message);
-        } else {
-          toast.error(
-            err instanceof ORPCError && err?.code === "UNAUTHORIZED"
-              ? "You must be logged in to update users"
-              : "Failed to update user",
-          );
-        }
+        toast.error(
+          err instanceof ORPCError && err?.code === "UNAUTHORIZED"
+            ? "You are not authorized to update this user"
+            : "Failed to update user",
+        );
       },
     }),
   );
@@ -522,7 +518,7 @@ export default function UserModal({
                         <UserPlus className="mr-2 h-4 w-4" />
                         Manage Access
                       </Button>
-                      <p className="text-xs text-muted-foreground text-center">
+                      <p className="text-center text-xs text-muted-foreground">
                         Progress here will be lost
                       </p>
                     </div>

@@ -1,6 +1,5 @@
 "use client";
 
-import type { InferRouterInputs, InferRouterOutputs } from "@orpc/server";
 import { createTanstackQueryUtils } from "@orpc/tanstack-query";
 import type {
   InferDataFromTag,
@@ -10,14 +9,10 @@ import type {
 import { QueryClientProvider } from "@tanstack/react-query";
 import React, { Suspense, useEffect, useState } from "react";
 
-import type { router } from "@acme/api";
-import { isDevelopmentNodeEnv } from "@acme/shared/common/constants";
+import { isDevelopment } from "@acme/shared/common/constants";
 
 import { createQueryClient } from "~/orpc/query-client";
 import { client } from "./client";
-
-export type Outputs = InferRouterOutputs<typeof router>;
-export type Inputs = InferRouterInputs<typeof router>;
 
 let clientQueryClientSingleton: QueryClient | undefined = undefined;
 export const getQueryClient = () => {
@@ -41,7 +36,7 @@ const ReactQueryDevtoolsProduction = React.lazy(() =>
 
 export function OrpcReactProvider(props: { children: React.ReactNode }) {
   const queryClient = getQueryClient();
-  const [showDevtools, setShowDevtools] = useState(isDevelopmentNodeEnv);
+  const [showDevtools, setShowDevtools] = useState(isDevelopment);
 
   useEffect(() => {
     // @ts-expect-error -- add toggleDevtools to window

@@ -2,32 +2,23 @@ import lt from "lodash/lt";
 import { X } from "lucide-react";
 import { useMemo } from "react";
 import { Controller } from "react-hook-form";
-import { z } from "zod";
 
 import { EVENT_CATEGORY_LABEL_MAP } from "@acme/shared/app/constants";
 import { DayOfWeek } from "@acme/shared/app/enums";
 import { Case } from "@acme/shared/common/enums";
 import { convertCase, isTruthy } from "@acme/shared/common/functions";
-import { Button } from "@acme/ui/button";
 import { Input } from "@acme/ui/input";
 import { MultiSelect } from "@acme/ui/multi-select";
 import { ControlledSelect } from "@acme/ui/select";
 import { Textarea } from "@acme/ui/textarea";
 import { toast } from "@acme/ui/toast";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
-import { RequestInsertSchema } from "@acme/validators";
 
 import { orpc, useQuery } from "~/orpc/react";
 import { useUpdateLocationFormContext } from "~/utils/forms";
 import { DebouncedImage } from "../debounced-image";
 import { CountrySelect } from "../modal/country-select";
 import { ControlledTimeInput } from "../time-input";
-
-export const UpdateLocationSchema = RequestInsertSchema.extend({
-  badImage: z.boolean().default(false),
-});
-
-type UpdateLocationSchema = z.infer<typeof UpdateLocationSchema>;
 
 export const LocationEventForm = ({
   isAdminForm = true,
@@ -493,40 +484,6 @@ export const LocationEventForm = ({
         </div>
       </div>
     </>
-  );
-};
-
-export const DevLoadTestData = () => {
-  const form = useUpdateLocationFormContext();
-  return (
-    <Button
-      type="button"
-      variant="outline"
-      onClick={() => {
-        const values = form.getValues();
-        !values.eventName && form.setValue("eventName", "Test Event");
-        !values.eventDayOfWeek && form.setValue("eventDayOfWeek", "monday");
-        !values.submittedBy && form.setValue("submittedBy", "test@test.com");
-        !values.aoLogo &&
-          form.setValue("aoLogo", "https://placehold.co/640x640");
-        !values.aoName && form.setValue("aoName", "Test AO");
-        !values.locationAddress &&
-          form.setValue("locationAddress", "123 Test St");
-        !values.locationAddress2 && form.setValue("locationAddress2", "Apt 1");
-        !values.locationCity && form.setValue("locationCity", "Test City");
-        !values.locationState && form.setValue("locationState", "CA");
-        !values.locationZip && form.setValue("locationZip", "12345");
-        !values.locationCountry &&
-          form.setValue("locationCountry", "United States");
-        !values.eventTypeIds?.length && form.setValue("eventTypeIds", [1]);
-        !values.eventStartTime && form.setValue("eventStartTime", "0900");
-        !values.eventEndTime && form.setValue("eventEndTime", "1000");
-        !values.eventDescription &&
-          form.setValue("eventDescription", "Test Description");
-      }}
-    >
-      (DEV) Load Test Data
-    </Button>
   );
 };
 

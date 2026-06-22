@@ -28,81 +28,79 @@ function getApiTimeoutMs(): number {
  * a typed oRPC client pointed at F3_API_BASE_URL. The React cache() ensures
  * at most one client is created per server request.
  */
-export const getApiClient = cache(
-  async (): Promise<RouterClient<typeof router>> => {
-    const cookieStore = await cookies();
-    const accessToken = cookieStore.get(ACCESS_TOKEN_COOKIE_NAME)?.value;
-    if (!accessToken) throw new Error("Missing access token");
+const getApiClient = cache(async (): Promise<RouterClient<typeof router>> => {
+  const cookieStore = await cookies();
+  const accessToken = cookieStore.get(ACCESS_TOKEN_COOKIE_NAME)?.value;
+  if (!accessToken) throw new Error("Missing access token");
 
-    const link = new RPCLink({
-      url: requireEnv("F3_API_BASE_URL"),
-      fetch: async (input, init) => {
-        const controller = new AbortController();
-        const startedAt = Date.now();
-        const endpointPath = new URL(input.url).pathname;
-        const timeout = setTimeout(() => controller.abort(), getApiTimeoutMs());
-        const upstreamSignal = (init as RequestInit | undefined)?.signal;
-        const onAbort = () => controller.abort();
+  const link = new RPCLink({
+    url: requireEnv("F3_API_BASE_URL"),
+    fetch: async (input, init) => {
+      const controller = new AbortController();
+      const startedAt = Date.now();
+      const endpointPath = new URL(input.url).pathname;
+      const timeout = setTimeout(() => controller.abort(), getApiTimeoutMs());
+      const upstreamSignal = (init as RequestInit | undefined)?.signal;
+      const onAbort = () => controller.abort();
 
-        if (upstreamSignal) {
-          if (upstreamSignal.aborted) {
-            controller.abort();
-          } else {
-            upstreamSignal.addEventListener("abort", onAbort, { once: true });
-          }
+      if (upstreamSignal) {
+        if (upstreamSignal.aborted) {
+          controller.abort();
+        } else {
+          upstreamSignal.addEventListener("abort", onAbort, { once: true });
         }
+      }
 
-        input.headers.set(Header.Client, Client.F3_ME);
-        input.headers.set(Header.Authorization, `Bearer ${accessToken}`);
+      input.headers.set(Header.Client, Client.F3_ME);
+      input.headers.set(Header.Authorization, `Bearer ${accessToken}`);
 
-        try {
-          const response = await fetch(input, {
-            ...init,
-            signal: controller.signal,
+      try {
+        const response = await fetch(input, {
+          ...init,
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          logWarn("me.api.upstream_http_error", {
+            apiBaseUrl: process.env.F3_API_BASE_URL,
+            endpointPath,
+            status: response.status,
+            statusText: response.statusText,
+            durationMs: Date.now() - startedAt,
+            requestId:
+              response.headers.get("x-request-id") ??
+              response.headers.get("x-cloud-trace-context") ??
+              undefined,
           });
-
-          if (!response.ok) {
-            logWarn("me.api.upstream_http_error", {
-              apiBaseUrl: process.env.F3_API_BASE_URL,
-              endpointPath,
-              status: response.status,
-              statusText: response.statusText,
-              durationMs: Date.now() - startedAt,
-              requestId:
-                response.headers.get("x-request-id") ??
-                response.headers.get("x-cloud-trace-context") ??
-                undefined,
-            });
-          }
-
-          return response;
-        } catch (err) {
-          logError(
-            "me.api.upstream_request_failed",
-            {
-              apiBaseUrl: process.env.F3_API_BASE_URL,
-              endpointPath,
-              durationMs: Date.now() - startedAt,
-              aborted: controller.signal.aborted,
-            },
-            err,
-          );
-          throw err;
-        } finally {
-          clearTimeout(timeout);
-          upstreamSignal?.removeEventListener("abort", onAbort);
         }
-      },
-    });
 
-    return createORPCClient<RouterClient<typeof router>>(link);
-  },
-);
+        return response;
+      } catch (err) {
+        logError(
+          "me.api.upstream_request_failed",
+          {
+            apiBaseUrl: process.env.F3_API_BASE_URL,
+            endpointPath,
+            durationMs: Date.now() - startedAt,
+            aborted: controller.signal.aborted,
+          },
+          err,
+        );
+        throw err;
+      } finally {
+        clearTimeout(timeout);
+        upstreamSignal?.removeEventListener("abort", onAbort);
+      }
+    },
+  });
 
-type ApiErrorLike = {
+  return createORPCClient<RouterClient<typeof router>>(link);
+});
+
+interface ApiErrorLike {
   code?: string;
   status?: number;
-};
+}
 
 function isApiErrorLike(err: unknown): err is ApiErrorLike {
   if (typeof err !== "object" || err === null) return false;

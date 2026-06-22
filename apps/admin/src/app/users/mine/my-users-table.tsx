@@ -475,7 +475,7 @@ const columns: TableOptions<
                 });
               }}
             >
-              <div>Delete</div>
+              <div>Deactivate</div>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

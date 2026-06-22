@@ -115,7 +115,7 @@ function OnboardingForm() {
           <div>
             <label
               htmlFor="f3Name"
-              className="block text-base font-medium mb-2"
+              className="mb-2 block text-base font-medium"
             >
               F3 Name
             </label>
@@ -133,7 +133,7 @@ function OnboardingForm() {
           <div>
             <label
               htmlFor="firstName"
-              className="block text-base font-medium mb-2"
+              className="mb-2 block text-base font-medium"
             >
               First Name
             </label>
@@ -151,7 +151,7 @@ function OnboardingForm() {
           <div>
             <label
               htmlFor="lastName"
-              className="block text-base font-medium mb-2"
+              className="mb-2 block text-base font-medium"
             >
               Last Name
             </label>
@@ -171,7 +171,7 @@ function OnboardingForm() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-md bg-primary px-4 py-3 text-base font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+            className="w-full rounded-md bg-primary px-4 py-3 text-base font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
           >
             {loading ? "Saving..." : "Continue"}
           </button>

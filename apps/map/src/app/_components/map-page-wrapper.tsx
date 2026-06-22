@@ -58,7 +58,7 @@ export const MapPageWrapper = (props: { children: React.ReactNode }) => {
       <DesktopSidebarContainer>
         <Sidebar />
       </DesktopSidebarContainer>
-      <div className={cn(`lg:pl-360 pl-0`)}>{props.children}</div>
+      <div className={cn(`pl-0 lg:pl-360`)}>{props.children}</div>
     </>
   );
 };

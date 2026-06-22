@@ -72,7 +72,7 @@ export default function UserMutate({
       onError: (err) => {
         toast.error(
           err instanceof ORPCError && err?.code === "UNAUTHORIZED"
-            ? "You must be logged in to upsert users"
+            ? "You are not authorized to upsert this user"
             : "Failed to upsert user",
         );
       },

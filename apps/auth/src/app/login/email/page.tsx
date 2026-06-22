@@ -39,7 +39,7 @@ function EmailLoginForm() {
       const res = await fetch("/api/verify-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, action: "send" }),
+        body: JSON.stringify({ email, action: "send", callbackUrl }),
       });
 
       if (!res.ok) {
@@ -80,7 +80,7 @@ function EmailLoginForm() {
 
         <form onSubmit={handleSubmit} noValidate className="space-y-5">
           <div>
-            <label htmlFor="email" className="block text-base font-medium mb-2">
+            <label htmlFor="email" className="mb-2 block text-base font-medium">
               Email address
             </label>
             <input
@@ -99,7 +99,7 @@ function EmailLoginForm() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-md bg-primary px-4 py-3 text-base font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+            className="w-full rounded-md bg-primary px-4 py-3 text-base font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
           >
             {loading ? "Sending..." : "Send Code"}
           </button>

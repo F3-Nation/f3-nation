@@ -13,9 +13,6 @@ import { constantTimeEqual } from "~/lib/crypto-utils";
 import { db } from "~/lib/db";
 import { getJWKS, signAccessToken } from "~/lib/jwt";
 
-// Re-export so any external consumers still find it here
-export { constantTimeEqual };
-
 function generateOpaqueToken(): string {
   return crypto.randomBytes(32).toString("base64url");
 }
@@ -120,23 +117,18 @@ export async function exchangeAuthorizationCode(params: {
   )
     return { error: "invalid_client" as const };
 
-  // PKCE verification
-  if (authCode.codeChallenge) {
-    if (!params.codeVerifier) return { error: "invalid_grant" as const };
+  // PKCE is required — reject codes that have no challenge stored (e.g. issued
+  // before enforcement was in place) so there is no bypass window.
+  if (!authCode.codeChallenge) return { error: "invalid_grant" as const };
+  if (!params.codeVerifier) return { error: "invalid_grant" as const };
 
-    let computedChallenge: string;
-    if (authCode.codeChallengeMethod === "S256") {
-      computedChallenge = crypto
-        .createHash("sha256")
-        .update(params.codeVerifier)
-        .digest("base64url");
-    } else {
-      computedChallenge = params.codeVerifier;
-    }
+  const computedChallenge = crypto
+    .createHash("sha256")
+    .update(params.codeVerifier)
+    .digest("base64url");
 
-    if (computedChallenge !== authCode.codeChallenge)
-      return { error: "invalid_grant" as const };
-  }
+  if (!constantTimeEqual(computedChallenge, authCode.codeChallenge))
+    return { error: "invalid_grant" as const };
 
   // Look up user email for JWT claims
   const [user] = await db

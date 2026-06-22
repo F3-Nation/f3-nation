@@ -1,9 +1,10 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
-import { resizeImage, uploadFile } from "@acme/storage";
+import { prepareImageForStorage, uploadFile } from "@acme/storage";
 
 import { requireAccessToken } from "~/lib/auth/server";
+import { logError } from "~/lib/logging";
 
 const ALLOWED_TYPES = new Set([
   "image/jpeg",
@@ -48,7 +49,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const buffer = Buffer.from(await fileEntry.arrayBuffer());
-    const jpeg = await resizeImage(buffer, {
+    const jpeg = await prepareImageForStorage(buffer, {
       width: dimension,
       height: dimension,
     });
@@ -56,7 +57,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ url });
   } catch (err) {
-    console.error("Logo upload failed:", err);
+    logError("admin.logo.upload_failed", { orgId }, err);
     return NextResponse.json(
       { error: "Failed to upload logo" },
       { status: 500 },

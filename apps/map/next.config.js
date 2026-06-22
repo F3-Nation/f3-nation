@@ -6,7 +6,6 @@ const jiti = _jiti(fileURLToPath(import.meta.url));
 
 // Import env files to validate at build time. Use jiti so we can load .ts files in here.
 jiti("./src/env");
-jiti("@acme/env");
 
 /** @type {import("next").NextConfig} */
 const config = {
@@ -25,9 +24,14 @@ const config = {
     "@acme/api",
     "@acme/auth",
     "@acme/db",
+    "@acme/logger",
     "@acme/ui",
     "@acme/validators",
   ],
+
+  // pino-pretty relies on worker threads (thread-stream); keep pino external so
+  // Next.js does not try to bundle it.
+  serverExternalPackages: ["pino", "pino-pretty", "thread-stream"],
 
   images: {
     remotePatterns: [
@@ -90,10 +94,4 @@ export default withSentryConfig(config, {
 
   // Automatically tree-shake Sentry logger statements to reduce bundle size
   disableLogger: true,
-
-  // Enables automatic instrumentation of Vercel Cron Monitors. (Does not yet work with App Router route handlers.)
-  // See the following for more information:
-  // https://docs.sentry.io/product/crons/
-  // https://vercel.com/docs/cron-jobs
-  automaticVercelMonitors: true,
 });

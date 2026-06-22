@@ -70,6 +70,7 @@ export default function AdminNationsModal({
       description: nation?.description ?? "",
       website: nation?.website ?? null,
       email: nation?.email ?? null,
+      phone: nation?.phone ?? null,
       twitter: nation?.twitter ?? null,
       facebook: nation?.facebook ?? null,
       instagram: nation?.instagram ?? null,
@@ -87,6 +88,7 @@ export default function AdminNationsModal({
       description: nation?.description ?? "",
       website: nation?.website ?? null,
       email: nation?.email ?? null,
+      phone: nation?.phone ?? null,
       twitter: nation?.twitter ?? null,
       facebook: nation?.facebook ?? null,
       instagram: nation?.instagram ?? null,
@@ -95,19 +97,23 @@ export default function AdminNationsModal({
     });
   }, [form, nation]);
 
+  const isEditing = !!nation?.id;
+  const actionText = isEditing ? "update" : "add";
+  const actionTextPast = isEditing ? "updated" : "added";
+
   const crupdateNation = useMutation(
     orpc.org.crupdate.mutationOptions({
       onSuccess: async () => {
         await invalidateQueries("org");
         closeModal();
-        toast.success("Successfully updated nation");
+        toast.success(`Successfully ${actionTextPast} nation`);
         router.refresh();
       },
       onError: (err) => {
         toast.error(
           err instanceof ORPCError && err?.code === "UNAUTHORIZED"
-            ? "You must be logged in to update nations"
-            : "Failed to update nation",
+            ? `You are not authorized to ${actionText} this nation`
+            : `Failed to ${actionText} nation`,
         );
       },
     }),
@@ -215,6 +221,26 @@ export default function AdminNationsModal({
                       <FormControl>
                         <Input
                           placeholder="Email"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="mb-4 w-1/2 px-2">
+                <FormField
+                  control={form.control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Phone</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="Phone"
+                          type="tel"
                           {...field}
                           value={field.value ?? ""}
                         />

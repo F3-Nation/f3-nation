@@ -40,33 +40,6 @@ export enum DeleteType {
   EVENT_INSTANCE = "EVENT_INSTANCE",
 }
 
-export const eventDefaults = {
-  eventId: -1,
-  workoutName: "",
-  startTime: "0530",
-  endTime: "0615",
-  dayOfWeek: null,
-  eventTypeIds: [1],
-  eventDescription: "",
-  aoId: null,
-  aoWebsite: "",
-};
-
-export const locationDefaults = {
-  locationId: null,
-  locationAddress: "",
-  locationAddress2: "",
-  locationCity: "",
-  locationState: "",
-  locationZip: "",
-  locationCountry: "",
-  locationDescription: "",
-  aoName: "",
-  aoLogo: "",
-  regionId: null,
-  regionWebsite: "",
-};
-
 export interface DataType {
   [ModalType.ADMIN_USERS]: {
     id?: number | null;

@@ -1,7 +1,7 @@
 import { DEFAULT_CENTER, DEFAULT_ZOOM } from "@acme/shared/app/constants";
 import { ZustandStore } from "@acme/shared/common/classes";
 
-export type NearbyLocationCenterType =
+type NearbyLocationCenterType =
   | "self"
   | "search"
   | "manual-update"
@@ -50,8 +50,6 @@ const initialState = {
   hasTriedInitialShowUserLocation: false,
   didSetQueryParamLocation: false,
 };
-
-export type MapStoreState = typeof initialState;
 
 export const mapStore = new ZustandStore({
   initialState,
