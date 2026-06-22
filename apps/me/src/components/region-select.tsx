@@ -56,7 +56,7 @@ export function RegionSelect({ regions, value, onChange }: RegionSelectProps) {
       {open && (
         <div
           id="region-list"
-          className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md"
+          className="bg-popover absolute z-50 mt-1 w-full rounded-md border shadow-md"
         >
           <div className="p-2">
             <Input
@@ -73,7 +73,7 @@ export function RegionSelect({ regions, value, onChange }: RegionSelectProps) {
             {value !== null && (
               <button
                 type="button"
-                className="relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm text-muted-foreground outline-none hover:bg-accent"
+                className="text-muted-foreground hover:bg-accent relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none"
                 onClick={() => {
                   onChange(null);
                   selectAndClose();
@@ -83,7 +83,7 @@ export function RegionSelect({ regions, value, onChange }: RegionSelectProps) {
               </button>
             )}
             {filteredRegions.length === 0 ? (
-              <p className="px-2 py-4 text-center text-sm text-muted-foreground">
+              <p className="text-muted-foreground px-2 py-4 text-center text-sm">
                 No regions found.
               </p>
             ) : (
@@ -92,7 +92,7 @@ export function RegionSelect({ regions, value, onChange }: RegionSelectProps) {
                   key={region.id}
                   type="button"
                   disabled={!region.isActive && region.id !== value}
-                  className={`relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent ${
+                  className={`hover:bg-accent relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none ${
                     region.id === value ? "bg-accent font-medium" : ""
                   }${!region.isActive ? " opacity-50" : ""}`}
                   onClick={() => {
@@ -102,7 +102,7 @@ export function RegionSelect({ regions, value, onChange }: RegionSelectProps) {
                 >
                   {region.name}
                   {!region.isActive && (
-                    <span className="ml-auto text-xs text-muted-foreground">
+                    <span className="text-muted-foreground ml-auto text-xs">
                       Inactive
                     </span>
                   )}

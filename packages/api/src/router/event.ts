@@ -28,6 +28,7 @@ import { EventInsertSchema } from "@acme/validators";
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
+import { logError } from "../logger";
 import { notifyMapDataChange } from "../lib/webhook-events";
 import type { Context } from "../shared";
 import { editorProcedure, protectedProcedure } from "../shared";
@@ -832,7 +833,16 @@ export const eventRouter = {
             4,
             seriesData.startDate,
           );
-        } else if (existingEvent.recurrencePattern) {
+
+          // Check if this is the first recurring event for the region and
+          // trigger the "region in a box" notification flow.
+          const { maybeNotifyFirstEventForRegion } =
+            await import("../lib/first-event-service");
+          void maybeNotifyFirstEventForRegion(ctx.db, result.orgId).catch(
+            (err: unknown) =>
+              logError("api.event.first_event_notify_failed", {}, err),
+          );
+        } else if (existingEvent.dayOfWeek) {
           // Existing series: check for structural changes
           const existingSeriesData = {
             dayOfWeek: existingEvent.dayOfWeek,
@@ -982,9 +992,8 @@ export const eventRouter = {
         );
 
       // Cascade delete event instances for series events
-      const { softDeleteFutureInstancesForSeries } = await import(
-        "../lib/cascade-service"
-      );
+      const { softDeleteFutureInstancesForSeries } =
+        await import("../lib/cascade-service");
       await softDeleteFutureInstancesForSeries(ctx.db, input.id);
 
       // Notify webhooks and invalidate cache about the event deletion

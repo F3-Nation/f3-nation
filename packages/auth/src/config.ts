@@ -41,24 +41,19 @@ function extractHostname(url: string | undefined): string | undefined {
  * - map.f3nation.com, api.f3nation.com, etc: use .f3nation.com
  * - map.f3nation.test, api.f3nation.test: use .f3nation.test
  *
- * If running in Vercel, use NEXT_PUBLIC_VERCEL_URL if available (or some runtime value if available).
- * Else, fallback to window.location if possible (for client-side usage), or process.env if on server.
- * If all else fails, default to undefined (scopes to current host).
- *
+ * On the client, uses window.location.hostname.
  * On the server, prefer NEXT_PUBLIC_ADMIN_URL before API/MAP so the admin app on its own host
  * (e.g. Cloud Run) does not inherit .f3nation.com from API/MAP and break Set-Cookie.
+ * If all else fails, default to undefined (scopes to current host).
  */
 function getCookieDomain(): string | undefined {
   const hostname =
     typeof window !== "undefined"
       ? window.location.hostname
-      : // Try Vercel env first (it won't have protocol in NEXT_PUBLIC_VERCEL_URL)
-        extractHostname(process.env.NEXT_PUBLIC_VERCEL_URL) ??
-        extractHostname(process.env.VERCEL_URL) ??
-        extractHostname(env.NEXT_PUBLIC_ADMIN_URL) ??
+      : (extractHostname(env.NEXT_PUBLIC_ADMIN_URL) ??
         extractHostname(env.NEXT_PUBLIC_API_URL) ??
         extractHostname(env.NEXT_PUBLIC_MAP_URL) ??
-        undefined;
+        undefined);
 
   if (
     !hostname ||
@@ -208,7 +203,7 @@ export const authConfig: NextAuthConfig = {
       }
 
       if (trigger === "update" && session && "roles" in session) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
         token.roles = session.roles;
       }
 

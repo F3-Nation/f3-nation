@@ -374,6 +374,8 @@ export type LocationMeta = {
 export type OrgMeta = {
   latLonKey?: string;
   mapSeed?: boolean;
+  firstEventNotificationSent?: boolean;
+  region_location_short_description?: string;
 } & Record<string, unknown>;
 
 export type UpdateRequestMeta = Record<string, unknown>;

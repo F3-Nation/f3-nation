@@ -4,6 +4,7 @@
 export enum Templates {
   feedbackForm = "feedback-form",
   mapChangeRequest = "map-change-request",
+  regionInABox = "region-in-a-box",
 }
 
 /**
@@ -12,6 +13,8 @@ export enum Templates {
 export const DefaultSubject: Partial<Record<Templates, string>> = {
   [Templates.feedbackForm]: "Feedback Form",
   [Templates.mapChangeRequest]: "F3 Map Change Request",
+  [Templates.regionInABox]:
+    "You're on the map! We want to send you resources to accelerate your growth",
 };
 
 /**
@@ -39,11 +42,19 @@ export interface MapChangeRequestData {
 }
 
 /**
+ * Region-in-a-box welcome email template data
+ */
+export interface RegionInABoxData {
+  regionName: string;
+}
+
+/**
  * Template data types mapped by template
  */
 export interface TemplateType {
   [Templates.feedbackForm]: FeedbackFormData;
   [Templates.mapChangeRequest]: MapChangeRequestData;
+  [Templates.regionInABox]: RegionInABoxData;
 }
 
 // Shared email styles
@@ -139,6 +150,58 @@ export const templateRenderers: {
       </div>
       <div class="footer">
         This is an automated message from F3 Nation. Please do not reply to this email.
+      </div>
+    </div>
+  </body>
+</html>`,
+
+  [Templates.regionInABox]: (data: RegionInABoxData) => `<html>
+  <head><style>${emailStyles}</style></head>
+  <body>
+    <div class="container">
+      <div class="header">Welcome to the F3 Nation Map!</div>
+      <div class="content">
+        <p>Dear leaders of <span class="highlight">${escapeHtml(data.regionName)}</span>,</p>
+        <p>
+          Congratulations — you are now approved and have your first workout on the F3 Nation map!
+          We'd love to send you some key materials to help you get started and accelerate your
+          region's growth.
+        </p>
+        <p><strong>The Region-in-a-Box bundle includes:</strong></p>
+        <ul>
+          <li>1 F3 Knitted Polyester Flag</li>
+          <li>2 F3 Freed to Lead Book — 2nd Edition</li>
+          <li>2 F3 Q Source Book</li>
+          <li>1 F3 Stencil — "Worm's Coupon Maker"</li>
+          <li>10 F3 Stickers</li>
+          <li>10 F3 Business Cards</li>
+        </ul>
+        <p><strong>To claim your free bundle, here's what to do:</strong></p>
+        <ol>
+          <li>
+            <strong>Reply all</strong> to this email and let us know you'd like to take advantage of
+            the bundle. One of us will respond with two coupon codes — one to make the bundle free
+            and one to cover shipping.
+          </li>
+          <li>
+            Head to the product page:
+            <a href="https://f3gear.com/products/f3-region-in-a-box-tier1">
+              https://f3gear.com/products/f3-region-in-a-box-tier1
+            </a>
+            and add it to your cart.
+          </li>
+          <li>
+            Enter your shipping details and apply <strong>both coupon codes</strong> at checkout to
+            receive the bundle at no cost.
+          </li>
+        </ol>
+        <p>
+          We are excited to have <span class="highlight">${escapeHtml(data.regionName)}</span> as
+          part of the F3 Nation community. Keep up the great work!
+        </p>
+      </div>
+      <div class="footer">
+        This message was sent by F3 Nation. Please reply all to respond to the full team.
       </div>
     </div>
   </body>

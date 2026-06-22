@@ -1,5 +1,7 @@
 # ---------- Stage 1: Prune monorepo ----------
-FROM --platform=linux/amd64 node:24-alpine AS builder
+ARG TURBO_VERSION=2
+FROM node:24.17.0-alpine AS builder
+ARG TURBO_VERSION
 
 ENV TURBO_TELEMETRY_DISABLED=1
 ENV PNPM_HOME="/pnpm"
@@ -7,13 +9,14 @@ ENV PATH="$PNPM_HOME:$PATH"
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-RUN npm install -g turbo@1.13.4
+RUN npm install -g turbo@${TURBO_VERSION}
 
 COPY . .
 RUN turbo prune f3-me --docker
 
 # ---------- Stage 2: Install + build ----------
-FROM --platform=linux/amd64 node:24-alpine AS installer
+FROM node:24.17.0-alpine AS installer
+ARG TURBO_VERSION
 
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV TURBO_TELEMETRY_DISABLED=1
@@ -25,7 +28,7 @@ ENV SKIP_ENV_VALIDATION=true
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-RUN npm install -g turbo@1.13.4 && corepack enable
+RUN corepack enable
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 
 # Install dependencies from pruned lockfile
@@ -36,10 +39,18 @@ RUN pnpm install --frozen-lockfile
 
 # Copy source and build
 COPY --from=builder /app/out/full/ .
+
+# `turbo prune` copies the full catalog into pnpm-workspace.yaml but only this
+# app's subset into the pruned lockfile. pnpm's verify-deps-before-run check (run
+# by `pnpm run build`) flags that as catalog drift under strict catalogMode and
+# fails the frozen install. Deps are already installed via the explicit frozen
+# install above, so skip the redundant pre-run verification.
+RUN printf '\nverifyDepsBeforeRun: false\n' >> pnpm-workspace.yaml
+
 RUN pnpm turbo build --filter=f3-me
 
 # ---------- Stage 3: Production runner ----------
-FROM --platform=linux/amd64 node:24-alpine AS runner
+FROM node:24.17.0-alpine AS runner
 
 RUN apk add --no-cache libc6-compat
 WORKDIR /app

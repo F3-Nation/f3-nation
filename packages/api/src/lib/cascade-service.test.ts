@@ -9,14 +9,16 @@
 import { vi } from "vitest";
 
 vi.mock("@orpc/experimental-ratelimit/memory", () => ({
-  MemoryRatelimiter: vi.fn().mockImplementation(() => ({
-    limit: vi.fn().mockResolvedValue({
-      success: true,
-      limit: 10,
-      remaining: 9,
-      reset: Date.now() + 60000,
-    }),
-  })),
+  MemoryRatelimiter: vi.fn(function () {
+    return {
+      limit: vi.fn().mockResolvedValue({
+        success: true,
+        limit: 10,
+        remaining: 9,
+        reset: Date.now() + 60000,
+      }),
+    };
+  }),
 }));
 
 import { and, eq, gte, schema } from "@acme/db";

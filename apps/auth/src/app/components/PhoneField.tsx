@@ -46,7 +46,7 @@ export function PhoneField({
 
   return (
     <div>
-      <label htmlFor={id} className="block text-base font-medium mb-2">
+      <label htmlFor={id} className="mb-2 block text-base font-medium">
         {label}
       </label>
       <div className="grid grid-cols-[max-content_minmax(0,1fr)] gap-3">

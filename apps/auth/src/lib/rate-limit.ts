@@ -1,6 +1,10 @@
 /**
- * Simple in-memory rate limiter. For Cloud Run with single instance,
- * this is sufficient. For multi-instance, swap to Redis.
+ * In-memory rate limiter backed by a per-process Map.
+ *
+ * The auth service is deployed with --max-instances=1 (see deploy-auth.yml)
+ * so a single process handles all traffic and this store is authoritative.
+ * If that constraint is ever relaxed, replace this with a shared store
+ * (Redis/Upstash) so counters are global across instances.  See #356.
  */
 
 interface RateLimitEntry {

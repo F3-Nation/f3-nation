@@ -172,6 +172,7 @@ const columns: TableOptions<Sector>["columns"] = [
     enableHiding: false,
     enableSorting: false,
     cell: ({ row }) => {
+      if (!row.original.isActive) return null;
       return (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -190,7 +191,7 @@ const columns: TableOptions<Sector>["columns"] = [
                 });
               }}
             >
-              <div>Delete</div>
+              <div>Deactivate</div>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

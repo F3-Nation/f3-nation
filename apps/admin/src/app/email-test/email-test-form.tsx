@@ -124,6 +124,18 @@ const templateConfigs: Record<Templates, TemplateConfig> = {
       },
     ],
   },
+  [Templates.regionInABox]: {
+    name: "Region In A Box",
+    description: "Email sent when a region creates their first event.",
+    fields: [
+      {
+        name: "regionName",
+        label: "Region Name",
+        type: "text",
+        default: "Test Region",
+      },
+    ],
+  },
 };
 
 const formSchema = z.object({

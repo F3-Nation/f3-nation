@@ -1,16 +1,9 @@
 import type { Session } from "@acme/auth";
 import type { UserRole } from "@acme/shared/app/enums";
 import { aliasedTable, eq, schema } from "@acme/db";
-import {
-  isProductionNodeEnv,
-  isTestNodeEnv,
-} from "@acme/shared/common/constants";
-
 import type { Context } from "./shared";
 
-const ALLOW_MTNDEV_OVERRIDE = false as boolean;
-
-const LOG = false as boolean;
+import { logDebug } from "./logger";
 
 export const checkHasRoleOnOrg = async ({
   session,
@@ -26,7 +19,7 @@ export const checkHasRoleOnOrg = async ({
   success: boolean;
   orgId: number | null;
   roleName: UserRole | null;
-  mode: "mtndev-override" | "direct-permission" | "org-admin" | "no-permission";
+  mode: "direct-permission" | "org-admin" | "no-permission";
 }> => {
   if (!session) {
     return {
@@ -37,35 +30,12 @@ export const checkHasRoleOnOrg = async ({
     };
   }
 
-  if (LOG)
-    console.log(
-      "Checking if user has role on org",
-      session.id,
-      orgId,
-      roleName,
-      "roles",
-      session.roles,
-    );
-
-  // F3 Nation
-  if (
-    session.email === "declan@mountaindev.com" ||
-    (!isProductionNodeEnv && !isTestNodeEnv && ALLOW_MTNDEV_OVERRIDE)
-  ) {
-    const nations = await db
-      .select()
-      .from(schema.orgs)
-      .where(eq(schema.orgs.orgType, "nation"));
-    console.log("OVERRIDING ROLE DUE TO MTNDEV OVERRIDE (OR DEV)");
-    if (nations.find((n) => n.id === orgId)) {
-      return {
-        success: true,
-        orgId,
-        roleName,
-        mode: "mtndev-override",
-      };
-    }
-  }
+  logDebug("api.role_check.checking", {
+    userId: session.id,
+    orgId,
+    roleName,
+    roles: session.roles,
+  });
 
   const hasDirectAccessForThisOrg = session.roles?.some(
     (r) =>

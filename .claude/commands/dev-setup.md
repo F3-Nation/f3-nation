@@ -146,8 +146,8 @@ When called with `status`, check everything without modifying anything:
 ```
 --- DEV ENVIRONMENT STATUS ---
 Prerequisites:
-  Node.js:           v24.14.1 ✓
-  pnpm:              10.33.0 ✓
+  Node.js:           v24.17.0 ✓
+  pnpm:              11.6.0 ✓
   gcloud:            512.0.0 ✓
   cloud-sql-proxy:   2.21.2 ✓
 

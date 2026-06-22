@@ -24,14 +24,14 @@ echo "  F3 Nation — Local Dev Setup"
 echo "  ────────────────────────────────────────────"
 
 # ── Step 1: Copy per-directory env files ─────────────────────────────────────
-echo "  → Copying .env.local.example files..."
+echo "  → Copying .env.example files..."
 _env_ts=$(date +%Y%m%d%H%M%S)
-for dir in apps/api apps/auth apps/map apps/me apps/admin packages/env; do
+for dir in apps/api apps/auth apps/map apps/me apps/admin apps/homepage packages/env; do
   if [ -f "$dir/.env" ]; then
     mv "$dir/.env" "$dir/.env.bak.$_env_ts"
     echo "     $dir/.env backed up → $dir/.env.bak.$_env_ts"
   fi
-  cp "$dir/.env.local.example" "$dir/.env"
+  cp "$dir/.env.example" "$dir/.env"
   echo "     $dir/.env created"
 done
 

@@ -11,11 +11,12 @@ import { DefaultSubject, renderTemplate, Templates } from "./templates";
  * Default recipients for each template
  */
 export const DefaultTo: Partial<Record<Templates, string | string[]>> = {
-  [Templates.feedbackForm]: env.EMAIL_ADMIN_DESTINATIONS.split(","),
+  [Templates.feedbackForm]: env.EMAIL_ADMIN_DESTINATIONS?.split(",") ?? [],
 };
 
 type TemplateMessage<T extends Templates> = TemplateType[T] & {
   to?: string | string[];
+  cc?: string | string[];
   subject?: string;
   from?: string;
 };
@@ -28,7 +29,7 @@ export class MailService {
   private transporter: nodemailer.Transporter<SMTPTransport.SentMessageInfo> | null =
     null;
   templates = Templates;
-  adminDestinations: string[] = env.EMAIL_ADMIN_DESTINATIONS.split(",");
+  adminDestinations: string[] = env.EMAIL_ADMIN_DESTINATIONS?.split(",") ?? [];
 
   constructor() {
     //

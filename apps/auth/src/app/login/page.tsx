@@ -14,13 +14,13 @@ export default function LoginPage() {
             priority
           />
           <h1 className="text-3xl font-bold">F3 Nation Auth Provider</h1>
-          <p className="text-base text-muted-foreground text-center">
+          <p className="text-center text-base text-muted-foreground">
             Central authentication service for F3 Nation applications
           </p>
         </div>
         <Link
           href="/login/email"
-          className="flex w-full items-center justify-center rounded-md bg-primary px-4 py-3 text-base font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+          className="flex w-full items-center justify-center rounded-md bg-primary px-4 py-3 text-base font-medium text-primary-foreground transition-colors hover:bg-primary/90"
         >
           Sign in with Email
         </Link>

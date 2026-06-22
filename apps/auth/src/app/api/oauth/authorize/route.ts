@@ -16,7 +16,9 @@ import { rateLimit } from "~/lib/rate-limit";
 import { env } from "~/env";
 
 export async function GET(request: NextRequest) {
-  const ip = request.headers.get("x-forwarded-for") ?? "unknown";
+  const ip =
+    request.headers.get("x-forwarded-for")?.split(",").at(-1)?.trim() ??
+    "unknown";
   const { allowed } = rateLimit(`authorize:${ip}`, 30, 60 * 1000);
   if (!allowed) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
@@ -33,6 +35,29 @@ export async function GET(request: NextRequest) {
   const codeChallenge = searchParams.get("code_challenge");
   const codeChallengeMethod =
     searchParams.get("code_challenge_method") ?? "plain";
+
+  // Require PKCE for all authorization requests.
+  // Only S256 is accepted — plain transfers the verifier in the clear and
+  // provides no meaningful protection (RFC 7636 §4.2 / OAuth 2.1 §4.1.1).
+  if (!codeChallenge) {
+    return NextResponse.json(
+      {
+        error: "invalid_request",
+        error_description: "code_challenge is required",
+      },
+      { status: 400 },
+    );
+  }
+  if (codeChallengeMethod !== "S256") {
+    return NextResponse.json(
+      {
+        error: "invalid_request",
+        error_description:
+          "Unsupported code_challenge_method — only S256 is accepted",
+      },
+      { status: 400 },
+    );
+  }
 
   // Validate required params
   if (responseType !== "code") {
@@ -88,7 +113,15 @@ export async function GET(request: NextRequest) {
     .where(eq(users.id, userId))
     .limit(1);
 
-  const meta = (dbUser?.meta ?? {}) as Record<string, unknown>;
+  // User not found in DB — session is stale (e.g. after a DB wipe). Force re-login.
+  if (!dbUser) {
+    const callbackUrl = `${publicUrl}${reqUrl.pathname}${reqUrl.search}`;
+    const loginUrl = new URL("/login/email", publicUrl);
+    loginUrl.searchParams.set("callbackUrl", callbackUrl);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  const meta = (dbUser.meta ?? {}) as Record<string, unknown>;
   if (!meta.onboarding_completed) {
     const callbackUrl = `${publicUrl}${reqUrl.pathname}${reqUrl.search}`;
     const onboardingUrl = new URL("/onboarding", publicUrl);

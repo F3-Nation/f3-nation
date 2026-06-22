@@ -275,6 +275,8 @@ const columns: TableOptions<WorkoutEvent>["columns"] = [
     id: "id",
     enableHiding: false,
     cell: ({ row }) => {
+      if (!row.original.isActive) return null;
+
       return (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -293,7 +295,7 @@ const columns: TableOptions<WorkoutEvent>["columns"] = [
                 });
               }}
             >
-              <div>Delete</div>
+              <div>Deactivate</div>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

@@ -2,8 +2,8 @@ import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 
 import { auth } from "@acme/auth";
-import { env } from "@acme/env";
 import { isNationAdminFromSession } from "@acme/shared/app/role-checks";
+import { env } from "~/env";
 
 export async function POST(request: Request) {
   try {

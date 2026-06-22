@@ -12,9 +12,9 @@ import { vi } from "vitest";
 const mockLimit = vi.hoisted(() => vi.fn());
 
 vi.mock("@orpc/experimental-ratelimit/memory", () => ({
-  MemoryRatelimiter: vi.fn().mockImplementation(() => ({
-    limit: mockLimit,
-  })),
+  MemoryRatelimiter: vi.fn(function () {
+    return { limit: mockLimit };
+  }),
 }));
 
 import { eq, schema } from "@acme/db";
@@ -1498,6 +1498,121 @@ describe("Event Router", () => {
           // ~12 Wednesdays from Jan 1 to March 31
           expect(instances.length).toBeGreaterThanOrEqual(12);
         }
+      });
+
+      it("should update instances in place (not duplicate) when updating a series with null recurrencePattern", async () => {
+        // Regression test: a series with dayOfWeek set but recurrencePattern = null was
+        // incorrectly treated as a non-series event on update, causing createEventInstancesForSeries
+        // to run again and duplicate all existing instances.
+        const session = await createAdminSession();
+        await mockAuthWithSession(session);
+
+        const region = await createTestRegion();
+        if (!region) return;
+
+        const ao = await createTestAO(region.id);
+        if (!ao) return;
+
+        const location = await createTestLocation(region.id);
+        if (!location) return;
+
+        const eventType = await createTestEventType();
+        if (!eventType) return;
+
+        const editorSession = createEditorSession({
+          orgId: ao.id,
+          orgName: ao.name,
+        });
+        await mockAuthWithSession(editorSession);
+
+        const client = createTestClient();
+
+        // Step 1: Create a series with dayOfWeek set and recurrencePattern: null (defaults to weekly)
+        const createResult = await client.event.crupdate({
+          name: `Null Recurrence Regression ${uniqueId()}`,
+          aoId: ao.id,
+          regionId: region.id,
+          locationId: location.id,
+          dayOfWeek: "thursday",
+          startTime: "0530",
+          endTime: "0615",
+          startDate: "2027-01-01",
+          endDate: "2027-03-31",
+          recurrencePattern: null,
+          recurrenceInterval: null,
+          indexWithinInterval: null,
+          highlight: false,
+          isActive: true,
+          eventTypeIds: [eventType.id],
+          email: null,
+        });
+
+        expect(createResult.event).not.toBeNull();
+        const seriesId = createResult.event!.id;
+        createdEventIds.push(seriesId);
+
+        // Step 2: Record the unique instance dates after creation
+        const instancesAfterCreate = await db
+          .select({
+            id: schema.eventInstances.id,
+            startDate: schema.eventInstances.startDate,
+          })
+          .from(schema.eventInstances)
+          .where(eq(schema.eventInstances.seriesId, seriesId));
+
+        expect(instancesAfterCreate.length).toBeGreaterThan(0);
+        const datesAfterCreate = instancesAfterCreate
+          .map((i) => i.startDate)
+          .sort();
+
+        // Step 3: Update a non-structural field (name) — recurrencePattern stays null
+        const updatedName = `Null Recurrence Regression Updated ${uniqueId()}`;
+        const updateResult = await client.event.crupdate({
+          id: seriesId,
+          name: updatedName,
+          aoId: ao.id,
+          regionId: region.id,
+          locationId: location.id,
+          dayOfWeek: "thursday",
+          startTime: "0530",
+          endTime: "0615",
+          startDate: "2027-01-01",
+          endDate: "2027-03-31",
+          recurrencePattern: null,
+          recurrenceInterval: null,
+          indexWithinInterval: null,
+          highlight: false,
+          isActive: true,
+          eventTypeIds: [eventType.id],
+          email: null,
+        });
+
+        expect(updateResult.event?.name).toBe(updatedName);
+
+        // Step 4: Assert no duplicate instances were created
+        const instancesAfterUpdate = await db
+          .select({
+            id: schema.eventInstances.id,
+            startDate: schema.eventInstances.startDate,
+            name: schema.eventInstances.name,
+          })
+          .from(schema.eventInstances)
+          .where(eq(schema.eventInstances.seriesId, seriesId));
+
+        const datesAfterUpdate = instancesAfterUpdate
+          .map((i) => i.startDate)
+          .sort();
+
+        // Instance count must not increase
+        expect(instancesAfterUpdate.length).toBe(instancesAfterCreate.length);
+
+        // Dates must be identical (no duplicates, no new entries)
+        expect(datesAfterUpdate).toEqual(datesAfterCreate);
+
+        // Instances should reflect the updated name
+        expect(instancesAfterUpdate.every((i) => i.name === updatedName)).toBe(
+          true,
+        );
       });
 
       it("should cascade soft-delete to instances when deleting a series", async () => {

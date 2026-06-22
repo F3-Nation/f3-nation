@@ -407,7 +407,7 @@ export default function AdminManageAccessModal({
                                 placeholder={
                                   data?.userId
                                     ? field.value
-                                      ? userByIdData?.user?.email ?? ""
+                                      ? (userByIdData?.user?.email ?? "")
                                       : "Email not available"
                                     : ""
                                 }
@@ -531,7 +531,7 @@ export default function AdminManageAccessModal({
                                       {selectedUser.email}
                                     </p>
                                   ) : (
-                                    <p className="truncate text-sm text-muted-foreground italic">
+                                    <p className="truncate text-sm italic text-muted-foreground">
                                       Email not available
                                     </p>
                                   )}

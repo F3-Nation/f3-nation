@@ -4,23 +4,15 @@ import { redirect } from "next/navigation";
 
 import { routes } from "@acme/shared/app/constants";
 
-import {
-  ACCESS_TOKEN_COOKIE_NAME,
-  REFRESH_TOKEN_COOKIE_NAME,
-} from "./constants";
+import { ACCESS_TOKEN_COOKIE_NAME } from "./constants";
 import type { AdminSession } from "./session";
-import { parseAccessTokenPayload } from "./tokens";
+import { verifyAccessTokenPayload } from "./tokens";
 import { getMyProfile } from "~/lib/api/client";
 
 const NO_ADMIN_ACCESS_PATH = `${routes.admin.noAccess.__path}?reason=no-admin-access`;
 
-const getCachedSessionPayload = cache((accessToken: string) => {
-  let payload: ReturnType<typeof parseAccessTokenPayload>;
-  try {
-    payload = parseAccessTokenPayload(accessToken);
-  } catch {
-    return null;
-  }
+const getCachedSessionPayload = cache(async (accessToken: string) => {
+  const payload = await verifyAccessTokenPayload(accessToken);
 
   if (!payload?.sub || !payload.email) return null;
 
@@ -41,21 +33,16 @@ export async function getAccessToken(): Promise<string | null> {
   return cookieStore.get(ACCESS_TOKEN_COOKIE_NAME)?.value ?? null;
 }
 
-export async function getRefreshToken(): Promise<string | null> {
-  const cookieStore = await cookies();
-  return cookieStore.get(REFRESH_TOKEN_COOKIE_NAME)?.value ?? null;
-}
-
-export function getSessionFromAccessToken(
+async function getSessionFromAccessToken(
   accessToken: string,
-): AdminSession | null {
+): Promise<AdminSession | null> {
   return getCachedSessionPayload(accessToken);
 }
 
 export async function getSessionUser(): Promise<AdminSession | null> {
   const accessToken = await getAccessToken();
   if (!accessToken) return null;
-  const session = getSessionFromAccessToken(accessToken);
+  const session = await getSessionFromAccessToken(accessToken);
   if (!session) return null;
 
   try {
@@ -74,15 +61,6 @@ export async function getSessionUser(): Promise<AdminSession | null> {
     console.warn("Failed to hydrate admin roles from API", error);
     return session;
   }
-}
-
-export async function requireAuth(): Promise<AdminSession> {
-  const user = await getSessionUser();
-  if (!user) {
-    redirect("/api/auth/login");
-  }
-
-  return user;
 }
 
 export async function requireAdminPortalAccess(
@@ -106,7 +84,7 @@ export async function requireAdminPortalAccess(
 
 export async function requireAccessToken(): Promise<string> {
   const accessToken = await getAccessToken();
-  if (!accessToken || !getSessionFromAccessToken(accessToken)) {
+  if (!accessToken || !(await getSessionFromAccessToken(accessToken))) {
     redirect("/api/auth/login");
   }
 

@@ -27,7 +27,7 @@ declare -A PROJECT_MAP=(
 )
 
 SERVICE_NAME="f3-me"
-REGION="us-east1"
+REGION="us-central1"
 
 # Env vars that map to GCP secrets (var name → secret ID)
 # Only genuinely sensitive values go here.
@@ -42,6 +42,7 @@ ENV_FILE_VARS=(
   OAUTH_REDIRECT_URI
   F3_API_BASE_URL
   GCS_BUCKET
+  NEXT_PUBLIC_GA_MEASUREMENT_ID
   NEXT_PUBLIC_SITE_URL
 )
 

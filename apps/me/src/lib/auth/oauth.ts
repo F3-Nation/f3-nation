@@ -6,33 +6,24 @@ import type {
   OauthClient,
 } from "@acme/sso";
 
-function getRequiredEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) throw new Error(`${name} env var is required`);
-  return value;
-}
+import { env } from "@/env";
 
 function buildAuthConfig(): AuthClientConfig {
-  const authServerUrl = getRequiredEnv("AUTH_PROVIDER_URL");
-  if (
-    process.env.NODE_ENV === "production" &&
-    !authServerUrl.startsWith("https://")
-  ) {
+  const authServerUrl = env.AUTH_PROVIDER_URL;
+  if (env.NODE_ENV === "production" && !authServerUrl.startsWith("https://")) {
     throw new Error("AUTH_PROVIDER_URL must use HTTPS in production");
   }
   return {
-    clientId: getRequiredEnv("OAUTH_CLIENT_ID"),
-    clientSecret: getRequiredEnv("OAUTH_CLIENT_SECRET"),
-    redirectUri: getRequiredEnv("OAUTH_REDIRECT_URI"),
+    clientId: env.OAUTH_CLIENT_ID,
+    clientSecret: env.OAUTH_CLIENT_SECRET,
+    redirectUri: env.OAUTH_REDIRECT_URI,
     authServerUrl,
   };
 }
 
 let _authClient: AuthClient | null = null;
 function getAuthClient(): AuthClient {
-  if (!_authClient) {
-    _authClient = new AuthClient(buildAuthConfig());
-  }
+  _authClient ??= new AuthClient(buildAuthConfig());
   return _authClient;
 }
 

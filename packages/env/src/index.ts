@@ -18,19 +18,23 @@ export const env = createEnv({
       process.env.NODE_ENV === "production"
         ? z.string().min(1)
         : z.string().min(1).optional(),
-    DATABASE_URL: z.string().min(1),
+    DATABASE_URL: z.string().min(1).optional(),
     EMAIL_SERVER: z.string().min(1),
     EMAIL_FROM: z.string().min(1),
     NODE_ENV: z
       .enum(["development", "production", "test"])
       .default("development"),
+    LOG_LEVEL: z
+      .enum(["trace", "debug", "info", "warn", "error", "fatal"])
+      .default("info"),
     EMAIL_ADMIN_DESTINATIONS: z.string().min(1),
+    EMAIL_REGION_IN_A_BOX_CC: z.string().min(1).optional(),
     GOOGLE_LOGO_BUCKET_PRIVATE_KEY: z.string().min(1),
     GOOGLE_LOGO_BUCKET_CLIENT_EMAIL: z.string().min(1),
     GOOGLE_LOGO_BUCKET_BUCKET_NAME: z.string().min(1),
-    TEST_DATABASE_URL: z.string().min(1),
+    TEST_DATABASE_URL: z.string().min(1).optional(),
     API_KEY: z.string().min(1),
-    SUPER_ADMIN_API_KEY: z.string().min(1),
+    SUPER_ADMIN_API_KEY: z.string().min(1).optional(),
     NOTIFY_WEBHOOK_URLS_COMMA_SEPARATED: z.string().optional(),
     GCS_EMULATOR_HOST: z.string().optional(),
   },

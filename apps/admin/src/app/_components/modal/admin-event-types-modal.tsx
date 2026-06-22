@@ -103,8 +103,7 @@ export default function AdminEventTypesModal({
       onError: (err) => {
         toast.error(
           err instanceof ORPCError && err?.code === "UNAUTHORIZED"
-            ? err.message ??
-                `You are not authorized to ${actionText} this Event Type`
+            ? `You are not authorized to ${actionText} this event type`
             : `Failed to ${actionText} event type`,
         );
       },
@@ -133,12 +132,14 @@ export default function AdminEventTypesModal({
     }
   };
 
+  const showDeleteButton = isEditing && eventType?.isActive !== false;
+
   return (
     <Dialog open={true} onOpenChange={() => closeModal()}>
       <DialogContent
         style={{ zIndex: Z_INDEX.HOW_TO_JOIN_MODAL }}
         className={cn(
-          `max-w-[95%] rounded-lg sm:max-w-[90%] lg:max-w-[600px] max-h-[90vh] overflow-y-auto`,
+          `max-h-[90vh] max-w-[95%] overflow-y-auto rounded-lg sm:max-w-[90%] lg:max-w-[600px]`,
         )}
       >
         <DialogHeader>
@@ -272,20 +273,22 @@ export default function AdminEventTypesModal({
                   )}
                 </Button>
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  closeModal();
-                  openModal(ModalType.ADMIN_DELETE_CONFIRMATION, {
-                    id: eventType?.id ?? -1,
-                    type: DeleteType.EVENT_TYPE,
-                  });
-                }}
-                className="w-full"
-              >
-                Delete Event
-              </Button>
+              {showDeleteButton ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    closeModal();
+                    openModal(ModalType.ADMIN_DELETE_CONFIRMATION, {
+                      id: eventType?.id ?? -1,
+                      type: DeleteType.EVENT_TYPE,
+                    });
+                  }}
+                  className="w-full"
+                >
+                  Deactivate Event Type
+                </Button>
+              ) : null}
             </div>
           </div>
         </Form>

@@ -12,11 +12,11 @@ Query Cloud Run logs for any app in this monorepo. Defaults to **auth** on **sta
 
 See `apps.conf` for the full registry. Currently:
 
-| App    | Staging Project               | Prod Project         | Region       |
-| ------ | ----------------------------- | -------------------- | ------------ |
-| `auth` | `f3-authentication-staging`   | `f3-authentication`  | `us-east1`   |
-| `api`  | `f3-api-472214`               | `f3-api-472214`      | `us-central1`|
-| `map`  | `pin-mastery`                 | `pin-mastery`        | `us-central1`|
+| App    | Staging Project             | Prod Project        | Region        |
+| ------ | --------------------------- | ------------------- | ------------- |
+| `auth` | `f3-authentication-staging` | `f3-authentication` | `us-central1` |
+| `api`  | `f3-api-app-staging`        | `f3-api-app`        | `us-central1` |
+| `map`  | `pin-mastery`               | `pin-mastery`       | `us-central1` |
 
 ## Instructions
 
@@ -79,10 +79,10 @@ If there are errors, offer to dig deeper into specific log entries by their `ins
 
 The following app + environment combinations have been verified working:
 
-| App    | Staging | Prod | Notes |
-| ------ | ------- | ---- | ----- |
-| `auth` | ✅      | ✅   | Primary use case — originally built for this app |
-| `api`  | ✅      | ✅   | GCP project `f3-api-472214`, service names differ per env |
+| App    | Staging | Prod | Notes                                                                   |
+| ------ | ------- | ---- | ----------------------------------------------------------------------- |
+| `auth` | ✅      | ✅   | Primary use case — originally built for this app                        |
+| `api`  | ✅      | ✅   | GCP projects `f3-api-app-staging` / `f3-api-app`, region `us-central1`  |
 | `map`  | ✅      | ✅   | GCP project `pin-mastery`, Cloud Run service is `f3-2` / `f3-2-staging` |
 
 ## Adding a New App

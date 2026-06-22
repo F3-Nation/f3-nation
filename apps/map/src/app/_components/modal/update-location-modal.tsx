@@ -3,7 +3,6 @@ import gte from "lodash/gte";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { v4 as uuid } from "uuid";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
 import {
@@ -87,7 +86,7 @@ export const UpdateLocationModal = ({
           ...values,
           eventStartTime: convertHH_mmToHHmm(values.eventStartTime ?? ""),
           eventEndTime: convertHH_mmToHHmm(values.eventEndTime ?? ""),
-          eventId: gte(data.eventId, 0) ? data.eventId ?? null : null,
+          eventId: gte(data.eventId, 0) ? (data.eventId ?? null) : null,
         };
 
         const result = await submitUpdateRequest(updateRequestData);
@@ -156,7 +155,7 @@ export const UpdateLocationModal = ({
   );
 
   useEffect(() => {
-    form.setValue("id", uuid());
+    form.setValue("id", crypto.randomUUID());
     form.setValue("requestType", data.requestType);
     if (data.regionId != null && data.regionId !== -1) {
       form.setValue("regionId", data.regionId);

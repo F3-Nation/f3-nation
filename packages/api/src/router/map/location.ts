@@ -253,6 +253,7 @@ export const mapLocationRouter = os.router({
             parentName: z.string().nullable().describe("Parent AO name"),
             parentWebsite: z.string().nullable().describe("Parent AO website"),
             parentEmail: z.string().nullable().describe("Parent AO email"),
+            parentPhone: z.string().nullable().describe("Parent AO phone"),
             parentTwitter: z.string().nullable().describe("Parent AO Twitter"),
             parentFacebook: z
               .string()
@@ -267,6 +268,7 @@ export const mapLocationRouter = os.router({
             regionLogo: z.string().nullable().describe("Region logo URL"),
             regionWebsite: z.string().nullable().describe("Region website"),
             regionEmail: z.string().nullable().describe("Region email"),
+            regionPhone: z.string().nullable().describe("Region phone"),
             regionTwitter: z.string().nullable().describe("Region Twitter"),
             regionFacebook: z.string().nullable().describe("Region Facebook"),
             regionInstagram: z.string().nullable().describe("Region Instagram"),
@@ -339,6 +341,7 @@ export const mapLocationRouter = os.router({
             parentName: parentOrg.name,
             parentWebsite: parentOrg.website,
             parentEmail: parentOrg.email,
+            parentPhone: parentOrg.phone,
             parentTwitter: parentOrg.twitter,
             parentFacebook: parentOrg.facebook,
             parentInstagram: parentOrg.instagram,
@@ -347,6 +350,7 @@ export const mapLocationRouter = os.router({
             regionLogo: regionOrg.logoUrl,
             regionWebsite: regionOrg.website,
             regionEmail: regionOrg.email,
+            regionPhone: regionOrg.phone,
             regionTwitter: regionOrg.twitter,
             regionFacebook: regionOrg.facebook,
             regionInstagram: regionOrg.instagram,

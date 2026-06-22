@@ -239,7 +239,9 @@ declare module "next-auth" {
 }
 
 declare module "@tanstack/table-core" {
-  interface ColumnMeta {
+  // Type parameters must match the original declaration for the augmentation to
+  // merge (`RowData` is re-exported by @tanstack/table-core).
+  interface ColumnMeta<TData extends RowData, TValue> {
     // Used in the Header component and in csv
     name?: string;
     excludeFromCsv?: boolean;

@@ -11,14 +11,9 @@ import {
 } from "@acme/shared/app/constants";
 import { safeParseFloat, safeParseInt } from "@acme/shared/common/functions";
 
-import type { SparseF3Marker } from "~/utils/types";
 import { getQueryData, orpc } from "~/orpc/react";
 import { mapStore } from "~/utils/store/map";
 import { setSelectedItem } from "~/utils/store/selected-item";
-
-export type LocationMarkerWithDistance = SparseF3Marker & {
-  distance: number | null;
-};
 
 const InitialLocationContext = createContext<{
   initialCenter: google.maps.LatLngLiteral;
@@ -93,7 +88,7 @@ const SuspendedInitialLocationProvider = (params: { children: ReactNode }) => {
       !!queryLocationId || (queryLat != null && queryLon != null)
       ? CLOSE_ZOOM
       : // Otherwise, use the stored zoom or default zoom
-        mapStore.get("zoom") ?? DEFAULT_ZOOM;
+        (mapStore.get("zoom") ?? DEFAULT_ZOOM);
 
   if (!hasAttemptedSetInitialSelectedItem.current) {
     hasAttemptedSetInitialSelectedItem.current = true;

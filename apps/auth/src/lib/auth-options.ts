@@ -7,6 +7,7 @@ import type { UserMeta } from "@acme/shared/app/types";
 
 import { db } from "~/lib/db";
 import { sendEmailCode, verifyEmailCode } from "~/lib/email-mfa";
+import { logError } from "~/lib/logging";
 import { env } from "~/env";
 
 export const authOptions: NextAuthConfig = {
@@ -52,7 +53,7 @@ export const authOptions: NextAuthConfig = {
           try {
             await sendEmailCode(email);
           } catch (err) {
-            console.error("sendEmailCode failed in authorize:", err);
+            logError("auth.authorize.send_code_failed", {}, err);
             throw new Error(
               "Failed to send verification code. Please try again.",
             );
@@ -94,7 +95,7 @@ export const authOptions: NextAuthConfig = {
             status: users.status,
           })
           .from(users)
-          .where(eq(users.id, token.userId as number))
+          .where(eq(users.id, token.userId))
           .limit(1);
 
         if (dbUser) {

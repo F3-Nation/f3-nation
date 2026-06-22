@@ -6,6 +6,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import Image from "next/image";
 
+import { isValidCallbackUrl } from "~/lib/callback-url";
+
 export default function VerifyEmailPage() {
   return (
     <Suspense>
@@ -61,8 +63,17 @@ function VerifyEmailForm() {
         return;
       }
 
-      // Success — redirect
-      router.push(callbackUrl);
+      // Success — redirect. Guard against open-redirect: only follow
+      // same-origin or relative callbackUrls. Use the canonical auth URL
+      // (not window.location.origin) so the check stays consistent with the
+      // server-side guard in sendEmailCode even when served behind a proxy.
+      const safeUrl = isValidCallbackUrl(
+        callbackUrl,
+        process.env.NEXT_PUBLIC_AUTH_URL ?? window.location.origin,
+      )
+        ? callbackUrl
+        : "/";
+      router.push(safeUrl);
     },
     [email, callbackUrl, router],
   );
@@ -100,7 +111,7 @@ function VerifyEmailForm() {
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label htmlFor="code" className="block text-base font-medium mb-2">
+            <label htmlFor="code" className="mb-2 block text-base font-medium">
               Verification code
             </label>
             <input
@@ -113,7 +124,7 @@ function VerifyEmailForm() {
               value={code}
               onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
               placeholder="000000"
-              className="w-full rounded-md border bg-background px-3 py-2 text-center text-2xl font-mono tracking-[0.5em] outline-none focus:ring-2 focus:ring-ring"
+              className="w-full rounded-md border bg-background px-3 py-2 text-center font-mono text-2xl tracking-[0.5em] outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
 
@@ -122,7 +133,7 @@ function VerifyEmailForm() {
           <button
             type="submit"
             disabled={loading || code.length !== 6}
-            className="w-full rounded-md bg-primary px-4 py-3 text-base font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+            className="w-full rounded-md bg-primary px-4 py-3 text-base font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
           >
             {loading ? "Verifying..." : "Verify"}
           </button>

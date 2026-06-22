@@ -9,5 +9,9 @@ export default defineConfig({
     setupFiles: ["./src/__tests__/setup.ts"],
     fileParallelism: false,
     env: { NODE_ENV: "test" },
+    coverage: {
+      provider: "v8",
+      include: ["src/**/*.{ts,tsx}"],
+    },
   },
 });
