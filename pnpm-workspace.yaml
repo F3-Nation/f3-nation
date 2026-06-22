@@ -54,7 +54,7 @@ catalog:
   "@turbo/gen": ^1.12.3
   "@types/geojson": ^7946.0.16
   "@types/google.maps": ^3.65.0
-  "@types/lodash": ^4.14.195
+  "@types/lodash": ^4.17.24
   "@types/node": ^24.12.4
   "@types/nodemailer": ^8.0.0
   "@types/pg": ^8.10.9
