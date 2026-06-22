@@ -423,6 +423,7 @@ export const LocationEventForm = ({
                     type="file"
                     accept="image/*"
                     onChange={async (e) => {
+                      const input = e.currentTarget;
                       if (formRegionId == null) {
                         toast.error("Please select a region first");
                         return;
@@ -442,6 +443,8 @@ export const LocationEventForm = ({
                             ? err.message
                             : "Failed to upload logo",
                         );
+                      } finally {
+                        input.value = "";
                       }
                     }}
                     disabled={lt(formRegionId, 0)}
