@@ -56,7 +56,7 @@ catalog:
   "@types/google.maps": ^3.65.0
   "@types/lodash": ^4.14.195
   "@types/node": ^24.12.4
-  "@types/nodemailer": ^8.0.0
+  "@types/nodemailer": ^8.0.1
   "@types/pg": ^8.10.9
   "@types/react": ^18.3.1
   "@types/react-dom": ^18.3.1

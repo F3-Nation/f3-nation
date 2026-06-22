@@ -160,8 +160,8 @@ catalogs:
       specifier: ^24.12.4
       version: 24.12.4
     '@types/nodemailer':
-      specifier: ^8.0.0
-      version: 8.0.0
+      specifier: ^8.0.1
+      version: 8.0.1
     '@types/pg':
       specifier: ^8.10.9
       version: 8.20.0
@@ -784,7 +784,7 @@ importers:
         version: 24.12.4
       '@types/nodemailer':
         specifier: 'catalog:'
-        version: 8.0.0
+        version: 8.0.1
       '@types/pg':
         specifier: 'catalog:'
         version: 8.20.0
@@ -1044,7 +1044,7 @@ importers:
         version: 24.12.4
       '@types/nodemailer':
         specifier: 'catalog:'
-        version: 8.0.0
+        version: 8.0.1
       '@types/react':
         specifier: 'catalog:'
         version: 18.3.28
@@ -1359,7 +1359,7 @@ importers:
         version: 4.17.24
       '@types/nodemailer':
         specifier: 'catalog:'
-        version: 8.0.0
+        version: 8.0.1
       eslint:
         specifier: 'catalog:'
         version: 10.4.0(jiti@2.7.0)
@@ -1507,7 +1507,7 @@ importers:
         version: link:../../tooling/typescript
       '@types/nodemailer':
         specifier: 'catalog:'
-        version: 8.0.0
+        version: 8.0.1
       eslint:
         specifier: 'catalog:'
         version: 10.4.0(jiti@2.7.0)
@@ -5326,8 +5326,8 @@ packages:
   '@types/node@25.9.2':
     resolution: {integrity: sha512-G05zqtJhcDLb8uslf5EjCxXg9G1KQxiV8OS0R26IC//Eoyitzqe8z37I7cqvnZlrlSfgocQRfSn/AHBZJJFyGw==}
 
-  '@types/nodemailer@8.0.0':
-    resolution: {integrity: sha512-fyf8jWULsCo0d0BuoQ75i6IeoHs47qcqxWc7yUdUcV0pOZGjUTTOvwdG1PRXUDqN/8A64yQdQdnA2pZgcdi+cA==}
+  '@types/nodemailer@8.0.1':
+    resolution: {integrity: sha512-PxpaInm8V1JQDd4j0ds5HfvWQk8JupS1C0Picb96QJsrrRDjBH+DlK7L4ZdNSqNULhiZRQHc40nLVShaGxXAMw==}
 
   '@types/pg-pool@2.0.6':
     resolution: {integrity: sha512-TaAUE5rq2VQYxab5Ts7WZhKNmuN78Q6PiFonTDdpbx8a1H0M1vhy3rhiMjl+e2iHmogyMw7jZF4FrE6eJUy5HQ==}
@@ -12453,7 +12453,7 @@ snapshots:
     dependencies:
       undici-types: 7.24.6
 
-  '@types/nodemailer@8.0.0':
+  '@types/nodemailer@8.0.1':
     dependencies:
       '@types/node': 25.9.2
 
