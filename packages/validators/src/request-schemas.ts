@@ -58,7 +58,7 @@ export type LocationFieldsType = z.infer<typeof LocationFields>;
 
 // Region-related fields
 export const RegionFields = z.object({
-  originalRegionId: z.number(),
+  originalRegionId: z.number().positive("Original region ID is required"),
 });
 
 export type RegionFieldsType = z.infer<typeof RegionFields>;

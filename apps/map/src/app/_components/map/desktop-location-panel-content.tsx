@@ -54,6 +54,8 @@ export const DesktopLocationPanelContent = () => {
     >
       {/* Close button in the top right */}
       <button
+        type="button"
+        aria-label="Close location panel"
         className="absolute right-2 top-2 rounded-full bg-muted-foreground px-1 py-1 text-sm text-background"
         onClick={(e) => {
           closePanel();

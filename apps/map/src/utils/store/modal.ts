@@ -26,7 +26,6 @@ export enum ModalType {
   WORKOUT_DETAILS = "WORKOUT_DETAILS",
   INFO = "INFO",
   SETTINGS = "SETTINGS",
-  DELETE_CONFIRMATION = "DELETE_CONFIRMATION",
   QR_CODE = "QR_CODE",
   ABOUT_MAP = "ABOUT_MAP",
   MAP_HELP = "MAP_HELP",
@@ -161,10 +160,6 @@ export interface DataType {
   [ModalType.INFO]: null;
   [ModalType.USER_LOCATION_INFO]: null;
   [ModalType.SETTINGS]: null;
-  [ModalType.DELETE_CONFIRMATION]: {
-    type: DeleteType;
-    onConfirm: () => void;
-  };
   [ModalType.QR_CODE]: {
     url: string;
     fileName: string;

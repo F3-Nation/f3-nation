@@ -674,21 +674,7 @@ export const mapLocationRouter = os.router({
       const aos = await ctx.db
         .select({
           id: schema.orgs.id,
-          parentId: schema.orgs.parentId,
           name: schema.orgs.name,
-          orgType: schema.orgs.orgType,
-          defaultLocationId: schema.orgs.defaultLocationId,
-          description: schema.orgs.description,
-          isActive: schema.orgs.isActive,
-          logoUrl: schema.orgs.logoUrl,
-          website: schema.orgs.website,
-          email: schema.orgs.email,
-          twitter: schema.orgs.twitter,
-          facebook: schema.orgs.facebook,
-          instagram: schema.orgs.instagram,
-          lastAnnualReview: schema.orgs.lastAnnualReview,
-          meta: schema.orgs.meta,
-          created: schema.orgs.created,
           workouts: sql<string[]>`COALESCE(
             ARRAY_AGG(DISTINCT ${schema.events.name})
             FILTER (WHERE ${schema.events.name} IS NOT NULL),

@@ -47,8 +47,9 @@ import { MoveEventToNewLocationRequestForm } from "../forms/move-event-to-new-lo
 import { DeleteEventRequestForm } from "../forms/delete-event-request-form";
 import { DeleteAoRequestForm } from "../forms/delete-ao-request-form";
 
-const REQUEST_FORM_MAP: Partial<
-  Record<RequestType, React.ComponentType<AdminRequestFormProps>>
+const REQUEST_FORM_MAP: Record<
+  RequestType,
+  React.ComponentType<AdminRequestFormProps> | null
 > = {
   create_ao_and_location_and_event: CreateAoLocationEventRequestForm,
   create_event: CreateEventRequestForm,
@@ -62,6 +63,8 @@ const REQUEST_FORM_MAP: Partial<
   move_event_to_new_location: MoveEventToNewLocationRequestForm,
   delete_event: DeleteEventRequestForm,
   delete_ao: DeleteAoRequestForm,
+  // Legacy request type with no dedicated form; handled by the runtime guard.
+  edit: null,
 };
 
 export default function AdminRequestsModal({

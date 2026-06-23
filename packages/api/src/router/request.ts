@@ -53,6 +53,7 @@ import {
   handleMoveEventToNewLocation,
   recordUpdateRequest,
 } from "../lib/update-request-handlers";
+import { logError } from "../logger";
 import { notifyMapChangeRequest } from "../services/map-request-notification";
 import { editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
@@ -1036,7 +1037,11 @@ const notifyPendingRequest = async ({
         requestId: result.updateRequest.id,
       });
     } catch (error) {
-      console.error("Failed to send notification", { error });
+      logError(
+        "api.request.notify_failed",
+        { requestId: result.updateRequest.id },
+        error,
+      );
       // Don't fail the request if notification fails
     }
   }
@@ -1065,9 +1070,10 @@ const handleRequest = async <T extends HandleableRequestInput>({
   status: "approved" | "pending" | "rejected";
   updateRequest: { id: string };
 }> => {
-  const { permissions } = await checkRequest({ input, ctx });
+  const { permissions, submittedBy } = await checkRequest({ input, ctx });
   const updateRequestData = {
     ...input,
+    submittedBy,
   } as Pick<UpdateRequestData, "requestType" | "submittedBy"> &
     Record<string, unknown>;
   if (permissions.success) {

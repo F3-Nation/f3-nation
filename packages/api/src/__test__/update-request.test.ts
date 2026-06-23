@@ -509,10 +509,13 @@ describe("handleMoveAOToDifferentLocation - moves an AO to a different location"
 
     await handleMoveAOToDifferentLocation(ctx, request);
 
-    // Verify db.update was called to update events with the new location
-    expect(mockDb._mocks.mockUpdate).toHaveBeenCalledTimes(1);
+    // Verify db.update was called to update events and the AO default location
+    expect(mockDb._mocks.mockUpdate).toHaveBeenCalledTimes(2);
     expect(mockDb._mocks.mockSet).toHaveBeenCalledWith({ locationId: 2 });
-    expect(mockDb._mocks.mockWhere).toHaveBeenCalledTimes(1);
+    expect(mockDb._mocks.mockSet).toHaveBeenCalledWith({
+      defaultLocationId: 2,
+    });
+    expect(mockDb._mocks.mockWhere).toHaveBeenCalledTimes(2);
 
     const result = await recordUpdateRequest({
       ctx,
@@ -572,10 +575,13 @@ describe("handleMoveAOToNewLocation - moves an AO to a new location", () => {
       regionId: 1,
     });
 
-    // Verify db.update was called to update events with the new location
-    expect(mockDb._mocks.mockUpdate).toHaveBeenCalledTimes(1);
+    // Verify db.update was called to update events and the AO default location
+    expect(mockDb._mocks.mockUpdate).toHaveBeenCalledTimes(2);
     expect(mockDb._mocks.mockSet).toHaveBeenCalledWith({ locationId: 100 });
-    expect(mockDb._mocks.mockWhere).toHaveBeenCalledTimes(1);
+    expect(mockDb._mocks.mockSet).toHaveBeenCalledWith({
+      defaultLocationId: 100,
+    });
+    expect(mockDb._mocks.mockWhere).toHaveBeenCalledTimes(2);
 
     const result = await recordUpdateRequest({
       ctx,
@@ -784,37 +790,5 @@ describe("handleDeleteAO - soft deletes an AO and its events", () => {
         },
       }),
     );
-  });
-});
-
-describe("rejectSubmission - rejects a pending update request", () => {
-  it("creates a pending request first, then rejects it by updating status to rejected", async () => {
-    const { ctx, mockDb } = createMockContext();
-
-    // First create a pending request
-    const request = createEventRequest();
-    const pendingResult = await recordUpdateRequest({
-      ctx,
-      updateRequest: request,
-      status: "pending",
-    });
-
-    expect(pendingResult).toEqual(
-      expect.objectContaining({
-        id: "test-request-id",
-        status: "pending",
-        requestType: "create_event",
-      }),
-    );
-
-    // Simulate rejecting the request by calling db.update
-    mockDb._mocks.mockUpdate({});
-    mockDb._mocks.mockSet({ status: "rejected" });
-    await mockDb._mocks.mockWhere({});
-
-    // Verify db.update was called to set status to rejected
-    expect(mockDb._mocks.mockUpdate).toHaveBeenCalledTimes(1);
-    expect(mockDb._mocks.mockSet).toHaveBeenCalledWith({ status: "rejected" });
-    expect(mockDb._mocks.mockWhere).toHaveBeenCalledTimes(1);
   });
 });

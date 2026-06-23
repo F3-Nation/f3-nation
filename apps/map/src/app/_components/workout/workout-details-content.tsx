@@ -321,6 +321,7 @@ export const WorkoutDetailsContent = ({
             <Link
               href={event.aoWebsite}
               target="_blank"
+              rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-sm text-blue-600 underline hover:text-blue-800 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
             >
               Visit AO Website
@@ -383,6 +384,7 @@ export const WorkoutDetailsContent = ({
           <Link
             href={location.regionWebsite}
             target="_blank"
+            rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-sm text-blue-600 underline hover:text-blue-800 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
           >
             Visit Region Website

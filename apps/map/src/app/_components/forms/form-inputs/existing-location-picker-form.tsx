@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { PlusCircle } from "lucide-react";
 import { Controller, useFormContext } from "react-hook-form";
 
@@ -22,6 +22,7 @@ export const ExistingLocationPickerForm = (params: {
   const form = useFormContext<ExistingLocationPickerFormValues>();
   const formNewRegionId = form.watch("newRegionId");
   const formOriginalRegionId = form.watch("originalRegionId");
+  const formNewLocationId = form.watch("newLocationId");
 
   const disabled =
     (params.region === "newRegion" && !formNewRegionId) ||
@@ -71,6 +72,26 @@ export const ExistingLocationPickerForm = (params: {
     params.region,
     formOriginalRegionId,
     formNewRegionId,
+  ]);
+
+  // When the region changes the filtered options change too; clear a selected
+  // location that no longer belongs to the region so an invalid
+  // location/region pair can't be submitted. A null id means "create new
+  // location" and is always valid. Wait for location data so a pre-filled id
+  // isn't wiped before the options have loaded.
+  useEffect(() => {
+    if (formNewLocationId == null || !locations?.locations) return;
+    const stillValid = sortedRegionLocationOptions.some(
+      (option) => option.value === formNewLocationId.toString(),
+    );
+    if (!stillValid) {
+      form.setValue("newLocationId", null);
+    }
+  }, [
+    formNewLocationId,
+    locations?.locations,
+    sortedRegionLocationOptions,
+    form,
   ]);
 
   return (

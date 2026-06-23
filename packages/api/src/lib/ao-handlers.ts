@@ -81,8 +81,7 @@ export const updateAO = async (
     newLocationIds.push(...result.newLocationIds);
   }
 
-  const set: typeof schema.orgs.$inferInsert = {
-    ...ao,
+  const set: Partial<typeof schema.orgs.$inferInsert> = {
     ...removeUndefinedFromObject(params),
   };
 

@@ -19,6 +19,7 @@ import { RequestInsertSchema } from "@acme/validators";
 
 import type { Context } from "../shared";
 import type { UpdateRequestData } from "./types";
+import { logError, logInfo } from "../logger";
 import { createAO, updateAO } from "./ao-handlers";
 import { insertEvent, updateEvent, updateEventTypes } from "./event-handlers";
 import { insertLocation, updateLocation } from "./location-handlers";
@@ -190,7 +191,10 @@ export const recordUpdateRequest = async (params: {
   }
 
   if (!regionId) {
-    console.error("Region ID missing in update request", params.updateRequest);
+    logError("api.update_request.region_id_missing", {
+      requestId: params.updateRequest.id,
+      requestType: params.updateRequest.requestType,
+    });
     throw new Error("Region ID is required");
   }
 
@@ -265,7 +269,7 @@ export const recordUpdateRequest = async (params: {
       })
       .returning();
 
-    console.log("recordUpdateRequest: Insert/update completed", { updated });
+    logInfo("api.update_request.recorded", { requestId });
 
     if (!updated) {
       throw new Error("Failed to update request record");
@@ -273,11 +277,7 @@ export const recordUpdateRequest = async (params: {
 
     return updated;
   } catch (error) {
-    console.error("recordUpdateRequest: Database error", {
-      error,
-      requestId,
-      updateRequestInsertData,
-    });
+    logError("api.update_request.db_error", { requestId }, error);
     throw error;
   }
 };
@@ -286,48 +286,55 @@ export const handleCreateLocationAndEvent = async (
   ctx: Context,
   request: CreateAOAndLocationAndEventType,
 ) => {
-  // 1. Create location
-  const location = await insertLocation(ctx, {
-    regionId: request.originalRegionId,
-    locationName: undefined,
-    locationLat: request.locationLat,
-    locationLng: request.locationLng,
-    locationAddress: request.locationAddress,
-    locationAddress2: request.locationAddress2,
-    locationCity: request.locationCity,
-    locationState: request.locationState,
-    locationZip: request.locationZip,
-    locationCountry: request.locationCountry,
-    locationDescription: request.locationDescription,
-  });
-  const locationId = location.id;
+  // These four writes are mutually dependent (event references the AO and
+  // location). Run them in a single transaction so a later failure can't leave
+  // an orphaned location/AO/event behind.
+  await ctx.db.transaction(async (tx) => {
+    const txCtx: Context = { ...ctx, db: tx as unknown as Context["db"] };
 
-  // 2. Create AO
-  const aoId = await createAO(ctx, {
-    regionId: request.originalRegionId,
-    aoName: request.aoName,
-    aoLogo: request.aoLogo,
-    aoWebsite: request.aoWebsite,
-    locationId,
-  });
+    // 1. Create location
+    const location = await insertLocation(txCtx, {
+      regionId: request.originalRegionId,
+      locationName: undefined,
+      locationLat: request.locationLat,
+      locationLng: request.locationLng,
+      locationAddress: request.locationAddress,
+      locationAddress2: request.locationAddress2,
+      locationCity: request.locationCity,
+      locationState: request.locationState,
+      locationZip: request.locationZip,
+      locationCountry: request.locationCountry,
+      locationDescription: request.locationDescription,
+    });
+    const locationId = location.id;
 
-  // 3. Create event
-  const event = await insertEvent(ctx, {
-    aoId: aoId,
-    locationId: locationId,
-    eventName: request.eventName,
-    eventDescription: request.eventDescription,
-    eventDayOfWeek: request.eventDayOfWeek,
-    eventStartTime: request.eventStartTime,
-    eventEndTime: request.eventEndTime,
-    eventStartDate: request.eventStartDate,
-    eventRecurrencePattern: "weekly",
-  });
-  const eventId = event.id;
+    // 2. Create AO
+    const aoId = await createAO(txCtx, {
+      regionId: request.originalRegionId,
+      aoName: request.aoName,
+      aoLogo: request.aoLogo,
+      aoWebsite: request.aoWebsite,
+      locationId,
+    });
 
-  await updateEventTypes(ctx, {
-    eventId,
-    eventTypeIds: request.eventTypeIds,
+    // 3. Create event
+    const event = await insertEvent(txCtx, {
+      aoId: aoId,
+      locationId: locationId,
+      eventName: request.eventName,
+      eventDescription: request.eventDescription,
+      eventDayOfWeek: request.eventDayOfWeek,
+      eventStartTime: request.eventStartTime,
+      eventEndTime: request.eventEndTime,
+      eventStartDate: request.eventStartDate,
+      eventRecurrencePattern: "weekly",
+    });
+    const eventId = event.id;
+
+    await updateEventTypes(txCtx, {
+      eventId,
+      eventTypeIds: request.eventTypeIds,
+    });
   });
 };
 
@@ -440,6 +447,12 @@ export const handleMoveAOToNewLocation = async (
     .update(schema.events)
     .set({ locationId })
     .where(eq(schema.events.orgId, request.originalAoId));
+
+  // Keep the AO's default location in sync with its events.
+  await ctx.db
+    .update(schema.orgs)
+    .set({ defaultLocationId: locationId })
+    .where(eq(schema.orgs.id, request.originalAoId));
 };
 
 export const handleMoveAOToDifferentLocation = async (
@@ -469,6 +482,12 @@ export const handleMoveAOToDifferentLocation = async (
     .update(schema.events)
     .set({ locationId })
     .where(eq(schema.events.orgId, request.originalAoId));
+
+  // Keep the AO's default location in sync with its events.
+  await ctx.db
+    .update(schema.orgs)
+    .set({ defaultLocationId: locationId })
+    .where(eq(schema.orgs.id, request.originalAoId));
 };
 
 export const handleMoveEventToDifferentAO = async (

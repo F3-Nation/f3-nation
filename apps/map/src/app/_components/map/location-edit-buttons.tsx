@@ -12,7 +12,6 @@ import {
 import { orpc, useQuery } from "~/orpc/react";
 import { openRequestModal } from "~/utils/open-request-modal";
 import { appStore } from "~/utils/store/app";
-import { useFilteredMapResults } from "./filtered-map-results-provider";
 
 interface LocationEditButtonsProps {
   locationId: number;
@@ -34,12 +33,11 @@ export const LocationEditButtons = ({
   eventCount = 0,
 }: LocationEditButtonsProps) => {
   const mode = appStore.use.mode();
-  const { locationOrderedLocationMarkers } = useFilteredMapResults();
 
   const { data: workoutInfo } = useQuery(
     orpc.map.location.locationWorkout.queryOptions({
-      input: { locationId: locationOrderedLocationMarkers?.[0]?.id ?? -1 },
-      enabled: mode === "edit" && !!locationOrderedLocationMarkers?.[0]?.id,
+      input: { locationId },
+      enabled: mode === "edit" && !!locationId,
     }),
   );
 

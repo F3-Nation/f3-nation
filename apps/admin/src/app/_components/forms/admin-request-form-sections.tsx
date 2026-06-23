@@ -31,7 +31,7 @@ export const EventDetailsFields = () => {
   const { data: eventTypes } = useQuery(
     orpc.eventType.all.queryOptions({
       input: {
-        orgIds: formRegionId ? [formRegionId] : [],
+        orgIds: formRegionId && formRegionId > 0 ? [formRegionId] : [],
       },
     }),
   );
@@ -302,7 +302,7 @@ export const LocationPickerField = ({
   const locationOptions = useMemo(() => {
     const existing =
       locations?.locations
-        .filter((l) => !formRegionId || l.regionId === formRegionId)
+        .filter((l) => !(formRegionId > 0) || l.regionId === formRegionId)
         .sort((a, b) => a.locationName.localeCompare(b.locationName))
         .map((l) => ({
           labelComponent: (

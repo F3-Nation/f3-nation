@@ -5,8 +5,8 @@ import { RequestInsertSchema } from "@acme/validators";
 
 const timeFormat = z
   .string()
-  .regex(/^\d{2}:\d{2}$/, {
-    message: "Start time must be in 24hr format (HH:mm)",
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, {
+    message: "Time must be in 24hr format (HH:mm)",
   })
   .or(z.literal(""));
 

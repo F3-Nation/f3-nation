@@ -6,6 +6,7 @@ import type { EventMeta } from "@acme/shared/app/types";
 import { schema } from "@acme/db";
 
 import type { Context } from "../shared";
+import { logDebug } from "../logger";
 
 export const updateEvent = async (
   ctx: Context,
@@ -28,7 +29,7 @@ export const updateEvent = async (
     eventContactEmail?: string | null;
   },
 ) => {
-  console.log("updateRequest", updateRequest);
+  logDebug("api.event.update", { eventId: updateRequest.eventId });
   // Update existing event
   const [updated] = await ctx.db
     .update(schema.events)
@@ -42,8 +43,6 @@ export const updateEvent = async (
       endTime: updateRequest.eventEndTime ?? undefined,
       dayOfWeek: updateRequest.eventDayOfWeek ?? undefined,
       seriesId: updateRequest.eventSeriesId ?? undefined,
-      isActive: true,
-      highlight: false,
       orgId: updateRequest.aoId ?? undefined,
       recurrencePattern: updateRequest.eventRecurrencePattern ?? undefined,
       recurrenceInterval: updateRequest.eventRecurrenceInterval ?? undefined,
@@ -54,7 +53,7 @@ export const updateEvent = async (
     .where(eq(schema.events.id, updateRequest.eventId))
     .returning();
 
-  console.log("updated", updated);
+  logDebug("api.event.updated", { eventId: updated?.id });
 
   if (!updated) {
     throw new Error("Failed to update event");
@@ -89,7 +88,7 @@ export const insertEvent = async (
     name: updateRequest.eventName,
     locationId: updateRequest.locationId,
     description: updateRequest.eventDescription ?? undefined,
-    startDate: updateRequest.eventStartDate ?? new Date().toISOString(),
+    startDate: updateRequest.eventStartDate ?? dayjs().format("YYYY-MM-DD"),
     endDate: updateRequest.eventEndDate ?? undefined,
     startTime: updateRequest.eventStartTime ?? undefined,
     endTime: updateRequest.eventEndTime ?? undefined,

@@ -84,7 +84,10 @@ export const UpdatePane = () => {
       zIndex={Z_INDEX.UPDATE_PANE}
       draggable
       onDragEnd={(e) => {
-        if (!e.latLng) throw new Error("No latLng");
+        if (!e.latLng) {
+          toast.error("Could not update marker position");
+          return;
+        }
         mapStore.setState({
           updateLocation: {
             lat: e.latLng.lat(),
@@ -144,6 +147,8 @@ export const UpdatePane = () => {
 
           <div className="mt-2">
             <button
+              type="button"
+              aria-label="Clear update location marker"
               className="absolute -right-2 -top-2 rounded-full bg-muted-foreground px-1 py-1 text-sm text-background"
               onClick={clearUpdateLocation}
               onTouchEnd={clearUpdateLocation}

@@ -125,7 +125,6 @@ function useRequestStatusHandler() {
  */
 function useFormSubmission<T extends SubmitSectionFormValues>(params: {
   mutationFn: (values: T) => Promise<MutationResult>;
-  enableLogging?: boolean;
 }) {
   const { mutateAsync: rejectSubmission } = useMutation(
     orpc.request.rejectSubmission.mutationOptions(),
@@ -139,9 +138,6 @@ function useFormSubmission<T extends SubmitSectionFormValues>(params: {
     try {
       await form.handleSubmit(
         async (values) => {
-          if (params.enableLogging) {
-            console.log("submit section values", values);
-          }
           try {
             const result = await params.mutationFn(values as T);
             await handleMutationResult(result);
@@ -150,7 +146,6 @@ function useFormSubmission<T extends SubmitSectionFormValues>(params: {
           }
         },
         (errors) => {
-          console.log("Form validation errors:", errors);
           handleSubmissionError(errors);
         },
       )();
@@ -311,7 +306,6 @@ export function SubmitSection<T extends SubmitSectionFormValues>({
 
   const { isSubmitting, submitForm, rejectForm } = useFormSubmission({
     mutationFn,
-    enableLogging: !isReview,
   });
 
   return (

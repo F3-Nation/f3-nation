@@ -10,7 +10,7 @@ import type { UpdateRequestById } from "./types";
 import { client } from "~/orpc/client";
 import { getQueryData, orpc } from "~/orpc/react";
 import { mapStore } from "./store/map";
-import { ModalType, openModal } from "./store/modal";
+import { closeModal, ModalType, openModal } from "./store/modal";
 
 export const openRequestModal = async (params: {
   type: RequestType;
@@ -292,6 +292,9 @@ const openRequestModalDefaults = async () => {
 };
 
 const toastError = (requestType: RequestType, message: string) => {
+  // Close the loading spinner shown at the start of openRequestModal so guard
+  // failures don't leave it stuck on screen.
+  closeModal(undefined, ModalType.LOADING);
   toast.error(`${requestTypeToTitle(requestType)}: ${message}`);
 };
 

@@ -57,6 +57,9 @@ export const WorkoutDetailsModal = ({
   const timeDisplay =
     shortDayOfWeek && formattedTime ? `${shortDayOfWeek} ${formattedTime}` : "";
 
+  console.log("locationId", locationId);
+  console.log("mode", mode);
+
   return (
     <Dialog open={true} onOpenChange={closeModal}>
       <DialogContent

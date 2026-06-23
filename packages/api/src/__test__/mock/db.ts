@@ -101,11 +101,16 @@ export const createMockDb = () => {
 
   const mockDelete = vi.fn().mockReturnValue({ where: mockWhere });
 
-  return {
+  // Runs the callback with the same mock db so transactional handlers behave
+  // like the non-transactional path in tests.
+  const mockTransaction = vi.fn();
+
+  const db = {
     insert: mockInsert,
     update: mockUpdate,
     select: mockSelect,
     delete: mockDelete,
+    transaction: mockTransaction,
     _mocks: {
       mockInsert,
       mockValues,
@@ -116,10 +121,17 @@ export const createMockDb = () => {
       mockWhere,
       mockSelect,
       mockFrom,
+      mockTransaction,
     },
     // Expose the database for assertions
     _database: mockDatabase,
   };
+
+  mockTransaction.mockImplementation((callback: (tx: typeof db) => unknown) =>
+    Promise.resolve(callback(db)),
+  );
+
+  return db;
 };
 
 export type MockDb = ReturnType<typeof createMockDb>;

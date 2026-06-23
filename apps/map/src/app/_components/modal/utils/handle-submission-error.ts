@@ -27,6 +27,9 @@ export const handleSubmissionError = (error: unknown): void => {
   } else if (error instanceof ORPCError) {
     console.error("handleSubmissionError error is an ORPCError", error);
     errorMessage = error.message;
+  } else if (error instanceof Error) {
+    console.error("handleSubmissionError error is Error", error);
+    errorMessage = error.message;
   } else if (isObject(error)) {
     console.error("handleSubmissionError error is object", error);
     const errorMessages = Object.entries(
@@ -45,9 +48,6 @@ export const handleSubmissionError = (error: unknown): void => {
       errorMessages.length > 0
         ? errorMessages.join(", ")
         : "Form validation failed";
-  } else if (error instanceof Error) {
-    console.error("handleSubmissionError error is Error", error);
-    errorMessage = error.message;
   } else {
     console.error("handleSubmissionError error is not an Error", error);
     errorMessage = "Failed to submit update request";
