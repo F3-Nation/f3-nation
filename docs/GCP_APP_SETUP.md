@@ -238,13 +238,13 @@ bash "apps/${APP_NAME}/scripts/cloud-run-env.sh" --env prod
 ## 7. Map Custom Domains
 
 ```bash
-gcloud run domain-mappings create \
+gcloud beta run domain-mappings create \
   --service="$CLOUDRUN_SERVICE" \
   --domain="$STAGING_DOMAIN" \
   --region="$GCP_REGION" \
   --project="$GCP_STAGING_PROJECT"
 
-gcloud run domain-mappings create \
+gcloud beta run domain-mappings create \
   --service="$CLOUDRUN_SERVICE" \
   --domain="$PROD_DOMAIN" \
   --region="$GCP_REGION" \

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Push secrets and env vars to GCP Cloud Run for the f3-slackbot service.
+# Push secrets and env vars to GCP Cloud Run for the f3-slackbot service and scripts job.
 #
 # Usage:
 #   bash scripts/cloud-run-env.sh --env staging   # reads .env.cloud-run.staging → project f3-slackbot-staging
@@ -12,7 +12,7 @@ set -euo pipefail
 #
 # This script:
 #   1. Creates/updates secrets in GCP Secret Manager
-#   2. Updates the Cloud Run service to reference those secrets as env vars
+#   2. Updates the Cloud Run service and scripts job to reference those secrets as env vars
 #
 # Requires:
 #   - gcloud CLI authenticated (`gcloud auth login`)
@@ -27,6 +27,7 @@ declare -A PROJECT_MAP=(
 )
 
 SERVICE_NAME="f3-slackbot"
+SCRIPTS_JOB_NAME="f3-slackbot-scripts"
 REGION="us-central1"
 
 # Env vars that map to GCP secrets (var name → secret ID)
@@ -62,6 +63,8 @@ ENV_FILE_VARS=(
   ACHIEVMENTS_ALPHA_TESTING_ORG_IDS
   ADMIN_CHANNEL_ID
   STRAVA_CLIENT_ID
+  HOME_REGION_NUDGE_DAY
+  HOME_REGION_NUDGE_HOUR
 )
 
 # Plain env vars (hardcoded, same across environments)
@@ -135,6 +138,7 @@ unset _env_key _env_val
 echo "Environment:  $ENV_NAME"
 echo "GCP Project:  $PROJECT"
 echo "Service:      $SERVICE_NAME"
+echo "Scripts job:  $SCRIPTS_JOB_NAME"
 echo "Region:       $REGION"
 echo "Env file:     $ENV_FILE"
 echo ""
@@ -203,36 +207,69 @@ if [[ "$FAILED" -ne 0 ]]; then
   exit 1
 fi
 
-# ── Grant Cloud Run service account access to secrets ──
+# ── Grant Cloud Run runtime service accounts access to secrets ──
 echo ""
-echo "Granting secret access to Cloud Run service account..."
+echo "Granting secret access to Cloud Run runtime service accounts..."
 
-SA_EMAIL="$(gcloud run services describe "$SERVICE_NAME" \
-  --project "$PROJECT" \
-  --region "$REGION" \
-  --format='value(spec.template.spec.serviceAccountName)' 2>/dev/null)" || SA_EMAIL=""
+PROJECT_NUMBER="$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')"
+DEFAULT_COMPUTE_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
 
-if [[ -z "$SA_EMAIL" ]]; then
-  PROJECT_NUMBER="$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')"
-  SA_EMAIL="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
-fi
+get_service_sa() {
+  local service_name="$1"
+  local sa_email
+
+  sa_email="$(gcloud run services describe "$service_name" \
+    --project "$PROJECT" \
+    --region "$REGION" \
+    --format='value(spec.template.spec.serviceAccountName)' 2>/dev/null)" || sa_email=""
+
+  printf '%s' "${sa_email:-$DEFAULT_COMPUTE_SA}"
+}
+
+get_job_sa() {
+  local job_name="$1"
+  local sa_email
+
+  # Cloud Run Jobs have had different describe shapes across gcloud/API versions;
+  # try the known formats, then fall back to the default compute service account.
+  sa_email="$(gcloud run jobs describe "$job_name" \
+    --project "$PROJECT" \
+    --region "$REGION" \
+    --format='value(spec.template.spec.template.spec.serviceAccountName)' 2>/dev/null)" || sa_email=""
+
+  if [[ -z "$sa_email" ]]; then
+    sa_email="$(gcloud run jobs describe "$job_name" \
+      --project "$PROJECT" \
+      --region "$REGION" \
+      --format='value(template.template.serviceAccount)' 2>/dev/null)" || sa_email=""
+  fi
+
+  printf '%s' "${sa_email:-$DEFAULT_COMPUTE_SA}"
+}
+
+RUNTIME_SAS=(
+  "$(get_service_sa "$SERVICE_NAME")"
+  "$(get_job_sa "$SCRIPTS_JOB_NAME")"
+)
 
 for var in "${!SECRET_MAP[@]}"; do
   secret_id="${SECRET_MAP[$var]}"
-  echo "  Granting access to $secret_id..."
-  if ! gcloud secrets add-iam-policy-binding "$secret_id" \
-    --project "$PROJECT" \
-    --member "serviceAccount:${SA_EMAIL}" \
-    --role "roles/secretmanager.secretAccessor" \
-    --quiet > /dev/null; then
-    echo "  ERROR: Failed to grant IAM access for secret $secret_id — aborting."
-    exit 1
-  fi
+  for sa_email in "${RUNTIME_SAS[@]}"; do
+    echo "  Granting $sa_email access to $secret_id..."
+    if ! gcloud secrets add-iam-policy-binding "$secret_id" \
+      --project "$PROJECT" \
+      --member "serviceAccount:${sa_email}" \
+      --role "roles/secretmanager.secretAccessor" \
+      --quiet > /dev/null; then
+      echo "  ERROR: Failed to grant IAM access for secret $secret_id to $sa_email — aborting."
+      exit 1
+    fi
+  done
 done
 
 # ── Build the Cloud Run update command ──
 echo ""
-echo "Updating Cloud Run service env vars and secret references..."
+echo "Updating Cloud Run service and scripts job env vars and secret references..."
 
 UPDATE_ARGS=()
 
@@ -254,12 +291,49 @@ for var in "${!SECRET_MAP[@]}"; do
   SECRET_ARGS+=("${var}=${secret_id}:latest")
 done
 
+# gcloud parses --update-env-vars/--update-secrets as dictionary flags. The
+# default separator is a comma, but values like SLACK_SCOPES also contain
+# commas, so use gcloud's custom delimiter escaping syntax.
+DICT_DELIM="__F3_ENV_DELIM__"
+
+join_dict_args() {
+  local joined=""
+  local arg
+
+  for arg in "$@"; do
+    if [[ -z "$joined" ]]; then
+      joined="$arg"
+    else
+      joined+="${DICT_DELIM}${arg}"
+    fi
+  done
+
+  printf '^%s^%s' "$DICT_DELIM" "$joined"
+}
+
+UPDATE_ENV_VARS_ARG="$(join_dict_args "${UPDATE_ARGS[@]}")"
+UPDATE_SECRETS_ARG="$(join_dict_args "${SECRET_ARGS[@]}")"
+
 gcloud run services update "$SERVICE_NAME" \
   --project "$PROJECT" \
   --region "$REGION" \
-  --update-env-vars "$(IFS=,; echo "${UPDATE_ARGS[*]}")" \
-  --update-secrets "$(IFS=,; echo "${SECRET_ARGS[*]}")" \
+  --update-env-vars "$UPDATE_ENV_VARS_ARG" \
+  --update-secrets "$UPDATE_SECRETS_ARG" \
   --quiet
 
+if gcloud run jobs describe "$SCRIPTS_JOB_NAME" \
+  --project "$PROJECT" \
+  --region "$REGION" \
+  --format='value(name)' &>/dev/null; then
+  gcloud run jobs update "$SCRIPTS_JOB_NAME" \
+    --project "$PROJECT" \
+    --region "$REGION" \
+    --update-env-vars "$UPDATE_ENV_VARS_ARG" \
+    --update-secrets "$UPDATE_SECRETS_ARG" \
+    --quiet
+else
+  echo "WARNING: Cloud Run Job $SCRIPTS_JOB_NAME does not exist in $PROJECT; skipping job env update."
+fi
+
 echo ""
-echo "Done! Service $SERVICE_NAME in $PROJECT updated."
+echo "Done! Service $SERVICE_NAME and scripts job $SCRIPTS_JOB_NAME in $PROJECT updated."
