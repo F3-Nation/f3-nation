@@ -435,6 +435,7 @@ export const LocationEventForm = ({
                         const url = await uploadLogo({
                           file,
                           orgId: formRegionId,
+                          requestId: form.getValues("id"),
                         });
                         onChange(url);
                       } catch (err) {

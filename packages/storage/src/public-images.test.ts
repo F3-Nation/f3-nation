@@ -130,6 +130,34 @@ describe("uploadOrgLogo (emulator mode)", () => {
     );
   });
 
+  it("isolates pending uploads under a requestId path", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(new Response("{}", { status: 200 }))),
+    );
+
+    const storage = createPublicImageStorage({
+      channel: "prod",
+      credentials: FAKE_CREDENTIALS,
+    });
+    const url = await storage.uploadOrgLogo(123, Buffer.from("img"), {
+      requestId: "abc-123",
+    });
+    expect(url).toBe(
+      `http://${EMULATOR_HOST}/f3-public-images/org-logos/123-abc-123.jpg`,
+    );
+  });
+
+  it("rejects a path-unsafe requestId", async () => {
+    const storage = createPublicImageStorage({
+      channel: "prod",
+      credentials: FAKE_CREDENTIALS,
+    });
+    await expect(
+      storage.uploadOrgLogo(1, Buffer.from("img"), { requestId: "../evil" }),
+    ).rejects.toThrow("requestId must be alphanumeric");
+  });
+
   it("uploads to staging bucket and returns canonical URL", async () => {
     vi.stubGlobal(
       "fetch",

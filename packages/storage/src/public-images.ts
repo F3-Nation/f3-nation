@@ -12,7 +12,7 @@ export interface PublicImageStorage {
   uploadOrgLogo(
     orgId: number,
     file: Buffer,
-    options?: { size?: number },
+    options?: { size?: number; requestId?: string },
   ): Promise<string>;
   deleteOrgLogo(orgId: number): Promise<void>;
   uploadUserAvatar(
@@ -137,6 +137,16 @@ export function createPublicImageStorage(config: {
     return value;
   }
 
+  function assertOptionalRequestId(value: string | undefined): string {
+    if (value == null) return "";
+    // Path-safe only: requestId is a client-supplied UUID. Reject anything
+    // that could escape the org-logos/{orgId} key space.
+    if (!/^[A-Za-z0-9_-]+$/.test(value)) {
+      throw new Error("requestId must be alphanumeric, dash, or underscore");
+    }
+    return `-${value}`;
+  }
+
   function assertPositiveIntegerSize(
     value: number | undefined,
     fallback: number,
@@ -152,11 +162,18 @@ export function createPublicImageStorage(config: {
     async uploadOrgLogo(orgId, file, options) {
       assertPositiveIntegerId("orgId", orgId);
       const size = assertPositiveIntegerSize(options?.size, 640);
+      const suffix = assertOptionalRequestId(options?.requestId);
       const jpg = await prepareImageForStorage(file, {
         width: size,
         height: size,
       });
-      return uploadToBucket(`org-logos/${orgId}.jpg`, jpg, "image/jpeg");
+      // requestId isolates pending change-request uploads so they don't
+      // overwrite the live org logo before the revision is approved.
+      return uploadToBucket(
+        `org-logos/${orgId}${suffix}.jpg`,
+        jpg,
+        "image/jpeg",
+      );
     },
 
     async deleteOrgLogo(orgId) {

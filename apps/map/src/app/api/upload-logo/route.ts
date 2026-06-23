@@ -24,6 +24,7 @@ export async function POST(request: Request) {
   const file = formData.get("file");
   const orgIdRaw = formData.get("orgId");
   const sizeRaw = formData.get("size");
+  const requestIdRaw = formData.get("requestId");
 
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "No file provided" }, { status: 400 });
@@ -53,11 +54,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid size" }, { status: 400 });
   }
 
+  // requestId keeps each pending change-request upload on its own path so it
+  // does not overwrite the live org logo before the revision is approved.
+  if (
+    typeof requestIdRaw !== "string" ||
+    !/^[A-Za-z0-9_-]+$/.test(requestIdRaw)
+  ) {
+    return NextResponse.json({ error: "Invalid requestId" }, { status: 400 });
+  }
+  const requestId = requestIdRaw;
+
   const orgId = orgIdNum;
 
   try {
     const buffer = Buffer.from(await file.arrayBuffer());
-    const url = await storage.uploadOrgLogo(orgId, buffer, { size });
+    const url = await storage.uploadOrgLogo(orgId, buffer, { size, requestId });
 
     return NextResponse.json({ url });
   } catch (err) {
