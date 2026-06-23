@@ -199,6 +199,10 @@ ENVEOF
     echo "# AUTH_JWT_PRIVATE_KEY=  (not found in GCP)"
   fi
 
+  echo ""
+  echo "# -- Google Cloud Storage (local emulator) --"
+  echo "GCS_EMULATOR_HOST=localhost:9023"
+  echo "GCS_CREDENTIALS=local-placeholder-not-used-with-emulator"
 
   cat << 'ENVEOF2'
 

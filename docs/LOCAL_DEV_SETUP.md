@@ -56,22 +56,24 @@ If you need to customize a specific app's env (e.g., point one app at a differen
 
 Pull secrets manually and map them to env vars. The canonical mapping is:
 
-| GCP Secret Name          | `.env` Variable(s)                                | Notes                                                                     |
-| ------------------------ | ------------------------------------------------- | ------------------------------------------------------------------------- |
-| `database-host`          | `DATABASE_HOST`                                   | Use `localhost` for local dev (proxy handles the connection)              |
-| `database-user`          | `DATABASE_USER`                                   | Also used in `DATABASE_URL`                                               |
-| `database-password`      | `DATABASE_PASSWORD`                               | Also used in `DATABASE_URL`                                               |
-| `database-name`          | `DATABASE_NAME`                                   | Also used in `DATABASE_URL`                                               |
-| `auth-secret`            | `AUTH_SECRET`                                     | Required in production; optional in dev                                   |
-| `auth-jwt-private-key`   | `AUTH_JWT_PRIVATE_KEY`                            | RSA PEM key; single-line with `\n` escapes, wrapped in double quotes      |
-| `api-key`                | `API_KEY`                                         |                                                                           |
-| `super-admin-api-key`    | `SUPER_ADMIN_API_KEY`                             |                                                                           |
-| `sendgrid-api-key`       | `EMAIL_SERVER`                                    | SMTP connection string (e.g. `smtp://apikey:<key>@smtp.sendgrid.net:587`) |
-| `google-maps-api-key`    | `NEXT_PUBLIC_GOOGLE_API_KEY`, `F3_GOOGLE_API_KEY` | Google Maps JS API key; required by map + api + admin apps.               |
-| _(set manually)_         | `EMAIL_FROM`                                      | Sender address (e.g. `noreply@f3nation.com`)                              |
-| _(set manually)_         | `EMAIL_ADMIN_DESTINATIONS`                        | Comma-separated admin email addresses                                     |
-| _(same as DATABASE_URL)_ | `TEST_DATABASE_URL`                               | Connection string for test database                                       |
-| _(set manually)_         | `NOTIFY_WEBHOOK_URLS_COMMA_SEPARATED`             | Optional; comma-separated webhook URLs for notifications                  |
+| GCP Secret Name          | `.env` Variable(s)                                | Notes                                                                                              |
+| ------------------------ | ------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `database-host`          | `DATABASE_HOST`                                   | Use `localhost` for local dev (proxy handles the connection)                                       |
+| `database-user`          | `DATABASE_USER`                                   | Also used in `DATABASE_URL`                                                                        |
+| `database-password`      | `DATABASE_PASSWORD`                               | Also used in `DATABASE_URL`                                                                        |
+| `database-name`          | `DATABASE_NAME`                                   | Also used in `DATABASE_URL`                                                                        |
+| `auth-secret`            | `AUTH_SECRET`                                     | Required in production; optional in dev                                                            |
+| `auth-jwt-private-key`   | `AUTH_JWT_PRIVATE_KEY`                            | RSA PEM key; single-line with `\n` escapes, wrapped in double quotes                               |
+| `api-key`                | `API_KEY`                                         |                                                                                                    |
+| `super-admin-api-key`    | `SUPER_ADMIN_API_KEY`                             |                                                                                                    |
+| `sendgrid-api-key`       | `EMAIL_SERVER`                                    | SMTP connection string (e.g. `smtp://apikey:<key>@smtp.sendgrid.net:587`)                          |
+| `google-maps-api-key`    | `NEXT_PUBLIC_GOOGLE_API_KEY`, `F3_GOOGLE_API_KEY` | Google Maps JS API key; required by map + api + admin apps.                                        |
+| _(set manually)_         | `GCS_EMULATOR_HOST`                               | `localhost:9023` for the local fake-gcs emulator                                                   |
+| _(set manually)_         | `GCS_CREDENTIALS`                                 | `local-placeholder-not-used-with-emulator` for local dev; base64 service-account JSON for real GCS |
+| _(set manually)_         | `EMAIL_FROM`                                      | Sender address (e.g. `noreply@f3nation.com`)                                                       |
+| _(set manually)_         | `EMAIL_ADMIN_DESTINATIONS`                        | Comma-separated admin email addresses                                                              |
+| _(same as DATABASE_URL)_ | `TEST_DATABASE_URL`                               | Connection string for test database                                                                |
+| _(set manually)_         | `NOTIFY_WEBHOOK_URLS_COMMA_SEPARATED`             | Optional; comma-separated webhook URLs for notifications                                           |
 
 **Client-side variables** (set these directly in `.env`):
 
