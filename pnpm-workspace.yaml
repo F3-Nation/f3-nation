@@ -4,7 +4,7 @@ packages:
   - tooling/*
 
 catalog:
-  "@auth/core": 0.41.0
+  "@auth/core": 0.41.2
   "@commitlint/cli": ^21.0.2
   "@commitlint/config-conventional": ^21.0.2
   "@commitlint/cz-commitlint": ^21.0.2
@@ -53,10 +53,10 @@ catalog:
   "@testing-library/user-event": ^14.6.1
   "@turbo/gen": ^1.12.3
   "@types/geojson": ^7946.0.16
-  "@types/google.maps": ^3.65.0
-  "@types/lodash": ^4.14.195
+  "@types/google.maps": ^3.65.1
+  "@types/lodash": ^4.17.24
   "@types/node": ^24.12.4
-  "@types/nodemailer": ^8.0.0
+  "@types/nodemailer": ^8.0.1
   "@types/pg": ^8.10.9
   "@types/react": ^18.3.1
   "@types/react-dom": ^18.3.1
@@ -65,10 +65,10 @@ catalog:
   "@vitejs/plugin-react": ^5.2.0
   "@vitest/coverage-v8": ^4.1.8
   autoprefixer: ^10.5.0
-  class-variance-authority: ^0.7.0
-  clsx: ^2.1.0
+  class-variance-authority: ^0.7.1
+  clsx: ^2.1.1
   cmdk: ^0.2.1
-  commitizen: ^4.3.1
+  commitizen: ^4.3.2
   dayjs: ^1.11.10
   dompurify: ^3.4.9
   dotenv: ^16.3.2
@@ -140,11 +140,11 @@ catalog:
   zustand: ^4.5.2
 overrides:
   braces: ">=3.0.3"
-  cross-spawn: ">=7.0.5"
+  cross-spawn: ">=7.0.6"
   fast-uri: ">=3.1.1"
   "form-data@>=2.0.0 <2.5.6": "^2.5.6"
   next: "^15.5.18"
-  "@auth/core": "0.41.0"
+  "@auth/core": "0.41.2"
   "@vis.gl/react-google-maps": 1.5.2
 peerDependencyRules:
   allowedVersions:
