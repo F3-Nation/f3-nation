@@ -11,7 +11,15 @@
   "rangeStrategy": "bump",
   "pinDigests": true,
   "prConcurrentLimit": 10,
+  "vulnerabilityAlerts": { "groupName": null, "schedule": [] },
   "packageRules": [
+    {
+      "description": "Batch all remaining (ungrouped) minor & patch npm updates into one weekly PR. Placed first so the ecosystem group rules below override it (last match wins for groupName); major updates and the github-actions manager are intentionally excluded",
+      "matchManagers": ["npm"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "all non-major dependencies",
+      "groupSlug": "all-minor-patch"
+    },
     {
       "description": "Group first-party GitHub Actions (actions/*); auto-merge minor and patch — low supply-chain risk",
       "groupName": "GitHub Actions (first-party)",
