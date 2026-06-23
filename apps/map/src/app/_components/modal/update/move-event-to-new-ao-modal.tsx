@@ -45,7 +45,7 @@ export const MoveEventToNewAoModal = ({
             />
           </div>
           <AODetailsForm<MoveEventToNewAOType> />
-          <ExistingLocationPickerForm<MoveEventToNewAOType> region="newRegion" />
+          <ExistingLocationPickerForm region="newRegion" />
           {!formNewLocationId && <LocationDetailsForm<MoveEventToNewAOType> />}
           <ContactDetailsForm<MoveEventToNewAOType> />
           <SubmitSection<MoveEventToNewAOType>

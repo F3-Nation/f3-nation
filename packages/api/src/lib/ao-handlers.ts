@@ -28,7 +28,6 @@ export const createAO = async (
     aoLogo?: string | null;
   },
 ): Promise<number> => {
-  console.log("createAO", { regionId, locationId, aoName });
   const normalizedAoName = aoName?.trim();
 
   if (!normalizedAoName || normalizedAoName.length < 2) {

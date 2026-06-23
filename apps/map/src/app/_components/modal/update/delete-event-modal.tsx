@@ -30,7 +30,7 @@ export const DeleteEventModal = ({
       <Form {...form}>
         <form className="w-[inherit] overflow-x-hidden p-0.5">
           {!isProductionNodeEnv && <FormDebugData />}
-          <DeleteEventForm<DeleteEventType> />
+          <DeleteEventForm />
           <ContactDetailsForm<DeleteEventType> />
           <SubmitSection<DeleteEventType>
             mutationFn={(values) =>

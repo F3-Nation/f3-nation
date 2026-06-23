@@ -2,33 +2,33 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Next.js",
+      "name": "Map: Dev",
       "type": "node-terminal",
       "request": "launch",
       "command": "pnpm dev",
-      "cwd": "${workspaceFolder}/apps/nextjs/",
+      "cwd": "${workspaceFolder}/apps/map",
       "skipFiles": ["<node_internals>/**"]
     },
     {
-      "name": "Next.js: Debug App",
+      "name": "Map: Debug App",
       "type": "node",
       "request": "launch",
       "cwd": "${workspaceFolder}",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["-F", "nextjs", "dev"],
+      "runtimeArgs": ["-F", "f3-map", "dev"],
       "skipFiles": ["<node_internals>/**"],
       "outFiles": ["${workspaceFolder}/**/*.js"],
       "console": "integratedTerminal"
     },
     {
-      "name": "Next.js: Full Stack Debug",
+      "name": "Map: Full Stack Debug",
       "type": "node",
       "request": "launch",
-      "cwd": "${workspaceFolder}/apps/nextjs",
+      "cwd": "${workspaceFolder}/apps/map",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["dev"],
       "serverReadyAction": {
-        "pattern": "started server on .+, url: (https?://.+)",
+        "pattern": "- Local:.+(https?://.+)",
         "uriFormat": "%s",
         "action": "debugWithChrome"
       },

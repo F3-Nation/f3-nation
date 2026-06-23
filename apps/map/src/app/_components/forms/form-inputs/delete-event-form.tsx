@@ -4,7 +4,7 @@ import type { DeleteEventType } from "@acme/validators/request-schemas";
 
 import { orpc, useQuery } from "~/orpc/react";
 
-export const DeleteEventForm = <_T extends DeleteEventType>() => {
+export const DeleteEventForm = () => {
   const form = useFormContext<DeleteEventType>();
   const originalEventId = form.watch("originalEventId");
   const { data: event } = useQuery(

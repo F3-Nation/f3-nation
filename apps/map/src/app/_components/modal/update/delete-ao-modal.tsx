@@ -30,7 +30,7 @@ export const DeleteAoModal = ({
       <Form {...form}>
         <form className="w-[inherit] overflow-x-hidden p-0.5">
           {!isProductionNodeEnv && <FormDebugData />}
-          <DeleteAoForm<DeleteAOType> />
+          <DeleteAoForm />
           <ContactDetailsForm<DeleteAOType> />
           <SubmitSection<DeleteAOType>
             mutationFn={(values) =>

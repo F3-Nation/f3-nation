@@ -4,7 +4,7 @@ import type { DeleteAOType } from "@acme/validators/request-schemas";
 
 import { orpc, useQuery } from "~/orpc/react";
 
-export const DeleteAoForm = <_T extends DeleteAOType>() => {
+export const DeleteAoForm = () => {
   const form = useFormContext<DeleteAOType>();
   const originalAoId = form.watch("originalAoId");
   const { data: result } = useQuery(

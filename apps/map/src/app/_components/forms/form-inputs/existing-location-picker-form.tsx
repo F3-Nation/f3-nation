@@ -16,9 +16,7 @@ interface ExistingLocationPickerFormValues {
   newRegionId?: number | null;
 }
 
-export const ExistingLocationPickerForm = <
-  _T extends ExistingLocationPickerFormValues,
->(params: {
+export const ExistingLocationPickerForm = (params: {
   region: "originalRegion" | "newRegion";
 }) => {
   const form = useFormContext<ExistingLocationPickerFormValues>();

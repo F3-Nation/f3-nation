@@ -2,15 +2,17 @@ import { vi } from "vitest";
 
 import type { Context } from "../../shared";
 
-// In-memory store to simulate database
-let mockDatabase: Map<string, Record<string, unknown>>;
-let idCounter = 0;
 /**
  * Creates a mock database with chainable methods that tracks inserts/updates.
  * Simulates Drizzle ORM's query builder pattern.
+ *
+ * State (the in-memory store and id counter) is owned per call, so each test
+ * gets an isolated database instance with no cross-test leakage.
  */
 export const createMockDb = () => {
-  mockDatabase = new Map();
+  // In-memory store to simulate database
+  const mockDatabase = new Map<string, Record<string, unknown>>();
+  let idCounter = 0;
 
   const mockReturning = vi.fn();
 
@@ -128,15 +130,3 @@ export type MockDb = ReturnType<typeof createMockDb>;
 export const asMockContextDb = (mockDb: MockDb): Context["db"] => {
   return mockDb as unknown as Context["db"];
 };
-
-/**
- * Clears the in-memory mock database.
- */
-export const clearMockDatabase = () => {
-  mockDatabase?.clear();
-};
-
-/**
- * Gets the current state of the mock database.
- */
-export const getMockDatabase = () => mockDatabase;
