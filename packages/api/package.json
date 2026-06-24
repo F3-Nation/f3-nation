@@ -25,6 +25,7 @@
     "@acme/logger": "workspace:*",
     "@acme/mail": "workspace:*",
     "@acme/shared": "workspace:^0.1.0",
+    "@acme/storage": "workspace:*",
     "@acme/validators": "workspace:^0.1.0",
     "@orpc/experimental-ratelimit": "catalog:",
     "@orpc/server": "catalog:",

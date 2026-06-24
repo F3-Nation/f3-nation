@@ -1234,6 +1234,9 @@ importers:
       '@acme/shared':
         specifier: workspace:^0.1.0
         version: link:../shared
+      '@acme/storage':
+        specifier: workspace:*
+        version: link:../storage
       '@acme/validators':
         specifier: workspace:^0.1.0
         version: link:../validators

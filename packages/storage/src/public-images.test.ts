@@ -414,3 +414,80 @@ describe("id and size validation", () => {
     },
   );
 });
+
+// ---------------------------------------------------------------------------
+// promoteOrgLogo — emulator mode
+// ---------------------------------------------------------------------------
+
+describe("promoteOrgLogo (emulator mode)", () => {
+  beforeEach(() => {
+    process.env.GCS_EMULATOR_HOST = EMULATOR_HOST;
+  });
+
+  afterEach(() => {
+    delete process.env.GCS_EMULATOR_HOST;
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("moves pending logo to canonical path and deletes the pending file", async () => {
+    const calls: { url: string; method: string }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string, init?: { method?: string }) => {
+        calls.push({ url, method: init?.method ?? "GET" });
+        return Promise.resolve(
+          new Response("img-bytes", {
+            status: 200,
+            headers: { "content-type": "image/jpeg" },
+          }),
+        );
+      }),
+    );
+
+    const storage = createPublicImageStorage({
+      channel: "prod",
+      credentials: FAKE_CREDENTIALS,
+    });
+    const result = await storage.promoteOrgLogo(
+      `http://${EMULATOR_HOST}/f3-public-images/org-logos/123-abc-123.jpg`,
+    );
+
+    expect(result).toBe(
+      `http://${EMULATOR_HOST}/f3-public-images/org-logos/123.jpg`,
+    );
+    // read pending, upload canonical (overwrites previous), delete pending
+    expect(calls[0]?.url).toContain(
+      "/f3-public-images/org-logos/123-abc-123.jpg",
+    );
+    expect(calls[1]?.method).toBe("POST");
+    expect(calls[1]?.url).toContain("org-logos%2F123.jpg");
+    expect(calls[2]?.method).toBe("DELETE");
+    expect(calls[2]?.url).toContain("org-logos%2F123-abc-123.jpg");
+  });
+
+  it("returns an already-canonical URL unchanged without touching storage", async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(new Response("{}", { status: 200 })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const storage = createPublicImageStorage({
+      channel: "prod",
+      credentials: FAKE_CREDENTIALS,
+    });
+    const canonical = `http://${EMULATOR_HOST}/f3-public-images/org-logos/123.jpg`;
+    await expect(storage.promoteOrgLogo(canonical)).resolves.toBe(canonical);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects a URL outside the allowed buckets", async () => {
+    const storage = createPublicImageStorage({
+      channel: "prod",
+      credentials: FAKE_CREDENTIALS,
+    });
+    await expect(
+      storage.promoteOrgLogo("https://evil.example.com/org-logos/1-x.jpg"),
+    ).rejects.toThrow("not an allowed public image");
+  });
+});

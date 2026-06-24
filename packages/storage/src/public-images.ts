@@ -22,6 +22,13 @@ export interface PublicImageStorage {
   ): Promise<string>;
   deleteUserAvatar(userId: number): Promise<void>;
   isAllowedPublicImageUrl(url: string): boolean;
+  /**
+   * Promote a pending change-request logo (`org-logos/{orgId}-{requestId}.jpg`)
+   * to the canonical org path (`org-logos/{orgId}.jpg`), overwriting any
+   * existing logo and removing the pending file. Returns the canonical URL.
+   * If the URL is not a pending logo, it is returned unchanged.
+   */
+  promoteOrgLogo(pendingUrl: string): Promise<string>;
 }
 
 export function createPublicImageStorage(config: {
@@ -113,6 +120,31 @@ export function createPublicImageStorage(config: {
       .delete({ ignoreNotFound: true });
   }
 
+  async function moveWithinBucket(src: string, dest: string): Promise<void> {
+    const emulatorHost = getEmulatorHost();
+
+    if (emulatorHost) {
+      const response = await emulatorFetch(
+        `http://${emulatorHost}/${bucket}/${encodeURI(src)}`,
+      );
+      if (!response.ok) {
+        const body = await response.text().catch(() => "(unreadable)");
+        throw new Error(
+          `GCS emulator read failed: HTTP ${response.status} ${body}`,
+        );
+      }
+      const data = Buffer.from(await response.arrayBuffer());
+      const contentType = response.headers.get("content-type") ?? "image/jpeg";
+      // uploadToBucket overwrites dest; deleteFromBucket removes the pending file.
+      await uploadToBucket(dest, data, contentType);
+      await deleteFromBucket(src);
+      return;
+    }
+
+    // file.move() copies to dest (overwriting) then deletes src.
+    await getClient().bucket(bucket).file(src).move(dest);
+  }
+
   function isAllowedPublicImageUrl(url: string): boolean {
     if (
       url.startsWith(`https://storage.googleapis.com/${BUCKETS.prod}/`) ||
@@ -194,6 +226,26 @@ export function createPublicImageStorage(config: {
     async deleteUserAvatar(userId) {
       assertPositiveIntegerId("userId", userId);
       await deleteFromBucket(`user-avatars/${userId}.jpg`);
+    },
+
+    async promoteOrgLogo(pendingUrl) {
+      if (!isAllowedPublicImageUrl(pendingUrl)) {
+        throw new Error("promoteOrgLogo: url is not an allowed public image");
+      }
+      const marker = `/${bucket}/`;
+      const idx = pendingUrl.indexOf(marker);
+      if (idx === -1) {
+        throw new Error("promoteOrgLogo: url is not in this channel's bucket");
+      }
+      const base = pendingUrl.slice(0, idx + marker.length);
+      const path = pendingUrl.slice(idx + marker.length).split("?")[0] ?? "";
+      const match = /^org-logos\/(\d+)-[A-Za-z0-9_-]+\.jpg$/.exec(path);
+      // Already canonical (or some other path): nothing to promote.
+      if (!match) return pendingUrl;
+
+      const canonicalPath = `org-logos/${match[1]}.jpg`;
+      await moveWithinBucket(path, canonicalPath);
+      return `${base}${canonicalPath}`;
     },
 
     isAllowedPublicImageUrl,
