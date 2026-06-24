@@ -138,13 +138,9 @@ catalog:
   zod: ^3.25.76
   zustand: ^4.5.7
 overrides:
-  braces: ">=3.0.3"
-  cross-spawn: ">=7.0.6"
-  fast-uri: ">=3.1.2"
   "form-data@>=2.0.0 <2.5.6": "^2.5.6"
   next: "^15.5.19"
   "@auth/core": "0.41.2"
-  "@vis.gl/react-google-maps": 1.8.3
 peerDependencyRules:
   allowedVersions:
     eslint-plugin-react>eslint: "10"
