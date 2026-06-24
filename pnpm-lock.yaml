@@ -205,8 +205,8 @@ catalogs:
       specifier: ^3.4.9
       version: 3.4.9
     dotenv:
-      specifier: ^16.6.1
-      version: 16.6.1
+      specifier: ^17.4.2
+      version: 17.4.2
     dotenv-cli:
       specifier: ^7.4.4
       version: 7.4.4
@@ -801,7 +801,7 @@ importers:
         version: 10.5.0(postcss@8.5.15)
       dotenv:
         specifier: 'catalog:'
-        version: 16.6.1
+        version: 17.4.2
       dotenv-cli:
         specifier: 'catalog:'
         version: 7.4.4
@@ -1437,7 +1437,7 @@ importers:
         version: 0.9.2(typescript@6.0.3)(zod@3.25.76)
       dotenv:
         specifier: 'catalog:'
-        version: 16.6.1
+        version: 17.4.2
       zod:
         specifier: 'catalog:'
         version: 3.25.76
@@ -6487,6 +6487,10 @@ packages:
 
   dotenv@16.6.1:
     resolution: {integrity: sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow==}
+    engines: {node: '>=12'}
+
+  dotenv@17.4.2:
+    resolution: {integrity: sha512-nI4U3TottKAcAD9LLud4Cb7b2QztQMUEfHbvhTH09bqXTxnSie8WnjPALV/WMCrJZ6UV/qHJ6L03OqO3LcdYZw==}
     engines: {node: '>=12'}
 
   drizzle-kit@0.31.10:
@@ -13851,6 +13855,8 @@ snapshots:
   dotenv@16.0.3: {}
 
   dotenv@16.6.1: {}
+
+  dotenv@17.4.2: {}
 
   drizzle-kit@0.31.10:
     dependencies:
