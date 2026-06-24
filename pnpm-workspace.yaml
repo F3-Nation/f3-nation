@@ -51,7 +51,7 @@ catalog:
   "@testing-library/jest-dom": ^6.4.2
   "@testing-library/react": ^16.3.2
   "@testing-library/user-event": ^14.6.1
-  "@turbo/gen": ^1.13.4
+  "@turbo/gen": ^2.9.18
   "@types/geojson": ^7946.0.16
   "@types/google.maps": ^3.65.1
   "@types/lodash": ^4.17.24
