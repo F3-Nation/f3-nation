@@ -208,8 +208,8 @@ catalogs:
       specifier: ^17.4.2
       version: 17.4.2
     dotenv-cli:
-      specifier: ^7.4.4
-      version: 7.4.4
+      specifier: ^11.0.0
+      version: 11.0.0
     drizzle-kit:
       specifier: ^0.31.10
       version: 0.31.10
@@ -420,7 +420,7 @@ importers:
         version: 4.3.2(@types/node@25.9.2)(typescript@6.0.3)
       dotenv-cli:
         specifier: 'catalog:'
-        version: 7.4.4
+        version: 11.0.0
       eslint:
         specifier: 'catalog:'
         version: 10.4.0(jiti@2.7.0)
@@ -504,7 +504,7 @@ importers:
         version: 1.11.21
       dotenv-cli:
         specifier: 'catalog:'
-        version: 7.4.4
+        version: 11.0.0
       geist:
         specifier: 'catalog:'
         version: 1.7.2(next@15.5.19(@opentelemetry/api@1.9.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))
@@ -631,7 +631,7 @@ importers:
         version: 0.9.2(typescript@6.0.3)(zod@3.25.76)
       dotenv-cli:
         specifier: 'catalog:'
-        version: 7.4.4
+        version: 11.0.0
       handlebars:
         specifier: 'catalog:'
         version: 4.7.9
@@ -804,7 +804,7 @@ importers:
         version: 17.4.2
       dotenv-cli:
         specifier: 'catalog:'
-        version: 7.4.4
+        version: 11.0.0
       eslint:
         specifier: 'catalog:'
         version: 10.4.0(jiti@2.7.0)
@@ -952,7 +952,7 @@ importers:
         version: 3.4.9
       dotenv-cli:
         specifier: 'catalog:'
-        version: 7.4.4
+        version: 11.0.0
       geist:
         specifier: 'catalog:'
         version: 1.7.2(next@15.5.19(@opentelemetry/api@1.9.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))
@@ -1288,7 +1288,7 @@ importers:
         version: 4.1.9(vitest@4.1.9)
       dotenv-cli:
         specifier: 'catalog:'
-        version: 7.4.4
+        version: 11.0.0
       eslint:
         specifier: 'catalog:'
         version: 10.4.0(jiti@2.7.0)
@@ -1388,7 +1388,7 @@ importers:
         version: 1.11.21
       dotenv-cli:
         specifier: 'catalog:'
-        version: 7.4.4
+        version: 11.0.0
       drizzle-orm:
         specifier: 'catalog:'
         version: 0.45.2(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(pg@8.22.0)(postgres@3.4.9)
@@ -1453,7 +1453,7 @@ importers:
         version: link:../../tooling/typescript
       dotenv-cli:
         specifier: 'catalog:'
-        version: 7.4.4
+        version: 11.0.0
       eslint:
         specifier: 'catalog:'
         version: 10.4.0(jiti@2.7.0)
@@ -1902,7 +1902,7 @@ importers:
         version: link:../typescript
       dotenv-cli:
         specifier: 'catalog:'
-        version: 7.4.4
+        version: 11.0.0
       drizzle-orm:
         specifier: 'catalog:'
         version: 0.45.2(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(pg@8.22.0)(postgres@3.4.9)
@@ -6473,12 +6473,12 @@ packages:
     resolution: {integrity: sha512-QM8q3zDe58hqUqjraQOmzZ1LIH9SWQJTlEKCH4kJ2oQvLZk7RbQXvtDM2XEq3fwkV9CCvvH4LA0AV+ogFsBM2Q==}
     engines: {node: '>=8'}
 
-  dotenv-cli@7.4.4:
-    resolution: {integrity: sha512-XkBYCG0tPIes+YZr4SpfFv76SQrV/LeCE8CI7JSEMi3VR9MvTihCGTOtbIexD6i2mXF+6px7trb1imVCXSNMDw==}
+  dotenv-cli@11.0.0:
+    resolution: {integrity: sha512-r5pA8idbk7GFWuHEU7trSTflWcdBpQEK+Aw17UrSHjS6CReuhrrPcyC3zcQBPQvhArRHnBo/h6eLH1fkCvNlww==}
     hasBin: true
 
-  dotenv-expand@10.0.0:
-    resolution: {integrity: sha512-GopVGCpVS1UKH75VKHGuQFqS1Gusej0z4FyQkPdwjil2gNIv+LNsqBlboOzpJFZKVT95GkCyWJbBSdFEFUWI2A==}
+  dotenv-expand@12.0.3:
+    resolution: {integrity: sha512-uc47g4b+4k/M/SeaW1y4OApx+mtLWl92l5LMPP0GNXctZqELk+YGgOPIIC5elYmUH4OuoK3JLhuRUYegeySiFA==}
     engines: {node: '>=12'}
 
   dotenv@16.0.3:
@@ -13843,14 +13843,16 @@ snapshots:
     dependencies:
       is-obj: 2.0.0
 
-  dotenv-cli@7.4.4:
+  dotenv-cli@11.0.0:
     dependencies:
       cross-spawn: 7.0.6
-      dotenv: 16.6.1
-      dotenv-expand: 10.0.0
+      dotenv: 17.4.2
+      dotenv-expand: 12.0.3
       minimist: 1.2.8
 
-  dotenv-expand@10.0.0: {}
+  dotenv-expand@12.0.3:
+    dependencies:
+      dotenv: 16.6.1
 
   dotenv@16.0.3: {}
 
