@@ -46,7 +46,31 @@ echo "GH envs: $GH_STAGING_ENV / $GH_PROD_ENV"
 
 ---
 
-## 2. Create Artifact Registry Repositories
+## 2. Enable Required APIs
+
+Enable the APIs used by the deployment pipeline in both app projects before creating resources or running deploy workflows.
+
+```bash
+gcloud services enable \
+  serviceusage.googleapis.com \
+  run.googleapis.com \
+  artifactregistry.googleapis.com \
+  sqladmin.googleapis.com \
+  --project="$GCP_STAGING_PROJECT"
+
+gcloud services enable \
+  serviceusage.googleapis.com \
+  run.googleapis.com \
+  artifactregistry.googleapis.com \
+  sqladmin.googleapis.com \
+  --project="$GCP_PROD_PROJECT"
+```
+
+`sqladmin.googleapis.com` is required for apps that attach Cloud SQL instances with `--add-cloudsql-instances`. It is harmless for apps that do not use Cloud SQL.
+
+---
+
+## 3. Create Artifact Registry Repositories
 
 Each GCP project gets its own Docker registry. The build job pushes to staging; the deploy-prod job copies the image to prod's registry (no rebuild).
 
@@ -64,7 +88,7 @@ gcloud artifacts repositories create cloud-run-builds \
 
 ---
 
-## 3. Create Cloud Run Services
+## 4. Create Cloud Run Services
 
 Cloud Run requires an initial image before secrets/env can be configured. Deploy a placeholder first.
 
@@ -86,11 +110,11 @@ gcloud run deploy "$CLOUDRUN_SERVICE" \
 
 ---
 
-## 4. Set Up Workload Identity Federation (WIF)
+## 5. Set Up Workload Identity Federation (WIF)
 
 The WIF pool and provider in `f3-github` are shared — **skip the creation commands if `f3-github` already exists** (it does for all apps after the first). Only run the SA + IAM + binding steps.
 
-### 4a. Shared infrastructure (one-time, already done for existing apps)
+### 5a. Shared infrastructure (one-time, already done for existing apps)
 
 ```bash
 # Skip if f3-github already exists
@@ -115,21 +139,21 @@ gcloud iam workload-identity-pools providers create-oidc "github" \
   --project="$WIF_PROJECT"
 ```
 
-### 4b. Get the WIF project number (needed for every app)
+### 5b. Get the WIF project number (needed for every app)
 
 ```bash
 WIF_PROJECT_NUMBER=$(gcloud projects describe "$WIF_PROJECT" --format='value(projectNumber)')
 echo "WIF_PROJECT_NUMBER=$WIF_PROJECT_NUMBER"
 ```
 
-### 4c. Staging service account
+### 5c. Staging service account
 
 ```bash
 gcloud iam service-accounts create github-actions-deploy \
   --display-name="GitHub Actions Deploy" \
   --project="$GCP_STAGING_PROJECT"
 
-# Cloud Run admin + Artifact Registry writer + SA user
+# Cloud Run admin + Artifact Registry writer + SA user + Service Usage viewer
 gcloud projects add-iam-policy-binding "$GCP_STAGING_PROJECT" \
   --member="serviceAccount:${STAGING_SA}" \
   --role="roles/run.admin"
@@ -139,6 +163,9 @@ gcloud projects add-iam-policy-binding "$GCP_STAGING_PROJECT" \
 gcloud projects add-iam-policy-binding "$GCP_STAGING_PROJECT" \
   --member="serviceAccount:${STAGING_SA}" \
   --role="roles/iam.serviceAccountUser"
+gcloud projects add-iam-policy-binding "$GCP_STAGING_PROJECT" \
+  --member="serviceAccount:${STAGING_SA}" \
+  --role="roles/serviceusage.serviceUsageViewer"
 
 # Allow GitHub Actions to impersonate the staging SA
 gcloud iam service-accounts add-iam-policy-binding "$STAGING_SA" \
@@ -147,20 +174,23 @@ gcloud iam service-accounts add-iam-policy-binding "$STAGING_SA" \
   --project="$GCP_STAGING_PROJECT"
 ```
 
-### 4d. Production service account
+### 5d. Production service account
 
 ```bash
 gcloud iam service-accounts create github-actions-deploy \
   --display-name="GitHub Actions Deploy" \
   --project="$GCP_PROD_PROJECT"
 
-# Cloud Run admin + SA user on prod
+# Cloud Run admin + SA user + Service Usage viewer on prod
 gcloud projects add-iam-policy-binding "$GCP_PROD_PROJECT" \
   --member="serviceAccount:${PROD_SA}" \
   --role="roles/run.admin"
 gcloud projects add-iam-policy-binding "$GCP_PROD_PROJECT" \
   --member="serviceAccount:${PROD_SA}" \
   --role="roles/iam.serviceAccountUser"
+gcloud projects add-iam-policy-binding "$GCP_PROD_PROJECT" \
+  --member="serviceAccount:${PROD_SA}" \
+  --role="roles/serviceusage.serviceUsageViewer"
 
 # Prod SA needs AR read on staging (pull the built image) and AR write on prod (push the promoted copy)
 gcloud projects add-iam-policy-binding "$GCP_STAGING_PROJECT" \
@@ -179,7 +209,112 @@ gcloud iam service-accounts add-iam-policy-binding "$PROD_SA" \
 
 ---
 
-## 5. Create GitHub Environments and Set Variables
+## 6. Grant Optional Resource Access
+
+Some apps need access to additional GCP resources at deploy time or runtime. Apply only the sections that match the app.
+
+### 6a. Cloud SQL access
+
+Apps that deploy with `--add-cloudsql-instances` need Cloud SQL IAM in two places:
+
+1. The GitHub Actions deploy service account needs to validate Cloud SQL and Service Usage state during `gcloud run deploy`.
+2. The Cloud Run runtime service account needs to connect to the database after the revision starts.
+
+Grant the deploy service accounts Cloud SQL Client on the app projects. If the app connects to Cloud SQL instances in another project, grant the same role on that database project too.
+
+```bash
+gcloud projects add-iam-policy-binding "$GCP_STAGING_PROJECT" \
+  --member="serviceAccount:${STAGING_SA}" \
+  --role="roles/cloudsql.client"
+
+gcloud projects add-iam-policy-binding "$GCP_PROD_PROJECT" \
+  --member="serviceAccount:${PROD_SA}" \
+  --role="roles/cloudsql.client"
+```
+
+If the Cloud SQL instance lives in a shared database project, also grant the deploy service accounts both Cloud SQL Client and Service Usage Viewer on that project:
+
+```bash
+DB_PROJECT="f3data" # change when using a different shared database project
+
+gcloud projects add-iam-policy-binding "$DB_PROJECT" \
+  --member="serviceAccount:${STAGING_SA}" \
+  --role="roles/cloudsql.client"
+gcloud projects add-iam-policy-binding "$DB_PROJECT" \
+  --member="serviceAccount:${STAGING_SA}" \
+  --role="roles/serviceusage.serviceUsageViewer"
+
+gcloud projects add-iam-policy-binding "$DB_PROJECT" \
+  --member="serviceAccount:${PROD_SA}" \
+  --role="roles/cloudsql.client"
+gcloud projects add-iam-policy-binding "$DB_PROJECT" \
+  --member="serviceAccount:${PROD_SA}" \
+  --role="roles/serviceusage.serviceUsageViewer"
+```
+
+Then grant the Cloud Run runtime service accounts Cloud SQL Client. The commands below use the default Compute Engine service accounts created for each project; if the Cloud Run service uses a custom runtime service account, replace these values with that account email.
+
+```bash
+STAGING_PROJECT_NUMBER=$(gcloud projects describe "$GCP_STAGING_PROJECT" --format='value(projectNumber)')
+PROD_PROJECT_NUMBER=$(gcloud projects describe "$GCP_PROD_PROJECT" --format='value(projectNumber)')
+
+STAGING_RUNTIME_SA="${STAGING_PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+PROD_RUNTIME_SA="${PROD_PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+
+gcloud projects add-iam-policy-binding "$GCP_STAGING_PROJECT" \
+  --member="serviceAccount:${STAGING_RUNTIME_SA}" \
+  --role="roles/cloudsql.client"
+
+gcloud projects add-iam-policy-binding "$GCP_PROD_PROJECT" \
+  --member="serviceAccount:${PROD_RUNTIME_SA}" \
+  --role="roles/cloudsql.client"
+
+```
+
+If the Cloud SQL instances are in a shared database project, also grant the runtime service accounts Cloud SQL Client on that project:
+
+```bash
+DB_PROJECT="f3data" # change when using a different shared database project
+
+gcloud projects add-iam-policy-binding "$DB_PROJECT" \
+  --member="serviceAccount:${STAGING_RUNTIME_SA}" \
+  --role="roles/cloudsql.client"
+gcloud projects add-iam-policy-binding "$DB_PROJECT" \
+  --member="serviceAccount:${PROD_RUNTIME_SA}" \
+  --role="roles/cloudsql.client"
+```
+
+### 6b. Storage bucket access
+
+Apps that read from or write to Cloud Storage buckets at runtime, including apps that mount buckets as Cloud Run volumes, need bucket IAM for the Cloud Run runtime service account. `roles/storage.objectUser` includes object listing plus read/write access.
+
+```bash
+STAGING_BUCKETS=(
+  "example-staging-bucket"
+)
+
+PROD_BUCKETS=(
+  "example-prod-bucket"
+)
+
+for bucket in "${STAGING_BUCKETS[@]}"; do
+  gcloud storage buckets add-iam-policy-binding "gs://${bucket}" \
+    --member="serviceAccount:${STAGING_RUNTIME_SA}" \
+    --role="roles/storage.objectUser"
+done
+
+for bucket in "${PROD_BUCKETS[@]}"; do
+  gcloud storage buckets add-iam-policy-binding "gs://${bucket}" \
+    --member="serviceAccount:${PROD_RUNTIME_SA}" \
+    --role="roles/storage.objectUser"
+done
+```
+
+For Cloud Run volume mounts, the `bucket=` value must be a bucket name only, not a folder path. Use `bucket=my-bucket`, not `bucket=my-bucket/some-prefix`.
+
+---
+
+## 7. Create GitHub Environments and Set Variables
 
 The staging environment needs no protection rules. The prod environment requires a reviewer so deploys need manual approval. Run all of this from inside the repo directory:
 
@@ -216,7 +351,7 @@ gh variable set WIF_SA       --env "$GH_PROD_ENV" --repo "$GH_REPO" --body "$PRO
 
 ---
 
-## 6. Push App Secrets to Cloud Run
+## 8. Push App Secrets to Cloud Run
 
 Each app has its own `.env.cloud-run.example` file and a helper script that pushes env vars to Cloud Run as secrets.
 
@@ -235,7 +370,7 @@ bash "apps/${APP_NAME}/scripts/cloud-run-env.sh" --env prod
 
 ---
 
-## 7. Map Custom Domains
+## 9. Map Custom Domains
 
 ```bash
 gcloud beta run domain-mappings create \
@@ -255,7 +390,7 @@ Follow the DNS instructions printed by each command. Propagation can take up to 
 
 ---
 
-## 8. Disconnect Firebase App Hosting (if applicable)
+## 10. Disconnect Firebase App Hosting (if applicable)
 
 If the app previously ran on Firebase App Hosting, remove it to stop duplicate auto-deploys:
 
@@ -266,12 +401,15 @@ In the Firebase Console for each project → **App Hosting** → select the back
 ## Checklist
 
 - [ ] Variables set and confirmed (`echo` block)
+- [ ] Required APIs enabled in staging and prod projects
 - [ ] Artifact Registry repos created (staging + prod)
 - [ ] Cloud Run services created with placeholder image
 - [ ] `f3-github` WIF pool/provider exists (skip creation if already present)
 - [ ] Staging SA created, IAM roles granted, WIF binding added
 - [ ] Prod SA created, IAM roles granted (including cross-project AR read on staging), WIF binding added
-- [ ] GitHub environments created and `WIF_PROVIDER`/`WIF_SA` variables set (step 5)
+- [ ] Cloud SQL IAM granted to deploy/runtime SAs if the app uses Cloud SQL
+- [ ] Storage bucket IAM granted to runtime SAs if the app uses Cloud Storage buckets or volume mounts
+- [ ] GitHub environments created and `WIF_PROVIDER`/`WIF_SA` variables set (step 7)
 - [ ] Cloud Run env vars pushed for staging and prod
 - [ ] Custom domains mapped and DNS updated
 - [ ] Firebase App Hosting disconnected (if applicable)
