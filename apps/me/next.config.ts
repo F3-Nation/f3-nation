@@ -18,11 +18,18 @@ const nextConfig: NextConfig = {
         hostname: "storage.googleapis.com",
         pathname: "/f3-public-images-staging/**",
       },
+      // Local fake-gcs emulator (both prod- and staging-named buckets).
       {
         protocol: "http",
         hostname: "localhost",
         port: "9023",
         pathname: "/f3-public-images/**",
+      },
+      {
+        protocol: "http",
+        hostname: "localhost",
+        port: "9023",
+        pathname: "/f3-public-images-staging/**",
       },
       {
         protocol: "https",
