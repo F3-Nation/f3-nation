@@ -37,6 +37,7 @@ jobs:
         --cpu=1
         --min-instances=0
         --max-instances=2
+        --add-cloudsql-instances=f3data:us-central1:f3data-nonprod
         --add-volume=name=user-avatars,type=cloud-storage,bucket=f3-public-images-staging
         --add-volume-mount=volume=user-avatars,mount-path=/mnt/user-avatars
         --add-volume=name=event_instance_images,type=cloud-storage,bucket=f3-public-images-staging
@@ -82,3 +83,17 @@ jobs:
       prod_environment: slackbot-production
       region: us-central1
       ar_repo: cloud-run-builds
+      staging_flags: >-
+        --memory=4Gi
+        --cpu=1
+        --add-cloudsql-instances=f3data:us-central1:f3data-nonprod
+        --add-volume=name=calendar-images,type=cloud-storage,bucket=f3nation-calendar-images
+        --add-volume-mount=volume=calendar-images,mount-path=/mnt/calendar-images
+        --task-timeout=6h
+      prod_flags: >-
+        --memory=4Gi
+        --cpu=1
+        --add-cloudsql-instances=f3data:us-central1:f3data
+        --add-volume=name=calendar-images,type=cloud-storage,bucket=f3nation-calendar-images
+        --add-volume-mount=volume=calendar-images,mount-path=/mnt/calendar-images
+        --task-timeout=6h

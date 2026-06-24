@@ -34,7 +34,6 @@ REGION="us-central1"
 # Only genuinely sensitive values go here.
 declare -A SECRET_MAP=(
   [SLACK_SIGNING_SECRET]="slack-signing-secret"
-  [SLACK_BOT_TOKEN]="slack-bot-token"
   [SLACK_CLIENT_SECRET]="slack-client-secret"
   [DATABASE_PASSWORD]="database-password"
   [SECRET_ADMIN_PASSWORD]="secret-admin-password"
@@ -49,7 +48,7 @@ declare -A SECRET_MAP=(
 # Per-environment env vars read from the env file (not sensitive, set as plain Cloud Run env vars)
 ENV_FILE_VARS=(
   SLACK_CLIENT_ID
-  F3_BASE_URL
+  F3_API_BASE_URL
   STATS_URL
   MAP_REVALIDATION_URL
   FILE_BUCKET_PREFIX
@@ -60,7 +59,7 @@ ENV_FILE_VARS=(
   DATABASE_HOST
   DATABASE_USER
   DATABASE_SCHEMA
-  ACHIEVMENTS_ALPHA_TESTING_ORG_IDS
+  ACHIEVEMENTS_ALPHA_TESTING_ORG_IDS
   ADMIN_CHANNEL_ID
   STRAVA_CLIENT_ID
   HOME_REGION_NUDGE_DAY

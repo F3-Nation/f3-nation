@@ -58,6 +58,16 @@ on:
         required: false
         type: string
         default: ""
+      staging_flags:
+        description: "Staging-only flags passed directly to gcloud run jobs deploy; falls back to flags when empty"
+        required: false
+        type: string
+        default: ""
+      prod_flags:
+        description: "Production-only flags passed directly to gcloud run jobs deploy; falls back to flags when empty"
+        required: false
+        type: string
+        default: ""
 
 jobs:
   ci-gate:
@@ -154,7 +164,7 @@ jobs:
           IMAGE: ${{ needs.build.outputs.image }}
           REGION: ${{ inputs.region }}
           PROJECT_ID: ${{ inputs.staging_project }}
-          FLAGS: ${{ inputs.flags }}
+          FLAGS: ${{ inputs.staging_flags || inputs.flags }}
         run: |
           if [[ -n "${FLAGS}" ]]; then
             # shellcheck disable=SC2206
@@ -208,7 +218,7 @@ jobs:
           IMAGE: ${{ env.prod_image }}
           REGION: ${{ inputs.region }}
           PROJECT_ID: ${{ inputs.prod_project }}
-          FLAGS: ${{ inputs.flags }}
+          FLAGS: ${{ inputs.prod_flags || inputs.flags }}
         run: |
           if [[ -n "${FLAGS}" ]]; then
             # shellcheck disable=SC2206
