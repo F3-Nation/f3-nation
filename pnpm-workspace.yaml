@@ -12,7 +12,7 @@ catalog:
   "@google-cloud/storage": ^7.21.0
   "@hookform/resolvers": ^3.10.0
   "@ianvs/prettier-plugin-sort-imports": ^4.1.1
-  "@next/eslint-plugin-next": ^16.2.3
+  "@next/eslint-plugin-next": ^16.2.9
   "@orpc/client": ^1.8.8
   "@orpc/experimental-ratelimit": ^1.13.2
   "@orpc/openapi": ^1.8.8
@@ -77,9 +77,9 @@ catalog:
   drizzle-orm: ^0.45.2
   drizzle-zod: ^0.7.1
   esbuild-register: ^3.6.0
-  eslint: ^10.4.0
-  eslint-config-turbo: ^2.9.14
-  eslint-plugin-import-x: ^4.15.1
+  eslint: ^10.5.0
+  eslint-config-turbo: ^2.9.18
+  eslint-plugin-import-x: ^4.16.2
   eslint-plugin-jsx-a11y: ^6.10.2
   eslint-plugin-react: ^7.37.5
   eslint-plugin-react-hooks: ^7.1.1
@@ -126,7 +126,7 @@ catalog:
   tsx: ^4.22.4
   turbo: ^2.9.18
   typescript: ^6.0.3
-  typescript-eslint: ^8.60.0
+  typescript-eslint: ^8.61.1
   vaul: ^0.9.9
   # Vitest 4 requires Vite >= 6. Vite is otherwise only a transitive (auto-installed
   # peer) dep, which pnpm won't reliably bump from the locked v5; declaring it
