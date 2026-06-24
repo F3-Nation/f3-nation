@@ -10,8 +10,7 @@
     "allowArbitraryExtensions": true,
     "plugins": [{ "name": "next" }],
     "tsBuildInfoFile": "node_modules/.cache/tsbuildinfo.json",
-    "strictNullChecks": true,
-    "types": ["@acme/tsconfig/type-extensions", "google.maps"]
+    "strictNullChecks": true
   },
   "include": [".", ".next/types/**/*.ts"],
   "exclude": ["node_modules", "vitest.config.ts", ".next"]
