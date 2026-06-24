@@ -8,7 +8,8 @@
     },
     "plugins": [{ "name": "next" }],
     "tsBuildInfoFile": "node_modules/.cache/tsbuildinfo.json",
-    "strictNullChecks": true
+    "strictNullChecks": true,
+    "types": ["@acme/tsconfig/type-extensions", "google.maps"]
   },
   "include": [".", ".next/types/**/*.ts"],
   "exclude": ["node_modules", ".next"]
