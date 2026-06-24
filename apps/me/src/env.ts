@@ -13,6 +13,10 @@ export const env = createEnv({
     OAUTH_CLIENT_ID: z.string().min(1),
     OAUTH_CLIENT_SECRET: z.string().min(1),
     OAUTH_REDIRECT_URI: z.string().url(),
+    F3_CHANNEL: z.enum(["local", "ci", "branch", "dev", "staging", "prod"]),
+    // Base64-encoded service-account JSON for GCS public-image uploads.
+    GCS_CREDENTIALS: z.string().min(1),
+    GCS_EMULATOR_HOST: z.string().optional(),
   },
   client: {
     NEXT_PUBLIC_SITE_URL: z.string().min(1),
@@ -28,5 +32,6 @@ export const env = createEnv({
   skipValidation:
     !!process.env.CI ||
     !!process.env.SKIP_ENV_VALIDATION ||
+    process.env.NODE_ENV === "test" ||
     process.env.npm_lifecycle_event === "lint",
 });

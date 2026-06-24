@@ -27,6 +27,7 @@ import { DeleteRequestSchema, RequestInsertSchema } from "@acme/validators";
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
+import { getPublicImageStorage } from "../lib/storage";
 import { notifyMapDataChange } from "../lib/webhook-events";
 import { logError, logDebug } from "../logger";
 import { notifyMapChangeRequest } from "../services/map-request-notification";
@@ -1113,6 +1114,27 @@ const applyUpdateRequest = async (
     eventDayOfWeek?: DayOfWeek | null;
   },
 ): Promise<UpdateRequestResponse> => {
+  // Promote a pending change-request logo (org-logos/{orgId}-{requestId}.jpg)
+  // to the canonical org path (org-logos/{orgId}.jpg), overwriting any previous
+  // logo and removing the pending file, so the DB stores the canonical URL.
+  if (updateRequest.aoLogo) {
+    try {
+      const storage = getPublicImageStorage();
+      if (storage.isAllowedPublicImageUrl(updateRequest.aoLogo)) {
+        updateRequest.aoLogo = await storage.promoteOrgLogo(
+          updateRequest.aoLogo,
+        );
+      }
+    } catch (error) {
+      // Don't fail approval on storage issues; keep the submitted URL.
+      logError(
+        "api.request.logo_promotion_failed",
+        { aoLogo: updateRequest.aoLogo },
+        error,
+      );
+    }
+  }
+
   // LOCATION
   if (updateRequest.locationId == undefined) {
     // INSERT LOCATION

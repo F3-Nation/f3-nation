@@ -30,9 +30,8 @@ export const env = createEnv({
       ),
     F3_MAP_BASE_URL: z.string().url(),
     GCS_EMULATOR_HOST: z.string().optional(),
-    GOOGLE_LOGO_BUCKET_BUCKET_NAME: z.string().min(1),
-    GOOGLE_LOGO_BUCKET_CLIENT_EMAIL: z.string().min(1),
-    GOOGLE_LOGO_BUCKET_PRIVATE_KEY: z.string().min(1),
+    // Base64-encoded service-account JSON for GCS public-image uploads.
+    GCS_CREDENTIALS: z.string().min(1),
     SUPER_ADMIN_API_KEY: z.string().min(1),
   },
   /**
