@@ -349,10 +349,10 @@ catalogs:
       specifier: 2.2.6
       version: 2.2.6
     tailwind-merge:
-      specifier: ^2.2.1
+      specifier: ^2.6.1
       version: 2.6.1
     tailwindcss:
-      specifier: ^3.4.1
+      specifier: ^3.4.19
       version: 3.4.19
     tailwindcss-animate:
       specifier: ^1.0.7
@@ -15758,7 +15758,7 @@ snapshots:
       lines-and-columns: 1.2.4
       mz: 2.7.0
       pirates: 4.0.7
-      tinyglobby: 0.2.16
+      tinyglobby: 0.2.17
       ts-interface-checker: 0.1.13
 
   supercluster@8.0.1:
