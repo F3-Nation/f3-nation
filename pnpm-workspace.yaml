@@ -86,7 +86,7 @@ catalog:
   geist: ^1.7.2
   google-auth-library: ^10.7.0
   handlebars: ^4.7.9
-  inquirer: ^12.11.1
+  inquirer: ^14.0.2
   jiti: ^2.7.0
   jose: ^6.2.3
   jsdom: ^29.1.1
