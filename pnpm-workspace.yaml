@@ -131,8 +131,7 @@ catalog:
   # Vitest 4 requires Vite >= 6. Vite is otherwise only a transitive (auto-installed
   # peer) dep, which pnpm won't reliably bump from the locked v5; declaring it
   # explicitly in each vitest package pins a compatible Vite deterministically.
-  vite: ^7.3.5
-  vite-tsconfig-paths: ^6.1.1
+  vite: ^8.0.16
   vitest: ^4.1.9
   vitest-canvas-mock: ^1.1.4
   zod: ^3.25.76
