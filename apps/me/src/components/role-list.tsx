@@ -35,7 +35,7 @@ export function RoleList({ roles: initialRoles }: RoleListProps) {
   });
 
   if (roles.length === 0) {
-    return <p className="text-muted-foreground text-sm">No roles assigned.</p>;
+    return <p className="text-sm text-muted-foreground">No roles assigned.</p>;
   }
 
   return (
@@ -54,7 +54,7 @@ export function RoleList({ roles: initialRoles }: RoleListProps) {
               </span>
               <button
                 type="button"
-                className="hover:bg-foreground/10 ml-1 rounded-full p-0.5 disabled:opacity-50"
+                className="ml-1 rounded-full p-0.5 hover:bg-foreground/10 disabled:opacity-50"
                 disabled={removing !== null}
                 onClick={() => setRoleToConfirm(role)}
                 aria-label={`Remove ${role.roleName} role from ${role.orgName ?? `Org ${role.orgId}`}`}
@@ -76,7 +76,7 @@ export function RoleList({ roles: initialRoles }: RoleListProps) {
           );
         })}
       </div>
-      <p className="text-muted-foreground text-xs">
+      <p className="text-xs text-muted-foreground">
         To add a new role, contact your region admins. Check{" "}
         <a
           href="https://org.f3nation.com"

@@ -98,7 +98,7 @@ export const EventChip = (props: {
     <div
       key={event.id}
       className={cn(
-        "flex flex-row items-center ",
+        "flex flex-row items-center",
         "rounded-sm",
         "text-xs text-white",
         "px-2 shadow",
@@ -157,8 +157,8 @@ export const EventChip = (props: {
           className={cn(
             "flex size-3 items-center justify-center rounded-full bg-background text-foreground",
             { "-ml-4 -mt-3 size-4 text-sm": size === "large" },
-            { "-ml-[10px] -mt-[6px] size-3 text-xs ": size === "medium" },
-            { "-ml-[8px] -mt-[6px] size-[10px] text-xs ": size === "small" },
+            { "-ml-[10px] -mt-[6px] size-3 text-xs": size === "medium" },
+            { "-ml-[8px] -mt-[6px] size-[10px] text-xs": size === "small" },
           )}
         >
           +

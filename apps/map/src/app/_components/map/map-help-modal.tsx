@@ -100,7 +100,7 @@ export function MapHelpModal() {
                 </Link>
               </Card>
             ))}
-            <div className="flex flex-col gap-1 ">
+            <div className="flex flex-col gap-1">
               <h3 className="text-lg font-semibold">Other</h3>
               <div className="flex flex-col gap-1">
                 <button

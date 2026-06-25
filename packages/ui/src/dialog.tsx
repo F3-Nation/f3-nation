@@ -27,7 +27,7 @@ const DialogOverlay = React.forwardRef<
     style={{ zIndex: Z_INDEX.DIALOG_OVERLAY }}
     className={cn(
       "fixed inset-0",
-      "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 ",
+      "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
       "grid max-h-screen place-items-center overflow-y-auto bg-foreground/30 backdrop-blur-sm dark:bg-background/10",
       className,
     )}
