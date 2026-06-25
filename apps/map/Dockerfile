@@ -41,7 +41,6 @@ COPY --from=builder /app/out/full/ .
 ENV NODE_ENV=production
 ENV CI=true
 ENV SKIP_ENV_VALIDATION=true
-ENV SKIP_SSG=1
 
 # `turbo prune` copies the full catalog into pnpm-workspace.yaml but only this
 # app's subset into the pruned lockfile. pnpm's verify-deps-before-run check (run

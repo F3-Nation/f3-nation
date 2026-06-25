@@ -73,8 +73,8 @@ Object.defineProperty(window, "matchMedia", {
 });
 
 describe("layout app router", () => {
-  it("should render layout", async () => {
-    const layoutResult = await RootLayout({ children: <div /> });
+  it("should render layout", () => {
+    const layoutResult = RootLayout({ children: <div /> });
     const { container } = render(layoutResult);
     expect(container.querySelector("body")).toHaveClass(
       "min-h-dvh w-screen bg-background font-sans text-foreground antialiased",

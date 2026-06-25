@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 
 export type Channel = "local" | "ci" | "branch" | "dev" | "staging" | "prod";
 
@@ -10,42 +10,59 @@ interface RuntimeConfig {
   adminUrl: string;
 }
 
-const RuntimeConfigContext = createContext<RuntimeConfig | null>(null);
+// Loading default used before /api/runtime-config resolves on the client. The
+// page tree still renders (and caches) with these values; the only consumer that
+// must wait for the real key is the Google Maps APIProvider, which gates on it.
+const DEFAULT_CONFIG: RuntimeConfig = {
+  channel: "local",
+  googleApiKey: "",
+  adminUrl: "",
+};
 
-let _runtimeConfig: RuntimeConfig | null = null;
+const RuntimeConfigContext = createContext<RuntimeConfig>(DEFAULT_CONFIG);
+
+// Mirror of the latest config for non-React callers (e.g. places utils) that
+// read the key synchronously. Populated once the fetch resolves; those callers
+// only fire on user interaction, well after the provider has mounted.
+let _runtimeConfig: RuntimeConfig = DEFAULT_CONFIG;
 
 export function RuntimeConfigProvider({
-  channel,
-  googleApiKey,
-  adminUrl,
   children,
 }: {
-  channel: Channel;
-  googleApiKey: string;
-  adminUrl: string;
   children: React.ReactNode;
 }) {
-  _runtimeConfig = { channel, googleApiKey, adminUrl };
+  const [config, setConfig] = useState<RuntimeConfig>(_runtimeConfig);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/runtime-config");
+        if (!res.ok) throw new Error(`runtime-config ${res.status}`);
+        const data = (await res.json()) as RuntimeConfig;
+        if (cancelled) return;
+        _runtimeConfig = data;
+        setConfig(data);
+      } catch (err) {
+        console.error("Failed to load runtime config", err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
-    <RuntimeConfigContext.Provider value={_runtimeConfig}>
+    <RuntimeConfigContext.Provider value={config}>
       {children}
     </RuntimeConfigContext.Provider>
   );
 }
 
 export function useRuntimeConfig(): RuntimeConfig {
-  const ctx = useContext(RuntimeConfigContext);
-  if (!ctx) {
-    throw new Error(
-      "useRuntimeConfig must be used within RuntimeConfigProvider",
-    );
-  }
-  return ctx;
+  return useContext(RuntimeConfigContext);
 }
 
 export function getGoogleApiKey(): string {
-  if (!_runtimeConfig) {
-    throw new Error("RuntimeConfigProvider has not rendered yet");
-  }
   return _runtimeConfig.googleApiKey;
 }

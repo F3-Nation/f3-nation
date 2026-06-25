@@ -61,6 +61,8 @@ export const GoogleMapComponent = () => {
   const { initialCenter, initialZoom } = useInitialLocation();
   const { googleApiKey } = useRuntimeConfig();
 
+  if (!googleApiKey) return null;
+
   return (
     <APIProvider apiKey={googleApiKey}>
       <ProvidedGoogleMapComponent
