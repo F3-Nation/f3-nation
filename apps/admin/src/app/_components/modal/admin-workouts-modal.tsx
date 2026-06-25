@@ -69,11 +69,8 @@ const EventInsertForm = EventInsertSchema.extend({
   endTime: z.string().regex(/^\d{2}:\d{2}$/, {
     message: "End time must be in 24hr format (HH:mm)",
   }),
-  eventTypeIds: z
-    .number()
-    .array()
-    .min(1, { message: "Event type is required" }),
-  startDate: z.string().min(1, { message: "Start date is required" }),
+  eventTypeIds: z.number().array().min(1, { error: "Event type is required" }),
+  startDate: z.string().min(1, { error: "Start date is required" }),
   dayOfWeek: z.enum(DayOfWeek, {
     message: "Day of week is required",
   }),

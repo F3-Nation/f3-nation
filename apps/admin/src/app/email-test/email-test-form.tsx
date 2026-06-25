@@ -139,9 +139,9 @@ const templateConfigs: Record<Templates, TemplateConfig> = {
 };
 
 const formSchema = z.object({
-  template: z.nativeEnum(Templates),
-  to: z.string().email("Please enter a valid email address"),
-  data: z.record(z.unknown()),
+  template: z.enum(Templates),
+  to: z.email("Please enter a valid email address"),
+  data: z.record(z.string(), z.unknown()),
 });
 
 export const EmailTestForm = () => {

@@ -196,7 +196,11 @@ export const userListUserOutputSchema = UserSelectSchema.partial()
       )
       .describe("User roles"),
     name: z.string().describe("Full name (firstName + lastName)"),
-    meta: z.record(z.unknown()).nullable().optional().describe("User metadata"),
+    meta: z
+      .record(z.string(), z.unknown())
+      .nullable()
+      .optional()
+      .describe("User metadata"),
     homeRegion: z
       .object({
         homeRegionId: z.number().describe("Home region ID"),
@@ -223,7 +227,11 @@ export const userDetailOutputSchema = UserSelectSchema.partial()
         }),
       )
       .describe("User roles"),
-    meta: z.record(z.unknown()).nullable().optional().describe("User metadata"),
+    meta: z
+      .record(z.string(), z.unknown())
+      .nullable()
+      .optional()
+      .describe("User metadata"),
     homeRegion: z
       .object({
         homeRegionId: z.number().describe("Home region ID"),

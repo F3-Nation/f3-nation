@@ -21,14 +21,14 @@ import {
 import { cn } from ".";
 import { Label } from "./label";
 
-function useForm<TSchema extends ZodType>(
-  props: Omit<UseFormProps<TSchema["_input"]>, "resolver"> & {
-    schema: TSchema;
+function useForm<TOutput, TInput extends FieldValues = FieldValues>(
+  props: Omit<UseFormProps<TInput, unknown, TOutput>, "resolver"> & {
+    schema: ZodType<TOutput, TInput>;
   },
 ) {
-  const form = __useForm<TSchema["_input"]>({
+  const form = __useForm<TInput, unknown, TOutput>({
     ...props,
-    resolver: zodResolver(props.schema, undefined),
+    resolver: zodResolver(props.schema),
   });
 
   return form;
@@ -191,13 +191,17 @@ const FormMessage = React.forwardRef<
 FormMessage.displayName = "FormMessage";
 
 // Create a factory so that we don't have to worry about using the wrong form types
-const ShadCNFormFactory = <T extends ZodType>(schema: T) => {
-  const useSchemaForm = (props: Omit<UseFormProps<T["_input"]>, "resolver">) =>
+const ShadCNFormFactory = <TOutput, TInput extends FieldValues = FieldValues>(
+  schema: ZodType<TOutput, TInput>,
+) => {
+  const useSchemaForm = (
+    props: Omit<UseFormProps<TInput, unknown, TOutput>, "resolver">,
+  ) =>
     useForm({
       ...props,
       schema,
     });
-  const useSchemaFormContext = () => useFormContext<T["_input"]>();
+  const useSchemaFormContext = () => useFormContext<TInput>();
   return { useSchemaForm, useSchemaFormContext };
 };
 

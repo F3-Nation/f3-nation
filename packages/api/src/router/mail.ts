@@ -63,11 +63,11 @@ export const mailRouter = {
   sendTest: nationAdminProcedure
     .input(
       z.object({
-        template: z.nativeEnum(Templates).describe("The template ID to send"),
-        to: z.string().email().describe("Recipient email address"),
+        template: z.enum(Templates).describe("The template ID to send"),
+        to: z.email().describe("Recipient email address"),
         // Template-specific data
         data: z
-          .record(z.unknown())
+          .record(z.string(), z.unknown())
           .describe(
             "Template-specific data object. See /mail/templates endpoint for required/optional fields.",
           ),
@@ -136,11 +136,9 @@ export const mailRouter = {
   preview: nationAdminProcedure
     .input(
       z.object({
-        template: z
-          .nativeEnum(Templates)
-          .describe("The template ID to preview"),
+        template: z.enum(Templates).describe("The template ID to preview"),
         data: z
-          .record(z.unknown())
+          .record(z.string(), z.unknown())
           .describe(
             "Template-specific data object. See /mail/templates endpoint for required/optional fields.",
           ),
