@@ -45,13 +45,13 @@ export function AuthCard({ error }: AuthCardProps) {
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {error && (
-          <div className="border-destructive/50 bg-destructive/10 text-destructive rounded-md border p-3 text-sm">
+          <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
             {ERROR_MESSAGES[error] ?? `An error occurred: ${error}`}
           </div>
         )}
         <a
           href="/api/auth/login?returnTo=/profile"
-          className="bg-primary text-primary-foreground ring-offset-background hover:bg-primary/90 focus-visible:ring-ring inline-flex h-11 w-full items-center justify-center whitespace-nowrap rounded-md px-8 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+          className="inline-flex h-11 w-full items-center justify-center whitespace-nowrap rounded-md bg-primary px-8 text-sm font-medium text-primary-foreground ring-offset-background transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           Sign in with F3 Nation
         </a>

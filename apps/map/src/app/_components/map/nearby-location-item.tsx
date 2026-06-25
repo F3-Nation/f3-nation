@@ -142,7 +142,7 @@ export const NearbyLocationItem = (props: {
               </div>
             ) : null}
           </div>
-          <div className="flex flex-row flex-wrap gap-x-2 gap-y-1 ">
+          <div className="flex flex-row flex-wrap gap-x-2 gap-y-1">
             {item.events.map((event) => {
               return (
                 <EventChip

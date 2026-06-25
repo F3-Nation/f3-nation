@@ -65,7 +65,7 @@ export function MapSearchBoxMobile({
     >
       <div
         className={cn(
-          " grid grid-cols-[1fr] items-center px-2 transition-all",
+          "grid grid-cols-[1fr] items-center px-2 transition-all",
           className,
         )}
         {...rest}

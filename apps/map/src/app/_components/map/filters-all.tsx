@@ -96,7 +96,7 @@ export const FiltersAll = (props: ComponentProps<"div">) => {
       )}
       {...rest}
     >
-      <div className="mt-4 flex h-full flex-col gap-4 overflow-auto px-6 pb-20 ">
+      <div className="mt-4 flex h-full flex-col gap-4 overflow-auto px-6 pb-20">
         <div className="flex flex-row justify-between">
           <h2 className="text-center text-xl font-bold">Map Filters</h2>
           <button
