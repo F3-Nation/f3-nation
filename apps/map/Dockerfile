@@ -41,6 +41,10 @@ COPY --from=builder /app/out/full/ .
 ENV NODE_ENV=production
 ENV CI=true
 ENV SKIP_ENV_VALIDATION=true
+# Build-only: the Docker build has no DB/API access, so skip the build-time
+# data fetch on `/` (renders empty). At runtime SKIP_SSG is unset, so ISR
+# regeneration fetches real map data against the live DB. See page.tsx.
+ENV SKIP_SSG=1
 
 # `turbo prune` copies the full catalog into pnpm-workspace.yaml but only this
 # app's subset into the pruned lockfile. pnpm's verify-deps-before-run check (run
