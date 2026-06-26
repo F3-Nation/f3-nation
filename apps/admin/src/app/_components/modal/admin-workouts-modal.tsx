@@ -63,10 +63,10 @@ import { ControlledTimeInput } from "../time-input";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 
 const EventInsertForm = EventInsertSchema.extend({
-  startTime: z.string().regex(/^\d{2}:\d{2}$/, {
+  startTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, {
     error: "Start time must be in 24hr format (HH:mm)",
   }),
-  endTime: z.string().regex(/^\d{2}:\d{2}$/, {
+  endTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, {
     error: "End time must be in 24hr format (HH:mm)",
   }),
   eventTypeIds: z.number().array().min(1, { error: "Event type is required" }),

@@ -42,7 +42,7 @@ import { useAuth } from "~/utils/hooks/use-auth";
 import { closeModal } from "~/utils/store/modal";
 
 const ApiKeyFormSchema = z.object({
-  name: z.string().min(1, { error: "Name is required" }),
+  name: z.string().trim().min(1, { error: "Name is required" }),
   description: z.string().optional(),
   roles: z
     .object({

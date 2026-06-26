@@ -9,6 +9,17 @@ import { logError } from "../logger";
 import { nationAdminProcedure } from "../shared";
 
 /**
+ * Templates the sendTest/preview handlers actually implement. Narrowing the
+ * input to this subset prevents unsupported templates (e.g. regionInABox) from
+ * passing validation — which would make sendTest report success without sending
+ * and preview throw "Unknown template".
+ */
+export const supportedTemplateSchema = z.enum([
+  Templates.feedbackForm,
+  Templates.mapChangeRequest,
+]);
+
+/**
  * Mail router for testing email templates (nation admin only)
  */
 export const mailRouter = {
@@ -63,7 +74,7 @@ export const mailRouter = {
   sendTest: nationAdminProcedure
     .input(
       z.object({
-        template: z.enum(Templates).describe("The template ID to send"),
+        template: supportedTemplateSchema.describe("The template ID to send"),
         to: z.email().describe("Recipient email address"),
         // Template-specific data
         data: z
@@ -136,7 +147,9 @@ export const mailRouter = {
   preview: nationAdminProcedure
     .input(
       z.object({
-        template: z.enum(Templates).describe("The template ID to preview"),
+        template: supportedTemplateSchema.describe(
+          "The template ID to preview",
+        ),
         data: z
           .record(z.string(), z.unknown())
           .describe(

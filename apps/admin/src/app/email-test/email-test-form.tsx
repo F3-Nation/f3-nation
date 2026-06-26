@@ -49,7 +49,16 @@ interface TemplateConfig {
   fields: TemplateField[];
 }
 
-const templateConfigs: Record<Templates, TemplateConfig> = {
+// Templates the mail router's sendTest/preview handlers actually implement.
+// Keep in sync with `supportedTemplateSchema` in packages/api/src/router/mail.ts
+// so the form never offers a template the backend silently can't process.
+const supportedTemplates = [
+  Templates.feedbackForm,
+  Templates.mapChangeRequest,
+] as const;
+type SupportedTemplate = (typeof supportedTemplates)[number];
+
+const templateConfigs: Record<SupportedTemplate, TemplateConfig> = {
   [Templates.feedbackForm]: {
     name: "Feedback Form",
     description: "Email sent when a user submits feedback",
@@ -124,28 +133,16 @@ const templateConfigs: Record<Templates, TemplateConfig> = {
       },
     ],
   },
-  [Templates.regionInABox]: {
-    name: "Region In A Box",
-    description: "Email sent when a region creates their first event.",
-    fields: [
-      {
-        name: "regionName",
-        label: "Region Name",
-        type: "text",
-        default: "Test Region",
-      },
-    ],
-  },
 };
 
 const formSchema = z.object({
-  template: z.enum(Templates),
+  template: z.enum(supportedTemplates),
   to: z.email("Please enter a valid email address"),
   data: z.record(z.string(), z.unknown()),
 });
 
 export const EmailTestForm = () => {
-  const [selectedTemplate, setSelectedTemplate] = useState<Templates>(
+  const [selectedTemplate, setSelectedTemplate] = useState<SupportedTemplate>(
     Templates.mapChangeRequest,
   );
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
@@ -179,7 +176,7 @@ export const EmailTestForm = () => {
   const templateConfig = templateConfigs[selectedTemplate];
 
   // Build default values from template config
-  const getDefaultValues = (template: Templates) => {
+  const getDefaultValues = (template: SupportedTemplate) => {
     const config = templateConfigs[template];
     const data: Record<string, unknown> = {};
     config.fields.forEach((field) => {
@@ -198,7 +195,7 @@ export const EmailTestForm = () => {
   });
 
   const handleTemplateChange = (value: string) => {
-    const template = value as Templates;
+    const template = value as SupportedTemplate;
     setSelectedTemplate(template);
     setPreviewHtml(null);
     form.reset(getDefaultValues(template));
@@ -251,7 +248,7 @@ export const EmailTestForm = () => {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {Object.values(Templates).map((template) => (
+                        {supportedTemplates.map((template) => (
                           <SelectItem key={template} value={template}>
                             {templateConfigs[template].name}
                           </SelectItem>

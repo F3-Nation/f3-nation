@@ -48,7 +48,7 @@ export const CrupdateUserSchema = UserInsertSchema.extend({
 export const EmailAuthSchema = UserInsertSchema.pick({
   email: true,
 }).extend({
-  email: z.email(),
+  email: z.email({ error: "Invalid email format" }),
 });
 
 // LOCATION SCHEMA

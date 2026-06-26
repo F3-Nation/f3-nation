@@ -201,7 +201,7 @@ const ShadCNFormFactory = <TOutput, TInput extends FieldValues = FieldValues>(
       ...props,
       schema,
     });
-  const useSchemaFormContext = () => useFormContext<TInput>();
+  const useSchemaFormContext = () => useFormContext<TInput, unknown, TOutput>();
   return { useSchemaForm, useSchemaFormContext };
 };
 
