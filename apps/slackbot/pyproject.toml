@@ -75,6 +75,9 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 include-package-data = true
 
+[tool.setuptools.package-data]
+utilities = ["default_help.json"]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["application*", "features*", "infrastructure*", "utilities*"]

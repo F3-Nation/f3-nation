@@ -1,5 +1,6 @@
 import json
 import os
+from importlib import resources
 from logging import Logger
 
 from slack_sdk.models.blocks import ActionsBlock, ButtonElement, SectionBlock
@@ -18,7 +19,7 @@ def build_help_menu(
     context: dict,
     region_record: SlackSettings,
 ):
-    with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), "utilities", "default_help.json")) as f:
+    with resources.files("utilities").joinpath("default_help.json").open() as f:
         default_help_text = json.load(f)
 
     existing_view = body.get("view", {})
