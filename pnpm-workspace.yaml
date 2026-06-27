@@ -145,6 +145,20 @@ peerDependencyRules:
     eslint-plugin-react>eslint: "10"
     eslint-plugin-react-hooks>eslint: "10"
     eslint-plugin-jsx-a11y>eslint: "10"
+# @hookform/resolvers declares only react-hook-form as a peer, not its validator,
+# so pnpm's isolated linker never symlinks zod into the resolver's virtual-store
+# dir. Its `@hookform/resolvers/zod` entry then does `import "zod/v4/core"`, which
+# the bundler resolves from the resolver's .pnpm location and can't find -> Next
+# fails with "Can't resolve 'zod/v4/core'". Declaring zod as a peer here makes pnpm
+# link the consumer's zod (packages/ui, via catalog) into the resolver. Optional so
+# any future non-zod consumer doesn't warn.
+packageExtensions:
+  "@hookform/resolvers":
+    peerDependencies:
+      zod: "*"
+    peerDependenciesMeta:
+      zod:
+        optional: true
 allowBuilds:
   "@sentry/cli": true
   core-js: true
