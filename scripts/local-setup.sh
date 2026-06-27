@@ -15,7 +15,7 @@
 
 set -e
 
-BUCKET_NAME="${GOOGLE_LOGO_BUCKET_BUCKET_NAME:-f3-public-images}"
+BUCKETS=(f3-public-images f3-public-images-staging)
 GCS_PORT=9023
 PG_CONTAINER=f3-postgres
 
@@ -83,20 +83,22 @@ for i in $(seq 1 30); do
   sleep 1
 done
 
-# ── Step 4: Create GCS bucket ────────────────────────────────────────────────
-echo "  → Creating GCS bucket '${BUCKET_NAME}'..."
-status=$(curl -s -o /tmp/gcs-bucket-create.out -w "%{http_code}" -X POST "http://localhost:${GCS_PORT}/storage/v1/b" \
-  -H "Content-Type: application/json" \
-  -d "{\"name\": \"${BUCKET_NAME}\"}")
-if [ "$status" = "200" ] || [ "$status" = "201" ]; then
-  echo "     Bucket '${BUCKET_NAME}' created."
-elif [ "$status" = "409" ]; then
-  echo "     Bucket already exists — continuing."
-else
-  echo "     ERROR: failed to create bucket (HTTP ${status})."
-  cat /tmp/gcs-bucket-create.out
-  exit 1
-fi
+# ── Step 4: Create GCS buckets ───────────────────────────────────────────────
+for BUCKET_NAME in "${BUCKETS[@]}"; do
+  echo "  → Creating GCS bucket '${BUCKET_NAME}'..."
+  status=$(curl -s -o /tmp/gcs-bucket-create.out -w "%{http_code}" -X POST "http://localhost:${GCS_PORT}/storage/v1/b" \
+    -H "Content-Type: application/json" \
+    -d "{\"name\": \"${BUCKET_NAME}\"}")
+  if [ "$status" = "200" ] || [ "$status" = "201" ]; then
+    echo "     Bucket '${BUCKET_NAME}' created."
+  elif [ "$status" = "409" ]; then
+    echo "     Bucket '${BUCKET_NAME}' already exists — continuing."
+  else
+    echo "     ERROR: failed to create bucket '${BUCKET_NAME}' (HTTP ${status})."
+    cat /tmp/gcs-bucket-create.out
+    exit 1
+  fi
+done
 
 # ── Step 5: Run migrations ────────────────────────────────────────────────────
 echo "  → Running database migrations..."

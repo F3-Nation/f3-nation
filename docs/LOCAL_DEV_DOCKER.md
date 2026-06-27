@@ -8,12 +8,12 @@ This guide walks through setting up a **fully local** F3 Nation development envi
 
 Four Docker containers replace the cloud services you'd otherwise need access to:
 
-| Container        | What it is                                       | Local URL             |
-| ---------------- | ------------------------------------------------ | --------------------- |
-| **Postgres**     | The app's database, pre-loaded with seed data    | `localhost:5433`      |
-| **Adminer**      | A web UI to browse and query the database        | http://localhost:8080 |
-| **GCS Emulator** | Emulates Google Cloud Storage for logo uploads   | http://localhost:9023 |
-| **Mailpit**      | Catches all outbound emails so you can read them | http://localhost:8025 |
+| Container        | What it is                                       | Local URL               |
+| ---------------- | ------------------------------------------------ | ----------------------- |
+| **Postgres**     | The app's database, pre-loaded with seed data    | `localhost:5433`        |
+| **Adminer**      | A web UI to browse and query the database        | <http://localhost:8080> |
+| **GCS Emulator** | Emulates Google Cloud Storage for logo uploads   | <http://localhost:9023> |
+| **Mailpit**      | Catches all outbound emails so you can read them | <http://localhost:8025> |
 
 Your app servers (Map, API, Auth) still run natively on your machine with `pnpm dev`. Docker only manages the stateful infrastructure.
 
@@ -114,14 +114,15 @@ docker run hello-world
 <summary>git: Saving and submitting code; working with GitHub</summary>
 git is how you interact with GitHub from your instance of the code. You often already have git. If not, here's a link.
 
-1. Go to https://git-scm.com/install/ and download the correct version. During install, if you don't know what anything means, just leave defaults and keep hitting Next.
+1. Go to <https://git-scm.com/install/> and download the correct version. During install, if you don't know what anything means, just leave defaults and keep hitting Next.
+
 </details>
 
 <details>
 <summary>VS Code: User interface work coding</summary>
 You will need a code editor in order to edit code! The instructions assume you will be using VS Code. If you have a different IDE, you'll have to adjust accordingly.
 
-1. Go to https://code.visualstudio.com/download and download the correct version.
+1. Go to <https://code.visualstudio.com/download> and download the correct version.
 </details>
 
 <details>
@@ -231,15 +232,15 @@ The above command will install code if you don't have it already and then open y
 pnpm dev
 ```
 
-| App      | URL                   |
-| -------- | --------------------- |
-| Map      | http://localhost:3000 |
-| API      | http://localhost:3001 |
-| Admin    | http://localhost:3002 |
-| Me       | http://localhost:3003 |
-| Auth     | http://localhost:3004 |
-| Homepage | http://localhost:3005 |
-| Slackbot | http://localhost:3006 |
+| App      | URL                     |
+| -------- | ----------------------- |
+| Map      | <http://localhost:3000> |
+| API      | <http://localhost:3001> |
+| Admin    | <http://localhost:3002> |
+| Me       | <http://localhost:3003> |
+| Auth     | <http://localhost:3004> |
+| Homepage | <http://localhost:3005> |
+| Slackbot | http://localhost:3006   |
 
 ---
 
@@ -313,7 +314,7 @@ The `5433` port is where the Docker Postgres container is exposed on your machin
 
 ### Email (Mailpit)
 
-All outbound emails are captured by [Mailpit](https://mailpit.axllent.org/) — no emails actually leave your machine. Open http://localhost:8025 to read any email the app sends (password resets, notifications, etc.).
+All outbound emails are captured by [Mailpit](https://mailpit.axllent.org/) — no emails actually leave your machine. Open <http://localhost:8025> to read any email the app sends (password resets, notifications, etc.).
 
 | Variable                   | Value                    | Meaning                                                                 |
 | -------------------------- | ------------------------ | ----------------------------------------------------------------------- |
@@ -324,14 +325,13 @@ All outbound emails are captured by [Mailpit](https://mailpit.axllent.org/) — 
 
 ### Google Cloud Storage (GCS emulator)
 
-| Variable                          | Value                   | Meaning                                                             |
-| --------------------------------- | ----------------------- | ------------------------------------------------------------------- |
-| `GCS_EMULATOR_HOST`               | `localhost:9023`        | Tells the app to use the local emulator instead of real GCS         |
-| `GOOGLE_LOGO_BUCKET_PRIVATE_KEY`  | `local-placeholder-...` | Required by env validation, but **ignored** when emulator is active |
-| `GOOGLE_LOGO_BUCKET_CLIENT_EMAIL` | `local@local.local`     | Same — ignored when emulator is active                              |
-| `GOOGLE_LOGO_BUCKET_BUCKET_NAME`  | `f3-public-images`      | The bucket name used by both the emulator and real GCS              |
+| Variable            | Value                                      | Meaning                                                             |
+| ------------------- | ------------------------------------------ | ------------------------------------------------------------------- |
+| `GCS_EMULATOR_HOST` | `localhost:9023`                           | Tells the app to use the local emulator instead of real GCS         |
+| `GCS_CREDENTIALS`   | `local-placeholder-not-used-with-emulator` | Required by env validation, but **ignored** when emulator is active |
+| `F3_CHANNEL`        | `local`                                    | Selects staging bucket (`f3-public-images-staging`) for local dev   |
 
-When `GCS_EMULATOR_HOST` is set, the upload route skips Google authentication entirely and sends files directly to the local fake-gcs-server. Uploaded logos are stored in a Docker volume and served at `http://localhost:9023/f3-public-images/<filename>`.
+When `GCS_EMULATOR_HOST` is set, the upload route skips Google authentication entirely and sends files directly to the local fake-gcs-server. Uploaded logos are stored in a Docker volume at canonical paths such as `org-logos/{orgId}.jpg` and served at `http://localhost:9023/f3-public-images-staging/<path>`.
 
 ### Client-side URLs
 
@@ -357,7 +357,7 @@ These tell each Next.js app where to find the other apps. Don't change these unl
 
 ### Browse the database with Adminer
 
-1. Open http://localhost:8080
+1. Open <http://localhost:8080>
 2. Fill in the login form:
    - **System**: PostgreSQL
    - **Server**: `f3-postgres`
@@ -405,18 +405,18 @@ Logo uploads in the Map app are handled by the GCS emulator (`fake-gcs-server`) 
 
 1. When you upload a logo, the Map app sends the image to its `/api/upload-logo` route
 2. The route detects `GCS_EMULATOR_HOST` in the env and calls the emulator instead of real GCS
-3. The emulator stores the file in the `f3-public-images` bucket
-4. The returned public URL points to `http://localhost:9023/f3-public-images/<filename>`
+3. The emulator stores the file in the `f3-public-images-staging` bucket (local `F3_CHANNEL`)
+4. The returned public URL points to `http://localhost:9023/f3-public-images-staging/org-logos/<orgId>.jpg`
 
 ### Browsing stored files
 
 To list all uploaded files in the emulator:
 
 ```bash
-curl http://localhost:9023/storage/v1/b/f3-public-images/o | jq '.items[].name'
+curl http://localhost:9023/storage/v1/b/f3-public-images-staging/o | jq '.items[].name'
 ```
 
-Individual files are directly accessible at `http://localhost:9023/f3-public-images/<filename>`.
+Individual files are directly accessible at `http://localhost:9023/f3-public-images-staging/<filename>`.
 
 ### Resetting uploaded files
 
@@ -435,7 +435,7 @@ pnpm docker:up
 # then re-create the bucket:
 curl -X POST http://localhost:9023/storage/v1/b \
   -H "Content-Type: application/json" \
-  -d '{"name": "f3-public-images"}'
+  -d '{"name": "f3-public-images-staging"}'
 ```
 
 ---
@@ -530,7 +530,7 @@ The bucket needs to be created after the emulator starts. Run:
 ```bash
 curl -X POST http://localhost:9023/storage/v1/b \
   -H "Content-Type: application/json" \
-  -d '{"name": "f3-public-images"}'
+  -d '{"name": "f3-public-images-staging"}'
 ```
 
 ### Migrations failing

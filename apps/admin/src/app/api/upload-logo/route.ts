@@ -1,10 +1,11 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
-import { prepareImageForStorage, uploadFile } from "@acme/storage";
+import { parseOptionalSize } from "@acme/storage";
 
 import { requireAccessToken } from "~/lib/auth/server";
 import { logError } from "~/lib/logging";
+import { storage } from "~/lib/storage";
 
 const ALLOWED_TYPES = new Set([
   "image/jpeg",
@@ -26,7 +27,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "No file provided" }, { status: 400 });
   }
 
-  if (!orgIdRaw || isNaN(Number(orgIdRaw))) {
+  const orgIdNum = Number(orgIdRaw);
+  if (!orgIdRaw || !Number.isInteger(orgIdNum) || orgIdNum <= 0) {
     return NextResponse.json({ error: "Invalid orgId" }, { status: 400 });
   }
 
@@ -44,16 +46,16 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const orgId = Number(orgIdRaw);
-  const dimension = sizeRaw ? Number(sizeRaw) : 640;
+  const size = parseOptionalSize(sizeRaw);
+  if (size === "invalid") {
+    return NextResponse.json({ error: "Invalid size" }, { status: 400 });
+  }
+
+  const orgId = orgIdNum;
 
   try {
     const buffer = Buffer.from(await fileEntry.arrayBuffer());
-    const jpeg = await prepareImageForStorage(buffer, {
-      width: dimension,
-      height: dimension,
-    });
-    const url = await uploadFile(`org-logos/${orgId}.jpg`, jpeg, "image/jpeg");
+    const url = await storage.uploadOrgLogo(orgId, buffer, { size });
 
     return NextResponse.json({ url });
   } catch (err) {

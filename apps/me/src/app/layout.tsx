@@ -26,7 +26,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${inter.className} bg-background text-foreground min-h-screen overflow-x-hidden overscroll-y-none antialiased`}
+        className={`${inter.className} min-h-screen overflow-x-hidden overscroll-y-none bg-background text-foreground antialiased`}
       >
         <GoogleAnalytics />
         <ToastProvider>

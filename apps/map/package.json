@@ -22,6 +22,7 @@
     "@acme/logger": "workspace:*",
     "@acme/mail": "workspace:*",
     "@acme/shared": "workspace:^0.1.0",
+    "@acme/storage": "workspace:^0.2.0",
     "@acme/tailwind-config": "workspace:^0.1.0",
     "@acme/ui": "workspace:^0.1.0",
     "@acme/validators": "workspace:^0.1.0",
@@ -85,7 +86,6 @@
     "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "vite-tsconfig-paths": "catalog:",
     "vitest": "catalog:",
     "vitest-canvas-mock": "catalog:"
   },

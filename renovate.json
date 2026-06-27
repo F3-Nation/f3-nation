@@ -128,6 +128,12 @@
         "autoprefixer",
         "postcss"
       ]
+    },
+    {
+      "description": "Group Turborepo packages",
+      "groupName": "Turborepo",
+      "matchDepTypes": ["pnpm.catalog.default"],
+      "matchPackageNames": ["turbo", "@turbo/*"]
     }
   ]
 }

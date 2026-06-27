@@ -1,73 +1,78 @@
-import { GoogleAuth } from "google-auth-library";
 import { NextResponse } from "next/server";
 
-import { env } from "~/env";
+import { auth } from "@acme/auth";
+import { parseOptionalSize } from "@acme/storage";
+
+import { logError } from "~/lib/logging";
+import { storage } from "~/lib/storage";
+
+const ALLOWED_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
+const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
 
 export async function POST(request: Request) {
-  try {
-    const formData = await request.formData();
-    const file = formData.get("file") as File;
-    const orgId = formData.get("orgId") as string;
-    const requestId = formData.get("requestId") as string;
-    const size = formData.get("size") as string | undefined;
+  const session = await auth();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
-    if (!file || !orgId || !requestId) {
-      return NextResponse.json({ error: "No file provided" }, { status: 400 });
-    }
+  const formData = await request.formData();
+  const file = formData.get("file");
+  const orgIdRaw = formData.get("orgId");
+  const sizeRaw = formData.get("size");
+  const requestIdRaw = formData.get("requestId");
 
-    const filename = `${orgId}-${requestId}${size ? `-${size}` : ""}.${file.type.split("/")[1]}`;
-    const bucket = env.GOOGLE_LOGO_BUCKET_BUCKET_NAME;
-    const isEmulator = !!env.GCS_EMULATOR_HOST;
-    const gcsBase = isEmulator
-      ? `http://${env.GCS_EMULATOR_HOST}`
-      : "https://storage.googleapis.com";
+  if (!(file instanceof File)) {
+    return NextResponse.json({ error: "No file provided" }, { status: 400 });
+  }
 
-    let bearerToken: string;
-    if (isEmulator) {
-      bearerToken = "local-dev-token";
-    } else {
-      const auth = new GoogleAuth({
-        credentials: {
-          private_key: env.GOOGLE_LOGO_BUCKET_PRIVATE_KEY.replace(
-            /\\\n/g,
-            "\n",
-          ).replace(/\\n/g, "\n"),
-          client_email: env.GOOGLE_LOGO_BUCKET_CLIENT_EMAIL,
-        },
-        scopes: ["https://www.googleapis.com/auth/cloud-platform"],
-      });
-      const client = await auth.getClient();
-      const tokenResult = await client.getAccessToken();
-      if (!tokenResult.token)
-        throw new Error("GCS: failed to obtain access token");
-      bearerToken = tokenResult.token;
-    }
+  const orgIdNum = Number(orgIdRaw);
+  if (!orgIdRaw || !Number.isInteger(orgIdNum) || orgIdNum <= 0) {
+    return NextResponse.json({ error: "Invalid orgId" }, { status: 400 });
+  }
 
-    const response = await fetch(
-      `${gcsBase}/upload/storage/v1/b/${bucket}/o?uploadType=media&name=${filename}`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${bearerToken}`,
-          "Content-Type": file.type,
-        },
-        body: await file.arrayBuffer(),
-      },
+  if (!ALLOWED_TYPES.has(file.type)) {
+    return NextResponse.json(
+      { error: "Invalid file type. Allowed: jpeg, png, webp, gif" },
+      { status: 400 },
     );
+  }
 
-    if (!response.ok) {
-      const body = await response.text().catch(() => "(unreadable)");
-      console.error(`GCS upload failed: HTTP ${response.status}`, body);
-      throw new Error(`Failed to upload to GCS: HTTP ${response.status}`);
-    }
+  if (file.size > MAX_SIZE) {
+    return NextResponse.json(
+      { error: "File too large. Maximum size is 10MB" },
+      { status: 400 },
+    );
+  }
 
-    const publicUrl = isEmulator
-      ? `http://${env.GCS_EMULATOR_HOST}/${bucket}/${filename}`
-      : `https://storage.googleapis.com/${bucket}/${filename}`;
+  const size = parseOptionalSize(sizeRaw);
+  if (size === "invalid") {
+    return NextResponse.json({ error: "Invalid size" }, { status: 400 });
+  }
 
-    return NextResponse.json({ url: publicUrl });
-  } catch (error) {
-    console.error("Error uploading file:", error);
+  // requestId keeps each pending change-request upload on its own path so it
+  // does not overwrite the live org logo before the revision is approved.
+  if (
+    typeof requestIdRaw !== "string" ||
+    !/^[A-Za-z0-9_-]+$/.test(requestIdRaw)
+  ) {
+    return NextResponse.json({ error: "Invalid requestId" }, { status: 400 });
+  }
+  const requestId = requestIdRaw;
+
+  const orgId = orgIdNum;
+
+  try {
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const url = await storage.uploadOrgLogo(orgId, buffer, { size, requestId });
+
+    return NextResponse.json({ url });
+  } catch (err) {
+    logError("map.logo.upload_failed", { orgId }, err);
     return NextResponse.json(
       { error: "Failed to upload file" },
       { status: 500 },

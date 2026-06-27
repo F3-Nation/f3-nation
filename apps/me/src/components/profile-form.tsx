@@ -72,7 +72,7 @@ export function ProfileForm({ user, regions }: ProfileFormProps) {
               href="https://apps.f3nation.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="bg-primary text-primary-foreground hover:bg-primary/90 focus-visible:outline-hidden focus-visible:ring-ring inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-offset-2"
+              className="focus-visible:outline-hidden inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               Go to apps.f3nation.com &rarr;
             </a>
@@ -95,11 +95,11 @@ export function ProfileForm({ user, regions }: ProfileFormProps) {
                 disabled
                 className="disabled:opacity-70"
               />
-              <p className="text-muted-foreground text-xs">
+              <p className="text-xs text-muted-foreground">
                 Email{" "}
                 <a
                   href="mailto:it@f3nation.com?subject=Need%20to%20change%20F3%20email%20address"
-                  className="text-primary hover:text-primary/80 underline"
+                  className="text-primary underline hover:text-primary/80"
                 >
                   it@f3nation.com
                 </a>{" "}
@@ -209,7 +209,7 @@ export function ProfileForm({ user, regions }: ProfileFormProps) {
                 </Label>
                 <p
                   id="user-emergency-info-dr-sharing-help"
-                  className="text-muted-foreground text-sm"
+                  className="text-sm text-muted-foreground"
                 >
                   If enabled, users can search for your emergency info from
                   other Slack workspaces.
