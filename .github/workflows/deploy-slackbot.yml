@@ -38,11 +38,11 @@ jobs:
         --min-instances=0
         --max-instances=2
         --add-cloudsql-instances=f3data:us-central1:f3data-nonprod
-        --add-volume=name=user-avatars,type=cloud-storage,bucket=f3-public-images-staging
+        --add-volume=name=user-avatars,type=cloud-storage,bucket=f3-public-images-staging,mount-options=only-dir=user-avatars
         --add-volume-mount=volume=user-avatars,mount-path=/mnt/user-avatars
-        --add-volume=name=event_instance_images,type=cloud-storage,bucket=f3-public-images-staging
+        --add-volume=name=event_instance_images,type=cloud-storage,bucket=f3-public-images-staging,mount-options=only-dir=event_instance_images
         --add-volume-mount=volume=event_instance_images,mount-path=/mnt/event_instance_images
-        --add-volume=name=org-logos,type=cloud-storage,bucket=f3-public-images-staging
+        --add-volume=name=org-logos,type=cloud-storage,bucket=f3-public-images-staging,mount-options=only-dir=org-logos
         --add-volume-mount=volume=org-logos,mount-path=/mnt/org-logos
         --add-volume=name=oauth_states,type=cloud-storage,bucket=f3nation-bot-oauth-state
         --add-volume-mount=volume=oauth_states,mount-path=/mnt/oauth_states
@@ -56,11 +56,11 @@ jobs:
         --min-instances=1
         --max-instances=100
         --add-cloudsql-instances=f3data:us-central1:f3data
-        --add-volume=name=user-avatars,type=cloud-storage,bucket=f3-public-images
+        --add-volume=name=user-avatars,type=cloud-storage,bucket=f3-public-images,mount-options=only-dir=user-avatars
         --add-volume-mount=volume=user-avatars,mount-path=/mnt/user-avatars
-        --add-volume=name=event_instance_images,type=cloud-storage,bucket=f3-public-images
+        --add-volume=name=event_instance_images,type=cloud-storage,bucket=f3-public-images,mount-options=only-dir=event_instance_images
         --add-volume-mount=volume=event_instance_images,mount-path=/mnt/event_instance_images
-        --add-volume=name=org-logos,type=cloud-storage,bucket=f3-public-images
+        --add-volume=name=org-logos,type=cloud-storage,bucket=f3-public-images,mount-options=only-dir=org-logos
         --add-volume-mount=volume=org-logos,mount-path=/mnt/org-logos
         --add-volume=name=oauth_states,type=cloud-storage,bucket=f3nation-prod-bot-oauth-state
         --add-volume-mount=volume=oauth_states,mount-path=/mnt/oauth_states
