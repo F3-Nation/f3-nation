@@ -3,11 +3,7 @@
 import Script from "next/script";
 
 /**
- * Google Analytics component
- *
- * This component is used to track user interactions with the website.
- * It is used to track user interactions with the website.
- * It is used to track user interactions with the website.
+ * Google Analytics component that injects GA scripts when a measurement ID is provided.
  */
 export const GoogleAnalytics = ({
   measurementId,
@@ -25,7 +21,7 @@ export const GoogleAnalytics = ({
           window.dataLayer = window.dataLayer || [];
           function gtag(){dataLayer.push(arguments);}
           gtag('js', new Date());
-          gtag('config', '${measurementId}', {
+          gtag('config', ${JSON.stringify(measurementId)}, {
           page_path: window.location.pathname,
           });
         `}
