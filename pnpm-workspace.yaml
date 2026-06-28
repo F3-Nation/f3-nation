@@ -13,12 +13,12 @@ catalog:
   "@hookform/resolvers": ^5.4.0
   "@ianvs/prettier-plugin-sort-imports": ^4.7.1
   "@next/eslint-plugin-next": ^16.2.9
-  "@orpc/client": ^1.8.8
-  "@orpc/experimental-ratelimit": ^1.13.2
-  "@orpc/openapi": ^1.8.8
-  "@orpc/server": ^1.8.8
-  "@orpc/tanstack-query": ^1.8.8
-  "@orpc/zod": ^1.8.8
+  "@orpc/client": ^1.14.6
+  "@orpc/experimental-ratelimit": ^1.14.6
+  "@orpc/openapi": ^1.14.6
+  "@orpc/server": ^1.14.6
+  "@orpc/tanstack-query": ^1.14.6
+  "@orpc/zod": ^1.14.6
   "@radix-ui/react-alert-dialog": ^1.0.4
   "@radix-ui/react-avatar": ^1.0.4
   "@radix-ui/react-checkbox": ^1.0.4
