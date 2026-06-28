@@ -91,6 +91,28 @@ describe("API Key Router", () => {
         expect(key?.keySignature?.length).toBe(4);
       }
     });
+
+    // Regression: read-only keys (e.g. the seeded Map App key) carry no role
+    // association — read-only access is the absence of a role. Listing such a
+    // key must succeed and report empty roles, not fail output validation.
+    it("should list a read-only key (no roles) without failing validation", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const client = createTestClient();
+      const createResult = await client.apiKey.create({
+        name: `Read-only List Test ${uniqueId()}`,
+      });
+      if (createResult.id) {
+        createdApiKeyIds.push(createResult.id);
+      }
+
+      const result = await client.apiKey.list();
+      const key = result.apiKeys.find((k) => k.id === createResult.id);
+      expect(key).toBeDefined();
+      expect(key?.roles).toEqual([]);
+      expect(key?.orgIds).toEqual([]);
+    });
   });
 
   describe("create", () => {

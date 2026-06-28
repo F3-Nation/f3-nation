@@ -10,7 +10,7 @@ catalog:
   "@commitlint/cz-commitlint": ^21.0.2
   "@faker-js/faker": ^10.5.0
   "@google-cloud/storage": ^7.21.0
-  "@hookform/resolvers": ^3.10.0
+  "@hookform/resolvers": ^5.4.0
   "@ianvs/prettier-plugin-sort-imports": ^4.7.1
   "@next/eslint-plugin-next": ^16.2.9
   "@orpc/client": ^1.8.8
@@ -42,7 +42,7 @@ catalog:
   "@react-hook/window-size": ^3.1.1
   "@scalar/nextjs-api-reference": ^0.9.5
   "@sentry/nextjs": ^9.15.0
-  "@t3-oss/env-nextjs": ^0.9.2
+  "@t3-oss/env-nextjs": ^0.13.11
   "@tanstack/react-query": 5.90.12
   "@tanstack/react-query-devtools": 5.90.2
   "@tanstack/react-table": ^8.20.5
@@ -75,7 +75,7 @@ catalog:
   dotenv-cli: ^11.0.0
   drizzle-kit: ^0.31.10
   drizzle-orm: ^0.45.2
-  drizzle-zod: ^0.7.1
+  drizzle-zod: ^0.8.3
   esbuild-register: ^3.6.0
   eslint: ^10.5.0
   eslint-config-turbo: ^2.9.18
@@ -134,7 +134,7 @@ catalog:
   vite: ^8.0.16
   vitest: ^4.1.9
   vitest-canvas-mock: ^1.1.4
-  zod: ^3.25.76
+  zod: ^4.4.3
   zustand: ^4.5.7
 overrides:
   "form-data@>=2.0.0 <2.5.6": "^2.5.6"
@@ -145,6 +145,20 @@ peerDependencyRules:
     eslint-plugin-react>eslint: "10"
     eslint-plugin-react-hooks>eslint: "10"
     eslint-plugin-jsx-a11y>eslint: "10"
+# @hookform/resolvers declares only react-hook-form as a peer, not its validator,
+# so pnpm's isolated linker never symlinks zod into the resolver's virtual-store
+# dir. Its `@hookform/resolvers/zod` entry then does `import "zod/v4/core"`, which
+# the bundler resolves from the resolver's .pnpm location and can't find -> Next
+# fails with "Can't resolve 'zod/v4/core'". Declaring zod as a peer here makes pnpm
+# link the consumer's zod (packages/ui, via catalog) into the resolver. Optional so
+# any future non-zod consumer doesn't warn.
+packageExtensions:
+  "@hookform/resolvers":
+    peerDependencies:
+      zod: "*"
+    peerDependenciesMeta:
+      zod:
+        optional: true
 allowBuilds:
   "@sentry/cli": true
   core-js: true
