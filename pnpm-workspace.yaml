@@ -75,7 +75,7 @@ catalog:
   dotenv-cli: ^11.0.0
   drizzle-kit: ^0.31.10
   drizzle-orm: ^0.45.2
-  drizzle-zod: ^0.7.1
+  drizzle-zod: ^0.8.3
   esbuild-register: ^3.6.0
   eslint: ^10.5.0
   eslint-config-turbo: ^2.9.18
