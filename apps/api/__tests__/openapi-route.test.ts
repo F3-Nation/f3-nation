@@ -6,7 +6,7 @@ vi.mock("@acme/api", () => ({
   router: {},
 }));
 
-vi.mock("@orpc/zod", () => ({
+vi.mock("@orpc/zod/zod4", () => ({
   ZodToJsonSchemaConverter: class ZodToJsonSchemaConverter {},
 }));
 
