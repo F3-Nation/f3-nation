@@ -33,7 +33,7 @@ const authStore = new ZustandStore({
 });
 
 const SignInFormSchema = z.object({
-  email: z.string().email(),
+  email: z.email(),
 });
 
 export interface SignInComponentProps {

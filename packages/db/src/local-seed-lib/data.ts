@@ -205,7 +205,9 @@ export const LOCAL_API_KEYS = [
     key: "local-map-key",
     name: "Map App (local dev)",
     description: "Used by apps/map for read-only API access",
-    role: "user" as const,
+    // Read-only access is the absence of a role (defacto "user"); the system
+    // only assigns the editor/admin roles. See seedApiKeys.
+    role: null,
   },
   {
     key: "local-slackbot-key",

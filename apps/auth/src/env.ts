@@ -18,8 +18,8 @@ export const env = createEnv({
       .default("development"),
   },
   client: {
-    NEXT_PUBLIC_API_URL: z.string().url(),
-    NEXT_PUBLIC_AUTH_URL: z.string().url(),
+    NEXT_PUBLIC_API_URL: z.url(),
+    NEXT_PUBLIC_AUTH_URL: z.url(),
   },
   experimental__runtimeEnv: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,

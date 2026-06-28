@@ -9,15 +9,15 @@ export const env = createEnv({
   },
   server: {
     F3_CHANNEL: z.enum(["local", "ci", "branch", "dev", "staging", "prod"]),
-    F3_MAP_BASE_URL: z.string().url(),
-    F3_API_BASE_URL: z.string().url(),
-    F3_ADMIN_BASE_URL: z.string().url(),
+    F3_MAP_BASE_URL: z.url(),
+    F3_API_BASE_URL: z.url(),
+    F3_ADMIN_BASE_URL: z.url(),
     F3_GOOGLE_API_KEY: z.string().min(1),
     // F3 SSO OAuth — http://localhost allowed; https enforced in code/prod.
-    AUTH_PROVIDER_URL: z.string().url(),
+    AUTH_PROVIDER_URL: z.url(),
     OAUTH_CLIENT_ID: z.string().min(1),
     OAUTH_CLIENT_SECRET: z.string().min(1),
-    OAUTH_REDIRECT_URI: z.string().url(),
+    OAUTH_REDIRECT_URI: z.url(),
     // Base64-encoded service-account JSON for GCS public-image uploads.
     GCS_CREDENTIALS: z.string().min(1),
     GCS_EMULATOR_HOST: z.string().optional(),

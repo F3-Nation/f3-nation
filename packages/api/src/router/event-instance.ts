@@ -342,16 +342,16 @@ export const eventInstanceRouter = {
         startTime: z.string().nullish(),
         endTime: z.string().nullish(),
         highlight: z.boolean().optional().default(false),
-        meta: z.record(z.unknown()).nullish(),
+        meta: z.record(z.string(), z.unknown()).nullish(),
         isPrivate: z.boolean().optional().default(false),
         eventTypeId: z.coerce.number().optional(),
         eventTagId: z.coerce.number().optional(),
         preblast: z.string().nullish(),
-        preblastRich: z.record(z.unknown()).nullish(),
+        preblastRich: z.record(z.string(), z.unknown()).nullish(),
         preblastTs: z.number().nullish(),
         // Backblast fields
         backblast: z.string().nullish(),
-        backblastRich: z.array(z.record(z.unknown())).nullish(),
+        backblastRich: z.array(z.record(z.string(), z.unknown())).nullish(),
         backblastTs: z.number().nullish(),
         paxCount: z.number().nullish(),
         fngCount: z.number().nullish(),
@@ -521,9 +521,9 @@ export const eventInstanceRouter = {
         /** Only return events without a posted preblast (preblast_ts IS NULL) */
         notPostedOnly: z
           .enum(["true", "false"])
-          .transform((v) => v === "true")
           .optional()
-          .default("true"),
+          .default("true")
+          .transform((v) => v === "true"),
       }),
     )
     .route({
@@ -615,9 +615,9 @@ export const eventInstanceRouter = {
         /** Only return events without a posted backblast (backblast_ts IS NULL) */
         notPostedOnly: z
           .enum(["true", "false"])
-          .transform((v) => v === "true")
           .optional()
-          .default("true"),
+          .default("true")
+          .transform((v) => v === "true"),
       }),
     )
     .route({
@@ -708,9 +708,9 @@ export const eventInstanceRouter = {
         /** Only return events without a posted backblast (backblast_ts IS NULL) */
         notPostedOnly: z
           .enum(["true", "false"])
-          .transform((v) => v === "true")
           .optional()
-          .default("true"),
+          .default("true")
+          .transform((v) => v === "true"),
         /** Maximum number of events to return */
         limit: z.coerce.number().optional().default(20),
       }),
