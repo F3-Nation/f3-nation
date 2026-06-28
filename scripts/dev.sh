@@ -17,7 +17,7 @@ for arg in "$@"; do
 done
 
 if [[ "$include_py" == "true" ]]; then
-  exec turbo dev "${turbo_args[@]}"
+  exec turbo dev "${turbo_args[@]+"${turbo_args[@]}"}"
 fi
 
-exec turbo dev --filter='!slack-bot' "${turbo_args[@]}"
+exec turbo dev --filter='!slack-bot' "${turbo_args[@]+"${turbo_args[@]}"}"
