@@ -57,6 +57,12 @@
     --ring: 240 4.9% 83.9%;
   }
 }
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+}
 @utility scrollbar-hide {
   -ms-overflow-style: none; /* IE and Edge */
   scrollbar-width: none; /* Firefox */

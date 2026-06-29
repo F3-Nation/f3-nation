@@ -5,6 +5,7 @@
    v4's automatic source detection ignores. Declare it explicitly so its classes
    are not purged. (Replaces the v3 `content: [..., "../../packages/ui/**"]`.) */
 @source "../../packages/ui/src";
+@source "../../packages/shared/src";
 
 /* Class-based dark mode (replaces v3 `darkMode: ["class"]`). */
 @custom-variant dark (&:is(.dark *));
