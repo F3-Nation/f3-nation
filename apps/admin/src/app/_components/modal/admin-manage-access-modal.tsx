@@ -509,7 +509,7 @@ export default function AdminManageAccessModal({
                           {selectedUser ? (
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex flex-1 items-start gap-2">
-                                <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-green-600" />
+                                <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
                                 <div className="min-w-0 flex-1">
                                   <p className="text-sm font-medium text-foreground">
                                     {(() => {
@@ -531,7 +531,7 @@ export default function AdminManageAccessModal({
                                       {selectedUser.email}
                                     </p>
                                   ) : (
-                                    <p className="truncate text-sm italic text-muted-foreground">
+                                    <p className="truncate text-sm text-muted-foreground italic">
                                       Email not available
                                     </p>
                                   )}
@@ -544,7 +544,7 @@ export default function AdminManageAccessModal({
                                   size="sm"
                                   onClick={handleClearSelection}
                                   disabled={!!data?.userId}
-                                  className="h-8 w-8 flex-shrink-0 p-0"
+                                  className="h-8 w-8 shrink-0 p-0"
                                 >
                                   <X className="h-4 w-4" />
                                 </Button>
@@ -553,7 +553,7 @@ export default function AdminManageAccessModal({
                           ) : isCreatingNew ? (
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex flex-1 items-start gap-2">
-                                <UserPlus className="mt-0.5 h-5 w-5 flex-shrink-0 text-blue-600" />
+                                <UserPlus className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
                                 <div className="min-w-0 flex-1">
                                   <p className="text-sm font-medium text-foreground">
                                     Creating New User
@@ -568,7 +568,7 @@ export default function AdminManageAccessModal({
                                 variant="ghost"
                                 size="sm"
                                 onClick={handleClearSelection}
-                                className="h-8 w-8 flex-shrink-0 p-0"
+                                className="h-8 w-8 shrink-0 p-0"
                               >
                                 <X className="h-4 w-4" />
                               </Button>

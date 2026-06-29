@@ -70,7 +70,7 @@ export const SelectedItem = (props: {
       >
         <div className="text-lg font-bold">{selectedEvent.name}</div>
         <div className="mt-2 flex flex-row items-start gap-2">
-          <div className="flex flex-shrink-0 flex-col items-center">
+          <div className="flex shrink-0 flex-col items-center">
             <ImageWithFallback
               src={
                 // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
@@ -118,13 +118,13 @@ export const SelectedItem = (props: {
             ) : null}
           </div>
         </div>
-        <div className="pointer-events-auto absolute right-3 top-3">
+        <div className="pointer-events-auto absolute top-3 right-3">
           <Maximize2 className="text-gray-700 transition-all hover:scale-110" />
         </div>
       </button>
       {hideCloseButton ? null : (
         <button
-          className="pointer-events-auto absolute right-3 top-3"
+          className="pointer-events-auto absolute top-3 right-3"
           onClick={() =>
             setSelectedItem({
               locationId: null,

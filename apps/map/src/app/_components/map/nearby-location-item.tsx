@@ -87,7 +87,7 @@ export const NearbyLocationItem = (props: {
       className={cn(
         "text-left text-sm text-foreground",
         // pl-1 balances the image on left and right
-        "relative w-full cursor-pointer py-2 pl-1 pr-2",
+        "relative w-full cursor-pointer py-2 pr-2 pl-1",
         "bg-background",
         { "bg-gray-100 dark:bg-gray-800": isLocationSelected },
       )}
@@ -115,7 +115,7 @@ export const NearbyLocationItem = (props: {
       }}
     >
       <div className="flex flex-row items-stretch gap-1">
-        <div className="flex flex-shrink-0 flex-col items-center justify-center">
+        <div className="flex shrink-0 flex-col items-center justify-center">
           <ImageWithFallback
             // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
             src={item.logo ? item.logo : "/f3_logo.png"}
@@ -130,7 +130,7 @@ export const NearbyLocationItem = (props: {
         {/* Use flex-col to stack items vertically */}
         <div className="flex w-full flex-col items-stretch justify-start overflow-hidden">
           <div className="flex w-full flex-1 flex-row items-center justify-between">
-            <div className="-mt-[4px] line-clamp-1 pt-0 text-base font-bold leading-6">
+            <div className="-mt-[4px] line-clamp-1 pt-0 text-base leading-6 font-bold">
               {name}
             </div>
             {isNumber(item.distance) ? (

@@ -17,7 +17,7 @@ import {
 } from "~/utils/store/filter";
 
 const filterButtonClassName =
-  "text-sm font-semibold pointer-events-auto flex items-center justify-center gap-2 rounded-md bg-background px-2 py-1 shadow text-foreground flex-shrink-0";
+  "text-sm font-semibold pointer-events-auto flex items-center justify-center gap-2 rounded-md bg-background px-2 py-1 shadow-sm text-foreground shrink-0";
 
 export const MobileFilterButtons = () => {
   const { today, tomorrow, todayVar, tomorrowVar } =

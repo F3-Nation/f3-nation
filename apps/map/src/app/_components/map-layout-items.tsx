@@ -83,13 +83,13 @@ export const MapLayoutItems = () => {
             <SettingsButton className="-mt-[6px] mr-[10px]" />
           </MapControl>
           <MapControl position={ControlPosition.RIGHT_TOP}>
-            <UserLocationIcon className="mr-[10px] mt-1" />
+            <UserLocationIcon className="mt-1 mr-[10px]" />
           </MapControl>
           <MapControl position={ControlPosition.RIGHT_TOP}>
-            <InfoButton className="mr-[10px] mt-1" />
+            <InfoButton className="mt-1 mr-[10px]" />
           </MapControl>
           <MapControl position={ControlPosition.RIGHT_TOP}>
-            <LayoutEditButton className="mr-[10px] mt-1" />
+            <LayoutEditButton className="mt-1 mr-[10px]" />
           </MapControl>
         </>
       )}
@@ -114,7 +114,7 @@ const DesktopLocationPanelContainer = (props: ComponentProps<"div">) => (
   <div
     style={{ zIndex: Z_INDEX.LOCATION_PANEL }}
     // max-w-md must match to MAX_DESKTOP_WORKOUT_PANEL_WIDTH
-    className="scrollbar-hide pointer-events-none absolute bottom-0 left-2 top-0 hidden w-1/2 max-w-md overflow-y-auto pb-2 pt-12 lg:block"
+    className="scrollbar-hide pointer-events-none absolute top-0 bottom-0 left-2 hidden w-1/2 max-w-md overflow-y-auto pt-12 pb-2 lg:block"
     {...props}
   />
 );
@@ -123,7 +123,7 @@ const MobileAboveSearchBox = (props: ComponentProps<"div">) => (
   <div
     style={{ zIndex: Z_INDEX.OVERLAY_BUTTONS }}
     // 46px and 6px to keep the slider in the middle between them
-    className="absolute bottom-[44px] left-0 right-0 block lg:hidden"
+    className="absolute right-0 bottom-[44px] left-0 block lg:hidden"
     {...props}
   />
 );

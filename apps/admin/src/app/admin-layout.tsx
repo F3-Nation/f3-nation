@@ -95,11 +95,11 @@ const Layout = ({
       </div>
       <div className={`flex flex-col lg:flex-row`}>
         <div
-          className="hidden h-full flex-shrink-0 lg:block"
+          className="hidden h-full shrink-0 lg:block"
           style={{ width: ADMIN_SIDEBAR_WIDTH }}
         />
         <div
-          className="block w-full flex-shrink-0 lg:hidden"
+          className="block w-full shrink-0 lg:hidden"
           style={{ height: ADMIN_HEADER_HEIGHT }}
         />
         <div

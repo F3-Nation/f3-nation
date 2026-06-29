@@ -361,7 +361,7 @@ export const EmailTestForm = () => {
         </CardHeader>
         <CardContent>
           {previewHtml ? (
-            <div className="rounded border bg-white">
+            <div className="rounded-sm border bg-white">
               <iframe
                 srcDoc={previewHtml}
                 className="h-[500px] w-full"
@@ -369,7 +369,7 @@ export const EmailTestForm = () => {
               />
             </div>
           ) : (
-            <div className="flex h-[500px] items-center justify-center rounded border bg-muted/50 text-muted-foreground">
+            <div className="flex h-[500px] items-center justify-center rounded-sm border bg-muted/50 text-muted-foreground">
               Click "Preview" to see the email template
             </div>
           )}

@@ -179,7 +179,7 @@ export const AdminNavLinks = ({
             <div
               key={link.label}
               className={cn(
-                "mb-2 mt-2 text-base font-semibold",
+                "mt-2 mb-2 text-base font-semibold",
                 sectionClassName,
               )}
             >

@@ -171,7 +171,7 @@ export const FeatureMarker = ({
                 className={cn(
                   // min-h-[32.5px] so it doesn't collapse with no text
                   "min-h-[32.5px] flex-1 cursor-pointer bg-foreground py-2 text-center text-background",
-                  "border-b-2 border-l-2 border-r-2 border-t-2 border-foreground",
+                  "border-t-2 border-r-2 border-b-2 border-l-2 border-foreground",
                   `google-eventid-${event.id}`,
                   {
                     "rounded-r-full": isEnd,

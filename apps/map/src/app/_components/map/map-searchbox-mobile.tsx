@@ -57,7 +57,7 @@ export function MapSearchBoxMobile({
   return (
     <div
       className={cn(
-        "pointer-events-none absolute bottom-1 left-0 right-0 block lg:hidden",
+        "pointer-events-none absolute right-0 bottom-1 left-0 block lg:hidden",
         className,
       )}
       style={{ zIndex: Z_INDEX.MAP_SEARCHBOX_MOBILE }}
@@ -165,7 +165,7 @@ export function MapSearchBoxMobile({
             />
             {/* <WithLove /> */}
           </div>
-          <div className="pointer-events-none absolute bottom-0 right-2 top-0 flex flex-col items-center justify-center">
+          <div className="pointer-events-none absolute top-0 right-2 bottom-0 flex flex-col items-center justify-center">
             {text || searchBarFocused ? (
               <button
                 className="pointer-events-auto mx-auto"

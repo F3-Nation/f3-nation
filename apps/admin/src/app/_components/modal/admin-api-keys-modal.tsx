@@ -129,7 +129,7 @@ export default function AdminApiKeysModal() {
                   Copy this secret now. You will not be able to view it again.
                 </p>
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <code className="break-all rounded bg-background px-2 py-1 text-sm">
+                  <code className="rounded-sm bg-background px-2 py-1 text-sm break-all">
                     {createdSecret}
                   </code>
                   <Button
