@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@acme/auth";
 import { isNationAdminFromSession } from "@acme/shared/app/role-checks";
 import { env } from "~/env";
+import { logError, logInfo, logWarn } from "~/lib/logging";
 
 // Regeneration of `/` fetches the slow map endpoints, so allow generous time
 // but never hang the revalidation forever.
@@ -22,12 +23,11 @@ async function warmMapPage(): Promise<boolean> {
     const res = await fetch(`http://127.0.0.1:${port}/`, {
       // Bypass the fetch cache so this actually drives regeneration.
       cache: "no-store",
-      headers: { "x-cache-warm": "1" },
       signal: controller.signal,
     });
     return res.ok;
   } catch (warmError) {
-    console.warn("Map page cache warm failed", { warmError });
+    logWarn("map.revalidate.warm_failed", { warmError });
     return false;
   } finally {
     clearTimeout(timeout);
@@ -41,18 +41,18 @@ export async function POST(request: Request) {
     const isInternalRequest = apiKey === env.SUPER_ADMIN_API_KEY;
 
     if (!isInternalRequest) {
-      console.log("This is not an internal request. Checking session");
+      logInfo("map.revalidate.session_check", {});
 
       // For user-initiated requests, check session and nation admin status
       const session = await auth();
 
       if (!session) {
-        console.log("Session not found");
+        logWarn("map.revalidate.unauthorized", {});
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
 
       if (!isNationAdminFromSession(session)) {
-        console.log("User is not a nation admin");
+        logWarn("map.revalidate.forbidden", {});
         return NextResponse.json(
           { error: "Forbidden - Nation admin access required" },
           { status: 403 },
@@ -63,19 +63,18 @@ export async function POST(request: Request) {
     // Revalidate the map page cache
     revalidatePath("/");
 
-    // Self-fetch to regenerate now instead of making the next visitor wait.
-    // Uses localhost so the request hits this instance, not another via the LB.
+    // Self-fetch localhost to eagerly ISR-regenerate on this instance; other
+    // Cloud Run instances revalidate lazily on their next visitor.
     const warmed = await warmMapPage();
 
-    console.log("revalidate", {
+    logInfo("map.revalidate.success", {
       source: isInternalRequest ? "internal" : "user",
       warmed,
-      timestamp: new Date().toISOString(),
     });
 
     return NextResponse.json({ success: true, warmed });
   } catch (error) {
-    console.error("Error revalidating cache", { error });
+    logError("map.revalidate.error", {}, error);
     return NextResponse.json(
       { error: "Failed to revalidate cache" },
       { status: 500 },

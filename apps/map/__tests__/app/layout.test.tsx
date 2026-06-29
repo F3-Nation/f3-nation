@@ -1,9 +1,19 @@
 // Mock setups use vi.fn() with untyped callbacks — unsafe rules don't apply here
 /* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-assignment */
-import { render } from "@testing-library/react";
+import { render, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import RootLayout from "../../src/app/layout";
+
+// RootLayout mounts RuntimeConfigProvider, which fetches /api/runtime-config on
+// mount. Stub it so the suite doesn't hit an unmocked (and unresolvable)
+// relative URL, and so the bootstrap path is exercised with real config shape.
+const runtimeConfigFetchMock = vi.fn().mockResolvedValue({
+  ok: true,
+  json: () =>
+    Promise.resolve({ channel: "local", googleApiKey: "", adminUrl: "" }),
+});
+vi.stubGlobal("fetch", runtimeConfigFetchMock);
 
 vi.mock("next/headers", () => ({
   headers: vi.fn().mockResolvedValue(new Headers()),
@@ -73,11 +83,16 @@ Object.defineProperty(window, "matchMedia", {
 });
 
 describe("layout app router", () => {
-  it("should render layout", () => {
+  it("should render layout", async () => {
     const layoutResult = RootLayout({ children: <div /> });
     const { container } = render(layoutResult);
     expect(container.querySelector("body")).toHaveClass(
       "min-h-dvh w-screen bg-background font-sans text-foreground antialiased",
+    );
+    await waitFor(() =>
+      expect(runtimeConfigFetchMock).toHaveBeenCalledWith(
+        "/api/runtime-config",
+      ),
     );
   });
 });

@@ -35,16 +35,24 @@ export function RuntimeConfigProvider({
 
   useEffect(() => {
     let cancelled = false;
+    // Retry with exponential backoff so a transient failure doesn't leave the
+    // app stuck on DEFAULT_CONFIG (an empty googleApiKey blocks map rendering).
     void (async () => {
-      try {
-        const res = await fetch("/api/runtime-config");
-        if (!res.ok) throw new Error(`runtime-config ${res.status}`);
-        const data = (await res.json()) as RuntimeConfig;
-        if (cancelled) return;
-        _runtimeConfig = data;
-        setConfig(data);
-      } catch (err) {
-        console.error("Failed to load runtime config", err);
+      const MAX_DELAY = 30_000;
+      for (let attempt = 0; !cancelled; attempt++) {
+        try {
+          const res = await fetch("/api/runtime-config");
+          if (!res.ok) throw new Error(`runtime-config ${res.status}`);
+          const data = (await res.json()) as RuntimeConfig;
+          if (cancelled) return;
+          _runtimeConfig = data;
+          setConfig(data);
+          return;
+        } catch (err) {
+          console.error("Failed to load runtime config", err);
+          const delay = Math.min(1000 * 2 ** attempt, MAX_DELAY);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
       }
     })();
     return () => {

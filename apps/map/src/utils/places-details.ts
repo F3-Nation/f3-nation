@@ -11,6 +11,9 @@ const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours (place details don't change o
 
 export async function placesDetails(placeId: string): Promise<PlaceDetails> {
   const googleApiKey = getGoogleApiKey();
+  if (!googleApiKey) {
+    throw new Error("Google API key not available yet");
+  }
   // Check cache first
   const cached = placeDetailsCache.get(placeId);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {

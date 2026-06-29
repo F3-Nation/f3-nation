@@ -189,7 +189,8 @@ jobs:
           URL: ${{ inputs.staging_url }}
           SECRET_NAME: ${{ inputs.revalidate_secret_name }}
         run: |
-          KEY="$(gcloud secrets versions access latest --secret="${SECRET_NAME}" --project="${PROJECT}")"
+          KEY="$(gcloud secrets versions access latest --secret="${SECRET_NAME}" --project="${PROJECT}")" \
+            || { echo "::warning::Could not read ${SECRET_NAME}; skipping cache warm"; exit 0; }
           code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "${URL%/}/api/revalidate" -H "x-api-key: ${KEY}")
           echo "Revalidation POST ${URL%/}/api/revalidate -> ${code}"
           if [ "${code}" != "200" ]; then
@@ -249,7 +250,8 @@ jobs:
           URL: ${{ inputs.prod_url }}
           SECRET_NAME: ${{ inputs.revalidate_secret_name }}
         run: |
-          KEY="$(gcloud secrets versions access latest --secret="${SECRET_NAME}" --project="${PROJECT}")"
+          KEY="$(gcloud secrets versions access latest --secret="${SECRET_NAME}" --project="${PROJECT}")" \
+            || { echo "::warning::Could not read ${SECRET_NAME}; skipping cache warm"; exit 0; }
           code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "${URL%/}/api/revalidate" -H "x-api-key: ${KEY}")
           echo "Revalidation POST ${URL%/}/api/revalidate -> ${code}"
           if [ "${code}" != "200" ]; then
