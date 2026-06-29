@@ -11,7 +11,7 @@ export const HelpButton = () => {
         href="/help?back=%2Fmap"
         className={cn(
           filterButtonClassName,
-          "flex w-auto whitespace-nowrap bg-foreground text-background",
+          "flex w-auto bg-foreground whitespace-nowrap text-background",
         )}
       >
         <CircleQuestionMark strokeWidth={2} className={cn("size-4")} />

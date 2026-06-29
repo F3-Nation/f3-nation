@@ -2,7 +2,7 @@ import { Skeleton } from "@acme/ui/skeleton";
 
 export const SelectedItemSkeleton = () => {
   return (
-    <div className="flex min-h-[100px] w-full flex-col justify-between rounded-lg bg-background p-2 shadow">
+    <div className="flex min-h-[100px] w-full flex-col justify-between rounded-lg bg-background p-2 shadow-sm">
       <div className="flex flex-row justify-between">
         <Skeleton className="h-[30px] w-[120px]" />
         <Skeleton className="h-[10px] w-[20px]" />

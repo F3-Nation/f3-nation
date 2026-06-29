@@ -26,7 +26,7 @@ export function Navbar() {
               alt="F3 Nation"
               width={32}
               height={32}
-              className="rounded"
+              className="rounded-sm"
             />
             <span className="text-lg font-bold tracking-tight">F3 Me</span>
           </Link>

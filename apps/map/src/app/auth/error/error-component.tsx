@@ -73,7 +73,7 @@ export default function ErrorComponent() {
       <div className="flex flex-col items-center">
         <h2 className="mt-2 text-center text-3xl font-semibold">{heading}</h2>
       </div>
-      <AuthWrapper className="pb-8 pt-2">
+      <AuthWrapper className="pt-2 pb-8">
         <div className="flex flex-col items-center">
           <Image
             src="/f3_logo.png"
@@ -83,7 +83,7 @@ export default function ErrorComponent() {
             className="h-full object-contain"
           />
 
-          <div className="mb-6 mt-4 text-lg leading-8 text-foreground">
+          <div className="mt-4 mb-6 text-lg leading-8 text-foreground">
             {message}
           </div>
 
