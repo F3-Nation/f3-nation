@@ -68,19 +68,19 @@ export async function POST(request: Request) {
 
   const orgId = orgIdNum;
 
-  // Authorization: caller must have an editor (or admin) role on this org,
-  // matching the role required to submit org change requests.
-  const { success } = await checkHasRoleOnOrg({
-    session,
-    orgId,
-    db,
-    roleName: "editor",
-  });
-  if (!success) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
   try {
+    // Authorization: caller must have an editor (or admin) role on this org,
+    // matching the role required to submit org change requests.
+    const { success } = await checkHasRoleOnOrg({
+      session,
+      orgId,
+      db,
+      roleName: "editor",
+    });
+    if (!success) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const buffer = Buffer.from(await file.arrayBuffer());
     const url = await storage.uploadOrgLogo(orgId, buffer, { size, requestId });
 
