@@ -139,7 +139,7 @@ catalogs:
       specifier: ^8.21.3
       version: 8.21.3
     '@testing-library/jest-dom':
-      specifier: ^6.4.2
+      specifier: ^6.9.1
       version: 6.9.1
     '@testing-library/react':
       specifier: ^16.3.2
