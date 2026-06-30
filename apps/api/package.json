@@ -30,7 +30,6 @@
     "@sentry/nextjs": "catalog:",
     "@t3-oss/env-nextjs": "catalog:",
     "dotenv-cli": "catalog:",
-    "handlebars": "catalog:",
     "next": "catalog:",
     "next-auth": "catalog:",
     "react": "catalog:",

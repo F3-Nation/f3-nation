@@ -85,7 +85,6 @@ catalog:
   eslint-plugin-react-hooks: ^7.1.1
   geist: ^1.7.2
   google-auth-library: ^10.7.0
-  handlebars: ^4.7.9
   inquirer: ^12.11.1
   jiti: ^2.7.0
   jose: ^6.2.3
