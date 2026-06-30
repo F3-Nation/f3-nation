@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
+import { checkHasRoleOnOrg } from "@acme/api";
 import { auth } from "@acme/auth";
+import { db } from "@acme/db/client";
 import { parseOptionalSize } from "@acme/storage";
 
 import { logError } from "~/lib/logging";
@@ -65,6 +67,18 @@ export async function POST(request: Request) {
   const requestId = requestIdRaw;
 
   const orgId = orgIdNum;
+
+  // Authorization: caller must have an editor (or admin) role on this org,
+  // matching the role required to submit org change requests.
+  const { success } = await checkHasRoleOnOrg({
+    session,
+    orgId,
+    db,
+    roleName: "editor",
+  });
+  if (!success) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   try {
     const buffer = Buffer.from(await file.arrayBuffer());

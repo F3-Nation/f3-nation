@@ -23,6 +23,9 @@ import { userRouter } from "./router/user";
 export { notifyMapDataChange } from "./lib/webhook-events";
 export type { WebhookEvent } from "./lib/webhook-events";
 
+// Re-export role authorization helper for use in app route handlers
+export { checkHasRoleOnOrg } from "./check-has-role-on-org";
+
 export const router = os.prefix(API_PREFIX_V1).router({
   apiKey: os.prefix("/api-key").router(apiKeyRouter),
   attendance: os.prefix("/attendance").router(attendanceRouter),
