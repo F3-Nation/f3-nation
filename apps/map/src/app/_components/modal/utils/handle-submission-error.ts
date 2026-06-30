@@ -11,7 +11,7 @@ export const handleSubmissionError = (error: unknown): void => {
 
   if (error instanceof ZodError) {
     console.error("handleSubmissionError ZodError", error);
-    const errorMessages = error.errors
+    const errorMessages = error.issues
       .map((err) => {
         if (err?.message) {
           return `${err.path.join(".")}: ${err.message}`;

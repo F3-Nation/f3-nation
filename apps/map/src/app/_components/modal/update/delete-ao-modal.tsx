@@ -1,8 +1,5 @@
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
-
 import type { DeleteAOType } from "@acme/validators/request-schemas";
-import { Form } from "@acme/ui/form";
+import { Form, useForm } from "@acme/ui/form";
 import { DeleteAOSchema } from "@acme/validators/request-schemas";
 
 import type { DataType, ModalType } from "~/utils/store/modal";
@@ -19,8 +16,8 @@ export const DeleteAoModal = ({
 }: {
   data: DataType[ModalType.DELETE_AO];
 }) => {
-  const form = useForm<DeleteAOType>({
-    resolver: zodResolver(DeleteAOSchema),
+  const form = useForm({
+    schema: DeleteAOSchema,
     defaultValues: data,
     mode: "onBlur",
   });

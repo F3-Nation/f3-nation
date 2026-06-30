@@ -5,12 +5,10 @@ import { requireAuth } from "@/lib/auth/server";
 import { deleteMyPosition } from "@/lib/api/client";
 import { logError } from "@/lib/logging";
 
-const deletePositionSchema = z
-  .object({
-    orgId: z.number().int().positive(),
-    positionId: z.number().int().positive(),
-  })
-  .strict();
+const deletePositionSchema = z.strictObject({
+  orgId: z.number().int().positive(),
+  positionId: z.number().int().positive(),
+});
 
 export async function DELETE(request: NextRequest) {
   let sessionUserId: number | undefined;

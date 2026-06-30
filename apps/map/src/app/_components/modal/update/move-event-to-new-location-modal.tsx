@@ -1,8 +1,5 @@
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
-
 import type { MoveEventToNewLocationType } from "@acme/validators/request-schemas";
-import { Form } from "@acme/ui/form";
+import { Form, useForm } from "@acme/ui/form";
 import { MoveEventToNewLocationSchema } from "@acme/validators/request-schemas";
 
 import type { DataType, ModalType } from "~/utils/store/modal";
@@ -20,8 +17,8 @@ export const MoveEventToNewLocationModal = ({
 }: {
   data: DataType[ModalType.MOVE_EVENT_TO_NEW_LOCATION];
 }) => {
-  const form = useForm<MoveEventToNewLocationType>({
-    resolver: zodResolver(MoveEventToNewLocationSchema),
+  const form = useForm({
+    schema: MoveEventToNewLocationSchema,
     defaultValues: data,
   });
 

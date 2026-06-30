@@ -1,10 +1,10 @@
 import { coverageExclude, coverageInclude } from "@acme/vitest-config";
 import react from "@vitejs/plugin-react";
-import tsconfigPaths from "vite-tsconfig-paths";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  plugins: [tsconfigPaths(), react()],
+  plugins: [react()],
+  resolve: { tsconfigPaths: true },
   test: {
     globals: true,
     environment: "jsdom",
@@ -18,10 +18,10 @@ export default defineConfig({
       exclude: coverageExclude,
       thresholds: {
         autoUpdate: true,
-        statements: 90.32,
+        statements: 90.47,
         branches: 90.9,
         functions: 77.77,
-        lines: 90.32,
+        lines: 90.47,
       },
     },
     exclude: [

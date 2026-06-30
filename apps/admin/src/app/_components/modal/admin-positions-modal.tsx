@@ -324,7 +324,7 @@ export default function AdminPositionsModal({
               />
             </div>
             <div className="mb-3 w-full px-2">
-              <div className="mb-3 flex flex-col space-y-2 pt-3 sm:flex-row sm:space-x-4 sm:space-y-0">
+              <div className="mb-3 flex flex-col space-y-2 pt-3 sm:flex-row sm:space-y-0 sm:space-x-4">
                 <Button
                   type="button"
                   variant="outline"

@@ -1,8 +1,5 @@
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
-
 import type { CreateEventType } from "@acme/validators/request-schemas";
-import { Form } from "@acme/ui/form";
+import { Form, useForm } from "@acme/ui/form";
 import { CreateEventSchema } from "@acme/validators/request-schemas";
 
 import type { DataType, ModalType } from "~/utils/store/modal";
@@ -19,9 +16,9 @@ export const CreateEventModal = ({
 }: {
   data: DataType[ModalType.CREATE_EVENT];
 }) => {
-  const form = useForm<CreateEventType>({
-    resolver: zodResolver(CreateEventSchema),
-    defaultValues: data as CreateEventType,
+  const form = useForm({
+    schema: CreateEventSchema,
+    defaultValues: data,
   });
 
   return (

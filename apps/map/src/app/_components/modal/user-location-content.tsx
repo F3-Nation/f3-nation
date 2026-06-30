@@ -23,7 +23,7 @@ export const UserLocationContent = (params?: {
       {permissions !== "granted" && params?.allowInteraction ? (
         <button
           className={cn(
-            "self-center rounded-md bg-foreground px-4 py-2 text-background shadow hover:bg-foreground/90",
+            "self-center rounded-md bg-foreground px-4 py-2 text-background shadow-sm hover:bg-foreground/90",
           )}
           onClick={() => attemptToNavigateToUserLocation()}
         >

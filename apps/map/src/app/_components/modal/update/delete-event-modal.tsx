@@ -1,8 +1,5 @@
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
-
 import type { DeleteEventType } from "@acme/validators/request-schemas";
-import { Form } from "@acme/ui/form";
+import { Form, useForm } from "@acme/ui/form";
 import { DeleteEventSchema } from "@acme/validators/request-schemas";
 
 import type { DataType, ModalType } from "~/utils/store/modal";
@@ -19,8 +16,8 @@ export const DeleteEventModal = ({
 }: {
   data: DataType[ModalType.DELETE_EVENT];
 }) => {
-  const form = useForm<DeleteEventType>({
-    resolver: zodResolver(DeleteEventSchema),
+  const form = useForm({
+    schema: DeleteEventSchema,
     defaultValues: data,
     mode: "onBlur",
   });

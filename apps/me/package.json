@@ -37,8 +37,10 @@
   },
   "devDependencies": {
     "@acme/eslint-config": "workspace:^0.2.0",
+    "@acme/tailwind-config": "workspace:*",
     "@acme/tsconfig": "workspace:^0.1.0",
     "@acme/vitest-config": "workspace:^0.1.0",
+    "@tailwindcss/postcss": "catalog:",
     "@testing-library/jest-dom": "catalog:",
     "@testing-library/react": "catalog:",
     "@testing-library/user-event": "catalog:",
@@ -47,12 +49,9 @@
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "@vitest/coverage-v8": "catalog:",
-    "autoprefixer": "catalog:",
     "eslint": "catalog:",
     "postcss": "catalog:",
     "prettier": "catalog:",
-    "tailwindcss": "catalog:",
-    "tailwindcss-animate": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"

@@ -258,7 +258,7 @@ function PositionAssignmentRow({
 
       <div className="flex flex-wrap gap-1.5">
         {position.users.length === 0 ? (
-          <span className="text-xs italic text-muted-foreground">
+          <span className="text-xs text-muted-foreground italic">
             No users assigned
           </span>
         ) : (

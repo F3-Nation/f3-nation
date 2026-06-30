@@ -187,7 +187,7 @@ export const ApiKeysTable = () => {
                               return (
                                 <span
                                   key={`${row.id}-${role.orgId}-${index}`}
-                                  className={`inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium ${
+                                  className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap ${
                                     roleStyles[role.roleName]
                                   }`}
                                 >
@@ -196,7 +196,7 @@ export const ApiKeysTable = () => {
                               );
                             })
                           ) : (
-                            <span className="inline-flex items-center whitespace-nowrap rounded-full border border-gray-200 bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
+                            <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-100 px-2 py-0.5 text-xs font-medium whitespace-nowrap text-gray-700">
                               Read only
                             </span>
                           )}

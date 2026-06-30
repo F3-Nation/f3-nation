@@ -50,13 +50,13 @@ export const DesktopLocationPanelContent = () => {
   return (
     <div
       data-testid={TestId.PANEL}
-      className="pointer-events-auto relative flex max-w-[95vw] flex-col rounded-lg bg-background p-4 shadow dark:border sm:max-w-full"
+      className="pointer-events-auto relative flex flex-col rounded-lg bg-background p-4 shadow-sm dark:border"
     >
       {/* Close button in the top right */}
       <button
         type="button"
         aria-label="Close location panel"
-        className="absolute right-2 top-2 rounded-full bg-muted-foreground px-1 py-1 text-sm text-background"
+        className="absolute top-2 right-2 rounded-full bg-muted-foreground px-1 py-1 text-sm text-background"
         onClick={(e) => {
           closePanel();
           e.stopPropagation();
@@ -85,6 +85,19 @@ export const DesktopLocationPanelContent = () => {
         providedEventId={panelEventId}
         chipSize={isLarge ? "large" : isMedium ? "medium" : "small"}
       />
+
+      <div className="h-8" />
+      <div className="absolute top-2 right-2 flex flex-row gap-2">
+        <button
+          className="rounded-full bg-muted-foreground px-1 py-1 text-sm text-background"
+          onClick={(e) => {
+            closePanel();
+            e.stopPropagation();
+          }}
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
     </div>
   );
 };

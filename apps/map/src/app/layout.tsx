@@ -69,7 +69,7 @@ export default async function RootLayout(props: { children: React.ReactNode }) {
           GeistMono.variable,
         )}
       >
-        <GoogleAnalytics />
+        <GoogleAnalytics measurementId={env.NEXT_PUBLIC_GA_MEASUREMENT_ID} />
         <RouteChangeTracker />
         <DataProvider>
           <ElementProvider>{props.children}</ElementProvider>

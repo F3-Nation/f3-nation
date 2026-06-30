@@ -47,7 +47,7 @@ export const expectInvalidAt = (
   schema: {
     safeParse: (v: unknown) => {
       success: boolean;
-      error?: { issues: { path: (string | number)[] }[] };
+      error?: { issues: { path: PropertyKey[] }[] };
     };
   },
   payload: unknown,

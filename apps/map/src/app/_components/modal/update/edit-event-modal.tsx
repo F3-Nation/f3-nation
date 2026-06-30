@@ -1,8 +1,5 @@
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
-
 import type { EditEventType } from "@acme/validators/request-schemas";
-import { Form } from "@acme/ui/form";
+import { Form, useForm } from "@acme/ui/form";
 import { EditEventSchema } from "@acme/validators/request-schemas";
 
 import type { DataType, ModalType } from "~/utils/store/modal";
@@ -19,8 +16,8 @@ export const EditEventModal = ({
 }: {
   data: DataType[ModalType.EDIT_EVENT];
 }) => {
-  const form = useForm<EditEventType>({
-    resolver: zodResolver(EditEventSchema),
+  const form = useForm({
+    schema: EditEventSchema,
     defaultValues: data,
     mode: "onBlur",
   });

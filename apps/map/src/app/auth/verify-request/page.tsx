@@ -13,7 +13,7 @@ export default function VerifyRequestPage() {
           Check your email
         </h2>
       </div>
-      <AuthWrapper className="pb-8 pt-2">
+      <AuthWrapper className="pt-2 pb-8">
         <div className="flex flex-col items-center">
           <Image
             src="/f3_logo.png"
@@ -23,7 +23,7 @@ export default function VerifyRequestPage() {
             className="h-full object-contain"
           />
 
-          <p className="mb-6 mt-4 text-lg leading-8 text-foreground">
+          <p className="mt-4 mb-6 text-lg leading-8 text-foreground">
             A sign in link has been sent to your email address.
           </p>
 

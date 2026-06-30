@@ -21,7 +21,7 @@ export const AODetailsForm = <_T extends AODetailsFormValues>() => {
   const formId = form.watch("id");
   return (
     <>
-      <h2 className="mb-2 mt-4 text-xl font-semibold text-muted-foreground">
+      <h2 className="mt-4 mb-2 text-xl font-semibold text-muted-foreground">
         New AO Details:
       </h2>
 
@@ -87,7 +87,6 @@ export const AODetailsForm = <_T extends AODetailsFormValues>() => {
                             file: blob64,
                             orgId: formOriginalRegionId,
                             requestId: formId,
-                            size: 64,
                           });
                         }
                       } catch {

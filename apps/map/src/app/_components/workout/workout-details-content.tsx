@@ -156,7 +156,7 @@ export const WorkoutDetailsContent = ({
   return (
     <>
       <div className="flex flex-row flex-wrap items-center justify-start gap-x-2">
-        <div className="flex flex-shrink-0 flex-col items-center">
+        <div className="flex shrink-0 flex-col items-center">
           <button
             className="cursor-pointer"
             onClick={() =>
@@ -181,7 +181,7 @@ export const WorkoutDetailsContent = ({
             />
           </button>
         </div>
-        <div className="line-clamp-2 flex-1 text-left text-2xl font-bold leading-6 sm:text-4xl">
+        <div className="line-clamp-2 flex-1 text-left text-2xl leading-6 font-bold sm:text-4xl">
           {event?.name ?? "Workout Information"}
         </div>
       </div>
@@ -239,7 +239,7 @@ export const WorkoutDetailsContent = ({
                   <dt className="text-sm font-medium text-muted-foreground">
                     {field}
                   </dt>
-                  <dd className="mt-1 whitespace-pre-line text-sm text-foreground">
+                  <dd className="mt-1 text-sm whitespace-pre-line text-foreground">
                     {workoutFields[field as keyof typeof workoutFields]}
                   </dd>
                 </div>
@@ -410,7 +410,7 @@ export const WorkoutDetailsContent = ({
       <div className="mt-6 flex justify-end">
         <button
           onClick={onCopyLink}
-          className="flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+          className="flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-xs transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"

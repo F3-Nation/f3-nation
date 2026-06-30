@@ -49,7 +49,6 @@ ENV_FILE_VARS=(
   F3_CHANNEL
   OAUTH_CLIENT_ID
   OAUTH_REDIRECT_URI
-  GCS_BUCKET
 )
 
 
@@ -104,7 +103,7 @@ echo "Environment:  $ENV_NAME"
 echo "GCP Project:  $PROJECT"
 echo "Service:      $SERVICE_NAME"
 echo "Region:       $REGION"
-echo "Env file:     $(readlink -f "$ENV_FILE")"
+echo "Env file:     $(cd "$(dirname "$ENV_FILE")" && pwd -P)/$(basename "$ENV_FILE")"
 echo ""
 
 # ---------------------------------------------------------------------------

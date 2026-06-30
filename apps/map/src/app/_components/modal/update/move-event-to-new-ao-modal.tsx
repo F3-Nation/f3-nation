@@ -1,8 +1,5 @@
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
-
 import type { MoveEventToNewAOType } from "@acme/validators/request-schemas";
-import { Form } from "@acme/ui/form";
+import { Form, useForm } from "@acme/ui/form";
 import { MoveEventToNewAOSchema } from "@acme/validators/request-schemas";
 
 import type { DataType, ModalType } from "~/utils/store/modal";
@@ -22,8 +19,8 @@ export const MoveEventToNewAoModal = ({
 }: {
   data: DataType[ModalType.MOVE_EVENT_TO_NEW_AO];
 }) => {
-  const form = useForm<MoveEventToNewAOType>({
-    resolver: zodResolver(MoveEventToNewAOSchema),
+  const form = useForm({
+    schema: MoveEventToNewAOSchema,
     defaultValues: data,
   });
 
@@ -35,7 +32,7 @@ export const MoveEventToNewAoModal = ({
         <form className="w-[inherit] overflow-x-hidden p-0.5">
           {!isProductionNodeEnv && <FormDebugData />}
 
-          <h2 className="mb-2 mt-4 text-xl font-semibold text-muted-foreground">
+          <h2 className="mt-4 mb-2 text-xl font-semibold text-muted-foreground">
             Destination Region:
           </h2>
           <div className="flex flex-row flex-wrap gap-4">

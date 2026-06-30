@@ -26,8 +26,8 @@ export const NearbyLocationUpdateButton = () => {
   return status === "loading" ? (
     <div
       className={cn(
-        "rounded-xl bg-background px-4 py-1 text-sm text-foreground shadow",
-        "absolute left-2/4 top-14 -translate-x-2/4",
+        "rounded-xl bg-background px-4 py-1 text-sm text-foreground shadow-sm",
+        "absolute top-14 left-2/4 -translate-x-2/4",
       )}
     >
       <div className="flex flex-row items-center gap-2">
@@ -38,8 +38,8 @@ export const NearbyLocationUpdateButton = () => {
   ) : hasMovedAwayFromLocation ? (
     <button
       className={cn(
-        "rounded-xl bg-background px-4 py-1 text-sm text-foreground shadow",
-        "absolute left-2/4 top-14 -translate-x-2/4",
+        "rounded-xl bg-background px-4 py-1 text-sm text-foreground shadow-sm",
+        "absolute top-14 left-2/4 -translate-x-2/4",
       )}
       style={{ zIndex: Z_INDEX.OVERLAY_BUTTONS }}
       onClick={() => {

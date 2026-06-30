@@ -1,9 +1,6 @@
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
-
 import type { CreateAOAndLocationAndEventType } from "@acme/validators/request-schemas";
 import { isProductionNodeEnv } from "@acme/shared/common/constants";
-import { Form } from "@acme/ui/form";
+import { Form, useForm } from "@acme/ui/form";
 import { CreateAOAndLocationAndEventSchema } from "@acme/validators/request-schemas";
 
 import type { DataType, ModalType } from "~/utils/store/modal";
@@ -22,8 +19,8 @@ export const CreateAOAndLocationAndEventModal = ({
 }: {
   data: DataType[ModalType.CREATE_AO_AND_LOCATION_AND_EVENT];
 }) => {
-  const form = useForm<CreateAOAndLocationAndEventType>({
-    resolver: zodResolver(CreateAOAndLocationAndEventSchema),
+  const form = useForm({
+    schema: CreateAOAndLocationAndEventSchema,
     defaultValues: data,
     mode: "onBlur",
   });

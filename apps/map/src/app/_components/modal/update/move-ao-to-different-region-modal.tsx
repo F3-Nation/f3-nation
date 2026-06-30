@@ -1,8 +1,5 @@
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
-
 import type { MoveAoToDifferentRegionType } from "@acme/validators/request-schemas";
-import { Form } from "@acme/ui/form";
+import { Form, useForm } from "@acme/ui/form";
 import { MoveAOToDifferentRegionSchema } from "@acme/validators/request-schemas";
 
 import type { DataType, ModalType } from "~/utils/store/modal";
@@ -19,8 +16,8 @@ export const MoveAOToDifferentRegionModal = ({
 }: {
   data: DataType[ModalType.MOVE_AO_TO_DIFFERENT_REGION];
 }) => {
-  const form = useForm<MoveAoToDifferentRegionType>({
-    resolver: zodResolver(MoveAOToDifferentRegionSchema),
+  const form = useForm({
+    schema: MoveAOToDifferentRegionSchema,
     defaultValues: data,
     mode: "onBlur",
   });
@@ -30,7 +27,7 @@ export const MoveAOToDifferentRegionModal = ({
       <Form {...form}>
         <form className="w-[inherit] overflow-x-hidden p-0.5">
           {!isProductionNodeEnv && <FormDebugData />}
-          <h2 className="mb-2 mt-4 text-xl font-semibold text-muted-foreground">
+          <h2 className="mt-4 mb-2 text-xl font-semibold text-muted-foreground">
             Region Details:
           </h2>
           <div className="flex flex-row flex-wrap gap-4">

@@ -1,8 +1,5 @@
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
-
 import type { MoveAOToDifferentLocationType } from "@acme/validators/request-schemas";
-import { Form } from "@acme/ui/form";
+import { Form, useForm } from "@acme/ui/form";
 import { MoveAOToDifferentLocationSchema } from "@acme/validators/request-schemas";
 
 import type { DataType, ModalType } from "~/utils/store/modal";
@@ -20,8 +17,8 @@ export const MoveAOToDifferentLocationModal = ({
 }: {
   data: DataType[ModalType.MOVE_AO_TO_DIFFERENT_LOCATION];
 }) => {
-  const form = useForm<MoveAOToDifferentLocationType>({
-    resolver: zodResolver(MoveAOToDifferentLocationSchema),
+  const form = useForm({
+    schema: MoveAOToDifferentLocationSchema,
     defaultValues: data,
     mode: "onBlur",
   });
