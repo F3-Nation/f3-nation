@@ -72,7 +72,7 @@ export function ProfileForm({ user, regions }: ProfileFormProps) {
               href="https://apps.f3nation.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="focus-visible:outline-hidden inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-hidden"
             >
               Go to apps.f3nation.com &rarr;
             </a>

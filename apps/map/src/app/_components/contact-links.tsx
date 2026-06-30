@@ -1,7 +1,11 @@
-import { Facebook, Globe, Instagram, Mail, Phone, Twitter } from "lucide-react";
+import { Globe, Mail, Phone } from "lucide-react";
 import Link from "next/link";
 
 import { cn } from "@acme/ui";
+
+import FacebookSvgComponent from "./SVGs/facebook";
+import InstagramSvgComponent from "./SVGs/instagram";
+import XSvgComponent from "./SVGs/x";
 
 interface ContactInfo {
   website?: string | null;
@@ -99,17 +103,17 @@ export const ContactLinks = ({
     },
     {
       url: normalizeTwitterUrl(twitter),
-      icon: Twitter,
+      icon: XSvgComponent,
       label: "X (Twitter)",
     },
     {
       url: normalizeFacebookUrl(facebook),
-      icon: Facebook,
+      icon: FacebookSvgComponent,
       label: "Facebook",
     },
     {
       url: normalizeInstagramUrl(instagram),
-      icon: Instagram,
+      icon: InstagramSvgComponent,
       label: "Instagram",
     },
   ].filter((link) => link.url);

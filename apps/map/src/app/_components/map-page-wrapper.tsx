@@ -13,7 +13,7 @@ const _DesktopHeaderContainer = (props: { children: React.ReactNode }) => {
   return (
     <div
       className={cn(
-        `absolute left-0 right-0 top-0`,
+        `absolute top-0 right-0 left-0`,
         `items-center justify-center`,
         `border-b-2 border-ring bg-background px-2`,
         `hidden lg:flex`,

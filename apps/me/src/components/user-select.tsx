@@ -158,7 +158,7 @@ export function UserSelect({ value, onChange }: UserSelectProps) {
                       itemRefs.current[0] = el;
                     }}
                     type="button"
-                    className="relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm text-muted-foreground outline-none hover:bg-accent"
+                    className="relative flex w-full cursor-pointer items-center rounded-sm px-2 py-1.5 text-sm text-muted-foreground outline-hidden select-none hover:bg-accent"
                     onClick={() => {
                       onChange(null);
                       setSelectedUser(null);
@@ -187,7 +187,7 @@ export function UserSelect({ value, onChange }: UserSelectProps) {
                       itemRefs.current[clearOffset + idx] = el;
                     }}
                     type="button"
-                    className={`relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent ${
+                    className={`relative flex w-full cursor-pointer items-center rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent ${
                       user.id === value ? "bg-accent font-medium" : ""
                     }${user.status !== "active" ? "opacity-50" : ""}`}
                     onClick={() => {

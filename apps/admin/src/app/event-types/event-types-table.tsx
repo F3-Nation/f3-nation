@@ -188,7 +188,7 @@ const columns: TableOptions<
       return (
         <div className="flex flex-wrap items-center justify-start">
           <span
-            className={`inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium ${roleStyles[ec]}`}
+            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap ${roleStyles[ec]}`}
           >
             {roleLabels[ec]}
           </span>

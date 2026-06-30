@@ -175,10 +175,10 @@ export function MapSearchBox({
               }}
               onSubmit={() => onSubmit()}
             />
-            <div className="pointer-events-none absolute left-3 top-2">
+            <div className="pointer-events-none absolute top-2 left-3">
               <Search color="#aaa" />
             </div>
-            <div className="absolute right-2 top-2 flex flex-row items-center gap-2">
+            <div className="absolute top-2 right-2 flex flex-row items-center gap-2">
               {isLoading && <Spinner className="h-4 w-4 border-2" />}
               {text && (
                 <button

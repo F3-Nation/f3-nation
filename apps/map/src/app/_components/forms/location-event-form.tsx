@@ -87,7 +87,7 @@ export const LocationEventForm = ({
 
   return (
     <>
-      <h2 className="mb-2 mt-4 text-xl font-semibold text-muted-foreground">
+      <h2 className="mt-4 mb-2 text-xl font-semibold text-muted-foreground">
         Event Details:
       </h2>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -191,7 +191,7 @@ export const LocationEventForm = ({
           </p>
         </div>
       </div>
-      <h2 className="mb-2 mt-4 text-xl font-semibold text-muted-foreground">
+      <h2 className="mt-4 mb-2 text-xl font-semibold text-muted-foreground">
         Physical Location Details:
       </h2>
       <div className="text-sm font-medium text-muted-foreground">
@@ -368,7 +368,7 @@ export const LocationEventForm = ({
           </p>
         </div>
       </div>
-      <h2 className="mb-2 mt-4 text-xl font-semibold text-muted-foreground">
+      <h2 className="mt-4 mb-2 text-xl font-semibold text-muted-foreground">
         AO Details:
       </h2>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -492,7 +492,7 @@ export const LocationEventForm = ({
           </p>
         </div>
       </div>
-      <h2 className="mb-2 mt-4 text-xl font-semibold text-muted-foreground">
+      <h2 className="mt-4 mb-2 text-xl font-semibold text-muted-foreground">
         Other Details:
       </h2>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
