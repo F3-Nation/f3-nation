@@ -111,7 +111,7 @@ export const locationRouter = {
               .nullable()
               .describe("Location address country"),
             meta: z
-              .record(z.unknown())
+              .record(z.string(), z.unknown())
               .nullable()
               .describe("Location metadata"),
             created: z.string().describe("Location creation date"),
@@ -282,7 +282,7 @@ export const locationRouter = {
               .nullable()
               .describe("Location address country"),
             meta: z
-              .record(z.unknown())
+              .record(z.string(), z.unknown())
               .nullable()
               .describe("Location metadata"),
           })
@@ -363,7 +363,7 @@ export const locationRouter = {
               .nullable()
               .describe("Location address country"),
             meta: z
-              .record(z.unknown())
+              .record(z.string(), z.unknown())
               .nullable()
               .describe("Location metadata"),
             created: z.string().describe("Location creation date"),
@@ -499,8 +499,7 @@ export const locationRouter = {
         maxLng: z.coerce
           .number()
           .describe("Maximum longitude of the bounding box"),
-        since: z
-          .string()
+        since: z.iso
           .datetime()
           .optional()
           .describe(
@@ -557,7 +556,7 @@ export const locationRouter = {
               .nullable()
               .describe("Location address country"),
             meta: z
-              .record(z.unknown())
+              .record(z.string(), z.unknown())
               .nullable()
               .describe("Location metadata"),
             created: z.string().describe("Location creation date"),
@@ -576,8 +575,7 @@ export const locationRouter = {
               .describe("Maximum longitude of the bounding box"),
           })
           .describe("Bounding box"),
-        since: z
-          .string()
+        since: z.iso
           .datetime()
           .nullable()
           .describe(

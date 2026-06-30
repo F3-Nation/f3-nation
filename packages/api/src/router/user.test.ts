@@ -330,7 +330,7 @@ describe("User Router", () => {
       if (testUser) {
         // Test that string IDs are coerced to numbers
         const result = await client.user.byId({
-          id: String(testUser.id) as unknown as number, // Simulate coercion
+          id: String(testUser.id), // Simulate coercion (v4 coerce input is unknown)
           includePii: false,
         });
 

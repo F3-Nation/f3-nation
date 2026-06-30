@@ -7,7 +7,7 @@ import type {
   FieldValues,
   UseFormProps,
 } from "react-hook-form";
-import type { ZodType } from "zod";
+import type { input as zInput, output as zOutput, ZodType } from "zod";
 import * as React from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Slot } from "@radix-ui/react-slot";
@@ -21,15 +21,22 @@ import {
 import { cn } from ".";
 import { Label } from "./label";
 
-function useForm<TSchema extends ZodType>({
-  schema,
-  ...props
-}: Omit<UseFormProps<TSchema["_input"]>, "resolver"> & {
-  schema: TSchema;
-}) {
-  const form = __useForm<TSchema["_input"]>({
+function useForm<S extends ZodType>(
+  props: Omit<
+    UseFormProps<zInput<S> & FieldValues, unknown, zOutput<S>>,
+    "resolver"
+  > & {
+    schema: S;
+  },
+) {
+  const form = __useForm<zInput<S> & FieldValues, unknown, zOutput<S>>({
     ...props,
-    resolver: zodResolver(schema, undefined),
+    // zodResolver's overloads can't resolve concrete in/out from the generic
+    // schema `S` (its input isn't known to extend FieldValues), so we assert
+    // the concrete schema shape the wrapper already guarantees.
+    resolver: zodResolver(
+      props.schema as unknown as ZodType<zOutput<S>, zInput<S> & FieldValues>,
+    ),
   });
 
   return form;
@@ -192,13 +199,17 @@ const FormMessage = React.forwardRef<
 FormMessage.displayName = "FormMessage";
 
 // Create a factory so that we don't have to worry about using the wrong form types
-const ShadCNFormFactory = <T extends ZodType>(schema: T) => {
-  const useSchemaForm = (props: Omit<UseFormProps<T["_input"]>, "resolver">) =>
+const ShadCNFormFactory = <TOutput, TInput extends FieldValues = FieldValues>(
+  schema: ZodType<TOutput, TInput>,
+) => {
+  const useSchemaForm = (
+    props: Omit<UseFormProps<TInput, unknown, TOutput>, "resolver">,
+  ) =>
     useForm({
       ...props,
       schema,
     });
-  const useSchemaFormContext = () => useFormContext<T["_input"]>();
+  const useSchemaFormContext = () => useFormContext<TInput, unknown, TOutput>();
   return { useSchemaForm, useSchemaFormContext };
 };
 

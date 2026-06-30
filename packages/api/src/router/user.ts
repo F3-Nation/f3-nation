@@ -208,10 +208,7 @@ export const userRouter = {
   byEmail: editorProcedure
     .input(
       z.object({
-        email: z
-          .string()
-          .email()
-          .describe("The email address of the user to retrieve"),
+        email: z.email().describe("The email address of the user to retrieve"),
         includePii: z.coerce
           .boolean()
           .optional()
@@ -336,7 +333,7 @@ export const userRouter = {
           )
           .describe("User roles"),
         meta: z
-          .record(z.unknown())
+          .record(z.string(), z.unknown())
           .nullable()
           .optional()
           .describe("User metadata"),

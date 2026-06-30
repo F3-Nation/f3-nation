@@ -548,7 +548,10 @@ export const eventRouter = {
             email: z.string().nullable().describe("Event email"),
             highlight: z.boolean().describe("Whether the event is highlighted"),
             created: z.string().describe("Event creation date"),
-            meta: z.record(z.unknown()).nullable().describe("Event metadata"),
+            meta: z
+              .record(z.string(), z.unknown())
+              .nullable()
+              .describe("Event metadata"),
             isPrivate: z.boolean().describe("Whether the event is private"),
             aos: z
               .array(
@@ -710,7 +713,10 @@ export const eventRouter = {
               .number()
               .nullable()
               .describe("Index within interval"),
-            meta: z.record(z.unknown()).nullable().describe("Event metadata"),
+            meta: z
+              .record(z.string(), z.unknown())
+              .nullable()
+              .describe("Event metadata"),
             isPrivate: z.boolean().describe("Whether the event is private"),
             created: z.string().describe("Date the event was created"),
             updated: z.string().describe("Date the event was last updated"),

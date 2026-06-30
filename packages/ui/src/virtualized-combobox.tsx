@@ -73,6 +73,9 @@ const VirtualizedCommand = <T,>({
     });
   }, [options, searchTerm, selectedOptions]);
 
+  // TanStack Virtual's useVirtualizer returns functions the React Compiler can't
+  // memoize; opting this hook out of the rule is the documented escape hatch.
+  // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
     count: sortedFilteredOptions.length,
     getScrollElement: () => parentRef.current,
@@ -245,7 +248,7 @@ export function VirtualizedCombobox<T>({
           className={cn(
             "relative flex w-full items-center rounded-md border px-3 py-1 pr-8 text-left ring-offset-white placeholder:text-slate-500",
             "dark:border-slate-800 dark:bg-slate-950 dark:ring-offset-slate-950 dark:placeholder:text-slate-400 dark:focus-visible:ring-slate-300",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-700 disabled:cursor-not-allowed disabled:opacity-50",
+            "focus-visible:ring-2 focus-visible:ring-slate-700 focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50",
             "file:border-0 file:bg-transparent file:text-sm file:font-medium",
             className,
           )}
@@ -253,13 +256,13 @@ export function VirtualizedCombobox<T>({
         >
           <label
             className={cn(
-              "absolute left-0 top-0 px-3 font-semibold tracking-wide text-primary",
+              "absolute top-0 left-0 px-3 font-semibold tracking-wide text-primary",
             )}
           >
             {label}
             {required ? <span className="text-red-500">*</span> : null}
           </label>
-          <div className={cn("w-full text-left text-sm font-normal leading-3")}>
+          <div className={cn("w-full text-left text-sm leading-3 font-normal")}>
             {!selectedOptions?.length ? (
               searchPlaceholder
             ) : selectedOptions.length === 1 ? (
@@ -271,7 +274,7 @@ export function VirtualizedCombobox<T>({
               </div>
             ) : null}
           </div>
-          <div className="absolute right-3 top-0 flex h-full items-center">
+          <div className="absolute top-0 right-3 flex h-full items-center">
             <ChevronDownIcon className="h-4 w-4 transition duration-200 group-data-[state=open]:rotate-180" />
           </div>
         </Button>

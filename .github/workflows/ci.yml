@@ -33,9 +33,7 @@ env:
   EMAIL_FROM: ci@example.com
   EMAIL_ADMIN_DESTINATIONS: ci@example.com
   # Google (mocks)
-  GOOGLE_LOGO_BUCKET_PRIVATE_KEY: mock-private-key
-  GOOGLE_LOGO_BUCKET_CLIENT_EMAIL: mock@example.iam.gserviceaccount.com
-  GOOGLE_LOGO_BUCKET_BUCKET_NAME: mock-bucket
+  GCS_CREDENTIALS: eyJjbGllbnRfZW1haWwiOiJtb2NrQGV4YW1wbGUuaWFtLmdzZXJ2aWNlYWNjb3VudC5jb20iLCJwcml2YXRlX2tleSI6Ii0tLS0tQkVHSU4gUlNBIFBSSVZBVEUgS0VZLS0tLS1cbmZha2Vcbi0tLS0tRU5EIFJTQSBQUklWQVRFIEtFWS0tLS0tIn0=
   # API (mocks)
   API_KEY: ci-api-key-placeholder
   SUPER_ADMIN_API_KEY: ci-super-admin-key-placeholder
@@ -51,7 +49,7 @@ jobs:
   format-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-node-pnpm
@@ -60,7 +58,7 @@ jobs:
   security-audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-node-pnpm
@@ -74,7 +72,7 @@ jobs:
       issues: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-node-pnpm
@@ -234,7 +232,7 @@ jobs:
           process.stdout.write(`comment_body<<${delimiter}\n${body}\n${delimiter}\n`);
           NODE
       - name: Upsert PR comment
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const marker = '<!-- recent-package-watch -->';
@@ -280,7 +278,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-node-pnpm
@@ -289,7 +287,7 @@ jobs:
   typecheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-node-pnpm
@@ -298,7 +296,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-node-pnpm
@@ -321,7 +319,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-node-pnpm
@@ -342,7 +340,7 @@ jobs:
       matrix:
         app: [admin, api, auth, map, me]
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           persist-credentials: false
       - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0

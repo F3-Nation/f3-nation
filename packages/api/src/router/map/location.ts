@@ -218,7 +218,7 @@ export const mapLocationRouter = os.router({
             orgId: z.number().describe("Organization ID"),
             locationName: z.string().describe("Location name (alias)"),
             locationMeta: z
-              .record(z.unknown())
+              .record(z.string(), z.unknown())
               .nullable()
               .describe("Location metadata"),
             locationAddress: z
