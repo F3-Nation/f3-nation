@@ -43,8 +43,7 @@ const config = {
     ],
   },
 
-  /** We already do linting and typechecking as separate tasks in CI */
-  eslint: { ignoreDuringBuilds: true },
+  /** We already do typechecking as a separate task in CI */
   typescript: { ignoreBuildErrors: true },
   redirects: async () => {
     const adminUrl = (
@@ -92,6 +91,11 @@ export default withSentryConfig(config, {
   // side errors will fail.
   tunnelRoute: "/monitoring",
 
-  // Automatically tree-shake Sentry logger statements to reduce bundle size
-  disableLogger: true,
+  // Webpack-plugin build options. Only applied when building with webpack; the
+  // default Turbopack build ignores these. (Sentry v10 moved disableLogger here
+  // as webpack.treeshake.removeDebugLogging.)
+  webpack: {
+    // Automatically tree-shake Sentry logger statements to reduce bundle size
+    treeshake: { removeDebugLogging: true },
+  },
 });

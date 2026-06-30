@@ -11,7 +11,7 @@ export function DebouncedImage({
   onImageSuccess: () => void;
 }) {
   const [loading, setLoading] = useState(true);
-  const [image, setImage] = useState<string | undefined>(undefined);
+  const [image, setImage] = useState<string | Blob | undefined>(undefined);
   useEffect(() => {
     setLoading(true);
     const timeout = setTimeout(() => {

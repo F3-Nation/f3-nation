@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 
-export function defaultMiddleware() {
+export function defaultProxy() {
   return NextResponse.next();
 }
-export default defaultMiddleware;
+export default defaultProxy;
 
 export const config = {
   matcher: [],

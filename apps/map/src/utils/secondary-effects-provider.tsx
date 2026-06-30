@@ -12,7 +12,7 @@ import { ModalType, openModal } from "./store/modal";
 export const SecondaryEffectsProvider = () => {
   const { status, session } = useAuth();
   const mode = appStore.use.mode();
-  const initialEditMode = useRef<"view" | "edit">();
+  const initialEditMode = useRef<"view" | "edit" | undefined>(undefined);
 
   // Show info about edit mode if it is on
   useEffect(() => {

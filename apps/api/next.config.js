@@ -44,8 +44,7 @@ const config = {
     ],
   },
 
-  /** We already do linting and typechecking as separate tasks in CI */
-  eslint: { ignoreDuringBuilds: true },
+  /** We already do typechecking as a separate task in CI */
   typescript: { ignoreBuildErrors: true },
   redirects: async () => {
     return [
@@ -65,11 +64,6 @@ export default withSentryConfig(config, {
   org: "f3-nation",
   project: "maps-nextjs",
 
-  // This app is App Router only — it has no pages/ API routes or data-fetching
-  // functions (getServerSideProps, etc.). Disabling auto-instrumentation of
-  // Pages Router server functions avoids unnecessary webpack loader overhead.
-  autoInstrumentServerFunctions: false,
-
   // Only print logs for uploading source maps in CI
   silent: !process.env.CI,
 
@@ -85,6 +79,16 @@ export default withSentryConfig(config, {
   // side errors will fail.
   tunnelRoute: "/monitoring",
 
-  // Automatically tree-shake Sentry logger statements to reduce bundle size
-  disableLogger: true,
+  // Webpack-plugin build options. Only applied when building with webpack; the
+  // default Turbopack build ignores these. (Sentry v10 moved disableLogger and
+  // autoInstrumentServerFunctions under the webpack namespace.)
+  webpack: {
+    // Automatically tree-shake Sentry logger statements to reduce bundle size
+    treeshake: { removeDebugLogging: true },
+
+    // This app is App Router only — it has no pages/ API routes or data-fetching
+    // functions (getServerSideProps, etc.). Disabling auto-instrumentation of
+    // Pages Router server functions avoids unnecessary webpack loader overhead.
+    autoInstrumentServerFunctions: false,
+  },
 });
