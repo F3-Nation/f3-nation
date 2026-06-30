@@ -38,7 +38,7 @@ export const DeleteAoForm = () => {
           <div>
             <div className="text-lg font-semibold text-red-800 dark:text-red-200">
               {result?.org?.name ?? (
-                <span className="italic text-red-400">AO name loading...</span>
+                <span className="text-red-400 italic">AO name loading...</span>
               )}
             </div>
             <div className="text-xs text-muted-foreground">

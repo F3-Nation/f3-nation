@@ -149,7 +149,7 @@ export const UpdatePane = () => {
             <button
               type="button"
               aria-label="Clear update location marker"
-              className="absolute -right-2 -top-2 rounded-full bg-muted-foreground px-1 py-1 text-sm text-background"
+              className="absolute -top-2 -right-2 rounded-full bg-muted-foreground px-1 py-1 text-sm text-background"
               onClick={clearUpdateLocation}
               onTouchEnd={clearUpdateLocation}
             >

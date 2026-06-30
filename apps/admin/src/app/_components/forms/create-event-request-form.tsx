@@ -23,7 +23,7 @@ export const CreateEventRequestForm = () => {
     <>
       <EventDetailsFields />
 
-      <h2 className="mb-2 mt-4 text-xl font-semibold text-muted-foreground">
+      <h2 className="mt-4 mb-2 text-xl font-semibold text-muted-foreground">
         Context (read-only):
       </h2>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

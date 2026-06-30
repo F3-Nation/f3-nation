@@ -96,7 +96,7 @@ export const ExistingLocationPickerForm = (params: {
 
   return (
     <>
-      <h2 className="mb-2 mt-4 text-xl font-semibold text-muted-foreground">
+      <h2 className="mt-4 mb-2 text-xl font-semibold text-muted-foreground">
         Select Destination Location:
       </h2>
       <div className="grid grid-cols-1 gap-4">
