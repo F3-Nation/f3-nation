@@ -6,7 +6,7 @@ import { VersionInfo } from "../version-info";
 export default function WithLove() {
   return (
     <div className="my-[1px] flex flex-row items-center justify-center gap-4">
-      <div className="flex gap-2 whitespace-nowrap text-xs text-foreground opacity-60">
+      <div className="flex gap-2 text-xs whitespace-nowrap text-foreground opacity-60">
         <VersionInfo className="text-center text-xs text-foreground/60" />
         <button
           className="text-foreground underline underline-offset-2"

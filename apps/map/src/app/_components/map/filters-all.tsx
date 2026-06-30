@@ -109,7 +109,7 @@ export const FiltersAll = (props: ComponentProps<"div">) => {
           </button>
         </div>
         <div>
-          <h3 className="mb-2 mt-2 text-lg font-semibold">Day of Workout</h3>
+          <h3 className="mt-2 mb-2 text-lg font-semibold">Day of Workout</h3>
           <div className="grid grid-cols-7 gap-2">
             {SHORT_DAY_ORDER.map((day, index) => (
               <button

@@ -21,7 +21,6 @@
     "@acme/db": "workspace:^0.1.0",
     "@acme/logger": "workspace:*",
     "@acme/shared": "workspace:^0.1.0",
-    "@acme/tailwind-config": "workspace:^0.1.0",
     "@acme/ui": "workspace:^0.1.0",
     "@acme/validators": "workspace:^0.1.0",
     "@orpc/openapi": "catalog:",
@@ -54,7 +53,6 @@
     "jiti": "catalog:",
     "jsdom": "catalog:",
     "prettier": "catalog:",
-    "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"

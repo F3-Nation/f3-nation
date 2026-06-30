@@ -73,7 +73,7 @@ export function RegionSelect({ regions, value, onChange }: RegionSelectProps) {
             {value !== null && (
               <button
                 type="button"
-                className="relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm text-muted-foreground outline-none hover:bg-accent"
+                className="relative flex w-full cursor-pointer items-center rounded-sm px-2 py-1.5 text-sm text-muted-foreground outline-hidden select-none hover:bg-accent"
                 onClick={() => {
                   onChange(null);
                   selectAndClose();
@@ -92,7 +92,7 @@ export function RegionSelect({ regions, value, onChange }: RegionSelectProps) {
                   key={region.id}
                   type="button"
                   disabled={!region.isActive && region.id !== value}
-                  className={`relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent ${
+                  className={`relative flex w-full cursor-pointer items-center rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent ${
                     region.id === value ? "bg-accent font-medium" : ""
                   }${!region.isActive ? "opacity-50" : ""}`}
                   onClick={() => {

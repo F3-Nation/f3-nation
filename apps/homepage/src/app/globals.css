@@ -1,6 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "@acme/tailwind-config/web.css";
 
 @layer base {
   :root {

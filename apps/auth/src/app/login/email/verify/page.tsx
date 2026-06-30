@@ -93,7 +93,7 @@ function VerifyEmailForm() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center">
-      <div className="w-full max-w-lg space-y-8 rounded-lg border bg-card p-10 shadow-sm">
+      <div className="w-full max-w-lg space-y-8 rounded-lg border bg-card p-10 shadow-xs">
         <div className="flex flex-col items-center space-y-4">
           <Image
             src="/f3nation.svg"
@@ -124,7 +124,7 @@ function VerifyEmailForm() {
               value={code}
               onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
               placeholder="000000"
-              className="w-full rounded-md border bg-background px-3 py-2 text-center font-mono text-2xl tracking-[0.5em] outline-none focus:ring-2 focus:ring-ring"
+              className="w-full rounded-md border bg-background px-3 py-2 text-center font-mono text-2xl tracking-[0.5em] outline-hidden focus:ring-2 focus:ring-ring"
             />
           </div>
 

@@ -19,7 +19,7 @@ export const DesktopLocationPanelContent = () => {
   return (
     <div
       data-testid={TestId.PANEL}
-      className="pointer-events-auto relative flex flex-col rounded-lg bg-background p-4 shadow dark:border"
+      className="pointer-events-auto relative flex flex-col rounded-lg bg-background p-4 shadow-sm dark:border"
     >
       <WorkoutDetailsContent
         locationId={panelLocationId}
@@ -28,7 +28,7 @@ export const DesktopLocationPanelContent = () => {
       />
 
       <div className="h-8" />
-      <div className="absolute right-2 top-2 flex flex-row gap-2">
+      <div className="absolute top-2 right-2 flex flex-row gap-2">
         <button
           className="rounded-full bg-muted-foreground px-1 py-1 text-sm text-background"
           onClick={(e) => {
