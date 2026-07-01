@@ -1,6 +1,6 @@
 # ---------- Stage 1: Prune monorepo ----------
     ARG TURBO_VERSION=2
-    FROM node:24.17.0-alpine AS builder
+    FROM node:24.18.0-alpine AS builder
     ARG TURBO_VERSION
     
     ENV TURBO_TELEMETRY_DISABLED=1
@@ -17,7 +17,7 @@
     RUN turbo prune f3-api --docker
     
     # ---------- Stage 2: Install + build ----------
-    FROM node:24.17.0-alpine AS installer
+    FROM node:24.18.0-alpine AS installer
     ARG TURBO_VERSION
     
     ENV NEXT_TELEMETRY_DISABLED=1
@@ -52,7 +52,7 @@
     RUN pnpm turbo build --filter=f3-api
     
     # ---------- Stage 3: Production runner ----------
-    FROM node:24.17.0-alpine AS runner
+    FROM node:24.18.0-alpine AS runner
     
     RUN apk add --no-cache libc6-compat openssl && apk update
     WORKDIR /app
