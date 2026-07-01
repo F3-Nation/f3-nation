@@ -22,14 +22,13 @@
     "@acme/prettier-config": "workspace:*",
     "@acme/tailwind-config": "workspace:*",
     "@acme/tsconfig": "workspace:*",
+    "@tailwindcss/postcss": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
-    "autoprefixer": "catalog:",
     "eslint": "catalog:",
     "postcss": "catalog:",
     "prettier": "catalog:",
-    "tailwindcss": "catalog:",
     "typescript": "catalog:"
   },
   "prettier": "@acme/prettier-config"

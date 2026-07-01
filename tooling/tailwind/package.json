@@ -4,8 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./native": "./native.ts",
-    "./web": "./web.ts"
+    "./web.css": "./web.css"
   },
   "license": "MIT",
   "scripts": {
@@ -15,10 +14,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "autoprefixer": "catalog:",
-    "postcss": "catalog:",
     "tailwindcss": "catalog:",
-    "tailwindcss-animate": "catalog:"
+    "tw-animate-css": "catalog:"
   },
   "devDependencies": {
     "@acme/eslint-config": "workspace:^0.2.0",

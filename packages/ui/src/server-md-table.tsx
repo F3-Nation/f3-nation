@@ -461,7 +461,7 @@ export const MDTable = <T extends { id: string | number }>(
           <div className="flex flex-row items-center gap-2">
             <Button
               variant="ghost"
-              className="w-8 rounded border p-1"
+              className="w-8 rounded-sm border p-1"
               onClick={() => table.setPageIndex(0)}
               disabled={!table.getCanPreviousPage()}
             >
@@ -469,7 +469,7 @@ export const MDTable = <T extends { id: string | number }>(
             </Button>
             <Button
               variant="ghost"
-              className="w-8 rounded border p-1"
+              className="w-8 rounded-sm border p-1"
               onClick={() => table.previousPage()}
               disabled={!table.getCanPreviousPage()}
             >
@@ -483,7 +483,7 @@ export const MDTable = <T extends { id: string | number }>(
             </span>
             <Button
               variant="ghost"
-              className="w-8 rounded border p-1"
+              className="w-8 rounded-sm border p-1"
               onClick={() => table.nextPage()}
               disabled={!table.getCanNextPage()}
             >
@@ -491,7 +491,7 @@ export const MDTable = <T extends { id: string | number }>(
             </Button>
             <Button
               variant="ghost"
-              className="w-8 rounded border p-1"
+              className="w-8 rounded-sm border p-1"
               onClick={() => table.setPageIndex(table.getPageCount() - 1)}
               disabled={!table.getCanNextPage()}
             >
@@ -500,7 +500,7 @@ export const MDTable = <T extends { id: string | number }>(
           </div>
           {/* ability to select the size of the page */}
           <div className="flex flex-row items-center gap-2">
-            <div className="pointer-events-none flex-shrink-0">Page size</div>
+            <div className="pointer-events-none shrink-0">Page size</div>
             <Select
               value={tableState.pagination.pageSize.toString()}
               onValueChange={(value) => {

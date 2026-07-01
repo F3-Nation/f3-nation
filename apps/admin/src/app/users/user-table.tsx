@@ -287,7 +287,7 @@ const columns: TableOptions<
           {row.original.roles.map((role) => (
             <span
               key={role.orgId}
-              className={`inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium ${
+              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap ${
                 roleStyles[role.roleName]
               }`}
             >
