@@ -344,7 +344,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
-      - uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+      - id: build
+        continue-on-error: true
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: .
           file: apps/${{ matrix.app }}/Dockerfile
@@ -353,4 +355,17 @@ jobs:
           platforms: linux/amd64
           push: false
           cache-from: type=gha,scope=docker-${{ matrix.app }}
-          cache-to: type=gha,mode=max,scope=docker-${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=docker-${{ matrix.app }},ignore-error=true
+      # Fallback: GitHub evicts individual GHA cache blobs (LRU / 7-day) while
+      # leaving the index manifest behind, so cache-from can hit a dangling
+      # reference and fail with `BlobNotFound`. Retry without cache-from so the
+      # build still passes; cache-to rewrites a fresh index, re-warming the
+      # cache for the next run.
+      - if: steps.build.outcome == 'failure'
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          platforms: linux/amd64
+          push: false
+          cache-to: type=gha,mode=max,scope=docker-${{ matrix.app }},ignore-error=true
