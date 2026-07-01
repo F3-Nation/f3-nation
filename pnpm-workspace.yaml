@@ -179,3 +179,4 @@ cleanupUnusedCatalogs: true
 publicHoistPattern:
   - "sharp"
   - "@img/*"
+minimumReleaseAge: 0
