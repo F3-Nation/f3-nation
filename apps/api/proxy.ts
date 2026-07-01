@@ -8,10 +8,10 @@ import { NextResponse } from "next/server";
 import withAdmin from "./middleware/with-admin";
 import withEditor from "./middleware/with-editor";
 
-export function defaultProxy() {
+function defaultProxy() {
   return NextResponse.next();
 }
-export default withAdmin(withEditor(defaultProxy));
+export const proxy = withAdmin(withEditor(defaultProxy));
 
 // Read more: https://nextjs.org/docs/app/building-your-application/routing/proxy#matcher
 export const config = {
