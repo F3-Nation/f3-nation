@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0](https://github.com/F3-Nation/f3-nation/compare/me@1.4.1...me@1.5.0) (2026-07-01)
+
+
+### Features
+
+* **storage:** consolidate GCS uploads into @acme/storage package ([#469](https://github.com/F3-Nation/f3-nation/issues/469)) ([92a712f](https://github.com/F3-Nation/f3-nation/commit/92a712f897ba1a787e81f2bfc6a5878541bddd3c))
+
 ## [1.4.1](https://github.com/F3-Nation/f3-nation/compare/me@1.4.0...me@1.4.1) (2026-06-18)
 
 
