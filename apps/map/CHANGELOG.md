@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.0.1](https://github.com/F3-Nation/f3-nation/compare/map@6.0.0...map@6.0.1) (2026-07-01)
+
+
+### Bug Fixes
+
+* **repo:** bump node to 24.18.0 to fix GCS upload premature-close regression ([#543](https://github.com/F3-Nation/f3-nation/issues/543)) ([e96348a](https://github.com/F3-Nation/f3-nation/commit/e96348ad6252fb7e9220819d02d5a7114422e5ba))
+
 ## [6.0.0](https://github.com/F3-Nation/f3-nation/compare/map@5.1.7...map@6.0.0) (2026-07-01)
 
 
