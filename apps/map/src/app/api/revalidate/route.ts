@@ -19,18 +19,26 @@ async function warmMapPage(): Promise<boolean> {
   const port = process.env.PORT ?? "3000";
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), WARM_TIMEOUT_MS);
+  let res: Response | undefined;
   try {
-    const res = await fetch(`http://127.0.0.1:${port}/`, {
+    res = await fetch(`http://127.0.0.1:${port}/`, {
       // Bypass the fetch cache so this actually drives regeneration.
       cache: "no-store",
       signal: controller.signal,
     });
     return res.ok;
   } catch (warmError) {
-    logWarn("map.revalidate.warm_failed", { warmError });
+    logWarn("map.revalidate.warm_failed", { err: warmError });
     return false;
   } finally {
     clearTimeout(timeout);
+    // We never read the body, so cancel it to release the socket (undici keeps
+    // the connection open until the body is drained or cancelled).
+    try {
+      await res?.body?.cancel();
+    } catch {
+      // Already consumed/closed — nothing to clean up.
+    }
   }
 }
 

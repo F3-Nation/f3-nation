@@ -191,7 +191,8 @@ jobs:
         run: |
           KEY="$(gcloud secrets versions access latest --secret="${SECRET_NAME}" --project="${PROJECT}")" \
             || { echo "::warning::Could not read ${SECRET_NAME}; skipping cache warm"; exit 0; }
-          code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "${URL%/}/api/revalidate" -H "x-api-key: ${KEY}")
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "${URL%/}/api/revalidate" -H "x-api-key: ${KEY}") \
+            || code="curl_failed"
           echo "Revalidation POST ${URL%/}/api/revalidate -> ${code}"
           if [ "${code}" != "200" ]; then
             echo "::warning::Cache revalidation returned HTTP ${code}"
@@ -252,7 +253,8 @@ jobs:
         run: |
           KEY="$(gcloud secrets versions access latest --secret="${SECRET_NAME}" --project="${PROJECT}")" \
             || { echo "::warning::Could not read ${SECRET_NAME}; skipping cache warm"; exit 0; }
-          code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "${URL%/}/api/revalidate" -H "x-api-key: ${KEY}")
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "${URL%/}/api/revalidate" -H "x-api-key: ${KEY}") \
+            || code="curl_failed"
           echo "Revalidation POST ${URL%/}/api/revalidate -> ${code}"
           if [ "${code}" != "200" ]; then
             echo "::warning::Cache revalidation returned HTTP ${code}"

@@ -4,11 +4,22 @@ import { createContext, useContext, useEffect, useState } from "react";
 
 export type Channel = "local" | "ci" | "branch" | "dev" | "staging" | "prod";
 
-interface RuntimeConfig {
+// Shape returned by /api/runtime-config.
+interface RuntimeConfigData {
   channel: Channel;
   googleApiKey: string;
   adminUrl: string;
 }
+
+// Status of the runtime config fetch: transient load apart from a persistent failure.
+export type RuntimeConfigStatus = "loading" | "ready" | "error";
+
+interface RuntimeConfig extends RuntimeConfigData {
+  status: RuntimeConfigStatus;
+}
+
+// Consecutive failures to tolerate before showing an error instead of the loader.
+const ERROR_AFTER_ATTEMPTS = 3;
 
 // Loading default used before /api/runtime-config resolves on the client. The
 // page tree still renders (and caches) with these values; the only consumer that
@@ -17,9 +28,12 @@ const DEFAULT_CONFIG: RuntimeConfig = {
   channel: "local",
   googleApiKey: "",
   adminUrl: "",
+  status: "loading",
 };
 
-const RuntimeConfigContext = createContext<RuntimeConfig>(DEFAULT_CONFIG);
+// `null` distinguishes "no provider mounted" from the provider's own loading
+// state (DEFAULT_CONFIG), so useRuntimeConfig can still catch wiring mistakes.
+const RuntimeConfigContext = createContext<RuntimeConfig | null>(null);
 
 // Mirror of the latest config for non-React callers (e.g. places utils) that
 // read the key synchronously. Populated once the fetch resolves; those callers
@@ -43,13 +57,21 @@ export function RuntimeConfigProvider({
         try {
           const res = await fetch("/api/runtime-config");
           if (!res.ok) throw new Error(`runtime-config ${res.status}`);
-          const data = (await res.json()) as RuntimeConfig;
+          const data = (await res.json()) as RuntimeConfigData;
           if (cancelled) return;
-          _runtimeConfig = data;
-          setConfig(data);
+          const resolved: RuntimeConfig = { ...data, status: "ready" };
+          _runtimeConfig = resolved;
+          setConfig(resolved);
           return;
         } catch (err) {
-          console.error("Failed to load runtime config", err);
+          // Avoid spamming the browser console indefinitely during a prolonged outage.
+          if (process.env.NODE_ENV !== "production") {
+            console.error("Failed to load runtime config", err);
+          }
+          // Surface an error after enough failures so the UI stops looping on the loader.
+          if (!cancelled && attempt + 1 >= ERROR_AFTER_ATTEMPTS) {
+            setConfig((prev) => ({ ...prev, status: "error" }));
+          }
           const delay = Math.min(1000 * 2 ** attempt, MAX_DELAY);
           await new Promise((resolve) => setTimeout(resolve, delay));
         }
@@ -68,7 +90,13 @@ export function RuntimeConfigProvider({
 }
 
 export function useRuntimeConfig(): RuntimeConfig {
-  return useContext(RuntimeConfigContext);
+  const ctx = useContext(RuntimeConfigContext);
+  if (ctx === null) {
+    throw new Error(
+      "useRuntimeConfig must be used within a RuntimeConfigProvider",
+    );
+  }
+  return ctx;
 }
 
 export function getGoogleApiKey(): string {

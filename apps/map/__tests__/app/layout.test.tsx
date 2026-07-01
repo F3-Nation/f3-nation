@@ -1,7 +1,7 @@
 // Mock setups use vi.fn() with untyped callbacks — unsafe rules don't apply here
 /* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-assignment */
 import { render, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import RootLayout from "../../src/app/layout";
 
@@ -80,6 +80,10 @@ Object.defineProperty(window, "matchMedia", {
     removeEventListener: vi.fn(),
     dispatchEvent: vi.fn(),
   })),
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe("layout app router", () => {
