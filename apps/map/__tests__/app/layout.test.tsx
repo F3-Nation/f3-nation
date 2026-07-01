@@ -1,7 +1,7 @@
 // Mock setups use vi.fn() with untyped callbacks — unsafe rules don't apply here
 /* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-assignment */
 import { render, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import RootLayout from "../../src/app/layout";
 
@@ -80,6 +80,13 @@ Object.defineProperty(window, "matchMedia", {
     removeEventListener: vi.fn(),
     dispatchEvent: vi.fn(),
   })),
+});
+
+// Re-stub fetch before every test so afterEach's vi.unstubAllGlobals() (which
+// clears the module-scope stub above) doesn't leave later tests hitting the
+// real /api/runtime-config request.
+beforeEach(() => {
+  vi.stubGlobal("fetch", runtimeConfigFetchMock);
 });
 
 afterEach(() => {

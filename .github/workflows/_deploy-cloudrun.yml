@@ -191,11 +191,15 @@ jobs:
         run: |
           KEY="$(gcloud secrets versions access latest --secret="${SECRET_NAME}" --project="${PROJECT}")" \
             || { echo "::warning::Could not read ${SECRET_NAME}; skipping cache warm"; exit 0; }
-          code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "${URL%/}/api/revalidate" -H "x-api-key: ${KEY}") \
-            || code="curl_failed"
+          raw=$(curl -sS -w '\n%{http_code}' -X POST "${URL%/}/api/revalidate" -H "x-api-key: ${KEY}") \
+            || raw=$'\ncurl_failed'
+          code=$(printf '%s' "${raw}" | tail -n1)
+          body=$(printf '%s' "${raw}" | sed '$d')
           echo "Revalidation POST ${URL%/}/api/revalidate -> ${code}"
           if [ "${code}" != "200" ]; then
             echo "::warning::Cache revalidation returned HTTP ${code}"
+          elif [ "$(printf '%s' "${body}" | jq -r '.warmed // false')" != "true" ]; then
+            echo "::warning::Cache revalidated but warm-up did not complete; instance will regenerate lazily on next visit"
           fi
 
   # ── Deploy to production (requires approval) ──
@@ -253,9 +257,13 @@ jobs:
         run: |
           KEY="$(gcloud secrets versions access latest --secret="${SECRET_NAME}" --project="${PROJECT}")" \
             || { echo "::warning::Could not read ${SECRET_NAME}; skipping cache warm"; exit 0; }
-          code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "${URL%/}/api/revalidate" -H "x-api-key: ${KEY}") \
-            || code="curl_failed"
+          raw=$(curl -sS -w '\n%{http_code}' -X POST "${URL%/}/api/revalidate" -H "x-api-key: ${KEY}") \
+            || raw=$'\ncurl_failed'
+          code=$(printf '%s' "${raw}" | tail -n1)
+          body=$(printf '%s' "${raw}" | sed '$d')
           echo "Revalidation POST ${URL%/}/api/revalidate -> ${code}"
           if [ "${code}" != "200" ]; then
             echo "::warning::Cache revalidation returned HTTP ${code}"
+          elif [ "$(printf '%s' "${body}" | jq -r '.warmed // false')" != "true" ]; then
+            echo "::warning::Cache revalidated but warm-up did not complete; instance will regenerate lazily on next visit"
           fi
