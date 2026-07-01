@@ -31,3 +31,4 @@ jobs:
       prod_environment: map-production
       staging_url: https://staging.map.f3nation.com
       prod_url: https://map.f3nation.com
+      revalidate_after_deploy: true

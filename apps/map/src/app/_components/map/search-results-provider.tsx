@@ -39,24 +39,37 @@ export const TextSearchResultsProvider = ({
 }: {
   children: React.ReactNode;
 }) => {
+  RERENDER_LOGS && console.log("TextSearchResultsProvider rerender");
+  const text = searchStore.use.text();
+
+  const [searchEngaged, setSearchEngaged] = useState(false);
+  useEffect(() => {
+    if (text.length > 0) setSearchEngaged(true);
+  }, [text]);
+
   const { data: regionsResponse } = useQuery(
-    orpc.map.location.regionsWithLocation.queryOptions({ input: undefined }),
+    orpc.map.location.regionsWithLocation.queryOptions({
+      input: undefined,
+      enabled: searchEngaged,
+    }),
   );
   const regions = regionsResponse?.regionsWithLocation;
   const { data: eventIdToRegionNameLookupResponse } = useQuery(
-    orpc.event.eventIdToRegionNameLookup.queryOptions({ input: undefined }),
+    orpc.event.eventIdToRegionNameLookup.queryOptions({
+      input: undefined,
+      enabled: searchEngaged,
+    }),
   );
   const eventIdToRegionNameLookup = eventIdToRegionNameLookupResponse?.lookup;
   const { data: locationIdToRegionNameLookupResponse } = useQuery(
     orpc.map.location.locationIdToRegionNameLookup.queryOptions({
       input: undefined,
+      enabled: searchEngaged,
     }),
   );
   const locationIdToRegionNameLookup =
     locationIdToRegionNameLookupResponse?.lookup;
   const isMobileWidth = useIsMobileWidth();
-  RERENDER_LOGS && console.log("TextSearchResultsProvider rerender");
-  const text = searchStore.use.text();
   const { filteredLocationMarkers } = useFilteredMapResults();
 
   const [geoResults, setGeoResults] = useState<GeoMapSearchResult[]>([]);
