@@ -81,14 +81,39 @@ const slackMetadataSchema = z
 
 const baseMessageInputSchema = z
   .object({
-    regionOrgId: z.coerce.number().int().positive(),
-    slackChannelId: z.string().trim().min(1).max(255),
+    regionOrgId: z.coerce
+      .number()
+      .int()
+      .positive()
+      .describe("The F3 org ID of the region to which the Slack bot is linked")
+      .min(1),
+    slackChannelId: z
+      .string()
+      .trim()
+      .min(1)
+      .max(255)
+      .describe(
+        "The Slack channel, user, or group ID where the message will be posted or updated",
+      ),
     text: z
       .string()
       .max(4000)
-      .refine((value) => value.trim().length > 0, "Required"),
-    blocks: z.array(slackJsonObjectSchema).max(50).optional(),
-    metadata: slackMetadataSchema.optional(),
+      .refine((value) => value.trim().length > 0, "Required")
+      .describe(
+        "The text content of the Slack message. This supports Slack's markdown-like formatting",
+      ),
+    blocks: z
+      .array(slackJsonObjectSchema)
+      .max(50)
+      .optional()
+      .describe(
+        "An array of Block Kit blocks to include in the Slack message. Each block must be a valid JSON object according to Slack's Block Kit specification",
+      ),
+    metadata: slackMetadataSchema
+      .optional()
+      .describe(
+        "Optional metadata for the Slack message, which must include an event_type and event_payload keys. The event type must be a non-empty string, and the event_payload must be a valid JSON object",
+      ),
   })
   .strict();
 
@@ -98,10 +123,29 @@ export const postSlackMessageInputSchema = baseMessageInputSchema
       .string()
       .max(80)
       .refine((value) => value.trim().length > 0, "Required")
-      .optional(),
-    icon_url: z.string().url().startsWith("https://").optional(),
-    mrkdwn: z.boolean().optional(),
-    thread_ts: slackTimestampSchema.optional(),
+      .optional()
+      .describe(
+        "The username to display as the sender of the Slack message. This is optional and can be used to override the default bot username.",
+      ),
+    icon_url: z
+      .string()
+      .url()
+      .startsWith("https://")
+      .optional()
+      .describe(
+        "The URL of the icon to display as the sender of the Slack message. This is optional and must be a valid HTTPS URL.",
+      ),
+    mrkdwn: z
+      .boolean()
+      .optional()
+      .describe(
+        "Whether to enable Markdown formatting in the Slack message. This is optional and defaults to true.",
+      ),
+    thread_ts: slackTimestampSchema
+      .optional()
+      .describe(
+        "The timestamp of the parent message to reply to in a thread. This is optional and allows the message to be posted as a threaded reply.",
+      ),
   })
   .strict();
 
@@ -361,7 +405,7 @@ export const slackRouter = {
       tags: ["slack"],
       summary: "Post a Slack message",
       description:
-        "Requires admin access on the target org and exactly one Slack bot install linked to that org.",
+        "Post a Slack message to a channel, user, or group. Requires admin access on the target org and an active F3 Nation Slack app installation.",
     })
     .output(slackMessageOutputSchema)
     .handler(async ({ context: ctx, input }) => {
@@ -400,7 +444,7 @@ export const slackRouter = {
       tags: ["slack"],
       summary: "Update a Slack message",
       description:
-        "Requires admin access on the target org and exactly one Slack bot install linked to that org.",
+        "Update a Slack message in a channel, user, or group. Requires admin access on the target org and an active F3 Nation Slack app installation.",
     })
     .output(slackMessageOutputSchema)
     .handler(async ({ context: ctx, input }) => {
