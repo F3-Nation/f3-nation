@@ -240,7 +240,7 @@ pnpm dev
 | Me       | <http://localhost:3003> |
 | Auth     | <http://localhost:3004> |
 | Homepage | <http://localhost:3005> |
-| Slackbot | http://localhost:3006   |
+| Slackbot | <http://localhost:3006> |
 
 ---
 
