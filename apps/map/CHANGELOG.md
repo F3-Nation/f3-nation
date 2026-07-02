@@ -1,5 +1,12 @@
 # Changelog
 
+## [7.0.1](https://github.com/F3-Nation/f3-nation/compare/map@7.0.0...map@7.0.1) (2026-07-02)
+
+
+### Bug Fixes
+
+* **repo:** reinstall sharp in runner stage to fix ERR_DLOPEN_FAILED ([#550](https://github.com/F3-Nation/f3-nation/issues/550)) ([faf1f68](https://github.com/F3-Nation/f3-nation/commit/faf1f68c4b3930a6db67f8cd09cd57c21a446bbc))
+
 ## [7.0.0](https://github.com/F3-Nation/f3-nation/compare/map@6.0.1...map@7.0.0) (2026-07-02)
 
 
