@@ -18,15 +18,18 @@ This creates `apps/slackbot/.env` from `apps/slackbot/.env.local.example`, then 
 
 ### Create Slack app and configure Slack credentials
 
-1. **Initialize and install your local Slack app**: I recommend you use your own private Slack workspace for this. Open [Slack's app console](https://api.slack.com/apps), click Create New App->from manifest, then paste in the contents from `app_manifest.json`. After you install to your workspace, gather the Signing Secret from the Basic Information tab and the Bot User OAuth Token from the OAuth & Permissions tab. For the app-level token, you will need to generate this from the Basic Information tab (when asked, assign it the `connections:write` scope).
-
-2. **Copy to `.env`**: edit `apps/slackbot/.env` and set:
+1. **Initialize and install your local Slack app**: I recommend you use your own private Slack workspace for this.
+2. Open [Slack's app console](https://api.slack.com/apps), click Create New App->from manifest, then paste in the contents from `app_manifest.json`. Hit Save Changes at the top. You'll get a warning at the top asking you to verify the URL. Ignore it.
+3. After you install to your workspace, gather the Signing Secret from the Basic Information tab and the Bot User OAuth Token from the OAuth & Permissions tab. For the app-level token, you will need to generate this from the Basic Information tab (when asked, assign it the `connections:write` scope).
+4. **Copy to `.env`**: edit `apps/slackbot/.env` and set:
 
 - `SLACK_SIGNING_SECRET`
 - `SLACK_BOT_TOKEN`
 - `SLACK_APP_TOKEN`
 
 ### Start the local apps with Slackbot
+
+In the app manifest, there is a setting called socket_mode_enabled that is set to true. This tells Slack to connect to the app locally on your machine (port 3006).
 
 From the repo root:
 
@@ -37,6 +40,10 @@ pnpm dev --include-py
 Slackbot is opt-in for root dev startup because it needs the Python environment and Slack credentials. At the very least, you will need to also run the API app.
 
 - Slackbot local URL: http://localhost:3006
+
+### Uploading Files (NOT IMPLEMENTED)
+
+Slackbot allows you to upload user avatar images and region logos. Right now the file upload functionality does not work when running the app locally. Maybe on day.
 
 ### First steps
 
