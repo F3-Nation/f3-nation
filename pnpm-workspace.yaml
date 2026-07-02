@@ -116,7 +116,7 @@ catalog:
   react-responsive: ^9.0.2
   server-only: ^0.0.1
   sharp: ^0.35.2
-  sonner: ^1.7.4
+  sonner: ^2.0.7
   supercluster: ^8.0.1
   superjson: 2.2.6
   tailwind-merge: ^3.6.0
