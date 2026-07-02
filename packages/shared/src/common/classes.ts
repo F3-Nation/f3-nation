@@ -110,31 +110,23 @@ export class ZustandStore<T extends Record<string, unknown>> {
   }
 
   /**
-   * @deprecated Use native setState instead. set used to have an issue where
-   * it would cause excessive rerenders due to whole-state cloneDeep
-   */
-  set<U extends keyof T, V extends GetFieldType<T, U>>(key: U, value: V) {
-    // Somehow setState does magic to prevent other objects from being marked as updated
-    const partialState = { [key]: value } as unknown as Partial<T>;
-    this.useBoundStore.setState(partialState);
-  }
-
-  /**
    * This function does some magic to prevent other top-level keys from being updated
    * Also will not update unchanged objects in the updated keys of the Partial object
    * eg i={a:{b:1},c:2} -> {c:3,...i} will not update a.
    * This is because that object reference is the same
    */
-  setState(...fn: Parameters<typeof this.useBoundStore.setState>) {
-    this.useBoundStore.setState(...fn);
-  }
-
-  // This is deprecated, use native setState instead. update used to have an issue
-  // where it would cause excessive rerenders due to whole-state cloneDeep
-  /**
-   * @deprecated Use setState instead
-   */
-  update(...fn: Parameters<typeof this.useBoundStore.setState>) {
-    this.useBoundStore.setState(...fn);
+  setState(
+    partial: T | Partial<T> | ((state: T) => T | Partial<T>),
+    replace?: false,
+  ): void;
+  setState(state: T | ((state: T) => T), replace: true): void;
+  setState(
+    partial: T | Partial<T> | ((state: T) => T | Partial<T>),
+    replace?: boolean,
+  ) {
+    const args = [partial, replace] as Parameters<
+      typeof this.useBoundStore.setState
+    >;
+    this.useBoundStore.setState(...args);
   }
 }
