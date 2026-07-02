@@ -65,6 +65,9 @@ COPY --from=installer --chown=auth:nodejs /app/apps/auth/.next/standalone ./
 COPY --from=installer --chown=auth:nodejs /app/apps/auth/.next/static ./apps/auth/.next/static
 COPY --from=installer --chown=auth:nodejs /app/apps/auth/public ./apps/auth/public
 
+# Reinstall sharp: Turbopack drops it from the standalone output.
+RUN rm -rf ./node_modules/sharp ./node_modules/@img && npm install --no-save --no-audit --no-fund sharp@0.35.2
+
 USER auth
 
 ENV PORT=8080

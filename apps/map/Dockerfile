@@ -69,6 +69,9 @@ COPY --from=installer --chown=map:nodejs /app/apps/map/.next/standalone ./
 COPY --from=installer --chown=map:nodejs /app/apps/map/.next/static ./apps/map/.next/static
 COPY --from=installer --chown=map:nodejs /app/apps/map/public ./apps/map/public
 
+# Reinstall sharp: Turbopack drops it from the standalone output.
+RUN rm -rf ./node_modules/sharp ./node_modules/@img && npm install --no-save --no-audit --no-fund sharp@0.35.2
+
 USER map
 
 ENV PORT=8080
