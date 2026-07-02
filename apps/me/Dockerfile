@@ -63,6 +63,9 @@ COPY --from=installer --chown=me:nodejs /app/apps/me/.next/standalone ./
 COPY --from=installer --chown=me:nodejs /app/apps/me/.next/static ./apps/me/.next/static
 COPY --from=installer --chown=me:nodejs /app/apps/me/public ./apps/me/public
 
+# Reinstall sharp: Turbopack drops it from the standalone output.
+RUN rm -rf ./node_modules/sharp ./node_modules/@img && npm install sharp@0.35.2
+
 USER me
 
 ENV NODE_ENV=production

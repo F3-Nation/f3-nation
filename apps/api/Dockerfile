@@ -63,7 +63,10 @@
     # Copy standalone output
     COPY --from=installer --chown=api:nodejs /app/apps/api/.next/standalone ./
     COPY --from=installer --chown=api:nodejs /app/apps/api/.next/static ./apps/api/.next/static
-    
+
+    # Reinstall sharp: Turbopack drops it from the standalone output.
+    RUN rm -rf ./node_modules/sharp ./node_modules/@img && npm install sharp@0.35.2
+
     USER api
     
     ENV PORT=8080
