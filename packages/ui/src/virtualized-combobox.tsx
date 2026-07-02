@@ -53,6 +53,8 @@ const VirtualizedCommand = <T,>({
   onClear,
   hideClearButton,
 }: VirtualizedCommandProps<T>) => {
+  "use no memo";
+
   const [searchTerm, setSearchTerm] = useState("");
   const parentRef = useRef(null);
 
@@ -73,9 +75,7 @@ const VirtualizedCommand = <T,>({
     });
   }, [options, searchTerm, selectedOptions]);
 
-  // TanStack Virtual's useVirtualizer returns functions the React Compiler can't
-  // memoize; opting this hook out of the rule is the documented escape hatch.
-  // eslint-disable-next-line react-hooks/incompatible-library
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual
   const virtualizer = useVirtualizer({
     count: sortedFilteredOptions.length,
     getScrollElement: () => parentRef.current,

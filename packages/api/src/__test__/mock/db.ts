@@ -86,11 +86,9 @@ export const createMockDb = () => {
       where: vi.fn(() => resolveSelectRows()),
       then: <TResult1 = unknown[], TResult2 = never>(
         onfulfilled?:
-          | ((value: unknown[]) => TResult1 | PromiseLike<TResult1>)
-          | null,
+          ((value: unknown[]) => TResult1 | PromiseLike<TResult1>) | null,
         onrejected?:
-          | ((reason: unknown) => TResult2 | PromiseLike<TResult2>)
-          | null,
+          ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
       ) => resolveSelectRows().then(onfulfilled, onrejected),
     };
     return chain;

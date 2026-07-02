@@ -181,7 +181,7 @@ export const WorkoutDetailsContent = ({
             />
           </button>
         </div>
-        <div className="line-clamp-2 flex-1 text-left text-2xl leading-6 font-bold sm:text-4xl">
+        <div className="line-clamp-2 flex-1 text-left text-2xl leading-tight font-bold sm:text-4xl">
           {event?.name ?? "Workout Information"}
         </div>
       </div>

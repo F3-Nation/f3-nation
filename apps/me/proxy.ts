@@ -13,7 +13,7 @@ const PUBLIC_PATHS = ["/", "/api/auth/login", "/api/auth/callback"];
 const STATIC_ASSET_PATTERN =
   /\.(?:css|js|mjs|map|txt|xml|json|png|jpe?g|gif|webp|svg|ico|bmp|avif|woff2?|ttf|otf|eot|mp4|webm|mp3|wav|ogg|pdf)$/i;
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
   // Allow public paths

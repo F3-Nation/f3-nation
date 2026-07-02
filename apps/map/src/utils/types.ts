@@ -77,27 +77,21 @@ export interface GeoMapSearchResult {
 
 export const isF3LocationMapSearchResult = (
   result:
-    | F3LocationMapSearchResult
-    | GeoMapSearchResult
-    | F3RegionMapSearchResult,
+    F3LocationMapSearchResult | GeoMapSearchResult | F3RegionMapSearchResult,
 ): result is F3LocationMapSearchResult => {
   return result.type === "location";
 };
 
 export const isGeoMapSearchResult = (
   result:
-    | F3LocationMapSearchResult
-    | GeoMapSearchResult
-    | F3RegionMapSearchResult,
+    F3LocationMapSearchResult | GeoMapSearchResult | F3RegionMapSearchResult,
 ): result is GeoMapSearchResult => {
   return result.type === "geo";
 };
 
 export const isF3RegionMapSearchResult = (
   result:
-    | F3LocationMapSearchResult
-    | GeoMapSearchResult
-    | F3RegionMapSearchResult,
+    F3LocationMapSearchResult | GeoMapSearchResult | F3RegionMapSearchResult,
 ): result is F3RegionMapSearchResult => {
   return result.type === "region";
 };

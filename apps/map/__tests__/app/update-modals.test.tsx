@@ -78,7 +78,7 @@ import { MoveEventToNewLocationModal } from "~/app/_components/modal/update/move
 // Each modal only forwards `data` to react-hook-form's defaultValues; the field
 // values themselves are exercised by the child forms (stubbed here), so an empty
 // object is sufficient to render the modal shell.
-const cases: [string, (props: { data: any }) => JSX.Element, string][] = [
+const cases: [string, (props: { data: any }) => React.ReactNode, string][] = [
   [
     "CreateAOAndLocationAndEventModal",
     CreateAOAndLocationAndEventModal,

@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.4.1](https://github.com/F3-Nation/f3-nation/compare/admin@1.4.0...admin@1.4.1) (2026-07-01)
+
+
+### Bug Fixes
+
+* **repo:** bump node to 24.18.0 to fix GCS upload premature-close regression ([#543](https://github.com/F3-Nation/f3-nation/issues/543)) ([e96348a](https://github.com/F3-Nation/f3-nation/commit/e96348ad6252fb7e9220819d02d5a7114422e5ba))
+
+## [1.4.0](https://github.com/F3-Nation/f3-nation/compare/admin@1.3.1...admin@1.4.0) (2026-07-01)
+
+
+### Features
+
+* **admin:** add Short Location Description field to Region editor ([#470](https://github.com/F3-Nation/f3-nation/issues/470)) ([a90514d](https://github.com/F3-Nation/f3-nation/commit/a90514d02d270885905e3dede5d46869fb442c3b)), closes [#84](https://github.com/F3-Nation/f3-nation/issues/84)
+* **storage:** consolidate GCS uploads into @acme/storage package ([#469](https://github.com/F3-Nation/f3-nation/issues/469)) ([92a712f](https://github.com/F3-Nation/f3-nation/commit/92a712f897ba1a787e81f2bfc6a5878541bddd3c))
+
 ## [1.3.1](https://github.com/F3-Nation/f3-nation/compare/admin@1.3.0...admin@1.3.1) (2026-06-18)
 
 

@@ -177,6 +177,8 @@ export interface MDTableProps<T extends { id: string | number }> {
 export const MDTable = <T extends { id: string | number }>(
   params: MDTableProps<T>,
 ) => {
+  "use no memo";
+
   const {
     paginationOptions,
     serverSidePagination,
@@ -238,6 +240,7 @@ export const MDTable = <T extends { id: string | number }>(
     cachedCount.current = totalCountParam;
   }
 
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table
   const table = useReactTable<T>({
     data: cachedData.current ?? [],
     columns,

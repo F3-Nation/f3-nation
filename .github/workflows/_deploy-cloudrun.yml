@@ -63,6 +63,16 @@ on:
         required: false
         type: string
         default: ""
+      revalidate_after_deploy:
+        description: "POST /api/revalidate after a healthy deploy to warm the static cache"
+        required: false
+        type: boolean
+        default: false
+      revalidate_secret_name:
+        description: "Secret Manager secret ID holding the x-api-key for /api/revalidate"
+        required: false
+        type: string
+        default: SUPER_ADMIN_API_KEY
 
 jobs:
   # ── Gate: wait for the full CI check set to pass on this commit ──
@@ -168,6 +178,30 @@ jobs:
           flags: ${{ inputs.flags }}
           # Env vars are set via Cloud Run secrets / env config (see scripts/cloud-run-env.sh)
 
+      - name: Set up Cloud SDK (staging revalidation)
+        if: inputs.revalidate_after_deploy
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Warm static cache (staging)
+        if: inputs.revalidate_after_deploy
+        env:
+          PROJECT: ${{ inputs.staging_project }}
+          URL: ${{ inputs.staging_url }}
+          SECRET_NAME: ${{ inputs.revalidate_secret_name }}
+        run: |
+          KEY="$(gcloud secrets versions access latest --secret="${SECRET_NAME}" --project="${PROJECT}")" \
+            || { echo "::warning::Could not read ${SECRET_NAME}; skipping cache warm"; exit 0; }
+          raw=$(curl -sS -w '\n%{http_code}' -X POST "${URL%/}/api/revalidate" -H "x-api-key: ${KEY}") \
+            || raw=$'\ncurl_failed'
+          code=$(printf '%s' "${raw}" | tail -n1)
+          body=$(printf '%s' "${raw}" | sed '$d')
+          echo "Revalidation POST ${URL%/}/api/revalidate -> ${code}"
+          if [ "${code}" != "200" ]; then
+            echo "::warning::Cache revalidation returned HTTP ${code}"
+          elif [ "$(printf '%s' "${body}" | jq -r '.warmed // false')" != "true" ]; then
+            echo "::warning::Cache revalidated but warm-up did not complete; instance will regenerate lazily on next visit"
+          fi
+
   # ── Deploy to production (requires approval) ──
   deploy-prod:
     needs: [build, deploy-staging]
@@ -213,3 +247,23 @@ jobs:
           # deploy-cloudrun v3 defaults wait to false; keep waiting for the revision to be healthy
           wait: "true"
           flags: ${{ inputs.flags }}
+
+      - name: Warm static cache (prod)
+        if: inputs.revalidate_after_deploy
+        env:
+          PROJECT: ${{ inputs.prod_project }}
+          URL: ${{ inputs.prod_url }}
+          SECRET_NAME: ${{ inputs.revalidate_secret_name }}
+        run: |
+          KEY="$(gcloud secrets versions access latest --secret="${SECRET_NAME}" --project="${PROJECT}")" \
+            || { echo "::warning::Could not read ${SECRET_NAME}; skipping cache warm"; exit 0; }
+          raw=$(curl -sS -w '\n%{http_code}' -X POST "${URL%/}/api/revalidate" -H "x-api-key: ${KEY}") \
+            || raw=$'\ncurl_failed'
+          code=$(printf '%s' "${raw}" | tail -n1)
+          body=$(printf '%s' "${raw}" | sed '$d')
+          echo "Revalidation POST ${URL%/}/api/revalidate -> ${code}"
+          if [ "${code}" != "200" ]; then
+            echo "::warning::Cache revalidation returned HTTP ${code}"
+          elif [ "$(printf '%s' "${body}" | jq -r '.warmed // false')" != "true" ]; then
+            echo "::warning::Cache revalidated but warm-up did not complete; instance will regenerate lazily on next visit"
+          fi

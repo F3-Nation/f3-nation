@@ -7,7 +7,6 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { db } from "@acme/db/client";
 import { orgs } from "@acme/db/schema/schema";
 import { env } from "@acme/env";
-import type { UserRole } from "@acme/shared/app/enums";
 import { COOKIE_NAME } from "@acme/shared/common/constants";
 import { ProviderId } from "@acme/shared/common/enums";
 
@@ -203,7 +202,7 @@ export const authConfig: NextAuthConfig = {
       }
 
       if (trigger === "update" && session && "roles" in session) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
         token.roles = session.roles;
       }
 
@@ -215,9 +214,7 @@ export const authConfig: NextAuthConfig = {
         id: token.id as string | undefined,
         email: token.email,
         name: token.name as string | undefined,
-        roles: token.roles as
-          | { orgId: number; orgName: string; roleName: UserRole }[]
-          | undefined,
+        roles: token.roles,
       };
       return Promise.resolve(result);
     },

@@ -46,7 +46,8 @@ const SuspendedInitialLocationProvider = (params: { children: ReactNode }) => {
 
   const center = useRef<google.maps.LatLngLiteral | null>(null);
   const zoom = useRef<number | null>(null);
-  const hasInitialized = useRef(false);
+  const didSetQueryParamLocation = useRef(false);
+  const hasSyncedInitialMapState = useRef(false);
 
   // Calculate initial values during render (reading is safe)
   if (center.current === null) {
@@ -58,14 +59,15 @@ const SuspendedInitialLocationProvider = (params: { children: ReactNode }) => {
     const locLat = locationLatLng?.[3];
     const locLon = locationLatLng?.[4];
 
-    const calculatedCenter =
+    const queryParamCenter =
       locLat != null && locLon != null
         ? { lat: locLat, lng: locLon }
         : queryLat != null && queryLon != null
           ? { lat: queryLat, lng: queryLon }
           : null;
 
-    center.current = calculatedCenter ??
+    didSetQueryParamLocation.current = !!queryParamCenter;
+    center.current = queryParamCenter ??
       mapStore.get("center") ?? {
         lat: DEFAULT_CENTER[0],
         lng: DEFAULT_CENTER[1],
@@ -81,44 +83,18 @@ const SuspendedInitialLocationProvider = (params: { children: ReactNode }) => {
       : // Otherwise, use the stored zoom or default zoom
         (mapStore.get("zoom") ?? DEFAULT_ZOOM);
 
-  // Perform state updates in useEffect (not during render)
+  // Sync the derived initial state into the external stores in an effect.
+  // Writing to these stores during render updates other subscribed components
+  // (e.g. the ancestor UserLocationProvider) mid-render, which React flags.
   useEffect(() => {
-    if (hasInitialized.current) return;
-    hasInitialized.current = true;
-
-    const locationLatLng = getQueryData(
-      orpc.map.location.eventsAndLocations.queryKey({
-        input: undefined,
-      }),
-    )?.find((location) => location[0] === queryLocationId);
-    const locLat = locationLatLng?.[3];
-    const locLon = locationLatLng?.[4];
-
-    const calculatedCenter =
-      locLat != null && locLon != null
-        ? { lat: locLat, lng: locLon }
-        : queryLat != null && queryLon != null
-          ? { lat: queryLat, lng: queryLon }
-          : null;
-
-    const didSetQueryParamLocation = !!calculatedCenter;
+    if (hasSyncedInitialMapState.current) return;
+    hasSyncedInitialMapState.current = true;
 
     mapStore.setState({
-      didSetQueryParamLocation,
-    });
-
-    const finalCenter = calculatedCenter ??
-      mapStore.get("center") ?? {
-        lat: DEFAULT_CENTER[0],
-        lng: DEFAULT_CENTER[1],
-      };
-
-    mapStore.setState({
-      nearbyLocationCenter: {
-        ...finalCenter,
-        name: "",
-        type: "default",
-      },
+      didSetQueryParamLocation: didSetQueryParamLocation.current,
+      nearbyLocationCenter: center.current
+        ? { ...center.current, name: "", type: "default" }
+        : null,
     });
 
     if (queryLocationId != null) {
@@ -128,7 +104,8 @@ const SuspendedInitialLocationProvider = (params: { children: ReactNode }) => {
         showPanel: true,
       });
     }
-  }, [queryLocationId, queryEventId, queryLat, queryLon]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <InitialLocationContext.Provider
