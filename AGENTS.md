@@ -10,8 +10,11 @@ file that routes back here so guidance never drifts:
 - **GitHub Copilot** → [`.github/copilot-instructions.md`](.github/copilot-instructions.md)
 - **Cursor** → [`.cursor/rules/f3-project-guidelines.mdc`](.cursor/rules/f3-project-guidelines.mdc)
 
-Deeper guidance lives in `docs/`:
+Deeper guidance lives in `docs/` and the repo root:
 
+- [`AI_GUARDRAILS.md`](AI_GUARDRAILS.md) — operating boundaries
+  (Always / Never / Can) and the domains where humans always have final say
+  (security, availability/reliability, scalability).
 - [`docs/AI_DEVELOPMENT_GUIDE.md`](docs/AI_DEVELOPMENT_GUIDE.md) — secure patterns
   and pitfalls to avoid (API authorization, auth/tokens, secrets, web security,
   data layer, multi-instance reliability) with a pre-flight checklist.
