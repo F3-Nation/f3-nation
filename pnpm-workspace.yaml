@@ -138,9 +138,7 @@ catalog:
   zustand: ^4.5.7
 overrides:
   "form-data@>=2.0.0 <2.5.6": "^2.5.6"
-  # next-auth pins an exact @auth/core, which would otherwise install a second
-  # copy and break the JWT module augmentations (see type-extensions.d.ts).
-  "@auth/core": "catalog:"
+  "@auth/core": "0.41.2"
 peerDependencyRules:
   allowedVersions:
     eslint-plugin-react>eslint: "10"
