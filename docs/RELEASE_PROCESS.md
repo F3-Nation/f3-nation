@@ -58,6 +58,12 @@ After a push to `dev`, the `release-please.yml` workflow runs. It:
   - Bumps the version in `apps/me/package.json`
   - Generates/updates `apps/me/CHANGELOG.md`
 
+For Slackbot release PRs, `.github/workflows/release-please-uv-lock.yml` runs
+after Release Please updates `apps/slackbot/pyproject.toml`. It runs `uv lock`
+and pushes any resulting `uv.lock` change back to the release PR using the same
+GitHub App token. This keeps Docker's `uv sync --locked ...` build step aligned
+with Release Please's version bump.
+
 If multiple PRs are merged to `dev` before the Release Please PR is merged, Release Please accumulates all of them — the PR is updated in place, never duplicated.
 
 ### 3. Review and merge the Release Please PR
