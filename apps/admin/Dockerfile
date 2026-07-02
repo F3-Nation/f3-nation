@@ -66,7 +66,7 @@ COPY --from=installer --chown=admin:nodejs /app/apps/admin/.next/static ./apps/a
 COPY --from=installer --chown=admin:nodejs /app/apps/admin/public ./apps/admin/public
 
 # Reinstall sharp: Turbopack drops it from the standalone output.
-RUN rm -rf ./node_modules/sharp ./node_modules/@img && npm install sharp@0.35.2
+RUN rm -rf ./node_modules/sharp ./node_modules/@img && npm install --no-save --no-audit --no-fund sharp@0.35.2
 
 USER admin
 

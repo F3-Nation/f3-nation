@@ -65,7 +65,7 @@
     COPY --from=installer --chown=api:nodejs /app/apps/api/.next/static ./apps/api/.next/static
 
     # Reinstall sharp: Turbopack drops it from the standalone output.
-    RUN rm -rf ./node_modules/sharp ./node_modules/@img && npm install sharp@0.35.2
+    RUN rm -rf ./node_modules/sharp ./node_modules/@img && npm install --no-save --no-audit --no-fund sharp@0.35.2
 
     USER api
     
