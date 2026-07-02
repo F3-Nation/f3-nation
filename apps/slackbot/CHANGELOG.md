@@ -2,6 +2,23 @@
 
 <!-- version list -->
 
+## [2.0.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@1.13.0...slackbot@2.0.0) (2026-07-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* **slackbot:** slackbot monorepo integration ([#425](https://github.com/F3-Nation/f3-nation/issues/425))
+
+### Features
+
+* **repo:** triggering release ([b5e1415](https://github.com/F3-Nation/f3-nation/commit/b5e1415682df6abc3cdfa8653bc3658954fa7d0c))
+* **slackbot:** slackbot monorepo integration ([#425](https://github.com/F3-Nation/f3-nation/issues/425)) ([6f8f8ad](https://github.com/F3-Nation/f3-nation/commit/6f8f8ad0bb0bf308016d7303346124f0410e8295))
+
+
+### Bug Fixes
+
+* **repo:** updated to code were blocking deployment ([3b0e947](https://github.com/F3-Nation/f3-nation/commit/3b0e947cb9d3a2de2566058d8921ce058499acc7))
+
 ## v1.13.0 (2026-06-06)
 
 ### Bug Fixes
