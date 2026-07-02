@@ -18,7 +18,7 @@ This creates `apps/slackbot/.env` from `apps/slackbot/.env.local.example`, then 
 
 ### Create Slack app and configure Slack credentials
 
-1. **Initialize and install your local Slack app**: I recommend you use your own private Slack workspace for this. Open [Slack's app console](https://api.slack.com/apps), click Create New App->from manifest, then paste in the contents from `app_manifest.json`. After you install to your workspace, gather the Signing Secret from the Basic Information tab and the Bot User OAuth Token from the OAuth & Permissions tab. For the app-level token, you will need to generate this from the Basic Information tab.
+1. **Initialize and install your local Slack app**: I recommend you use your own private Slack workspace for this. Open [Slack's app console](https://api.slack.com/apps), click Create New App->from manifest, then paste in the contents from `app_manifest.json`. After you install to your workspace, gather the Signing Secret from the Basic Information tab and the Bot User OAuth Token from the OAuth & Permissions tab. For the app-level token, you will need to generate this from the Basic Information tab (when asked, assign it the `connections:write` scope).
 
 2. **Copy to `.env`**: edit `apps/slackbot/.env` and set:
 
