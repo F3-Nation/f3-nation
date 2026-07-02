@@ -27,7 +27,7 @@
     "zustand": "catalog:"
   },
   "peerDependencies": {
-    "react": ">=18 <19"
+    "react": ">=18 <20"
   },
   "devDependencies": {
     "@acme/eslint-config": "workspace:^0.2.0",
@@ -38,6 +38,7 @@
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "eslint": "catalog:",
+    "react": "catalog:",
     "typescript": "catalog:"
   },
   "prettier": "@acme/prettier-config"

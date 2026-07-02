@@ -1,0 +1,41 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "map",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "f3-map", "dev"],
+      "port": 3000
+    },
+    {
+      "name": "api",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "f3-api", "dev"],
+      "port": 3001
+    },
+    {
+      "name": "admin",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "f3-admin", "dev"],
+      "port": 3002
+    },
+    {
+      "name": "me",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "f3-me", "dev"],
+      "port": 3003
+    },
+    {
+      "name": "auth",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "f3-auth", "dev"],
+      "port": 3004
+    },
+    {
+      "name": "homepage",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "f3-homepage", "dev"],
+      "port": 3005
+    }
+  ]
+}

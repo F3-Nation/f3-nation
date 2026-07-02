@@ -2,8 +2,6 @@
 
 This guide walks through setting up a **fully local** F3 Nation development environment using Docker. You do **not** need any Google Cloud credentials to follow this guide.
 
-> **Recommended path for new contributors.** If you already have GCP access, see [LOCAL_DEV_SETUP.md](LOCAL_DEV_SETUP.md) instead.
-
 ---
 
 ## What you're setting up
@@ -23,12 +21,13 @@ Your app servers (Map, API, Auth) still run natively on your machine with `pnpm 
 
 Install these before starting:
 
-| Tool                       | Install                                                                               | Check            |
-| -------------------------- | ------------------------------------------------------------------------------------- | ---------------- |
-| **Docker Desktop**         | [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/) | `docker version` |
-| **Node.js** (see `.nvmrc`) | `nvm install`                                                                         | `node -v`        |
-| **pnpm** v10+              | `corepack enable && corepack prepare pnpm@latest --activate`                          | `pnpm -v`        |
-| **Git**                    | [git-scm.com](https://git-scm.com)                                                    | `git --version`  |
+| Tool                       | Install                                                                                                   | Check            |
+| -------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------- |
+| **Docker Desktop**         | [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/)                     | `docker version` |
+| **Node.js** (see `.nvmrc`) | `nvm install`                                                                                             | `node -v`        |
+| **pnpm** v10+              | `corepack enable && corepack prepare pnpm@latest --activate`                                              | `pnpm -v`        |
+| **uv**                     | [docs.astral.sh/uv/getting-started/installation](https://docs.astral.sh/uv/getting-started/installation/) | `uv --version`   |
+| **Git**                    | [git-scm.com](https://git-scm.com)                                                                        | `git --version`  |
 
 Make sure Docker Desktop is **running** before you continue.
 
@@ -124,6 +123,26 @@ git is how you interact with GitHub from your instance of the code. You often al
 You will need a code editor in order to edit code! The instructions assume you will be using VS Code. If you have a different IDE, you'll have to adjust accordingly.
 
 1. Go to <https://code.visualstudio.com/download> and download the correct version.
+</details>
+
+<details>
+<summary>uv: Python package manager for Slackbot</summary>
+
+The Slackbot app is a Python app in `apps/slackbot`. The repository root tries to run `uv sync` during `pnpm install` via the `postinstall` script. If `uv` is not installed yet, `pnpm install` will continue with a warning and skip syncing the Slackbot Python dependencies.
+
+On macOS or Linux/WSL:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Close and reopen your terminal, then verify:
+
+```bash
+uv --version
+```
+
+After installing `uv`, run `pnpm python:install` to sync the Slackbot Python dependencies.
 
 </details>
 
@@ -151,8 +170,11 @@ The following commands will set up the base environment. If any commands fail, l
 git clone https://github.com/F3-Nation/f3-nation.git
 cd f3-nation
 nvm install        # installs the Node version in .nvmrc
+uv --version       # optional here; needed for apps/slackbot
 pnpm install
 ```
+
+`pnpm install` runs `uv sync` automatically for the Python Slackbot app when `uv` is available. If `uv --version` fails, install `uv`, then run `pnpm python:install`.
 
 ### 2. Run the one-time setup script
 
@@ -163,7 +185,7 @@ pnpm local:setup
 This script does everything automatically:
 
 - Copies each directory's `.env.example` → `.env` (skips any that already exist):
-  `apps/api`, `apps/auth`, `apps/homepage`, `apps/map`, `apps/me`, `apps/admin`, and `packages/env`
+  `apps/api`, `apps/auth`, `apps/homepage`, `apps/map`, `apps/me`, `apps/admin`, `apps/slackbot`, and `packages/env`
 - Starts the four Docker containers
 - Waits for Postgres to be ready
 - Creates the `f3-public-images` bucket in the GCS emulator
@@ -218,6 +240,7 @@ pnpm dev
 | Me       | <http://localhost:3003> |
 | Auth     | <http://localhost:3004> |
 | Homepage | <http://localhost:3005> |
+| Slackbot | <http://localhost:3006> |
 
 ---
 
@@ -233,8 +256,11 @@ The following commands will set up the base environment. If any commands fail, l
 git clone git@github.com:F3-Nation/f3-nation.git
 cd f3-nation
 nvm install        # installs the Node version in .nvmrc
+uv --version       # optional here; needed for apps/slackbot
 pnpm install
 ```
+
+`pnpm install` runs `uv sync` automatically for the Python Slackbot app when `uv` is available. If `uv --version` fails, install `uv`, then run `pnpm python:install`.
 
 ## Daily workflow
 
@@ -257,14 +283,15 @@ The Docker containers save their data in named volumes (`postgres_data`, `gcs_da
 
 Each app and shared package has its own `.env` file, copied from a `.env.example` template during `pnpm local:setup`. All template values work out-of-the-box with Docker — you don't need to edit anything to get started.
 
-| Directory           | Purpose                                                            |
-| ------------------- | ------------------------------------------------------------------ |
-| `apps/api/.env`     | API app (Next.js on port 3001)                                     |
-| `apps/auth/.env`    | Auth app (Next.js on port 3004)                                    |
-| `apps/map/.env`     | Map app (Next.js on port 3000)                                     |
-| `apps/admin/.env`   | Admin app (Next.js on port 3002)                                   |
-| `apps/me/.env`      | Me app (Next.js on port 3003)                                      |
-| `packages/env/.env` | Shared backend env root (used by `packages/db` and `packages/api`) |
+| Directory            | Purpose                                                            |
+| -------------------- | ------------------------------------------------------------------ |
+| `apps/api/.env`      | API app (Next.js on port 3001)                                     |
+| `apps/auth/.env`     | Auth app (Next.js on port 3004)                                    |
+| `apps/map/.env`      | Map app (Next.js on port 3000)                                     |
+| `apps/admin/.env`    | Admin app (Next.js on port 3002)                                   |
+| `apps/me/.env`       | Me app (Next.js on port 3003)                                      |
+| `apps/slackbot/.env` | Slackbot app (Python Socket Mode app on port 3006)                 |
+| `packages/env/.env`  | Shared backend env root (used by `packages/db` and `packages/api`) |
 
 Here's what each variable means:
 
@@ -434,6 +461,16 @@ The `-v` flag removes the named volumes (`postgres_data`, `gcs_data`). Next time
 ---
 
 ## Troubleshooting
+
+### Slackbot dependencies were skipped because `uv` is missing
+
+Install `uv`, then sync the Slackbot Python dependencies:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv --version
+pnpm python:install
+```
 
 ### Port already in use
 

@@ -1,4 +1,4 @@
-import type { NextFetchEvent, NextMiddleware, NextRequest } from "next/server";
+import type { NextFetchEvent, NextProxy, NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 
@@ -7,7 +7,7 @@ import { COOKIE_NAME } from "@acme/shared/common/constants";
 
 import type { MiddlewareFactory } from "./types";
 
-const withAdmin: MiddlewareFactory = (next: NextMiddleware) => {
+const withAdmin: MiddlewareFactory = (next: NextProxy) => {
   return async (request: NextRequest, _next: NextFetchEvent) => {
     const res = await next(request, _next);
 

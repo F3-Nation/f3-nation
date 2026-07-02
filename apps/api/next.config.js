@@ -12,13 +12,6 @@ const config = {
   output: "standalone",
   reactStrictMode: true,
 
-  webpack: (config, { webpack }) => {
-    // https://github.com/handlebars-lang/handlebars.js/issues/1174#issuecomment-229918935
-    config.resolve.alias.handlebars = "handlebars/dist/handlebars.min.js";
-    return config;
-  },
-  reactStrictMode: true,
-
   /** Enables hot reloading for local packages without a build step */
   transpilePackages: [
     "@acme/api",
@@ -44,8 +37,7 @@ const config = {
     ],
   },
 
-  /** We already do linting and typechecking as separate tasks in CI */
-  eslint: { ignoreDuringBuilds: true },
+  /** We already do typechecking as a separate task in CI */
   typescript: { ignoreBuildErrors: true },
   redirects: async () => {
     return [
@@ -65,11 +57,6 @@ export default withSentryConfig(config, {
   org: "f3-nation",
   project: "maps-nextjs",
 
-  // This app is App Router only — it has no pages/ API routes or data-fetching
-  // functions (getServerSideProps, etc.). Disabling auto-instrumentation of
-  // Pages Router server functions avoids unnecessary webpack loader overhead.
-  autoInstrumentServerFunctions: false,
-
   // Only print logs for uploading source maps in CI
   silent: !process.env.CI,
 
@@ -84,7 +71,4 @@ export default withSentryConfig(config, {
   // Note: Check that the configured route will not match with your Next.js middleware, otherwise reporting of client-
   // side errors will fail.
   tunnelRoute: "/monitoring",
-
-  // Automatically tree-shake Sentry logger statements to reduce bundle size
-  disableLogger: true,
 });
