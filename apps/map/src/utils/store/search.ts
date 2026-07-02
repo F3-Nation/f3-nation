@@ -1,4 +1,3 @@
-import type { MutableRefObject } from "react";
 import { createRef } from "react";
 
 import type { PlaceResult } from "@acme/shared/app/types";
@@ -9,8 +8,7 @@ const initialState = {
   placesResults: [] as PlaceResult[],
   shouldShowResults: false,
   searchBarFocused: false,
-  searchBarRef:
-    createRef<HTMLInputElement>() as MutableRefObject<HTMLInputElement | null>,
+  searchBarRef: createRef<HTMLInputElement>(),
 };
 
 export const searchStore = new ZustandStore({

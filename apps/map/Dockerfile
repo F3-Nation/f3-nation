@@ -1,6 +1,6 @@
 # ---------- Stage 1: Prune monorepo ----------
 ARG TURBO_VERSION=2
-FROM node:24.17.0-alpine AS builder
+FROM node:24.18.0-alpine AS builder
 ARG TURBO_VERSION
 
 ENV TURBO_TELEMETRY_DISABLED=1
@@ -17,7 +17,7 @@ COPY . .
 RUN turbo prune f3-map --docker
 
 # ---------- Stage 2: Install + build ----------
-FROM node:24.17.0-alpine AS installer
+FROM node:24.18.0-alpine AS installer
 ARG TURBO_VERSION
 
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -41,6 +41,9 @@ COPY --from=builder /app/out/full/ .
 ENV NODE_ENV=production
 ENV CI=true
 ENV SKIP_ENV_VALIDATION=true
+# Build-only: the Docker build has no DB/API access, so skip the build-time
+# data fetch on `/` (renders empty). At runtime SKIP_SSG is unset, so ISR
+# regeneration fetches real map data against the live DB. See page.tsx.
 ENV SKIP_SSG=1
 
 # `turbo prune` copies the full catalog into pnpm-workspace.yaml but only this
@@ -53,7 +56,7 @@ RUN printf '\nverifyDepsBeforeRun: false\n' >> pnpm-workspace.yaml
 RUN pnpm turbo build --filter=f3-map
 
 # ---------- Stage 3: Production runner ----------
-FROM node:24.17.0-alpine AS runner
+FROM node:24.18.0-alpine AS runner
 
 RUN apk add --no-cache libc6-compat openssl && apk update
 WORKDIR /app

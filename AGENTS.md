@@ -24,7 +24,7 @@ that app's `AGENTS.md`.
 
 ## Project Structure & Module Organization
 
-- Use Node >=24.17 (see `.nvmrc`), pnpm 11, and Turborepo for workspace orchestration.
+- Use Node >=24.18 (see `.nvmrc`), pnpm 11, and Turborepo for workspace orchestration.
 - `apps/` holds the deployable apps: Next.js apps `map` (port 3000), `admin`, `api`, `auth`, `homepage`, and `me`; plus the Python Slack app `slackbot` (port 3006).
 - Shared code is organized in `packages/`: `api` (oRPC routers), `auth` (auth helpers), `db` (Drizzle schema/migrations), `env` (environment validation), `mail` (transactional email), `shared` (utilities), `sso` (single sign-on helpers), `storage` (object storage), `ui` (shared components), and `validators` (Zod schemas).
 - Configuration files are in `tooling/`; Turbo generators live in `turbo/`.

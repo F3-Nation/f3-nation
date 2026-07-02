@@ -12,6 +12,10 @@ import type { RouterOutputs } from "~/orpc/types";
 import { SecondaryEffectsProvider } from "~/utils/secondary-effects-provider";
 import { TouchDeviceProvider } from "~/utils/touch-device-provider";
 
+// ISR safety net: on-demand revalidation via /api/revalidate is the primary
+// freshness mechanism; the 1-hour window is insurance if a webhook call fails.
+export const revalidate = 3600;
+
 const shouldSkipSsg =
   // process.env.CI === "true" || // Needed to turn this off so that docker builds do SSG for inital location loads
   process.env.SKIP_SSG === "1" || process.env.F3_CHANNEL === "ci";
@@ -30,10 +34,11 @@ export default async function MapPage() {
     : await (async () => {
         const { client } = await import("~/orpc/client");
 
-        const eventsAndLocations =
-          await client.map.location.eventsAndLocations();
-        const regionsWithLocation =
-          await client.map.location.regionsWithLocation();
+        // Independent queries - run them concurrently
+        const [eventsAndLocations, regionsWithLocation] = await Promise.all([
+          client.map.location.eventsAndLocations(),
+          client.map.location.regionsWithLocation(),
+        ]);
 
         return { eventsAndLocations, regionsWithLocation };
       })();

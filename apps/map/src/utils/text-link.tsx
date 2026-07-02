@@ -1,3 +1,4 @@
+import type { ReactElement } from "react";
 import DOMPurify from "dompurify";
 
 const urlRegex = /https?:\/\/[^\s]+/g;
@@ -6,7 +7,7 @@ function isHTML(text: string): boolean {
   return /<[a-z][\s\S]*>/i.test(text);
 }
 
-export default function textLink(text: string): JSX.Element {
+export default function textLink(text: string): ReactElement {
   // If the text contains HTML, sanitize and render it directly
   if (isHTML(text)) {
     const sanitizedHTML = DOMPurify.sanitize(text, {
@@ -45,7 +46,7 @@ export default function textLink(text: string): JSX.Element {
       }
       return arr;
     },
-    [] as (string | JSX.Element)[],
+    [] as (string | ReactElement)[],
   );
 
   return <>{result}</>;

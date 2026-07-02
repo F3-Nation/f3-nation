@@ -52,6 +52,8 @@ const VirtualizedCommand = <T,>({
   onClear,
   hideClearButton,
 }: VirtualizedCommandProps<T>) => {
+  "use no memo";
+
   const [searchTerm, setSearchTerm] = useState("");
   const parentRef = useRef(null);
 
@@ -75,6 +77,7 @@ const VirtualizedCommand = <T,>({
     });
   }, [options, searchTerm, selectedOptions]);
 
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual
   const virtualizer = useVirtualizer({
     count: sortedFilteredOptions.length,
     getScrollElement: () => parentRef.current,

@@ -334,13 +334,23 @@ export default function SettingsModal() {
                 onClick={() => {
                   void fetch("/api/revalidate", { method: "POST" })
                     .then(async (response) => {
+                      const json = (await response.json()) as {
+                        error?: string;
+                        warmed?: boolean;
+                      };
                       if (!response.ok) {
-                        const json = (await response.json()) as {
-                          error: string;
-                        };
                         throw new Error(json.error ?? "Failed to revalidate");
                       }
-                      toast.success("Nation revalidated");
+                      // warmed=false means the cache was invalidated but this
+                      // instance couldn't eagerly regenerate it; other
+                      // instances will still pick it up lazily on next visit.
+                      if (json.warmed) {
+                        toast.success("Nation revalidated");
+                      } else {
+                        toast.warning(
+                          "Nation cache invalidated, but warm-up timed out — it will refresh on next visit",
+                        );
+                      }
                     })
                     .catch((error: unknown) => {
                       console.log("RevalidateNation", { error });
