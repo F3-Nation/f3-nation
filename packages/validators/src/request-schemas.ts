@@ -86,10 +86,10 @@ export const CreateAOAndLocationAndEventSchema = BaseSchema.extend({
   requestType: z.literal("create_ao_and_location_and_event"),
   badImage: z.boolean().default(false),
 })
-  .merge(EventFields)
-  .merge(AOFields)
-  .merge(LocationFields)
-  .merge(RegionFields);
+  .extend(EventFields.shape)
+  .extend(AOFields.shape)
+  .extend(LocationFields.shape)
+  .extend(RegionFields.shape);
 
 export type CreateAOAndLocationAndEventType = z.infer<
   typeof CreateAOAndLocationAndEventSchema
@@ -101,7 +101,7 @@ export const CreateEventSchema = BaseSchema.extend({
   originalAoId: z.number().positive("AO ID is required"),
   originalLocationId: z.number().positive("Location ID is required"),
   originalRegionId: z.number().positive("Region ID is required"),
-}).merge(EventFields);
+}).extend(EventFields.shape);
 
 export type CreateEventType = z.infer<typeof CreateEventSchema>;
 
@@ -110,9 +110,9 @@ export const EditEventSchema = BaseSchema.extend({
   requestType: z.literal("edit_event"),
   originalEventId: z.number().positive("Event ID is required"),
 })
-  .merge(EventFields.partial())
-  .merge(AOFields.partial())
-  .merge(LocationFields.partial())
+  .extend(EventFields.partial().shape)
+  .extend(AOFields.partial().shape)
+  .extend(LocationFields.partial().shape)
   .extend({ currentValues: makeSchemaLoose(EventFields) });
 
 export type EditEventType = z.infer<typeof EditEventSchema>;
@@ -124,10 +124,10 @@ export const EditAOAndLocationSchema = BaseSchema.extend({
   originalAoId: z.number().positive("AO ID is required"),
   originalLocationId: z.number().positive("Location ID is required"),
 })
-  .merge(AOFields.partial())
-  .merge(LocationFields.partial())
+  .extend(AOFields.partial().shape)
+  .extend(LocationFields.partial().shape)
   .extend({
-    currentValues: makeSchemaLoose(AOFields.merge(LocationFields)),
+    currentValues: makeSchemaLoose(AOFields.extend(LocationFields.shape)),
   });
 
 export type EditAOAndLocationType = z.infer<typeof EditAOAndLocationSchema>;
@@ -138,8 +138,8 @@ export const MoveAOToDifferentRegionSchema = BaseSchema.extend({
   newRegionId: z.number().positive("Target region ID is required"),
   originalAoId: z.number().positive("Original AO ID is required"),
 })
-  .merge(AOFields.partial())
-  .merge(LocationFields.partial());
+  .extend(AOFields.partial().shape)
+  .extend(LocationFields.partial().shape);
 
 export type MoveAoToDifferentRegionType = z.infer<
   typeof MoveAOToDifferentRegionSchema
@@ -151,7 +151,7 @@ export const MoveAOToNewLocationSchema = BaseSchema.extend({
   originalAoId: z.number().positive("AO ID is required"),
   originalLocationId: z.number().positive("Location ID is required"),
 })
-  .merge(LocationFields)
+  .extend(LocationFields.shape)
   .extend({
     currentValues: makeSchemaLoose(LocationFields),
   });
@@ -167,7 +167,7 @@ export const MoveAOToDifferentLocationSchema = BaseSchema.extend({
     .number()
     .positive("Target location ID is required")
     .nullable(),
-}).merge(LocationFields.partial());
+}).extend(LocationFields.partial().shape);
 
 export type MoveAOToDifferentLocationType = z.infer<
   typeof MoveAOToDifferentLocationSchema
@@ -185,8 +185,8 @@ export const MoveEventToDifferentAOSchema = BaseSchema.extend({
     .positive("Target location ID is required")
     .optional(),
 })
-  .merge(EventFields.partial())
-  .merge(LocationFields.partial());
+  .extend(EventFields.partial().shape)
+  .extend(LocationFields.partial().shape);
 
 export type MoveEventToDifferentAOType = z.infer<
   typeof MoveEventToDifferentAOSchema
@@ -205,9 +205,9 @@ export const MoveEventToNewAOSchema = BaseSchema.extend({
   newRegionId: z.number().positive("Target region ID is required").optional(),
   badImage: z.boolean().default(false),
 })
-  .merge(EventFields)
-  .merge(AOFields)
-  .merge(LocationFields);
+  .extend(EventFields.shape)
+  .extend(AOFields.shape)
+  .extend(LocationFields.shape);
 
 export type MoveEventToNewAOType = z.infer<typeof MoveEventToNewAOSchema>;
 
@@ -217,7 +217,7 @@ export const MoveEventToNewLocationSchema = BaseSchema.extend({
   originalEventId: z.number().positive("Event ID is required"),
   originalLocationId: z.number().positive("Location ID is required"),
 })
-  .merge(LocationFields)
+  .extend(LocationFields.shape)
   .extend({ currentValues: makeSchemaLoose(LocationFields) });
 
 export type MoveEventToNewLocationType = z.infer<
