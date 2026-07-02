@@ -52,7 +52,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup-node-pnpm
+      - uses: ./.github/actions/setup
       - run: pnpm format
 
   security-audit:
@@ -61,7 +61,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup-node-pnpm
+      - uses: ./.github/actions/setup
       - run: pnpm audit --prod --audit-level=high
 
   recent-package-watch:
@@ -75,7 +75,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup-node-pnpm
+      - uses: ./.github/actions/setup
       - name: Build recent release report
         id: report
         shell: bash
@@ -281,7 +281,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup-node-pnpm
+      - uses: ./.github/actions/setup
       - run: pnpm lint
 
   typecheck:
@@ -290,7 +290,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup-node-pnpm
+      - uses: ./.github/actions/setup
       - run: pnpm typecheck
 
   build:
@@ -299,7 +299,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup-node-pnpm
+      - uses: ./.github/actions/setup
       - run: pnpm build
 
   test-coverage:
@@ -322,7 +322,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup-node-pnpm
+      - uses: ./.github/actions/setup
       - run: pnpm test
 
   # Builds each app's deploy image the same way the release pipeline does
