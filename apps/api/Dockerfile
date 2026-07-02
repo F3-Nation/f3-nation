@@ -33,7 +33,7 @@
     # Install dependencies from pruned lockfile
     COPY --from=builder /app/out/json/ .
     COPY --from=builder /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
-    RUN pnpm install --frozen-lockfile
+    RUN pnpm install --frozen-lockfile --ignore-scripts
     
     # Copy source and build
     COPY --from=builder /app/out/full/ .

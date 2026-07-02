@@ -42,7 +42,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: ./.github/actions/setup-node-pnpm
+      - uses: ./.github/actions/setup
 
       - name: Build static export
         run: pnpm build --filter f3-homepage
