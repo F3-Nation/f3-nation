@@ -1,0 +1,10 @@
+[project]
+name = "f3-nation-python-workspace"
+version = "0.0.0"
+requires-python = ">=3.12,<4.0"
+
+[tool.uv.workspace]
+members = ["apps/slackbot", "packages/db-python"]
+
+[tool.uv.sources]
+f3-data-models = { workspace = true }

@@ -26,7 +26,7 @@ echo "  ────────────────────────
 # ── Step 1: Copy per-directory env files ─────────────────────────────────────
 echo "  → Copying .env.example files..."
 _env_ts=$(date +%Y%m%d%H%M%S)
-for dir in apps/api apps/auth apps/map apps/me apps/admin apps/homepage packages/env; do
+for dir in apps/api apps/auth apps/map apps/me apps/admin apps/homepage apps/slackbot packages/env; do
   if [ -f "$dir/.env" ]; then
     mv "$dir/.env" "$dir/.env.bak.$_env_ts"
     echo "     $dir/.env backed up → $dir/.env.bak.$_env_ts"
@@ -123,7 +123,9 @@ echo "    1. Set NEXT_PUBLIC_GOOGLE_API_KEY in apps/map/.env, apps/api/.env, and
 echo "       (map tiles won't load without it)"
 echo "       Get one free at: https://console.cloud.google.com/google/maps-apis/"
 echo ""
-echo "    2. Start the app servers:"
+echo "    2. (Optional) If you want to run slackbot, there are a few extra steps — see apps/slackbot/README.md"
+echo ""
+echo "    3. Start the app servers:"
 echo "       pnpm dev"
 echo ""
 echo "  Daily workflow:"

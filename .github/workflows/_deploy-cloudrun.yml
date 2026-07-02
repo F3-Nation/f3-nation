@@ -32,6 +32,11 @@ on:
         description: "Path to the app Dockerfile"
         required: true
         type: string
+      build_context:
+        description: "Docker build context path"
+        required: false
+        type: string
+        default: "."
       staging_environment:
         description: "GitHub Environment name for staging"
         required: true
@@ -42,12 +47,14 @@ on:
         type: string
       staging_url:
         description: "Public staging URL"
-        required: true
+        required: false
         type: string
+        default: ""
       prod_url:
         description: "Public production URL"
-        required: true
+        required: false
         type: string
+        default: ""
       region:
         description: "GCP region"
         required: false
@@ -60,6 +67,16 @@ on:
         default: cloud-run-builds
       flags:
         description: "Extra flags passed directly to gcloud run deploy (e.g. --max-instances=1)"
+        required: false
+        type: string
+        default: ""
+      staging_flags:
+        description: "Staging-only flags passed directly to gcloud run deploy; falls back to flags when empty"
+        required: false
+        type: string
+        default: ""
+      prod_flags:
+        description: "Production-only flags passed directly to gcloud run deploy; falls back to flags when empty"
         required: false
         type: string
         default: ""
@@ -137,6 +154,7 @@ jobs:
       - name: Build and push Docker image
         env:
           DOCKERFILE: ${{ inputs.dockerfile }}
+          BUILD_CONTEXT: ${{ inputs.build_context }}
         run: |
           TURBO_VERSION=$(grep '^  turbo:' pnpm-workspace.yaml | awk '{print $2}')
           # Cloud Run only runs linux/amd64. The Dockerfile FROM lines no longer
@@ -146,7 +164,7 @@ jobs:
             --file "${DOCKERFILE}" \
             --build-arg TURBO_VERSION="${TURBO_VERSION}" \
             --tag "${{ steps.meta.outputs.image }}" \
-            .
+            "${BUILD_CONTEXT}"
           docker push "${{ steps.meta.outputs.image }}"
 
   # ── Deploy to staging ──
@@ -175,7 +193,7 @@ jobs:
           project_id: ${{ inputs.staging_project }}
           # deploy-cloudrun v3 defaults wait to false; keep waiting for the revision to be healthy
           wait: "true"
-          flags: ${{ inputs.flags }}
+          flags: ${{ inputs.staging_flags || inputs.flags }}
           # Env vars are set via Cloud Run secrets / env config (see scripts/cloud-run-env.sh)
 
       - name: Set up Cloud SDK (staging revalidation)
@@ -246,7 +264,7 @@ jobs:
           project_id: ${{ inputs.prod_project }}
           # deploy-cloudrun v3 defaults wait to false; keep waiting for the revision to be healthy
           wait: "true"
-          flags: ${{ inputs.flags }}
+          flags: ${{ inputs.prod_flags || inputs.flags }}
 
       - name: Warm static cache (prod)
         if: inputs.revalidate_after_deploy

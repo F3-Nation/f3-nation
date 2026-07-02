@@ -5,6 +5,8 @@
  */
 
 import { db } from "./client";
+import { seedAttendanceTypes } from "./local-seed-lib/attendance";
+import { seedEventTags } from "./local-seed-lib/event-tags";
 import {
   seedAoLocationsAndEvents,
   seedEventTypes,
@@ -21,7 +23,9 @@ import {
 async function seed() {
   console.log("Seeding local development database...");
   const { nationId, regionIds, aoIds } = await seedOrgHierarchy(db);
+  await seedAttendanceTypes(db);
   const allEventTypes = await seedEventTypes(db);
+  await seedEventTags(db);
   await seedAoLocationsAndEvents(db, aoIds, regionIds, allEventTypes);
   const { adminUserId, roleIds } = await seedDevUsers(db, nationId);
   await seedApiKeys(db, adminUserId, nationId, roleIds);
