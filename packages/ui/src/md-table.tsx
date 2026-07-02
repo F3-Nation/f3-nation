@@ -96,6 +96,8 @@ export interface MDTableProps<T> {
 }
 
 export const MDTable = <T,>(params: MDTableProps<T>) => {
+  "use no memo";
+
   const {
     paginationOptions,
     pagination: paginationParam,
@@ -169,6 +171,7 @@ export const MDTable = <T,>(params: MDTableProps<T>) => {
   const [columnVisibility, setColumnVisibility] =
     React.useState<VisibilityState>({});
 
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table
   const table = useReactTable<T>({
     data: cachedData.current ?? [],
     columns,

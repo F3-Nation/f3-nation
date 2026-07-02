@@ -104,91 +104,93 @@ export function MapSearchBox({
       <F3Logo className={cn("transition-all", { hidden: isFocused })} />
       <div className="relative w-full">
         <Popover open={isFocused}>
-          <PopoverTrigger className="w-full">
-            <Input
-              data-testid={TestId.MAP_SEARCHBOX_INPUT}
-              onKeyDown={(e) => {
-                if (e.key === "ArrowDown") {
-                  setFocusedIndex((prev) =>
-                    Math.min(prev + 1, combinedResults.length - 1),
-                  );
-                  e.preventDefault();
-                } else if (e.key === "ArrowUp") {
-                  setFocusedIndex((prev) => Math.max(prev - 1, 0));
-                  e.preventDefault();
-                }
-              }}
-              ref={(node) => {
-                if (node) {
-                  inputRef.current = node;
-                }
-              }}
-              aria-expanded={isFocused}
-              type="text"
-              // placeholder="Search by location, zip, etc."
-              placeholder={`Search ${workoutCount?.count ?? "5000+"} free, peer-led workouts`}
-              onFocus={() => {
-                setIsFocused(true);
-                setFocusedIndex(0);
-              }}
-              onBlur={(e) => {
-                const clickedElement = e.relatedTarget as HTMLElement;
-                if (checkboxContainerRef.current?.contains(clickedElement)) {
-                  return;
-                }
-                setIsFocused(false);
-              }}
-              value={text}
-              className={cn(
-                "h-[42px] w-full rounded-full bg-foreground pl-10 text-base text-background caret-background placeholder:text-sm placeholder:text-background/60",
-                "transition-all",
-              )}
-              onChange={(e) => {
-                shouldRedirectOnResult.current = true;
-                const value = e.target.value;
-                searchStore.setState({ text: value });
+          <PopoverTrigger asChild>
+            <div className="w-full">
+              <Input
+                data-testid={TestId.MAP_SEARCHBOX_INPUT}
+                onKeyDown={(e) => {
+                  if (e.key === "ArrowDown") {
+                    setFocusedIndex((prev) =>
+                      Math.min(prev + 1, combinedResults.length - 1),
+                    );
+                    e.preventDefault();
+                  } else if (e.key === "ArrowUp") {
+                    setFocusedIndex((prev) => Math.max(prev - 1, 0));
+                    e.preventDefault();
+                  }
+                }}
+                ref={(node) => {
+                  if (node) {
+                    inputRef.current = node;
+                  }
+                }}
+                aria-expanded={isFocused}
+                type="text"
+                // placeholder="Search by location, zip, etc."
+                placeholder={`Search ${workoutCount?.count ?? "5000+"} free, peer-led workouts`}
+                onFocus={() => {
+                  setIsFocused(true);
+                  setFocusedIndex(0);
+                }}
+                onBlur={(e) => {
+                  const clickedElement = e.relatedTarget as HTMLElement;
+                  if (checkboxContainerRef.current?.contains(clickedElement)) {
+                    return;
+                  }
+                  setIsFocused(false);
+                }}
+                value={text}
+                className={cn(
+                  "h-[42px] w-full rounded-full bg-foreground pl-10 text-base text-background caret-background placeholder:text-sm placeholder:text-background/60",
+                  "transition-all",
+                )}
+                onChange={(e) => {
+                  shouldRedirectOnResult.current = true;
+                  const value = e.target.value;
+                  searchStore.setState({ text: value });
 
-                if (!value) {
-                  searchStore.setState({ placesResults: [] });
-                  setIsLoading(false);
-                } else if (value.length > 2) {
-                  setIsLoading(true);
-                  // Use debounced autocomplete to reduce API calls
-                  debouncedPlacesAutocomplete(
-                    value,
-                    mapStore.get("center") ?? {
-                      lat: DEFAULT_CENTER[0] ?? 37.7937,
-                      lng: DEFAULT_CENTER[1] ?? -122.3965,
-                    },
-                    mapStore.get("zoom"),
-                    (results) => {
-                      setIsLoading(false);
-                      // Only update if the input hasn't changed
-                      if (searchStore.get("text") === value) {
-                        searchStore.setState({ placesResults: results });
-                      }
-                    },
-                  );
-                } else {
-                  setIsLoading(false);
-                }
-              }}
-              onSubmit={() => onSubmit()}
-            />
-            <div className="pointer-events-none absolute top-2 left-3">
-              <Search color="#aaa" />
-            </div>
-            <div className="absolute top-2 right-2 flex flex-row items-center gap-2">
-              {isLoading && <Spinner className="h-4 w-4 border-2" />}
-              {text && (
-                <button
-                  onClick={() => {
-                    searchStore.setState({ text: "" });
-                  }}
-                >
-                  <XCircle color="#aaa" />
-                </button>
-              )}
+                  if (!value) {
+                    searchStore.setState({ placesResults: [] });
+                    setIsLoading(false);
+                  } else if (value.length > 2) {
+                    setIsLoading(true);
+                    // Use debounced autocomplete to reduce API calls
+                    debouncedPlacesAutocomplete(
+                      value,
+                      mapStore.get("center") ?? {
+                        lat: DEFAULT_CENTER[0] ?? 37.7937,
+                        lng: DEFAULT_CENTER[1] ?? -122.3965,
+                      },
+                      mapStore.get("zoom"),
+                      (results) => {
+                        setIsLoading(false);
+                        // Only update if the input hasn't changed
+                        if (searchStore.get("text") === value) {
+                          searchStore.setState({ placesResults: results });
+                        }
+                      },
+                    );
+                  } else {
+                    setIsLoading(false);
+                  }
+                }}
+                onSubmit={() => onSubmit()}
+              />
+              <div className="pointer-events-none absolute top-2 left-3">
+                <Search color="#aaa" />
+              </div>
+              <div className="absolute top-2 right-2 flex flex-row items-center gap-2">
+                {isLoading && <Spinner className="h-4 w-4 border-2" />}
+                {text && (
+                  <button
+                    onClick={() => {
+                      searchStore.setState({ text: "" });
+                    }}
+                  >
+                    <XCircle color="#aaa" />
+                  </button>
+                )}
+              </div>
             </div>
           </PopoverTrigger>
           <PopoverContent

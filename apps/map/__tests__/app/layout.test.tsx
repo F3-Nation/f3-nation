@@ -96,8 +96,11 @@ afterEach(() => {
 describe("layout app router", () => {
   it("should render layout", async () => {
     const layoutResult = RootLayout({ children: <div /> });
-    const { container } = render(layoutResult);
-    expect(container.querySelector("body")).toHaveClass(
+    render(layoutResult);
+    // React 19 treats <html>/<body> as singleton host components and applies
+    // their props to the real document elements instead of nesting them inside
+    // the render container, so assert against document.body.
+    expect(document.querySelector("body")).toHaveClass(
       "min-h-dvh w-screen bg-background font-sans text-foreground antialiased",
     );
     await waitFor(() =>
