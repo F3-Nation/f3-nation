@@ -251,10 +251,11 @@ export type DeleteAOType = z.infer<typeof DeleteAOSchema>;
  */
 function makeSchemaLoose<T extends z.ZodObject<z.ZodRawShape>>(schema: T) {
   const shape = schema.shape;
-  const looseShape: Record<string, z.ZodUnknown> = {};
+  const looseShape: Record<string, z.ZodOptional<z.ZodUnknown>> = {};
 
   for (const key in shape) {
-    looseShape[key] = z.unknown(); // Accept any value for this key
+    // Optional so missing keys pass — a bare `z.unknown()` is required in Zod 4.
+    looseShape[key] = z.unknown().optional();
   }
 
   return z.object(looseShape);
