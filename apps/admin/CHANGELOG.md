@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.0](https://github.com/F3-Nation/f3-nation/compare/admin@1.4.1...admin@2.0.0) (2026-07-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* **slackbot:** slackbot monorepo integration ([#425](https://github.com/F3-Nation/f3-nation/issues/425))
+
+### Features
+
+* **slackbot:** slackbot monorepo integration ([#425](https://github.com/F3-Nation/f3-nation/issues/425)) ([6f8f8ad](https://github.com/F3-Nation/f3-nation/commit/6f8f8ad0bb0bf308016d7303346124f0410e8295))
+
 ## [1.4.1](https://github.com/F3-Nation/f3-nation/compare/admin@1.4.0...admin@1.4.1) (2026-07-01)
 
 
