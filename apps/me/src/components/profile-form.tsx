@@ -12,7 +12,6 @@ import {
   CardTitle,
 } from "@acme/ui/card";
 import { Switch } from "@acme/ui/switch";
-import { useToast } from "@/components/ui/toast";
 import { AvatarUpload } from "@/components/avatar-upload";
 import { RegionSelect } from "@/components/region-select";
 import { UserSelect } from "@/components/user-select";
@@ -27,16 +26,12 @@ interface ProfileFormProps {
 }
 
 export function ProfileForm({ user, regions }: ProfileFormProps) {
-  const { toast } = useToast();
   const {
     form,
     isFieldDirty,
     dirtyClass: dc,
     updateField,
-  } = useProfileForm({
-    user,
-    toast,
-  });
+  } = useProfileForm({ user });
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-4 pb-12">

@@ -3,7 +3,6 @@
 import { useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
-import { useToast } from "@/components/ui/toast";
 import { useAvatarUpload } from "@/hooks/useAvatarUpload";
 import { cn } from "@/lib/utils";
 
@@ -18,7 +17,6 @@ export function AvatarUpload({
   fallbackName,
   onUploaded,
 }: AvatarUploadProps) {
-  const { toast } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
   const {
     uploading,
@@ -27,7 +25,7 @@ export function AvatarUpload({
     setDragOver,
     handleDrop,
     handleFileChange,
-  } = useAvatarUpload({ currentUrl, onUploaded, toast });
+  } = useAvatarUpload({ currentUrl, onUploaded });
 
   const openFilePicker = () => inputRef.current?.click();
 
