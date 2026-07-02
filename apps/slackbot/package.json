@@ -1,5 +1,5 @@
 {
-  "name": "slack-bot",
+  "name": "f3-slackbot",
   "version": "1.13.0",
   "private": true,
   "scripts": {
