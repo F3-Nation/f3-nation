@@ -12,7 +12,8 @@ export const checkHasRoleOnOrg = async ({
   roleName,
 }: {
   session: Session | null;
-  roleName: UserRole;
+  /** Role required on the org. Omit to accept any role (direct or ancestor). */
+  roleName?: UserRole;
   orgId: number;
   db: Context["db"];
 }): Promise<{
@@ -37,15 +38,18 @@ export const checkHasRoleOnOrg = async ({
     roles: session.roles,
   });
 
-  const hasDirectAccessForThisOrg = session.roles?.some(
+  const directMatch = session.roles?.find(
     (r) =>
-      (r.roleName === "admin" || r.roleName === roleName) && r.orgId === orgId,
+      (roleName === undefined ||
+        r.roleName === "admin" ||
+        r.roleName === roleName) &&
+      r.orgId === orgId,
   );
-  if (hasDirectAccessForThisOrg)
+  if (directMatch)
     return {
       success: true,
       orgId: orgId,
-      roleName: roleName,
+      roleName: directMatch.roleName,
       mode: "direct-permission",
     };
 
@@ -89,7 +93,9 @@ export const checkHasRoleOnOrg = async ({
 
   const matchingPermission = session.roles?.find(
     (r) =>
-      (r.roleName === "admin" || r.roleName === roleName) &&
+      (roleName === undefined ||
+        r.roleName === "admin" ||
+        r.roleName === roleName) &&
       allAncestorOrgIds.includes(r.orgId),
   );
 

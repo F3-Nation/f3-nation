@@ -62,16 +62,18 @@ describe("POST /api/upload-logo", () => {
     expect(uploadOrgLogoMock).not.toHaveBeenCalled();
   });
 
-  it("returns 403 when the caller lacks an editor role on the org", async () => {
+  it("returns 403 when the caller has no role on the org", async () => {
     authMock.mockResolvedValue({ id: "u1", roles: [] });
     checkHasRoleOnOrgMock.mockResolvedValue({ success: false });
 
     const res = await POST(buildRequest(validFields()));
 
     expect(res.status).toBe(403);
-    expect(checkHasRoleOnOrgMock).toHaveBeenCalledWith(
-      expect.objectContaining({ orgId: 42, roleName: "editor" }),
-    );
+    expect(checkHasRoleOnOrgMock).toHaveBeenCalledWith({
+      session: { id: "u1", roles: [] },
+      orgId: 42,
+      db: {},
+    });
     expect(uploadOrgLogoMock).not.toHaveBeenCalled();
   });
 

@@ -69,13 +69,12 @@ export async function POST(request: Request) {
   const orgId = orgIdNum;
 
   try {
-    // Authorization: caller must have an editor (or admin) role on this org,
-    // matching the role required to submit org change requests.
+    // Authorization: caller must have some role on this org (direct or via
+    // an ancestor org) — any role qualifies, editor is not required.
     const { success } = await checkHasRoleOnOrg({
       session,
       orgId,
       db,
-      roleName: "editor",
     });
     if (!success) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
