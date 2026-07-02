@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.1](https://github.com/F3-Nation/f3-nation/compare/auth@2.0.0...auth@2.0.1) (2026-07-02)
+
+
+### Bug Fixes
+
+* **repo:** reinstall sharp in runner stage to fix ERR_DLOPEN_FAILED ([#550](https://github.com/F3-Nation/f3-nation/issues/550)) ([faf1f68](https://github.com/F3-Nation/f3-nation/commit/faf1f68c4b3930a6db67f8cd09cd57c21a446bbc))
+
 ## [2.0.0](https://github.com/F3-Nation/f3-nation/compare/auth@1.3.2...auth@2.0.0) (2026-07-02)
 
 

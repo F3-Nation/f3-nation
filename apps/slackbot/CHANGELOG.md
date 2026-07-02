@@ -2,6 +2,13 @@
 
 <!-- version list -->
 
+## [2.0.1](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.0.0...slackbot@2.0.1) (2026-07-02)
+
+
+### Bug Fixes
+
+* **slackbot:** getting slackbot version in line with release-please ([#555](https://github.com/F3-Nation/f3-nation/issues/555)) ([a5d4177](https://github.com/F3-Nation/f3-nation/commit/a5d4177dbf90aa297196727225bead15c782fe83))
+
 ## [2.0.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@1.13.0...slackbot@2.0.0) (2026-07-02)
 
 
