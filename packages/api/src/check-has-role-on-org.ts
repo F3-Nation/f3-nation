@@ -5,6 +5,24 @@ import type { Context } from "./shared";
 
 import { logDebug } from "./logger";
 
+/**
+ * Check if a role matches the requested role name.
+ * Returns true if:
+ * - No specific role is required (roleName is undefined), OR
+ * - The role is "admin" (admin has access to everything), OR
+ * - The role exactly matches the requested roleName
+ */
+function matchesRoleName(
+  roleNameToCheck: UserRole,
+  requestedRoleName: UserRole | undefined,
+): boolean {
+  return (
+    requestedRoleName === undefined ||
+    roleNameToCheck === "admin" ||
+    roleNameToCheck === requestedRoleName
+  );
+}
+
 export const checkHasRoleOnOrg = async ({
   session,
   orgId,
@@ -39,11 +57,7 @@ export const checkHasRoleOnOrg = async ({
   });
 
   const directMatch = session.roles?.find(
-    (r) =>
-      (roleName === undefined ||
-        r.roleName === "admin" ||
-        r.roleName === roleName) &&
-      r.orgId === orgId,
+    (r) => matchesRoleName(r.roleName, roleName) && r.orgId === orgId,
   );
   if (directMatch)
     return {
@@ -93,9 +107,7 @@ export const checkHasRoleOnOrg = async ({
 
   const matchingPermission = session.roles?.find(
     (r) =>
-      (roleName === undefined ||
-        r.roleName === "admin" ||
-        r.roleName === roleName) &&
+      matchesRoleName(r.roleName, roleName) &&
       allAncestorOrgIds.includes(r.orgId),
   );
 

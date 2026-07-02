@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { authMock, checkHasRoleOnOrgMock, uploadOrgLogoMock } = vi.hoisted(
-  () => ({
+const { authMock, checkHasRoleOnOrgMock, uploadOrgLogoMock, logErrorMock } =
+  vi.hoisted(() => ({
     authMock: vi.fn(),
     checkHasRoleOnOrgMock: vi.fn(),
     uploadOrgLogoMock: vi.fn(),
-  }),
-);
+    logErrorMock: vi.fn(),
+  }));
 
 vi.mock("@acme/auth", () => ({
   auth: authMock,
@@ -25,7 +25,7 @@ vi.mock("~/lib/storage", () => ({
 }));
 
 vi.mock("~/lib/logging", () => ({
-  logError: vi.fn(),
+  logError: logErrorMock,
 }));
 
 import { POST } from "~/app/api/upload-logo/route";
@@ -74,6 +74,24 @@ describe("POST /api/upload-logo", () => {
       orgId: 42,
       db: {},
     });
+    expect(uploadOrgLogoMock).not.toHaveBeenCalled();
+  });
+
+  it("returns 500 when checkHasRoleOnOrg throws an error", async () => {
+    authMock.mockResolvedValue({ id: "u1", roles: [] });
+    checkHasRoleOnOrgMock.mockRejectedValue(
+      new Error("Database connection failed"),
+    );
+
+    const res = await POST(buildRequest(validFields()));
+
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: "Failed to upload file" });
+    expect(logErrorMock).toHaveBeenCalledWith(
+      "map.logo.upload_failed",
+      { orgId: 42 },
+      expect.any(Error),
+    );
     expect(uploadOrgLogoMock).not.toHaveBeenCalled();
   });
 
