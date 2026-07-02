@@ -143,7 +143,7 @@
       "message_menu_options_url": "https://localhost:3006/slack/events"
     },
     "org_deploy_enabled": false,
-    "socket_mode_enabled": false,
+    "socket_mode_enabled": true,
     "token_rotation_enabled": false
   }
 }
