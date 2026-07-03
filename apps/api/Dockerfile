@@ -64,8 +64,11 @@
     COPY --from=installer --chown=api:nodejs /app/apps/api/.next/standalone ./
     COPY --from=installer --chown=api:nodejs /app/apps/api/.next/static ./apps/api/.next/static
 
-    # Reinstall sharp: Turbopack drops it from the standalone output.
-    RUN rm -rf ./node_modules/sharp ./node_modules/@img && npm install --no-save --no-audit --no-fund sharp@0.35.2
+    # Reinstall sharp: Turbopack drops libvips and leaves a pnpm-store shadow; purge both, then verify.
+    RUN rm -rf ./node_modules/sharp ./node_modules/@img \
+          ./node_modules/.pnpm/sharp@* ./node_modules/.pnpm/@img+* && \
+        npm install --no-save --no-audit --no-fund sharp@0.35.2 && \
+        node -e "require('sharp'); console.log('sharp loaded OK')"
 
     USER api
     

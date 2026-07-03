@@ -21,9 +21,9 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Keep the `npm install sharp@x.y.z` pin in app Dockerfiles updated",
+      "description": "Keep the `sharp@x.y.z` reinstall pin in app Dockerfiles updated",
       "managerFilePatterns": ["/^apps/.+/Dockerfile$/"],
-      "matchStrings": ["npm install sharp@(?<currentValue>[0-9.]+)"],
+      "matchStrings": ["sharp@(?<currentValue>[0-9.]+)"],
       "depNameTemplate": "sharp",
       "datasourceTemplate": "npm"
     }
