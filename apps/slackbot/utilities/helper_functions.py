@@ -420,6 +420,7 @@ def populate_users(client: WebClient, team_id: str, org_id: int = None) -> None:
             home_region_id=org_id,
         )
         for u in users
+        if not u.get("deleted")
     ]
     DbManager.create_or_ignore(User, user_list)
 

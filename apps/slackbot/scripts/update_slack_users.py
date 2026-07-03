@@ -38,8 +38,8 @@ def update_slack_users(force=False):
                 users.extend(response["members"])
 
             for user in users:
-                if user["is_bot"] or user["id"] == "USLACKBOT":
-                    continue  # Skip bots and the Slackbot
+                if user["is_bot"] or user["id"] == "USLACKBOT" or user.get("deleted"):
+                    continue  # Skip bots, the Slackbot, and deleted users
 
                 slack_user = slack_user_dict.get(user["id"])
                 if not safe_get(slack_user, "user_id"):
