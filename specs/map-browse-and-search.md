@@ -98,11 +98,16 @@ city X" to "this workout, this address, this time" in a few interactions.
 
 ## 5. Roles & authorization (RBAC)
 
-Browsing is anonymous by design, but the map **API procedures are
+Browsing is anonymous by design. Today the map **API procedures are
 `protectedProcedure`, not `publicProcedure`**: the map app itself is the
 trusted caller. Server-side (SSG) calls and the browser's `/api/orpc` proxy
 inject `F3_MAP_API_KEY` (the proxy strips any inbound auth headers first), so
 the end user never authenticates.
+
+Decided direction (see §10): map reads become **public procedures**, with the
+**source of each read recorded** (which app/client the request came from) so
+anonymous access doesn't mean anonymous telemetry. The table below describes
+current behavior until that migration lands.
 
 | Action                                                     | Allowed                                                         | Explicitly denied                           |
 | ---------------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------- |
@@ -124,7 +129,8 @@ production).
   [`map-update-request-flow.md`](map-update-request-flow.md)).
 - Region landing pages (`region-pages` app) and the homepage.
 - Mobile-app-specific behavior beyond the responsive mobile web layout.
-- Changing the access model for map read procedures.
+- Implementing the public-reads migration (§10 decision 3) — separate change
+  with its own review; this spec pins current behavior.
 
 ## 8. Critical-path test cases (blocking tier)
 
@@ -143,18 +149,20 @@ production).
   (SSG hit vs dynamic render), `map.revalidate.triggered` /
   `map.revalidate.warmed`, search-to-selection funnel counts, and
   `locationWorkout` latency.
+- Required for the public-reads migration (§10 decision 3): every map read
+  records its source (calling app/client), so public access remains
+  attributable.
 
-## 10. Open questions (resolve before final)
+## 10. Decisions (owner-resolved 2026-07-03)
 
-1. The sidebar subtitle hard-codes "4,368 free, peer-led workouts" while the
-   search placeholder uses the live count — should the subtitle use the live
-   count too?
-2. Should opening a copied event link also auto-open the detail panel (vs
-   only centering the map)?
-3. Is the current access model (protected procedures + trusted map-app key)
-   the intended long-term design for map reads, or should read procedures
-   become explicitly public? (Owner/security call — affects the RBAC matrix
-   above.)
+1. The hard-coded sidebar count was a load-time tradeoff. It **may be made
+   live**, but only if map load performance does not get worse — any change
+   here must show it doesn't regress first load.
+2. Copied event links **centering the map (current behavior) is correct** —
+   no auto-open of the detail panel.
+3. Map reads **should become public procedures**, with the source of each
+   read recorded (see §5 and §9). Until that migration, the trusted map-app
+   key model stands.
 
 ## 11. Human sign-off checklist
 

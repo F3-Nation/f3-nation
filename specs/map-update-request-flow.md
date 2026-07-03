@@ -107,8 +107,8 @@ accurate while regions retain control over their own data.
   closes, and the row leaves the default pending view.
 - **AC-13** — GIVEN an editor viewing a pending request for their region WHEN
   they click Reject THEN the request status becomes `rejected`, **no live data
-  changes**, a confirmation toast appears, and the row leaves the default
-  pending view.
+  changes**, a confirmation toast appears in success/neutral styling (green or
+  gray — not the error style), and the row leaves the default pending view.
 - **AC-14** — GIVEN a signed-in user whose only role is `user` WHEN they
   navigate to the admin app THEN they are redirected to the no-access page and
   cannot reach the Requests page.
@@ -118,6 +118,10 @@ accurate while regions retain control over their own data.
 - **AC-16** — GIVEN an approved `delete_ao` or `delete_event` request THEN the
   AO/event is deactivated (`is_active = false`), never hard-deleted, and no
   longer renders on the map.
+- **AC-17** — GIVEN an editor approving a request whose change touches a
+  region they cannot edit WHEN the approval is processed as `pending` instead
+  of applied THEN the UI tells them it was submitted for further review rather
+  than showing an unconditional "Approved" confirmation.
 
 ## 5. Roles & authorization (RBAC)
 
@@ -125,15 +129,15 @@ Tiers from `packages/api/src/shared.ts`; per-org scoping via
 `checkHasRoleOnOrg` (role on the org itself or any ancestor org — AO → Region
 → Sector → Area → Nation; `admin` satisfies `editor`).
 
-| Action                                                    | Allowed                                                                                                      | Explicitly denied                                                                       |
-| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
-| Enter map edit mode                                       | Any authenticated user                                                                                       | Anonymous (sign-in modal)                                                               |
-| Submit any of the 12 request types (`protectedProcedure`) | Any authenticated user                                                                                       | Anonymous (UNAUTHORIZED)                                                                |
-| Auto-apply on submit                                      | Submitter with `editor`/`admin` on **all** affected orgs (event org, locations' orgs, original + new region) | Any submitter lacking editor on ≥1 affected org → request is recorded `pending` instead |
-| Load admin portal / Requests page                         | Any user with an `editor` or `admin` role                                                                    | Role `user` only → no-access redirect; anonymous → sign-in                              |
-| List requests / view request detail (`editorProcedure`)   | Any editor/admin (default view scoped to own editable regions; nation admin sees all)                        | Non-editor authenticated users; anonymous                                               |
-| Approve (`validateSubmissionByAdmin`, `editorProcedure`)  | Editor/admin of **all** orgs the change touches (same per-org check as auto-apply)                           | Editor of an unrelated region — the change does not apply                               |
-| Reject (`rejectSubmission`, `editorProcedure`)            | Editor/admin of the request's region (or ancestor)                                                           | Editor of an unrelated region (UNAUTHORIZED)                                            |
+| Action                                                    | Allowed                                                                                                                          | Explicitly denied                                                                       |
+| --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Enter map edit mode                                       | Any authenticated user                                                                                                           | Anonymous (sign-in modal)                                                               |
+| Submit any of the 12 request types (`protectedProcedure`) | Any authenticated user                                                                                                           | Anonymous (UNAUTHORIZED)                                                                |
+| Auto-apply on submit                                      | Submitter with `editor`/`admin` on **all** affected orgs (event org, locations' orgs, original + new region)                     | Any submitter lacking editor on ≥1 affected org → request is recorded `pending` instead |
+| Load admin portal / Requests page                         | Any user with an `editor` or `admin` role                                                                                        | Role `user` only → no-access redirect; anonymous → sign-in                              |
+| List requests / view request detail (`editorProcedure`)   | Any editor/admin — cross-region read visibility is intended (default view scoped to own editable regions; nation admin sees all) | Non-editor authenticated users; anonymous                                               |
+| Approve (`validateSubmissionByAdmin`, `editorProcedure`)  | Editor/admin of **all** orgs the change touches (same per-org check as auto-apply)                                               | Editor of an unrelated region — the change does not apply                               |
+| Reject (`rejectSubmission`, `editorProcedure`)            | Editor/admin of the request's region (or ancestor)                                                                               | Editor of an unrelated region (UNAUTHORIZED)                                            |
 
 ## 6. Data & migrations
 
@@ -157,6 +161,8 @@ Tiers from `packages/api/src/shared.ts`; per-org scoping via
   events).
 - Rate limiting beyond the existing per-IP limiter; per-user submission caps.
 - The admin app's other management surfaces (users, roles, event types).
+- Mandatory reviewer attribution on approve/reject (`reviewed_by` stays
+  optional for now; may revisit for audit later).
 
 ## 8. Critical-path test cases (blocking tier)
 
@@ -177,17 +183,18 @@ Tiers from `packages/api/src/shared.ts`; per-org scoping via
   `request.rejected`, `request.notification_failed` — enough to alert on
   review backlog and notification failures.
 
-## 10. Open questions (resolve before final)
+## 10. Decisions (owner-resolved 2026-07-03)
 
-1. Request **detail** (`request.byId`) and the "Only Mine = off" list view are
-   visible to editors of any region. Is cross-region read visibility intended,
-   or should reads be scoped like rejects are?
-2. Reject currently records no reviewer identity (`reviewed_by` /
-   `reviewed_at` unset on reject). Should reviewer attribution be required for
-   audit?
-3. The reject confirmation toast renders in the error (red) style. Intended?
-4. An editor approving a request they lack region permission for silently
-   re-records it as `pending` (no error surfaced). Should the UI say so?
+1. Cross-region read visibility of requests for editors is **intended
+   behavior** (reflected in the RBAC table above).
+2. Reviewer attribution (`reviewed_by`) is **not mandatory** for now (listed
+   under non-goals; may revisit for audit).
+3. The reject confirmation toast **must be success/neutral styled** (green or
+   gray), not the error style (AC-13). Current code uses the error style —
+   this is a required fix.
+4. When an approval is processed as `pending` because the approver lacks
+   permission, the UI **must surface it** (AC-17). Current code shows
+   "Approved update" unconditionally — this is a required fix.
 
 ## 11. Human sign-off checklist
 
