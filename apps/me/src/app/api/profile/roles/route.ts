@@ -5,12 +5,10 @@ import { requireAuth } from "@/lib/auth/server";
 import { deleteMyRole } from "@/lib/api/client";
 import { logError } from "@/lib/logging";
 
-const deleteRoleSchema = z
-  .object({
-    orgId: z.number().int().positive(),
-    roleId: z.number().int().positive(),
-  })
-  .strict();
+const deleteRoleSchema = z.strictObject({
+  orgId: z.number().int().positive(),
+  roleId: z.number().int().positive(),
+});
 
 export async function DELETE(request: NextRequest) {
   let sessionUserId: number | undefined;

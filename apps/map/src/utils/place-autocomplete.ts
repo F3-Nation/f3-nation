@@ -50,10 +50,14 @@ async function placesAutocomplete({
   center: { lat: number; lng: number };
   zoom: number;
 }): Promise<PlaceResult[]> {
-  const googleApiKey = getGoogleApiKey();
   // Check cache first
   const cacheKey = `${input.toLowerCase().trim()}_${center.lat}_${center.lng}_${zoom}`;
   const cached = autocompleteCache.get(cacheKey);
+
+  const googleApiKey = getGoogleApiKey();
+  if (!googleApiKey) {
+    return cached?.results ?? [];
+  }
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     return cached.results;
   }

@@ -103,10 +103,10 @@ export const EventChip = (props: {
     <div
       key={event.id}
       className={cn(
-        "flex flex-row items-center ",
+        "flex flex-row items-center",
         "rounded-sm",
         "text-xs text-white",
-        "px-2 shadow",
+        "px-2 shadow-sm",
         "cursor-pointer",
         { "pointer-events-none bg-muted": !isInteractive },
         isInteractive && selected && getSelectedChipBg(props.mapStatus ?? null),
@@ -126,11 +126,11 @@ export const EventChip = (props: {
         })}
       >
         {name ? (
-          <div className="line-clamp-1 whitespace-break-spaces text-left">
+          <div className="line-clamp-1 text-left whitespace-break-spaces">
             {name}
           </div>
         ) : null}
-        <div className="line-clamp-1 flex-shrink-0 text-left">
+        <div className="line-clamp-1 shrink-0 text-left">
           {when || "No time"}
         </div>
       </div>
@@ -169,9 +169,9 @@ export const EventChip = (props: {
         <div
           className={cn(
             "flex size-3 items-center justify-center rounded-full bg-background text-foreground",
-            { "-ml-4 -mt-3 size-4 text-sm": size === "large" },
-            { "-ml-[10px] -mt-[6px] size-3 text-xs ": size === "medium" },
-            { "-ml-[8px] -mt-[6px] size-[10px] text-xs ": size === "small" },
+            { "-mt-3 -ml-4 size-4 text-sm": size === "large" },
+            { "-mt-[6px] -ml-[10px] size-3 text-xs": size === "medium" },
+            { "-mt-[6px] -ml-[8px] size-[10px] text-xs": size === "small" },
           )}
         >
           +

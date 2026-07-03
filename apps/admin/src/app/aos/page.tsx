@@ -8,7 +8,7 @@ const AOPage = async () => {
   // Don't get the aos on the server here since there are so many
   return (
     <Layout title="AOs">
-      <div className="flex w-full  flex-col">
+      <div className="flex w-full flex-col">
         <div className="flex flex-row items-center justify-between">
           <h1 className="hidden text-2xl font-bold lg:block">AOs</h1>
           <div className="ml-auto flex flex-row items-center justify-start gap-2">

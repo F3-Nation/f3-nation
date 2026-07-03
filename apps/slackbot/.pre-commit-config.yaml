@@ -1,0 +1,36 @@
+repos:
+  - repo: https://github.com/python-poetry/poetry
+    rev: 2.2.1
+    hooks:
+      - id: poetry-check
+      - id: poetry-lock
+
+  - repo: https://github.com/python-poetry/poetry-plugin-export
+    rev: 1.8.0
+    hooks:
+      - id: poetry-export
+        args:
+          [
+            "--without",
+            "dev",
+            "-f",
+            "requirements.txt",
+            "-o",
+            "requirements.txt",
+            "--without-hashes",
+          ]
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Ruff version.
+    rev: v0.15.9
+    hooks:
+      # Run the linter.
+      - id: ruff
+        args: [--fix]
+      # Run the formatter.
+      - id: ruff-format
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.4.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args: []

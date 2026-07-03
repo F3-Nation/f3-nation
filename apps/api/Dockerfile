@@ -1,6 +1,6 @@
 # ---------- Stage 1: Prune monorepo ----------
     ARG TURBO_VERSION=2
-    FROM node:24.17.0-alpine AS builder
+    FROM node:24.18.0-alpine AS builder
     ARG TURBO_VERSION
     
     ENV TURBO_TELEMETRY_DISABLED=1
@@ -17,7 +17,7 @@
     RUN turbo prune f3-api --docker
     
     # ---------- Stage 2: Install + build ----------
-    FROM node:24.17.0-alpine AS installer
+    FROM node:24.18.0-alpine AS installer
     ARG TURBO_VERSION
     
     ENV NEXT_TELEMETRY_DISABLED=1
@@ -33,7 +33,7 @@
     # Install dependencies from pruned lockfile
     COPY --from=builder /app/out/json/ .
     COPY --from=builder /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
-    RUN pnpm install --frozen-lockfile
+    RUN pnpm install --frozen-lockfile --ignore-scripts
     
     # Copy source and build
     COPY --from=builder /app/out/full/ .
@@ -52,7 +52,7 @@
     RUN pnpm turbo build --filter=f3-api
     
     # ---------- Stage 3: Production runner ----------
-    FROM node:24.17.0-alpine AS runner
+    FROM node:24.18.0-alpine AS runner
     
     RUN apk add --no-cache libc6-compat openssl && apk update
     WORKDIR /app
@@ -63,7 +63,13 @@
     # Copy standalone output
     COPY --from=installer --chown=api:nodejs /app/apps/api/.next/standalone ./
     COPY --from=installer --chown=api:nodejs /app/apps/api/.next/static ./apps/api/.next/static
-    
+
+    # Reinstall sharp: Turbopack drops libvips and leaves a pnpm-store shadow; purge both, then verify.
+    RUN rm -rf ./node_modules/sharp ./node_modules/@img \
+          ./node_modules/.pnpm/sharp@* ./node_modules/.pnpm/@img+* && \
+        npm install --no-save --no-audit --no-fund sharp@0.35.2 && \
+        node -e "require('sharp'); console.log('sharp loaded OK')"
+
     USER api
     
     ENV PORT=8080

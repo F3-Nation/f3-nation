@@ -16,7 +16,6 @@ import { toast } from "@acme/ui/toast";
 
 import { orpc, useQuery } from "~/orpc/react";
 import { useUpdateLocationFormContext } from "~/utils/forms";
-import { scaleAndCropImage } from "~/utils/image/scale-and-crop-image";
 import { uploadLogo } from "~/utils/image/upload-logo";
 import { mapStore } from "~/utils/store/map";
 import { DebouncedImage } from "../debounced-image";
@@ -30,12 +29,9 @@ export const LocationEventForm = ({
   isAdminForm?: boolean;
 }) => {
   const form = useUpdateLocationFormContext();
-  const formId = form.watch("id");
   const formRegionId = form.watch("regionId");
   const formLocationId = form.watch("locationId");
   const formAoId = form.watch("aoId");
-  console.log("form eventTypeIds", form.getValues().eventTypeIds);
-
   // Get form values
   const { data: regionsResponse } = useQuery(
     orpc.map.location.regions.queryOptions(),
@@ -91,7 +87,7 @@ export const LocationEventForm = ({
 
   return (
     <>
-      <h2 className="mb-2 mt-4 text-xl font-semibold text-muted-foreground">
+      <h2 className="mt-4 mb-2 text-xl font-semibold text-muted-foreground">
         Event Details:
       </h2>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -152,7 +148,6 @@ export const LocationEventForm = ({
             control={form.control}
             name="eventTypeIds"
             render={({ field, fieldState }) => {
-              console.log("eventTypes", eventTypes, field.value);
               return (
                 <div>
                   <MultiSelect
@@ -196,7 +191,7 @@ export const LocationEventForm = ({
           </p>
         </div>
       </div>
-      <h2 className="mb-2 mt-4 text-xl font-semibold text-muted-foreground">
+      <h2 className="mt-4 mb-2 text-xl font-semibold text-muted-foreground">
         Physical Location Details:
       </h2>
       <div className="text-sm font-medium text-muted-foreground">
@@ -373,7 +368,7 @@ export const LocationEventForm = ({
           </p>
         </div>
       </div>
-      <h2 className="mb-2 mt-4 text-xl font-semibold text-muted-foreground">
+      <h2 className="mt-4 mb-2 text-xl font-semibold text-muted-foreground">
         AO Details:
       </h2>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -428,30 +423,29 @@ export const LocationEventForm = ({
                     type="file"
                     accept="image/*"
                     onChange={async (e) => {
+                      const input = e.currentTarget;
                       if (formRegionId == null) {
                         toast.error("Please select a region first");
                         return;
                       }
-                      console.log("files", e.target.files);
                       const file = e.target.files?.[0];
                       if (!file) return;
 
-                      const blob640 = await scaleAndCropImage(file, 640, 640);
-                      if (!blob640) return;
-                      const url640 = await uploadLogo({
-                        file: blob640,
-                        orgId: formRegionId,
-                        requestId: formId,
-                      });
-                      onChange(url640);
-                      const blob64 = await scaleAndCropImage(file, 64, 64);
-                      if (blob64) {
-                        await uploadLogo({
-                          file: blob64,
+                      try {
+                        const url = await uploadLogo({
+                          file,
                           orgId: formRegionId,
-                          requestId: formId,
-                          size: 64,
+                          requestId: form.getValues("id"),
                         });
+                        onChange(url);
+                      } catch (err) {
+                        toast.error(
+                          err instanceof Error
+                            ? err.message
+                            : "Failed to upload logo",
+                        );
+                      } finally {
+                        input.value = "";
                       }
                     }}
                     disabled={lt(formRegionId, 0)}
@@ -498,7 +492,7 @@ export const LocationEventForm = ({
           </p>
         </div>
       </div>
-      <h2 className="mb-2 mt-4 text-xl font-semibold text-muted-foreground">
+      <h2 className="mt-4 mb-2 text-xl font-semibold text-muted-foreground">
         Other Details:
       </h2>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

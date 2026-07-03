@@ -41,7 +41,7 @@ export function PhoneField({
   onCountryChange,
 }: PhoneFieldProps) {
   const inputClass =
-    "w-full rounded-md border bg-background px-4 py-3 text-base outline-none focus:ring-2 focus:ring-ring";
+    "w-full rounded-md border bg-background px-4 py-3 text-base outline-hidden focus:ring-2 focus:ring-ring";
   const selectClass = `${inputClass} pr-10`;
 
   return (

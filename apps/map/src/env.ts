@@ -15,8 +15,8 @@ export const env = createEnv({
   server: {
     DATABASE_URL: z.string().min(1).optional(),
     TEST_DATABASE_URL: z.string().min(1).optional(),
-    F3_ADMIN_URL: z.string().url().optional(),
-    F3_API_BASE_URL: z.string().url(),
+    F3_ADMIN_URL: z.url().optional(),
+    F3_API_BASE_URL: z.url(),
     F3_CHANNEL: z.enum(["local", "ci", "branch", "dev", "staging", "prod"]),
     F3_GOOGLE_API_KEY: z.string().min(1),
     // Required in non-development environments, optional in development
@@ -26,13 +26,12 @@ export const env = createEnv({
       .optional()
       .refine(
         (val) => process.env.NODE_ENV === "development" || val !== undefined,
-        { message: "Required in non-development environments" },
+        { error: "Required in non-development environments" },
       ),
-    F3_MAP_BASE_URL: z.string().url(),
+    F3_MAP_BASE_URL: z.url(),
     GCS_EMULATOR_HOST: z.string().optional(),
-    GOOGLE_LOGO_BUCKET_BUCKET_NAME: z.string().min(1),
-    GOOGLE_LOGO_BUCKET_CLIENT_EMAIL: z.string().min(1),
-    GOOGLE_LOGO_BUCKET_PRIVATE_KEY: z.string().min(1),
+    // Base64-encoded service-account JSON for GCS public-image uploads.
+    GCS_CREDENTIALS: z.string().min(1),
     SUPER_ADMIN_API_KEY: z.string().min(1),
   },
   /**

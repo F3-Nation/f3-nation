@@ -12,13 +12,6 @@ const config = {
   output: "standalone",
   reactStrictMode: true,
 
-  webpack: (config, { webpack }) => {
-    // https://github.com/handlebars-lang/handlebars.js/issues/1174#issuecomment-229918935
-    config.resolve.alias.handlebars = "handlebars/dist/handlebars.min.js";
-    return config;
-  },
-  reactStrictMode: true,
-
   /** Enables hot reloading for local packages without a build step */
   transpilePackages: [
     "@acme/api",
@@ -43,8 +36,7 @@ const config = {
     ],
   },
 
-  /** We already do linting and typechecking as separate tasks in CI */
-  eslint: { ignoreDuringBuilds: true },
+  /** We already do typechecking as a separate task in CI */
   typescript: { ignoreBuildErrors: true },
   redirects: async () => {
     const adminUrl = (
@@ -91,7 +83,4 @@ export default withSentryConfig(config, {
   // Note: Check that the configured route will not match with your Next.js middleware, otherwise reporting of client-
   // side errors will fail.
   tunnelRoute: "/monitoring",
-
-  // Automatically tree-shake Sentry logger statements to reduce bundle size
-  disableLogger: true,
 });

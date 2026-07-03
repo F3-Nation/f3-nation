@@ -432,7 +432,7 @@ export const WorkoutDetailsContent = ({
   return (
     <>
       <div className="flex flex-row flex-wrap items-center justify-start gap-x-2">
-        <div className="flex flex-shrink-0 flex-col items-center">
+        <div className="flex shrink-0 flex-col items-center">
           <button
             className="cursor-pointer"
             onClick={() =>
@@ -457,7 +457,7 @@ export const WorkoutDetailsContent = ({
             />
           </button>
         </div>
-        <div className="line-clamp-2 flex-1 text-left text-2xl font-bold leading-6 sm:text-4xl">
+        <div className="line-clamp-2 flex-1 text-left text-2xl leading-tight font-bold sm:text-4xl">
           {event?.name ?? location.parentName ?? "Workout Information"}
         </div>
       </div>
@@ -542,7 +542,7 @@ export const WorkoutDetailsContent = ({
                 "flex cursor-pointer flex-row items-center",
                 "rounded-sm",
                 "text-base text-white",
-                "px-2 shadow",
+                "px-2 shadow-sm",
                 { "pointer-events-auto bg-blue-600": true },
                 { "gap-2 py-0": true },
               )}
@@ -585,7 +585,7 @@ export const WorkoutDetailsContent = ({
                     <dt className="text-sm font-medium text-muted-foreground">
                       {field}
                     </dt>
-                    <dd className="mt-1 whitespace-pre-line text-sm text-foreground">
+                    <dd className="mt-1 text-sm whitespace-pre-line text-foreground">
                       {workoutFields[field as keyof typeof workoutFields]}
                     </dd>
                   </div>

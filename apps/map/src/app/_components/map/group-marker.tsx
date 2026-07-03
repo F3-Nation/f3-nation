@@ -180,8 +180,8 @@ export const FeatureMarker = ({
                 }}
                 className={cn(
                   // min-h-[32.5px] so it doesn't collapse with no text
-                  "min-h-[32.5px] flex-1 cursor-pointer py-2 text-center",
-                  "border-b-2 border-l-2 border-r-2 border-t-2",
+                  "min-h-[32.5px] flex-1 cursor-pointer bg-foreground py-2 text-center text-background",
+                  "border-t-2 border-r-2 border-b-2 border-l-2 border-foreground",
                   `google-eventid-${event.id}`,
                   (event.mapStatus && getStatusBase(event.mapStatus)) ??
                     STATUS_BASE_DEFAULT,

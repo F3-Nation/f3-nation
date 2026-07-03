@@ -94,17 +94,17 @@ export function MapHelpModal() {
                       </Link>
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="px-4 pb-4 pt-0 text-sm text-muted-foreground">
+                  <CardContent className="px-4 pt-0 pb-4 text-sm text-muted-foreground">
                     {video.description}
                   </CardContent>
                 </Link>
               </Card>
             ))}
-            <div className="flex flex-col gap-1 ">
+            <div className="flex flex-col gap-1">
               <h3 className="text-lg font-semibold">Other</h3>
               <div className="flex flex-col gap-1">
                 <button
-                  className="flex w-full flex-row items-center justify-center gap-2 rounded-md bg-card p-2 shadow-sm hover:bg-accent"
+                  className="flex w-full flex-row items-center justify-center gap-2 rounded-md bg-card p-2 shadow-xs hover:bg-accent"
                   onClick={() => {
                     openModal(ModalType.ABOUT_MAP);
                   }}
@@ -114,7 +114,7 @@ export function MapHelpModal() {
                 </button>
               </div>
               <Link
-                className="flex w-full flex-row items-center justify-center gap-2 rounded-md bg-card p-2 shadow-sm hover:bg-accent"
+                className="flex w-full flex-row items-center justify-center gap-2 rounded-md bg-card p-2 shadow-xs hover:bg-accent"
                 target="_blank"
                 href={"https://f3nation.com/about-f3"}
               >

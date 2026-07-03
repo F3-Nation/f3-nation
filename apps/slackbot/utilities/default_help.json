@@ -1,0 +1,191 @@
+{
+  "type": "rich_text",
+  "elements": [
+    {
+      "type": "rich_text_section",
+      "elements": [
+        {
+          "type": "text",
+          "text": "Welcome to the F3 Nation help menu!",
+          "style": {
+            "bold": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "\n\nIf you're looking for a full guide, see the "
+        },
+        {
+          "type": "link",
+          "url": "https://docs.google.com/document/d/1e7tmuY3irKDt9oy1URQVcxPwxyet1ZY_bVZhGvhESEw/edit?tab=t.ezcys6v42f0t#heading=h.zi1izp9lf58i",
+          "text": "start of our manual here"
+        },
+        {
+          "type": "text",
+          "text": ". Otherwise, see below on how to find the calendar, sign up to Q, and send out your first preblast! See "
+        },
+        {
+          "type": "link",
+          "url": "https://www.youtube.com/watch?v=4A1UroeVA0s&list=PLChC4Hw8Z8x2wG6yk1FwtTKeIySfHT9we",
+          "text": "this video for a visual demonstration"
+        },
+        {
+          "type": "text",
+          "text": " "
+        },
+        {
+          "type": "emoji",
+          "name": "movie_camera",
+          "unicode": "1f3a5"
+        },
+        {
+          "type": "text",
+          "text": "\n\n"
+        },
+        {
+          "type": "text",
+          "text": "How to find and use the calendar",
+          "style": {
+            "bold": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "\n\nYou can get to your region's calendar of workouts by starting to type / and then either use the "
+        },
+        {
+          "type": "text",
+          "text": "/f3-calendar",
+          "style": {
+            "code": true
+          }
+        },
+        {
+          "type": "text",
+          "text": " or select the \"Open F3 Calendar\" shortcut. There will also be buttons to find the menu, like the one above!\n\nOnce in the calendar view, you can see upcoming events listed. You can filter by date, status, AO, etc. You can interact with the events by clicking the overflow menu button next to it ("
+        },
+        {
+          "type": "text",
+          "text": "...",
+          "style": {
+            "code": true
+          }
+        },
+        {
+          "type": "text",
+          "text": " on desktop and "
+        },
+        {
+          "type": "text",
+          "text": "More",
+          "style": {
+            "code": true
+          }
+        },
+        {
+          "type": "text",
+          "text": " on mobile). From there you can Hard Commit (\"HC\"), sign up to Q if it's open, or see the preblast.\n\n"
+        },
+        {
+          "type": "text",
+          "text": "How to post a preblast",
+          "style": {
+            "bold": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "\n\nTo post a preblast, there are several ways to initialize that:\n"
+        }
+      ]
+    },
+    {
+      "type": "rich_text_list",
+      "style": "bullet",
+      "indent": 0,
+      "elements": [
+        {
+          "type": "rich_text_section",
+          "elements": [
+            {
+              "type": "text",
+              "text": "Start typing "
+            },
+            {
+              "type": "text",
+              "text": "/",
+              "style": {
+                "code": true
+              }
+            },
+            {
+              "type": "text",
+              "text": " and either select the "
+            },
+            {
+              "type": "text",
+              "text": "/preblast",
+              "style": {
+                "code": true
+              }
+            },
+            {
+              "type": "text",
+              "text": " command and hit send, or select the \"Create Preblast\" shortcut"
+            }
+          ]
+        },
+        {
+          "type": "rich_text_section",
+          "elements": [
+            {
+              "type": "text",
+              "text": "Click the \"Create Preblast\" button in the reminder message you will get before the event"
+            }
+          ]
+        },
+        {
+          "type": "rich_text_section",
+          "elements": [
+            {
+              "type": "text",
+              "text": "Click on the overflow button on the event in the calendar view ("
+            },
+            {
+              "type": "text",
+              "text": "...",
+              "style": {
+                "code": true
+              }
+            },
+            {
+              "type": "text",
+              "text": " on desktop and "
+            },
+            {
+              "type": "text",
+              "text": "More",
+              "style": {
+                "code": true
+              }
+            },
+            {
+              "type": "text",
+              "text": " on mobile) and then \"Edit Preblast\""
+            }
+          ]
+        }
+      ],
+      "border": 0
+    },
+    {
+      "type": "rich_text_section",
+      "elements": [
+        {
+          "type": "text",
+          "text": "\nWhen you use the first option, you will have the option to choose between upcoming events you're signed up to lead, or to post one for an unscheduled event. This should only be used for \"off the books\" events.\n\nAfter filling out the preblast form, you can choose whether you want to post it right now to Slack, or to wait for the automated preblast to be sent (usually around 12 hours before the event). Once it is posted, you can edit by using its Edit button or through the calendar menu.\n\nIf you do not fill out a preblast by the automated time, a generic one will be posted for you."
+        }
+      ]
+    }
+  ]
+}

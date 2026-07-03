@@ -517,7 +517,7 @@ export default function AdminLocationsModal({
                     />
                   </div>
                   <div className="w-full px-2">
-                    <div className="flex flex-col space-y-2 pt-4 sm:flex-row sm:space-x-4 sm:space-y-0">
+                    <div className="flex flex-col space-y-2 pt-4 sm:flex-row sm:space-y-0 sm:space-x-4">
                       <Button
                         type="button"
                         variant="outline"

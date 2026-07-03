@@ -1,6 +1,6 @@
 # ---------- Stage 1: Prune monorepo ----------
 ARG TURBO_VERSION=2
-FROM node:24.17.0-alpine AS builder
+FROM node:24.18.0-alpine AS builder
 ARG TURBO_VERSION
 
 ENV TURBO_TELEMETRY_DISABLED=1
@@ -15,7 +15,7 @@ COPY . .
 RUN turbo prune f3-me --docker
 
 # ---------- Stage 2: Install + build ----------
-FROM node:24.17.0-alpine AS installer
+FROM node:24.18.0-alpine AS installer
 ARG TURBO_VERSION
 
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -35,7 +35,7 @@ ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 COPY --from=builder /app/out/json/ .
 COPY --from=builder /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
 # Install dependencies with pnpm version from root package.json "packageManager"
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --ignore-scripts
 
 # Copy source and build
 COPY --from=builder /app/out/full/ .
@@ -50,7 +50,7 @@ RUN printf '\nverifyDepsBeforeRun: false\n' >> pnpm-workspace.yaml
 RUN pnpm turbo build --filter=f3-me
 
 # ---------- Stage 3: Production runner ----------
-FROM node:24.17.0-alpine AS runner
+FROM node:24.18.0-alpine AS runner
 
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
@@ -62,6 +62,12 @@ RUN addgroup --system --gid 1001 nodejs && \
 COPY --from=installer --chown=me:nodejs /app/apps/me/.next/standalone ./
 COPY --from=installer --chown=me:nodejs /app/apps/me/.next/static ./apps/me/.next/static
 COPY --from=installer --chown=me:nodejs /app/apps/me/public ./apps/me/public
+
+# Reinstall sharp: Turbopack drops libvips and leaves a pnpm-store shadow; purge both, then verify.
+RUN rm -rf ./node_modules/sharp ./node_modules/@img \
+      ./node_modules/.pnpm/sharp@* ./node_modules/.pnpm/@img+* && \
+    npm install --no-save --no-audit --no-fund sharp@0.35.2 && \
+    node -e "require('sharp'); console.log('sharp loaded OK')"
 
 USER me
 

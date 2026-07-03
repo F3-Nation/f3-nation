@@ -6,7 +6,11 @@ export function DebouncedImage({
   alt,
   onImageFail,
   onImageSuccess,
-}: DetailedHTMLProps<ImgHTMLAttributes<HTMLImageElement>, HTMLImageElement> & {
+}: Omit<
+  DetailedHTMLProps<ImgHTMLAttributes<HTMLImageElement>, HTMLImageElement>,
+  "src"
+> & {
+  src?: string;
   onImageFail: () => void;
   onImageSuccess: () => void;
 }) {

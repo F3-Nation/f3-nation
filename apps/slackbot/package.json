@@ -1,0 +1,10 @@
+{
+  "name": "f3-slackbot",
+  "version": "1.13.0",
+  "private": true,
+  "scripts": {
+    "dev": "uv run bash ./app_startup.sh",
+    "test": "uv run pytest",
+    "lint": "uv run ruff check ."
+  }
+}
