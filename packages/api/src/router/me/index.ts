@@ -15,7 +15,7 @@ import { protectedProcedure } from "../../shared";
  */
 
 const profileUpdateSchema = z
-  .object({
+  .strictObject({
     f3Name: z
       .string()
       .min(1)
@@ -47,7 +47,6 @@ const profileUpdateSchema = z
       .optional()
       .describe("ID of the user's home region org."),
     avatarUrl: z
-      .string()
       .url()
       .nullable()
       .optional()
@@ -71,13 +70,12 @@ const profileUpdateSchema = z
       .optional()
       .describe("Additional emergency notes (allergies, medical conditions)."),
     meta: z
-      .record(z.unknown())
+      .record(z.string(), z.unknown())
       .optional()
       .describe(
         "JSON meta fields to merge with existing meta (e.g. f3_name_origin, my_f3_why).",
       ),
   })
-  .strict()
   .describe("Whitelisted profile fields the user can update.");
 
 const meRoleSchema = z.object({
@@ -104,7 +102,7 @@ const meProfileSchema = z.object({
   phone: z.string().nullable(),
   homeRegionId: z.number().int().min(1).nullable(),
   avatarUrl: z.string().nullable(),
-  meta: z.union([z.record(z.unknown()), z.string()]).nullable(),
+  meta: z.union([z.record(z.string(), z.unknown()), z.string()]).nullable(),
   emergencyContact: z.string().nullable(),
   emergencyPhone: z.string().nullable(),
   emergencyNotes: z.string().nullable(),

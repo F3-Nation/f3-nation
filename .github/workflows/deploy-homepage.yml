@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Wait for CI to pass
-        uses: lewagon/wait-on-check-action@9312864dfbc9fd208e9c0417843430751c042800 # v1.7.0
+        uses: lewagon/wait-on-check-action@96d9100b431964d10e0136aff8b9ccb92470505e # v1.8.0
         with:
           ref: ${{ github.sha }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
@@ -38,11 +38,11 @@ jobs:
       contents: read
       pages: write
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           persist-credentials: false
 
-      - uses: ./.github/actions/setup-node-pnpm
+      - uses: ./.github/actions/setup
 
       - name: Build static export
         run: pnpm build --filter f3-homepage

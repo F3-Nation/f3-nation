@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=24.17.0 <25"
+    "node": ">=24.18.0 <25"
   },
-  "packageManager": "pnpm@11.8.0+sha512.c1f5e7c4cb241c8f174b743851d82f42b802324afc8b0f116b96adb15aa06664948dde36960a3ba1079ba5b4b29dd0140135b94b5b5f5263592249d68e555f26",
+  "packageManager": "pnpm@11.9.0+sha512.bd682d5d03fe525ef7c9fd6780c6884d1e756ac4c9c9fe00c538782824310dcf90e3ddc4f53835f06dfaebd5085e41855e0bcbb3b60de2ac5bbab89e5036f03b",
   "scripts": {
     "build": "turbo build",
     "ci:local": "pnpm format && pnpm lint && pnpm typecheck && pnpm build && pnpm test",
@@ -28,7 +28,7 @@
     "db:seed": "pnpm -F db seed",
     "db:studio": "pnpm -F db studio",
     "db:update-db": "pnpm -F db update-db",
-    "dev": "turbo dev",
+    "dev": "bash scripts/dev.sh",
     "docker:down": "docker compose -f docker-compose.yml down",
     "docker:up": "docker compose -f docker-compose.yml up -d",
     "docker:up:logs": "docker compose -f docker-compose.yml up",
@@ -42,6 +42,8 @@
     "lint:unused": "knip",
     "lint": "turbo run lint --continue -- --cache --cache-location node_modules/.cache/.eslintcache; pnpm run lint:ws",
     "local:setup": "bash scripts/local-setup.sh",
+    "postinstall": "bash scripts/postinstall-uv-sync.sh",
+    "python:install": "uv sync",
     "reset-test-db": "turbo run reset-test-db",
     "test": "turbo test",
     "typecheck": "turbo typecheck",

@@ -57,7 +57,7 @@ const isISODate = (str: string): boolean => {
 
 export const dateOrIso = z.union([
   z.date(),
-  z.string().refine(isISODate, { message: "Not a valid ISO string date " }),
+  z.string().refine(isISODate, { error: "Not a valid ISO string date " }),
 ]);
 
 export const dayOfWeekToShortDayOfWeek = (dayOfWeek: DayOfWeek): string => {
@@ -163,7 +163,7 @@ export const requestTypeToTitle = (requestType: RequestType) => {
 };
 
 // Helper to normalize query params that can be single value or array
-export const arrayOrSingle = <T extends z.ZodTypeAny>(schema: T) =>
+export const arrayOrSingle = <T extends z.ZodType>(schema: T) =>
   z.preprocess(
     (val) => (val === undefined ? undefined : Array.isArray(val) ? val : [val]),
     z.array(schema),
@@ -179,6 +179,7 @@ export const parseSorting = () =>
       // Try to join them and parse as JSON
       if (Array.isArray(val) && val.every((v) => typeof v === "string")) {
         try {
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-return
           return JSON.parse(val.join(","));
         } catch {
           // If joining fails, try parsing each string individually
@@ -195,6 +196,7 @@ export const parseSorting = () =>
       if (typeof val === "string") {
         console.log("val is string");
         try {
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-return
           return JSON.parse(val);
         } catch {
           return undefined;
@@ -222,7 +224,7 @@ export function isValidEmail(email: string | null | undefined): boolean {
   if (typeof email !== "string") return false;
   const trimmed = email.trim();
   if (!trimmed) return false;
-  return z.string().email().safeParse(trimmed).success;
+  return z.email().safeParse(trimmed).success;
 }
 
 /**

@@ -9,10 +9,10 @@ import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { adminProcedure } from "../shared";
 
 const createApiKeySchema = z.object({
-  name: z.string().min(1, { message: "Name is required" }),
+  name: z.string().min(1, { error: "Name is required" }),
   description: z.string().optional(),
   ownerId: z.number().optional(),
-  ownerEmail: z.string().email().optional(),
+  ownerEmail: z.email().optional(),
   roles: z
     .object({
       orgId: z.number(),
@@ -20,7 +20,7 @@ const createApiKeySchema = z.object({
     })
     .array()
     .optional(),
-  expiresAt: z.string().datetime().nullable().optional(),
+  expiresAt: z.iso.datetime().nullable().optional(),
 });
 
 const revokeApiKeySchema = z.object({
@@ -75,11 +75,7 @@ export const apiKeyRouter = {
               created: z.string().describe("Date the API key was created"),
               updated: z.string().describe("Date the API key was last updated"),
               ownerName: z.string().nullable().describe("Owner user name"),
-              ownerEmail: z
-                .string()
-                .email()
-                .nullable()
-                .describe("Owner user email"),
+              ownerEmail: z.email().nullable().describe("Owner user email"),
               keySignature: z
                 .string()
                 .describe("Last 4 characters of the API key"),

@@ -96,6 +96,8 @@ export interface MDTableProps<T> {
 }
 
 export const MDTable = <T,>(params: MDTableProps<T>) => {
+  "use no memo";
+
   const {
     paginationOptions,
     pagination: paginationParam,
@@ -169,6 +171,7 @@ export const MDTable = <T,>(params: MDTableProps<T>) => {
   const [columnVisibility, setColumnVisibility] =
     React.useState<VisibilityState>({});
 
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table
   const table = useReactTable<T>({
     data: cachedData.current ?? [],
     columns,
@@ -354,7 +357,7 @@ export const MDTable = <T,>(params: MDTableProps<T>) => {
             <div className="flex flex-row items-center gap-1 sm:gap-2">
               <Button
                 variant="ghost"
-                className="h-8 w-8 rounded border p-0"
+                className="h-8 w-8 rounded-sm border p-0"
                 onClick={() => table.setPageIndex(0)}
                 disabled={!table.getCanPreviousPage()}
               >
@@ -362,7 +365,7 @@ export const MDTable = <T,>(params: MDTableProps<T>) => {
               </Button>
               <Button
                 variant="ghost"
-                className="h-8 w-8 rounded border p-0"
+                className="h-8 w-8 rounded-sm border p-0"
                 onClick={() => table.previousPage()}
                 disabled={!table.getCanPreviousPage()}
               >
@@ -376,7 +379,7 @@ export const MDTable = <T,>(params: MDTableProps<T>) => {
               </span>
               <Button
                 variant="ghost"
-                className="h-8 w-8 rounded border p-0"
+                className="h-8 w-8 rounded-sm border p-0"
                 onClick={() => table.nextPage()}
                 disabled={!table.getCanNextPage()}
               >
@@ -384,7 +387,7 @@ export const MDTable = <T,>(params: MDTableProps<T>) => {
               </Button>
               <Button
                 variant="ghost"
-                className="h-8 w-8 rounded border p-0"
+                className="h-8 w-8 rounded-sm border p-0"
                 onClick={() => table.setPageIndex(table.getPageCount() - 1)}
                 disabled={!table.getCanNextPage()}
               >
@@ -393,7 +396,7 @@ export const MDTable = <T,>(params: MDTableProps<T>) => {
             </div>
             {/* ability to select the size of the page */}
             <div className="flex flex-row items-center gap-2">
-              <div className="pointer-events-none flex-shrink-0 text-sm sm:text-base">
+              <div className="pointer-events-none shrink-0 text-sm sm:text-base">
                 Page size
               </div>
               <Select

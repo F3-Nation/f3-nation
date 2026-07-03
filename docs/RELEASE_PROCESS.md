@@ -20,7 +20,7 @@ feature branch → PR → dev
               (e.g. me@1.2.0, admin@1.1.0)
                          ↓
               deploy-me.yml / deploy-admin.yml
-              / deploy-auth.yml fires on that tag
+              / deploy-auth.yml / deploy-slackbot.yml fires on that tag
                          ↓
                 app is deployed to staging
                          ↓
@@ -58,6 +58,12 @@ After a push to `dev`, the `release-please.yml` workflow runs. It:
   - Bumps the version in `apps/me/package.json`
   - Generates/updates `apps/me/CHANGELOG.md`
 
+For Slackbot release PRs, `.github/workflows/release-please-uv-lock.yml` runs
+after Release Please updates `apps/slackbot/pyproject.toml`. It runs `uv lock`
+and pushes any resulting `uv.lock` change back to the release PR using the same
+GitHub App token. This keeps Docker's `uv sync --locked ...` build step aligned
+with Release Please's version bump.
+
 If multiple PRs are merged to `dev` before the Release Please PR is merged, Release Please accumulates all of them — the PR is updated in place, never duplicated.
 
 ### 3. Review and merge the Release Please PR
@@ -72,11 +78,12 @@ On merge of the Release Please PR, the workflow runs again and this time creates
 
 The tag triggers the corresponding deploy workflow:
 
-| Tag pattern | Workflow                             | Environments                           |
-| ----------- | ------------------------------------ | -------------------------------------- |
-| `me@*`      | `.github/workflows/deploy-me.yml`    | `me-staging` → `me.f3nation.com`       |
-| `admin@*`   | `.github/workflows/deploy-admin.yml` | `admin-staging` → `admin.f3nation.com` |
-| `auth@*`    | `.github/workflows/deploy-auth.yml`  | `auth-staging` → `auth.f3nation.com`   |
+| Tag pattern  | Workflow                                | Environments                               |
+| ------------ | --------------------------------------- | ------------------------------------------ |
+| `me@*`       | `.github/workflows/deploy-me.yml`       | `me-staging` → `me.f3nation.com`           |
+| `admin@*`    | `.github/workflows/deploy-admin.yml`    | `admin-staging` → `admin.f3nation.com`     |
+| `auth@*`     | `.github/workflows/deploy-auth.yml`     | `auth-staging` → `auth.f3nation.com`       |
+| `slackbot@*` | `.github/workflows/deploy-slackbot.yml` | `slackbot-staging` → `slackbot-production` |
 
 Each deploy workflow:
 
@@ -84,6 +91,11 @@ Each deploy workflow:
 2. Builds the Docker image and pushes to GCP Artifact Registry
 3. Deploys to the staging Cloud Run service
 4. Promotes the image and deploys to production
+
+For `slackbot@*`, the workflow runs two deploy tracks from one tag:
+
+1. Main Slackbot Cloud Run service deploy (`f3-slackbot` in `f3-slackbot-staging` and `f3-slackbot`)
+2. Scripts Cloud Run Job deploy (`f3-slackbot-scripts` in `f3-slackbot-staging` and `f3-slackbot`)
 
 ---
 

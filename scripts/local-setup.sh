@@ -15,7 +15,7 @@
 
 set -e
 
-BUCKET_NAME="${GOOGLE_LOGO_BUCKET_BUCKET_NAME:-f3-public-images}"
+BUCKETS=(f3-public-images f3-public-images-staging)
 GCS_PORT=9023
 PG_CONTAINER=f3-postgres
 
@@ -26,7 +26,7 @@ echo "  ────────────────────────
 # ── Step 1: Copy per-directory env files ─────────────────────────────────────
 echo "  → Copying .env.example files..."
 _env_ts=$(date +%Y%m%d%H%M%S)
-for dir in apps/api apps/auth apps/map apps/me apps/admin apps/homepage packages/env; do
+for dir in apps/api apps/auth apps/map apps/me apps/admin apps/homepage apps/slackbot packages/env; do
   if [ -f "$dir/.env" ]; then
     mv "$dir/.env" "$dir/.env.bak.$_env_ts"
     echo "     $dir/.env backed up → $dir/.env.bak.$_env_ts"
@@ -83,20 +83,22 @@ for i in $(seq 1 30); do
   sleep 1
 done
 
-# ── Step 4: Create GCS bucket ────────────────────────────────────────────────
-echo "  → Creating GCS bucket '${BUCKET_NAME}'..."
-status=$(curl -s -o /tmp/gcs-bucket-create.out -w "%{http_code}" -X POST "http://localhost:${GCS_PORT}/storage/v1/b" \
-  -H "Content-Type: application/json" \
-  -d "{\"name\": \"${BUCKET_NAME}\"}")
-if [ "$status" = "200" ] || [ "$status" = "201" ]; then
-  echo "     Bucket '${BUCKET_NAME}' created."
-elif [ "$status" = "409" ]; then
-  echo "     Bucket already exists — continuing."
-else
-  echo "     ERROR: failed to create bucket (HTTP ${status})."
-  cat /tmp/gcs-bucket-create.out
-  exit 1
-fi
+# ── Step 4: Create GCS buckets ───────────────────────────────────────────────
+for BUCKET_NAME in "${BUCKETS[@]}"; do
+  echo "  → Creating GCS bucket '${BUCKET_NAME}'..."
+  status=$(curl -s -o /tmp/gcs-bucket-create.out -w "%{http_code}" -X POST "http://localhost:${GCS_PORT}/storage/v1/b" \
+    -H "Content-Type: application/json" \
+    -d "{\"name\": \"${BUCKET_NAME}\"}")
+  if [ "$status" = "200" ] || [ "$status" = "201" ]; then
+    echo "     Bucket '${BUCKET_NAME}' created."
+  elif [ "$status" = "409" ]; then
+    echo "     Bucket '${BUCKET_NAME}' already exists — continuing."
+  else
+    echo "     ERROR: failed to create bucket '${BUCKET_NAME}' (HTTP ${status})."
+    cat /tmp/gcs-bucket-create.out
+    exit 1
+  fi
+done
 
 # ── Step 5: Run migrations ────────────────────────────────────────────────────
 echo "  → Running database migrations..."
@@ -121,7 +123,9 @@ echo "    1. Set NEXT_PUBLIC_GOOGLE_API_KEY in apps/map/.env, apps/api/.env, and
 echo "       (map tiles won't load without it)"
 echo "       Get one free at: https://console.cloud.google.com/google/maps-apis/"
 echo ""
-echo "    2. Start the app servers:"
+echo "    2. (Optional) If you want to run slackbot, there are a few extra steps — see apps/slackbot/README.md"
+echo ""
+echo "    3. Start the app servers:"
 echo "       pnpm dev"
 echo ""
 echo "  Daily workflow:"

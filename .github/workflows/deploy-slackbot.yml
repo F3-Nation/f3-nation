@@ -1,0 +1,99 @@
+name: Deploy Slackbot
+
+on:
+  push:
+    tags:
+      - "slackbot@*"
+
+# Prevent concurrent deploys of the same tag.
+concurrency:
+  group: deploy-slackbot-${{ github.ref_name }}
+  cancel-in-progress: false
+
+# Reusable workflows can't elevate GITHUB_TOKEN beyond what the caller grants.
+# id-token: write -> GCP OIDC (google-github-actions/auth); checks: read -> CI gate.
+permissions:
+  contents: read
+  id-token: write
+  checks: read
+
+jobs:
+  deploy-main:
+    uses: ./.github/workflows/_deploy-cloudrun.yml
+    with:
+      image_name: f3-slackbot
+      service_name: f3-slackbot
+      staging_project: f3-slackbot-staging
+      prod_project: f3-slackbot
+      tag_prefix: slackbot@
+      dockerfile: apps/slackbot/Dockerfile
+      build_context: .
+      staging_environment: slackbot-staging
+      prod_environment: slackbot-production
+      region: us-central1
+      ar_repo: cloud-run-builds
+      staging_flags: >-
+        --memory=1Gi
+        --cpu=1
+        --min-instances=0
+        --max-instances=2
+        --add-cloudsql-instances=f3data:us-central1:f3data-nonprod
+        --add-volume=name=user-avatars,type=cloud-storage,bucket=f3-public-images-staging,mount-options=only-dir=user-avatars
+        --add-volume-mount=volume=user-avatars,mount-path=/mnt/user-avatars
+        --add-volume=name=event_instance_images,type=cloud-storage,bucket=f3-public-images-staging,mount-options=only-dir=event_instance_images
+        --add-volume-mount=volume=event_instance_images,mount-path=/mnt/event_instance_images
+        --add-volume=name=org-logos,type=cloud-storage,bucket=f3-public-images-staging,mount-options=only-dir=org-logos
+        --add-volume-mount=volume=org-logos,mount-path=/mnt/org-logos
+        --add-volume=name=oauth_states,type=cloud-storage,bucket=f3nation-bot-oauth-state
+        --add-volume-mount=volume=oauth_states,mount-path=/mnt/oauth_states
+        --add-volume=name=oauth_installations,type=cloud-storage,bucket=f3nation-bot-oauth-installation
+        --add-volume-mount=volume=oauth_installations,mount-path=/mnt/oauth_installations
+        --add-volume=name=calendar-images,type=cloud-storage,bucket=f3nation-calendar-images
+        --add-volume-mount=volume=calendar-images,mount-path=/mnt/calendar-images
+      prod_flags: >-
+        --memory=4Gi
+        --cpu=2
+        --min-instances=1
+        --max-instances=100
+        --add-cloudsql-instances=f3data:us-central1:f3data
+        --add-volume=name=user-avatars,type=cloud-storage,bucket=f3-public-images,mount-options=only-dir=user-avatars
+        --add-volume-mount=volume=user-avatars,mount-path=/mnt/user-avatars
+        --add-volume=name=event_instance_images,type=cloud-storage,bucket=f3-public-images,mount-options=only-dir=event_instance_images
+        --add-volume-mount=volume=event_instance_images,mount-path=/mnt/event_instance_images
+        --add-volume=name=org-logos,type=cloud-storage,bucket=f3-public-images,mount-options=only-dir=org-logos
+        --add-volume-mount=volume=org-logos,mount-path=/mnt/org-logos
+        --add-volume=name=oauth_states,type=cloud-storage,bucket=f3nation-prod-bot-oauth-state
+        --add-volume-mount=volume=oauth_states,mount-path=/mnt/oauth_states
+        --add-volume=name=oauth_installations,type=cloud-storage,bucket=f3nation-prod-bot-oauth-installation
+        --add-volume-mount=volume=oauth_installations,mount-path=/mnt/oauth_installations
+        --add-volume=name=calendar-images,type=cloud-storage,bucket=f3nation-calendar-images
+        --add-volume-mount=volume=calendar-images,mount-path=/mnt/calendar-images
+
+  deploy-scripts:
+    uses: ./.github/workflows/_deploy-cloudrun-job.yml
+    with:
+      image_name: f3-slackbot-scripts
+      job_name: f3-slackbot-scripts
+      staging_project: f3-slackbot-staging
+      prod_project: f3-slackbot
+      tag_prefix: slackbot@
+      dockerfile: apps/slackbot/scripts/Dockerfile
+      build_context: .
+      staging_environment: slackbot-staging
+      prod_environment: slackbot-production
+      region: us-central1
+      ar_repo: cloud-run-builds
+      staging_flags: >-
+        --memory=4Gi
+        --cpu=1
+        --set-cloudsql-instances=f3data:us-central1:f3data-nonprod
+        --add-volume=name=calendar-images,type=cloud-storage,bucket=f3nation-calendar-images
+        --add-volume-mount=volume=calendar-images,mount-path=/mnt/calendar-images
+        --task-timeout=6h
+      prod_flags: >-
+        --memory=4Gi
+        --cpu=1
+        --set-cloudsql-instances=f3data:us-central1:f3data
+        --add-volume=name=calendar-images,type=cloud-storage,bucket=f3nation-calendar-images
+        --add-volume-mount=volume=calendar-images,mount-path=/mnt/calendar-images
+        --task-timeout=6h

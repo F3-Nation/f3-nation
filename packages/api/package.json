@@ -25,6 +25,7 @@
     "@acme/logger": "workspace:*",
     "@acme/mail": "workspace:*",
     "@acme/shared": "workspace:^0.1.0",
+    "@acme/storage": "workspace:*",
     "@acme/validators": "workspace:^0.1.0",
     "@orpc/experimental-ratelimit": "catalog:",
     "@orpc/server": "catalog:",
@@ -35,9 +36,9 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "next": ">=15.5.18 <16",
-    "react": ">=18 <19",
-    "react-dom": ">=18 <19"
+    "next": ">=15.5.18 <17",
+    "react": ">=18 <20",
+    "react-dom": ">=18 <20"
   },
   "devDependencies": {
     "@acme/eslint-config": "workspace:^0.2.0",
@@ -48,9 +49,10 @@
     "dotenv-cli": "catalog:",
     "eslint": "catalog:",
     "prettier": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "vite-tsconfig-paths": "catalog:",
     "vitest": "catalog:"
   },
   "prettier": "@acme/prettier-config"

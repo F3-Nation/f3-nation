@@ -2,20 +2,18 @@
 
 This guide walks through setting up a **fully local** F3 Nation development environment using Docker. You do **not** need any Google Cloud credentials to follow this guide.
 
-> **Recommended path for new contributors.** If you already have GCP access, see [LOCAL_DEV_SETUP.md](LOCAL_DEV_SETUP.md) instead.
-
 ---
 
 ## What you're setting up
 
 Four Docker containers replace the cloud services you'd otherwise need access to:
 
-| Container        | What it is                                       | Local URL             |
-| ---------------- | ------------------------------------------------ | --------------------- |
-| **Postgres**     | The app's database, pre-loaded with seed data    | `localhost:5433`      |
-| **Adminer**      | A web UI to browse and query the database        | http://localhost:8080 |
-| **GCS Emulator** | Emulates Google Cloud Storage for logo uploads   | http://localhost:9023 |
-| **Mailpit**      | Catches all outbound emails so you can read them | http://localhost:8025 |
+| Container        | What it is                                       | Local URL               |
+| ---------------- | ------------------------------------------------ | ----------------------- |
+| **Postgres**     | The app's database, pre-loaded with seed data    | `localhost:5433`        |
+| **Adminer**      | A web UI to browse and query the database        | <http://localhost:8080> |
+| **GCS Emulator** | Emulates Google Cloud Storage for logo uploads   | <http://localhost:9023> |
+| **Mailpit**      | Catches all outbound emails so you can read them | <http://localhost:8025> |
 
 Your app servers (Map, API, Auth) still run natively on your machine with `pnpm dev`. Docker only manages the stateful infrastructure.
 
@@ -23,12 +21,13 @@ Your app servers (Map, API, Auth) still run natively on your machine with `pnpm 
 
 Install these before starting:
 
-| Tool                       | Install                                                                               | Check            |
-| -------------------------- | ------------------------------------------------------------------------------------- | ---------------- |
-| **Docker Desktop**         | [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/) | `docker version` |
-| **Node.js** (see `.nvmrc`) | `nvm install`                                                                         | `node -v`        |
-| **pnpm** v10+              | `corepack enable && corepack prepare pnpm@latest --activate`                          | `pnpm -v`        |
-| **Git**                    | [git-scm.com](https://git-scm.com)                                                    | `git --version`  |
+| Tool                       | Install                                                                                                   | Check            |
+| -------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------- |
+| **Docker Desktop**         | [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/)                     | `docker version` |
+| **Node.js** (see `.nvmrc`) | `nvm install`                                                                                             | `node -v`        |
+| **pnpm** v10+              | `corepack enable && corepack prepare pnpm@latest --activate`                                              | `pnpm -v`        |
+| **uv**                     | [docs.astral.sh/uv/getting-started/installation](https://docs.astral.sh/uv/getting-started/installation/) | `uv --version`   |
+| **Git**                    | [git-scm.com](https://git-scm.com)                                                                        | `git --version`  |
 
 Make sure Docker Desktop is **running** before you continue.
 
@@ -115,14 +114,37 @@ docker run hello-world
 <summary>git: Saving and submitting code; working with GitHub</summary>
 git is how you interact with GitHub from your instance of the code. You often already have git. If not, here's a link.
 
-1. Go to https://git-scm.com/install/ and download the correct version. During install, if you don't know what anything means, just leave defaults and keep hitting Next.
+1. Go to <https://git-scm.com/install/> and download the correct version. During install, if you don't know what anything means, just leave defaults and keep hitting Next.
+
 </details>
 
 <details>
 <summary>VS Code: User interface work coding</summary>
 You will need a code editor in order to edit code! The instructions assume you will be using VS Code. If you have a different IDE, you'll have to adjust accordingly.
 
-1. Go to https://code.visualstudio.com/download and download the correct version.
+1. Go to <https://code.visualstudio.com/download> and download the correct version.
+
+</details>
+
+<details>
+<summary>uv: Python package manager for Slackbot</summary>
+
+The Slackbot app is a Python app in `apps/slackbot`. The repository root tries to run `uv sync` during `pnpm install` via the `postinstall` script. If `uv` is not installed yet, `pnpm install` will continue with a warning and skip syncing the Slackbot Python dependencies.
+
+On macOS or Linux/WSL:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Close and reopen your terminal, then verify:
+
+```bash
+uv --version
+```
+
+After installing `uv`, run `pnpm python:install` to sync the Slackbot Python dependencies.
+
 </details>
 
 <details>
@@ -149,8 +171,11 @@ The following commands will set up the base environment. If any commands fail, l
 git clone https://github.com/F3-Nation/f3-nation.git
 cd f3-nation
 nvm install        # installs the Node version in .nvmrc
+uv --version       # optional here; needed for apps/slackbot
 pnpm install
 ```
+
+`pnpm install` runs `uv sync` automatically for the Python Slackbot app when `uv` is available. If `uv --version` fails, install `uv`, then run `pnpm python:install`.
 
 ### 2. Run the one-time setup script
 
@@ -161,7 +186,7 @@ pnpm local:setup
 This script does everything automatically:
 
 - Copies each directory's `.env.example` → `.env` (skips any that already exist):
-  `apps/api`, `apps/auth`, `apps/homepage`, `apps/map`, `apps/me`, `apps/admin`, and `packages/env`
+  `apps/api`, `apps/auth`, `apps/homepage`, `apps/map`, `apps/me`, `apps/admin`, `apps/slackbot`, and `packages/env`
 - Starts the four Docker containers
 - Waits for Postgres to be ready
 - Creates the `f3-public-images` bucket in the GCS emulator
@@ -208,14 +233,15 @@ The above command will install code if you don't have it already and then open y
 pnpm dev
 ```
 
-| App      | URL                   |
-| -------- | --------------------- |
-| Map      | http://localhost:3000 |
-| API      | http://localhost:3001 |
-| Admin    | http://localhost:3002 |
-| Me       | http://localhost:3003 |
-| Auth     | http://localhost:3004 |
-| Homepage | http://localhost:3005 |
+| App      | URL                     |
+| -------- | ----------------------- |
+| Map      | <http://localhost:3000> |
+| API      | <http://localhost:3001> |
+| Admin    | <http://localhost:3002> |
+| Me       | <http://localhost:3003> |
+| Auth     | <http://localhost:3004> |
+| Homepage | <http://localhost:3005> |
+| Slackbot | <http://localhost:3006> |
 
 ---
 
@@ -231,8 +257,11 @@ The following commands will set up the base environment. If any commands fail, l
 git clone git@github.com:F3-Nation/f3-nation.git
 cd f3-nation
 nvm install        # installs the Node version in .nvmrc
+uv --version       # optional here; needed for apps/slackbot
 pnpm install
 ```
+
+`pnpm install` runs `uv sync` automatically for the Python Slackbot app when `uv` is available. If `uv --version` fails, install `uv`, then run `pnpm python:install`.
 
 ## Daily workflow
 
@@ -255,14 +284,15 @@ The Docker containers save their data in named volumes (`postgres_data`, `gcs_da
 
 Each app and shared package has its own `.env` file, copied from a `.env.example` template during `pnpm local:setup`. All template values work out-of-the-box with Docker — you don't need to edit anything to get started.
 
-| Directory           | Purpose                                                            |
-| ------------------- | ------------------------------------------------------------------ |
-| `apps/api/.env`     | API app (Next.js on port 3001)                                     |
-| `apps/auth/.env`    | Auth app (Next.js on port 3004)                                    |
-| `apps/map/.env`     | Map app (Next.js on port 3000)                                     |
-| `apps/admin/.env`   | Admin app (Next.js on port 3002)                                   |
-| `apps/me/.env`      | Me app (Next.js on port 3003)                                      |
-| `packages/env/.env` | Shared backend env root (used by `packages/db` and `packages/api`) |
+| Directory            | Purpose                                                            |
+| -------------------- | ------------------------------------------------------------------ |
+| `apps/api/.env`      | API app (Next.js on port 3001)                                     |
+| `apps/auth/.env`     | Auth app (Next.js on port 3004)                                    |
+| `apps/map/.env`      | Map app (Next.js on port 3000)                                     |
+| `apps/admin/.env`    | Admin app (Next.js on port 3002)                                   |
+| `apps/me/.env`       | Me app (Next.js on port 3003)                                      |
+| `apps/slackbot/.env` | Slackbot app (Python Socket Mode app on port 3006)                 |
+| `packages/env/.env`  | Shared backend env root (used by `packages/db` and `packages/api`) |
 
 Here's what each variable means:
 
@@ -285,7 +315,7 @@ The `5433` port is where the Docker Postgres container is exposed on your machin
 
 ### Email (Mailpit)
 
-All outbound emails are captured by [Mailpit](https://mailpit.axllent.org/) — no emails actually leave your machine. Open http://localhost:8025 to read any email the app sends (password resets, notifications, etc.).
+All outbound emails are captured by [Mailpit](https://mailpit.axllent.org/) — no emails actually leave your machine. Open <http://localhost:8025> to read any email the app sends (password resets, notifications, etc.).
 
 | Variable                   | Value                    | Meaning                                                                 |
 | -------------------------- | ------------------------ | ----------------------------------------------------------------------- |
@@ -296,14 +326,13 @@ All outbound emails are captured by [Mailpit](https://mailpit.axllent.org/) — 
 
 ### Google Cloud Storage (GCS emulator)
 
-| Variable                          | Value                   | Meaning                                                             |
-| --------------------------------- | ----------------------- | ------------------------------------------------------------------- |
-| `GCS_EMULATOR_HOST`               | `localhost:9023`        | Tells the app to use the local emulator instead of real GCS         |
-| `GOOGLE_LOGO_BUCKET_PRIVATE_KEY`  | `local-placeholder-...` | Required by env validation, but **ignored** when emulator is active |
-| `GOOGLE_LOGO_BUCKET_CLIENT_EMAIL` | `local@local.local`     | Same — ignored when emulator is active                              |
-| `GOOGLE_LOGO_BUCKET_BUCKET_NAME`  | `f3-public-images`      | The bucket name used by both the emulator and real GCS              |
+| Variable            | Value                                      | Meaning                                                             |
+| ------------------- | ------------------------------------------ | ------------------------------------------------------------------- |
+| `GCS_EMULATOR_HOST` | `localhost:9023`                           | Tells the app to use the local emulator instead of real GCS         |
+| `GCS_CREDENTIALS`   | `local-placeholder-not-used-with-emulator` | Required by env validation, but **ignored** when emulator is active |
+| `F3_CHANNEL`        | `local`                                    | Selects staging bucket (`f3-public-images-staging`) for local dev   |
 
-When `GCS_EMULATOR_HOST` is set, the upload route skips Google authentication entirely and sends files directly to the local fake-gcs-server. Uploaded logos are stored in a Docker volume and served at `http://localhost:9023/f3-public-images/<filename>`.
+When `GCS_EMULATOR_HOST` is set, the upload route skips Google authentication entirely and sends files directly to the local fake-gcs-server. Uploaded logos are stored in a Docker volume at canonical paths such as `org-logos/{orgId}.jpg` and served at `http://localhost:9023/f3-public-images-staging/<path>`.
 
 ### Client-side URLs
 
@@ -329,7 +358,7 @@ These tell each Next.js app where to find the other apps. Don't change these unl
 
 ### Browse the database with Adminer
 
-1. Open http://localhost:8080
+1. Open <http://localhost:8080>
 2. Fill in the login form:
    - **System**: PostgreSQL
    - **Server**: `f3-postgres`
@@ -377,18 +406,18 @@ Logo uploads in the Map app are handled by the GCS emulator (`fake-gcs-server`) 
 
 1. When you upload a logo, the Map app sends the image to its `/api/upload-logo` route
 2. The route detects `GCS_EMULATOR_HOST` in the env and calls the emulator instead of real GCS
-3. The emulator stores the file in the `f3-public-images` bucket
-4. The returned public URL points to `http://localhost:9023/f3-public-images/<filename>`
+3. The emulator stores the file in the `f3-public-images-staging` bucket (local `F3_CHANNEL`)
+4. The returned public URL points to `http://localhost:9023/f3-public-images-staging/org-logos/<orgId>.jpg`
 
 ### Browsing stored files
 
 To list all uploaded files in the emulator:
 
 ```bash
-curl http://localhost:9023/storage/v1/b/f3-public-images/o | jq '.items[].name'
+curl http://localhost:9023/storage/v1/b/f3-public-images-staging/o | jq '.items[].name'
 ```
 
-Individual files are directly accessible at `http://localhost:9023/f3-public-images/<filename>`.
+Individual files are directly accessible at `http://localhost:9023/f3-public-images-staging/<filename>`.
 
 ### Resetting uploaded files
 
@@ -407,7 +436,7 @@ pnpm docker:up
 # then re-create the bucket:
 curl -X POST http://localhost:9023/storage/v1/b \
   -H "Content-Type: application/json" \
-  -d '{"name": "f3-public-images"}'
+  -d '{"name": "f3-public-images-staging"}'
 ```
 
 ---
@@ -433,6 +462,16 @@ The `-v` flag removes the named volumes (`postgres_data`, `gcs_data`). Next time
 ---
 
 ## Troubleshooting
+
+### Slackbot dependencies were skipped because `uv` is missing
+
+Install `uv`, then sync the Slackbot Python dependencies:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv --version
+pnpm python:install
+```
 
 ### Port already in use
 
@@ -492,7 +531,7 @@ The bucket needs to be created after the emulator starts. Run:
 ```bash
 curl -X POST http://localhost:9023/storage/v1/b \
   -H "Content-Type: application/json" \
-  -d '{"name": "f3-public-images"}'
+  -d '{"name": "f3-public-images-staging"}'
 ```
 
 ### Migrations failing

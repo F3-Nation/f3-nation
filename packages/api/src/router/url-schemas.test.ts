@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ZodTypeAny } from "zod";
+import type { ZodType } from "zod";
 
 import {
   facebookUrlSchema,
@@ -8,12 +8,12 @@ import {
   websiteUrlSchema,
 } from "@acme/validators";
 
-const pass = (schema: ZodTypeAny, value: string) =>
+const pass = (schema: ZodType, value: string) =>
   expect(schema.safeParse(value).success, `expected "${value}" to pass`).toBe(
     true,
   );
 
-const fail = (schema: ZodTypeAny, value: string) =>
+const fail = (schema: ZodType, value: string) =>
   expect(schema.safeParse(value).success, `expected "${value}" to fail`).toBe(
     false,
   );

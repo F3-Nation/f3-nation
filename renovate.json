@@ -1,7 +1,13 @@
 {
   "$schema": "https://json.schemastore.org/renovate.json",
-  "extends": ["config:recommended"],
-  "enabledManagers": ["github-actions", "npm"],
+  "extends": ["config:recommended", "group:allNonMajor"],
+  "enabledManagers": [
+    "github-actions",
+    "npm",
+    "docker-compose",
+    "dockerfile",
+    "custom.regex"
+  ],
   "timezone": "America/New_York",
   "schedule": ["before 9am on Monday"],
   "dependencyDashboard": true,
@@ -11,6 +17,17 @@
   "rangeStrategy": "bump",
   "pinDigests": true,
   "prConcurrentLimit": 10,
+  "vulnerabilityAlerts": { "groupName": null, "schedule": [] },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Keep the `sharp@x.y.z` reinstall pin in app Dockerfiles updated",
+      "managerFilePatterns": ["/^apps/.+/Dockerfile$/"],
+      "matchStrings": ["sharp@(?<currentValue>[0-9.]+)"],
+      "depNameTemplate": "sharp",
+      "datasourceTemplate": "npm"
+    }
+  ],
   "packageRules": [
     {
       "description": "Group first-party GitHub Actions (actions/*); auto-merge minor and patch — low supply-chain risk",
@@ -30,103 +47,6 @@
       "description": "Disable noisy peerDependency update PRs",
       "matchDepTypes": ["peerDependencies"],
       "enabled": false
-    },
-    {
-      "description": "Group Next.js ecosystem packages",
-      "groupName": "Next.js",
-      "matchDepTypes": ["pnpm.catalog.default"],
-      "matchPackageNames": [
-        "next",
-        "next-auth",
-        "next-themes",
-        "@sentry/nextjs",
-        "@scalar/nextjs-api-reference",
-        "@t3-oss/env-nextjs"
-      ]
-    },
-    {
-      "description": "Group React core packages",
-      "groupName": "React",
-      "matchDepTypes": ["pnpm.catalog.default"],
-      "matchPackageNames": [
-        "react",
-        "react-dom",
-        "@types/react",
-        "@types/react-dom"
-      ]
-    },
-    {
-      "description": "Group all @radix-ui/* packages",
-      "groupName": "Radix UI",
-      "matchDepTypes": ["pnpm.catalog.default"],
-      "matchPackageNames": ["@radix-ui/*"]
-    },
-    {
-      "description": "Group TanStack packages",
-      "groupName": "TanStack",
-      "matchDepTypes": ["pnpm.catalog.default"],
-      "matchPackageNames": ["@tanstack/*"]
-    },
-    {
-      "description": "Group oRPC packages",
-      "groupName": "oRPC",
-      "matchDepTypes": ["pnpm.catalog.default"],
-      "matchPackageNames": ["@orpc/*"]
-    },
-    {
-      "description": "Group Drizzle ORM packages",
-      "groupName": "Drizzle ORM",
-      "matchDepTypes": ["pnpm.catalog.default"],
-      "matchPackageNames": ["drizzle-orm", "drizzle-kit", "drizzle-zod"]
-    },
-    {
-      "description": "Group testing packages",
-      "groupName": "Testing",
-      "matchDepTypes": ["pnpm.catalog.default"],
-      "matchPackageNames": [
-        "vitest",
-        "@vitest/*",
-        "@testing-library/*",
-        "jsdom",
-        "vitest-canvas-mock"
-      ]
-    },
-    {
-      "description": "Group ESLint packages",
-      "groupName": "ESLint",
-      "matchDepTypes": ["pnpm.catalog.default"],
-      "matchPackageNames": [
-        "eslint",
-        "typescript-eslint",
-        "eslint-config-turbo",
-        "eslint-plugin-import-x",
-        "eslint-plugin-jsx-a11y",
-        "eslint-plugin-react",
-        "eslint-plugin-react-hooks",
-        "@next/eslint-plugin-next"
-      ]
-    },
-    {
-      "description": "Group Prettier and formatting packages",
-      "groupName": "Prettier",
-      "matchDepTypes": ["pnpm.catalog.default"],
-      "matchPackageNames": [
-        "prettier",
-        "prettier-plugin-tailwindcss",
-        "@ianvs/prettier-plugin-sort-imports"
-      ]
-    },
-    {
-      "description": "Group Tailwind CSS packages",
-      "groupName": "Tailwind CSS",
-      "matchDepTypes": ["pnpm.catalog.default"],
-      "matchPackageNames": [
-        "tailwindcss",
-        "tailwind-merge",
-        "tailwindcss-animate",
-        "autoprefixer",
-        "postcss"
-      ]
     }
   ]
 }
