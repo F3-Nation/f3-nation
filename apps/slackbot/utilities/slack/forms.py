@@ -97,7 +97,7 @@ BACKBLAST_FORM = orm.BlockView(
             label="Total PAX Count",
             action=actions.BACKBLAST_COUNT,
             optional=True,
-            element=orm.PlainTextInputElement(placeholder="Total PAX count including FNGs"),
+            element=orm.NumberInputElement(placeholder="Total PAX count including FNGs", is_decimal_allowed=False),
             hint="If left blank, this will be calculated automatically from the fields above.",
         ),
         orm.InputBlock(
