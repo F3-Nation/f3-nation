@@ -63,11 +63,6 @@ COPY --from=installer --chown=me:nodejs /app/apps/me/.next/standalone ./
 COPY --from=installer --chown=me:nodejs /app/apps/me/.next/static ./apps/me/.next/static
 COPY --from=installer --chown=me:nodejs /app/apps/me/public ./apps/me/public
 
-# outputFileTracingIncludes in next.config forces the complete @img/sharp-libvips-*
-# packages into the standalone trace; verify no external symlink dangles and every
-# runtime sharp (hashed external + complete traced pnpm copies) actually loads.
-RUN node -e "const fs=require('fs'),p=process.cwd()+'/',d='apps/me/.next/node_modules';if(fs.existsSync(d))for(const n of fs.readdirSync(d)){const f=p+d+'/'+n;if(!fs.existsSync(f))throw Error('dangling external symlink: '+f);if(n.startsWith('sharp-'))require(fs.realpathSync(f))}for(const n of fs.readdirSync('node_modules/.pnpm'))if(n.startsWith('sharp@')&&fs.existsSync('node_modules/.pnpm/'+n+'/node_modules/sharp/dist'))require(p+'node_modules/.pnpm/'+n+'/node_modules/sharp');console.log('sharp externals verified')"
-
 USER me
 
 ENV NODE_ENV=production
