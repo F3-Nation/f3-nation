@@ -19,6 +19,7 @@ CALENDAR_CONFIG_Q_LINEUP_DAY = "calendar_config_q_lineup_day"
 CALENDAR_CONFIG_Q_LINEUP_TIME = "calendar_config_q_lineup_time"
 CALENDAR_CONFIG_GROUP_BY_OPTION = "calendar_config_group_by_option"
 CALENDAR_CONFIG_OPEN_EVENT_COLOR = "calendar_config_open_event_color"
+CALENDAR_CONFIG_SPECIAL_DAYS_OUT = "calendar_config_special_days_out"
 
 
 def build_calendar_config_form(
@@ -54,6 +55,7 @@ def build_calendar_general_config_form(
             CALENDAR_CONFIG_CALENDAR_IMAGE_CHANNEL: region_record.q_image_posting_channel,
             CALENDAR_CONFIG_Q_LINEUP_DAY: safe_convert(region_record.send_q_lineups_day, str) or "6",
             CALENDAR_CONFIG_Q_LINEUP_TIME: q_lineups_time,
+            CALENDAR_CONFIG_SPECIAL_DAYS_OUT: region_record.calendar_config_special_days_out,
         }
     )
     form.post_modal(
@@ -82,6 +84,7 @@ def handle_calendar_config_general(
     region_record.send_q_lineups_hour_cst = (
         safe_convert(send_q_lineups_time.split(":")[0], int) if send_q_lineups_time else 17
     )
+    region_record.calendar_config_special_days_out = safe_convert(safe_get(values, CALENDAR_CONFIG_SPECIAL_DAYS_OUT), int)
     DbManager.update_records(
         cls=SlackSpace,
         filters=[SlackSpace.team_id == region_record.team_id],
@@ -160,6 +163,18 @@ CALENDAR_CONFIG_GENERAL_FORM = orm.BlockView(
             action=CALENDAR_CONFIG_CALENDAR_IMAGE_CHANNEL,
             element=orm.ChannelsSelectElement(placeholder="Select a channel"),
             optional=True,
+        ),
+        orm.InputBlock(
+            label="Special Days Out",
+            action=CALENDAR_CONFIG_SPECIAL_DAYS_OUT,
+            element=orm.NumberInputElement(
+                placeholder="Enter a number",
+                min_value=0,
+                is_decimal_allowed=False,
+                initial_value=180,
+            ),
+            optional=True,
+            hint="This setting controls how many days in advance special days are displayed on the calendar image. Set to 0 to disable special days.",
         ),
         orm.InputBlock(
             label="Group Calendar By Option",
