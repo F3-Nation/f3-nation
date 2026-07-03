@@ -1,5 +1,12 @@
 # Changelog
 
+## [7.0.2](https://github.com/F3-Nation/f3-nation/compare/map@7.0.1...map@7.0.2) (2026-07-03)
+
+
+### Bug Fixes
+
+* **repo:** purge pnpm-store sharp shadow so runner reinstall loads libvips ([#556](https://github.com/F3-Nation/f3-nation/issues/556)) ([1f6874c](https://github.com/F3-Nation/f3-nation/commit/1f6874c2ad54f3ba464416b28dffbf0a54e79eac))
+
 ## [7.0.1](https://github.com/F3-Nation/f3-nation/compare/map@7.0.0...map@7.0.1) (2026-07-02)
 
 
