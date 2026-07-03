@@ -8,6 +8,12 @@ const config = {
   // pino-pretty relies on worker threads (thread-stream); keep pino external so
   // Next.js does not try to bundle it.
   serverExternalPackages: ["pino", "pino-pretty", "thread-stream"],
+
+  // Turbopack's standalone trace drops the dlopen'd libvips shared library from
+  // @img/sharp-libvips-*; force the complete packages into the trace.
+  outputFileTracingIncludes: {
+    "/*": ["../../node_modules/.pnpm/@img+sharp-libvips-*/**/*"],
+  },
   typescript: { ignoreBuildErrors: true },
 };
 
