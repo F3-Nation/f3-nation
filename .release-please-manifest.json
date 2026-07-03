@@ -1,9 +1,9 @@
 {
-  "apps/api": "6.0.3",
-  "apps/admin": "2.0.3",
-  "apps/auth": "2.0.3",
+  "apps/api": "6.0.4",
+  "apps/admin": "2.0.4",
+  "apps/auth": "2.0.4",
   "apps/homepage": "1.2.1",
-  "apps/map": "7.0.3",
-  "apps/me": "2.0.3",
+  "apps/map": "7.0.4",
+  "apps/me": "2.0.4",
   "apps/slackbot": "2.0.1"
 }

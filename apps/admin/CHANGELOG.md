@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.4](https://github.com/F3-Nation/f3-nation/compare/admin@2.0.3...admin@2.0.4) (2026-07-03)
+
+
+### Bug Fixes
+
+* **repo:** trace libvips into standalone output instead of reinstalling sharp ([#560](https://github.com/F3-Nation/f3-nation/issues/560)) ([fe1dca6](https://github.com/F3-Nation/f3-nation/commit/fe1dca66dbf5f00758b4fef04522ec946d38115d))
+
 ## [2.0.3](https://github.com/F3-Nation/f3-nation/compare/admin@2.0.2...admin@2.0.3) (2026-07-03)
 
 
