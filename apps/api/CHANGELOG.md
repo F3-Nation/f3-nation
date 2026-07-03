@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.0.3](https://github.com/F3-Nation/f3-nation/compare/api@6.0.2...api@6.0.3) (2026-07-03)
+
+
+### Bug Fixes
+
+* **repo:** repoint Turbopack hashed sharp symlink after runner reinstall ([#558](https://github.com/F3-Nation/f3-nation/issues/558)) ([c8bec3a](https://github.com/F3-Nation/f3-nation/commit/c8bec3a9067d4620b4f64b25391cce0406e0e4a9))
+
 ## [6.0.2](https://github.com/F3-Nation/f3-nation/compare/api@6.0.1...api@6.0.2) (2026-07-03)
 
 
