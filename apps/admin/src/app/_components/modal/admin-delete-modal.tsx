@@ -103,6 +103,7 @@ export default function AdminDeleteModal({
           break;
         case DeleteType.POSITION:
           await invalidateQueries("position");
+          break;
         case DeleteType.EVENT_INSTANCE:
           await invalidateQueries("eventInstance");
           await invalidateQueries("map");

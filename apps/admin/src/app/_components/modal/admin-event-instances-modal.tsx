@@ -209,6 +209,7 @@ export default function AdminEventInstancesModal({
     orpc.eventInstance.crupdate.mutationOptions({
       onSuccess: async () => {
         await invalidateQueries("eventInstance");
+        await invalidateQueries("map");
         closeModal();
         toast.success(
           isEditing
@@ -242,11 +243,12 @@ export default function AdminEventInstancesModal({
 
       const trimmedName = formData.name?.trim();
       const descTrim = formData.description?.trim();
+      const endDate = formData.endDate?.trim() ?? null;
       await crupdateEventInstance.mutateAsync({
         ...(isEditing && data.id != null ? { id: data.id } : {}),
         orgId: formData.orgId,
         startDate: formData.startDate,
-        endDate: formData.endDate,
+        endDate: endDate,
         locationId: formData.locationId ?? null,
         name: trimmedName ?? undefined,
         description: descTrim == null || descTrim === "" ? null : descTrim,

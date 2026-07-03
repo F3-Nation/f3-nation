@@ -208,7 +208,6 @@ export const FilteredMapResultsProvider = (params: { children: ReactNode }) => {
       number,
       { seriesException: string | null; startDate: string }[]
     >();
-    const standaloneInstances: NonNullable<typeof upcomingInstancesData> = [];
 
     if (upcomingInstancesData) {
       for (const instance of upcomingInstancesData) {
@@ -241,8 +240,8 @@ export const FilteredMapResultsProvider = (params: { children: ReactNode }) => {
               eventTypes: event[4],
               aoName: event[5],
               aoLogo: event[6],
-              startDate: event[5],
-              endDate: event[6],
+              startDate: event[7],
+              endDate: event[8],
             };
             return {
               ...eventObj,
@@ -253,52 +252,10 @@ export const FilteredMapResultsProvider = (params: { children: ReactNode }) => {
       },
     );
 
-    const locationMap = new Map<
-      number,
-      (typeof allLocationMarkerFilterData)[number]
-    >();
-    for (const loc of allLocationMarkerFilterData) {
-      locationMap.set(loc.id, loc);
-    }
-
-    for (const instance of standaloneInstances) {
-      if (
-        instance.locationId == null ||
-        instance.lat == null ||
-        instance.lon == null
-      )
-        continue;
-      const dayOfWeek = dateToDayOfWeek(instance.startDate);
-      const instanceEvent = {
-        id: -instance.id,
-        name: instance.name,
-        dayOfWeek: dayOfWeek,
-        startTime: instance.startTime,
-        eventTypes: instance.eventTypes,
-        aoName: instance.aoName,
-        aoLogo: instance.aoLogo,
-        startDate: instance.startDate,
-        endDate: null,
-        mapStatus: "highlight" as MapStatus,
-      };
-
-      const existing = locationMap.get(instance.locationId);
-      if (existing) {
-        existing.events.push(instanceEvent);
-      } else {
-        const newLocation = {
-          id: instance.locationId,
-          aoName: instance.aoName ?? "",
-          logo: instance.aoLogo,
-          lat: instance.lat,
-          lon: instance.lon,
-          fullAddress: instance.fullAddress,
-          events: [instanceEvent],
-        };
-        locationMap.set(instance.locationId, newLocation);
-        allLocationMarkerFilterData.push(newLocation);
-      }
-    }
+    mergeUpcomingInstancesIntoMarkers({
+      locationMarkers: allLocationMarkerFilterData,
+      upcomingInstancesData,
+    });
 
     return allLocationMarkerFilterData;
   }, [mapEventAndLocationData, upcomingInstancesData]);

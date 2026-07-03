@@ -522,7 +522,12 @@ export const mapLocationRouter = os.router({
             eq(schema.eventTypes.isActive, true),
           ),
         )
-        .where(eq(schema.locations.id, input.locationId))
+        .where(
+          and(
+            eq(schema.locations.id, input.locationId),
+            eq(schema.locations.isActive, true),
+          ),
+        )
         .groupBy(
           schema.locations.id,
           schema.events.id,
@@ -533,8 +538,15 @@ export const mapLocationRouter = os.router({
       const location = results[0]?.location;
       const events = results
         .map((r) => r.event)
-        .filter((e) => e.id != null)
-        .map((e) => ({ ...e, id: e.id!, name: e.name! }));
+        .filter(
+          (
+            e,
+          ): e is NonNullable<(typeof results)[number]["event"]> & {
+            id: number;
+            name: string;
+          } => e?.id != null && e.name != null,
+        )
+        .map((e) => ({ ...e, id: e.id, name: e.name }));
 
       // Return a message instead of throwing so the client can show a friendly
       // "deleted/unavailable" panel without crashing into an error state.
