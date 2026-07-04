@@ -25,7 +25,7 @@ export interface AuthUser {
   picture?: string;
 }
 
-export interface OauthClient {
+export interface OAuthClient {
   clientId: string;
   redirectUri: string;
   authServerUrl: string;
@@ -71,7 +71,7 @@ export class AuthClient {
   }
 
   /** Returns public OAuth config (no secrets). Safe for client-side use. */
-  getOAuthConfig(): OauthClient {
+  getOAuthConfig(): OAuthClient {
     return {
       clientId: this.config.clientId,
       redirectUri: this.config.redirectUri,
