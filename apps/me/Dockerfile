@@ -49,6 +49,9 @@ RUN printf '\nverifyDepsBeforeRun: false\n' >> pnpm-workspace.yaml
 
 RUN pnpm turbo build --filter=f3-me
 
+# Assert the next.config libvips tracing include landed (a zero-match glob is a silent no-op).
+RUN test -n "$(find apps/me/.next/standalone -name 'libvips-cpp*')"
+
 # ---------- Stage 3: Production runner ----------
 FROM node:24.18.0-alpine AS runner
 
