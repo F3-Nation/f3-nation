@@ -102,7 +102,12 @@ export async function seedApiKeys(
     if (keyId) {
       // Read-only keys (role: null) get no association — absence of a role is
       // the system's read-only access level.
-      const roleId = apiKey.role === "editor" ? roleIds.editorId : null;
+      const roleId =
+        apiKey.role === "admin"
+          ? roleIds.adminId
+          : apiKey.role === "editor"
+            ? roleIds.editorId
+            : null;
       if (roleId !== null) {
         await db
           .insert(schema.rolesXApiKeysXOrg)

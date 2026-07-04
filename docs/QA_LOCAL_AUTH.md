@@ -180,7 +180,7 @@ The `scripts/qa/extract-mfa-link.sh` helper handles the log-scrape + curl-fetch 
 
 ## Multi-service log capture
 
-`pnpm dev` from the repo root runs `turbo dev --parallel`, which interleaves stdout from every workspace into one stream. For QA you usually want apps/auth's stream isolated:
+`pnpm dev` from the repo root runs the TypeScript apps through Turbo and interleaves stdout from every selected workspace into one stream. For QA you usually want apps/auth's stream isolated:
 
 ```bash
 # Best: run apps/auth alone, separately from the rest

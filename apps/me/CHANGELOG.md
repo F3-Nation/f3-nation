@@ -1,5 +1,44 @@
 # Changelog
 
+## [2.0.4](https://github.com/F3-Nation/f3-nation/compare/me@2.0.3...me@2.0.4) (2026-07-03)
+
+
+### Bug Fixes
+
+* **repo:** trace libvips into standalone output instead of reinstalling sharp ([#560](https://github.com/F3-Nation/f3-nation/issues/560)) ([fe1dca6](https://github.com/F3-Nation/f3-nation/commit/fe1dca66dbf5f00758b4fef04522ec946d38115d))
+
+## [2.0.3](https://github.com/F3-Nation/f3-nation/compare/me@2.0.2...me@2.0.3) (2026-07-03)
+
+
+### Bug Fixes
+
+* **repo:** repoint Turbopack hashed sharp symlink after runner reinstall ([#558](https://github.com/F3-Nation/f3-nation/issues/558)) ([c8bec3a](https://github.com/F3-Nation/f3-nation/commit/c8bec3a9067d4620b4f64b25391cce0406e0e4a9))
+
+## [2.0.2](https://github.com/F3-Nation/f3-nation/compare/me@2.0.1...me@2.0.2) (2026-07-03)
+
+
+### Bug Fixes
+
+* **repo:** purge pnpm-store sharp shadow so runner reinstall loads libvips ([#556](https://github.com/F3-Nation/f3-nation/issues/556)) ([1f6874c](https://github.com/F3-Nation/f3-nation/commit/1f6874c2ad54f3ba464416b28dffbf0a54e79eac))
+
+## [2.0.1](https://github.com/F3-Nation/f3-nation/compare/me@2.0.0...me@2.0.1) (2026-07-02)
+
+
+### Bug Fixes
+
+* **repo:** reinstall sharp in runner stage to fix ERR_DLOPEN_FAILED ([#550](https://github.com/F3-Nation/f3-nation/issues/550)) ([faf1f68](https://github.com/F3-Nation/f3-nation/commit/faf1f68c4b3930a6db67f8cd09cd57c21a446bbc))
+
+## [2.0.0](https://github.com/F3-Nation/f3-nation/compare/me@1.5.1...me@2.0.0) (2026-07-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* **slackbot:** slackbot monorepo integration ([#425](https://github.com/F3-Nation/f3-nation/issues/425))
+
+### Features
+
+* **slackbot:** slackbot monorepo integration ([#425](https://github.com/F3-Nation/f3-nation/issues/425)) ([6f8f8ad](https://github.com/F3-Nation/f3-nation/commit/6f8f8ad0bb0bf308016d7303346124f0410e8295))
+
 ## [1.5.1](https://github.com/F3-Nation/f3-nation/compare/me@1.5.0...me@1.5.1) (2026-07-01)
 
 

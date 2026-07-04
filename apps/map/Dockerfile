@@ -33,7 +33,7 @@ RUN corepack enable
 # Install dependencies from pruned lockfile
 COPY --from=builder /app/out/json/ .
 COPY --from=builder /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --ignore-scripts
 
 # Copy source and build
 COPY --from=builder /app/out/full/ .
@@ -54,6 +54,9 @@ ENV SKIP_SSG=1
 RUN printf '\nverifyDepsBeforeRun: false\n' >> pnpm-workspace.yaml
 
 RUN pnpm turbo build --filter=f3-map
+
+# Assert the next.config libvips tracing include landed (a zero-match glob is a silent no-op).
+RUN test -n "$(find apps/map/.next/standalone -name 'libvips-cpp*')"
 
 # ---------- Stage 3: Production runner ----------
 FROM node:24.18.0-alpine AS runner

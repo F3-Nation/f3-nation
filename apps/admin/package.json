@@ -1,6 +1,6 @@
 {
   "name": "f3-admin",
-  "version": "1.4.1",
+  "version": "2.0.4",
   "private": true,
   "type": "module",
   "scripts": {
