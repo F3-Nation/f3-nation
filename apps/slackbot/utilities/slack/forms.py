@@ -428,6 +428,7 @@ CONFIG_GENERAL_FORM = orm.BlockView(
                 initial_value="no",
                 options=orm.as_selector_options(names=["Yes", "No"], values=["yes", "no"]),
             ),
+            hint="If enabled, only Qs, CoQs, Site-Q, AOQs, or admins can edit backblasts.",  # noqa: E501
         ),
         orm.DividerBlock(),
         orm.InputBlock(
