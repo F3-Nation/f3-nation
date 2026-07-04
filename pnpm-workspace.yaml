@@ -108,7 +108,6 @@ catalog:
   prettier: ^3.8.4
   prettier-plugin-tailwindcss: ^0.8.0
   react: ^19.2.7
-  react-day-picker: ^8.10.2
   react-dom: ^19.2.7
   react-hook-form: ^7.80.0
   react-phone-number-input: ^3.4.17
