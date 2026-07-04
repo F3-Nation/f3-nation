@@ -49,8 +49,7 @@
     "react-day-picker": "catalog:",
     "react-hook-form": "catalog:",
     "sonner": "catalog:",
-    "tailwind-merge": "catalog:",
-    "vaul": "catalog:"
+    "tailwind-merge": "catalog:"
   },
   "devDependencies": {
     "@acme/eslint-config": "workspace:^0.2.0",

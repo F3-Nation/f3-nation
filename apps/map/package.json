@@ -56,7 +56,6 @@
     "server-only": "catalog:",
     "supercluster": "catalog:",
     "superjson": "catalog:",
-    "vaul": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
