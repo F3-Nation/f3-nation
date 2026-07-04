@@ -31,6 +31,19 @@ export interface OauthClient {
   authServerUrl: string;
 }
 
+export interface OAuthStatePayload {
+  csrfToken: string;
+  returnTo: string;
+  timestamp: number;
+}
+
+export interface OAuthLoginFlowArtifacts {
+  csrfToken: string;
+  codeVerifier: string;
+  codeChallenge: string;
+  state: string;
+}
+
 // ---------------------------------------------------------------------------
 // SDK Error
 // ---------------------------------------------------------------------------
@@ -212,4 +225,157 @@ export class AuthClient {
       );
     }
   }
+}
+
+function getCrypto(): Crypto {
+  if (!globalThis.crypto) {
+    throw new AuthError(
+      "Web Crypto API is not available",
+      "crypto_unavailable",
+    );
+  }
+
+  return globalThis.crypto;
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  if (typeof Buffer !== "undefined") {
+    return Buffer.from(bytes).toString("base64");
+  }
+
+  if (typeof btoa !== "function") {
+    throw new AuthError(
+      "Base64 encoding is not available",
+      "base64_unavailable",
+    );
+  }
+
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+
+  return btoa(binary);
+}
+
+function base64ToBytes(base64: string): Uint8Array {
+  if (typeof Buffer !== "undefined") {
+    return Uint8Array.from(Buffer.from(base64, "base64"));
+  }
+
+  if (typeof atob !== "function") {
+    throw new AuthError(
+      "Base64 decoding is not available",
+      "base64_unavailable",
+    );
+  }
+
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+
+  return bytes;
+}
+
+function toBase64Url(bytes: Uint8Array): string {
+  return bytesToBase64(bytes)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+function fromBase64Url(base64url: string): Uint8Array {
+  const base64 = base64url.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+  return base64ToBytes(padded);
+}
+
+function randomBase64Url(bytesLength: number): string {
+  const bytes = new Uint8Array(bytesLength);
+  getCrypto().getRandomValues(bytes);
+  return toBase64Url(bytes);
+}
+
+export function isSafeReturnPath(path: string): boolean {
+  if (!path.startsWith("/")) return false;
+  if (path.startsWith("//") || path.startsWith("/\\")) return false;
+  if (/[\\\r\n\t]/.test(path)) return false;
+  return true;
+}
+
+export function sanitizeReturnPath(
+  path: string | null | undefined,
+  fallbackPath: string,
+): string {
+  if (!path) return fallbackPath;
+  return isSafeReturnPath(path) ? path : fallbackPath;
+}
+
+export function createOAuthState(payload: OAuthStatePayload): string {
+  const json = JSON.stringify(payload);
+  const bytes = new TextEncoder().encode(json);
+  return toBase64Url(bytes);
+}
+
+export function parseOAuthState(stateParam: string): OAuthStatePayload | null {
+  try {
+    const bytes = fromBase64Url(stateParam);
+    const state = JSON.parse(new TextDecoder().decode(bytes)) as unknown;
+
+    if (typeof state !== "object" || state === null) return null;
+
+    const candidate = state as Partial<OAuthStatePayload>;
+    if (
+      typeof candidate.csrfToken !== "string" ||
+      typeof candidate.returnTo !== "string" ||
+      typeof candidate.timestamp !== "number" ||
+      !Number.isFinite(candidate.timestamp)
+    ) {
+      return null;
+    }
+
+    return {
+      csrfToken: candidate.csrfToken,
+      returnTo: candidate.returnTo,
+      timestamp: candidate.timestamp,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function isOAuthStateExpired(
+  state: Pick<OAuthStatePayload, "timestamp">,
+  maxAgeMs = 600_000,
+  nowMs = Date.now(),
+): boolean {
+  return nowMs - state.timestamp > maxAgeMs;
+}
+
+export async function createOAuthLoginFlowArtifacts(params: {
+  returnTo: string;
+  timestamp?: number;
+}): Promise<OAuthLoginFlowArtifacts> {
+  const csrfToken = getCrypto().randomUUID();
+  const codeVerifier = randomBase64Url(32);
+  const digest = await getCrypto().subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(codeVerifier),
+  );
+  const codeChallenge = toBase64Url(new Uint8Array(digest));
+
+  const state = createOAuthState({
+    csrfToken,
+    returnTo: params.returnTo,
+    timestamp: params.timestamp ?? Date.now(),
+  });
+
+  return {
+    csrfToken,
+    codeVerifier,
+    codeChallenge,
+    state,
+  };
 }
