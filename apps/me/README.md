@@ -153,15 +153,15 @@ f3-me uses **tag-based deployment** via GitHub Actions and GCP Cloud Run. This i
 
 **How it works:**
 
-1. You PR into `dev` as usual — CI runs lint, typecheck, and tests
-2. When you're ready to deploy, you tag the commit on `dev` with `me@X.Y.Z`
+1. You PR into `main` as usual — CI runs lint, typecheck, and tests
+2. When you're ready to deploy, you tag the commit on `main` with `me@X.Y.Z`
 3. GitHub Actions builds a Docker image **once**
 4. The image deploys to **staging** automatically
 5. You verify on staging, then go to GitHub Actions and **approve** the production deploy
 6. The **same image** (no rebuild) deploys to **production**
 
 ```text
-PR → dev → tag me@1.2.3 → [CI passes] → build image → deploy staging → [approve] → deploy prod
+PR → main → tag me@1.2.3 → [CI passes] → build image → deploy staging → [approve] → deploy prod
 ```
 
 ### GCP Projects
@@ -173,18 +173,18 @@ PR → dev → tag me@1.2.3 → [CI passes] → build image → deploy staging �
 
 ### How to Deploy (Step by Step)
 
-#### 1. Merge your PR into `dev`
+#### 1. Merge your PR into `main`
 
-Wait for CI to pass on `dev`. You can verify in the GitHub Actions tab.
+Wait for CI to pass on `main`. You can verify in the GitHub Actions tab.
 
 #### 2. Tag the commit
 
 From the command line:
 
 ```bash
-# Make sure you're on dev and up to date
-git checkout dev
-git pull origin dev
+# Make sure you're on main and up to date
+git checkout main
+git pull origin main
 
 # Create the tag (use semantic versioning)
 git tag me@1.0.0
@@ -197,7 +197,7 @@ Or from GitHub's web UI:
 
 1. Go to the repo → **Releases** → **Draft a new release**
 2. Click **Choose a tag** → type `me@1.0.0` → **Create new tag: me@1.0.0 on publish**
-3. Set **Target** to `dev` (or the specific commit SHA)
+3. Set **Target** to `main` (or the specific commit SHA)
 4. Click **Publish release**
 
 **Tag naming:** Use `me@MAJOR.MINOR.PATCH` (e.g., `me@1.0.0`, `me@1.1.0`, `me@1.1.1`). The `me@` prefix scopes it to this app so other app tags won't trigger it.
