@@ -438,7 +438,7 @@ importers:
   apps/admin:
     dependencies:
       '@acme/api':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../../packages/api
       '@acme/logger':
         specifier: workspace:*
@@ -447,7 +447,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/mail
       '@acme/shared':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../packages/shared
       '@acme/sso':
         specifier: workspace:*
@@ -456,13 +456,13 @@ importers:
         specifier: workspace:*
         version: link:../../packages/storage
       '@acme/tailwind-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/tailwind
       '@acme/ui':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../packages/ui
       '@acme/validators':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../packages/validators
       '@orpc/client':
         specifier: 'catalog:'
@@ -532,10 +532,10 @@ importers:
         version: 4.4.3
     devDependencies:
       '@acme/eslint-config':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../../tooling/eslint
       '@acme/prettier-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/prettier
       '@acme/tsconfig':
         specifier: workspace:*
@@ -577,25 +577,25 @@ importers:
   apps/api:
     dependencies:
       '@acme/api':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../../packages/api
       '@acme/auth':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../packages/auth
       '@acme/db':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../packages/db
       '@acme/logger':
         specifier: workspace:*
         version: link:../../packages/logger
       '@acme/shared':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../packages/shared
       '@acme/ui':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../packages/ui
       '@acme/validators':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../packages/validators
       '@orpc/openapi':
         specifier: 'catalog:'
@@ -635,16 +635,16 @@ importers:
         version: 4.4.3
     devDependencies:
       '@acme/eslint-config':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../../tooling/eslint
       '@acme/prettier-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/prettier
       '@acme/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/typescript
       '@acme/vitest-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/vitest
       '@testing-library/jest-dom':
         specifier: 'catalog:'
@@ -856,13 +856,13 @@ importers:
   apps/map:
     dependencies:
       '@acme/api':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../../packages/api
       '@acme/auth':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../packages/auth
       '@acme/db':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../packages/db
       '@acme/logger':
         specifier: workspace:*
@@ -871,19 +871,19 @@ importers:
         specifier: workspace:*
         version: link:../../packages/mail
       '@acme/shared':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../packages/shared
       '@acme/storage':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../../packages/storage
       '@acme/tailwind-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/tailwind
       '@acme/ui':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../packages/ui
       '@acme/validators':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../packages/validators
       '@auth/core':
         specifier: 0.41.2
@@ -980,16 +980,16 @@ importers:
         version: 4.4.3
     devDependencies:
       '@acme/eslint-config':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../../tooling/eslint
       '@acme/prettier-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/prettier
       '@acme/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/typescript
       '@acme/vitest-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/vitest
       '@tailwindcss/postcss':
         specifier: 'catalog:'
@@ -1061,13 +1061,13 @@ importers:
   apps/me:
     dependencies:
       '@acme/api':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../../packages/api
       '@acme/logger':
         specifier: workspace:*
         version: link:../../packages/logger
       '@acme/shared':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../packages/shared
       '@acme/sso':
         specifier: workspace:*
@@ -1076,7 +1076,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/storage
       '@acme/ui':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../packages/ui
       '@orpc/client':
         specifier: 'catalog:'
@@ -1113,16 +1113,16 @@ importers:
         version: 4.4.3
     devDependencies:
       '@acme/eslint-config':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../../tooling/eslint
       '@acme/tailwind-config':
         specifier: workspace:*
         version: link:../../tooling/tailwind
       '@acme/tsconfig':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/typescript
       '@acme/vitest-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/vitest
       '@tailwindcss/postcss':
         specifier: 'catalog:'
@@ -1175,13 +1175,13 @@ importers:
   packages/api:
     dependencies:
       '@acme/auth':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../auth
       '@acme/db':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../db
       '@acme/env':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../env
       '@acme/logger':
         specifier: workspace:*
@@ -1190,13 +1190,13 @@ importers:
         specifier: workspace:*
         version: link:../mail
       '@acme/shared':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../shared
       '@acme/storage':
         specifier: workspace:*
         version: link:../storage
       '@acme/validators':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../validators
       '@orpc/experimental-ratelimit':
         specifier: 'catalog:'
@@ -1224,13 +1224,13 @@ importers:
         version: 4.4.3
     devDependencies:
       '@acme/eslint-config':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../../tooling/eslint
       '@acme/prettier-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/prettier
       '@acme/tsconfig':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/typescript
       '@types/lodash':
         specifier: 'catalog:'
@@ -1266,16 +1266,16 @@ importers:
   packages/auth:
     dependencies:
       '@acme/db':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../db
       '@acme/env':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../env
       '@acme/logger':
         specifier: workspace:*
         version: link:../logger
       '@acme/shared':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../shared
       '@auth/core':
         specifier: 0.41.2
@@ -1306,13 +1306,13 @@ importers:
         version: 19.2.7(react@19.2.7)
     devDependencies:
       '@acme/eslint-config':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../../tooling/eslint
       '@acme/prettier-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/prettier
       '@acme/tsconfig':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/typescript
       '@types/lodash':
         specifier: 'catalog:'
@@ -1398,13 +1398,13 @@ importers:
         version: 4.4.3
     devDependencies:
       '@acme/eslint-config':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../../tooling/eslint
       '@acme/prettier-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/prettier
       '@acme/tsconfig':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/typescript
       dotenv-cli:
         specifier: 'catalog:'
@@ -1457,13 +1457,13 @@ importers:
         version: 9.0.1
     devDependencies:
       '@acme/eslint-config':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../../tooling/eslint
       '@acme/prettier-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/prettier
       '@acme/tsconfig':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/typescript
       '@types/nodemailer':
         specifier: 'catalog:'
@@ -1494,13 +1494,13 @@ importers:
         version: 5.0.14(@types/react@19.2.17)(react@19.2.7)(use-sync-external-store@1.6.0(react@19.2.7))
     devDependencies:
       '@acme/eslint-config':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../../tooling/eslint
       '@acme/prettier-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/prettier
       '@acme/tsconfig':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/typescript
       '@faker-js/faker':
         specifier: 'catalog:'
@@ -1561,13 +1561,13 @@ importers:
         version: 4.4.3
     devDependencies:
       '@acme/eslint-config':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../../tooling/eslint
       '@acme/prettier-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/prettier
       '@acme/tsconfig':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/typescript
       '@types/node':
         specifier: 'catalog:'
@@ -1691,13 +1691,13 @@ importers:
         version: 3.6.0
     devDependencies:
       '@acme/eslint-config':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../../tooling/eslint
       '@acme/prettier-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/prettier
       '@acme/tsconfig':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/typescript
       '@types/lodash':
         specifier: 'catalog:'
@@ -1783,10 +1783,10 @@ importers:
         version: 8.62.0(eslint@10.5.0(jiti@2.7.0))(typescript@6.0.3)
     devDependencies:
       '@acme/prettier-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../prettier
       '@acme/tsconfig':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../typescript
       eslint:
         specifier: 'catalog:'
@@ -1811,7 +1811,7 @@ importers:
         version: 0.8.0(@ianvs/prettier-plugin-sort-imports@4.7.1(prettier@3.8.4))(prettier@3.8.4)
     devDependencies:
       '@acme/tsconfig':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../typescript
       typescript:
         specifier: 'catalog:'
@@ -1872,13 +1872,13 @@ importers:
         version: 1.4.0
     devDependencies:
       '@acme/eslint-config':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../eslint
       '@acme/prettier-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../prettier
       '@acme/tsconfig':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../typescript
       eslint:
         specifier: 'catalog:'
@@ -1905,13 +1905,13 @@ importers:
   tooling/vitest:
     devDependencies:
       '@acme/eslint-config':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../eslint
       '@acme/prettier-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../prettier
       '@acme/tsconfig':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../typescript
       eslint:
         specifier: 'catalog:'
