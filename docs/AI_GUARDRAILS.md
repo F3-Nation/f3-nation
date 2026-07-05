@@ -79,7 +79,7 @@ and signs off — no exceptions:
 
 Plus these explicit gates regardless of domain:
 
-- Merging to `dev`/`main` (a human merges; AI opens PRs).
+- Merging to `main` (a human merges; AI opens PRs).
 - Approving a spec's acceptance criteria.
 - Any change to auth/RBAC behavior.
 - Deleting data or running irreversible migrations.
