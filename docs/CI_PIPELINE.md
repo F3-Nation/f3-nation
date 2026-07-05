@@ -1,6 +1,6 @@
 # CI Pipeline — Gate Audit
 
-> What must pass before code reaches `dev`, staging, and production, in order;
+> What must pass before code reaches `dev`, `staging`, and `production`, in order;
 > plus the two reserved rungs (per-PR preview environments and a blocking E2E
 > tier) that will be added later. This document describes the pipeline as it
 > exists today — it changes when the workflows change, and any drift is a bug
