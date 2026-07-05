@@ -6,7 +6,18 @@ const nextConfig: NextConfig = {
   // pino-pretty relies on worker threads (thread-stream); keep pino external so
   // Next.js does not try to bundle it.
   serverExternalPackages: ["pino", "pino-pretty", "thread-stream"],
+
+  // Turbopack's standalone trace drops the dlopen'd libvips shared library from
+  // @img/sharp-libvips-*; force the complete packages into the trace. A zero-match
+  // glob is a silent no-op, so the Dockerfile asserts libvips landed in standalone.
+  outputFileTracingIncludes: {
+    "/*": ["../../node_modules/.pnpm/@img+sharp-libvips-*/**/*"],
+  },
   images: {
+    // Local fake-gcs emulator serves images from localhost, which Next.js 16's
+    // image optimizer blocks by default (SSRF guard). Only bypass it when the
+    // emulator is actually configured, never in staging/prod.
+    dangerouslyAllowLocalIP: !!process.env.GCS_EMULATOR_HOST,
     remotePatterns: [
       {
         protocol: "https",

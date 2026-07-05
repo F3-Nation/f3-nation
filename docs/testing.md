@@ -11,7 +11,7 @@ drifting across config comments.
 - A single app/package: `pnpm -C apps/map test` (append `--run` for a one-shot,
   non-watch run)
 - CI runs these under the `test-coverage` check (one of the five required checks
-  enforced by the `dev` branch ruleset — see [AGENTS.md](../AGENTS.md)).
+  enforced by the `main` branch ruleset — see [AGENTS.md](../AGENTS.md)).
 
 Use Vitest for unit and integration tests. Name test files `*.test.ts[x]` and
 place them next to the source or under `__tests__`. Reset databases before any

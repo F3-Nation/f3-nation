@@ -209,6 +209,12 @@ export const LOCAL_API_KEYS = [
     // only assigns the editor/admin roles. See seedApiKeys.
     role: null,
   },
+  {
+    key: "local-slackbot-key",
+    name: "Slackbot (local dev)",
+    description: "Used by apps/slackbot for full Admin access",
+    role: "admin" as const,
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -238,4 +244,24 @@ export const LOCAL_OAUTH_CLIENTS = [
     scopes: "openid profile email",
     isActive: true,
   },
+];
+
+// ---------------------------------------------------------------------------
+// Attendance types (1=PAX, 2=Q, 3=Co-Q)
+// ---------------------------------------------------------------------------
+export const ATTENDANCE_TYPES = [
+  { id: 1, type: "PAX" },
+  { id: 2, type: "Q" },
+  { id: 3, type: "Co-Q" },
+];
+
+// ---------------------------------------------------------------------------
+// Event tags
+// ---------------------------------------------------------------------------
+export const EVENT_TAGS = [
+  { name: "Convergence", color: "Orange" },
+  { name: "VQ", color: "Yellow" },
+  { name: "F3Versary", color: "White" },
+  { name: "Pre-Workout", color: "Black" },
+  { name: "Off-The-Books", color: "Black" },
 ];

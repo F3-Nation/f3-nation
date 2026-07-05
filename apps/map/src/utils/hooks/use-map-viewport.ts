@@ -8,24 +8,23 @@ interface MapViewportOptions {
 
 export function useMapViewport({ padding = 0 }: MapViewportOptions = {}) {
   const map = useMap();
-  const [bbox, setBbox] = useState<BBox>([-180, -90, 180, 90]);
-  const [zoom, setZoom] = useState(0);
+  const [bbox, setBbox] = useState<BBox | null>(null);
+  const [zoom, setZoom] = useState<number | null>(null);
 
-  // observe the map to get current bounds
   useEffect(() => {
     if (!map) return;
 
-    const listener = map.addListener("idle", () => {
+    const updateViewport = () => {
       const bounds = map.getBounds();
-      const zoom = map.getZoom();
+      const currentZoom = map.getZoom();
       const projection = map.getProjection();
 
-      if (!bounds || !zoom || !projection) return;
+      if (!bounds || currentZoom == null || !projection) return;
 
       const sw = bounds.getSouthWest();
       const ne = bounds.getNorthEast();
 
-      const paddingDegrees = degreesPerPixel(zoom) * padding;
+      const paddingDegrees = degreesPerPixel(currentZoom) * padding;
 
       const n = Math.min(90, ne.lat() + paddingDegrees);
       const s = Math.max(-90, sw.lat() - paddingDegrees);
@@ -34,9 +33,13 @@ export function useMapViewport({ padding = 0 }: MapViewportOptions = {}) {
       const e = ne.lng() + paddingDegrees;
 
       setBbox([w, s, e, n]);
-      setZoom(zoom);
-    });
+      setZoom(currentZoom);
+    };
 
+    // Read initial viewport immediately if the map is already ready
+    updateViewport();
+
+    const listener = map.addListener("idle", updateViewport);
     return () => listener.remove();
   }, [map, padding]);
 

@@ -1,6 +1,6 @@
 {
   "name": "f3-map",
-  "version": "5.1.1",
+  "version": "7.0.4",
   "private": true,
   "type": "module",
   "scripts": {
@@ -41,7 +41,6 @@
     "dotenv-cli": "catalog:",
     "geist": "catalog:",
     "google-auth-library": "catalog:",
-    "handlebars": "catalog:",
     "lodash": "catalog:",
     "lottie-react": "catalog:",
     "lucide-react": "catalog:",
@@ -57,7 +56,6 @@
     "server-only": "catalog:",
     "supercluster": "catalog:",
     "superjson": "catalog:",
-    "vaul": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

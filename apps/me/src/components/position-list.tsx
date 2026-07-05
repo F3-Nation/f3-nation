@@ -3,7 +3,6 @@
 import { useState } from "react";
 
 import { Badge } from "@acme/ui/badge";
-import { useToast } from "@/components/ui/toast";
 import { useRemovableList, compositeKey } from "@/hooks/useRemovableList";
 import { ConfirmRemoveDialog } from "./confirm-remove-dialog";
 import type { UserPosition } from "@/lib/types";
@@ -15,7 +14,6 @@ interface PositionListProps {
 export function PositionList({
   positions: initialPositions,
 }: PositionListProps) {
-  const { toast } = useToast();
   const [positionToConfirm, setPositionToConfirm] =
     useState<UserPosition | null>(null);
   const {
@@ -29,7 +27,6 @@ export function PositionList({
     buildDeleteBody: (p) => ({ orgId: p.orgId, positionId: p.positionId }),
     shouldKeep: (item, removed) =>
       !(item.orgId === removed.orgId && item.positionId === removed.positionId),
-    toast,
     successMessage: () => ({
       title: "Position removed",
       description: "Your position assignment has been removed.",

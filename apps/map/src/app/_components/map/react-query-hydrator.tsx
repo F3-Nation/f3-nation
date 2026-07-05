@@ -14,17 +14,21 @@ export const ReactQueryHydrator = (params: {
   regionsWithLocation: RouterOutputs["map"]["location"]["regionsWithLocation"];
   children: ReactNode;
 }) => {
+  // Only hydrate when real data exists — empty arrays (from SKIP_SSG builds)
+  // would be treated as fresh by React Query, preventing the client fetch.
+  const hasEvents = params.eventsAndLocations.length > 0;
+  const hasRegions = params.regionsWithLocation.regionsWithLocation.length > 0;
+
   useQuery(
     orpc.map.location.eventsAndLocations.queryOptions({
       input: undefined,
-      // hydrate via initialData to keep same behavior
-      initialData: params.eventsAndLocations,
+      ...(hasEvents ? { initialData: params.eventsAndLocations } : {}),
     }),
   );
   useQuery(
     orpc.map.location.regionsWithLocation.queryOptions({
       input: undefined,
-      initialData: params.regionsWithLocation,
+      ...(hasRegions ? { initialData: params.regionsWithLocation } : {}),
     }),
   );
 

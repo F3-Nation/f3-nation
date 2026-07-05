@@ -31,7 +31,7 @@ export function useSupercluster<T extends GeoJsonProperties>(
   const clusters = useMemo(() => {
     // don't try to read clusters before data was loaded into the clusterer (version===0),
     // otherwise getClusters will crash
-    if (!clusterer || version === 0) return [];
+    if (!clusterer || version === 0 || !bbox || zoom == null) return [];
 
     return clusterer.getClusters(bbox, zoom);
   }, [version, clusterer, bbox, zoom]);

@@ -1,5 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 
+import { toast } from "@acme/ui/toast";
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -7,11 +9,6 @@ import { useState, useCallback, useEffect } from "react";
 export interface AvatarUploadOptions {
   currentUrl: string | null;
   onUploaded: (url: string) => void;
-  toast: (opts: {
-    title: string;
-    description: string;
-    variant?: "destructive";
-  }) => void;
 }
 
 export interface UseAvatarUploadReturn {
@@ -70,7 +67,6 @@ export function validateAvatarFile(file: File): FileValidationError | null {
 export function useAvatarUpload({
   currentUrl,
   onUploaded,
-  toast,
 }: AvatarUploadOptions): UseAvatarUploadReturn {
   const [uploading, setUploading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(currentUrl);
@@ -84,7 +80,9 @@ export function useAvatarUpload({
     async (file: File) => {
       const validationError = validateAvatarFile(file);
       if (validationError) {
-        toast({ ...validationError, variant: "destructive" });
+        toast.error(validationError.title, {
+          description: validationError.description,
+        });
         return;
       }
 
@@ -109,21 +107,18 @@ export function useAvatarUpload({
         const data = (await res.json()) as { avatarUrl: string };
         setPreviewUrl(data.avatarUrl);
         onUploaded(data.avatarUrl);
-        toast({
-          title: "Avatar updated",
+        toast.success("Avatar updated", {
           description: "Your avatar has been saved.",
         });
       } catch (err) {
-        toast({
-          title: "Upload failed",
+        toast.error("Upload failed", {
           description: err instanceof Error ? err.message : "Please try again.",
-          variant: "destructive",
         });
       } finally {
         setUploading(false);
       }
     },
-    [onUploaded, toast],
+    [onUploaded],
   );
 
   const handleDrop = useCallback(

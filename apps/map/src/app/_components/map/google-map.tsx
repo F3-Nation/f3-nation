@@ -6,8 +6,11 @@ import { APIProvider, ControlPosition, Map } from "@vis.gl/react-google-maps";
 
 import { BreakPoints, SIDEBAR_WIDTH } from "@acme/shared/app/constants";
 import { TestId } from "@acme/shared/common/enums";
+import { Button } from "@acme/ui/button";
+import { Spinner } from "@acme/ui/spinner";
 import { useTheme } from "@acme/ui/theme";
 
+import type { RuntimeConfigStatus } from "~/utils/runtime-config";
 import { useRuntimeConfig } from "~/utils/runtime-config";
 import { useIsMobileWidth } from "~/utils/hooks/use-is-mobile-width";
 import { useUpdateLocSearchParams } from "~/utils/hooks/use-update-loc-search-params";
@@ -59,7 +62,10 @@ const MAP_CONFIGS: MapConfig[] = [
 
 export const GoogleMapComponent = () => {
   const { initialCenter, initialZoom } = useInitialLocation();
-  const { googleApiKey } = useRuntimeConfig();
+  const { googleApiKey, status } = useRuntimeConfig();
+
+  // Key loads async; show a loader/error instead of a blank screen until it's ready.
+  if (!googleApiKey) return <MapConfigFallback status={status} />;
 
   return (
     <APIProvider apiKey={googleApiKey}>
@@ -190,4 +196,25 @@ ProvidedGoogleMapComponent.displayName = "ProvidedGoogleMapComponent";
 const UrlUpdater = () => {
   useUpdateLocSearchParams();
   return null;
+};
+
+const MapConfigFallback = ({ status }: { status: RuntimeConfigStatus }) => {
+  const isError = status === "error";
+  return (
+    <div className="flex h-screen w-full flex-col items-center justify-center gap-4 bg-background text-center">
+      {isError ? (
+        <>
+          <p className="max-w-sm text-sm text-foreground/70">
+            We couldn&apos;t load the map right now. We&apos;ll keep trying, or
+            you can reload the page.
+          </p>
+          <Button variant="outline" onClick={() => window.location.reload()}>
+            Try again
+          </Button>
+        </>
+      ) : (
+        <Spinner text="Loading map…" />
+      )}
+    </div>
+  );
 };
