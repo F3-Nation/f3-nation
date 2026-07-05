@@ -7,7 +7,7 @@ for AI coding guidance. Read these, in order:
 
 1. [`AGENTS.md`](AGENTS.md) — canonical repository conventions (structure, build
    & test commands, environment setup, coding style, commit conventions).
-2. [`AI_GUARDRAILS.md`](AI_GUARDRAILS.md) — operating boundaries
+2. [`docs/AI_GUARDRAILS.md`](docs/AI_GUARDRAILS.md) — operating boundaries
    (Always / Never / Can) and the human-owned domains (security,
    availability/reliability, scalability).
 3. [`docs/AI_DEVELOPMENT_GUIDE.md`](docs/AI_DEVELOPMENT_GUIDE.md) — secure

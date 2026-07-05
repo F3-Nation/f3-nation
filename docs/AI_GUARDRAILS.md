@@ -1,9 +1,9 @@
 # AI Guardrails (Always / Never / Can)
 
 > Tool-agnostic operating boundaries for AI assistants and agents working in
-> this repository. [`AGENTS.md`](AGENTS.md) says **how** to work here
+> this repository. [`AGENTS.md`](../AGENTS.md) says **how** to work here
 > (conventions, commands, style) and
-> [`docs/AI_DEVELOPMENT_GUIDE.md`](docs/AI_DEVELOPMENT_GUIDE.md) says how to
+> [`docs/AI_DEVELOPMENT_GUIDE.md`](AI_DEVELOPMENT_GUIDE.md) says how to
 > work **securely**; this file says **what AI may decide on its own, what it
 > must never do, and what always belongs to a human**. If guidance conflicts,
 > the stricter rule wins.
@@ -11,21 +11,21 @@
 ## ALWAYS DO
 
 - **Work from a spec.** For feature work, read the feature's spec in
-  [`specs/`](specs/) before generating code; if none exists, write one from
-  the [template](specs/README.md) and get the acceptance criteria approved by
+  [`specs/`](../specs/) before generating code; if none exists, write one from
+  the [template](../specs/README.md) and get the acceptance criteria approved by
   a human before building.
 - **Authorize, don't just authenticate.** Every new or changed endpoint uses
   the correct procedure tier **and** verifies role/ownership on the specific
   resource — `protectedProcedure` alone is not authorization (see
-  [API authorization](docs/AI_DEVELOPMENT_GUIDE.md#api-authorization)).
+  [API authorization](AI_DEVELOPMENT_GUIDE.md#api-authorization)).
 - **Ship tests with code.** Every PR includes the tests that pin its behavior.
 - **Run the CI gates locally before pushing**: `pnpm format`, `pnpm lint`,
   `pnpm typecheck`, `pnpm build`, `pnpm test` — a PR that fails CI wastes a
   review cycle.
 - **Log through `@acme/logger`** with structured, dot-namespaced events —
-  never `console.*` (see [Logging](AGENTS.md#logging)).
+  never `console.*` (see [Logging](../AGENTS.md#logging)).
 - **Assume multi-instance deployment.** No in-memory state as a source of
-  truth (see [Reliability](docs/AI_DEVELOPMENT_GUIDE.md#reliability-in-a-multi-instance-world)).
+  truth (see [Reliability](AI_DEVELOPMENT_GUIDE.md#reliability-in-a-multi-instance-world)).
 - **Keep guardrails tool-agnostic.** Durable guidance goes in `AGENTS.md`,
   `docs/`, or this file — vendor config files stay thin pointers.
 - **Flag, don't bury.** When a change touches a human-owned domain (below),
@@ -43,7 +43,7 @@
   exists for the entity.
 - **Never put secrets or PII in code, logs, fixtures, seeds, or client
   bundles** (anything `NEXT_PUBLIC_*` is public — see
-  [Secrets](docs/AI_DEVELOPMENT_GUIDE.md#secrets--sensitive-data)).
+  [Secrets](AI_DEVELOPMENT_GUIDE.md#secrets--sensitive-data)).
 - **Never use `Math.random()` for anything security-relevant.**
 - **Never write queries that can melt the database at scale** (N+1 fan-outs,
   unbounded scans over large tables) — flag them for human scalability review
@@ -86,9 +86,9 @@ Plus these explicit gates regardless of domain:
 
 ## See also
 
-- [`AGENTS.md`](AGENTS.md) — repo conventions (structure, commands, style,
+- [`AGENTS.md`](../AGENTS.md) — repo conventions (structure, commands, style,
   commits).
-- [`docs/AI_DEVELOPMENT_GUIDE.md`](docs/AI_DEVELOPMENT_GUIDE.md) — secure
+- [`docs/AI_DEVELOPMENT_GUIDE.md`](AI_DEVELOPMENT_GUIDE.md) — secure
   patterns, pitfalls, and the pre-flight checklist.
-- [`specs/README.md`](specs/README.md) — the feature-spec template these
+- [`specs/README.md`](../specs/README.md) — the feature-spec template these
   guardrails assume.
