@@ -1,6 +1,6 @@
 # CI Pipeline — Gate Audit
 
-> What must pass before code reaches `dev`, `staging`, and `production`, in order;
+> What must pass before code reaches `main`, `staging`, and `production`, in order;
 > plus the two reserved rungs (per-PR preview environments and a blocking E2E
 > tier) that will be added later. This document describes the pipeline as it
 > exists today — it changes when the workflows change, and any drift is a bug
@@ -25,7 +25,7 @@ PR opened/updated
        ├─ (reserved) preview-env ·· per-PR Cloud Run deploy, opt-in label
        └─ (reserved) e2e-blocking · Playwright critical paths vs preview env
   │
-merge to dev  (ruleset "dev": PR required, the six checks above required,
+merge to main (ruleset "main": PR required, the six checks above required,
   │            no force-push, no deletion)
   │
 release-please.yml ····· accumulates merges into per-app release PRs
@@ -40,12 +40,12 @@ tag push (e.g. map@1.2.3) → deploy-<app>.yml → _deploy-cloudrun.yml
 
 ## Gate-by-gate
 
-All CI jobs run on `pull_request` (any target branch) and on `push` to `dev`.
+All CI jobs run on `pull_request` (any target branch) and on `push` to `main`.
 Every job checks out with `persist-credentials: false` and uses the shared
 `.github/actions/setup` (pnpm + Node from `.nvmrc` + Turbo remote cache).
 Third-party actions are SHA-pinned.
 
-| #   | Gate                   | What it runs                                                                                                           | What it catches                                                                                                                         | Merge-blocking (`dev` ruleset) |
+| #   | Gate                   | What it runs                                                                                                           | What it catches                                                                                                                         | Merge-blocking (`main` ruleset) |
 | --- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
 | 1   | `format-check`         | `pnpm format`                                                                                                          | Prettier drift                                                                                                                          | ✅                             |
 | 2   | `lint`                 | `pnpm lint`                                                                                                            | ESLint violations (incl. security rules)                                                                                                | ✅                             |
@@ -62,7 +62,7 @@ Local equivalents before pushing: `pnpm format`, `pnpm lint`, `pnpm typecheck`,
 
 ## Deploy pipeline (per app)
 
-Merges to `dev` don't deploy anything directly. `release-please.yml` maintains
+Merges to `main` don't deploy anything directly. `release-please.yml` maintains
 per-app release PRs; merging one pushes a tag like `map@1.2.3`, which triggers
 that app's thin `deploy-<app>.yml` caller into the shared
 [`_deploy-cloudrun.yml`](../.github/workflows/_deploy-cloudrun.yml):
@@ -81,7 +81,7 @@ that app's thin `deploy-<app>.yml` caller into the shared
 
 ## Observations (documented, not changed here)
 
-- `docker-build` runs on every PR but is **not** in the `dev` ruleset's
+- `docker-build` runs on every PR but is **not** in the `main` ruleset's
   required checks — an image-only breakage can merge and will surface at
   release time in the deploy `build` job.
 - The deploy `ci-gate` regexp waits on the five build/test checks but not
