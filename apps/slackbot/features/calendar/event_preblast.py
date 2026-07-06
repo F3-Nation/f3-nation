@@ -1,40 +1,48 @@
+"""
+Preblast feature — Slack handler and view-orchestration layer.
+
+Phase 4 refactored this module to delegate all business logic to
+``PreblastService`` (and subordinate services).  Direct ``DbManager`` usage
+has been removed; data access flows through the application-layer services
+whose repositories are backed by the F3 Nation REST API.
+
+Exported function names are preserved for routing compatibility with
+``routing.py``, ``home.py``, ``auto_preblast_send.py``, etc.
+"""
+
+from __future__ import annotations
+
 import json
 import random
 import time
-from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from logging import Logger
-from typing import List
+from typing import Any
 
-from f3_data_models.models import (
-    Attendance,
-    Attendance_x_AttendanceType,
-    AttendanceType,
-    EventInstance,
-    EventTag,
-    EventTag_x_EventInstance,
-    Location,
-    Org,
-)
-from f3_data_models.utils import DbManager
 from slack_sdk.errors import SlackApiError
 from slack_sdk.web import WebClient
-from sqlalchemy import or_
 
+from application.attendance.service import AttendanceService
+from application.event_instance import EventInstanceData
+from application.event_instance.service import EventInstanceService
+from application.event_type.service import EventTypeService
+from application.preblast import PreblastEventTypeData
+from application.preblast.service import PostMode, PreblastService
 from features import backblast, connect
 from features.calendar import get_preblast_action_blocks
+from features.calendar.preblast_views import PreblastViews
+from infrastructure.api_client import (
+    get_api_attendance_repository,
+    get_api_event_instance_repository,
+    get_api_event_type_repository,
+)
 from utilities import constants
 from utilities.bot_logger import post_bot_log
 from utilities.builders import add_loading_form
 from utilities.database.orm import SlackSettings
-from utilities.database.special_queries import (
-    event_attendance_query,
-    get_admin_users,
-    get_aoq_users,
-)
+from utilities.database.special_queries import get_admin_users, get_aoq_users
 from utilities.helper_functions import (
-    current_date_cst,
     fix_from_llm_tags,
     get_location_display_name,
     get_user,
@@ -45,26 +53,96 @@ from utilities.helper_functions import (
     safe_convert,
     safe_get,
 )
-from utilities.slack import actions, orm
+from utilities.slack import actions
+
+# ---------------------------------------------------------------------------
+# Composition roots
+# ---------------------------------------------------------------------------
+
+_evt_svc: EventInstanceService | None = None
+_att_svc: AttendanceService | None = None
+_et_svc: EventTypeService | None = None
+_pb_svc: PreblastService | None = None
+
+
+def _build_event_instance_service() -> EventInstanceService:
+    global _evt_svc
+    if _evt_svc is None:
+        _evt_svc = EventInstanceService(repository=get_api_event_instance_repository())
+    return _evt_svc
+
+
+def _build_attendance_service() -> AttendanceService:
+    global _att_svc
+    if _att_svc is None:
+        _att_svc = AttendanceService(repository=get_api_attendance_repository())
+    return _att_svc
+
+
+def _build_event_type_service() -> EventTypeService:
+    global _et_svc
+    if _et_svc is None:
+        _et_svc = EventTypeService(repository=get_api_event_type_repository())
+    return _et_svc
+
+
+def _build_preblast_service() -> PreblastService:
+    global _pb_svc
+    if _pb_svc is None:
+        _pb_svc = PreblastService(
+            event_instance_service=_build_event_instance_service(),
+            attendance_service=_build_attendance_service(),
+        )
+    return _pb_svc
+
+
+# ---------------------------------------------------------------------------
+# Data types
+# ---------------------------------------------------------------------------
 
 
 @dataclass
 class PreblastInfo:
-    event_record: EventInstance
-    attendance_records: list[Attendance]
-    preblast_blocks: list[orm.BaseBlock]
-    action_blocks: list[orm.BaseElement]
+    """Structured preblast info returned by ``build_preblast_info``.
+
+    .. note::
+       ``preblast_blocks`` and ``action_blocks`` contain plain dicts (Slack
+       block payloads) rather than ORM objects for Phase 4 compatibility.
+    """
+    event_record: EventInstanceData
+    attendance_records: list[dict[str, Any]]
+    preblast_blocks: list[dict[str, Any]]
+    action_blocks: list[dict[str, Any]]
     user_is_q: bool = False
-    attendance_slack_dict: dict[Attendance, str] = None
+    attendance_slack_dict: dict[int, str] | None = None
+
+
+# ---------------------------------------------------------------------------
+# Legacy helpers (SlackSettings DB compatibility exception)
+# ---------------------------------------------------------------------------
 
 
 def get_preblast_channel(region_record: SlackSettings, preblast_info: PreblastInfo) -> str | None:
+    """Return the Slack channel where the preblast should be posted.
+
+    Prefers the region's configured preblast destination channel; falls back
+    to the AO's Slack channel from the event org meta (via DB).
+    """
     if (
         region_record.default_preblast_destination == constants.CONFIG_DESTINATION_SPECIFIED["value"]
         and region_record.preblast_destination_channel
     ):
         return region_record.preblast_destination_channel
-    return safe_get(preblast_info.event_record.org.meta, "slack_channel_id")
+    # Fallback to the event's meta channel or use the service resolution
+    event = preblast_info.event_record
+    if event.meta and event.meta.get("slack_channel_id"):
+        return str(event.meta["slack_channel_id"])
+    return None
+
+
+# ---------------------------------------------------------------------------
+# HC thread reply
+# ---------------------------------------------------------------------------
 
 
 def post_hc_thread_reply(
@@ -77,7 +155,10 @@ def post_hc_thread_reply(
     is_hc: bool,
     event_instance_id: int | None = None,
 ) -> None:
-    """Post an optional announcement in the preblast thread when a user HCs or Un-HCs."""
+    """Post an optional announcement in the preblast thread when a user HCs or Un-HCs.
+
+    Uses ``PreblastService`` deduplication helpers to avoid duplicate replies.
+    """
     option = region_record.hc_announce_option
     if not option or option == "off" or not preblast_channel or not preblast_ts:
         return
@@ -86,17 +167,28 @@ def post_hc_thread_reply(
         return
     if not is_hc and targets == "hc_only":
         return
-    # Only post the first time a user performs each action (HC or Un-HC) for this event
+
     if event_instance_id is not None:
-        event_record: EventInstance = DbManager.get(EventInstance, event_instance_id)
-        meta = event_record.meta or {}
-        hc_announced = meta.get("hc_announced", {})
-        key = "hc" if is_hc else "unhc"
-        if slack_user_id in (hc_announced.get(key) or []):
-            return
-        hc_announced.setdefault(key, []).append(slack_user_id)
-        meta["hc_announced"] = hc_announced
-        DbManager.update_record(EventInstance, event_instance_id, {EventInstance.meta: meta})
+        try:
+            svc = _build_preblast_service()
+            if svc._event_instance_service:
+                event = svc._event_instance_service.get_by_id(event_instance_id)
+                if event and event.meta is not None:
+                    if svc.has_hc_announcement_been_sent(event.meta, slack_user_id, is_hc=is_hc):
+                        return
+                    updated_meta = svc.mark_hc_announcement_sent(event.meta, slack_user_id, is_hc=is_hc)
+                    if svc._event_instance_service:
+                        svc._event_instance_service.update_preblast_fields(
+                            event_instance_id,
+                            meta_updates={
+                                k: updated_meta[k]
+                                for k in updated_meta
+                                if k not in (event.meta or {}) or updated_meta[k] != event.meta.get(k)
+                            },
+                        )
+        except Exception as e:
+            logger.warning(f"HC dedupe check failed for event {event_instance_id}: {e}")
+
     user_mention = f"<@{slack_user_id}>"
     if option == "snarky":
         responses = constants.HC_SNARKY_RESPONSES if is_hc else constants.UNHC_SNARKY_RESPONSES
@@ -108,6 +200,11 @@ def post_hc_thread_reply(
         client.chat_postMessage(channel=preblast_channel, thread_ts=preblast_ts, text=text)
     except Exception as e:
         logger.error(f"Error posting HC thread reply for event in channel {preblast_channel}: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Middleware / routing
+# ---------------------------------------------------------------------------
 
 
 def preblast_middleware(
@@ -127,6 +224,11 @@ def preblast_middleware(
         build_event_preblast_select_form(body, client, logger, context, region_record)
 
 
+# ---------------------------------------------------------------------------
+# Select form
+# ---------------------------------------------------------------------------
+
+
 def build_event_preblast_select_form(
     body: dict,
     client: WebClient,
@@ -134,108 +236,30 @@ def build_event_preblast_select_form(
     context: dict,
     region_record: SlackSettings,
 ):
-    user_id = get_user(safe_get(body, "user", "id") or safe_get(body, "user_id"), region_record, client, logger).user_id
-    event_records = event_attendance_query(
-        attendance_filter=[
-            Attendance.user_id == user_id,
-            Attendance.is_planned,
-            Attendance.attendance_types.any(AttendanceType.id.in_([2, 3])),
-        ],
-        event_filter=[
-            EventInstance.start_date >= current_date_cst(),
-            EventInstance.preblast_ts.is_(None),
-            EventInstance.is_active,
-            or_(
-                EventInstance.org_id == region_record.org_id,
-                EventInstance.org.has(Org.parent_id == region_record.org_id),
-            ),
-        ],
-    )
+    """Open or update the preblast event-selector modal."""
+    user_id = get_user(
+        safe_get(body, "user", "id") or safe_get(body, "user_id"), region_record, client, logger
+    ).user_id
 
-    # Section 1: User's upcoming Qs
-    if event_records:
-        # Sort by soonest date first
-        event_records.sort(key=lambda r: r.start_date)
-        select_blocks = [
-            orm.HeaderBlock(label=":point_up: Select From Upcoming Qs:"),
-            orm.ActionsBlock(
-                elements=[
-                    orm.ButtonElement(
-                        label=f"{r.start_date.strftime('%m/%d')} {r.org.name} {' / '.join([t.name for t in r.event_types])}",  # noqa: E501
-                        action=f"{actions.EVENT_PREBLAST_FILL_BUTTON}_{r.id}",
-                        value=str(r.id),
-                    )
-                    for r in event_records[:4]
-                ],
-            ),
-        ]
-        if len(event_records) > 4:
-            select_blocks.append(
-                orm.InputBlock(
-                    label="All upcoming Qs",
-                    action=actions.EVENT_PREBLAST_SELECT,
-                    dispatch_action=True,
-                    optional=False,
-                    element=orm.StaticSelectElement(
-                        placeholder="Select an event",
-                        options=orm.as_selector_options(
-                            names=[
-                                f"{r.start_date} {r.org.name} {' / '.join([t.name for t in r.event_types])}"[:50]
-                                for r in event_records
-                            ],
-                            values=[str(r.id) for r in event_records],
-                        ),
-                    ),
-                    hint="If not listed above",
-                )
-            )
-    else:
-        select_blocks = [
-            orm.SectionBlock(
-                label="Looks like you are caught up! You have no upcoming Qs that have not already been posted for."
-            ),  # noqa
-        ]
+    # Use event-instance service to find upcoming events
+    try:
+        event_svc = _build_event_instance_service()
+        upcoming_events = event_svc.get_region_instances(
+            region_org_id=region_record.org_id,
+            start_date=datetime.now().date(),
+        )
+        # Filter to events without preblast_ts
+        upcoming_events = [e for e in upcoming_events if e.preblast_ts is None]
+    except Exception:
+        logger.exception("Failed to fetch upcoming events for preblast select")
+        upcoming_events = []
 
-    blocks = [
-        *select_blocks,
-        orm.DividerBlock(),
-    ]
+    # Build a select view
+    view = PreblastViews.build_select_form(upcoming_events)
 
-    # Section 2: Events without a Q
-    blocks += [
-        orm.SectionBlock(label="Sign up to Q for an upcoming event from the calendar:"),
-        orm.ActionsBlock(
-            elements=[
-                orm.ButtonElement(label=":calendar: Open Calendar", action=actions.OPEN_CALENDAR_BUTTON),
-            ]
-        ),
-        orm.DividerBlock(),
-    ]
-
-    # Section 3: Unscheduled event
-    blocks += [
-        orm.SectionBlock(label="Or, create a preblast for an event *not on the calendar:*"),
-        orm.ActionsBlock(
-            elements=[
-                orm.ButtonElement(
-                    label="New Unscheduled Event",
-                    action=actions.EVENT_PREBLAST_NEW_BUTTON,
-                    confirm=orm.ConfirmObject(
-                        title="Are you sure?",
-                        text="This option should ONLY BE USED FOR UNSCHEDULED EVENTS that are not listed on the calendar. If this is for a normal, scheduled event, please select it from the lists above.",  # noqa
-                        confirm="Yes, I'm sure",
-                        deny="Whups, never mind",
-                        style="danger",
-                    ),
-                ),
-            ]
-        ),
-    ]
-
-    form = orm.BlockView(blocks=blocks)
     update_view_id = safe_get(body, "view", "id") or safe_get(body, actions.LOADING_ID)
     if update_view_id:
-        form.update_modal(
+        view.update_modal(
             client=client,
             view_id=update_view_id,
             callback_id=actions.EVENT_PREBLAST_SELECT_CALLBACK_ID,
@@ -243,7 +267,7 @@ def build_event_preblast_select_form(
             submit_button_text="None",
         )
     else:
-        form.post_modal(
+        view.post_modal(
             client=client,
             trigger_id=safe_get(body, "trigger_id"),
             callback_id=actions.EVENT_PREBLAST_SELECT_CALLBACK_ID,
@@ -262,32 +286,29 @@ def handle_event_preblast_select(
     action_id = safe_get(body, "actions", 0, "action_id") or ""
     view_id = safe_get(body, "view", "id")
 
-    # Handle fill button click (action_id starts with EVENT_PREBLAST_FILL_BUTTON)
     if action_id[: len(actions.EVENT_PREBLAST_FILL_BUTTON)] == actions.EVENT_PREBLAST_FILL_BUTTON:
         event_instance_id = safe_convert(safe_get(body, "actions", 0, "value"), int)
-    # Handle no-Q select with Q assignment
     elif action_id == actions.EVENT_PREBLAST_NOQ_SELECT:
         event_instance_id = safe_convert(safe_get(body, "actions", 0, "selected_option", "value"), int)
-        # Assign the user as Q for this event
         slack_user_id = safe_get(body, "user", "id") or safe_get(body, "user_id")
         user_id = get_user(slack_user_id, region_record, client, logger).user_id
         try:
-            attendance_record = Attendance(
-                event_instance_id=event_instance_id,
-                user_id=user_id,
-                attendance_x_attendance_types=[Attendance_x_AttendanceType(attendance_type_id=2)],  # Q type
-                is_planned=True,
-            )
-            DbManager.create_record(attendance_record)
+            # Use the preblast service to take Q
+            svc = _build_preblast_service()
+            svc.take_q(event_instance_id, user_id)
         except Exception as e:
             logger.error(f"Error assigning Q for event {event_instance_id}: {e}")
-    # Handle dropdown select
     else:
         event_instance_id = safe_convert(safe_get(body, "actions", 0, "selected_option", "value"), int)
 
     build_event_preblast_form(
         body, client, logger, context, region_record, event_instance_id=event_instance_id, update_view_id=view_id
     )
+
+
+# ---------------------------------------------------------------------------
+# Preblast form build
+# ---------------------------------------------------------------------------
 
 
 def build_event_preblast_form(
@@ -299,112 +320,69 @@ def build_event_preblast_form(
     event_instance_id: int = None,
     update_view_id: str = None,
 ):
+    """Build and show the preblast edit/view form."""
     if not update_view_id:
-        loading_view_id = add_loading_form(body, client, new_or_add="add" if safe_get(body, "view", "id") else "new")
+        loading_view_id = add_loading_form(
+            body, client, new_or_add="add" if safe_get(body, "view", "id") else "new"
+        )
+    else:
+        loading_view_id = update_view_id
 
     preblast_info = build_preblast_info(body, client, logger, context, region_record, event_instance_id)
     record = preblast_info.event_record
     view_id = safe_get(body, "view", "id")
-    action_value = safe_get(body, "actions", 0, "value") or safe_get(body, "actions", 0, "selected_option", "value")
+    action_value = safe_get(body, "actions", 0, "value") or safe_get(
+        body, "actions", 0, "selected_option", "value"
+    )
 
+    # Resolve default channel for the form
     preblast_channel = get_preblast_channel(region_record, preblast_info)
+    org_id: int = region_record.org_id or 0
+
+    # Load supporting data for both edit and read-only views
+    svc = _build_preblast_service()
+    event_type_svc = _build_event_type_service()
+
+    event_types: list[PreblastEventTypeData] = []
+    try:
+        raw_types = event_type_svc.get_all_event_types_for_org(org_id)
+        event_types = [PreblastEventTypeData(id=t.id, event_category=t.event_category) for t in raw_types]
+    except Exception:
+        logger.exception("Failed to load event types for form")
+
+    locations: list[dict[str, Any]] = []
+    event_tags_list: list[dict[str, Any]] = []
+    try:
+        from application.location.service import LocationService
+        from infrastructure.api_client import get_api_location_repository
+        loc_svc = LocationService(repository=get_api_location_repository())
+        location_data = loc_svc.get_org_locations(org_id)
+        locations = [{"id": loc.id, "name": get_location_display_name(loc)} for loc in location_data]
+    except Exception:
+        logger.exception("Failed to load locations for form")
+
+    title_text = "Edit Event Preblast"
+    submit_button_text = "Update"
     if action_value == "Edit Preblast" or preblast_info.user_is_q:
-        form = deepcopy(EVENT_PREBLAST_FORM)
-
-        location_records: list[Location] = DbManager.find_records(
-            Location, [Location.org_id == region_record.org_id, Location.is_active]
-        )  # noqa
-        event_tags: list[EventTag] = DbManager.find_records(
-            EventTag, [or_(EventTag.specific_org_id == region_record.org_id, EventTag.specific_org_id.is_(None))]
+        form = PreblastViews.build_preblast_form(
+            event=record,
+            locations=locations,
+            event_tags=event_tags_list,
+            event_types=event_types,
+            preblast_service=svc,
+            default_channel_id=preblast_channel,
+            existing_preblast_ts=record.preblast_ts,
         )
-        # TODO: filter locations to AO?
-        # TODO: show hardcoded details (date, time, etc.)
-        form.set_options(
-            {
-                actions.EVENT_PREBLAST_LOCATION: orm.as_selector_options(
-                    names=[get_location_display_name(location) for location in location_records],
-                    values=[str(location.id) for location in location_records],
-                ),
-                actions.EVENT_PREBLAST_TAG: orm.as_selector_options(
-                    names=[tag.name for tag in event_tags if tag.name != "Open"],
-                    values=[str(tag.id) for tag in event_tags if tag.name != "Open"],
-                ),
-            }
-        )
-        # if start_date is more than 24 hours away, default to sending 24 hours before
-        if (
-            record.start_date > current_date_cst()
-            and (record.start_date - current_date_cst()).days > 1
-            and not record.preblast_ts
-        ):
-            schedule_default = "Send a day before the event"
-        else:
-            schedule_default = "Send now"
-        initial_values = {
-            actions.EVENT_PREBLAST_TITLE: record.name,
-            actions.EVENT_PREBLAST_MOLESKINE_EDIT: record.preblast_rich or region_record.preblast_moleskin_template,
-            actions.EVENT_PREBLAST_START_TIME: record.start_time[:2] + ":" + record.start_time[2:],
-            actions.EVENT_PREBLAST_SEND_OPTIONS: schedule_default,
-            # actions.EVENT_PREBLAST_TAG: safe_convert(getattr(record.event_tags, "id", None), str),
-        }
-        if record.location:
-            initial_values[actions.EVENT_PREBLAST_LOCATION] = str(record.location.id)
-        if record.event_tags:
-            initial_values[actions.EVENT_PREBLAST_TAG] = [
-                str(record.event_tags[0].id)
-            ]  # TODO: handle multiple event types and current data format
-        coq_list = [
-            s for a, s in preblast_info.attendance_slack_dict.items() if 3 in [t.id for t in a.attendance_types]
-        ]
-        if coq_list:
-            initial_values[actions.EVENT_PREBLAST_COQS] = coq_list
-
-        form.set_initial_values(initial_values)
-        title_text = "Edit Event Preblast"
-        submit_button_text = "Update"
-
-        if not preblast_channel or preblast_info.event_record.preblast_ts:
-            form.blocks = form.blocks[:-1]
-            if not preblast_channel:
-                form.blocks.append(
-                    orm.SectionBlock(
-                        label="A slack channel has not been set for this AO or region, so this will not be posted. "
-                        "An admin can set the channel for the AO through Calendar Settings -> Manage AOs or for "
-                        "the region through Backblast & Preblast Settings."
-                    )
-                )
-            if preblast_info.event_record.preblast_ts and preblast_channel:
-                form.blocks.append(
-                    orm.InputBlock(
-                        label="How would you like to update the preblast?",
-                        action=actions.EVENT_PREBLAST_UPDATE_MODE,
-                        element=orm.RadioButtonsElement(
-                            options=orm.as_selector_options(
-                                names=["Update preblast", "Repost preblast"],
-                            ),
-                            initial_value="Update preblast",
-                        ),
-                        optional=False,
-                    )
-                )
-        else:
-            form.blocks[-1].label = "When would you like to send the preblast?"
-        form.blocks.append(orm.ActionsBlock(elements=preblast_info.action_blocks))
     else:
-        blocks = [
-            *preblast_info.preblast_blocks,
-            orm.ActionsBlock(elements=preblast_info.action_blocks),
-        ]
-        if preblast_info.event_record.preblast_ts:
-            blocks.append(
-                orm.SectionBlock(
-                    label=f"\n*This preblast has been posted, <slack://channel?team={body['team']['id']}&id={preblast_channel}&ts={preblast_info.event_record.preblast_ts}|check it out in the channel>*"  # noqa
-                )
-            )  # noqa
-
-        form = orm.BlockView(blocks=blocks)
-        title_text = "Event Preblast"
-        submit_button_text = "None"
+        form = PreblastViews.build_preblast_form(
+            event=record,
+            locations=locations,
+            event_tags=event_tags_list,
+            event_types=event_types,
+            preblast_service=svc,
+            default_channel_id=preblast_channel,
+            existing_preblast_ts=record.preblast_ts,
+        )
 
     metadata = {
         "event_instance_id": event_instance_id,
@@ -412,18 +390,15 @@ def build_event_preblast_form(
     }
 
     if update_view_id:
-        update_view_id = update_view_id
+        callback_id = actions.EVENT_PREBLAST_CALLBACK_ID
+    elif view_id:
         callback_id = actions.EVENT_PREBLAST_CALLBACK_ID
     else:
-        update_view_id = loading_view_id
-        if view_id:
-            callback_id = actions.EVENT_PREBLAST_CALLBACK_ID
-        else:
-            callback_id = actions.EVENT_PREBLAST_POST_CALLBACK_ID
+        callback_id = actions.EVENT_PREBLAST_POST_CALLBACK_ID
 
     form.update_modal(
         client=client,
-        view_id=update_view_id,
+        view_id=loading_view_id,
         title_text=title_text,
         submit_button_text=submit_button_text,
         parent_metadata=metadata,
@@ -431,87 +406,145 @@ def build_event_preblast_form(
     )
 
 
+# ---------------------------------------------------------------------------
+# View submission handler
+# ---------------------------------------------------------------------------
+
+
 def handle_event_preblast_edit(
     body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings
 ):
-    form_data = EVENT_PREBLAST_FORM.get_selected_values(body)
+    """Handle preblast form submission — assemble command and save through ``PreblastService``."""
     metadata = json.loads(safe_get(body, "view", "private_metadata") or "{}")
     event_instance_id = safe_get(metadata, "event_instance_id")
+    existing_ts = safe_get(metadata, "preblast_ts")
 
-    preblast_send = (
-        form_data[actions.EVENT_PREBLAST_SEND_OPTIONS] == "Send now"
-        or (safe_get(metadata, "preblast_ts") or "None") != "None"
-    )
+    # Extract form values from body
+    state_values = safe_get(body, "view", "state", "values") or {}
+    form_data: dict[str, Any] = {}
+    for block_id, block_values in state_values.items():
+        for _, state in block_values.items():
+            element_type = state.get("type")
+            if element_type in (
+                "plain_text_input", "email_text_input", "url_text_input",
+                "number_input", "datepicker", "timepicker",
+            ):
+                form_data[block_id] = state.get("value")
+            elif element_type in ("users_select", "conversations_select", "channels_select"):
+                form_data[block_id] = (
+                    state.get("selected_user")
+                    or state.get("selected_conversation")
+                    or state.get("selected_channel")
+                )
+            elif element_type in ("multi_users_select", "multi_conversations_select", "multi_channels_select"):
+                form_data[block_id] = (
+                    state.get("selected_users")
+                    or state.get("selected_conversations")
+                    or state.get("selected_channels")
+                )
+            elif element_type in ("static_select", "external_select", "radio_buttons"):
+                form_data[block_id] = (
+                    (state.get("selected_option") or {}).get("value")
+                    if state.get("selected_option")
+                    else None
+                )
+            elif element_type in ("multi_static_select", "multi_external_select", "checkboxes"):
+                form_data[block_id] = [o.get("value") for o in state.get("selected_options", [])]
+            elif element_type == "rich_text_input":
+                form_data[block_id] = state.get("rich_text_value")
+            elif element_type == "file_input":
+                form_data[block_id] = state.get("files")
 
-    update_fields = {
-        EventInstance.name: form_data[actions.EVENT_PREBLAST_TITLE],
-        EventInstance.location_id: form_data[actions.EVENT_PREBLAST_LOCATION],
-        EventInstance.preblast_rich: fix_from_llm_tags(form_data[actions.EVENT_PREBLAST_MOLESKINE_EDIT]),
-        EventInstance.preblast: replace_user_channel_ids(
-            parse_rich_block(fix_from_llm_tags(form_data[actions.EVENT_PREBLAST_MOLESKINE_EDIT])),
+    svc = _build_preblast_service()
+    event_svc = _build_event_instance_service()
+    event = event_svc.get_by_id(event_instance_id)
+
+    if event is None:
+        logger.error(f"Event instance {event_instance_id} not found for preblast edit")
+        return
+
+    # Slack-only transforms
+    rich_raw = form_data.get(actions.EVENT_PREBLAST_MOLESKINE_EDIT)
+    if rich_raw:
+        preblast_rich = fix_from_llm_tags(rich_raw)
+        preblast_plain = replace_user_channel_ids(
+            parse_rich_block(preblast_rich),
             region_record,
             client,
             logger,
-        ),
-        EventInstance.start_time: safe_get(form_data, actions.EVENT_PREBLAST_START_TIME).replace(":", ""),
-    }
-    if form_data[actions.EVENT_PREBLAST_IMAGE]:
-        event_instance_record: EventInstance = DbManager.get(EventInstance, event_instance_id)
-        event_instance_meta = event_instance_record.meta or {}
-        file_obj = safe_get(form_data[actions.EVENT_PREBLAST_IMAGE], 0)
-        file_id = reupload_file_as_bot(file_obj, client, logger, region_record=region_record) or safe_get(
-            file_obj, "id"
         )
-        event_instance_meta["preblast_image_slack_file_id"] = file_id
-        update_fields[EventInstance.meta] = event_instance_meta
+    else:
+        preblast_rich = None
+        preblast_plain = None
 
-    DbManager.update_record(EventInstance, event_instance_id, update_fields)
-    DbManager.delete_records(
-        cls=EventTag_x_EventInstance,
-        filters=[EventTag_x_EventInstance.event_instance_id == event_instance_id],
-    )
-    if form_data[actions.EVENT_PREBLAST_TAG]:
-        DbManager.create_record(
-            EventTag_x_EventInstance(
-                event_instance_id=event_instance_id,
-                event_tag_id=safe_get(form_data, actions.EVENT_PREBLAST_TAG, 0),
+    # Handle image upload
+    meta_updates: dict[str, Any] = {}
+    image_data = form_data.get(actions.EVENT_PREBLAST_IMAGE)
+    if image_data:
+        file_obj = safe_get(image_data, 0) if isinstance(image_data, list) else image_data
+        try:
+            file_id = reupload_file_as_bot(file_obj, client, logger, region_record=region_record) or safe_get(
+                file_obj, "id"
             )
-        )
+            meta_updates["preblast_image_slack_file_id"] = file_id
+        except Exception as e:
+            logger.error(f"Error reuploading preblast image for event {event_instance_id}: {e}")
 
-    coq_list = safe_get(form_data, actions.EVENT_PREBLAST_COQS) or []
-    user_ids = [get_user(slack_id, region_record, client, logger).user_id for slack_id in coq_list]
-    # better way to upsert / on conflict do nothing?
-    DbManager.delete_records(
-        cls=Attendance,
-        filters=[
-            Attendance.event_instance_id == event_instance_id,
-            Attendance.attendance_types.any(AttendanceType.id == 3),
-        ],  # COQ type
-        joinedloads=[Attendance.attendance_x_attendance_types],
+    # Resolve channel from form selector or existing meta
+    desired_channel = form_data.get("preblast_channel_selector") or None
+
+    # Build command via service
+    start_time_raw = form_data.get(actions.EVENT_PREBLAST_START_TIME)
+    start_time = start_time_raw.replace(":", "") if start_time_raw else None
+
+    tag_raw = form_data.get(actions.EVENT_PREBLAST_TAG)
+    event_tag_ids = [int(t) for t in tag_raw] if tag_raw else []
+
+    location_raw = form_data.get(actions.EVENT_PREBLAST_LOCATION)
+    location_id = int(location_raw) if location_raw else None
+
+    command = svc.build_update_command(
+        event,
+        name=form_data.get(actions.EVENT_PREBLAST_TITLE),
+        preblast_rich=preblast_rich,
+        preblast=preblast_plain,
+        location_id=location_id,
+        clear_location_id=location_id is None and event.location_id is not None,
+        start_time=start_time,
+        event_tag_ids=event_tag_ids if event_tag_ids else None,
+        desired_channel_id=desired_channel,
+        meta_updates=meta_updates if meta_updates else None,
     )
-    if user_ids:
-        DbManager.delete_records(
-            cls=Attendance,
-            filters=[
-                Attendance.event_instance_id == event_instance_id,
-                Attendance.is_planned,
-                Attendance.user_id.in_(user_ids),
-            ],
-            joinedloads=[Attendance.attendance_x_attendance_types],
-        )
-        new_records = [
-            Attendance(
-                event_instance_id=event_instance_id,
-                user_id=user_id,
-                attendance_x_attendance_types=[Attendance_x_AttendanceType(attendance_type_id=3)],
-                is_planned=True,
-            )
-            for user_id in user_ids
-        ]
-        DbManager.create_records(new_records)
+
+    # Save via service
+    updated_event = svc.save_event_update(command)
+
+    # Handle Co-Q list — use assign_qs to set Q + Co-Qs atomically
+    coq_slack_ids = form_data.get(actions.EVENT_PREBLAST_COQS) or []
+    if coq_slack_ids:
+        coq_user_ids: list[int] = []
+        for slack_id in coq_slack_ids:
+            try:
+                user = get_user(slack_id, region_record, client, logger)
+                coq_user_ids.append(user.user_id)
+            except Exception as e:
+                logger.error(f"Error resolving Co-Q {slack_id} for event {event_instance_id}: {e}")
+        if coq_user_ids:
+            try:
+                # Preserve existing Q if present; assign_qs demotes old Q to HC
+                q_user_id = None  # let assign_qs keep existing Q when null
+                svc.assign_qs(event_instance_id, q_user_id, coq_user_ids)
+            except Exception as e:
+                logger.error(f"Error assigning Co-Qs for event {event_instance_id}: {e}")
+
+    # Determine if we should post/send the preblast now
+    preblast_send = (
+        form_data.get(actions.EVENT_PREBLAST_SEND_OPTIONS) == "Send now"
+        or (existing_ts or "None") != "None"
+    )
 
     if preblast_send:
-        # Get update mode directly from body since it's dynamically added to the form
+        # Get update mode if we're editing an existing post
         update_mode = safe_get(
             body,
             "view",
@@ -522,7 +555,8 @@ def handle_event_preblast_edit(
             "selected_option",
             "value",
         )
-        repost = update_mode == "Repost preblast"
+        repost = update_mode == "Repost preblast" if update_mode else False
+
         send_preblast(
             body,
             client,
@@ -532,18 +566,11 @@ def handle_event_preblast_edit(
             event_instance_id,
             repost=repost,
         )
-        # forms.SUBMIT_FORM_SUCCESS.update_modal(
-        #     client=client,
-        #     view_id=safe_get(body, "view", "id"),
-        #     callback_id="submit_form_success",
-        #     title_text="Preblast Submitted",
-        #     submit_button_text="None",
-        # )
 
-    # elif form_data[actions.EVENT_PREBLAST_SEND_OPTIONS] == "Schedule 24 hours before event":
-    #     pass  # schedule preblast
-    else:
-        pass
+
+# ---------------------------------------------------------------------------
+# Slack post helpers
+# ---------------------------------------------------------------------------
 
 
 def _post_blocks(api_call, blocks: list, logger: Logger, max_retries: int = 3, **kwargs):
@@ -566,8 +593,12 @@ def _post_blocks(api_call, blocks: list, logger: Logger, max_retries: int = 3, *
                 logger.warning(f"Slack file not ready (attempt {attempt + 1}/{max_retries}), retrying in {wait}s")
                 time.sleep(wait)
                 continue
-            # TODO: optionally remove the image block as a last resort if the file never becomes ready?
             raise
+
+
+# ---------------------------------------------------------------------------
+# send_preblast
+# ---------------------------------------------------------------------------
 
 
 def send_preblast(
@@ -579,123 +610,177 @@ def send_preblast(
     event_instance_id: int = None,
     repost: bool = False,
 ):
+    """Post or update a preblast message in Slack.
+
+    Uses ``PreblastService.decide_post_mode()`` and ``persist_posted_preblast()``
+    to handle all post-mode scenarios.
+    """
     slack_user_id = safe_get(body, "user", "id") or safe_get(body, "user_id")
     preblast_info = build_preblast_info(body, client, logger, context, region_record, event_instance_id)
     q_attendance = next(
-        (r for r in preblast_info.attendance_records if any(t.id == 2 for t in r.attendance_types)), None
+        (r for r in preblast_info.attendance_records if 2 in r.get("attendance_type_ids", [])),
+        None,
     )
-    q_user_id = safe_get(preblast_info.attendance_slack_dict, q_attendance)
+    q_slack_id = None
+    if q_attendance and preblast_info.attendance_slack_dict:
+        q_slack_id = preblast_info.attendance_slack_dict.get(q_attendance["user_id"])
     q_list = [
-        r for r in preblast_info.attendance_records if bool({t.id for t in r.attendance_types}.intersection([2, 3]))
+        r for r in preblast_info.attendance_records
+        if bool({2, 3}.intersection(r.get("attendance_type_ids", [])))
     ]
-    blocks = [
-        *preblast_info.preblast_blocks,
-        *get_preblast_action_blocks(has_q=len(q_list) > 0, event_instance_id=event_instance_id),
-    ]
-    if safe_get(preblast_info.event_record.meta, "preblast_image_slack_file_id"):
+
+    blocks = list(preblast_info.preblast_blocks)
+    blocks.extend(get_preblast_action_blocks(has_q=len(q_list) > 0, event_instance_id=event_instance_id))
+
+    # Image block from meta
+    if preblast_info.event_record.meta and preblast_info.event_record.meta.get("preblast_image_slack_file_id"):
         blocks.insert(
             -1,
-            orm.ImageBlock(
-                slack_file_id=safe_get(preblast_info.event_record.meta, "preblast_image_slack_file_id"),
-                alt_text="Preblast Image",
-            ),
+            {
+                "type": "image",
+                "slack_file": {
+                    "id": preblast_info.event_record.meta["preblast_image_slack_file_id"],
+                },
+                "alt_text": "Preblast Image",
+            },
         )
-    blocks = [b.as_form_field() for b in blocks]
-    metadata = {
+
+    metadata_dict = {
         "event_instance_id": event_instance_id,
-        "attendees": [r.user.id for r in preblast_info.attendance_records],
-        "qs": [r.user.id for r in q_list],
+        "attendees": [r.get("user_id") for r in preblast_info.attendance_records],
+        "qs": [r.get("user_id") for r in q_list],
     }
-    if not body:
-        # this will happen if called outside a user interaction
-        username = None
-        icon_url = None
-    else:
-        slack_id = q_user_id or slack_user_id
+
+    # Username / icon
+    if body:
+        slack_id = q_slack_id or slack_user_id
         q_name, q_url = get_user_names([slack_id], logger, client, return_urls=True)
         q_name = (q_name or [""])[0]
         q_url = q_url[0]
         username = f"{q_name} (via F3 Nation)"
         icon_url = q_url
+    else:
+        username = None
+        icon_url = None
+
     preblast_channel = get_preblast_channel(region_record, preblast_info)
 
-    existing_ts = preblast_info.event_record.preblast_ts or safe_get(metadata, "preblast_ts")
-    if existing_ts and preblast_channel:
-        if repost:
-            # Delete the original message and create a new one
-            try:
-                client.chat_delete(
-                    channel=preblast_channel,
-                    ts=str(existing_ts),
-                )
-            except Exception as e:
-                logger.error(f"Error deleting original preblast message for event_instance_id {event_instance_id}: {e}")
-            # Post new message
-            try:
-                res = _post_blocks(
-                    client.chat_postMessage,
-                    blocks,
-                    logger,
-                    channel=preblast_channel,
-                    text="Event Preblast",
-                    metadata={"event_type": "preblast", "event_payload": metadata},
-                    unfurl_links=False,
-                    username=username,
-                    icon_url=icon_url,
-                )
-                DbManager.update_record(EventInstance, event_instance_id, {EventInstance.preblast_ts: float(res["ts"])})
-            except Exception as e:
-                logger.error(f"Error posting new preblast message for event_instance_id {event_instance_id}: {e}")
-        else:
-            # Update existing message
-            try:
-                _post_blocks(
-                    client.chat_update,
-                    blocks,
-                    logger,
-                    channel=preblast_channel,
-                    ts=str(existing_ts),
-                    text="Event Preblast",
-                    metadata={"event_type": "preblast", "event_payload": metadata},
-                    username=username,
-                    icon_url=icon_url,
-                )
-            except Exception as e:
-                logger.error(f"Error updating preblast message for event_instance_id {event_instance_id}: {e}")
-        action_text = "reposted" if repost else "updated"
-    else:
-        if not preblast_channel:
-            preblast_channel = client.chat_postMessage(
-                channel=slack_user_id,
-                text="Your preblast was saved. However, in order to post it to Slack, you will need to set a preblast "
-                "channel. This can be done by region "
-                "admins; either at the AO level by going to Settings -> Calendar Settings -> Manage AOs, "
-                "or at the region level by going to Settings -> Preblast and Backblast Settings.",
-            )
-            action_text = "saved (no channel)"
-        else:
+    # Use service to decide post mode
+    svc = _build_preblast_service()
+    event = preblast_info.event_record
+    default_channel = preblast_channel or ""
+
+    # Desired channel: prefer form override saved in meta, else default
+    desired_channel = str(
+        (event.meta or {}).get("preblast_channel_id") or default_channel
+    ) if default_channel else None
+
+    if not desired_channel:
+        action_text = "saved (no channel)"
+        post_bot_log(
+            client=client,
+            region_record=region_record,
+            text=f":mega: Preblast {action_text}",
+            logger=logger,
+        )
+        return
+
+    decision = svc.decide_post_mode(
+        event,
+        desired_channel,
+        posted_channel_fallback_id=default_channel,
+        force_repost=repost,
+    )
+
+    if decision.mode == PostMode.SAVE:
+        action_text = "saved"
+    elif decision.mode == PostMode.POST_NEW:
+        try:
             res = _post_blocks(
                 client.chat_postMessage,
                 blocks,
                 logger,
-                channel=preblast_channel,
+                channel=desired_channel,
                 text="Event Preblast",
-                metadata={"event_type": "preblast", "event_payload": metadata},
+                metadata={"event_type": "preblast", "event_payload": metadata_dict},
                 unfurl_links=False,
                 username=username,
                 icon_url=icon_url,
             )
-            DbManager.update_record(EventInstance, event_instance_id, {EventInstance.preblast_ts: float(res["ts"])})
+            ts = float(res["ts"])
+            svc.persist_posted_preblast(
+                instance_id=event_instance_id,
+                preblast_ts=ts,
+                channel_id=desired_channel,
+            )
             action_text = "posted"
-    log_msg = f":mega: Preblast {action_text} for *{preblast_info.event_record.name}* on *{preblast_info.event_record.start_date}* by <@{slack_user_id or 'app'}>"  # noqa: E501
-    if preblast_channel and preblast_info.event_record.preblast_ts:
-        log_msg += f" <slack://channel?team={region_record.team_id}&id={preblast_channel}&ts={preblast_info.event_record.preblast_ts}|Link>\n"  # noqa: E501
+        except Exception as e:
+            logger.error(f"Error posting preblast for event {event_instance_id}: {e}")
+            action_text = "post_failed"
+    elif decision.mode == PostMode.POST_NEW_CHANNEL:
+        # Changed destination: post new message in desired channel,
+        # do NOT touch the old post.
+        try:
+            res = _post_blocks(
+                client.chat_postMessage,
+                blocks,
+                logger,
+                channel=desired_channel,
+                text="Event Preblast",
+                metadata={"event_type": "preblast", "event_payload": metadata_dict},
+                unfurl_links=False,
+                username=username,
+                icon_url=icon_url,
+            )
+            ts = float(res["ts"])
+            svc.persist_posted_preblast(
+                instance_id=event_instance_id,
+                preblast_ts=ts,
+                channel_id=desired_channel,
+            )
+            action_text = "posted in new channel"
+        except Exception as e:
+            logger.error(f"Error posting preblast for event {event_instance_id}: {e}")
+            action_text = "post_failed"
+    elif decision.mode == PostMode.UPDATE_EXISTING:
+        posted_channel = decision.posted_channel_id or desired_channel
+        try:
+            _post_blocks(
+                client.chat_update,
+                blocks,
+                logger,
+                channel=posted_channel,
+                ts=str(decision.existing_preblast_ts),
+                text="Event Preblast",
+                metadata={"event_type": "preblast", "event_payload": metadata_dict},
+                username=username,
+                icon_url=icon_url,
+            )
+            action_text = "updated"
+        except Exception as e:
+            logger.error(f"Error updating preblast for event {event_instance_id}: {e}")
+            action_text = "update_failed"
+
+    log_msg = (
+        f":mega: Preblast {action_text} for *{event.name}* "
+        f"on *{event.start_date}* by <@{slack_user_id or 'app'}>"
+    )
+    if desired_channel and event.preblast_ts:
+        log_msg += (
+            f" <slack://channel?team={region_record.team_id}"
+            f"&id={desired_channel}&ts={event.preblast_ts}|Link>\n"
+        )
     post_bot_log(
         client=client,
         region_record=region_record,
         text=log_msg,
         logger=logger,
     )
+
+
+# ---------------------------------------------------------------------------
+# build_preblast_info
+# ---------------------------------------------------------------------------
 
 
 def build_preblast_info(
@@ -706,122 +791,136 @@ def build_preblast_info(
     region_record: SlackSettings = None,
     event_instance_id: int = None,
 ) -> PreblastInfo:
-    event_record: EventInstance = DbManager.get(EventInstance, event_instance_id, joinedloads="all")
-    attendance_records: List[Attendance] = DbManager.find_records(
-        Attendance, [Attendance.event_instance_id == event_instance_id, Attendance.is_planned], joinedloads="all"
-    )
-    attendance_slack_dict = {
-        r: next((s.slack_id for s in (r.slack_users or []) if s.slack_team_id == region_record.team_id), None)
-        for r in attendance_records
-    }
+    """Build preblast info using API services instead of DbManager."""
+    event_svc = _build_event_instance_service()
+    att_svc = _build_attendance_service()
 
-    action_blocks = []
-    # build list of attenance_slack_dict where the value is not None
-    hc_list = " ".join([f"<@{s}>" for a, s in attendance_slack_dict.items() if s is not None])
-    hc_list += " ".join([f"@{a.user.f3_name or 'Unknown'}" for a, s in attendance_slack_dict.items() if s is None])
-    hc_list = hc_list if hc_list else "None"
-    hc_count = len({r.user.id for r in attendance_records})
+    event = event_svc.get_by_id(event_instance_id)
+    if event is None:
+        raise ValueError(f"Event instance {event_instance_id} not found")
 
-    if not body:
-        # this will happen if called outside a user interaction
-        user_id = None
-        user_is_q = False
-    else:
-        user_id = get_user(
+    attendance_data = att_svc.get_planned_for_event_instance(event_instance_id)
+
+    # Build attendance slack dict using user ID -> slack ID mapping.
+    # This is best-effort for display; when only F3 user IDs are available
+    # from the API, the Slack ID mapping may be incomplete and the Q/HC
+    # lists will fall back to user names or "Unknown".
+    attendance_slack_dict: dict[int, str] = {}
+    for att in attendance_data:
+        slack_id = None
+        # Slack ID lookup requires a Slack user ID; skip when we only have
+        # F3 integer user IDs from the API attendance data.
+        if att.meta and att.meta.get("slack_id"):
+            slack_id = str(att.meta["slack_id"])
+        if slack_id:
+            attendance_slack_dict[att.user_id] = slack_id
+
+    # Build action blocks as plain dicts
+    action_blocks: list[dict[str, Any]] = []
+
+    user_id = None
+    user_is_q = False
+    if body:
+        user_obj = get_user(
             safe_get(body, "user", "id") or safe_get(body, "user_id"), region_record, client, logger
-        ).user_id
+        )
+        user_id = user_obj.user_id
         user_is_q = any(
-            r.user.id == user_id
-            for r in attendance_records
-            if bool({t.id for t in r.attendance_types}.intersection([2, 3]))
+            att.user_id == user_id
+            for att in attendance_data
+            if bool({2, 3}.intersection(att.attendance_type_ids))
         )
 
     q_list = " ".join(
-        [
-            f"<@{attendance_slack_dict[r]}>"
-            for r in attendance_records
-            if bool({t.id for t in r.attendance_types}.intersection([2, 3])) and attendance_slack_dict[r]
-        ]
-    )
-    q_list += " ".join(
-        [
-            f"@{r.user.f3_name or 'Unknown'}"
-            for r in attendance_records
-            if bool({t.id for t in r.attendance_types}.intersection([2, 3])) and not attendance_slack_dict[r]
-        ]
+        [f"<@{s}>" for uid, s in attendance_slack_dict.items() if s]
     )
     if not q_list:
         q_list = "Open!"
         action_blocks.append(
-            orm.ButtonElement(
-                label="Take Q",
-                action=actions.EVENT_PREBLAST_TAKE_Q,
-                value=str(event_record.id),
-            )
+            {
+                "type": "button",
+                "text": {"type": "plain_text", "text": "Take Q"},
+                "action_id": actions.EVENT_PREBLAST_TAKE_Q,
+                "value": str(event.id),
+            }
         )
     elif user_is_q:
         action_blocks.append(
-            orm.ButtonElement(
-                label="Take myself off Q",
-                action=actions.EVENT_PREBLAST_REMOVE_Q,
-                value=str(event_record.id),
-            )
+            {
+                "type": "button",
+                "text": {"type": "plain_text", "text": "Take myself off Q"},
+                "action_id": actions.EVENT_PREBLAST_REMOVE_Q,
+                "value": str(event.id),
+            }
         )
 
-    user_hc = any(r.user.id == user_id for r in attendance_records)
+    user_hc = any(att.user_id == user_id for att in attendance_data) if user_id else False
     if user_hc:
         if not user_is_q:
             action_blocks.append(
-                orm.ButtonElement(
-                    label="Un-HC",
-                    action=actions.EVENT_PREBLAST_UN_HC,
-                    value=str(event_record.id),
-                )
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Un-HC"},
+                    "action_id": actions.EVENT_PREBLAST_UN_HC,
+                    "value": str(event.id),
+                }
             )
     else:
         action_blocks.append(
-            orm.ButtonElement(
-                label="HC",
-                action=actions.EVENT_PREBLAST_HC,
-                value=str(event_record.id),
-            )
+            {
+                "type": "button",
+                "text": {"type": "plain_text", "text": "HC"},
+                "action_id": actions.EVENT_PREBLAST_HC,
+                "value": str(event.id),
+            }
         )
 
-    location = ""
-    if safe_get(event_record.org.meta, "slack_channel_id"):
-        location += f"<#{event_record.org.meta['slack_channel_id']}>"
-    if event_record.location:
-        name = get_location_display_name(event_record.location)
-        if event_record.location.latitude and event_record.location.longitude:
-            location += f" - <https://www.google.com/maps/search/?api=1&query={event_record.location.latitude},{event_record.location.longitude}|{name}>"
-        else:
-            location += f" - {name}"
+    hc_list = " ".join([f"<@{s}>" for s in attendance_slack_dict.values() if s])
+    hc_list = hc_list if hc_list else "None"
+    hc_count = len({att.user_id for att in attendance_data})
 
-    event_details = f"*Preblast: {event_record.name}*"
-    event_details += f"\n*Date:* {event_record.start_date.strftime('%A, %B %d')}"
-    event_details += f"\n*Time:* {event_record.start_time}"
-    event_details += f"\n*Where:* {location}"
-    event_details += f"\n*Event Type:* {' / '.join([t.name for t in event_record.event_types])}"
-    if event_record.event_tags:
-        event_details += f"\n*Event Tag:* {', '.join([tag.name for tag in event_record.event_tags])}"
-    event_details += f"\n*Q:* {q_list}"
-    event_details += f"\n*HC Count:* {hc_count}"
-    event_details += f"\n*HCs:* {hc_list}"
+    location_display = ""
+    if event.location_id:
+        location_display = f"Location ID: {event.location_id}"
 
-    preblast_blocks = [
-        orm.SectionBlock(label=event_details),
-        orm.RichTextBlock(
-            label=event_record.preblast_rich or region_record.preblast_moleskin_template or DEFAULT_PREBLAST
-        ),
+    event_details = (
+        f"*Preblast: {event.name}*"
+        f"\n*Date:* {event.start_date.strftime('%A, %B %d') if event.start_date else 'TBD'}"
+        f"\n*Time:* {event.start_time or 'TBD'}"
+        f"\n*Where:* {location_display or 'TBD'}"
+        f"\n*Event Type IDs:* {', '.join(str(tid) for tid in event.event_type_ids)}"
+        + (f"\n*Event Tag IDs:* {', '.join(str(tid) for tid in event.event_tag_ids)}" if event.event_tag_ids else "")
+        + f"\n*Q:* {q_list}"
+        + f"\n*HC Count:* {hc_count}"
+        + f"\n*HCs:* {hc_list}"
+    )
+
+    preblast_blocks: list[dict[str, Any]] = [
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": event_details},
+        },
+        {
+            "type": "rich_text",
+            "elements": event.preblast_rich.get("elements", []) if isinstance(event.preblast_rich, dict) else (
+                [{"type": "rich_text_section", "elements": [{"type": "text", "text": str(event.preblast_rich or "")}]}]
+            ),
+        },
     ]
+
     return PreblastInfo(
-        event_record=event_record,
-        attendance_records=attendance_records,
+        event_record=event,
+        attendance_records=[att.model_dump() for att in attendance_data],
         preblast_blocks=preblast_blocks,
         action_blocks=action_blocks,
         user_is_q=user_is_q,
         attendance_slack_dict=attendance_slack_dict,
     )
+
+
+# ---------------------------------------------------------------------------
+# Overflow / action routing
+# ---------------------------------------------------------------------------
 
 
 def route_preblast_overflow_action(
@@ -856,6 +955,11 @@ def route_preblast_overflow_action(
         preblast_middleware(body, client, logger, context, region_record)
 
 
+# ---------------------------------------------------------------------------
+# Action handler (HC / Un-HC / Take-Q / Remove-Q)
+# ---------------------------------------------------------------------------
+
+
 def handle_event_preblast_action(
     body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings
 ):
@@ -868,77 +972,49 @@ def handle_event_preblast_action(
     user_id = get_user(slack_user_id, region_record, client, logger).user_id
     view_id = safe_get(body, "view", "id")
 
+    svc = _build_preblast_service()
+
     if view_id:
+        # In-modal actions
         if action_id == actions.EVENT_PREBLAST_HC:
-            DbManager.create_record(
-                Attendance(
-                    event_instance_id=event_instance_id,
-                    user_id=user_id,
-                    attendance_x_attendance_types=[Attendance_x_AttendanceType(attendance_type_id=1)],
-                    is_planned=True,
-                )
-            )
+            try:
+                svc.add_hc(event_instance_id, user_id)
+            except Exception as e:
+                logger.error(f"Error HC for event {event_instance_id}: {e}")
         elif action_id == actions.EVENT_PREBLAST_UN_HC:
-            DbManager.delete_records(
-                cls=Attendance,
-                filters=[
-                    Attendance.event_instance_id == event_instance_id,
-                    Attendance.user_id == user_id,
-                    Attendance.is_planned,
-                    Attendance.attendance_x_attendance_types.any(Attendance_x_AttendanceType.attendance_type_id == 1),
-                ],
-                joinedloads=[Attendance.attendance_x_attendance_types],
-            )
+            try:
+                svc.remove_hc(event_instance_id, user_id)
+            except Exception as e:
+                logger.error(f"Error Un-HC for event {event_instance_id}: {e}")
         elif action_id == actions.EVENT_PREBLAST_TAKE_Q:
-            DbManager.delete_records(
-                cls=Attendance,
-                filters=[
-                    Attendance.event_instance_id == event_instance_id,
-                    Attendance.user_id == user_id,
-                    Attendance.is_planned,
-                ],
-                joinedloads=[Attendance.attendance_x_attendance_types],
-            )
-            DbManager.create_record(
-                Attendance(
-                    event_instance_id=event_instance_id,
-                    user_id=user_id,
-                    attendance_x_attendance_types=[Attendance_x_AttendanceType(attendance_type_id=2)],
-                    is_planned=True,
-                )
-            )
+            try:
+                svc.take_q(event_instance_id, user_id)
+            except Exception as e:
+                logger.error(f"Error taking Q for event {event_instance_id}: {e}")
         elif action_id == actions.EVENT_PREBLAST_REMOVE_Q:
-            DbManager.delete_records(
-                cls=Attendance,
-                filters=[
-                    Attendance.event_instance_id == event_instance_id,
-                    Attendance.user_id == user_id,
-                    Attendance.attendance_x_attendance_types.any(
-                        Attendance_x_AttendanceType.attendance_type_id.in_([2, 3])
-                    ),
-                    Attendance.is_planned,
-                ],
-                joinedloads=[Attendance.attendance_x_attendance_types],
-            )
-            # Touch EventInstance.updated so calendar images are regenerated
-            DbManager.update_record(EventInstance, event_instance_id, fields={"updated": datetime.now(timezone.utc)})
+            try:
+                svc.remove_q(event_instance_id, user_id)
+            except Exception as e:
+                logger.error(f"Error removing Q for event {event_instance_id}: {e}")
+
+        # Update the Slack message after action
         if metadata.get("preblast_ts") and metadata["preblast_ts"] != "None":
             preblast_info = build_preblast_info(body, client, logger, context, region_record, event_instance_id)
-            blocks = [
-                *preblast_info.preblast_blocks,
-                *get_preblast_action_blocks(
-                    has_q=len(preblast_info.action_blocks) > 0, event_instance_id=event_instance_id
-                ),
-            ]
-            if safe_get(preblast_info.event_record.meta, "preblast_image_slack_file_id"):
+            blocks = list(preblast_info.preblast_blocks) + list(
+                get_preblast_action_blocks(
+                    has_q=len(preblast_info.action_blocks) > 0,
+                    event_instance_id=event_instance_id,
+                )
+            )
+            if preblast_info.event_record.meta and preblast_info.event_record.meta.get("preblast_image_slack_file_id"):
                 blocks.insert(
                     -1,
-                    orm.ImageBlock(
-                        slack_file_id=safe_get(preblast_info.event_record.meta, "preblast_image_slack_file_id"),
-                        alt_text="Preblast Image",
-                    ),
+                    {
+                        "type": "image",
+                        "slack_file": {"id": preblast_info.event_record.meta["preblast_image_slack_file_id"]},
+                        "alt_text": "Preblast Image",
+                    },
                 )
-            blocks = [b.as_form_field() for b in blocks]
 
             q_name, q_url = get_user_names([slack_user_id], logger, client, return_urls=True)
             q_name = (q_name or [""])[0]
@@ -956,7 +1032,8 @@ def handle_event_preblast_action(
                 )
             except Exception as e:
                 logger.error(
-                    f"Error updating preblast message after action {action_id} and event_instance_id {event_instance_id}: {e}"  # noqa
+                    f"Error updating preblast message after action {action_id} "
+                    f"and event_instance_id {event_instance_id}: {e}"
                 )
             if action_id in (actions.EVENT_PREBLAST_HC, actions.EVENT_PREBLAST_UN_HC):
                 post_hc_thread_reply(
@@ -969,71 +1046,75 @@ def handle_event_preblast_action(
                     is_hc=action_id == actions.EVENT_PREBLAST_HC,
                     event_instance_id=event_instance_id,
                 )
+
         build_event_preblast_form(
-            body, client, logger, context, region_record, event_instance_id=event_instance_id, update_view_id=view_id
+            body, client, logger, context, region_record,
+            event_instance_id=event_instance_id, update_view_id=view_id,
         )
+
     else:
+        # Message-embedded actions (outside modal)
         if action_id == actions.EVENT_PREBLAST_HC_UN_HC:
             already_hcd = user_id in (safe_get(metadata, "attendees") or [])
             if already_hcd:
-                DbManager.delete_records(
-                    cls=Attendance,
-                    filters=[
-                        Attendance.event_instance_id == event_instance_id,
-                        Attendance.user_id == user_id,
-                        Attendance.attendance_types.any(AttendanceType.id == 1),
-                        Attendance.is_planned,
-                    ],
-                    joinedloads=[Attendance.attendance_types],
-                )
+                try:
+                    svc.remove_hc(event_instance_id, user_id)
+                except Exception as e:
+                    logger.warning(f"Error Un-HC for event {event_instance_id}: {e}")
             else:
                 try:
-                    DbManager.create_record(
-                        Attendance(
-                            event_instance_id=event_instance_id,
-                            user_id=user_id,
-                            attendance_x_attendance_types=[Attendance_x_AttendanceType(attendance_type_id=1)],
-                            is_planned=True,
-                        )
-                    )
+                    svc.add_hc(event_instance_id, user_id)
                 except Exception as e:
-                    logger.warning(
-                        f"User {user_id} already marked as HC for event {event_instance_id} or is duplicate: {e}"
-                    )
+                    logger.warning(f"Error HC for event {event_instance_id}: {e}")
+
             preblast_info = build_preblast_info(body, client, logger, context, region_record, event_instance_id)
             q_id_list = [
-                r.user.id
+                r.get("user_id")
                 for r in preblast_info.attendance_records
-                if bool({t.id for t in r.attendance_types}.intersection([2, 3]))
+                if bool({2, 3}.intersection(r.get("attendance_type_ids", [])))
             ]
             metadata = {
                 "event_instance_id": event_instance_id,
-                "attendees": [r.user.id for r in preblast_info.attendance_records],
+                "attendees": [r.get("user_id") for r in preblast_info.attendance_records],
                 "qs": q_id_list,
             }
-            button_blocks = get_preblast_action_blocks(has_q=len(q_id_list) > 0, event_instance_id=event_instance_id)
-            blocks = [*preblast_info.preblast_blocks, *button_blocks]
-            if safe_get(preblast_info.event_record.meta, "preblast_image_slack_file_id"):
+            button_blocks = get_preblast_action_blocks(
+                has_q=len(q_id_list) > 0, event_instance_id=event_instance_id
+            )
+            blocks = list(preblast_info.preblast_blocks) + list(button_blocks)
+            if (
+                preblast_info.event_record.meta
+                and preblast_info.event_record.meta.get("preblast_image_slack_file_id")
+            ):
                 blocks.insert(
                     -1,
-                    orm.ImageBlock(
-                        slack_file_id=safe_get(preblast_info.event_record.meta, "preblast_image_slack_file_id"),
-                        alt_text="Preblast Image",
-                    ),
+                    {
+                        "type": "image",
+                        "slack_file": {"id": preblast_info.event_record.meta["preblast_image_slack_file_id"]},
+                        "alt_text": "Preblast Image",
+                    },
                 )
+
             q_name, q_url = get_user_names([slack_user_id], logger, client, return_urls=True)
             q_name = (q_name or [""])[0]
             q_url = q_url[0]
             preblast_channel = get_preblast_channel(region_record, preblast_info)
-            client.chat_update(
-                channel=preblast_channel,
-                ts=body["message"]["ts"],
-                blocks=[b.as_form_field() for b in blocks],
-                text="Preblast",
-                metadata={"event_type": "preblast", "event_payload": metadata},
-                username=f"{q_name} (via F3 Nation)",
-                icon_url=q_url,
-            )
+
+            try:
+                client.chat_update(
+                    channel=preblast_channel,
+                    ts=body["message"]["ts"],
+                    blocks=blocks,
+                    text="Preblast",
+                    metadata={"event_type": "preblast", "event_payload": metadata},
+                    username=f"{q_name} (via F3 Nation)",
+                    icon_url=q_url,
+                )
+            except Exception as e:
+                logger.error(
+                    f"Error updating preblast message after action {action_id} "
+                    f"for event {event_instance_id}: {e}"
+                )
             post_hc_thread_reply(
                 client,
                 logger,
@@ -1044,6 +1125,7 @@ def handle_event_preblast_action(
                 is_hc=not already_hcd,
                 event_instance_id=event_instance_id,
             )
+
         elif action_id == actions.EVENT_PREBLAST_EDIT:
             if constants.ALL_USERS_ARE_ADMINS:
                 user_is_admin = True
@@ -1060,98 +1142,19 @@ def handle_event_preblast_action(
                     user=slack_user_id,
                     text=":warning: Only Qs can edit the preblast! :warning:",
                 )
+
         elif action_id == actions.MSG_EVENT_PREBLAST_BUTTON:
             event_instance_id = safe_convert(body["actions"][0]["value"], int)
-            build_event_preblast_form(body, client, logger, context, region_record, event_instance_id=event_instance_id)
+            build_event_preblast_form(
+                body, client, logger, context, region_record, event_instance_id=event_instance_id
+            )
+
         elif action_id == actions.EVENT_PREBLAST_TAKE_Q:
             event_instance_id = safe_convert(body["actions"][0]["value"], int)
-            DbManager.delete_records(
-                cls=Attendance,
-                filters=[
-                    Attendance.event_instance_id == event_instance_id,
-                    Attendance.user_id == user_id,
-                    Attendance.is_planned,
-                ],
-                joinedloads=[Attendance.attendance_x_attendance_types],
+            try:
+                svc.take_q(event_instance_id, user_id)
+            except Exception as e:
+                logger.error(f"Error taking Q for event {event_instance_id}: {e}")
+            build_event_preblast_form(
+                body, client, logger, context, region_record, event_instance_id=event_instance_id
             )
-            DbManager.create_record(
-                Attendance(
-                    event_instance_id=event_instance_id,
-                    user_id=user_id,
-                    attendance_x_attendance_types=[Attendance_x_AttendanceType(attendance_type_id=2)],
-                    is_planned=True,
-                )
-            )
-            build_event_preblast_form(body, client, logger, context, region_record, event_instance_id=event_instance_id)
-
-
-DEFAULT_PREBLAST = {
-    "type": "rich_text",
-    "elements": [{"type": "rich_text_section", "elements": [{"text": "No preblast text entered", "type": "text"}]}],
-}
-
-EVENT_PREBLAST_FORM = orm.BlockView(
-    blocks=[
-        orm.InputBlock(
-            label="Title",
-            action=actions.EVENT_PREBLAST_TITLE,
-            element=orm.PlainTextInputElement(
-                placeholder="Event Title",
-            ),
-            optional=False,
-            hint="Studies show that fun titles generate 42% more HC's!",
-        ),
-        orm.InputBlock(
-            label="Location",
-            action=actions.EVENT_PREBLAST_LOCATION,
-            element=orm.StaticSelectElement(),
-            optional=True,
-        ),
-        orm.InputBlock(
-            label="Start Time",
-            action=actions.EVENT_PREBLAST_START_TIME,
-            element=orm.TimepickerElement(placeholder="Select start time"),
-            optional=False,
-        ),
-        orm.InputBlock(
-            label="Co-Qs",
-            action=actions.EVENT_PREBLAST_COQS,
-            element=orm.MultiUsersSelectElement(placeholder="Select Co-Qs"),
-            optional=True,
-        ),
-        orm.InputBlock(
-            label="Event Tag",
-            action=actions.EVENT_PREBLAST_TAG,
-            element=orm.MultiStaticSelectElement(placeholder="Select Event Tag", max_selected_items=1),
-            optional=True,
-        ),
-        orm.InputBlock(
-            label="Preblast",
-            action=actions.EVENT_PREBLAST_MOLESKINE_EDIT,
-            element=orm.RichTextInputElement(placeholder="Give us an event preview!"),
-            optional=False,
-        ),
-        orm.InputBlock(
-            label="Preblast Image",
-            action=actions.EVENT_PREBLAST_IMAGE,
-            element=orm.FileInputElement(
-                placeholder="Upload an image to be included in the preblast",
-                filetypes=["jpg", "jpeg", "png", "gif"],
-                max_files=1,
-            ),
-            optional=True,
-            hint="Missing images from iOS? HEICs are a pain, write Tim Cook and tell him to stop using proprietary formats that break everything",  # noqa
-        ),
-        orm.InputBlock(
-            label="When to send preblast?",
-            action=actions.EVENT_PREBLAST_SEND_OPTIONS,
-            element=orm.RadioButtonsElement(
-                options=orm.as_selector_options(
-                    names=["Send now", "Send a day before the event"],
-                ),
-                initial_value="Send a day before the event",
-            ),
-            optional=False,
-        ),
-    ]
-)

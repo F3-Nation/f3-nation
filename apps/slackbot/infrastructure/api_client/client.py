@@ -70,6 +70,9 @@ class F3ApiClient:
     def put(self, path: str, json: dict[str, Any] | None = None) -> Any:
         return self._request("put", path, json=json)
 
+    def patch(self, path: str, json: dict[str, Any] | None = None) -> Any:
+        return self._request("patch", path, json=json)
+
     def delete(self, path: str, json: dict[str, Any] | None = None) -> Any:
         return self._request("delete", path, json=json)
 

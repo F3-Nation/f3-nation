@@ -35,6 +35,7 @@ def _make_instance(
     meta: dict | None = None,
     is_private: bool = False,
     highlight: bool = False,
+    preblast_ts: int | float | None = None,
 ) -> EventInstanceData:
     return EventInstanceData(
         id=id,
@@ -49,6 +50,7 @@ def _make_instance(
         meta=meta,
         is_private=is_private,
         highlight=highlight,
+        preblast_ts=preblast_ts,
     )
 
 
@@ -146,6 +148,14 @@ class EventInstanceServiceTest(unittest.TestCase):
         self.assertEqual(kwargs["instance_id"], 5)
         self.assertEqual(kwargs["name"], "Updated")
 
+    def test_persist_posted_preblast_delegates(self):
+        repo = self._mock_repo()
+        repo.persist_posted_preblast.return_value = _make_instance(id=5, preblast_ts=1234567890)
+        service = EventInstanceService(repository=repo)
+        result = service.persist_posted_preblast(5, preblast_ts=1234567890, preblast_post_channel_id="C123")
+        repo.persist_posted_preblast.assert_called_once_with(5, preblast_ts=1234567890, preblast_post_channel_id="C123")
+        self.assertEqual(result.preblast_ts, 1234567890)
+
     def test_close_instance_fetches_meta_and_closes(self):
         repo = self._mock_repo()
         existing = _make_instance(id=3, meta={"existing_key": "val"})
@@ -220,6 +230,8 @@ class ApiEventInstanceRepositoryTest(unittest.TestCase):
             "eventTypes": [{"eventTypeId": 5}],
             "eventTags": [],
             "seriesException": series_exception,
+            "preblastTs": 1234567890,
+            "seriesId": 22,
         }
 
     def test_get_list_builds_correct_params(self):
@@ -261,6 +273,8 @@ class ApiEventInstanceRepositoryTest(unittest.TestCase):
         self.assertEqual(result.id, 5)
         self.assertEqual(result.start_date, date(2026, 6, 1))
         self.assertEqual(result.event_type_ids, [5])
+        self.assertEqual(result.preblast_ts, 1234567890)
+        self.assertEqual(result.series_id, 22)
 
     def test_get_by_id_returns_none_on_not_found(self):
         self.client.get.side_effect = F3ApiNotFoundError(404, "not found")
@@ -286,11 +300,15 @@ class ApiEventInstanceRepositoryTest(unittest.TestCase):
             "highlight": False,
             "event_types": [],
             "event_tags": [],
+            "preblast_ts": 42,
+            "series_id": 9,
         }
         self.client.get.return_value = {"eventInstance": raw}
         result = self.repo.get_by_id(1)
         self.assertEqual(result.start_time, "0530")
         self.assertEqual(result.org_id, 10)
+        self.assertEqual(result.preblast_ts, 42)
+        self.assertEqual(result.series_id, 9)
 
     def test_parse_instance_handles_singular_event_type_id(self):
         """API returns singular eventTypeId / eventTagId (not arrays)."""
@@ -364,6 +382,88 @@ class ApiEventInstanceRepositoryTest(unittest.TestCase):
         self.assertEqual(kwargs["json"]["name"], "Updated")
         self.assertEqual(kwargs["json"]["eventTypeId"], 1)
         self.assertNotIn("eventTagId", kwargs["json"])  # empty list → omitted
+
+    def test_update_writes_numeric_preblast_ts(self):
+        self.client.post.return_value = {"eventInstance": self._raw_instance(id=5)}
+        self.repo.update(
+            instance_id=5,
+            name="Updated",
+            org_id=10,
+            start_date=date(2026, 7, 4),
+            start_time="0600",
+            end_time="0700",
+            description=None,
+            location_id=None,
+            event_type_ids=[1],
+            event_tag_ids=[],
+            is_active=True,
+            is_private=False,
+            meta=None,
+            highlight=False,
+            preblast_rich=None,
+            preblast=None,
+            preblast_ts=987654321,
+        )
+        _, kwargs = self.client.post.call_args
+        self.assertEqual(kwargs["json"]["preblastTs"], 987654321)
+
+    def test_update_preblast_fields_merges_meta_and_preserves_required_fields(self):
+        self.client.get.return_value = {"eventInstance": {**self._raw_instance(id=10), "meta": {"keep": "yes"}}}
+        self.client.post.return_value = {"eventInstance": self._raw_instance(id=10)}
+        result = self.repo.update_preblast_fields(
+            10,
+            name="New Title",
+            preblast="pb",
+            meta_updates={"new": "value"},
+            preblast_channel_id="CDEST",
+        )
+        _, kwargs = self.client.post.call_args
+        self.assertEqual(kwargs["json"]["id"], 10)
+        self.assertEqual(kwargs["json"]["name"], "New Title")
+        self.assertEqual(kwargs["json"]["meta"], {"keep": "yes", "new": "value", "preblast_channel_id": "CDEST"})
+        self.assertEqual(result.id, 10)
+        self.assertEqual(self.client.get.call_count, 2)  # fetch before update, then authoritative refetch
+
+    def test_update_preblast_fields_can_clear_location(self):
+        self.client.get.return_value = {"eventInstance": {**self._raw_instance(id=10), "locationId": 99}}
+        self.client.post.return_value = {"success": True}
+        self.repo.update_preblast_fields(10, clear_location_id=True)
+        _, kwargs = self.client.post.call_args
+        self.assertIn("locationId", kwargs["json"])
+        self.assertIsNone(kwargs["json"]["locationId"])
+
+    def test_update_preblast_fields_preserves_location_when_not_clearing(self):
+        self.client.get.return_value = {"eventInstance": {**self._raw_instance(id=10), "locationId": 99}}
+        self.client.post.return_value = {"success": True}
+        self.repo.update_preblast_fields(10)
+        _, kwargs = self.client.post.call_args
+        self.assertEqual(kwargs["json"]["locationId"], 99)
+
+    def test_update_preblast_fields_raises_without_event_type(self):
+        self.client.get.return_value = {"eventInstance": {**self._raw_instance(id=10), "eventTypes": []}}
+        with self.assertRaisesRegex(ValueError, "missing required field 'event_type_ids'"):
+            self.repo.update_preblast_fields(10)
+        self.client.post.assert_not_called()
+
+    def test_update_preblast_fields_can_clear_event_tag(self):
+        self.client.get.return_value = {
+            "eventInstance": {**self._raw_instance(id=10), "eventTags": [{"eventTagId": 7}]}
+        }
+        self.client.post.return_value = {"eventInstance": self._raw_instance(id=10)}
+        self.repo.update_preblast_fields(10, event_tag_ids=[])
+        _, kwargs = self.client.post.call_args
+        self.assertIn("eventTagId", kwargs["json"])
+        self.assertIsNone(kwargs["json"]["eventTagId"])
+
+    def test_persist_posted_preblast_merges_post_channel(self):
+        self.client.get.return_value = {"eventInstance": {**self._raw_instance(id=11), "meta": {"keep": "yes"}}}
+        self.client.post.return_value = {"eventInstance": self._raw_instance(id=11)}
+        result = self.repo.persist_posted_preblast(11, preblast_ts=222, preblast_post_channel_id="CPOST")
+        _, kwargs = self.client.post.call_args
+        self.assertEqual(kwargs["json"]["preblastTs"], 222)
+        self.assertEqual(kwargs["json"]["meta"], {"keep": "yes", "preblast_post_channel_id": "CPOST"})
+        self.assertEqual(result.id, 11)
+        self.assertEqual(self.client.get.call_count, 2)
 
     def test_close_posts_correct_payload(self):
         instance = _make_instance(id=3, meta={"existing_key": "val"})

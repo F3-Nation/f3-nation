@@ -23,4 +23,6 @@ class EventInstanceData(BaseModel):
     highlight: bool = False
     preblast_rich: Any | None = None
     preblast: str | None = None
+    preblast_ts: int | float | None = None
+    series_id: int | None = None
     series_exception: str | None = None  # "closed" | "different-time" | "miscellaneous" | None

@@ -23,6 +23,9 @@ from application.event_instance import EventInstanceData
 from infrastructure.api_client.client import F3ApiClient, get_f3_api_client
 from infrastructure.api_client.exceptions import F3ApiNotFoundError
 
+PREBLAST_CHANNEL_META_KEY = "preblast_channel_id"
+PREBLAST_POST_CHANNEL_META_KEY = "preblast_post_channel_id"
+
 
 def _parse_instance(raw: dict) -> EventInstanceData:
     """Convert a raw API response dict to an ``EventInstanceData`` object."""
@@ -74,6 +77,8 @@ def _parse_instance(raw: dict) -> EventInstanceData:
         highlight=raw.get("highlight", False),
         preblast_rich=raw.get("preblastRich", raw.get("preblast_rich")),
         preblast=raw.get("preblast"),
+        preblast_ts=raw.get("preblastTs", raw.get("preblast_ts")),
+        series_id=raw.get("seriesId", raw.get("series_id")),
         series_exception=raw.get("seriesException", raw.get("series_exception")),
     )
 
@@ -94,6 +99,7 @@ def _build_crupdate_payload(
     highlight: bool,
     preblast_rich: Any | None,
     preblast: str | None,
+    preblast_ts: int | float | None = None,
 ) -> dict:
     # The API accepts a single eventTypeId and eventTagId (not arrays).
     payload: dict = {
@@ -119,7 +125,22 @@ def _build_crupdate_payload(
         payload["preblastRich"] = preblast_rich
     if preblast is not None:
         payload["preblast"] = preblast
+    if preblast_ts is not None:
+        payload["preblastTs"] = preblast_ts
     return payload
+
+
+def _merged_meta(existing: dict | None, updates: dict | None = None) -> dict:
+    meta = dict(existing or {})
+    if updates:
+        meta.update(updates)
+    return meta
+
+
+def _require_start_date(instance: EventInstanceData) -> date:
+    if instance.start_date is None:
+        raise ValueError(f"Event instance {instance.id} is missing required field 'start_date'")
+    return instance.start_date
 
 
 def _build_state_change_payload(
@@ -157,6 +178,7 @@ def _build_state_change_payload(
         highlight=instance.highlight,
         preblast_rich=instance.preblast_rich,
         preblast=instance.preblast,
+        preblast_ts=instance.preblast_ts,
     )
     payload["id"] = instance.id
     payload["seriesException"] = series_exception
@@ -210,6 +232,7 @@ class ApiEventInstanceRepository:
         highlight: bool,
         preblast_rich: Any | None,
         preblast: str | None,
+        preblast_ts: int | float | None = None,
     ) -> EventInstanceData:
         payload = _build_crupdate_payload(
             name=name,
@@ -227,6 +250,7 @@ class ApiEventInstanceRepository:
             highlight=highlight,
             preblast_rich=preblast_rich,
             preblast=preblast,
+            preblast_ts=preblast_ts,
         )
         result = self._client.post("/v1/event-instance", json=payload)
         raw = result.get("eventInstance") or result.get("result") or result
@@ -250,6 +274,7 @@ class ApiEventInstanceRepository:
         highlight: bool,
         preblast_rich: Any | None,
         preblast: str | None,
+        preblast_ts: int | float | None = None,
     ) -> EventInstanceData:
         payload = _build_crupdate_payload(
             name=name,
@@ -267,6 +292,7 @@ class ApiEventInstanceRepository:
             highlight=highlight,
             preblast_rich=preblast_rich,
             preblast=preblast,
+            preblast_ts=preblast_ts,
         )
         payload["id"] = instance_id
         result = self._client.post("/v1/event-instance", json=payload)
@@ -290,6 +316,100 @@ class ApiEventInstanceRepository:
     def delete(self, instance_id: int) -> None:
         """Hard-delete an event instance."""
         self._client.delete(f"/v1/event-instance/id/{instance_id}")
+
+    def update_preblast_fields(
+        self,
+        instance_id: int,
+        *,
+        name: str | None = None,
+        preblast_rich: Any | None = None,
+        preblast: str | None = None,
+        location_id: int | None = None,
+        clear_location_id: bool = False,
+        start_date: date | None = None,
+        start_time: str | None = None,
+        event_tag_ids: list[int] | None = None,
+        meta_updates: dict | None = None,
+        preblast_channel_id: str | None = None,
+    ) -> EventInstanceData:
+        existing = self.get_by_id(instance_id)
+        if existing is None:
+            raise ValueError(f"Event instance {instance_id} was not found")
+        if not existing.event_type_ids:
+            raise ValueError(f"Event instance {instance_id} is missing required field 'event_type_ids'")
+        meta_updates = _merged_meta(
+            meta_updates,
+            {PREBLAST_CHANNEL_META_KEY: preblast_channel_id} if preblast_channel_id else None,
+        )
+        tag_ids = event_tag_ids if event_tag_ids is not None else existing.event_tag_ids
+        resolved_location_id = None if clear_location_id else location_id
+        if not clear_location_id and location_id is None:
+            resolved_location_id = existing.location_id
+        payload = _build_crupdate_payload(
+            name=name if name is not None else existing.name or "",
+            org_id=existing.org_id,
+            start_date=start_date or _require_start_date(existing),
+            start_time=start_time or existing.start_time or "",
+            end_time=existing.end_time or "",
+            description=existing.description,
+            location_id=resolved_location_id,
+            event_type_id=existing.event_type_ids[0],
+            event_tag_id=tag_ids[0] if tag_ids else None,
+            is_active=existing.is_active,
+            is_private=existing.is_private,
+            meta=_merged_meta(existing.meta, meta_updates),
+            highlight=existing.highlight,
+            preblast_rich=preblast_rich if preblast_rich is not None else existing.preblast_rich,
+            preblast=preblast if preblast is not None else existing.preblast,
+            preblast_ts=existing.preblast_ts,
+        )
+        payload["id"] = instance_id
+        if event_tag_ids is not None and not event_tag_ids:
+            payload["eventTagId"] = None
+        if clear_location_id:
+            payload["locationId"] = None
+        self._client.post("/v1/event-instance", json=payload)
+        updated = self.get_by_id(instance_id)
+        if updated is None:
+            raise ValueError(f"Event instance {instance_id} was not found after update")
+        return updated
+
+    def persist_posted_preblast(
+        self,
+        instance_id: int,
+        *,
+        preblast_ts: int | float,
+        preblast_post_channel_id: str,
+    ) -> EventInstanceData:
+        existing = self.get_by_id(instance_id)
+        if existing is None:
+            raise ValueError(f"Event instance {instance_id} was not found")
+        if not existing.event_type_ids:
+            raise ValueError(f"Event instance {instance_id} is missing required field 'event_type_ids'")
+        payload = _build_crupdate_payload(
+            name=existing.name or "",
+            org_id=existing.org_id,
+            start_date=_require_start_date(existing),
+            start_time=existing.start_time or "",
+            end_time=existing.end_time or "",
+            description=existing.description,
+            location_id=existing.location_id,
+            event_type_id=existing.event_type_ids[0],
+            event_tag_id=existing.event_tag_ids[0] if existing.event_tag_ids else None,
+            is_active=existing.is_active,
+            is_private=existing.is_private,
+            meta=_merged_meta(existing.meta, {PREBLAST_POST_CHANNEL_META_KEY: preblast_post_channel_id}),
+            highlight=existing.highlight,
+            preblast_rich=existing.preblast_rich,
+            preblast=existing.preblast,
+            preblast_ts=preblast_ts,
+        )
+        payload["id"] = instance_id
+        self._client.post("/v1/event-instance", json=payload)
+        updated = self.get_by_id(instance_id)
+        if updated is None:
+            raise ValueError(f"Event instance {instance_id} was not found after update")
+        return updated
 
 
 # ---------------------------------------------------------------------------
