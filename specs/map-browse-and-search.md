@@ -82,8 +82,10 @@ city X" to "this workout, this address, this time" in a few interactions.
 
 - **AC-12** — GIVEN pins are visible WHEN the user activates a day filter
   (e.g. "Today") THEN only locations with at least one event matching the
-  filter remain on the map, and the nearby list shows "No locations found
-  matching your filters" when nothing matches.
+  filter remain on the map, and the nearby list shows a "No locations
+  found" empty state when nothing matches (the "matching your filters"
+  suffix appears only for day/type/time filters — AM/PM alone doesn't set
+  the filter-active flag).
 - **AC-13** — GIVEN the AM quick filter is active WHEN the user activates PM
   THEN AM deactivates (mutually exclusive), and Reset restores the unfiltered
   pin set.
