@@ -11,9 +11,7 @@ import {
 import type { AdminSession } from "./session";
 
 export type AdminSessionStatus =
-  | "loading"
-  | "authenticated"
-  | "unauthenticated";
+  "loading" | "authenticated" | "unauthenticated";
 
 interface AdminSessionContextValue {
   data: AdminSession | null;

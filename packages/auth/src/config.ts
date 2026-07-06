@@ -216,8 +216,7 @@ export const authConfig: NextAuthConfig = {
         email: token.email,
         name: token.name as string | undefined,
         roles: token.roles as
-          | { orgId: number; orgName: string; roleName: UserRole }[]
-          | undefined,
+          { orgId: number; orgName: string; roleName: UserRole }[] | undefined,
       };
       return Promise.resolve(result);
     },
