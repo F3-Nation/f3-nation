@@ -420,9 +420,9 @@ def populate_users(client: WebClient, team_id: str, org_id: int = None) -> None:
     active_users = []
     for u in users:
         user_id = safe_get(u, "id")
-        if not user_id or user_id == "USLACKBOT":
+        if not user_id:
             continue
-        if is_deactivated_slack_user(u) or safe_get(u, "is_bot"):
+        if is_deactivated_slack_user(u):
             continue
         active_users.append(u)
 
