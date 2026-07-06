@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFormContext } from "react-hook-form";
 
-import { isProductionNodeEnv } from "@acme/shared/common/constants";
+import { isProduction } from "@acme/shared/common/constants";
 import { isTruthy } from "@acme/shared/common/functions";
 import { cn } from "@acme/ui";
 import { Button } from "@acme/ui/button";
@@ -340,7 +340,7 @@ export function SubmitSection<T extends SubmitSectionFormValues>({
         Cancel
       </Button>
 
-      {!isProductionNodeEnv && <DevLoadTestData />}
+      {!isProduction && <DevLoadTestData />}
     </div>
   );
 }

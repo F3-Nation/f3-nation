@@ -1,5 +1,5 @@
 import type { CreateAOAndLocationAndEventType } from "@acme/validators/request-schemas";
-import { isProductionNodeEnv } from "@acme/shared/common/constants";
+import { isProduction } from "@acme/shared/common/constants";
 import { Form, useForm } from "@acme/ui/form";
 import { CreateAOAndLocationAndEventSchema } from "@acme/validators/request-schemas";
 
@@ -40,7 +40,7 @@ export const CreateAOAndLocationAndEventModal = ({
     <BaseModal title="New Location, AO & Event">
       <Form {...form}>
         <form className="w-[inherit] overflow-x-hidden p-0.5">
-          {!isProductionNodeEnv && <FormDebugData />}
+          {!isProduction && <FormDebugData />}
           <InRegionForm<CreateAOAndLocationAndEventType> />
           <LocationDetailsForm<CreateAOAndLocationAndEventType> />
           <AODetailsForm<CreateAOAndLocationAndEventType> />

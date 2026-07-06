@@ -3,7 +3,7 @@ import { Form, useForm } from "@acme/ui/form";
 import { DeleteAOSchema } from "@acme/validators/request-schemas";
 
 import type { DataType, ModalType } from "~/utils/store/modal";
-import { isProductionNodeEnv } from "@acme/shared/common/constants";
+import { isProduction } from "@acme/shared/common/constants";
 import { client } from "~/orpc/client";
 import { FormDebugData } from "../../forms/dev-debug-component";
 import { ContactDetailsForm } from "../../forms/form-inputs/contact-details-form";
@@ -26,7 +26,7 @@ export const DeleteAoModal = ({
     <BaseModal title="Delete AO">
       <Form {...form}>
         <form className="w-[inherit] overflow-x-hidden p-0.5">
-          {!isProductionNodeEnv && <FormDebugData />}
+          {!isProduction && <FormDebugData />}
           <DeleteAoForm />
           <ContactDetailsForm<DeleteAOType> />
           <SubmitSection<DeleteAOType>

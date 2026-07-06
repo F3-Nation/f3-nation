@@ -7,7 +7,7 @@ import { FormDebugData } from "~/app/_components/forms/dev-debug-component";
 import { ContactDetailsForm } from "~/app/_components/forms/form-inputs/contact-details-form";
 import { ExistingLocationPickerForm } from "~/app/_components/forms/form-inputs/existing-location-picker-form";
 import { BaseModal } from "~/app/_components/modal/base-modal";
-import { isProductionNodeEnv } from "@acme/shared/common/constants";
+import { isProduction } from "@acme/shared/common/constants";
 import { client } from "~/orpc/client";
 import { AODetailsForm } from "../../forms/form-inputs/ao-details-form";
 import { LocationDetailsForm } from "../../forms/form-inputs/location-details-form";
@@ -30,7 +30,7 @@ export const MoveEventToNewAoModal = ({
     <BaseModal title="Move Event to New AO">
       <Form {...form}>
         <form className="w-[inherit] overflow-x-hidden p-0.5">
-          {!isProductionNodeEnv && <FormDebugData />}
+          {!isProduction && <FormDebugData />}
 
           <h2 className="mt-4 mb-2 text-xl font-semibold text-muted-foreground">
             Destination Region:
