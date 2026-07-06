@@ -93,7 +93,7 @@ export default function AdminRequestsModal({
           valuesToSubmit.aoLogo = aoLogo;
         }
 
-        await validateSubmissionByAdmin.mutateAsync({
+        const result = await validateSubmissionByAdmin.mutateAsync({
           ...valuesToSubmit,
           eventStartTime: convertHH_mmToHHmm(
             valuesToSubmit.eventStartTime ?? "",
@@ -105,7 +105,13 @@ export default function AdminRequestsModal({
         void invalidateQueries("event");
         void invalidateQueries("location");
         router.refresh();
-        toast.success("Approved update");
+        if (result.status === "approved") {
+          toast.success("Approved update");
+        } else {
+          toast.info(
+            "You don't have permission for every affected region — the request was submitted for further review",
+          );
+        }
         closeModal();
       } catch (error) {
         console.log(error);
@@ -143,7 +149,7 @@ export default function AdminRequestsModal({
         void invalidateQueries("request");
         router.refresh();
         setStatus("idle");
-        toast.error("Rejected update");
+        toast.success("Rejected update");
         closeModal();
       });
   };
