@@ -33,8 +33,8 @@ export const FeaturesClusterMarker = ({
       position={position}
       zIndex={size}
       onClick={(e) => {
-        // Must call stop to prevent the map from being clicked
-        e.stop();
+        // Must stop propagation to prevent the map from being clicked
+        e.stopPropagation();
         if (marker == null) {
           throw new Error("Marker is null");
         }

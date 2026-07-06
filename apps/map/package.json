@@ -1,6 +1,6 @@
 {
   "name": "f3-map",
-  "version": "7.0.4",
+  "version": "7.0.5",
   "private": true,
   "type": "module",
   "scripts": {
@@ -17,16 +17,16 @@
     "with-env": "dotenv -e .env --"
   },
   "dependencies": {
-    "@acme/api": "workspace:^0.2.0",
-    "@acme/auth": "workspace:^0.1.0",
-    "@acme/db": "workspace:^0.1.0",
+    "@acme/api": "workspace:*",
+    "@acme/auth": "workspace:*",
+    "@acme/db": "workspace:*",
     "@acme/logger": "workspace:*",
     "@acme/mail": "workspace:*",
-    "@acme/shared": "workspace:^0.1.0",
-    "@acme/storage": "workspace:^0.2.0",
-    "@acme/tailwind-config": "workspace:^0.1.0",
-    "@acme/ui": "workspace:^0.1.0",
-    "@acme/validators": "workspace:^0.1.0",
+    "@acme/shared": "workspace:*",
+    "@acme/storage": "workspace:*",
+    "@acme/tailwind-config": "workspace:*",
+    "@acme/ui": "workspace:*",
+    "@acme/validators": "workspace:*",
     "@auth/core": "catalog:",
     "@hookform/resolvers": "catalog:",
     "@orpc/client": "catalog:",
@@ -63,10 +63,10 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@acme/eslint-config": "workspace:^0.2.0",
-    "@acme/prettier-config": "workspace:^0.1.0",
+    "@acme/eslint-config": "workspace:*",
+    "@acme/prettier-config": "workspace:*",
     "@acme/tsconfig": "workspace:*",
-    "@acme/vitest-config": "workspace:^0.1.0",
+    "@acme/vitest-config": "workspace:*",
     "@tailwindcss/postcss": "catalog:",
     "@testing-library/jest-dom": "catalog:",
     "@testing-library/react": "catalog:",

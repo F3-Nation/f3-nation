@@ -1,5 +1,7 @@
 import { useState, useCallback, useRef } from "react";
 
+import { toast } from "@acme/ui/toast";
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -14,11 +16,6 @@ export interface RemovableListOptions<T> {
   buildDeleteBody: (item: T) => Record<string, unknown>;
   /** Filter predicate: return false for the item being removed. */
   shouldKeep: (item: T, removedItem: T) => boolean;
-  toast: (opts: {
-    title: string;
-    description: string;
-    variant?: "destructive";
-  }) => void;
   /** Toast messages for success / failure. */
   successMessage: (item: T) => { title: string; description: string };
   failureTitle: string;
@@ -49,7 +46,6 @@ export function useRemovableList<T>({
   endpoint,
   buildDeleteBody,
   shouldKeep,
-  toast,
   successMessage,
   failureTitle,
 }: RemovableListOptions<T>): UseRemovableListReturn<T> {
@@ -83,12 +79,11 @@ export function useRemovableList<T>({
         }
 
         setItems((prev) => prev.filter((p) => shouldKeep(p, item)));
-        toast(successMessage(item));
+        const { title, description } = successMessage(item);
+        toast.success(title, { description });
       } catch (err) {
-        toast({
-          title: failureTitle,
+        toast.error(failureTitle, {
           description: err instanceof Error ? err.message : "Please try again.",
-          variant: "destructive",
         });
       } finally {
         inFlightRef.current = false;
@@ -100,7 +95,6 @@ export function useRemovableList<T>({
       endpoint,
       buildDeleteBody,
       shouldKeep,
-      toast,
       successMessage,
       failureTitle,
     ],
