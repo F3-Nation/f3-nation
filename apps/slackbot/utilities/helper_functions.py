@@ -416,12 +416,15 @@ def get_region_record(team_id: str, body, context, client, logger) -> SlackSetti
 
 
 def populate_users(client: WebClient, team_id: str, org_id: int = None) -> None:
-    users = client.users_list().get("members")
-    active_users = [
-        u
-        for u in users
-        if not is_deactivated_slack_user(u) and not safe_get(u, "is_bot") and safe_get(u, "id") != "USLACKBOT"
-    ]
+    users = client.users_list().get("members") or []
+    active_users = []
+    for u in users:
+        user_id = safe_get(u, "id")
+        if not user_id or user_id == "USLACKBOT":
+            continue
+        if is_deactivated_slack_user(u) or safe_get(u, "is_bot"):
+            continue
+        active_users.append(u)
 
     user_list = [
         User(
