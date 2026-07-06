@@ -1,7 +1,7 @@
 {
   "name": "f3-me",
   "type": "module",
-  "version": "2.0.0",
+  "version": "2.0.5",
   "private": true,
   "scripts": {
     "dev": "next dev --port 3003",
@@ -17,12 +17,12 @@
     "deploy:variables-secrets:prod": "/usr/bin/env bash scripts/cloud-run-env.sh --env prod"
   },
   "dependencies": {
-    "@acme/api": "workspace:^0.2.0",
+    "@acme/api": "workspace:*",
     "@acme/logger": "workspace:*",
-    "@acme/shared": "workspace:^0.1.0",
+    "@acme/shared": "workspace:*",
     "@acme/sso": "workspace:*",
     "@acme/storage": "workspace:*",
-    "@acme/ui": "workspace:^0.1.0",
+    "@acme/ui": "workspace:*",
     "@orpc/client": "catalog:",
     "@orpc/server": "catalog:",
     "@t3-oss/env-nextjs": "catalog:",
@@ -36,10 +36,10 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@acme/eslint-config": "workspace:^0.2.0",
+    "@acme/eslint-config": "workspace:*",
     "@acme/tailwind-config": "workspace:*",
-    "@acme/tsconfig": "workspace:^0.1.0",
-    "@acme/vitest-config": "workspace:^0.1.0",
+    "@acme/tsconfig": "workspace:*",
+    "@acme/vitest-config": "workspace:*",
     "@tailwindcss/postcss": "catalog:",
     "@testing-library/jest-dom": "catalog:",
     "@testing-library/react": "catalog:",

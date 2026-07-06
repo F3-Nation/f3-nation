@@ -1,6 +1,6 @@
 {
   "name": "@acme/api",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "exports": {
@@ -19,14 +19,14 @@
     "with-env": "dotenv -e ../env/.env --"
   },
   "dependencies": {
-    "@acme/auth": "workspace:^0.1.0",
-    "@acme/db": "workspace:^0.1.0",
-    "@acme/env": "workspace:^0.1.0",
+    "@acme/auth": "workspace:*",
+    "@acme/db": "workspace:*",
+    "@acme/env": "workspace:*",
     "@acme/logger": "workspace:*",
     "@acme/mail": "workspace:*",
-    "@acme/shared": "workspace:^0.1.0",
+    "@acme/shared": "workspace:*",
     "@acme/storage": "workspace:*",
-    "@acme/validators": "workspace:^0.1.0",
+    "@acme/validators": "workspace:*",
     "@orpc/experimental-ratelimit": "catalog:",
     "@orpc/server": "catalog:",
     "dayjs": "catalog:",
@@ -41,9 +41,9 @@
     "react-dom": ">=18 <20"
   },
   "devDependencies": {
-    "@acme/eslint-config": "workspace:^0.2.0",
-    "@acme/prettier-config": "workspace:^0.1.0",
-    "@acme/tsconfig": "workspace:^0.1.0",
+    "@acme/eslint-config": "workspace:*",
+    "@acme/prettier-config": "workspace:*",
+    "@acme/tsconfig": "workspace:*",
     "@types/lodash": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "dotenv-cli": "catalog:",

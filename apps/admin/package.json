@@ -1,6 +1,6 @@
 {
   "name": "f3-admin",
-  "version": "2.0.0",
+  "version": "2.0.5",
   "private": true,
   "type": "module",
   "scripts": {
@@ -14,15 +14,15 @@
     "with-env": "dotenv -e ../../.env --"
   },
   "dependencies": {
-    "@acme/api": "workspace:^0.2.0",
+    "@acme/api": "workspace:*",
     "@acme/logger": "workspace:*",
     "@acme/mail": "workspace:*",
-    "@acme/shared": "workspace:^0.1.0",
+    "@acme/shared": "workspace:*",
     "@acme/sso": "workspace:*",
     "@acme/storage": "workspace:*",
-    "@acme/tailwind-config": "workspace:^0.1.0",
-    "@acme/ui": "workspace:^0.1.0",
-    "@acme/validators": "workspace:^0.1.0",
+    "@acme/tailwind-config": "workspace:*",
+    "@acme/ui": "workspace:*",
+    "@acme/validators": "workspace:*",
     "@orpc/client": "catalog:",
     "@orpc/server": "catalog:",
     "@orpc/tanstack-query": "catalog:",
@@ -47,8 +47,8 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@acme/eslint-config": "workspace:^0.2.0",
-    "@acme/prettier-config": "workspace:^0.1.0",
+    "@acme/eslint-config": "workspace:*",
+    "@acme/prettier-config": "workspace:*",
     "@acme/tsconfig": "workspace:*",
     "@tailwindcss/postcss": "catalog:",
     "@types/google.maps": "catalog:",
