@@ -36,6 +36,12 @@
       "description": "Disable noisy peerDependency update PRs",
       "matchDepTypes": ["peerDependencies"],
       "enabled": false
+    },
+    {
+      "description": "Do not auto-update the Python base image; adopt interpreter upgrades manually",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["python"],
+      "enabled": false
     }
   ]
 }
