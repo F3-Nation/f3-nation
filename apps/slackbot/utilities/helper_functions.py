@@ -168,6 +168,11 @@ def safe_get(data, *keys):
         return None
 
 
+def is_deactivated_slack_user(slack_user_info: dict) -> bool:
+    """Return True when a Slack user payload represents a deactivated account."""
+    return bool(safe_get(slack_user_info, "deleted"))
+
+
 def get_pax(pax):
     p = ""
     for x in pax:
@@ -412,14 +417,20 @@ def get_region_record(team_id: str, body, context, client, logger) -> SlackSetti
 
 def populate_users(client: WebClient, team_id: str, org_id: int = None) -> None:
     users = client.users_list().get("members")
+    active_users = [
+        u
+        for u in users
+        if not is_deactivated_slack_user(u) and not safe_get(u, "is_bot") and safe_get(u, "id") != "USLACKBOT"
+    ]
+
     user_list = [
         User(
-            f3_name=u["profile"]["display_name"] or u["profile"]["real_name"],
-            email=u["profile"].get("email") or u["id"],
-            avatar_url=u["profile"].get("image_192"),
+            f3_name=safe_get(u, "profile", "display_name") or safe_get(u, "profile", "real_name"),
+            email=safe_get(u, "profile", "email") or u["id"],
+            avatar_url=safe_get(u, "profile", "image_192"),
             home_region_id=org_id,
         )
-        for u in users
+        for u in active_users
     ]
     DbManager.create_or_ignore(User, user_list)
 
@@ -429,17 +440,17 @@ def populate_users(client: WebClient, team_id: str, org_id: int = None) -> None:
     slack_user_list = [
         SlackUser(
             slack_id=u["id"],
-            user_id=users_dict.get(u["profile"].get("email") or u["id"]),
-            user_name=u["profile"]["display_name"] or u["profile"]["real_name"],
-            email=u["profile"].get("email") or u["id"],
-            avatar_url=u["profile"]["image_192"],
+            user_id=users_dict.get(safe_get(u, "profile", "email") or u["id"]),
+            user_name=safe_get(u, "profile", "display_name") or safe_get(u, "profile", "real_name"),
+            email=safe_get(u, "profile", "email") or u["id"],
+            avatar_url=safe_get(u, "profile", "image_192"),
             slack_team_id=team_id or "NOT FOUND",
             is_admin=u.get("is_admin") or False,
             is_owner=u.get("is_owner") or False,
             is_bot=u.get("is_bot") or False,
             slack_updated=safe_convert(safe_get(u, "user", "updated"), int),
         )
-        for u in users
+        for u in active_users
     ]
     DbManager.create_or_ignore(SlackUser, slack_user_list)
     update_local_slack_users()
