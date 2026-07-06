@@ -428,9 +428,9 @@ def populate_users(client: WebClient, team_id: str, org_id: int = None) -> None:
 
     user_list = [
         User(
-            f3_name=safe_get(u, "profile", "display_name") or safe_get(u, "profile", "real_name"),
-            email=safe_get(u, "profile", "email") or u["id"],
-            avatar_url=safe_get(u, "profile", "image_192"),
+            f3_name=u["profile"]["display_name"] or u["profile"]["real_name"],
+            email=u["profile"].get("email") or u["id"],
+            avatar_url=u["profile"].get("image_192"),
             home_region_id=org_id,
         )
         for u in active_users
@@ -443,10 +443,10 @@ def populate_users(client: WebClient, team_id: str, org_id: int = None) -> None:
     slack_user_list = [
         SlackUser(
             slack_id=u["id"],
-            user_id=users_dict.get(safe_get(u, "profile", "email") or u["id"]),
-            user_name=safe_get(u, "profile", "display_name") or safe_get(u, "profile", "real_name"),
-            email=safe_get(u, "profile", "email") or u["id"],
-            avatar_url=safe_get(u, "profile", "image_192"),
+            user_id=users_dict.get(u["profile"].get("email") or u["id"]),
+            user_name=u["profile"]["display_name"] or u["profile"]["real_name"],
+            email=u["profile"].get("email") or u["id"],
+            avatar_url=u["profile"]["image_192"],
             slack_team_id=team_id or "NOT FOUND",
             is_admin=u.get("is_admin") or False,
             is_owner=u.get("is_owner") or False,
