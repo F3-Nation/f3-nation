@@ -4,7 +4,7 @@
 set -euo pipefail
 
 if command -v uv >/dev/null 2>&1; then
-  uv sync
+  uv sync --all-packages
   exit 0
 fi
 
