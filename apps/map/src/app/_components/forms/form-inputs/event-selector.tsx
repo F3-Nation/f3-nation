@@ -28,7 +28,7 @@ interface EventSelectorFormValues {
  * Single Responsibility: Display and manage event selection
  * Depends on region being selected first
  */
-export function EventSelector<_T extends EventSelectorFormValues>({
+export function EventSelector({
   label = "Event to move:",
   fieldName = "newEventId",
   regionFieldName = "newRegionId",

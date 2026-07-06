@@ -24,12 +24,19 @@ export const ExistingLocationPickerForm = (params: {
   const formOriginalRegionId = form.watch("originalRegionId");
   const formNewLocationId = form.watch("newLocationId");
 
-  const disabled =
-    (params.region === "newRegion" && !formNewRegionId) ||
-    (params.region === "originalRegion" && !formOriginalRegionId);
+  const activeRegionId =
+    params.region === "originalRegion" ? formOriginalRegionId : formNewRegionId;
 
-  // Get location data
-  const { data: locations } = useQuery(orpc.location.all.queryOptions());
+  const disabled = activeRegionId == null;
+
+  // Fetch only the locations in the selected region (filtered server-side).
+  const { data: locations } = useQuery(
+    orpc.location.all.queryOptions({
+      input:
+        activeRegionId != null ? { regionIds: [activeRegionId] } : undefined,
+      enabled: activeRegionId != null,
+    }),
+  );
 
   const sortedRegionLocationOptions = useMemo(() => {
     const newLocationOption = {
@@ -47,12 +54,6 @@ export const ExistingLocationPickerForm = (params: {
 
     const existingLocations =
       locations?.locations
-        // If we have an original regionId, only show those, otherwise use the formRegionId
-        ?.filter((l) =>
-          params.region === "originalRegion"
-            ? l.regionId === formOriginalRegionId
-            : l.regionId === formNewRegionId,
-        )
         ?.sort((a, b) => a.locationName.localeCompare(b.locationName))
         ?.map((l) => ({
           labelComponent: (
@@ -67,12 +68,7 @@ export const ExistingLocationPickerForm = (params: {
         })) ?? [];
 
     return [newLocationOption, ...existingLocations];
-  }, [
-    locations?.locations,
-    params.region,
-    formOriginalRegionId,
-    formNewRegionId,
-  ]);
+  }, [locations?.locations]);
 
   // When the region changes the filtered options change too; clear a selected
   // location that no longer belongs to the region so an invalid

@@ -58,7 +58,6 @@ export const updateAO = async (
   ctx: Context,
   { id, ...params }: Partial<typeof schema.orgs.$inferInsert> & { id: number },
 ) => {
-  const newLocationIds: number[] = [];
   const [ao] = await ctx.db
     .select()
     .from(schema.orgs)
@@ -72,30 +71,38 @@ export const updateAO = async (
     throw new Error("Organization is not an AO");
   }
 
-  if (params.parentId && params.parentId !== ao.parentId && ao.parentId) {
-    const result = await moveAOLocsToNewRegion(ctx, {
-      aoId: ao.id,
-      oldRegionId: ao.parentId,
-      newRegionId: params.parentId,
-    });
-    newLocationIds.push(...result.newLocationIds);
-  }
-
   const set: Partial<typeof schema.orgs.$inferInsert> = {
     ...removeUndefinedFromObject(params),
   };
 
-  const [updatedAO] = await ctx.db
-    .update(schema.orgs)
-    .set(set)
-    .where(eq(schema.orgs.id, ao.id))
-    .returning();
+  // The region move (which copies locations and re-points events) and the AO
+  // row update are mutually dependent. Run them in a single transaction so a
+  // failure can't leave the AO's parentId and its locations inconsistent.
+  return ctx.db.transaction(async (tx) => {
+    const txCtx: Context = { ...ctx, db: tx as unknown as Context["db"] };
+    const newLocationIds: number[] = [];
 
-  if (!updatedAO) {
-    throw new Error("Failed to update AO");
-  }
+    if (params.parentId && params.parentId !== ao.parentId && ao.parentId) {
+      const result = await moveAOLocsToNewRegion(txCtx, {
+        aoId: ao.id,
+        oldRegionId: ao.parentId,
+        newRegionId: params.parentId,
+      });
+      newLocationIds.push(...result.newLocationIds);
+    }
 
-  return { ...updatedAO, newLocationIds };
+    const [updatedAO] = await txCtx.db
+      .update(schema.orgs)
+      .set(set)
+      .where(eq(schema.orgs.id, ao.id))
+      .returning();
+
+    if (!updatedAO) {
+      throw new Error("Failed to update AO");
+    }
+
+    return { ...updatedAO, newLocationIds };
+  });
 };
 
 export const getLocationIdsForAO = async (ctx: Context, aoId: number) => {

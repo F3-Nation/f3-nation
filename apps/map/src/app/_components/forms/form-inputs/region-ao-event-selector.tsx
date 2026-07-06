@@ -12,22 +12,12 @@ interface RegionAOEventSelectorProps {
   eventFieldName?: "originalEventId" | "newEventId";
 }
 
-interface RegionAOEventSelectorFormValues {
-  originalRegionId?: number | null;
-  newRegionId?: number | null;
-  originalAoId?: number | null;
-  newAoId?: number | null;
-  originalEventId?: number | null;
-  newEventId?: number | null;
-}
 /**
  * Composed component for Region + AO + Event selection
  * Follows Open/Closed Principle: New selection combinations can be added
  * without modifying existing components
  */
-export function RegionAOEventSelector<
-  _T extends RegionAOEventSelectorFormValues,
->({
+export function RegionAOEventSelector({
   title = "Choose Event:",
   regionLabel = "In Region:",
   aoLabel = "From AO (optional):",
@@ -42,13 +32,13 @@ export function RegionAOEventSelector<
         {title}
       </h2>
       <div className="flex flex-row flex-wrap gap-4">
-        <RegionSelector<_T> label={regionLabel} fieldName={regionFieldName} />
-        <AOSelector<_T>
+        <RegionSelector label={regionLabel} fieldName={regionFieldName} />
+        <AOSelector
           label={aoLabel}
           fieldName={aoFieldName}
           regionFieldName={regionFieldName}
         />
-        <EventSelector<_T>
+        <EventSelector
           label={eventLabel}
           fieldName={eventFieldName}
           regionFieldName={regionFieldName}

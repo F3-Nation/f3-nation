@@ -162,7 +162,7 @@ export default function AdminEventTypesModal({
                         placeholder="ID"
                         disabled
                         {...field}
-                        value={field.value as string}
+                        value={field.value?.toString() ?? ""}
                       />
                     </FormControl>
                     <FormMessage />

@@ -188,7 +188,7 @@ export const AoDetailsFields = ({
                   type="file"
                   accept="image/*"
                   onChange={(e) => {
-                    if (formRegionId == null || formRegionId <= -1) {
+                    if (formRegionId == null || !(formRegionId > 0)) {
                       toast.error("Please select a region first");
                       return;
                     }
@@ -198,7 +198,7 @@ export const AoDetailsFields = ({
 
                     onAoLogoFileChange?.(file, URL.createObjectURL(file));
                   }}
-                  disabled={formRegionId == null || formRegionId <= -1}
+                  disabled={formRegionId == null || !(formRegionId > 0)}
                   className="flex-1"
                 />
                 {(selectedAoLogoPreviewUrl ?? value) && (

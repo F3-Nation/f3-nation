@@ -157,7 +157,8 @@ export const recordUpdateRequest = async (params: {
     Record<string, unknown>;
   status: "approved" | "pending" | "rejected";
 }): Promise<typeof dbSchema.updateRequests.$inferSelect> => {
-  const reviewedAt = new Date().toISOString();
+  const reviewedAt =
+    params.status === "pending" ? undefined : new Date().toISOString();
 
   const req: Record<string, unknown> = { ...params.updateRequest };
 

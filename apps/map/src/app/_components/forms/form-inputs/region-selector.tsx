@@ -69,7 +69,6 @@ export function RegionSelector<_T extends RegionSelectorFormValues>({
         render={({ field, fieldState }) => (
           <>
             <VirtualizedCombobox
-              key={field.value?.toString()}
               options={regionOptions}
               value={field.value?.toString()}
               onSelect={(item) => {

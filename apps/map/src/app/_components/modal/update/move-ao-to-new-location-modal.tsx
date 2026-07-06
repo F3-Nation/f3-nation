@@ -8,9 +8,9 @@ import { ContactDetailsForm } from "~/app/_components/forms/form-inputs/contact-
 import { BaseModal } from "~/app/_components/modal/base-modal";
 import { isProduction } from "@acme/shared/common/constants";
 import { client } from "~/orpc/client";
-import { LocationDetailsForm } from "../../forms/form-inputs/location-details-form";
-import { RegionAndAOSelector } from "../../forms/form-inputs/region-and-ao-selector";
-import { SubmitSection } from "../../forms/submit-section";
+import { LocationDetailsForm } from "~/app/_components/forms/form-inputs/location-details-form";
+import { RegionAndAOSelector } from "~/app/_components/forms/form-inputs/region-and-ao-selector";
+import { SubmitSection } from "~/app/_components/forms/submit-section";
 
 export const MoveAOToNewLocationModal = ({
   data,
@@ -20,6 +20,7 @@ export const MoveAOToNewLocationModal = ({
   const form = useForm({
     schema: MoveAOToNewLocationSchema,
     defaultValues: data,
+    mode: "onBlur",
   });
 
   return (

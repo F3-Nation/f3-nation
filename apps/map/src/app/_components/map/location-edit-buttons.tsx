@@ -1,5 +1,7 @@
 import { ArrowRight, CirclePlus, Edit, Trash } from "lucide-react";
 
+import type { DayOfWeek } from "@acme/shared/app/enums";
+import { dayOfWeekToShortDayOfWeek } from "@acme/shared/app/functions";
 import { Button } from "@acme/ui/button";
 import {
   DropdownMenu,
@@ -113,7 +115,9 @@ export const LocationEditButtons = ({
                     meta: {
                       newRegionId: workoutInfo?.location?.regionId ?? undefined,
                       newAoId:
-                        workoutInfo?.location?.events[0]?.aoId ?? undefined,
+                        workoutInfo?.location?.events.find(
+                          (event) => event.id === eventId,
+                        )?.aoId ?? undefined,
                     },
                   });
                 }}
@@ -136,8 +140,6 @@ export const LocationEditButtons = ({
                     aoId,
                     meta: {
                       newRegionId: workoutInfo?.location?.regionId ?? undefined,
-                      newAoId:
-                        workoutInfo?.location?.events[0]?.aoId ?? undefined,
                     },
                   });
                 }}
@@ -273,24 +275,7 @@ export const LocationEditButtons = ({
 export const getShortDayOfWeek = (day: string | null | undefined) => {
   if (!day) return "";
 
-  switch (day.toLowerCase()) {
-    case "monday":
-      return "M";
-    case "tuesday":
-      return "Tu";
-    case "wednesday":
-      return "W";
-    case "thursday":
-      return "Th";
-    case "friday":
-      return "F";
-    case "saturday":
-      return "Sa";
-    case "sunday":
-      return "Su";
-    default:
-      return "";
-  }
+  return dayOfWeekToShortDayOfWeek(day.toLowerCase() as DayOfWeek);
 };
 
 export const formatTime = (time: string | null | undefined) => {

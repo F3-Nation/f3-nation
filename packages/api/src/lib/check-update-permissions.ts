@@ -7,6 +7,8 @@ import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 
 export interface CheckUpdatePermissionsInput {
   originalEventId?: number | null;
+  originalAoId?: number | null;
+  newAoId?: number | null;
   originalLocationId?: number | null;
   newLocationId?: number | null;
   originalRegionId?: number | null;
@@ -54,6 +56,8 @@ export const checkUpdatePermissions = async (params: {
   const orgsToCheck = [
     existingEvent?.orgId,
     ...locations.map((l) => l?.orgId),
+    input.originalAoId,
+    input.newAoId,
     input.originalRegionId,
     input.newRegionId,
   ]

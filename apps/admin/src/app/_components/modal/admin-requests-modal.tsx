@@ -95,6 +95,9 @@ export default function AdminRequestsModal({
 
   const formId = form.watch("id");
 
+  // Some legacy request types (e.g. "edit") have no dedicated form.
+  const FormComponent = request ? REQUEST_FORM_MAP[request.requestType] : null;
+
   const { data: eventTypes } = useQuery(
     orpc.eventType.all.queryOptions({ input: undefined }),
   );
@@ -255,17 +258,17 @@ export default function AdminRequestsModal({
                   {!isProd && <FormDebugData />}
                 </DialogTitle>
               </DialogHeader>
-              {(() => {
-                const FormComponent = REQUEST_FORM_MAP[request.requestType];
-                if (FormComponent) {
-                  return (
-                    <FormComponent
-                      selectedAoLogoPreviewUrl={selectedAoLogoPreviewUrl}
-                      onAoLogoFileChange={handleAoLogoFileChange}
-                    />
-                  );
-                }
-              })()}
+              {FormComponent ? (
+                <FormComponent
+                  selectedAoLogoPreviewUrl={selectedAoLogoPreviewUrl}
+                  onAoLogoFileChange={handleAoLogoFileChange}
+                />
+              ) : (
+                <div className="mt-4 rounded-md border border-dashed border-muted-foreground/40 p-4 text-sm text-muted-foreground">
+                  This is a legacy request type with no editable form. It can’t
+                  be approved here — reject it or close this dialog.
+                </div>
+              )}
               <div className="mt-4 flex justify-between gap-2">
                 <Button
                   type="button"
@@ -291,6 +294,7 @@ export default function AdminRequestsModal({
                   <Button
                     type="button"
                     className="bg-primary text-white hover:bg-primary/80"
+                    disabled={!FormComponent}
                     onClick={() => onSubmit()}
                   >
                     {status === "approving" ? (

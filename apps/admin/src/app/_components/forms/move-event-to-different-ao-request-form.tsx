@@ -34,8 +34,10 @@ export const MoveEventToDifferentAoRequestForm = () => {
   const regions = regionsResponse?.regions;
   const aos = useMemo(() => allAoData?.orgs ?? [], [allAoData]);
   const destinationAoOptions = useMemo(() => {
+    // Treat -1/null/0 (no region selected) as unfiltered so the AO list isn't empty.
+    const hasRegionFilter = !!formRegionId && formRegionId !== -1;
     const existing = aos
-      .filter((ao) => !formRegionId || ao.parentId === formRegionId)
+      .filter((ao) => !hasRegionFilter || ao.parentId === formRegionId)
       .map((ao) => ({
         label: ao.name,
         value: ao.id.toString(),
@@ -99,8 +101,9 @@ export const MoveEventToDifferentAoRequestForm = () => {
               );
               form.setValue("regionId", region?.id ?? -1);
 
+              // Reset a selected AO that no longer fits the region; keep new-AO drafts.
               const selectedAo = aos.find((ao) => ao.id === formAoId);
-              if (selectedAo?.parentId !== region?.id) {
+              if (selectedAo && selectedAo.parentId !== region?.id) {
                 form.setValue("aoId", null);
                 form.setValue("locationId", null);
                 form.setValue("aoName", "");

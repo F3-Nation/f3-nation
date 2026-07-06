@@ -29,13 +29,14 @@ function useForm<S extends ZodType>(
     schema: S;
   },
 ) {
+  const { schema, ...formProps } = props;
   const form = __useForm<zInput<S> & FieldValues, unknown, zOutput<S>>({
-    ...props,
+    ...formProps,
     // zodResolver's overloads can't resolve concrete in/out from the generic
     // schema `S` (its input isn't known to extend FieldValues), so we assert
     // the concrete schema shape the wrapper already guarantees.
     resolver: zodResolver(
-      props.schema as unknown as ZodType<zOutput<S>, zInput<S> & FieldValues>,
+      schema as unknown as ZodType<zOutput<S>, zInput<S> & FieldValues>,
     ),
   });
 

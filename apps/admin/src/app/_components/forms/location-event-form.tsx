@@ -79,7 +79,13 @@ export const LocationEventForm = ({
         <RegionSelectField label="Location Region" />
       </div>
       <div className="mb-3">
-        <LocationPickerField helperText="Select a location above to move this workout to a different location" />
+        <LocationPickerField
+          helperText={
+            showEventFields
+              ? "Select a location above to move this workout to a different location"
+              : "Select a location above to move this AO to a different location"
+          }
+        />
       </div>
       <div className="my-2 text-base font-bold text-foreground">
         The fields below update the location for all associated workouts

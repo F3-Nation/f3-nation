@@ -87,17 +87,6 @@ export const DesktopLocationPanelContent = () => {
       />
 
       <div className="h-8" />
-      <div className="absolute top-2 right-2 flex flex-row gap-2">
-        <button
-          className="rounded-full bg-muted-foreground px-1 py-1 text-sm text-background"
-          onClick={(e) => {
-            closePanel();
-            e.stopPropagation();
-          }}
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
     </div>
   );
 };

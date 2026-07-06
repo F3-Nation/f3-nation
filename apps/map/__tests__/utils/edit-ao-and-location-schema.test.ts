@@ -1,35 +1,24 @@
 import { describe, expect, it } from "vitest";
 
-import type { EditAOAndLocationType } from "@acme/validators/request-schemas";
 import { EditAOAndLocationSchema } from "@acme/validators/request-schemas";
+
+import {
+  aoFields,
+  base,
+  expectInvalidAt,
+  expectValid,
+  locationFields,
+} from "./request-schema-fixtures";
 
 // A fully-populated, correct edit_ao_and_location submission – the shape the
 // EditAoAndLocationModal hands to zodResolver when the user hits "Update".
-const validSubmission: EditAOAndLocationType = {
-  requestType: "edit_ao_and_location",
-  id: "11111111-1111-1111-1111-111111111111",
-  isReview: false,
-  badImage: false,
-  submittedBy: "tester@example.com",
-
-  originalRegionId: 5,
+const valid = {
+  ...base,
+  ...aoFields,
+  ...locationFields,
+  requestType: "edit_ao_and_location" as const,
   originalAoId: 30,
   originalLocationId: 10,
-
-  aoName: "Test AO",
-  aoLogo: "https://example.com/logo.png",
-  aoWebsite: "https://example.com",
-
-  locationLat: 35.5,
-  locationLng: -80.5,
-  locationAddress: "123 Main Street",
-  locationAddress2: "Suite 4",
-  locationCity: "Charlotte",
-  locationState: "NC",
-  locationZip: "28202",
-  locationCountry: "United States",
-  locationDescription: "Back parking lot",
-
   currentValues: {
     aoName: "Old AO",
     locationAddress: "1 Old Road",
@@ -37,13 +26,11 @@ const validSubmission: EditAOAndLocationType = {
 };
 
 describe("EditAOAndLocationSchema – valid submission", () => {
-  it("accepts a correctly-filled submission", () => {
-    const result = EditAOAndLocationSchema.safeParse(validSubmission);
-    expect(result.success).toBe(true);
-  });
+  it("accepts a correctly-filled submission", () =>
+    expectValid(EditAOAndLocationSchema, valid));
 
   it("preserves the submitted field values after parsing", () => {
-    const result = EditAOAndLocationSchema.parse(validSubmission);
+    const result = EditAOAndLocationSchema.parse(valid);
     expect(result).toMatchObject({
       requestType: "edit_ao_and_location",
       originalAoId: 30,
@@ -57,7 +44,7 @@ describe("EditAOAndLocationSchema – valid submission", () => {
 
   it("treats empty-string aoLogo/aoWebsite as omitted (preprocess)", () => {
     const result = EditAOAndLocationSchema.safeParse({
-      ...validSubmission,
+      ...valid,
       aoLogo: "",
       aoWebsite: "",
     });
@@ -69,85 +56,82 @@ describe("EditAOAndLocationSchema – valid submission", () => {
   });
 
   it("defaults badImage and isReview when omitted", () => {
-    const { badImage: _b, isReview: _r, ...rest } = validSubmission;
-    const result = EditAOAndLocationSchema.parse(rest);
+    const result = EditAOAndLocationSchema.parse(valid);
     expect(result.badImage).toBe(false);
     expect(result.isReview).toBe(false);
   });
 
-  it("allows optional AO/location fields to be absent", () => {
-    const minimal = {
+  it("allows optional AO/location fields to be absent", () =>
+    expectValid(EditAOAndLocationSchema, {
+      ...base,
       requestType: "edit_ao_and_location" as const,
-      id: validSubmission.id,
-      submittedBy: validSubmission.submittedBy,
-      originalRegionId: 5,
       originalAoId: 30,
       originalLocationId: 10,
       currentValues: {},
-    };
-    expect(EditAOAndLocationSchema.safeParse(minimal).success).toBe(true);
-  });
+    }));
 });
 
 describe("EditAOAndLocationSchema – invalid submissions", () => {
-  const invalidField = (
-    label: string,
-    overrides: Record<string, unknown>,
-    path: string,
-  ) => {
-    it(`rejects ${label}`, () => {
-      const result = EditAOAndLocationSchema.safeParse({
-        ...validSubmission,
-        ...overrides,
-      });
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        expect(result.error.issues.some((i) => i.path.includes(path))).toBe(
-          true,
-        );
-      }
-    });
-  };
+  it("rejects an aoName shorter than 2 characters", () =>
+    expectInvalidAt(
+      EditAOAndLocationSchema,
+      { ...valid, aoName: "A" },
+      "aoName",
+    ));
 
-  invalidField(
-    "an aoName shorter than 2 characters",
-    { aoName: "A" },
-    "aoName",
-  );
-  invalidField("a non-URL aoLogo", { aoLogo: "not-a-valid-url" }, "aoLogo");
-  invalidField(
-    "a non-URL aoWebsite",
-    { aoWebsite: "not-a-valid-url" },
-    "aoWebsite",
-  );
-  invalidField(
-    "an address shorter than 5 characters",
-    { locationAddress: "123" },
-    "locationAddress",
-  );
-  invalidField(
-    "a non-positive originalAoId",
-    { originalAoId: 0 },
-    "originalAoId",
-  );
-  invalidField(
-    "a non-positive originalLocationId",
-    { originalLocationId: -1 },
-    "originalLocationId",
-  );
-  invalidField(
-    "a missing originalRegionId",
-    { originalRegionId: undefined },
-    "originalRegionId",
-  );
-  invalidField(
-    "an invalid submittedBy email",
-    { submittedBy: "not-an-email" },
-    "submittedBy",
-  );
-  invalidField(
-    "a mismatched requestType literal",
-    { requestType: "edit_event" },
-    "requestType",
-  );
+  it("rejects a non-URL aoLogo", () =>
+    expectInvalidAt(
+      EditAOAndLocationSchema,
+      { ...valid, aoLogo: "not-a-valid-url" },
+      "aoLogo",
+    ));
+
+  it("rejects a non-URL aoWebsite", () =>
+    expectInvalidAt(
+      EditAOAndLocationSchema,
+      { ...valid, aoWebsite: "not-a-valid-url" },
+      "aoWebsite",
+    ));
+
+  it("rejects an address shorter than 5 characters", () =>
+    expectInvalidAt(
+      EditAOAndLocationSchema,
+      { ...valid, locationAddress: "123" },
+      "locationAddress",
+    ));
+
+  it("rejects a non-positive originalAoId", () =>
+    expectInvalidAt(
+      EditAOAndLocationSchema,
+      { ...valid, originalAoId: 0 },
+      "originalAoId",
+    ));
+
+  it("rejects a non-positive originalLocationId", () =>
+    expectInvalidAt(
+      EditAOAndLocationSchema,
+      { ...valid, originalLocationId: -1 },
+      "originalLocationId",
+    ));
+
+  it("rejects a missing originalRegionId", () =>
+    expectInvalidAt(
+      EditAOAndLocationSchema,
+      { ...valid, originalRegionId: undefined },
+      "originalRegionId",
+    ));
+
+  it("rejects an invalid submittedBy email", () =>
+    expectInvalidAt(
+      EditAOAndLocationSchema,
+      { ...valid, submittedBy: "not-an-email" },
+      "submittedBy",
+    ));
+
+  it("rejects a mismatched requestType literal", () =>
+    expectInvalidAt(
+      EditAOAndLocationSchema,
+      { ...valid, requestType: "edit_event" },
+      "requestType",
+    ));
 });

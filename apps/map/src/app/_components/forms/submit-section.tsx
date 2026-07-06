@@ -99,7 +99,8 @@ function useRequestStatusHandler() {
         break;
 
       case "rejected":
-        toast.error("Failed to submit update request");
+        // Throw so submitForm's catch routes this through handleSubmissionError,
+        // which surfaces the single failure toast. Toasting here too would double it.
         throw new Error("Failed to submit update request");
 
       case "approved":
@@ -238,7 +239,12 @@ function PermissionMessage({ canEdit, isReview }: PermissionMessageProps) {
   };
 
   return (
-    <div className="mb-2 text-center text-xs text-destructive">
+    <div
+      className={cn(
+        "mb-2 text-center text-xs",
+        canEdit ? "text-muted-foreground" : "text-destructive",
+      )}
+    >
       {getMessage()}
     </div>
   );

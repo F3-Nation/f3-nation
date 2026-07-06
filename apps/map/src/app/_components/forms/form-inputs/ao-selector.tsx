@@ -47,11 +47,9 @@ export function AOSelector<_T extends AOSelectorFormValues>({
         labelComponent: (
           <div className="flex flex-col">
             <div>{ao.name}</div>
-            {Array.isArray(ao.workouts) && ao.workouts.length > 0 && (
+            {ao.workouts.length > 0 && (
               <div className="text-[10px] text-muted-foreground">
-                {ao.workouts
-                  .filter((w): w is string => typeof w === "string")
-                  .join(", ")}
+                {ao.workouts.join(", ")}
               </div>
             )}
           </div>

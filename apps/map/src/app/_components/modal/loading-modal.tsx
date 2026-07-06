@@ -1,5 +1,5 @@
 import { Z_INDEX } from "@acme/shared/app/constants";
-import { Dialog, DialogContent } from "@acme/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@acme/ui/dialog";
 import { Loader } from "@acme/ui/loader";
 
 /**
@@ -18,6 +18,7 @@ export function LoadingModal() {
         style={{ zIndex: Z_INDEX.LOADING_MODAL }}
         className="w-min rounded-lg px-4 sm:px-6 md:w-min lg:px-8"
       >
+        <DialogTitle className="sr-only">Loading</DialogTitle>
         <div className="flex items-center justify-center p-8">
           <div className="flex flex-col items-center gap-4">
             <Loader className="size-12" />
