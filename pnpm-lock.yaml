@@ -315,9 +315,6 @@ catalogs:
     react:
       specifier: ^19.2.7
       version: 19.2.7
-    react-day-picker:
-      specifier: ^8.10.2
-      version: 8.10.2
     react-dom:
       specifier: ^19.2.7
       version: 19.2.7
@@ -331,8 +328,8 @@ catalogs:
       specifier: ^2.2.0
       version: 2.2.0
     react-responsive:
-      specifier: ^9.0.2
-      version: 9.0.2
+      specifier: ^10.0.1
+      version: 10.0.1
     server-only:
       specifier: ^0.0.1
       version: 0.0.1
@@ -340,8 +337,8 @@ catalogs:
       specifier: ^0.35.2
       version: 0.35.2
     sonner:
-      specifier: ^1.7.4
-      version: 1.7.4
+      specifier: ^2.0.7
+      version: 2.0.7
     supercluster:
       specifier: ^8.0.1
       version: 8.0.1
@@ -369,9 +366,6 @@ catalogs:
     typescript-eslint:
       specifier: ^8.61.1
       version: 8.62.0
-    vaul:
-      specifier: ^1.1.2
-      version: 1.1.2
     vite:
       specifier: ^8.0.16
       version: 8.1.0
@@ -389,7 +383,7 @@ catalogs:
       version: 5.0.14
 
 overrides:
-  form-data@>=2.0.0 <2.5.6: ^2.5.6
+  form-data@>=2.0.0 <2.5.6: ^4.0.6
   '@auth/core': 0.41.2
 
 packageExtensionsChecksum: sha256-MiHZ3mgtOUb60KfpkAkui5ad/9eLmcQda0MiZKaTRqA=
@@ -444,7 +438,7 @@ importers:
   apps/admin:
     dependencies:
       '@acme/api':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../../packages/api
       '@acme/logger':
         specifier: workspace:*
@@ -453,7 +447,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/mail
       '@acme/shared':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../packages/shared
       '@acme/sso':
         specifier: workspace:*
@@ -462,13 +456,13 @@ importers:
         specifier: workspace:*
         version: link:../../packages/storage
       '@acme/tailwind-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/tailwind
       '@acme/ui':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../packages/ui
       '@acme/validators':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../packages/validators
       '@orpc/client':
         specifier: 'catalog:'
@@ -538,10 +532,10 @@ importers:
         version: 4.4.3
     devDependencies:
       '@acme/eslint-config':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../../tooling/eslint
       '@acme/prettier-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/prettier
       '@acme/tsconfig':
         specifier: workspace:*
@@ -583,25 +577,25 @@ importers:
   apps/api:
     dependencies:
       '@acme/api':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../../packages/api
       '@acme/auth':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../packages/auth
       '@acme/db':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../packages/db
       '@acme/logger':
         specifier: workspace:*
         version: link:../../packages/logger
       '@acme/shared':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../packages/shared
       '@acme/ui':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../packages/ui
       '@acme/validators':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../packages/validators
       '@orpc/openapi':
         specifier: 'catalog:'
@@ -641,16 +635,16 @@ importers:
         version: 4.4.3
     devDependencies:
       '@acme/eslint-config':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../../tooling/eslint
       '@acme/prettier-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/prettier
       '@acme/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/typescript
       '@acme/vitest-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/vitest
       '@testing-library/jest-dom':
         specifier: 'catalog:'
@@ -862,13 +856,13 @@ importers:
   apps/map:
     dependencies:
       '@acme/api':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../../packages/api
       '@acme/auth':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../packages/auth
       '@acme/db':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../packages/db
       '@acme/logger':
         specifier: workspace:*
@@ -877,19 +871,19 @@ importers:
         specifier: workspace:*
         version: link:../../packages/mail
       '@acme/shared':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../packages/shared
       '@acme/storage':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../../packages/storage
       '@acme/tailwind-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/tailwind
       '@acme/ui':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../packages/ui
       '@acme/validators':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../packages/validators
       '@auth/core':
         specifier: 0.41.2
@@ -971,7 +965,7 @@ importers:
         version: 2.2.0(react@19.2.7)
       react-responsive:
         specifier: 'catalog:'
-        version: 9.0.2(react@19.2.7)
+        version: 10.0.1(react@19.2.7)
       server-only:
         specifier: 'catalog:'
         version: 0.0.1
@@ -981,24 +975,21 @@ importers:
       superjson:
         specifier: 'catalog:'
         version: 2.2.6
-      vaul:
-        specifier: 'catalog:'
-        version: 1.1.2(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       zod:
         specifier: 'catalog:'
         version: 4.4.3
     devDependencies:
       '@acme/eslint-config':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../../tooling/eslint
       '@acme/prettier-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/prettier
       '@acme/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/typescript
       '@acme/vitest-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/vitest
       '@tailwindcss/postcss':
         specifier: 'catalog:'
@@ -1070,13 +1061,13 @@ importers:
   apps/me:
     dependencies:
       '@acme/api':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../../packages/api
       '@acme/logger':
         specifier: workspace:*
         version: link:../../packages/logger
       '@acme/shared':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../packages/shared
       '@acme/sso':
         specifier: workspace:*
@@ -1085,7 +1076,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/storage
       '@acme/ui':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../packages/ui
       '@orpc/client':
         specifier: 'catalog:'
@@ -1122,16 +1113,16 @@ importers:
         version: 4.4.3
     devDependencies:
       '@acme/eslint-config':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../../tooling/eslint
       '@acme/tailwind-config':
         specifier: workspace:*
         version: link:../../tooling/tailwind
       '@acme/tsconfig':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/typescript
       '@acme/vitest-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/vitest
       '@tailwindcss/postcss':
         specifier: 'catalog:'
@@ -1184,13 +1175,13 @@ importers:
   packages/api:
     dependencies:
       '@acme/auth':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../auth
       '@acme/db':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../db
       '@acme/env':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../env
       '@acme/logger':
         specifier: workspace:*
@@ -1199,13 +1190,13 @@ importers:
         specifier: workspace:*
         version: link:../mail
       '@acme/shared':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../shared
       '@acme/storage':
         specifier: workspace:*
         version: link:../storage
       '@acme/validators':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../validators
       '@orpc/experimental-ratelimit':
         specifier: 'catalog:'
@@ -1233,13 +1224,13 @@ importers:
         version: 4.4.3
     devDependencies:
       '@acme/eslint-config':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../../tooling/eslint
       '@acme/prettier-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/prettier
       '@acme/tsconfig':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/typescript
       '@types/lodash':
         specifier: 'catalog:'
@@ -1275,16 +1266,16 @@ importers:
   packages/auth:
     dependencies:
       '@acme/db':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../db
       '@acme/env':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../env
       '@acme/logger':
         specifier: workspace:*
         version: link:../logger
       '@acme/shared':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../shared
       '@auth/core':
         specifier: 0.41.2
@@ -1315,13 +1306,13 @@ importers:
         version: 19.2.7(react@19.2.7)
     devDependencies:
       '@acme/eslint-config':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../../tooling/eslint
       '@acme/prettier-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/prettier
       '@acme/tsconfig':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/typescript
       '@types/lodash':
         specifier: 'catalog:'
@@ -1407,13 +1398,13 @@ importers:
         version: 4.4.3
     devDependencies:
       '@acme/eslint-config':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../../tooling/eslint
       '@acme/prettier-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/prettier
       '@acme/tsconfig':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/typescript
       dotenv-cli:
         specifier: 'catalog:'
@@ -1466,13 +1457,13 @@ importers:
         version: 9.0.1
     devDependencies:
       '@acme/eslint-config':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../../tooling/eslint
       '@acme/prettier-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/prettier
       '@acme/tsconfig':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/typescript
       '@types/nodemailer':
         specifier: 'catalog:'
@@ -1503,13 +1494,13 @@ importers:
         version: 5.0.14(@types/react@19.2.17)(react@19.2.7)(use-sync-external-store@1.6.0(react@19.2.7))
     devDependencies:
       '@acme/eslint-config':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../../tooling/eslint
       '@acme/prettier-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/prettier
       '@acme/tsconfig':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/typescript
       '@faker-js/faker':
         specifier: 'catalog:'
@@ -1570,13 +1561,13 @@ importers:
         version: 4.4.3
     devDependencies:
       '@acme/eslint-config':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../../tooling/eslint
       '@acme/prettier-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/prettier
       '@acme/tsconfig':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/typescript
       '@types/node':
         specifier: 'catalog:'
@@ -1689,30 +1680,24 @@ importers:
       next-themes:
         specifier: 'catalog:'
         version: 0.4.6(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      react-day-picker:
-        specifier: 'catalog:'
-        version: 8.10.2(date-fns@3.6.0)(react@19.2.7)
       react-hook-form:
         specifier: 'catalog:'
         version: 7.80.0(react@19.2.7)
       sonner:
         specifier: 'catalog:'
-        version: 1.7.4(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+        version: 2.0.7(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       tailwind-merge:
         specifier: 'catalog:'
         version: 3.6.0
-      vaul:
-        specifier: 'catalog:'
-        version: 1.1.2(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
     devDependencies:
       '@acme/eslint-config':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../../tooling/eslint
       '@acme/prettier-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/prettier
       '@acme/tsconfig':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../../tooling/typescript
       '@types/lodash':
         specifier: 'catalog:'
@@ -1798,10 +1783,10 @@ importers:
         version: 8.62.0(eslint@10.5.0(jiti@2.7.0))(typescript@6.0.3)
     devDependencies:
       '@acme/prettier-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../prettier
       '@acme/tsconfig':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../typescript
       eslint:
         specifier: 'catalog:'
@@ -1826,7 +1811,7 @@ importers:
         version: 0.8.0(@ianvs/prettier-plugin-sort-imports@4.7.1(prettier@3.8.4))(prettier@3.8.4)
     devDependencies:
       '@acme/tsconfig':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../typescript
       typescript:
         specifier: 'catalog:'
@@ -1887,13 +1872,13 @@ importers:
         version: 1.4.0
     devDependencies:
       '@acme/eslint-config':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../eslint
       '@acme/prettier-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../prettier
       '@acme/tsconfig':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../typescript
       eslint:
         specifier: 'catalog:'
@@ -1920,13 +1905,13 @@ importers:
   tooling/vitest:
     devDependencies:
       '@acme/eslint-config':
-        specifier: workspace:^0.2.0
+        specifier: workspace:*
         version: link:../eslint
       '@acme/prettier-config':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../prettier
       '@acme/tsconfig':
-        specifier: workspace:^0.1.0
+        specifier: workspace:*
         version: link:../typescript
       eslint:
         specifier: 'catalog:'
@@ -5723,9 +5708,6 @@ packages:
     resolution: {integrity: sha512-BS8PfmtDGnrgYdOonGZQdLZslWIeCGFP9tpan0hi1Co2Zr2NKADsvGYA8XxuG/4UWgJ6Cjtv+YJnB6MM69QGlQ==}
     engines: {node: '>= 0.4'}
 
-  date-fns@3.6.0:
-    resolution: {integrity: sha512-fRHTG8g/Gif+kSh50gaGEdToemgfj74aRX3swtiouboip5JDLAyDE9F11nHMIcvOaXeOC6D7SpNhi7uFyB7Uww==}
-
   dateformat@4.6.3:
     resolution: {integrity: sha512-2P0p0pFGzHS5EMnhdxQi7aJN+iMheud0UhG4dlE1DLAlvL8JHjJJTX/CSm4JXwV0Ka5nGk3zC5mcb5bUQUxxMA==}
 
@@ -6257,9 +6239,9 @@ packages:
     resolution: {integrity: sha512-dKx12eRCVIzqCxFGplyFKJMPvLEWgmNtUrpTiJIR5u97zEhRG8ySrtboPHZXx7daLxQVrl643cTzbab2tkQjxg==}
     engines: {node: '>= 0.4'}
 
-  form-data@2.5.6:
-    resolution: {integrity: sha512-Ogz/E85h9tlfJzpI6TuFpGcHZFhLrb9Gw8wq9v40CxSCPnv7ahKr6Xgtkn0KYCDQJ8DNn5VoMO8EXr9V5PadyA==}
-    engines: {node: '>= 0.12'}
+  form-data@4.0.6:
+    resolution: {integrity: sha512-vKatAh4SlVfgbv+YtmhiRjhEMJsYpsG1Y2rMQtR+SVSbytsSD1YGzDIcrAJmdFec88u/+VoGmxnl+80gL1tRCQ==}
+    engines: {node: '>= 6'}
 
   formatly@0.3.0:
     resolution: {integrity: sha512-9XNj/o4wrRFyhSMJOvsuyMwy8aUfBaZ1VrqHVfohyXf0Sw0e+yfKG+xZaY3arGCOMdwFsqObtzVOc1gU9KiT9w==}
@@ -7034,8 +7016,8 @@ packages:
     resolution: {integrity: sha512-hXdUTZYIVOt1Ex//jAQi+wTZZpUpwBj/0QsOzqegb3rGMMeJiSEu5xLHnYfBrRV4RH2+OCSOO95Is/7x1WJ4bw==}
     engines: {node: '>=10'}
 
-  matchmediaquery@0.3.1:
-    resolution: {integrity: sha512-Hlk20WQHRIm9EE9luN1kjRjYXAQToHOIAHPJn9buxBwuhfTHoKUcX+lXBbxc85DVQfXYbEQ4HcwQdd128E3qHQ==}
+  matchmediaquery@0.4.2:
+    resolution: {integrity: sha512-wrZpoT50ehYOudhDjt/YvUJc6eUzcdFPdmbizfgvswCKNHD1/OBOHYJpHie+HXpu6bSkEGieFMYk6VuutaiRfA==}
 
   math-intrinsics@1.1.0:
     resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
@@ -7537,12 +7519,6 @@ packages:
     resolution: {integrity: sha512-h36JMxKRqrAxVD8201FrCpyeNuUY9Y5zZwujr20fFO77tpUtGa6EZzfKw/3WaiBX95fq7+MpsuMLNdSnORAwSA==}
     engines: {node: '>=14.18.0'}
 
-  react-day-picker@8.10.2:
-    resolution: {integrity: sha512-LK68OTbHB3oJNhl9cA0qVizzp3o26w61YSjAFkYi67N86iro32wx86kSNeFU/hq+gI8m1yzWhnomMLfZ041RzQ==}
-    peerDependencies:
-      date-fns: ^2.28.0 || ^3.0.0
-      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
-
   react-dom@19.2.7:
     resolution: {integrity: sha512-t0BRVXvbiE/o20Hfw669rLbMCDWtYZLvmJigy2f0MxsXF+71pxhR3xOkspmsO8h3ZlNzyibAmtCa3l4lYKk6gQ==}
     peerDependencies:
@@ -7591,9 +7567,9 @@ packages:
       '@types/react':
         optional: true
 
-  react-responsive@9.0.2:
-    resolution: {integrity: sha512-+4CCab7z8G8glgJoRjAwocsgsv6VA2w7JPxFWHRc7kvz8mec1/K5LutNC2MG28Mn8mu6+bu04XZxHv5gyfT7xQ==}
-    engines: {node: '>=0.10'}
+  react-responsive@10.0.1:
+    resolution: {integrity: sha512-OM5/cRvbtUWEX8le8RCT8scA8y2OPtb0Q/IViEyCEM5FBN8lRrkUOZnu87I88A6njxDldvxG+rLBxWiA7/UM9g==}
+    engines: {node: '>=14'}
     peerDependencies:
       react: '>=16.8.0'
 
@@ -7768,8 +7744,8 @@ packages:
     resolution: {integrity: sha512-RJRdvCo6IAnPdsvP/7m6bsQqNnn1FCBX5ZNtFL98MmFF/4xAIJTIg1YbHW5DC2W5SKZanrC6i4HsJqlajw/dZw==}
     engines: {node: '>= 0.4'}
 
-  shallow-equal@1.2.1:
-    resolution: {integrity: sha512-S4vJDjHHMBaiZuT9NPb616CSmLf618jawtv3sufLl6ivK8WocjAo58cXwbRV1cgqxH0Qbv+iUt6m05eqEa2IRA==}
+  shallow-equal@3.1.0:
+    resolution: {integrity: sha512-pfVOw8QZIXpMbhBWvzBISicvToTiM5WBF1EeAUZDDSb5Dt29yl4AYbyywbJFSEsRUMr7gJaxqCdr4L3tQf9wVg==}
 
   sharp@0.34.5:
     resolution: {integrity: sha512-Ou9I5Ft9WNcCbXrU9cMgPBcCK8LiwLqcbywW3t4oDV37n1pzpuNLsYiAV8eODnjbtQlSDwZ2cUEeQz4E54Hltg==}
@@ -7820,8 +7796,8 @@ packages:
   sonic-boom@4.2.1:
     resolution: {integrity: sha512-w6AxtubXa2wTXAUsZMMWERrsIRAdrK0Sc+FUytWvYAhBJLyuI4llrMIC1DtlNSdI99EI86KZum2MMq3EAZlF9Q==}
 
-  sonner@1.7.4:
-    resolution: {integrity: sha512-DIS8z4PfJRbIyfVFDVnK9rO3eYDtse4Omcm6bt0oEr5/jtLgysmjuBl1frJ9E/EQZrFmKx2A8m/s5s9CRXIzhw==}
+  sonner@2.0.7:
+    resolution: {integrity: sha512-W6ZN4p58k8aDKA4XPcx2hpIQXBRAgyiWVkYhT7CvK6D3iAu7xjvVyhQHg2/iaKJZ1XVJ4r7XuwGL+WGEK37i9w==}
     peerDependencies:
       react: ^18.0.0 || ^19.0.0 || ^19.0.0-rc
       react-dom: ^18.0.0 || ^19.0.0 || ^19.0.0-rc
@@ -8217,12 +8193,6 @@ packages:
     resolution: {integrity: sha512-b+1eJOlsR9K8HJpow9Ok3fiWOWSIcIzXodvv0rQjVoOVNpWMpxf1wZNpt4y9h10odCNrqnYp1OBzRktckBe3sA==}
     deprecated: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
     hasBin: true
-
-  vaul@1.1.2:
-    resolution: {integrity: sha512-ZFkClGpWyI2WUQjdLJ/BaGuV6AVQiJ3uELGk3OYtP+B6yCO7Cmn9vPFXVJkRaGkOJu3m8bQMgtyzNHixULceQA==}
-    peerDependencies:
-      react: ^16.8 || ^17.0 || ^18.0 || ^19.0.0 || ^19.0.0-rc
-      react-dom: ^16.8 || ^17.0 || ^18.0 || ^19.0.0 || ^19.0.0-rc
 
   vite@8.1.0:
     resolution: {integrity: sha512-BuJcQK/56NQTWDGn4ABea3q4SSBdNPWwNZKTkkUpcMPnLoquSYH8llRtSUIgoL1KSCpHt5eghLShn50mH36y7Q==}
@@ -11158,7 +11128,7 @@ snapshots:
       '@types/caseless': 0.12.5
       '@types/node': 25.9.2
       '@types/tough-cookie': 4.0.5
-      form-data: 2.5.6
+      form-data: 4.0.6
 
   '@types/supercluster@7.1.3':
     dependencies:
@@ -11961,8 +11931,6 @@ snapshots:
       es-errors: 1.3.0
       is-data-view: 1.0.2
 
-  date-fns@3.6.0: {}
-
   dateformat@4.6.3: {}
 
   dayjs@1.11.21: {}
@@ -12585,14 +12553,13 @@ snapshots:
     dependencies:
       is-callable: 1.2.7
 
-  form-data@2.5.6:
+  form-data@4.0.6:
     dependencies:
       asynckit: 0.4.0
       combined-stream: 1.0.8
       es-set-tostringtag: 2.1.0
       hasown: 2.0.4
       mime-types: 2.1.35
-      safe-buffer: 5.2.1
 
   formatly@0.3.0:
     dependencies:
@@ -13412,7 +13379,7 @@ snapshots:
     dependencies:
       semver: 7.8.5
 
-  matchmediaquery@0.3.1:
+  matchmediaquery@0.4.2:
     dependencies:
       css-mediaquery: 0.1.2
 
@@ -13868,11 +13835,6 @@ snapshots:
 
   radash@12.1.1: {}
 
-  react-day-picker@8.10.2(date-fns@3.6.0)(react@19.2.7):
-    dependencies:
-      date-fns: 3.6.0
-      react: 19.2.7
-
   react-dom@19.2.7(react@19.2.7):
     dependencies:
       react: 19.2.7
@@ -13921,13 +13883,13 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.2.17
 
-  react-responsive@9.0.2(react@19.2.7):
+  react-responsive@10.0.1(react@19.2.7):
     dependencies:
       hyphenate-style-name: 1.1.0
-      matchmediaquery: 0.3.1
+      matchmediaquery: 0.4.2
       prop-types: 15.8.1
       react: 19.2.7
-      shallow-equal: 1.2.1
+      shallow-equal: 3.1.0
 
   react-style-singleton@2.2.3(@types/react@19.2.17)(react@19.2.7):
     dependencies:
@@ -14157,7 +14119,7 @@ snapshots:
       es-errors: 1.3.0
       es-object-atoms: 1.1.1
 
-  shallow-equal@1.2.1: {}
+  shallow-equal@3.1.0: {}
 
   sharp@0.34.5:
     dependencies:
@@ -14269,7 +14231,7 @@ snapshots:
     dependencies:
       atomic-sleep: 1.0.0
 
-  sonner@1.7.4(react-dom@19.2.7(react@19.2.7))(react@19.2.7):
+  sonner@2.0.7(react-dom@19.2.7(react@19.2.7))(react@19.2.7):
     dependencies:
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
@@ -14671,15 +14633,6 @@ snapshots:
   util-deprecate@1.0.2: {}
 
   uuid@9.0.1: {}
-
-  vaul@1.1.2(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7):
-    dependencies:
-      '@radix-ui/react-dialog': 1.1.17(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      react: 19.2.7
-      react-dom: 19.2.7(react@19.2.7)
-    transitivePeerDependencies:
-      - '@types/react'
-      - '@types/react-dom'
 
   vite@8.1.0(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0):
     dependencies:

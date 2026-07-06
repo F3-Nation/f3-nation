@@ -55,6 +55,9 @@ RUN printf '\nverifyDepsBeforeRun: false\n' >> pnpm-workspace.yaml
 
 RUN pnpm turbo build --filter=f3-map
 
+# Assert the next.config libvips tracing include landed (a zero-match glob is a silent no-op).
+RUN test -n "$(find apps/map/.next/standalone -name 'libvips-cpp*')"
+
 # ---------- Stage 3: Production runner ----------
 FROM node:24.18.0-alpine AS runner
 
@@ -68,12 +71,6 @@ RUN addgroup --system --gid 1001 nodejs && \
 COPY --from=installer --chown=map:nodejs /app/apps/map/.next/standalone ./
 COPY --from=installer --chown=map:nodejs /app/apps/map/.next/static ./apps/map/.next/static
 COPY --from=installer --chown=map:nodejs /app/apps/map/public ./apps/map/public
-
-# Reinstall sharp: Turbopack drops libvips and leaves a pnpm-store shadow; purge both, then verify.
-RUN rm -rf ./node_modules/sharp ./node_modules/@img \
-      ./node_modules/.pnpm/sharp@* ./node_modules/.pnpm/@img+* && \
-    npm install --no-save --no-audit --no-fund sharp@0.35.2 && \
-    node -e "require('sharp'); console.log('sharp loaded OK')"
 
 USER map
 

@@ -1,5 +1,40 @@
 # Changelog
 
+## [2.0.5](https://github.com/F3-Nation/f3-nation/compare/me@2.0.4...me@2.0.5) (2026-07-05)
+
+
+### Bug Fixes
+
+* **map,admin:** regions in region picker were grayed out ([37cec72](https://github.com/F3-Nation/f3-nation/commit/37cec722b933f6a121283403b3a5eb9fd8900f5e))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.2.1
+    * @acme/logger bumped to 0.1.1
+    * @acme/shared bumped to 0.1.1
+    * @acme/sso bumped to 0.1.1
+    * @acme/storage bumped to 0.2.1
+    * @acme/ui bumped to 0.1.1
+  * devDependencies
+    * @acme/tailwind-config bumped to 0.1.1
+
+## [2.0.4](https://github.com/F3-Nation/f3-nation/compare/me@2.0.3...me@2.0.4) (2026-07-03)
+
+
+### Bug Fixes
+
+* **repo:** trace libvips into standalone output instead of reinstalling sharp ([#560](https://github.com/F3-Nation/f3-nation/issues/560)) ([fe1dca6](https://github.com/F3-Nation/f3-nation/commit/fe1dca66dbf5f00758b4fef04522ec946d38115d))
+
+## [2.0.3](https://github.com/F3-Nation/f3-nation/compare/me@2.0.2...me@2.0.3) (2026-07-03)
+
+
+### Bug Fixes
+
+* **repo:** repoint Turbopack hashed sharp symlink after runner reinstall ([#558](https://github.com/F3-Nation/f3-nation/issues/558)) ([c8bec3a](https://github.com/F3-Nation/f3-nation/commit/c8bec3a9067d4620b4f64b25391cce0406e0e4a9))
+
 ## [2.0.2](https://github.com/F3-Nation/f3-nation/compare/me@2.0.1...me@2.0.2) (2026-07-03)
 
 
