@@ -9,12 +9,7 @@ import { protectedProcedure } from "../shared";
 import type { Context } from "../shared";
 
 type JsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | JsonValue[]
-  | { [key: string]: JsonValue };
+  string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
 interface SlackMessagePayload {
   channel: string;
@@ -52,20 +47,36 @@ type SlackWebApiResponse = SlackWebApiSuccess | SlackWebApiFailure;
 // message-size constraints; Slack still performs final Block Kit validation.
 const MAX_SLACK_PAYLOAD_BYTES = 128 * 1024;
 
+// Admin-supplied blocks/metadata JSON is recursive, so cap nesting depth to
+// prevent excessive recursion or stack overflow on pathological input. Slack's
+// own Block Kit rarely exceeds a handful of levels; 32 leaves generous headroom.
+const MAX_SLACK_JSON_DEPTH = 32;
+
 const slackTimestampSchema = z
   .string()
   .regex(/^\d{10}\.\d{6}$/, "Must be a Slack message timestamp");
 
-const slackJsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
-  z.union([
-    z.string(),
-    z.number().finite(),
-    z.boolean(),
-    z.null(),
-    z.array(slackJsonValueSchema),
-    z.record(z.string(), slackJsonValueSchema),
-  ]),
-);
+// Depth-bounded recursive JSON validator. Each nested array/record decrements
+// the remaining depth budget; once exhausted, only primitives are accepted so
+// deeper input is rejected without unbounded recursion.
+const createSlackJsonValueSchema = (
+  remainingDepth: number,
+): z.ZodType<JsonValue> =>
+  remainingDepth <= 0
+    ? z.union([z.string(), z.number().finite(), z.boolean(), z.null()])
+    : z.lazy(() =>
+        z.union([
+          z.string(),
+          z.number().finite(),
+          z.boolean(),
+          z.null(),
+          z.array(createSlackJsonValueSchema(remainingDepth - 1)),
+          z.record(z.string(), createSlackJsonValueSchema(remainingDepth - 1)),
+        ]),
+      );
+
+const slackJsonValueSchema: z.ZodType<JsonValue> =
+  createSlackJsonValueSchema(MAX_SLACK_JSON_DEPTH);
 
 const slackJsonObjectSchema = z.record(z.string(), slackJsonValueSchema);
 
@@ -138,6 +149,7 @@ export const postSlackMessageInputSchema = baseMessageInputSchema
     mrkdwn: z
       .boolean()
       .optional()
+      .default(true)
       .describe(
         "Whether to enable Markdown formatting in the Slack message. This is optional and defaults to true.",
       ),
@@ -238,7 +250,10 @@ const prepareSlackMessageRequest = async (
 ): Promise<{ botToken: string }> => {
   await assertOrgAdmin(ctx, regionOrgId);
   await assertActiveOrgExists(ctx.db, regionOrgId);
-  const botToken = await getSlackBotTokenForOrg(ctx.db, regionOrgId);
+  const [, botToken] = await Promise.all([
+    assertActiveOrgExists(ctx.db, regionOrgId),
+    getSlackBotTokenForOrg(ctx.db, regionOrgId),
+  ]);
 
   return { botToken };
 };
@@ -331,6 +346,7 @@ export const callSlackWebApi = async ({
         "Content-Type": "application/json; charset=utf-8",
       },
       body,
+      signal: AbortSignal.timeout(10_000),
     });
   } catch {
     throw new ORPCError("BAD_GATEWAY", {

@@ -99,6 +99,32 @@ describe("Slack router schemas", () => {
       }).success,
     ).toBe(false);
   });
+
+  it("rejects deeply nested blocks beyond the depth cap", () => {
+    // Build a payload nested deeper than MAX_SLACK_JSON_DEPTH by wrapping an
+    // object under a single key repeatedly.
+    let nested: Record<string, unknown> = { leaf: "value" };
+    for (let i = 0; i < 40; i++) {
+      nested = { nested };
+    }
+
+    expect(
+      postSlackMessageInputSchema.safeParse({
+        ...baseInput,
+        blocks: [nested],
+      }).success,
+    ).toBe(false);
+
+    expect(
+      postSlackMessageInputSchema.safeParse({
+        ...baseInput,
+        metadata: {
+          event_type: "f3.event",
+          event_payload: nested,
+        },
+      }).success,
+    ).toBe(false);
+  });
 });
 
 describe("callSlackWebApi", () => {
