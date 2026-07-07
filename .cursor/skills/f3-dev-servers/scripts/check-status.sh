@@ -22,7 +22,7 @@ for entry in "${services[@]}"; do
         echo "✅ $name (port $port): RUNNING"
     else
         echo "❌ $name (port $port): NOT RUNNING"
-        echo "   Start with: pnpm -F $pkg dev  (or 'pnpm dev' to start all)"
+        echo "   Start with: pnpm -F $pkg dev  (or 'pnpm dev --include-py' to start all)"
     fi
 done
 
