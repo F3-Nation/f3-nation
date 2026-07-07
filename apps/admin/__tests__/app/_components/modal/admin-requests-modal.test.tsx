@@ -35,6 +35,10 @@ vi.mock("~/app/_components/forms/location-event-form", () => ({
   FormDebugData: () => null,
 }));
 
+vi.mock("~/app/_components/forms/create-event-request-form", () => ({
+  CreateEventRequestForm: () => null,
+}));
+
 // Bypass react-hook-form so clicking Approve always reaches the submit
 // handler with valid values.
 vi.mock("~/utils/forms", () => ({
@@ -70,7 +74,7 @@ vi.mock("~/orpc/react", () => ({
         data: {
           request: {
             id: "request-1",
-            requestType: "edit",
+            requestType: "edit_event",
             regionId: 1,
           },
         },
