@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { randomBytes, randomUUID, createHash } from "crypto";
+import { createOAuthLoginFlowArtifacts } from "@acme/sso";
 import {
   OAUTH_CODE_VERIFIER_COOKIE_NAME,
   OAUTH_CSRF_COOKIE_NAME,
@@ -11,20 +11,8 @@ import { safeReturnTo } from "@/lib/auth/validation";
 
 export async function GET(request: NextRequest) {
   const returnTo = safeReturnTo(request.nextUrl.searchParams.get("returnTo"));
-
-  const csrfToken = randomUUID();
-  const codeVerifier = randomBytes(32).toString("base64url");
-  const codeChallenge = createHash("sha256")
-    .update(codeVerifier)
-    .digest("base64url");
-
-  const state = Buffer.from(
-    JSON.stringify({
-      csrfToken,
-      returnTo,
-      timestamp: Date.now(),
-    }),
-  ).toString("base64url");
+  const { csrfToken, codeVerifier, codeChallenge, state } =
+    await createOAuthLoginFlowArtifacts({ returnTo });
 
   const authorizeUrl = getAuthorizationUrl({
     state,

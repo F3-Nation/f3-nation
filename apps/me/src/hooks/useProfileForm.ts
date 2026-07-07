@@ -1,4 +1,7 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+
+import { toast } from "@acme/ui/toast";
+
 import { useSaveRegister } from "@/lib/save-context";
 import type { UserProfile, UserMeta } from "@/lib/types";
 
@@ -131,16 +134,10 @@ export function dirtyFieldClass(isDirty: boolean): string {
 
 interface UseProfileFormOptions {
   user: UserProfile;
-  toast: (opts: {
-    title: string;
-    description: string;
-    variant?: "destructive";
-  }) => void;
 }
 
 export function useProfileForm({
   user,
-  toast,
 }: UseProfileFormOptions): UseProfileFormReturn {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<ProfileFormState>(() =>
@@ -195,20 +192,17 @@ export function useProfileForm({
 
       setInitialForm({ ...form });
 
-      toast({
-        title: "Profile saved",
+      toast.success("Profile saved", {
         description: "Your changes have been saved successfully.",
       });
     } catch (err) {
-      toast({
-        title: "Save failed",
+      toast.error("Save failed", {
         description: err instanceof Error ? err.message : "Please try again.",
-        variant: "destructive",
       });
     } finally {
       setSaving(false);
     }
-  }, [form, initialForm, toast]);
+  }, [form, initialForm]);
 
   // Sync form state when the user record changes (e.g. after navigation to a different user)
   useEffect(() => {

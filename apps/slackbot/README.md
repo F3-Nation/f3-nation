@@ -2,7 +2,7 @@
 
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-F3 Nation Slack Bot runs inside the monorepo and now follows the same local workflow as the other apps.
+F3 Nation Slack Bot runs inside the monorepo and now follows the same local workflow as the the other apps.
 
 ## Local development (monorepo)
 

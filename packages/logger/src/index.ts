@@ -35,8 +35,7 @@ export type LogContext = Record<string, unknown>;
  * failures) just like `console.error` did.
  */
 let errorReporter:
-  | ((event: string, ctx: LogContext, err?: unknown) => void)
-  | undefined;
+  ((event: string, ctx: LogContext, err?: unknown) => void) | undefined;
 
 export function setErrorReporter(
   fn: (event: string, ctx: LogContext, err?: unknown) => void,

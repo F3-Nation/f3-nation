@@ -21,7 +21,7 @@ jobs:
       # same commitlint.config.mjs used for commits (single source of truth).
       #
       # Exempt release-please's own bot PRs: their titles (e.g. "chore: release
-      # dev") intentionally omit a scope and are committed via the API. Gate the
+      # main") intentionally omit a scope and are committed via the API. Gate the
       # STEP (not the job) so a skipped run still reports green and never blocks
       # branch protection on the bot's release PRs.
       - name: Lint PR title with commitlint
