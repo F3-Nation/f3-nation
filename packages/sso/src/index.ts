@@ -336,6 +336,10 @@ export function parseOAuthState(stateParam: string): OAuthStatePayload | null {
       return null;
     }
 
+    if (!isSafeReturnPath(candidate.returnTo)) {
+      return null;
+    }
+
     return {
       csrfToken: candidate.csrfToken,
       returnTo: candidate.returnTo,

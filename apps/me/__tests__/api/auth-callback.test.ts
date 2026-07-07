@@ -113,6 +113,7 @@ describe("Auth /callback route", () => {
     const csrfMismatch = await GET(
       makeRequest(
         "https://me.f3nation.test/api/auth/callback?code=abc&state=ok-state",
+        { oauth_csrf: "wrong-token" },
       ),
     );
     expect(csrfMismatch.headers.get("location")).toBe(

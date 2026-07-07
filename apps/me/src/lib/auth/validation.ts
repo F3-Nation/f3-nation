@@ -1,4 +1,4 @@
-import { isSafeReturnPath } from "@acme/sso";
+import { isSafeReturnPath, sanitizeReturnPath } from "@acme/sso";
 
 /**
  * Validate that a return-to path is safe (relative, no open-redirect).
@@ -10,6 +10,5 @@ export function isValidReturnTo(path: string): boolean {
 
 /** Sanitize a return-to value, falling back to /profile if invalid. */
 export function safeReturnTo(path: string | null | undefined): string {
-  if (!path) return "/profile";
-  return isValidReturnTo(path) ? path : "/profile";
+  return sanitizeReturnPath(path, "/profile");
 }
