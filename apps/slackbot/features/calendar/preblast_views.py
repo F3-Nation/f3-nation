@@ -14,13 +14,14 @@ from slack_sdk.models.blocks.block_elements import (
     ChannelSelectElement,
     FileInputElement,
     PlainTextInputElement,
+    RadioButtonsElement,
     RichTextInputElement,
     StaticMultiSelectElement,
     StaticSelectElement,
     TimePickerElement,
     UserMultiSelectElement,
 )
-from slack_sdk.models.blocks.basic_components import PlainTextObject
+from slack_sdk.models.blocks.basic_components import PlainTextObject, MarkdownTextObject
 
 from application.event_instance import EventInstanceData
 from application.preblast import PREBLAST_CHANNEL_META_KEY, PreblastEventTypeData
@@ -58,6 +59,7 @@ class PreblastViews:
         *,
         default_channel_id: str | None = None,
         existing_preblast_ts: int | float | None = None,
+        preblast_moleskin_template: Any | None = None,
     ) -> SdkBlockView:
         """Build the editable preblast form modal as an ``SdkBlockView``.
 
@@ -101,7 +103,7 @@ class PreblastViews:
             InputBlock(
                 label="Location",
                 element=StaticSelectElement(action_id=actions.EVENT_PREBLAST_LOCATION, placeholder="Select a location", options=loc_options),
-                optional=True,
+                optional=False,
                 block_id=actions.EVENT_PREBLAST_LOCATION,
             )
         )
@@ -190,8 +192,71 @@ class PreblastViews:
         elif default_channel_id:
             blocks.append(
                 SectionBlock(
-                    text=PlainTextObject(text=f"Preblast will be posted in <#{default_channel_id}>"),
+                    text=MarkdownTextObject(text=f"Preblast will be posted in <#{default_channel_id}>"),
                     block_id=PREBLAST_CHANNEL_SELECTOR_HINT,
+                )
+            )
+
+        # ── Send options / update mode (dynamic) ───────────────────────
+        # When the preblast has NOT been posted and a channel exists:
+        #   show "Send now" / "Send a day before the event" radio.
+        # When the preblast HAS been posted and a channel exists:
+        #   show "Update preblast" / "Repost preblast" radio.
+        # When no channel: show a notice that it won't be posted.
+        is_posted = existing_preblast_ts is not None
+        if not default_channel_id:
+            blocks.append(
+                SectionBlock(
+                    text=MarkdownTextObject(
+                        text=(
+                            "A slack channel has not been set for this AO or region, so this will not be posted. "
+                            "An admin can set the channel for the AO through Calendar Settings -> Manage AOs or "
+                            "for the region through Backblast & Preblast Settings."
+                        )
+                    ),
+                    block_id="preblast_no_channel_notice",
+                )
+            )
+        elif is_posted:
+            blocks.append(
+                InputBlock(
+                    label="How would you like to update the preblast?",
+                    element=RadioButtonsElement(
+                        action_id=actions.EVENT_PREBLAST_UPDATE_MODE,
+                        options=as_selector_options(names=["Update preblast", "Repost preblast"]),
+                        initial_option=as_selector_options(names=["Update preblast"])[0],
+                    ),
+                    optional=False,
+                    block_id=actions.EVENT_PREBLAST_UPDATE_MODE,
+                )
+            )
+        else:
+            # Not posted yet — show send options
+            # Default to "Send a day before" if event is >1 day away, else "Send now"
+            from datetime import date
+
+            schedule_default = "Send now"
+            if event.start_date:
+                today = date.today()
+                if event.start_date > today and (event.start_date - today).days > 1:
+                    schedule_default = "Send a day before the event"
+            send_options = as_selector_options(
+                names=["Send now", "Send a day before the event"],
+            )
+            initial_option = next(
+                (o for o in send_options if o.value == schedule_default),
+                send_options[0],
+            )
+            blocks.append(
+                InputBlock(
+                    label="When would you like to send the preblast?",
+                    element=RadioButtonsElement(
+                        action_id=actions.EVENT_PREBLAST_SEND_OPTIONS,
+                        options=send_options,
+                        initial_option=initial_option,
+                    ),
+                    optional=False,
+                    block_id=actions.EVENT_PREBLAST_SEND_OPTIONS,
                 )
             )
 
@@ -203,8 +268,10 @@ class PreblastViews:
             initial_values[actions.EVENT_PREBLAST_TITLE] = event.name
         if event.start_time:
             initial_values[actions.EVENT_PREBLAST_START_TIME] = f"{event.start_time[:2]}:{event.start_time[2:]}"
-        if existing_preblast_ts and event.preblast_rich:
+        if event.preblast_rich:
             initial_values[actions.EVENT_PREBLAST_MOLESKINE_EDIT] = event.preblast_rich
+        elif preblast_moleskin_template:
+            initial_values[actions.EVENT_PREBLAST_MOLESKINE_EDIT] = preblast_moleskin_template
         if event.location_id:
             initial_values[actions.EVENT_PREBLAST_LOCATION] = str(event.location_id)
         if event.event_tag_ids:

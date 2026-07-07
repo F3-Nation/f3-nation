@@ -60,6 +60,33 @@ def _parse_instance(raw: dict) -> EventInstanceData:
     else:
         start_date = None
 
+    # Extract nested display data from by-id API response
+    org_raw = raw.get("org")
+    org_name = None
+    org_meta = None
+    if org_raw and isinstance(org_raw, dict):
+        org_name = org_raw.get("name")
+        org_meta = org_raw.get("meta")
+
+    location_raw = raw.get("location")
+    location_name = None
+    location_latitude = None
+    location_longitude = None
+    if location_raw and isinstance(location_raw, dict):
+        location_name = location_raw.get("locationName", location_raw.get("name"))
+        location_latitude = location_raw.get("latitude")
+        location_longitude = location_raw.get("longitude")
+
+    # Extract event type names from nested objects
+    event_type_names: list[str] = []
+    if event_types_raw and isinstance(event_types_raw[0], dict):
+        event_type_names = [t.get("eventTypeName", t.get("name", "")) for t in event_types_raw]
+
+    # Extract event tag names from nested objects
+    event_tag_names: list[str] = []
+    if event_tags_raw and isinstance(event_tags_raw[0], dict):
+        event_tag_names = [t.get("eventTagName", t.get("name", "")) for t in event_tags_raw]
+
     return EventInstanceData(
         id=raw["id"],
         name=raw.get("name"),
@@ -80,6 +107,13 @@ def _parse_instance(raw: dict) -> EventInstanceData:
         preblast_ts=raw.get("preblastTs", raw.get("preblast_ts")),
         series_id=raw.get("seriesId", raw.get("series_id")),
         series_exception=raw.get("seriesException", raw.get("series_exception")),
+        org_name=org_name,
+        org_meta=org_meta,
+        location_name=location_name,
+        location_latitude=location_latitude,
+        location_longitude=location_longitude,
+        event_type_names=event_type_names,
+        event_tag_names=event_tag_names,
     )
 
 
