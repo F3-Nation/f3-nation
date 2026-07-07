@@ -323,8 +323,7 @@ jobs:
       - uses: ./.github/actions/setup
       # GCS_CREDENTIALS must exist with client_email/private_key fields, but
       # nothing real is needed. Built here from plainly fake JSON — a committed
-      # base64 blob trips generic high-entropy secret scanners (GitGuardian
-      # alerted on the fork copy, 2026-07-06).
+      # base64 blob trips generic high-entropy secret scanners.
       - name: Set mock GCS credentials
         run: echo "GCS_CREDENTIALS=$(printf '{\"client_email\":\"fake-not-a-real-credential@ci.invalid\",\"private_key\":\"THIS-IS-A-FAKE-PLACEHOLDER-FOR-CI\"}' | base64 -w0)" >> "$GITHUB_ENV"
       - run: pnpm test
