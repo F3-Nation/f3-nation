@@ -139,13 +139,20 @@ export default function AdminRequestsModal({
           eventEndTime: convertHH_mmToHHmm(valuesToSubmit.eventEndTime ?? ""),
         } as Parameters<typeof validateSubmissionByAdmin.mutateAsync>[0];
 
-        await validateSubmissionByAdmin.mutateAsync(submissionInput);
+        const result =
+          await validateSubmissionByAdmin.mutateAsync(submissionInput);
 
         void invalidateQueries("request");
         void invalidateQueries("event");
         void invalidateQueries("location");
         router.refresh();
-        toast.success("Approved update");
+        if (result.status === "approved") {
+          toast.success("Approved update");
+        } else {
+          toast.info(
+            "You don't have permission for every affected region — the request was submitted for further review",
+          );
+        }
         closeModal();
       } catch (error) {
         if (!(error instanceof ORPCError)) {
@@ -180,7 +187,7 @@ export default function AdminRequestsModal({
         void invalidateQueries("request");
         router.refresh();
         setStatus("idle");
-        toast.error("Rejected update");
+        toast.success("Rejected update");
         closeModal();
       });
   };
