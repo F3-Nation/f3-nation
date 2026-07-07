@@ -480,9 +480,7 @@ The auth server supports two methods:
 import crypto from "node:crypto";
 import { AuthClient } from "@acme/sso";
 
-const auth = new AuthClient({
-  /* ... */
-});
+const auth = new AuthClient({/* ... */});
 
 // 1. Generate a random code verifier (43-128 chars, URL-safe)
 const codeVerifier = crypto.randomBytes(32).toString("base64url");

@@ -23,12 +23,10 @@ export type GetIndexedField<T, K> = K extends keyof T
     : undefined;
 
 export type FieldWithPossiblyUndefined<T, Key> =
-  | GetFieldType<Exclude<T, undefined>, Key>
-  | Extract<T, undefined>;
+  GetFieldType<Exclude<T, undefined>, Key> | Extract<T, undefined>;
 
 export type IndexedFieldWithPossiblyUndefined<T, Key> =
-  | GetIndexedField<Exclude<T, undefined>, Key>
-  | Extract<T, undefined>;
+  GetIndexedField<Exclude<T, undefined>, Key> | Extract<T, undefined>;
 
 export type FlattenObjectKeys<
   T extends Record<string, unknown>,

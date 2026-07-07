@@ -1,7 +1,7 @@
 {
   "name": "@acme/ui",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
@@ -51,9 +51,9 @@
     "tailwind-merge": "catalog:"
   },
   "devDependencies": {
-    "@acme/eslint-config": "workspace:^0.2.0",
-    "@acme/prettier-config": "workspace:^0.1.0",
-    "@acme/tsconfig": "workspace:^0.1.0",
+    "@acme/eslint-config": "workspace:*",
+    "@acme/prettier-config": "workspace:*",
+    "@acme/tsconfig": "workspace:*",
     "@types/lodash": "catalog:",
     "@types/react": "catalog:",
     "eslint": "catalog:",

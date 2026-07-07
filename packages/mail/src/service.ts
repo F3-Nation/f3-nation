@@ -27,8 +27,7 @@ type TemplateMessage<T extends Templates> = TemplateType[T] & {
 };
 
 type TemplateMessageParams<T extends Templates> =
-  | TemplateMessage<T>[]
-  | TemplateMessage<T>;
+  TemplateMessage<T>[] | TemplateMessage<T>;
 
 export class MailService {
   private transporter: AppTransporter | null = null;
