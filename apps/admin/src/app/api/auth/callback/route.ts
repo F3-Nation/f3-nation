@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { isOAuthStateExpired, parseOAuthState } from "@acme/sso";
 
 import {
   ACCESS_TOKEN_DEFAULT_MAX_AGE,
@@ -14,12 +15,6 @@ import {
 import { exchangeCodeForToken, getUserInfo } from "~/lib/auth/oauth";
 import { safeReturnTo } from "~/lib/auth/validation";
 
-interface StatePayload {
-  csrfToken: string;
-  returnTo: string;
-  timestamp: number;
-}
-
 function getPublicOrigin(): string {
   return (process.env.F3_ADMIN_BASE_URL ?? "http://localhost:3002").replace(
     /\/+$/,
@@ -32,26 +27,6 @@ function errorRedirect(baseUrl: string, error: string, returnTo?: string) {
   url.searchParams.set("error", error);
   if (returnTo) url.searchParams.set("callbackUrl", returnTo);
   return NextResponse.redirect(url.toString());
-}
-
-function parseState(stateParam: string): StatePayload | null {
-  try {
-    const state = JSON.parse(
-      Buffer.from(stateParam, "base64url").toString("utf-8"),
-    ) as Partial<StatePayload>;
-
-    if (
-      typeof state.csrfToken !== "string" ||
-      typeof state.returnTo !== "string" ||
-      typeof state.timestamp !== "number"
-    ) {
-      return null;
-    }
-
-    return state as StatePayload;
-  } catch {
-    return null;
-  }
 }
 
 export async function GET(request: NextRequest) {
@@ -69,12 +44,12 @@ export async function GET(request: NextRequest) {
     return errorRedirect(baseUrl, "missing_params");
   }
 
-  const state = parseState(stateParam);
+  const state = parseOAuthState(stateParam);
   if (!state) {
     return errorRedirect(baseUrl, "invalid_state");
   }
 
-  if (Date.now() - state.timestamp > 600_000) {
+  if (isOAuthStateExpired(state, 600_000)) {
     return errorRedirect(baseUrl, "expired_state");
   }
 

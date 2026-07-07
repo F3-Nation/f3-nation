@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { isOAuthStateExpired, parseOAuthState } from "@acme/sso";
 import { exchangeCodeForToken, getUserInfo } from "@/lib/auth/oauth";
 import { safeReturnTo } from "@/lib/auth/validation";
 import {
@@ -11,12 +12,6 @@ import {
   REFRESH_TOKEN_MAX_AGE,
 } from "@/lib/auth/constants";
 import { logError, logInfo, logWarn } from "@/lib/logging";
-
-interface StatePayload {
-  csrfToken: string;
-  returnTo: string;
-  timestamp: number;
-}
 
 function getPublicOrigin(): string {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
@@ -46,18 +41,13 @@ export async function GET(request: NextRequest) {
     return errorRedirect(baseUrl, "missing_params");
   }
 
-  // Decode and validate state
-  let state: StatePayload;
-  try {
-    state = JSON.parse(
-      Buffer.from(stateParam, "base64url").toString("utf-8"),
-    ) as StatePayload;
-  } catch {
+  const state = parseOAuthState(stateParam);
+  if (!state) {
     return errorRedirect(baseUrl, "invalid_state");
   }
 
   // Check timestamp (10 minute window)
-  if (Date.now() - state.timestamp > 600_000) {
+  if (isOAuthStateExpired(state, 600_000)) {
     return errorRedirect(baseUrl, "expired_state");
   }
 
