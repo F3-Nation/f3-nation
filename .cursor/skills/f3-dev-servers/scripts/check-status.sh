@@ -5,28 +5,25 @@
 echo "=== F3 Nation Dev Server Status ==="
 echo ""
 
-# Check Caddy (port 443)
-if nc -z localhost 443 2>/dev/null; then
-    echo "✅ Caddy (port 443): RUNNING"
-else
-    echo "❌ Caddy (port 443): NOT RUNNING"
-    echo "   Start with: caddy run --config Caddyfile"
-fi
+# name | port | package (pnpm -F <package> dev)
+services=(
+    "Map|3000|f3-map"
+    "API|3001|f3-api"
+    "Admin|3002|f3-admin"
+    "Me|3003|f3-me"
+    "Auth|3004|f3-auth"
+    "Homepage|3005|f3-homepage"
+    "Slackbot|3006|f3-slackbot"
+)
 
-# Check API (port 3001)
-if nc -z localhost 3001 2>/dev/null; then
-    echo "✅ API (port 3001): RUNNING"
-else
-    echo "❌ API (port 3001): NOT RUNNING"
-    echo "   Start with: PORT=3001 pnpm -F f3-api dev"
-fi
-
-# Check Map (port 3000)
-if nc -z localhost 3000 2>/dev/null; then
-    echo "✅ Map (port 3000): RUNNING"
-else
-    echo "❌ Map (port 3000): NOT RUNNING"
-    echo "   Start with: PORT=3000 pnpm -F f3-map dev"
-fi
+for entry in "${services[@]}"; do
+    IFS='|' read -r name port pkg <<< "$entry"
+    if nc -z localhost "$port" 2>/dev/null; then
+        echo "✅ $name (port $port): RUNNING"
+    else
+        echo "❌ $name (port $port): NOT RUNNING"
+        echo "   Start with: pnpm -F $pkg dev  (or 'pnpm dev' to start all)"
+    fi
+done
 
 echo ""

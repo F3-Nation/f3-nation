@@ -21,7 +21,7 @@ const isProd = env.NEXT_PUBLIC_CHANNEL === "prod";
 
 // Cookie configuration for cross-subdomain auth (map.f3nation.com <-> api.f3nation.com)
 // In production: use __Secure- prefix (requires HTTPS) and .f3nation.com domain
-// In development with .f3nation.test: still use HTTPS (via Caddy/mkcert), so secure: true
+// In development served over HTTPS (e.g. a local .f3nation.test setup): still secure: true
 /**
  * Extract hostname from URL, stripping protocol and path/port
  */
@@ -85,7 +85,7 @@ function getCookieDomain(): string | undefined {
 
 /**
  * Determine if we should use secure cookies.
- * True when: production OR using HTTPS URLs (e.g., .f3nation.test with Caddy/mkcert)
+ * True when: production OR using HTTPS URLs (e.g., a local HTTPS .f3nation.test setup)
  */
 function shouldUseSecureCookies(): boolean {
   if (isProd) return true;

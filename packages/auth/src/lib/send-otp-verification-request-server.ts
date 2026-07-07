@@ -13,7 +13,7 @@ export interface SendVerificationRequestServerParams {
 
 /**
  * Get the internal URL for server-to-server calls.
- * In local dev with custom domains (e.g., map.f3nation.test via Caddy),
+ * In local dev with custom domains (e.g., map.f3nation.test via a local HTTPS proxy),
  * Node.js won't trust the self-signed certificate. Use localhost instead.
  */
 function getInternalApiUrl(params: { url: string }): string {
@@ -22,7 +22,7 @@ function getInternalApiUrl(params: { url: string }): string {
 
   // Detect local development:
   // - NEXT_PUBLIC_CHANNEL is "local" or "ci"
-  // - OR hostname ends with .f3nation.test (Caddy local proxy)
+  // - OR hostname ends with .f3nation.test (local HTTPS proxy)
   // - OR NODE_ENV is not production
   const isLocalDev =
     env.NEXT_PUBLIC_CHANNEL === "local" ||
