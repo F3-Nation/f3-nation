@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.2.3](https://github.com/F3-Nation/f3-nation/compare/homepage@1.2.2...homepage@1.2.3) (2026-07-08)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @acme/tailwind-config bumped to 0.1.2
+
 ## [1.2.2](https://github.com/F3-Nation/f3-nation/compare/homepage@1.2.1...homepage@1.2.2) (2026-07-05)
 
 
