@@ -46,16 +46,16 @@ Every job checks out with `persist-credentials: false` and uses the shared
 Third-party actions are SHA-pinned.
 
 | #   | Gate                   | What it runs                                                                                                           | What it catches                                                                                                                         | Merge-blocking (`main` ruleset) |
-| --- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| 1   | `format-check`         | `pnpm format`                                                                                                          | Prettier drift                                                                                                                          | ✅                             |
-| 2   | `lint`                 | `pnpm lint`                                                                                                            | ESLint violations (incl. security rules)                                                                                                | ✅                             |
-| 3   | `typecheck`            | `pnpm typecheck`                                                                                                       | Type errors across the workspace                                                                                                        | ✅                             |
-| 4   | `build`                | `pnpm build`                                                                                                           | Full-workspace build breakage                                                                                                           | ✅                             |
-| 5   | `test-coverage`        | `pnpm test` against a `postgres:18` service container (`f3_test` DB, mock env vars)                                    | Unit/integration regressions                                                                                                            | ✅                             |
-| 6   | `security-audit`       | `pnpm audit --prod --audit-level=high`                                                                                 | Known high/critical vulns in prod deps                                                                                                  | ✅                             |
-| 7   | `docker-build`         | Per-app `docker build` (admin, api, auth, map, me; matrix, `linux/amd64`, no push, GHA layer cache + cache-miss retry) | Breakage specific to the pruned Docker context (catalog mismatches, isolated-linker resolution) that the full-workspace build can't see | ❌ advisory                    |
-| 8   | `recent-package-watch` | npm publish-time report for all workspace deps (same-repo PRs only)                                                    | Supply-chain freshness signal — flags deps published in the last 3 days; upserts a PR comment                                           | ❌ advisory                    |
-| —   | `pr-title.yml`         | PR title lint                                                                                                          | Non-Conventional-Commit squash titles                                                                                                   | (separate workflow)            |
+| --- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| 1   | `format-check`         | `pnpm format`                                                                                                          | Prettier drift                                                                                                                          | ✅                              |
+| 2   | `lint`                 | `pnpm lint`                                                                                                            | ESLint violations (incl. security rules)                                                                                                | ✅                              |
+| 3   | `typecheck`            | `pnpm typecheck`                                                                                                       | Type errors across the workspace                                                                                                        | ✅                              |
+| 4   | `build`                | `pnpm build`                                                                                                           | Full-workspace build breakage                                                                                                           | ✅                              |
+| 5   | `test-coverage`        | `pnpm test` against a `postgres:18` service container (`f3_test` DB, mock env vars)                                    | Unit/integration regressions                                                                                                            | ✅                              |
+| 6   | `security-audit`       | `pnpm audit --prod --audit-level=high`                                                                                 | Known high/critical vulns in prod deps                                                                                                  | ✅                              |
+| 7   | `docker-build`         | Per-app `docker build` (admin, api, auth, map, me; matrix, `linux/amd64`, no push, GHA layer cache + cache-miss retry) | Breakage specific to the pruned Docker context (catalog mismatches, isolated-linker resolution) that the full-workspace build can't see | ❌ advisory                     |
+| 8   | `recent-package-watch` | npm publish-time report for all workspace deps (same-repo PRs only)                                                    | Supply-chain freshness signal — flags deps published in the last 3 days; upserts a PR comment                                           | ❌ advisory                     |
+| —   | `pr-title.yml`         | PR title lint                                                                                                          | Non-Conventional-Commit squash titles                                                                                                   | (separate workflow)             |
 
 Local equivalents before pushing: `pnpm format`, `pnpm lint`, `pnpm typecheck`,
 `pnpm build`, `pnpm test` (see [`AGENTS.md`](../AGENTS.md#build-test-and-development-commands)).
@@ -77,9 +77,7 @@ that app's thin `deploy-<app>.yml` caller into the shared
 4. **`deploy-prod`** — requires staging success, then Cloud Run in the prod
    project.
 
-`recreate-staging.yml` exists to rebuild the staging environment.
-
-## Observations (documented, not changed here)
+## Observations
 
 - `docker-build` runs on every PR but is **not** in the `main` ruleset's
   required checks — an image-only breakage can merge and will surface at
@@ -88,13 +86,11 @@ that app's thin `deploy-<app>.yml` caller into the shared
   `security-audit` (the audit already gated the merge; a tag cut from an
   unmerged or old SHA relies on that earlier gate).
 - The two reserved rungs below are the planned homes for end-to-end
-  verification, which today has no rung at all (Playwright was removed from
-  the repo; the `**/tests/**/*.spec.ts` glob remains reserved for it).
+  verification, which today has no rung at all.
 
 ## Reserved rungs (planned, not yet implemented)
 
-These are documented now so their position in the chain is agreed before any
-workflow changes:
+These do not exist yet and are documented for future reference:
 
 - **`preview-env`** — per-PR Cloud Run preview environment, opt-in via a
   `preview` label; scale-to-zero; own seeded database; torn down on PR
@@ -105,5 +101,3 @@ workflow changes:
   RBAC matrix) running against the preview environment, with traces/video on
   failure. Blocking: red means no merge. Everything beyond the critical paths
   runs as a separate **advisory** E2E tier that never blocks.
-
-Neither rung exists yet; nothing in this document changes current behavior.
