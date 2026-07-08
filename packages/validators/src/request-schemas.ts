@@ -179,7 +179,7 @@ export const MoveEventToDifferentAOSchema = BaseSchema.extend({
   originalEventId: z.number().positive("Event ID is required"),
   originalAoId: z.number().positive("Original AO ID is required"),
   newRegionId: z.number().positive("Target region ID is required").optional(),
-  newAoId: z.number().positive("Target AO ID is required").optional(),
+  newAoId: z.number().positive("Target AO ID is required"),
   newLocationId: z
     .number()
     .positive("Target location ID is required")

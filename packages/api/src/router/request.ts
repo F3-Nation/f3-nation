@@ -38,6 +38,7 @@ import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
 import { checkUpdatePermissions } from "../lib/check-update-permissions";
+import type { CreatedEntityIds } from "../lib/update-request-handlers";
 import {
   handleCreateEvent,
   handleCreateLocationAndEvent,
@@ -54,6 +55,7 @@ import {
   recordUpdateRequest,
 } from "../lib/update-request-handlers";
 import { logError } from "../logger";
+import { notifyMapDataChange } from "../lib/webhook-events";
 import { notifyMapChangeRequest } from "../services/map-request-notification";
 import { editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
@@ -115,8 +117,8 @@ const normalizeAdminRequestInput = (input: Record<string, unknown>) => {
     normalized.originalAoId ??= meta.originalAoId ?? normalized.aoId;
     normalized.originalLocationId ??= meta.originalLocationId;
     normalized.newLocationId ??= meta.newLocationId ?? normalized.locationId;
-    // When newLocationId equals originalLocationId, the admin is approving a
-    // "new location" request without overriding — signal the handler to create.
+    // No distinct target location was selected: null newLocationId so
+    // handleMoveAOToDifferentLocation creates one from the submitted address.
     if (normalized.newLocationId === normalized.originalLocationId) {
       normalized.newLocationId = null;
     }
@@ -849,6 +851,25 @@ export const requestRouter = {
       const parsedInput =
         ValidateSubmissionByAdminSchema.parse(normalizedInput);
 
+      // Reviewers must hold the editor role on the region the request is
+      // filed under (editorProcedure only proves a role on *some* org).
+      // Lacking permission on other affected orgs is not an error — that
+      // case is re-recorded as pending for further review by handleRequest.
+      const reviewRegionId =
+        ("newRegionId" in parsedInput ? parsedInput.newRegionId : undefined) ??
+        parsedInput.originalRegionId;
+      const { success: canReviewRegion } = await checkHasRoleOnOrg({
+        orgId: reviewRegionId,
+        session: ctx.session,
+        db: ctx.db,
+        roleName: "editor",
+      });
+      if (!canReviewRegion) {
+        throw new ORPCError("UNAUTHORIZED", {
+          message: "You are not authorized to edit this region",
+        });
+      }
+
       switch (parsedInput.requestType) {
         case "create_ao_and_location_and_event":
           return await handleRequest({
@@ -1047,6 +1068,25 @@ const notifyPendingRequest = async ({
   }
 };
 
+const REQUEST_TYPE_TO_MAP_EVENT: Record<
+  RequestType,
+  "map.created" | "map.updated" | "map.deleted"
+> = {
+  create_ao_and_location_and_event: "map.created",
+  create_event: "map.created",
+  edit_event: "map.updated",
+  edit_ao_and_location: "map.updated",
+  move_ao_to_different_region: "map.updated",
+  move_ao_to_new_location: "map.updated",
+  move_ao_to_different_location: "map.updated",
+  move_event_to_different_ao: "map.updated",
+  move_event_to_new_location: "map.updated",
+  move_event_to_new_ao: "map.updated",
+  delete_event: "map.deleted",
+  delete_ao: "map.deleted",
+  edit: "map.updated",
+};
+
 type HandleableRequestInput = CheckRequestInput & {
   requestType: UpdateRequestData["requestType"];
   submittedBy: string;
@@ -1059,7 +1099,7 @@ type HandleableRequestInput = CheckRequestInput & {
 interface HandleRequestInput<T extends HandleableRequestInput> {
   ctx: Context;
   input: T;
-  handler: (ctx: Context, input: T) => Promise<unknown>;
+  handler: (ctx: Context, input: T) => Promise<CreatedEntityIds | void>;
 }
 
 const handleRequest = async <T extends HandleableRequestInput>({
@@ -1070,18 +1110,46 @@ const handleRequest = async <T extends HandleableRequestInput>({
   status: "approved" | "pending" | "rejected";
   updateRequest: { id: string };
 }> => {
-  const { permissions, submittedBy } = await checkRequest({ input, ctx });
+  const { email, permissions, submittedBy } = await checkRequest({
+    input,
+    ctx,
+  });
   const updateRequestData = {
     ...input,
     submittedBy,
   } as Pick<UpdateRequestData, "requestType" | "submittedBy"> &
     Record<string, unknown>;
+  // Not reviewed yet — never trust a client-supplied reviewedBy
+  updateRequestData.reviewedBy = null;
   if (permissions.success) {
-    await handler(ctx, input);
-    const updateRequest = await recordUpdateRequest({
-      ctx,
-      updateRequest: updateRequestData,
-      status: "approved",
+    // Apply the change and record the audit row atomically, so a failure to
+    // record can't leave an applied-but-unaudited change behind (and a retry
+    // after such a failure can't apply the change twice).
+    const updateRequest = await ctx.db.transaction(async (tx) => {
+      const txCtx: Context = { ...ctx, db: tx as unknown as Context["db"] };
+      const created = (await handler(txCtx, input)) ?? {};
+      return await recordUpdateRequest({
+        ctx: txCtx,
+        updateRequest: {
+          ...updateRequestData,
+          reviewedBy: email,
+          // Link the audit row to the entities the handler just created;
+          // recordUpdateRequest maps new* ids onto the aoId/locationId columns
+          ...(created.eventId !== undefined && { eventId: created.eventId }),
+          ...(created.aoId !== undefined && { newAoId: created.aoId }),
+          ...(created.locationId !== undefined && {
+            newLocationId: created.locationId,
+          }),
+        },
+        status: "approved",
+      });
+    });
+    // Notify webhooks and invalidate the map cache only after the commit
+    notifyMapDataChange({
+      type: REQUEST_TYPE_TO_MAP_EVENT[updateRequest.requestType],
+      eventId: updateRequest.eventId ?? undefined,
+      locationId: updateRequest.locationId ?? undefined,
+      orgId: updateRequest.aoId ?? updateRequest.regionId,
     });
     const result = { status: "approved" as const, updateRequest };
     return result;

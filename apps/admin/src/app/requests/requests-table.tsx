@@ -117,7 +117,8 @@ export const RequestsTable = () => {
             return;
           }
           openModal(ModalType.ADMIN_REQUESTS, { id: response.request.id });
-        } catch {
+        } catch (error) {
+          console.error("request.byId failed", error);
           toast.error("Failed to load request details");
         }
       }}

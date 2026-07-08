@@ -13,11 +13,16 @@ import { vi } from "vitest";
 
 // Use vi.hoisted to ensure mockLimit is available when vi.mock runs (mocks are hoisted)
 const mockLimit = vi.hoisted(() => vi.fn());
+const mockNotifyMapDataChange = vi.hoisted(() => vi.fn());
 
 vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   MemoryRatelimiter: vi.fn(function () {
     return { limit: mockLimit };
   }),
+}));
+
+vi.mock("../lib/webhook-events", () => ({
+  notifyMapDataChange: mockNotifyMapDataChange,
 }));
 
 import { eq, schema } from "@acme/db";
@@ -37,6 +42,7 @@ describe("Request Router", () => {
   // Track created entities for cleanup
   const createdRequestIds: string[] = [];
   const createdEventIds: number[] = [];
+  const createdEventTypeIds: number[] = [];
   const createdLocationIds: number[] = [];
   const createdOrgIds: number[] = [];
 
@@ -63,6 +69,13 @@ describe("Request Router", () => {
     for (const eventId of createdEventIds.reverse()) {
       try {
         await cleanup.event(eventId);
+      } catch {
+        // Ignore errors during cleanup
+      }
+    }
+    for (const eventTypeId of createdEventTypeIds.reverse()) {
+      try {
+        await cleanup.eventType(eventTypeId);
       } catch {
         // Ignore errors during cleanup
       }
@@ -413,6 +426,320 @@ describe("Request Router", () => {
 
       expect(result.results).toBeDefined();
       expect(result.results.every((r) => r.success === false)).toBe(true);
+    });
+  });
+
+  describe("map data change notifications", () => {
+    it("fires notifyMapDataChange when a request is applied (approved)", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+      const location = await createTestLocation(ao.id);
+      if (!location) return;
+      const event = await createTestEvent(ao.id, location.id);
+      if (!event) return;
+
+      // Admin on F3 Nation has editor rights on descendants, so the delete
+      // request is applied immediately instead of going to review.
+      const client = createTestClient();
+      const result = await client.request.submitDeleteEventRequest({
+        id: crypto.randomUUID(),
+        requestType: "delete_event",
+        submittedBy: "admin@example.com",
+        originalEventId: event.id,
+        originalRegionId: region.id,
+      });
+      createdRequestIds.push(result.updateRequest.id);
+
+      expect(result.status).toBe("approved");
+      expect(mockNotifyMapDataChange).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "map.deleted", eventId: event.id }),
+      );
+
+      // The approved row records who applied the change
+      const [savedRequest] = await db
+        .select()
+        .from(schema.updateRequests)
+        .where(eq(schema.updateRequests.id, result.updateRequest.id));
+      expect(savedRequest?.reviewedBy).toBe(session.user?.email);
+      expect(savedRequest?.reviewedAt).toBeTruthy();
+    });
+
+    it("does not fire notifyMapDataChange when the request stays pending", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+      const location = await createTestLocation(ao.id);
+      if (!location) return;
+      const event = await createTestEvent(ao.id, location.id);
+      if (!event) return;
+
+      // Editor on an unrelated org has no permission on this region.
+      const noPermSession = createEditorSession({
+        orgId: 99999,
+        orgName: "Other Org",
+      });
+      await mockAuthWithSession(noPermSession);
+
+      const client = createTestClient();
+      const result = await client.request.submitDeleteEventRequest({
+        id: crypto.randomUUID(),
+        requestType: "delete_event",
+        submittedBy: "editor@example.com",
+        originalEventId: event.id,
+        originalRegionId: region.id,
+      });
+      createdRequestIds.push(result.updateRequest.id);
+
+      expect(result.status).toBe("pending");
+      expect(mockNotifyMapDataChange).not.toHaveBeenCalled();
+
+      // A pending row has no reviewer yet
+      const [savedRequest] = await db
+        .select()
+        .from(schema.updateRequests)
+        .where(eq(schema.updateRequests.id, result.updateRequest.id));
+      expect(savedRequest?.reviewedBy).toBeNull();
+      expect(savedRequest?.reviewedAt).toBeNull();
+    });
+  });
+
+  describe("approved request atomicity", () => {
+    it("rolls back the applied change when recording the audit row fails", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+      const location = await createTestLocation(ao.id);
+      if (!location) return;
+      const event = await createTestEvent(ao.id, location.id);
+      if (!event) return;
+
+      // A non-UUID id passes schema validation but makes the updateRequests
+      // insert fail, after the delete handler has already run.
+      const client = createTestClient();
+      await expect(
+        client.request.submitDeleteEventRequest({
+          id: "not-a-uuid",
+          requestType: "delete_event",
+          submittedBy: "admin@example.com",
+          originalEventId: event.id,
+          originalRegionId: region.id,
+        }),
+      ).rejects.toThrow();
+
+      // The event deactivation must have been rolled back
+      const [unchangedEvent] = await db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.id, event.id));
+      expect(unchangedEvent?.isActive).toBe(true);
+      expect(mockNotifyMapDataChange).not.toHaveBeenCalled();
+    });
+
+    it("applies a multi-write handler through the nested transactions", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+      const location = await createTestLocation(ao.id);
+      if (!location) return;
+      const event = await createTestEvent(ao.id, location.id);
+      if (!event) return;
+
+      // delete_ao writes both the AO and its events; it runs as a savepoint
+      // inside handleRequest's transaction (with updateAO nesting once more).
+      const client = createTestClient();
+      const result = await client.request.submitDeleteAORequest({
+        id: crypto.randomUUID(),
+        requestType: "delete_ao",
+        submittedBy: "admin@example.com",
+        originalAoId: ao.id,
+        originalRegionId: region.id,
+      });
+      createdRequestIds.push(result.updateRequest.id);
+
+      expect(result.status).toBe("approved");
+      const [savedAo] = await db
+        .select()
+        .from(schema.orgs)
+        .where(eq(schema.orgs.id, ao.id));
+      const [savedEvent] = await db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.id, event.id));
+      expect(savedAo?.isActive).toBe(false);
+      expect(savedEvent?.isActive).toBe(false);
+    });
+  });
+
+  describe("approved create requests", () => {
+    it("records the created event id on the approved request row", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+      const location = await createTestLocation(ao.id);
+      if (!location) return;
+
+      const [eventType] = await db
+        .insert(schema.eventTypes)
+        .values({
+          name: `Test Event Type ${uniqueId()}`,
+          eventCategory: "first_f",
+        })
+        .returning();
+      if (!eventType) return;
+      createdEventTypeIds.push(eventType.id);
+
+      const client = createTestClient();
+      const result = await client.request.submitCreateEventRequest({
+        id: crypto.randomUUID(),
+        requestType: "create_event",
+        submittedBy: "admin@example.com",
+        originalAoId: ao.id,
+        originalLocationId: location.id,
+        originalRegionId: region.id,
+        eventName: `Created Event ${uniqueId()}`,
+        eventDayOfWeek: "monday",
+        eventStartTime: "0530",
+        eventEndTime: "0615",
+        eventTypeIds: [eventType.id],
+      });
+      createdRequestIds.push(result.updateRequest.id ?? "");
+      if (result.updateRequest.eventId) {
+        createdEventIds.push(result.updateRequest.eventId);
+      }
+
+      expect(result.status).toBe("approved");
+
+      // The approved row links to the event the handler just created
+      const [savedRequest] = await db
+        .select()
+        .from(schema.updateRequests)
+        .where(eq(schema.updateRequests.id, result.updateRequest.id ?? ""));
+      expect(savedRequest?.eventId).toBeTruthy();
+
+      const [createdEvent] = await db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.id, savedRequest?.eventId ?? -1));
+      expect(createdEvent?.orgId).toBe(ao.id);
+
+      // The webhook payload carries the created event id too
+      expect(mockNotifyMapDataChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "map.created",
+          eventId: savedRequest?.eventId,
+        }),
+      );
+    });
+  });
+
+  describe("submitMoveEventToDifferentAoRequest", () => {
+    it("rejects a request without a destination AO instead of silently no-oping", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const client = createTestClient();
+      await expect(
+        // @ts-expect-error -- deliberately omits the required newAoId
+        client.request.submitMoveEventToDifferentAoRequest({
+          id: crypto.randomUUID(),
+          requestType: "move_event_to_different_ao",
+          submittedBy: "admin@example.com",
+          originalEventId: 1,
+          originalAoId: 1,
+          originalRegionId: 1,
+        }),
+      ).rejects.toThrow();
+    });
+  });
+
+  describe("validateSubmissionByAdmin", () => {
+    it("throws UNAUTHORIZED when the reviewer has no editor role on the request's region", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+      const location = await createTestLocation(ao.id);
+      if (!location) return;
+      const event = await createTestEvent(ao.id, location.id);
+      if (!event) return;
+
+      // Editor on an unrelated org must not be able to review this region
+      const noPermSession = createEditorSession({
+        orgId: 99999,
+        orgName: "Other Org",
+      });
+      await mockAuthWithSession(noPermSession);
+
+      const client = createTestClient();
+      await expect(
+        client.request.validateSubmissionByAdmin({
+          id: crypto.randomUUID(),
+          requestType: "delete_event",
+          submittedBy: "test@example.com",
+          originalEventId: event.id,
+          originalRegionId: region.id,
+        }),
+      ).rejects.toThrow(/not authorized/i);
+
+      expect(mockNotifyMapDataChange).not.toHaveBeenCalled();
+    });
+
+    it("records pending further review when the reviewer lacks permission on another affected region", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const originalRegion = await createTestRegion();
+      if (!originalRegion) return;
+      const newRegion = await createTestRegion();
+      if (!newRegion) return;
+      const ao = await createTestAO(originalRegion.id);
+      if (!ao) return;
+
+      // Editor on the target region only: allowed to review, but the move
+      // also affects the original region, so it goes to further review.
+      const targetRegionSession = createEditorSession({
+        orgId: newRegion.id,
+        orgName: newRegion.name,
+      });
+      await mockAuthWithSession(targetRegionSession);
+
+      const client = createTestClient();
+      const result = await client.request.validateSubmissionByAdmin({
+        id: crypto.randomUUID(),
+        requestType: "move_ao_to_different_region",
+        submittedBy: "editor@example.com",
+        originalAoId: ao.id,
+        originalRegionId: originalRegion.id,
+        newRegionId: newRegion.id,
+      });
+      createdRequestIds.push(result.updateRequest.id);
+
+      expect(result.status).toBe("pending");
+      expect(mockNotifyMapDataChange).not.toHaveBeenCalled();
     });
   });
 

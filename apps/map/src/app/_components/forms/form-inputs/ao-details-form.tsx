@@ -74,7 +74,14 @@ export const AODetailsForm = <_T extends AODetailsFormValues>() => {
 
                       try {
                         const blob640 = await scaleAndCropImage(file, 640, 640);
-                        if (!blob640) return;
+                        if (!blob640) {
+                          form.setError("aoLogo", {
+                            type: "manual",
+                            message:
+                              "Couldn't process that image. Please try a different file.",
+                          });
+                          return;
+                        }
                         const url640 = await uploadLogo({
                           file: blob640,
                           orgId: formOriginalRegionId,
@@ -83,13 +90,14 @@ export const AODetailsForm = <_T extends AODetailsFormValues>() => {
                         onChange(url640);
                         const blob64 = await scaleAndCropImage(file, 64, 64);
                         if (blob64) {
-                          void uploadLogo({
+                          await uploadLogo({
                             file: blob64,
                             orgId: formOriginalRegionId,
                             requestId: formId,
                           });
                         }
-                      } catch {
+                      } catch (error) {
+                        console.error("AO logo upload failed", error);
                         form.setError("aoLogo", {
                           type: "manual",
                           message: "Logo upload failed. Please try again.",

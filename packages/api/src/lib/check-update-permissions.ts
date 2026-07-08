@@ -15,22 +15,26 @@ export interface CheckUpdatePermissionsInput {
   newRegionId?: number | null;
 }
 
+type RoleCheckResult = Awaited<ReturnType<typeof checkHasRoleOnOrg>>;
+
+export interface UpdatePermissionsResult {
+  /** True only if the caller has the editor role on every affected org. */
+  success: boolean;
+  /** Per-org role checks; empty when there was no session or nothing to check. */
+  results: RoleCheckResult[];
+}
+
 export const checkUpdatePermissions = async (params: {
   input: CheckUpdatePermissionsInput;
   ctx: {
     db: AppDb;
     session: Session | null;
   };
-}) => {
+}): Promise<UpdatePermissionsResult> => {
   const { input, ctx } = params;
   const session = ctx.session;
   if (!session) {
-    return {
-      success: false,
-      orgId: null,
-      roleName: null,
-      mode: "no-permission",
-    };
+    return { success: false, results: [] };
   }
 
   const [existingEvent] = input.originalEventId
@@ -64,19 +68,20 @@ export const checkUpdatePermissions = async (params: {
     .filter(isTruthy)
     .filter(onlyUnique);
 
-  const canEditRegions =
-    orgsToCheck.length === 0
-      ? [{ success: false, orgId: null, roleName: null, mode: "no-permission" }]
-      : await Promise.all(
-          orgsToCheck.map(async (orgId) => {
-            return await checkHasRoleOnOrg({
-              orgId,
-              session,
-              db: ctx.db,
-              roleName: "editor",
-            });
-          }),
-        );
+  if (orgsToCheck.length === 0) {
+    return { success: false, results: [] };
+  }
+
+  const canEditRegions = await Promise.all(
+    orgsToCheck.map((orgId) =>
+      checkHasRoleOnOrg({
+        orgId,
+        session,
+        db: ctx.db,
+        roleName: "editor",
+      }),
+    ),
+  );
 
   return {
     success: canEditRegions.every((c) => c.success),

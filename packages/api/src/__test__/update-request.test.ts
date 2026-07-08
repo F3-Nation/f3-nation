@@ -17,6 +17,8 @@ import {
   handleMoveAOToDifferentRegion,
   handleMoveAOToNewLocation,
   handleMoveEventToDifferentAO,
+  handleMoveEventToNewAO,
+  handleMoveEventToNewLocation,
   recordUpdateRequest,
 } from "../lib/update-request-handlers";
 import {
@@ -30,6 +32,8 @@ import {
   createMoveAOToDifferentRegionRequest,
   createMoveAOToNewLocationRequest,
   createMoveEventToDifferentAORequest,
+  createMoveEventToNewAORequest,
+  createMoveEventToNewLocationRequest,
 } from "./fixtures";
 import { createMockContext } from "./mock";
 
@@ -113,7 +117,10 @@ describe("handleCreateLocationAndEvent - creates a new AO with location and even
     const { ctx } = createMockContext();
     const request = createAOAndLocationAndEventRequest();
 
-    await handleCreateLocationAndEvent(ctx, request);
+    const created = await handleCreateLocationAndEvent(ctx, request);
+
+    // The created ids are returned so the audit row can link to them
+    expect(created).toEqual({ locationId: 100, aoId: 200, eventId: 300 });
 
     // Verify insertLocation was called with correct params
     expect(mockInsertLocation).toHaveBeenCalledTimes(1);
@@ -212,7 +219,10 @@ describe("handleCreateEvent - adds event to an existing AO and location", () => 
     const { ctx } = createMockContext();
     const request = createEventRequest();
 
-    await handleCreateEvent(ctx, request);
+    const created = await handleCreateEvent(ctx, request);
+
+    // The created event id is returned so the audit row can link to it
+    expect(created).toEqual({ eventId: 300 });
 
     // Verify insertEvent was called with correct params
     expect(mockInsertEvent).toHaveBeenCalledTimes(1);
@@ -660,6 +670,109 @@ describe("handleMoveEventToDifferentAO - moves an event to a different AO", () =
         originalEventId: 1,
       },
     });
+  });
+});
+
+describe("handleMoveEventToNewAO - moves an event to a brand-new AO", () => {
+  it("creates a location and AO, repoints the event, and returns the new ids", async () => {
+    const { ctx } = createMockContext();
+    const request = createMoveEventToNewAORequest();
+
+    const created = await handleMoveEventToNewAO(ctx, request);
+
+    // No target location supplied, so a new one is created from the address
+    expect(mockInsertLocation).toHaveBeenCalledTimes(1);
+    expect(mockInsertLocation).toHaveBeenCalledWith(ctx, {
+      regionId: 1,
+      locationName: undefined,
+      locationLat: 35.3,
+      locationLng: -80.9,
+      locationAddress: "789 New AO St",
+      locationAddress2: undefined,
+      locationCity: "Charlotte",
+      locationState: "NC",
+      locationZip: "28205",
+      locationCountry: "United States",
+      locationDescription: undefined,
+    });
+
+    // AO is created in the original region, pointing at the new location
+    expect(mockCreateAO).toHaveBeenCalledTimes(1);
+    expect(mockCreateAO).toHaveBeenCalledWith(ctx, {
+      regionId: 1,
+      aoName: "New AO",
+      aoLogo: null,
+      aoWebsite: null,
+      locationId: 100, // From mockInsertLocation
+    });
+
+    // The event is repointed to the newly created AO and location
+    expect(mockUpdateEvent).toHaveBeenCalledTimes(1);
+    expect(mockUpdateEvent).toHaveBeenCalledWith(ctx, {
+      eventId: 1,
+      aoId: 200, // From mockCreateAO
+      locationId: 100, // From mockInsertLocation
+    });
+
+    // Both created ids are returned so the audit row can link to them
+    expect(created).toEqual({ aoId: 200, locationId: 100 });
+  });
+
+  it("reuses an existing target location instead of creating one", async () => {
+    const { ctx } = createMockContext();
+    const request = createMoveEventToNewAORequest({ newLocationId: 5 });
+
+    const created = await handleMoveEventToNewAO(ctx, request);
+
+    // A target location was supplied, so none is created
+    expect(mockInsertLocation).not.toHaveBeenCalled();
+    expect(mockCreateAO).toHaveBeenCalledWith(
+      ctx,
+      expect.objectContaining({ locationId: 5 }),
+    );
+    expect(mockUpdateEvent).toHaveBeenCalledWith(ctx, {
+      eventId: 1,
+      aoId: 200,
+      locationId: 5,
+    });
+
+    // No location was created, so only the new AO id is returned
+    expect(created).toEqual({ aoId: 200, locationId: undefined });
+  });
+});
+
+describe("handleMoveEventToNewLocation - moves an event to a new location", () => {
+  it("creates a location, repoints the event, and returns the new location id", async () => {
+    const { ctx } = createMockContext();
+    const request = createMoveEventToNewLocationRequest();
+
+    const created = await handleMoveEventToNewLocation(ctx, request);
+
+    // Verify insertLocation was called with the submitted address in the
+    // original region
+    expect(mockInsertLocation).toHaveBeenCalledTimes(1);
+    expect(mockInsertLocation).toHaveBeenCalledWith(ctx, {
+      locationLat: 35.3,
+      locationLng: -80.9,
+      locationAddress: "789 Event St",
+      locationAddress2: undefined,
+      locationCity: "Charlotte",
+      locationState: "NC",
+      locationZip: "28204",
+      locationCountry: "United States",
+      locationDescription: undefined,
+      regionId: 1,
+    });
+
+    // The event is repointed to the new location (AO is unchanged)
+    expect(mockUpdateEvent).toHaveBeenCalledTimes(1);
+    expect(mockUpdateEvent).toHaveBeenCalledWith(ctx, {
+      eventId: 1,
+      locationId: 100, // From mockInsertLocation
+    });
+
+    // The created location id is returned so the audit row can link to it
+    expect(created).toEqual({ locationId: 100 });
   });
 });
 

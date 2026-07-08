@@ -9,6 +9,7 @@ import type {
   MoveAoToDifferentRegionType,
   MoveAOToNewLocationType,
   MoveEventToDifferentAOType,
+  MoveEventToNewAOType,
   MoveEventToNewLocationType,
 } from "@acme/validators/request-schemas";
 
@@ -189,6 +190,47 @@ export const createMoveEventToDifferentAORequest = (
   originalAoId: 1,
   newAoId: 2,
   newLocationId: 2,
+  ...overrides,
+});
+
+/**
+ * Creates a valid MoveEventToNewAO request for testing.
+ *
+ * Defaults to a null `newLocationId` so the handler creates a fresh location
+ * from the submitted address; override it to exercise the reuse path.
+ */
+export const createMoveEventToNewAORequest = (
+  overrides: Partial<MoveEventToNewAOType> = {},
+): MoveEventToNewAOType => ({
+  id: "test-request-id",
+  requestType: "move_event_to_new_ao",
+  submittedBy: "test@example.com",
+  isReview: false,
+  badImage: false,
+  originalRegionId: 1,
+  originalEventId: 1,
+  originalAoId: 1,
+  originalLocationId: 1,
+  newLocationId: null,
+  // Event fields (unchanged event carried along with the move)
+  eventName: "Morning Beatdown",
+  eventDayOfWeek: "monday",
+  eventStartTime: "0530",
+  eventEndTime: "0615",
+  eventTypeIds: [1],
+  eventDescription: "A great workout",
+  // AO fields (the new AO to create)
+  aoName: "New AO",
+  aoLogo: null,
+  aoWebsite: null,
+  // Location fields (the new location to create)
+  locationLat: 35.3,
+  locationLng: -80.9,
+  locationAddress: "789 New AO St",
+  locationCity: "Charlotte",
+  locationState: "NC",
+  locationZip: "28205",
+  locationCountry: "United States",
   ...overrides,
 });
 
