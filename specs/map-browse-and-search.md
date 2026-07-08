@@ -46,11 +46,10 @@ city X" to "this workout, this address, this time" in a few interactions.
 
 ### Search
 
-- **AC-4** — GIVEN the user types 2+ characters in the search box THEN a
+- **AC-4** — GIVEN the user types 3+ characters in the search box THEN a
   results popover (`data-testid="map-searchbox-popover-content-desktop"`)
-  shows **F3 Workouts** and **F3 Regions** matches; the **Places** (geocoded)
-  group fills in at 3+ characters. All three kinds are toggleable; unchecking
-  a kind removes its rows.
+  shows matches grouped by the toggleable kinds **F3 Workouts**, **F3
+  Regions**, and **Places**; unchecking a kind removes its rows.
 - **AC-5** — GIVEN search results WHEN the user selects an F3 workout result
   THEN the map pans/zooms to that location and it becomes the selected item
   (`data-testid="selected-item-desktop"` on desktop).
@@ -64,7 +63,7 @@ city X" to "this workout, this address, this time" in a few interactions.
 - **AC-8** — GIVEN a visible pin WHEN the user clicks it (desktop) THEN the
   location panel opens (`data-testid="panel"`) showing the workout name, event
   type(s), address with a Google Maps directions link, schedule (day/time),
-  and region section; a close control dismisses it.
+  and region section; the "Close location panel" control closes it.
 - **AC-9** — GIVEN a location with multiple workouts WHEN its panel is open
   THEN all of that location's workouts are listed and selectable as chips.
 - **AC-10** — GIVEN an open location panel WHEN the user clicks "Copy Link to
