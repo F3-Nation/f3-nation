@@ -3,7 +3,7 @@ import type {
   AuthClientConfig,
   AuthTokens,
   AuthUser,
-  OauthClient,
+  OAuthClient,
 } from "@acme/sso";
 
 import { env } from "@/env";
@@ -27,7 +27,7 @@ function getAuthClient(): AuthClient {
   return _authClient;
 }
 
-export function getOAuthConfig(): OauthClient {
+export function getOAuthConfig(): OAuthClient {
   return getAuthClient().getOAuthConfig();
 }
 

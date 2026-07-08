@@ -3,7 +3,6 @@
 import { useState } from "react";
 
 import { Badge } from "@acme/ui/badge";
-import { useToast } from "@/components/ui/toast";
 import { useRemovableList, compositeKey } from "@/hooks/useRemovableList";
 import { ConfirmRemoveDialog } from "./confirm-remove-dialog";
 import type { UserRole } from "@/lib/types";
@@ -13,7 +12,6 @@ interface RoleListProps {
 }
 
 export function RoleList({ roles: initialRoles }: RoleListProps) {
-  const { toast } = useToast();
   const [roleToConfirm, setRoleToConfirm] = useState<UserRole | null>(null);
   const {
     items: roles,
@@ -26,7 +24,6 @@ export function RoleList({ roles: initialRoles }: RoleListProps) {
     buildDeleteBody: (r) => ({ orgId: r.orgId, roleId: r.roleId }),
     shouldKeep: (item, removed) =>
       !(item.orgId === removed.orgId && item.roleId === removed.roleId),
-    toast,
     successMessage: (r) => ({
       title: "Role removed",
       description: `Removed ${r.roleName} role.`,

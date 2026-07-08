@@ -23,9 +23,7 @@ const TextSearchResultsContext = createContext<{
   f3LocationResults: F3LocationMapSearchResult[];
   geoResults: GeoMapSearchResult[];
   combinedResults: (
-    | F3LocationMapSearchResult
-    | GeoMapSearchResult
-    | F3RegionMapSearchResult
+    F3LocationMapSearchResult | GeoMapSearchResult | F3RegionMapSearchResult
   )[];
 }>({
   f3RegionResults: [],
@@ -229,9 +227,7 @@ export const useTextSearchResults = (): {
   f3LocationResults: F3LocationMapSearchResult[];
   geoResults: GeoMapSearchResult[];
   combinedResults: (
-    | F3LocationMapSearchResult
-    | GeoMapSearchResult
-    | F3RegionMapSearchResult
+    F3LocationMapSearchResult | GeoMapSearchResult | F3RegionMapSearchResult
   )[];
 } => {
   return useContext(TextSearchResultsContext);

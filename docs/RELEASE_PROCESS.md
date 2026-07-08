@@ -1,13 +1,13 @@
 # Release Process
 
-This document describes how code merged to `dev` becomes a tagged release and triggers a production deployment.
+This document describes how code merged to `main` becomes a tagged release and triggers a production deployment.
 
 ---
 
 ## Overview
 
 ```
-feature branch → PR → dev
+feature branch → PR → main
                          ↓
                   Release Please runs
                          ↓
@@ -50,19 +50,25 @@ This matters for shared packages: a `fix(api): ...` commit that only touches `pa
 
 ### 2. Release Please opens a PR automatically
 
-After a push to `dev`, the `release-please.yml` workflow runs. It:
+After a push to `main`, the `release-please.yml` workflow runs. It:
 
-- Scans commits to `dev` since the last release for each app
+- Scans commits to `main` since the last release for each app
 - Determines the appropriate semver bump per app
 - Opens (or updates) a PR titled something like `chore(main): release me 1.2.0` that:
   - Bumps the version in `apps/me/package.json`
   - Generates/updates `apps/me/CHANGELOG.md`
 
-If multiple PRs are merged to `dev` before the Release Please PR is merged, Release Please accumulates all of them — the PR is updated in place, never duplicated.
+For Slackbot release PRs, `.github/workflows/release-please-uv-lock.yml` runs
+after Release Please updates `apps/slackbot/pyproject.toml`. It runs `uv lock`
+and pushes any resulting `uv.lock` change back to the release PR using the same
+GitHub App token. This keeps Docker's `uv sync --locked ...` build step aligned
+with Release Please's version bump.
+
+If multiple PRs are merged to `main` before the Release Please PR is merged, Release Please accumulates all of them — the PR is updated in place, never duplicated.
 
 ### 3. Review and merge the Release Please PR
 
-The PR is purely mechanical (version + changelog). Review the changelog entries to make sure they're accurate. When ready, merge it into `dev`.
+The PR is purely mechanical (version + changelog). Review the changelog entries to make sure they're accurate. When ready, merge it into `main`.
 
 ### 4. Release Please creates the tag
 
@@ -112,7 +118,7 @@ The changelogs live alongside each app's source and can be referenced during rel
 
 | File                                   | Purpose                                                                               |
 | -------------------------------------- | ------------------------------------------------------------------------------------- |
-| `.github/workflows/release-please.yml` | Runs on push to `dev`; creates/updates release PRs and tags                           |
+| `.github/workflows/release-please.yml` | Runs on push to `main`; creates/updates release PRs and tags                          |
 | `release-please-config.json`           | Defines which packages are tracked, tag format, changelog sections                    |
 | `.release-please-manifest.json`        | Tracks the last-released version of each app; updated automatically by Release Please |
 

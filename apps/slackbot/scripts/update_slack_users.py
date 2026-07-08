@@ -9,7 +9,7 @@ from f3_data_models.utils import DbManager, get_session
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
-from utilities.helper_functions import create_user, safe_get
+from utilities.helper_functions import create_user, is_deactivated_slack_user, safe_get
 
 
 def update_slack_users(force=False):
@@ -40,6 +40,8 @@ def update_slack_users(force=False):
             for user in users:
                 if user["is_bot"] or user["id"] == "USLACKBOT":
                     continue  # Skip bots and the Slackbot
+                if is_deactivated_slack_user(user):
+                    continue  # Skip deactivated accounts
 
                 slack_user = slack_user_dict.get(user["id"])
                 if not safe_get(slack_user, "user_id"):

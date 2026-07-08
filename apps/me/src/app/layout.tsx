@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { Toaster } from "@acme/ui/toast";
+
 import { AuthProvider } from "@/lib/auth/AuthProvider";
 import { Navbar } from "@/components/navbar";
-import { ToastProvider, Toaster } from "@/components/ui/toast";
 import { SaveProvider } from "@/lib/save-context";
 import { GoogleAnalytics } from "@/components/google-analytics";
 
@@ -29,15 +30,13 @@ export default function RootLayout({
         className={`${inter.className} min-h-screen overflow-x-hidden overscroll-y-none bg-background text-foreground antialiased`}
       >
         <GoogleAnalytics />
-        <ToastProvider>
-          <AuthProvider>
-            <SaveProvider>
-              <Navbar />
-              <main className="min-h-[calc(100vh-3.5rem)]">{children}</main>
-            </SaveProvider>
-          </AuthProvider>
-          <Toaster />
-        </ToastProvider>
+        <AuthProvider>
+          <SaveProvider>
+            <Navbar />
+            <main className="min-h-[calc(100vh-3.5rem)]">{children}</main>
+          </SaveProvider>
+        </AuthProvider>
+        <Toaster />
       </body>
     </html>
   );

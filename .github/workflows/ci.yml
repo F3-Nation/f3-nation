@@ -2,14 +2,14 @@ name: CI
 
 on:
   push:
-    branches: [dev]
+    branches: [main]
   pull_request:
     branches: ["**"]
     types: [opened, synchronize, reopened]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/dev' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
@@ -32,8 +32,6 @@ env:
   EMAIL_SERVER: smtp://user:pass@localhost:587
   EMAIL_FROM: ci@example.com
   EMAIL_ADMIN_DESTINATIONS: ci@example.com
-  # Google (mocks)
-  GCS_CREDENTIALS: eyJjbGllbnRfZW1haWwiOiJtb2NrQGV4YW1wbGUuaWFtLmdzZXJ2aWNlYWNjb3VudC5jb20iLCJwcml2YXRlX2tleSI6Ii0tLS0tQkVHSU4gUlNBIFBSSVZBVEUgS0VZLS0tLS1cbmZha2Vcbi0tLS0tRU5EIFJTQSBQUklWQVRFIEtFWS0tLS0tIn0=
   # API (mocks)
   API_KEY: ci-api-key-placeholder
   SUPER_ADMIN_API_KEY: ci-super-admin-key-placeholder
@@ -306,7 +304,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:18@sha256:29ee7bb30d804447dc9a91fd0d74322ae1dc3a4072cc6346f70a5ed6e783b565
+        image: postgres:18@sha256:4aabea78cf39b90e834caf3af7d602a18565f6fe2508705c8d01aa63245c2e20
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -323,6 +321,11 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
+      # GCS_CREDENTIALS must exist with client_email/private_key fields, but
+      # nothing real is needed. Built here from plainly fake JSON — a committed
+      # base64 blob trips generic high-entropy secret scanners.
+      - name: Set mock GCS credentials
+        run: echo "GCS_CREDENTIALS=$(printf '{\"client_email\":\"fake-not-a-real-credential@ci.invalid\",\"private_key\":\"THIS-IS-A-FAKE-PLACEHOLDER-FOR-CI\"}' | base64 -w0)" >> "$GITHUB_ENV"
       - run: pnpm test
 
   # Builds each app's deploy image the same way the release pipeline does
