@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/F3-Nation/f3-nation/compare/pkg-storage@0.2.1...pkg-storage@0.2.2) (2026-07-08)
+
+
+### Bug Fixes
+
+* **deps:** pin internal @acme/* refs to workspace:* to prevent release-please version drift ([#587](https://github.com/F3-Nation/f3-nation/issues/587)) ([21ded4b](https://github.com/F3-Nation/f3-nation/commit/21ded4bef25dbdd00b2e66e5d8abda516b7dd0b1))
+
 ## [0.2.1](https://github.com/F3-Nation/f3-nation/compare/pkg-storage@0.2.0...pkg-storage@0.2.1) (2026-07-05)
 
 
