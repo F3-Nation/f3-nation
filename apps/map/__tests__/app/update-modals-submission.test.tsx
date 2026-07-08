@@ -242,6 +242,7 @@ const cases: {
       requestType: "move_event_to_different_ao",
       originalEventId: 20,
       originalAoId: 30,
+      newAoId: 31,
     },
   },
   {
