@@ -39,8 +39,7 @@ it solve?
 ## 2. Context & links
 
 - App(s) affected: (map / api / auth / admin / me)
-- Related design docs / Figma:
-- Related Issues / PRs:
+- Key code: 
 
 ## 3. User stories
 
