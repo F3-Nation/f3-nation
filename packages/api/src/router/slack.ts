@@ -192,7 +192,7 @@ export const assertOrgAdmin = async (
   }
 };
 
-export const assertActiveOrgExists = async (db: AppDb, regionOrgId: number) => {
+const assertActiveOrgExists = async (db: AppDb, regionOrgId: number) => {
   const [org] = await db
     .select({ id: schema.orgs.id })
     .from(schema.orgs)
@@ -224,20 +224,22 @@ export const getSlackBotTokenForOrg = async (
 
   if (rows.length === 0) {
     throw new ORPCError("NOT_FOUND", {
-      message: "Slack bot is not installed for this org",
+      message:
+        "Slack bot is not installed for this region. Follow the instructions at https://slackbotdocs.f3nation.com to install the F3 Nation Slack app for your region!",
     });
   }
 
   if (rows.length > 1) {
     throw new ORPCError("CONFLICT", {
-      message: "Multiple Slack spaces are linked to this org",
+      message: "Multiple Slack spaces are linked to this region",
     });
   }
 
   const botToken = rows[0]?.botToken?.trim();
   if (!botToken) {
     throw new ORPCError("NOT_FOUND", {
-      message: "Slack bot token not found for this org",
+      message:
+        "Slack bot token not found for this region. Please contact the F3 tech team.",
     });
   }
 
@@ -333,7 +335,7 @@ export const callSlackWebApi = async ({
 
   if (new TextEncoder().encode(body).byteLength > MAX_SLACK_PAYLOAD_BYTES) {
     throw new ORPCError("BAD_REQUEST", {
-      message: "Slack message payload is too large",
+      message: "Slack message payload is limited to 128 KB in size.",
     });
   }
 
@@ -370,7 +372,8 @@ export const callSlackWebApi = async ({
     }
 
     throw new ORPCError("BAD_GATEWAY", {
-      message: "Slack API returned a non-JSON response",
+      message:
+        "An unexpected error occurred while processing the Slack API response",
     });
   }
 
