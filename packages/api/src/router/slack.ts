@@ -63,7 +63,7 @@ const createSlackJsonValueSchema = (
   remainingDepth: number,
 ): z.ZodType<JsonValue> =>
   remainingDepth <= 0
-    ? z.union([z.string(), z.number().finite(), z.boolean(), z.null()])
+    ? z.union([z.string(), z.number(), z.boolean(), z.null()])
     : z.lazy(() =>
         z.union([
           z.string(),
