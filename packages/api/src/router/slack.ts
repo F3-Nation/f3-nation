@@ -249,7 +249,6 @@ const prepareSlackMessageRequest = async (
   regionOrgId: number,
 ): Promise<{ botToken: string }> => {
   await assertOrgAdmin(ctx, regionOrgId);
-  await assertActiveOrgExists(ctx.db, regionOrgId);
   const [, botToken] = await Promise.all([
     assertActiveOrgExists(ctx.db, regionOrgId),
     getSlackBotTokenForOrg(ctx.db, regionOrgId),
