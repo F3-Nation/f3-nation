@@ -36,7 +36,7 @@
 - **Never weaken an authorization check, validation rule, or test assertion to
   make a test pass.** If a test and an auth check disagree, stop and ask a
   human.
-- **Never ship a destructive or irreversible schema migration without explicit
+- **Never ship a schema migration without explicit
   human sign-off** — dropping/renaming columns or enums, casting data,
   deleting rows. Reversible-by-design is the default.
 - **Never hard-delete user data** when a soft delete (`is_active = false`)
