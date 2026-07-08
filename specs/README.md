@@ -29,7 +29,7 @@ Copy everything below into `specs/<feature-slug>.md` for a new feature, excludin
 # <Feature name>
 
 > Status: DRAFT — acceptance criteria pending owner approval
-> Owner (human accountable): <name>
+> Human designer: <f3 name> (<github tag>)
 
 ## 1. Summary
 
