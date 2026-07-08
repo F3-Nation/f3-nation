@@ -88,14 +88,6 @@ export const AODetailsForm = <_T extends AODetailsFormValues>() => {
                           requestId: formId,
                         });
                         onChange(url640);
-                        const blob64 = await scaleAndCropImage(file, 64, 64);
-                        if (blob64) {
-                          await uploadLogo({
-                            file: blob64,
-                            orgId: formOriginalRegionId,
-                            requestId: formId,
-                          });
-                        }
                       } catch (error) {
                         console.error("AO logo upload failed", error);
                         form.setError("aoLogo", {
