@@ -23,7 +23,7 @@ Rules of the road:
 
 ## Template
 
-Copy everything below into `specs/<feature-slug>.md` for a new feature.
+Copy everything below into `specs/<feature-slug>.md` for a new feature, excluding triple-ticks at beginning and end of section.
 
 ```markdown
 # <Feature name>
