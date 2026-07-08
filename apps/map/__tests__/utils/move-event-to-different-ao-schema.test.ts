@@ -9,6 +9,7 @@ const valid = {
   requestType: "move_event_to_different_ao" as const,
   originalEventId: 20,
   originalAoId: 30,
+  newAoId: 31,
 };
 
 describe("MoveEventToDifferentAOSchema", () => {
