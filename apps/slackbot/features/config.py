@@ -146,7 +146,15 @@ def build_config_general_form(
 def _kotter_enabled(region_record: SlackSettings) -> bool:
     if region_record.kotter_reports_enabled is not None:
         return bool(region_record.kotter_reports_enabled)
-    return bool(region_record.send_aoq_reports and region_record.default_siteq)
+    return bool(region_record.send_aoq_reports)
+
+
+def _kotter_ao_reports_enabled(region_record: SlackSettings) -> bool:
+    if region_record.kotter_report_include_site_qs is not None:
+        return bool(region_record.kotter_report_include_site_qs)
+    if region_record.kotter_report_split_site_qs is not None:
+        return bool(region_record.kotter_report_split_site_qs)
+    return bool(region_record.kotter_reports_enabled is None and region_record.send_aoq_reports)
 
 
 def build_kotter_report_config_form(
@@ -162,13 +170,10 @@ def build_kotter_report_config_form(
             actions.KOTTER_REPORT_HOME_AO_WEEKS: region_record.HOME_AO_CAPTURE,
             actions.KOTTER_REPORT_NO_Q_WEEKS: region_record.NO_Q_THRESHOLD_WEEKS,
             actions.KOTTER_REPORT_NO_Q_POSTS: region_record.NO_Q_THRESHOLD_POSTS,
-            actions.KOTTER_REPORT_FALLBACK_CONVERSATION: region_record.kotter_report_fallback_conversation
-            or region_record.default_siteq,
             actions.KOTTER_REPORT_RECIPIENT_USERS: region_record.kotter_report_recipient_users or [],
             actions.KOTTER_REPORT_INCLUDE_ADMINS: "yes" if region_record.kotter_report_include_admins else "no",
-            actions.KOTTER_REPORT_INCLUDE_SITE_QS: "yes" if region_record.kotter_report_include_site_qs else "no",
+            actions.KOTTER_REPORT_INCLUDE_SITE_QS: "yes" if _kotter_ao_reports_enabled(region_record) else "no",
             actions.KOTTER_REPORT_SEND_MODE: region_record.kotter_report_send_mode or "group",
-            actions.KOTTER_REPORT_SPLIT_SITE_QS: "yes" if region_record.kotter_report_split_site_qs else "no",
             actions.KOTTER_REPORT_DAY: str(
                 region_record.kotter_report_day if region_record.kotter_report_day is not None else 0
             ),
@@ -193,17 +198,14 @@ def handle_kotter_report_config_post(
     config_data = forms.KOTTER_REPORT_CONFIG_FORM.get_selected_values(body)
 
     enabled = safe_get(config_data, actions.KOTTER_REPORT_ENABLE) == "enable"
-    fallback_conversation = safe_get(config_data, actions.KOTTER_REPORT_FALLBACK_CONVERSATION)
 
     region_record.kotter_reports_enabled = enabled
     region_record.send_aoq_reports = 1 if enabled else 0
-    region_record.kotter_report_fallback_conversation = fallback_conversation
-    region_record.default_siteq = fallback_conversation
     region_record.kotter_report_recipient_users = safe_get(config_data, actions.KOTTER_REPORT_RECIPIENT_USERS) or []
     region_record.kotter_report_include_admins = safe_get(config_data, actions.KOTTER_REPORT_INCLUDE_ADMINS) == "yes"
     region_record.kotter_report_include_site_qs = safe_get(config_data, actions.KOTTER_REPORT_INCLUDE_SITE_QS) == "yes"
     region_record.kotter_report_send_mode = safe_get(config_data, actions.KOTTER_REPORT_SEND_MODE) or "group"
-    region_record.kotter_report_split_site_qs = safe_get(config_data, actions.KOTTER_REPORT_SPLIT_SITE_QS) == "yes"
+    region_record.kotter_report_split_site_qs = False
     region_record.kotter_report_day = safe_convert(safe_get(config_data, actions.KOTTER_REPORT_DAY), int)
     region_record.kotter_report_hour_cst = safe_convert(safe_get(config_data, actions.KOTTER_REPORT_HOUR_CST), int)
     region_record.NO_POST_THRESHOLD = safe_convert(safe_get(config_data, actions.KOTTER_REPORT_NO_POST_WEEKS), int)

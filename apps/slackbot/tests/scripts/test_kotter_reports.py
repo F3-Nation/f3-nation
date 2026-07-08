@@ -45,6 +45,7 @@ def row(user_id=1, ao_id=10, ao_name="The AO"):
         f3_name=f"PAX {user_id}",
         slack_user_id=f"U{user_id}",
         last_post_date=date(2026, 1, 1),
+        last_q_date=date(2025, 12, 1),
         recent_post_count=5,
         recent_q_count=0,
         home_ao_org_id=ao_id,
@@ -53,7 +54,7 @@ def row(user_id=1, ao_id=10, ao_name="The AO"):
     )
 
 
-def test_get_kotter_config_enablement_and_legacy_fallback():
+def test_get_kotter_config_enablement_and_legacy_ao_flag():
     assert kotter_reports.get_kotter_config(settings(kotter_reports_enabled=True)).enabled is True
     assert (
         kotter_reports.get_kotter_config(
@@ -61,8 +62,13 @@ def test_get_kotter_config_enablement_and_legacy_fallback():
         ).enabled
         is False
     )
-    assert kotter_reports.get_kotter_config(settings(send_aoq_reports=1, default_siteq="C1")).enabled is True
-    assert kotter_reports.get_kotter_config(settings(send_aoq_reports=1, default_siteq=None)).enabled is False
+    legacy_cfg = kotter_reports.get_kotter_config(settings(send_aoq_reports=1, default_siteq=None))
+    assert legacy_cfg.enabled is True
+    assert legacy_cfg.include_site_qs is True
+    split_cfg = kotter_reports.get_kotter_config(
+        settings(kotter_reports_enabled=True, kotter_report_split_site_qs=True)
+    )
+    assert split_cfg.include_site_qs is True
     assert kotter_reports.get_kotter_config(settings(kotter_reports_enabled=True, bot_token=None)).enabled is False
     assert kotter_reports.get_kotter_config(settings(kotter_reports_enabled=True, org_id=None)).enabled is False
 
@@ -107,10 +113,12 @@ def test_get_kotter_config_thresholds_and_recipients():
 
 def test_resolve_group_and_individual_deliveries(monkeypatch):
     rows = [row(1)]
-    assert [
-        d.destination
-        for d in kotter_reports.resolve_kotter_deliveries(config(send_mode="group", fallback_conversation="C1"), rows)
-    ] == ["C1"]
+    deliveries = kotter_reports.resolve_kotter_deliveries(
+        config(send_mode="group", recipient_users=["U1", "U2"]), rows
+    )
+    assert len(deliveries) == 1
+    assert deliveries[0].destination is None
+    assert deliveries[0].destination_users == ["U1", "U2"]
 
     monkeypatch.setattr(
         kotter_reports, "get_admin_users", lambda org_id, team_id: [(None, SimpleNamespace(slack_id="UADMIN"))]
@@ -119,23 +127,37 @@ def test_resolve_group_and_individual_deliveries(monkeypatch):
         config(send_mode="individual", fallback_conversation="C1", recipient_users=["U1", "U1"], include_admins=True),
         rows,
     )
-    assert [d.destination for d in deliveries] == ["C1", "U1", "UADMIN"]
+    assert [d.destination for d in deliveries] == ["U1", "UADMIN"]
 
 
-def test_resolve_split_routing(monkeypatch):
+def test_group_delivery_channel_opens_shared_dm():
+    calls = []
+
+    class Client:
+        def conversations_open(self, users):
+            calls.append(users)
+            return {"channel": {"id": "D123"}}
+
+    delivery = kotter_reports.Delivery(destination=None, rows=[row(1)], destination_users=["U1", "U2"])
+
+    assert kotter_reports._delivery_channel(Client(), delivery) == "D123"
+    assert calls == ["U1,U2"]
+
+
+def test_resolve_ao_routing_has_no_fallback(monkeypatch):
     rows = [row(1, 10, "AO 10"), row(2, 20, "AO 20")]
     monkeypatch.setattr(kotter_reports, "get_site_q_slack_ids_by_ao", lambda ao_ids, team_id: {10: ["USITE"]})
     deliveries = kotter_reports.resolve_kotter_deliveries(
-        config(split_site_qs=True, include_site_qs=True, fallback_conversation="C1"), rows
+        config(include_site_qs=True, fallback_conversation="C1"), rows
     )
     assert any(d.destination == "USITE" and [r.user_id for r in d.rows] == [1] for d in deliveries)
-    assert any(d.destination == "C1" and [r.user_id for r in d.rows] == [2] and not d.summary_only for d in deliveries)
+    assert all(d.destination != "C1" for d in deliveries)
 
     monkeypatch.setattr(kotter_reports, "get_site_q_slack_ids_by_ao", lambda ao_ids, team_id: {})
     deliveries = kotter_reports.resolve_kotter_deliveries(
-        config(split_site_qs=True, include_site_qs=True, fallback_conversation="C1"), rows
+        config(include_site_qs=True, fallback_conversation="C1"), rows
     )
-    assert any(d.destination == "C1" and len(d.rows) == 2 and not d.summary_only for d in deliveries)
+    assert deliveries == []
 
 
 def test_build_kotter_message_table_summary_and_oversized():
@@ -143,15 +165,28 @@ def test_build_kotter_message_table_summary_and_oversized():
     text, blocks = kotter_reports.build_kotter_message(delivery)
     assert "None/stats" not in text
     assert any(block["type"] == "table" for block in blocks)
+    table = next(block for block in blocks if block["type"] == "table")
+    headers = [cell["text"] for cell in table["rows"][0]]
+    assert "Last Q" in headers
+    assert "Posts in window" not in headers
+    assert "Qs in window" not in headers
+    pax_cell = table["rows"][1][0]
+    pax_elements = pax_cell["elements"][0]["elements"]
+    assert pax_elements == [{"type": "user", "user_id": "U1"}]
+    assert "Last Q: 2025-12-01" in text
     text, blocks = kotter_reports.build_kotter_message(delivery, stats_url="https://example.test")
     assert "https://example.test/stats/pax/1" in text
     assert any("/stats/pax/1" in block.get("text", {}).get("text", "") for block in blocks)
+    table = next(block for block in blocks if block["type"] == "table")
+    pax_elements = table["rows"][1][0]["elements"][0]["elements"]
+    assert pax_elements[0] == {"type": "user", "user_id": "U1"}
+    assert pax_elements[2] == {"type": "link", "url": "https://example.test/stats/pax/1", "text": "stats"}
 
     text, blocks = kotter_reports.build_kotter_message(
         kotter_reports.Delivery(destination="C1", rows=[row(1)], summary_only=True)
     )
     assert "•" not in text
-    assert "Detailed AO/fallback reports" in text
+    assert "Detailed AO reports" in text
     assert all(block["type"] != "table" for block in blocks)
 
     many_rows = [row(i) for i in range(kotter_reports.SLACK_TABLE_MAX_DATA_ROWS + 2)]
@@ -188,6 +223,47 @@ def test_send_kotter_reports_schedule_guard(monkeypatch):
 
     kotter_reports.send_kotter_reports(force=True, now_cst=datetime(2026, 7, 6, 9))
     assert calls == {"rows": 2, "sent": 2}
+
+
+def test_send_kotter_reports_sample_report_uses_sample_rows(monkeypatch):
+    org = SimpleNamespace(id=1, name="Region")
+    slack = SimpleNamespace(
+        settings=settings(
+            kotter_reports_enabled=False,
+            kotter_report_day=0,
+            kotter_report_hour_cst=8,
+        ).__dict__
+    )
+    monkeypatch.setattr(kotter_reports.DbManager, "find_join_records3", lambda *args, **kwargs: [(None, org, slack)])
+    monkeypatch.setattr(
+        kotter_reports,
+        "get_kotter_rows",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("real rows should not be loaded")),
+    )
+
+    sample_calls = []
+    sent_titles = []
+    monkeypatch.setattr(
+        kotter_reports,
+        "get_sample_kotter_rows",
+        lambda *args, **kwargs: sample_calls.append(kwargs) or [row(1)],
+    )
+    monkeypatch.setattr(
+        kotter_reports,
+        "resolve_kotter_deliveries",
+        lambda cfg, rows: [kotter_reports.Delivery("C1", rows, title="Weekly Kotter Report: full list")],
+    )
+    monkeypatch.setattr(
+        kotter_reports,
+        "_send_delivery",
+        lambda client, delivery, stats_url: sent_titles.append(delivery.title),
+    )
+    monkeypatch.setattr(kotter_reports, "WebClient", lambda *args, **kwargs: object())
+
+    kotter_reports.send_kotter_reports(sample_report=True, now_cst=datetime(2026, 7, 6, 9))
+
+    assert sample_calls == [{"today": date(2026, 7, 6), "row_count": kotter_reports.DEFAULT_SAMPLE_REPORT_ROWS}]
+    assert sent_titles == ["Sample Weekly Kotter Report: full list"]
 
 
 def test_hourly_runner_calls_kotter_only_when_reporting(monkeypatch):

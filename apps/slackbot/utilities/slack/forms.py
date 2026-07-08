@@ -730,6 +730,7 @@ ACHIEVEMENT_FORM = orm.BlockView(
 
 KOTTER_REPORT_CONFIG_FORM = orm.BlockView(
     blocks=[
+        orm.SectionBlock(label="*Overall schedule*", action="kotter_report_schedule_heading"),
         orm.InputBlock(
             label="Enable weekly Kotter Reports?",
             action=actions.KOTTER_REPORT_ENABLE,
@@ -738,6 +739,7 @@ KOTTER_REPORT_CONFIG_FORM = orm.BlockView(
                 initial_value="disable",
                 options=orm.as_selector_options(names=["Enable", "Disable"], values=["enable", "disable"]),
             ),
+            hint="Top-level scheduler/report enablement. Defaults: Monday at 8 CST when day/hour are not specified.",
         ),
         orm.InputBlock(
             label="Weekly send day",
@@ -750,14 +752,42 @@ KOTTER_REPORT_CONFIG_FORM = orm.BlockView(
                     values=["0", "1", "2", "3", "4", "5", "6"],
                 ),
             ),
+            hint="Defaults to Monday when not specified.",
         ),
         orm.InputBlock(
             label="Weekly send hour CST",
             action=actions.KOTTER_REPORT_HOUR_CST,
             optional=False,
             element=orm.NumberInputElement(is_decimal_allowed=False, min_value=0, max_value=23),
+            hint="Defaults to 8 CST when not specified.",
         ),
         orm.DividerBlock(),
+        orm.SectionBlock(
+            label=(
+                "*AO reports*\n"
+                "When enabled, AO-specific reports are sent automatically to matching Site Qs based on Home AO. "
+                "There is no fallback delivery for AO reports."
+            ),
+            action="kotter_report_ao_heading",
+        ),
+        orm.InputBlock(
+            label="Enable AO reports to Site Qs?",
+            action=actions.KOTTER_REPORT_INCLUDE_SITE_QS,
+            optional=False,
+            element=orm.RadioButtonsElement(
+                initial_value="no",
+                options=orm.as_selector_options(names=["Yes", "No"], values=["yes", "no"]),
+            ),
+            hint=(
+                "Defaults to No. AO reports go only to matching Site Qs automatically; rows without a "
+                "Site Q match are not sent as AO reports."
+            ),
+        ),
+        orm.DividerBlock(),
+        orm.SectionBlock(
+            label="*Full list report*\nThe full list is sent only when admins and/or explicit users are selected.",
+            action="kotter_report_full_list_heading",
+        ),
         orm.InputBlock(
             label="Send mode",
             action=actions.KOTTER_REPORT_SEND_MODE,
@@ -767,89 +797,64 @@ KOTTER_REPORT_CONFIG_FORM = orm.BlockView(
                 options=orm.as_selector_options(names=["Group", "Individual"], values=["group", "individual"]),
             ),
             hint=(
-                "Group mode sends one report to the selected destination, while Individual mode sends a separate "
-                "report to each recipient."
+                "Defaults to group. Group sends one shared DM/MPIM to all selected users; Individual sends "
+                "one separate DM to each recipient. The full list only sends when admins or explicit users "
+                "are selected below."
             ),
         ),
         orm.InputBlock(
-            label="Send to admins?",
+            label="Send full list to admins?",
             action=actions.KOTTER_REPORT_INCLUDE_ADMINS,
             optional=False,
             element=orm.RadioButtonsElement(
                 initial_value="no",
                 options=orm.as_selector_options(names=["Yes", "No"], values=["yes", "no"]),
             ),
+            hint="Defaults to No.",
         ),
         orm.InputBlock(
-            label="Explicit recipient users",
+            label="Explicit full list recipient users",
             action=actions.KOTTER_REPORT_RECIPIENT_USERS,
             optional=True,
             element=orm.MultiUsersSelectElement(placeholder="Select users..."),
-        ),
-        orm.InputBlock(
-            label="Send to Site Qs?",
-            action=actions.KOTTER_REPORT_INCLUDE_SITE_QS,
-            optional=False,
-            element=orm.RadioButtonsElement(
-                initial_value="no",
-                options=orm.as_selector_options(names=["Yes", "No"], values=["yes", "no"]),
-            ),
-        ),
-        orm.InputBlock(
-            label="Split reports to Site Qs?",
-            action=actions.KOTTER_REPORT_SPLIT_SITE_QS,
-            optional=False,
-            element=orm.RadioButtonsElement(
-                initial_value="no",
-                options=orm.as_selector_options(names=["Yes", "No"], values=["yes", "no"]),
-            ),
-            hint=(
-                "If enabled, each Site Q will receive a separate report for their AO based on the user's most "
-                "posted AO. If a Site Q is not set, the report will be sent to the fallback user or channel."
-            ),
-        ),
-        orm.InputBlock(
-            label="Fallback user or channel",
-            action=actions.KOTTER_REPORT_FALLBACK_CONVERSATION,
-            optional=True,
-            element=orm.ConversationsSelectElement(placeholder="Select the user or channel..."),
-            hint="Used when grouped reports need a destination or Site Q routing has no match.",
+            hint="Select users who should receive the full list report.",
         ),
         orm.DividerBlock(),
+        orm.SectionBlock(label="*Thresholds*", action="kotter_report_thresholds_heading"),
         orm.InputBlock(
             label="No-post threshold weeks",
             action=actions.KOTTER_REPORT_NO_POST_WEEKS,
             optional=True,
             element=orm.NumberInputElement(is_decimal_allowed=False, min_value=0),
-            hint="This is the number of weeks of no posting that will put a PAX on the Kotter Report.",
+            hint="Defaults to 4 weeks when not specified.",
         ),
         orm.InputBlock(
             label="Remove-after weeks",
             action=actions.KOTTER_REPORT_REMOVE_WEEKS,
             optional=True,
             element=orm.NumberInputElement(is_decimal_allowed=False, min_value=0),
-            hint="This is the number of weeks of no posting that will remove a PAX from the Kotter Report.",
+            hint="Disabled/unbounded unless set beyond the no-post threshold.",
         ),
         orm.InputBlock(
             label="Home AO capture weeks",
             action=actions.KOTTER_REPORT_HOME_AO_WEEKS,
             optional=True,
             element=orm.NumberInputElement(is_decimal_allowed=False, min_value=0),
-            hint="This is the number of weeks to capture a user's Home AO.",
+            hint="Defaults to 8 weeks when not specified.",
         ),
         orm.InputBlock(
             label="No-Q threshold weeks",
             action=actions.KOTTER_REPORT_NO_Q_WEEKS,
             optional=True,
             element=orm.NumberInputElement(is_decimal_allowed=False, min_value=0),
-            hint="This is the number of weeks with no Q that will put a PAX on the Q Kotter Report.",
+            hint="Defaults to 12 weeks when not specified.",
         ),
         orm.InputBlock(
             label="No-Q minimum posts",
             action=actions.KOTTER_REPORT_NO_Q_POSTS,
             optional=True,
             element=orm.NumberInputElement(is_decimal_allowed=False, min_value=0),
-            hint="This is the minimum number of posts required for a user to be considered for the Q Kotter Report.",
+            hint="Defaults to 4 posts when not specified.",
         ),
     ]
 )
