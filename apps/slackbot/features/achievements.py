@@ -919,7 +919,7 @@ def handle_manage_overflow(body: dict, client: WebClient, logger: Logger, contex
 
 
 # =============================================================================
-# Tag Achievement Handlers (moved from weaselbot.py)
+# Tag Achievement Handlers
 # =============================================================================
 def build_tag_achievement_form(
     body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings

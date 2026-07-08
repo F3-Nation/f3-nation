@@ -246,6 +246,10 @@ CONFIG_FORM = orm.BlockView(
                     label=":chart_with_upwards_trend: Reporting Settings",
                     action=actions.CONFIG_REPORTING,
                 ),
+                orm.ButtonElement(
+                    label=":memo: Kotter Reports",
+                    action=actions.CONFIG_KOTTER_REPORTS,
+                ),
                 # orm.ButtonElement(
                 #     label=":newspaper: Region Canvas Settings",
                 #     action=actions.CONFIG_SPECIAL_EVENTS,
@@ -724,70 +728,129 @@ ACHIEVEMENT_FORM = orm.BlockView(
     ]
 )
 
-WEASELBOT_CONFIG_FORM = orm.BlockView(
+KOTTER_REPORT_CONFIG_FORM = orm.BlockView(
     blocks=[
         orm.InputBlock(
-            label="Which Weaselbot features should be enabled?",
-            action=actions.WEASELBOT_ENABLE_FEATURES,
-            element=orm.CheckboxInputElement(
-                options=orm.as_selector_options(
-                    names=["Achievements", "Kotter Reports"],
-                    values=["achievements", "kotter_reports"],
-                )
+            label="Enable weekly Kotter Reports?",
+            action=actions.KOTTER_REPORT_ENABLE,
+            optional=False,
+            element=orm.RadioButtonsElement(
+                initial_value="disable",
+                options=orm.as_selector_options(names=["Enable", "Disable"], values=["enable", "disable"]),
             ),
         ),
         orm.InputBlock(
-            label="Which channel should achievements be posted to?",
-            action=actions.WEASELBOT_ACHIEVEMENT_CHANNEL,
-            optional=True,
-            element=orm.ChannelsSelectElement(placeholder="Select the channel..."),
+            label="Weekly send day",
+            action=actions.KOTTER_REPORT_DAY,
+            optional=False,
+            element=orm.StaticSelectElement(
+                initial_value="0",
+                options=orm.as_selector_options(
+                    names=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+                    values=["0", "1", "2", "3", "4", "5", "6"],
+                ),
+            ),
         ),
         orm.InputBlock(
-            label="Which user or channel should Kotter Reports be posted to?",
-            action=actions.WEASELBOT_KOTTER_CHANNEL,
+            label="Weekly send hour CST",
+            action=actions.KOTTER_REPORT_HOUR_CST,
+            optional=False,
+            element=orm.NumberInputElement(is_decimal_allowed=False, min_value=0, max_value=23),
+        ),
+        orm.DividerBlock(),
+        orm.InputBlock(
+            label="Send mode",
+            action=actions.KOTTER_REPORT_SEND_MODE,
+            optional=False,
+            element=orm.RadioButtonsElement(
+                initial_value="group",
+                options=orm.as_selector_options(names=["Group", "Individual"], values=["group", "individual"]),
+            ),
+            hint=(
+                "Group mode sends one report to the selected destination, while Individual mode sends a separate "
+                "report to each recipient."
+            ),
+        ),
+        orm.InputBlock(
+            label="Send to admins?",
+            action=actions.KOTTER_REPORT_INCLUDE_ADMINS,
+            optional=False,
+            element=orm.RadioButtonsElement(
+                initial_value="no",
+                options=orm.as_selector_options(names=["Yes", "No"], values=["yes", "no"]),
+            ),
+        ),
+        orm.InputBlock(
+            label="Explicit recipient users",
+            action=actions.KOTTER_REPORT_RECIPIENT_USERS,
+            optional=True,
+            element=orm.MultiUsersSelectElement(placeholder="Select users..."),
+        ),
+        orm.InputBlock(
+            label="Send to Site Qs?",
+            action=actions.KOTTER_REPORT_INCLUDE_SITE_QS,
+            optional=False,
+            element=orm.RadioButtonsElement(
+                initial_value="no",
+                options=orm.as_selector_options(names=["Yes", "No"], values=["yes", "no"]),
+            ),
+        ),
+        orm.InputBlock(
+            label="Split reports to Site Qs?",
+            action=actions.KOTTER_REPORT_SPLIT_SITE_QS,
+            optional=False,
+            element=orm.RadioButtonsElement(
+                initial_value="no",
+                options=orm.as_selector_options(names=["Yes", "No"], values=["yes", "no"]),
+            ),
+            hint=(
+                "If enabled, each Site Q will receive a separate report for their AO based on the user's most "
+                "posted AO. If a Site Q is not set, the report will be sent to the fallback user or channel."
+            ),
+        ),
+        orm.InputBlock(
+            label="Fallback user or channel",
+            action=actions.KOTTER_REPORT_FALLBACK_CONVERSATION,
             optional=True,
             element=orm.ConversationsSelectElement(placeholder="Select the user or channel..."),
-            hint="Please note that Weaselbot will need to be manually added to private channels if selected.",
+            hint="Used when grouped reports need a destination or Site Q routing has no match.",
+        ),
+        orm.DividerBlock(),
+        orm.InputBlock(
+            label="No-post threshold weeks",
+            action=actions.KOTTER_REPORT_NO_POST_WEEKS,
+            optional=True,
+            element=orm.NumberInputElement(is_decimal_allowed=False, min_value=0),
+            hint="This is the number of weeks of no posting that will put a PAX on the Kotter Report.",
         ),
         orm.InputBlock(
-            label="How many weeks of no posting should put a PAX on the Kotter Report?",
-            action=actions.WEASELBOT_KOTTER_WEEKS,
+            label="Remove-after weeks",
+            action=actions.KOTTER_REPORT_REMOVE_WEEKS,
             optional=True,
-            element=orm.NumberInputElement(placeholder="Enter the number of weeks...", is_decimal_allowed=False),
+            element=orm.NumberInputElement(is_decimal_allowed=False, min_value=0),
+            hint="This is the number of weeks of no posting that will remove a PAX from the Kotter Report.",
         ),
         orm.InputBlock(
-            label="After how many weeks of no posting should a PAX be removed from the Kotter Report?",
-            action=actions.WEASELBOT_KOTTER_REMOVE_WEEKS,
+            label="Home AO capture weeks",
+            action=actions.KOTTER_REPORT_HOME_AO_WEEKS,
             optional=True,
-            element=orm.NumberInputElement(placeholder="Enter the number of weeks...", is_decimal_allowed=False),
+            element=orm.NumberInputElement(is_decimal_allowed=False, min_value=0),
+            hint="This is the number of weeks to capture a user's Home AO.",
         ),
         orm.InputBlock(
-            label="How many weeks of activity should be used to base a PAX's home AO?",
-            action=actions.WEASELBOT_HOME_AO_WEEKS,
+            label="No-Q threshold weeks",
+            action=actions.KOTTER_REPORT_NO_Q_WEEKS,
             optional=True,
-            element=orm.NumberInputElement(placeholder="Enter the number of weeks...", is_decimal_allowed=False),
+            element=orm.NumberInputElement(is_decimal_allowed=False, min_value=0),
+            hint="This is the number of weeks with no Q that will put a PAX on the Q Kotter Report.",
         ),
         orm.InputBlock(
-            label="After how many weeks of no Qing should a PAX be put on the Q list?",
-            action=actions.WEASELBOT_Q_WEEKS,
+            label="No-Q minimum posts",
+            action=actions.KOTTER_REPORT_NO_Q_POSTS,
             optional=True,
-            element=orm.NumberInputElement(placeholder="Enter the number of weeks...", is_decimal_allowed=False),
+            element=orm.NumberInputElement(is_decimal_allowed=False, min_value=0),
+            hint="This is the minimum number of posts required for a user to be considered for the Q Kotter Report.",
         ),
-        orm.InputBlock(
-            label="What should be the minimum number of posts over that time to be eligible for the Q list?",
-            action=actions.WEASELBOT_Q_POSTS,
-            optional=True,
-            element=orm.NumberInputElement(placeholder="Enter the number of posts...", is_decimal_allowed=False),
-        ),
-    ]
-)
-
-
-NO_WEASELBOT_CONFIG_FORM = orm.BlockView(
-    blocks=[
-        orm.SectionBlock(
-            label="Weaselbot and / or PAXMiner doesn't appear to be configured for this Slack workspace. Please follow <https://github.com/F3Nation-Community/weaselbot|these instructions> to get started!",  # noqa: E501
-        )
     ]
 )
 

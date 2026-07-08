@@ -31,6 +31,15 @@ class SlackSettings:
     welcome_channel: Optional[str] = None
     send_achievements: Optional[int] = None
     send_aoq_reports: Optional[int] = None
+    kotter_reports_enabled: Optional[bool] = None
+    kotter_report_recipient_users: Optional[list[str]] = None
+    kotter_report_include_admins: Optional[bool] = None
+    kotter_report_include_site_qs: Optional[bool] = None
+    kotter_report_send_mode: Optional[str] = None  # Options: "group", "individual"
+    kotter_report_split_site_qs: Optional[bool] = None
+    kotter_report_fallback_conversation: Optional[str] = None
+    kotter_report_day: Optional[int] = None
+    kotter_report_hour_cst: Optional[int] = None
     achievement_channel: Optional[str] = None
     achievement_send_option: Optional[str] = None  # Options: "post_individually", "post_summary", "send_in_dms_only"
     default_siteq: Optional[str] = None
