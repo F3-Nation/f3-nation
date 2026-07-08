@@ -28,7 +28,7 @@ known-first-party = []
 
 [project]
 name = "f3-nation-slack-bot"
-version = "2.0.0"
+version = "2.0.2"
 description = ""
 authors = [{ name = "Evan Petzoldt", email = "evan.petzoldt@protonmail.com" }]
 readme = "README.md"

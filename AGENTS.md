@@ -87,7 +87,7 @@ that app's `AGENTS.md`.
 - Drive the Node version from `.nvmrc` via `actions/setup-node` (`node-version-file: .nvmrc`) — `.nvmrc` is the single source of truth. Never hardcode `node-version:` in a workflow.
 - **Set the Docker target platform at build time, not in the `Dockerfile`.** Cloud Run only runs `linux/amd64`. The app `Dockerfile` `FROM` lines must **not** pin `--platform` (BuildKit's `FromPlatformFlagConstDisallowed` lint, and it forces emulation on arm64 dev machines). Instead pass the platform at the build invocation: `platforms: linux/amd64` on `docker/build-push-action` (CI) and `--platform=linux/amd64` on `docker build` (deploy). Building a **deployable** image locally on Apple Silicon therefore requires an explicit `docker build --platform=linux/amd64 …`. Do **not** switch to `$BUILDPLATFORM` cross-builds — `sharp`'s native binaries are platform-specific and would break in the amd64 runtime.
 - Share toolchain setup through the composite action [`.github/actions/setup`](.github/actions/setup/action.yml) (pnpm + Node + pnpm-store cache + frozen install) instead of repeating setup steps per job.
-- The five CI check names (`format-check`, `lint`, `typecheck`, `build`, `test-coverage`) are referenced by the `dev` branch ruleset and by `check-regexp` in the deploy workflows — renaming a job requires updating both.
+- The five CI check names (`format-check`, `lint`, `typecheck`, `build`, `test-coverage`) are referenced by the `main` branch ruleset and by `check-regexp` in the deploy workflows — renaming a job requires updating both.
 
 ## Testing Guidelines
 
@@ -135,7 +135,7 @@ Scopes are defined in `commitlint.config.mjs` and map to monorepo packages:
 | Apps & Packages | `api`, `auth` (exist in both `apps/` and `packages/`)               |
 | Packages        | `db`, `env`, `mail`, `shared`, `sso`, `storage`, `ui`, `validators` |
 | Tooling         | `eslint`, `prettier`, `tsconfig`, `scripts`, `github`, `tailwind`   |
-| Cross-cutting   | `deps`, `ci`, `repo`, `release`, `dev` (used by Release Please)     |
+| Cross-cutting   | `deps`, `ci`, `repo`, `release`, `main` (used by Release Please)    |
 
 **Choosing a scope:**
 

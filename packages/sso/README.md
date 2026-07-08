@@ -480,9 +480,7 @@ The auth server supports two methods:
 import crypto from "node:crypto";
 import { AuthClient } from "@acme/sso";
 
-const auth = new AuthClient({
-  /* ... */
-});
+const auth = new AuthClient({/* ... */});
 
 // 1. Generate a random code verifier (43-128 chars, URL-safe)
 const codeVerifier = crypto.randomBytes(32).toString("base64url");
@@ -538,7 +536,7 @@ const auth = new AuthClient({
 
 Returns the public OAuth config (no secrets). Safe to pass to client-side code.
 
-**Returns:** `OauthClient`
+**Returns:** `OAuthClient`
 
 ```typescript
 const config = auth.getOAuthConfig();
@@ -718,10 +716,10 @@ interface AuthUser {
 }
 ```
 
-### `OauthClient`
+### `OAuthClient`
 
 ```typescript
-interface OauthClient {
+interface OAuthClient {
   clientId: string; // Safe to send to the browser
   redirectUri: string;
   authServerUrl: string;
