@@ -7,13 +7,13 @@ settings:
 catalogs:
   default:
     '@commitlint/cli':
-      specifier: ^21.0.2
+      specifier: ^21.1.0
       version: 21.2.0
     '@commitlint/config-conventional':
-      specifier: ^21.0.2
+      specifier: ^21.1.0
       version: 21.2.0
     '@commitlint/cz-commitlint':
-      specifier: ^21.0.2
+      specifier: ^21.1.0
       version: 21.2.0
     '@faker-js/faker':
       specifier: ^10.5.0
@@ -124,16 +124,16 @@ catalogs:
       specifier: ^4.3.1
       version: 4.3.2
     '@tanstack/react-query':
-      specifier: 5.90.12
-      version: 5.90.12
+      specifier: 5.101.2
+      version: 5.101.2
     '@tanstack/react-query-devtools':
-      specifier: 5.90.2
-      version: 5.90.2
+      specifier: 5.101.2
+      version: 5.101.2
     '@tanstack/react-table':
-      specifier: ^8.20.5
+      specifier: ^8.21.3
       version: 8.21.3
     '@tanstack/react-virtual':
-      specifier: ^3.13.6
+      specifier: ^3.14.4
       version: 3.14.5
     '@tanstack/table-core':
       specifier: ^8.21.3
@@ -148,7 +148,7 @@ catalogs:
       specifier: ^14.6.1
       version: 14.6.1
     '@turbo/gen':
-      specifier: ^2.9.18
+      specifier: ^2.10.0
       version: 2.10.3
     '@types/geojson':
       specifier: ^7946.0.16
@@ -181,7 +181,7 @@ catalogs:
       specifier: ^1.8.3
       version: 1.9.0
     '@vitejs/plugin-react':
-      specifier: ^6.0.2
+      specifier: ^6.0.3
       version: 6.0.3
     '@vitest/coverage-v8':
       specifier: ^4.1.9
@@ -223,13 +223,13 @@ catalogs:
       specifier: ^3.6.0
       version: 3.6.0
     eslint:
-      specifier: ^10.5.0
+      specifier: ^10.6.0
       version: 10.6.0
     eslint-config-turbo:
-      specifier: ^2.9.18
+      specifier: ^2.10.0
       version: 2.10.3
     eslint-plugin-import-x:
-      specifier: ^4.16.2
+      specifier: ^4.17.1
       version: 4.17.1
     eslint-plugin-jsx-a11y:
       specifier: ^6.10.2
@@ -244,7 +244,7 @@ catalogs:
       specifier: ^1.7.2
       version: 1.7.2
     google-auth-library:
-      specifier: ^10.7.0
+      specifier: ^10.9.0
       version: 10.9.0
     inquirer:
       specifier: ^12.11.1
@@ -259,7 +259,7 @@ catalogs:
       specifier: ^29.1.1
       version: 29.1.1
     knip:
-      specifier: ^6.18.0
+      specifier: ^6.23.0
       version: 6.24.0
     lefthook:
       specifier: ^2.1.9
@@ -274,16 +274,16 @@ catalogs:
       specifier: ^2.4.1
       version: 2.4.1
     lucide-react:
-      specifier: ^1.21.0
+      specifier: ^1.22.0
       version: 1.23.0
     next:
       specifier: ^16.2.9
       version: 16.2.10
     next-auth:
-      specifier: 5.0.0-beta.30
-      version: 5.0.0-beta.30
+      specifier: 5.0.0-beta.31
+      version: 5.0.0-beta.31
     next-themes:
-      specifier: ^0.4.4
+      specifier: ^0.4.6
       version: 0.4.6
     nodemailer:
       specifier: ^9.0.1
@@ -301,13 +301,13 @@ catalogs:
       specifier: ^13.1.3
       version: 13.1.3
     postcss:
-      specifier: ^8.5.15
+      specifier: ^8.5.16
       version: 8.5.16
     postgres:
       specifier: ^3.4.9
       version: 3.4.9
     prettier:
-      specifier: ^3.8.4
+      specifier: ^3.9.3
       version: 3.9.4
     prettier-plugin-tailwindcss:
       specifier: ^0.8.0
@@ -355,7 +355,7 @@ catalogs:
       specifier: ^4.22.4
       version: 4.23.0
     turbo:
-      specifier: ^2.9.18
+      specifier: ^2.10.0
       version: 2.10.3
     tw-animate-css:
       specifier: ^1.4.0
@@ -364,7 +364,7 @@ catalogs:
       specifier: ^6.0.3
       version: 6.0.3
     typescript-eslint:
-      specifier: ^8.61.1
+      specifier: ^8.62.0
       version: 8.62.1
     uuid:
       specifier: ^11.0.0
@@ -373,7 +373,7 @@ catalogs:
       specifier: ^1.1.2
       version: 1.1.2
     vite:
-      specifier: ^8.0.16
+      specifier: ^8.1.0
       version: 8.1.3
     vitest:
       specifier: ^4.1.9
@@ -478,7 +478,7 @@ importers:
         version: 1.14.6(@opentelemetry/api@1.9.1)
       '@orpc/tanstack-query':
         specifier: 'catalog:'
-        version: 1.14.6(@opentelemetry/api@1.9.1)(@orpc/client@1.14.6(@opentelemetry/api@1.9.1))(@tanstack/query-core@5.90.12)
+        version: 1.14.6(@opentelemetry/api@1.9.1)(@orpc/client@1.14.6(@opentelemetry/api@1.9.1))(@tanstack/query-core@5.101.2)
       '@radix-ui/react-icons':
         specifier: 'catalog:'
         version: 1.3.2(react@19.2.7)
@@ -487,10 +487,10 @@ importers:
         version: 0.13.11(typescript@6.0.3)(zod@4.4.3)
       '@tanstack/react-query':
         specifier: 'catalog:'
-        version: 5.90.12(react@19.2.7)
+        version: 5.101.2(react@19.2.7)
       '@tanstack/react-query-devtools':
         specifier: 'catalog:'
-        version: 5.90.2(@tanstack/react-query@5.90.12(react@19.2.7))(react@19.2.7)
+        version: 5.101.2(@tanstack/react-query@5.101.2(react@19.2.7))(react@19.2.7)
       '@tanstack/react-table':
         specifier: 'catalog:'
         version: 8.21.3(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -647,7 +647,7 @@ importers:
         version: 16.2.10(@opentelemetry/api@1.9.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       next-auth:
         specifier: 'catalog:'
-        version: 5.0.0-beta.30(next@16.2.10(@opentelemetry/api@1.9.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(nodemailer@9.0.3)(react@19.2.7)
+        version: 5.0.0-beta.31(next@16.2.10(@opentelemetry/api@1.9.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(nodemailer@9.0.3)(react@19.2.7)
       react:
         specifier: 'catalog:'
         version: 19.2.7
@@ -744,7 +744,7 @@ importers:
         version: 16.2.10(@opentelemetry/api@1.9.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       next-auth:
         specifier: 'catalog:'
-        version: 5.0.0-beta.30(next@16.2.10(@opentelemetry/api@1.9.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(nodemailer@9.0.3)(react@19.2.7)
+        version: 5.0.0-beta.31(next@16.2.10(@opentelemetry/api@1.9.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(nodemailer@9.0.3)(react@19.2.7)
       nodemailer:
         specifier: 'catalog:'
         version: 9.0.3
@@ -923,7 +923,7 @@ importers:
         version: 1.14.6(@opentelemetry/api@1.9.1)
       '@orpc/tanstack-query':
         specifier: 'catalog:'
-        version: 1.14.6(@opentelemetry/api@1.9.1)(@orpc/client@1.14.6(@opentelemetry/api@1.9.1))(@tanstack/query-core@5.90.12)
+        version: 1.14.6(@opentelemetry/api@1.9.1)(@orpc/client@1.14.6(@opentelemetry/api@1.9.1))(@tanstack/query-core@5.101.2)
       '@react-hook/window-size':
         specifier: 'catalog:'
         version: 3.1.1(react@19.2.7)
@@ -935,10 +935,10 @@ importers:
         version: 0.13.11(typescript@6.0.3)(zod@4.4.3)
       '@tanstack/react-query':
         specifier: 'catalog:'
-        version: 5.90.12(react@19.2.7)
+        version: 5.101.2(react@19.2.7)
       '@tanstack/react-query-devtools':
         specifier: 'catalog:'
-        version: 5.90.2(@tanstack/react-query@5.90.12(react@19.2.7))(react@19.2.7)
+        version: 5.101.2(@tanstack/react-query@5.101.2(react@19.2.7))(react@19.2.7)
       '@vis.gl/react-google-maps':
         specifier: 'catalog:'
         version: 1.9.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -971,7 +971,7 @@ importers:
         version: 16.2.10(@opentelemetry/api@1.9.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       next-auth:
         specifier: 'catalog:'
-        version: 5.0.0-beta.30(next@16.2.10(@opentelemetry/api@1.9.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(nodemailer@9.0.3)(react@19.2.7)
+        version: 5.0.0-beta.31(next@16.2.10(@opentelemetry/api@1.9.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(nodemailer@9.0.3)(react@19.2.7)
       next-themes:
         specifier: 'catalog:'
         version: 0.4.6(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -1333,7 +1333,7 @@ importers:
         version: 16.2.10(@opentelemetry/api@1.9.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       next-auth:
         specifier: 'catalog:'
-        version: 5.0.0-beta.30(next@16.2.10(@opentelemetry/api@1.9.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(nodemailer@9.0.3)(react@19.2.7)
+        version: 5.0.0-beta.31(next@16.2.10(@opentelemetry/api@1.9.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(nodemailer@9.0.3)(react@19.2.7)
       nodemailer:
         specifier: 'catalog:'
         version: 9.0.3
@@ -1527,7 +1527,7 @@ importers:
         version: 4.18.1
       next-auth:
         specifier: 'catalog:'
-        version: 5.0.0-beta.30(next@16.2.10(@opentelemetry/api@1.9.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(nodemailer@9.0.3)(react@19.2.7)
+        version: 5.0.0-beta.31(next@16.2.10(@opentelemetry/api@1.9.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(nodemailer@9.0.3)(react@19.2.7)
       zod:
         specifier: 'catalog:'
         version: 4.4.3
@@ -1577,6 +1577,12 @@ importers:
       '@acme/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/typescript
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      '@vitest/coverage-v8':
+        specifier: 'catalog:'
+        version: 4.1.9(vitest@4.1.9)
       eslint:
         specifier: 'catalog:'
         version: 10.6.0(jiti@2.7.0)
@@ -1586,6 +1592,12 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
+      vite:
+        specifier: 'catalog:'
+        version: 8.1.3(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.23.0)(yaml@2.9.0)
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.1.3(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.23.0)(yaml@2.9.0))
 
   packages/storage:
     dependencies:
@@ -1942,7 +1954,7 @@ importers:
         version: 8.21.3
       next-auth:
         specifier: 'catalog:'
-        version: 5.0.0-beta.30(next@16.2.10(@opentelemetry/api@1.9.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(nodemailer@9.0.3)(react@19.2.7)
+        version: 5.0.0-beta.31(next@16.2.10(@opentelemetry/api@1.9.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(nodemailer@9.0.3)(react@19.2.7)
 
   tooling/vitest:
     devDependencies:
@@ -4855,20 +4867,20 @@ packages:
   '@tailwindcss/postcss@4.3.2':
     resolution: {integrity: sha512-rjVWYCa7Ngbi5AarT6k8TkxUG3Wl1QKzHdIZVsjZSzf36Jmo2IKZt/NHRAwly8oDkbBOH0YTu+CHuf9jPxMc+g==}
 
-  '@tanstack/query-core@5.90.12':
-    resolution: {integrity: sha512-T1/8t5DhV/SisWjDnaiU2drl6ySvsHj1bHBCWNXd+/T+Hh1cf6JodyEYMd5sgwm+b/mETT4EV3H+zCVczCU5hg==}
+  '@tanstack/query-core@5.101.2':
+    resolution: {integrity: sha512-hH5MLoJhF7KaIGd7q3xTXGXvslI+GYlM1Z/35aSHHWaCJWB7XvTSHYuV3eM7tw+aE0mT/xMro4M4Q9rCGHT0lw==}
 
-  '@tanstack/query-devtools@5.90.1':
-    resolution: {integrity: sha512-GtINOPjPUH0OegJExZ70UahT9ykmAhmtNVcmtdnOZbxLwT7R5OmRztR5Ahe3/Cu7LArEmR6/588tAycuaWb1xQ==}
+  '@tanstack/query-devtools@5.101.2':
+    resolution: {integrity: sha512-o+wHcqgN7Pp0s8v1i0UGq/ZrrEKrxdIiMQmKRdYb2w7NPtylYSJ4+wg/tIn71m9DLstwUwdEGAvROdly6HXP6w==}
 
-  '@tanstack/react-query-devtools@5.90.2':
-    resolution: {integrity: sha512-vAXJzZuBXtCQtrY3F/yUNJCV4obT/A/n81kb3+YqLbro5Z2+phdAbceO+deU3ywPw8B42oyJlp4FhO0SoivDFQ==}
+  '@tanstack/react-query-devtools@5.101.2':
+    resolution: {integrity: sha512-eU7HctdA9gDjqoERoEdzLbw9DiqnBDfh5+Hu0u26gjqoHJezOpQAuiesDL2VvkU+2cPV76zgv0tMZsOrI4LjnQ==}
     peerDependencies:
-      '@tanstack/react-query': ^5.90.2
+      '@tanstack/react-query': ^5.101.2
       react: ^18 || ^19
 
-  '@tanstack/react-query@5.90.12':
-    resolution: {integrity: sha512-graRZspg7EoEaw0a8faiUASCyJrqjKPdqJ9EwuDRUF9mEYJ1YPczI9H+/agJ0mOJkPCJDk0lsz5QTrLZ/jQ2rg==}
+  '@tanstack/react-query@5.101.2':
+    resolution: {integrity: sha512-seDkr6kzGzX1okaaTtZPtgA688CDPlXUz1C6xSg0ESqn04Vuc8tlrYms1s3de+znBqhPVxFRfpAfUf+6XvfPWg==}
     peerDependencies:
       react: ^18 || ^19
 
@@ -7207,8 +7219,8 @@ packages:
   neo-async@2.6.2:
     resolution: {integrity: sha512-Yd3UES5mWCSqR+qNT93S3UoYUkqAZ9lLg8a7g9rimsWmYGK8cVToA4/sF3RrshdyV3sAGMXVUmpMYOw+dLpOuw==}
 
-  next-auth@5.0.0-beta.30:
-    resolution: {integrity: sha512-+c51gquM3F6nMVmoAusRJ7RIoY0K4Ts9HCCwyy/BRoe4mp3msZpOzYMyb5LAYc1wSo74PMQkGDcaghIO7W6Xjg==}
+  next-auth@5.0.0-beta.31:
+    resolution: {integrity: sha512-1OBgCKPzo+S7UWWMp3xgvGvIJ0OpV7B3vR4ZDRqD9a4Ch+OT6dakLXG9ivhtmIWVa71nTSXattOHyCg8sNi8/Q==}
     peerDependencies:
       '@simplewebauthn/browser': ^9.0.1
       '@simplewebauthn/server': ^9.0.2
@@ -9814,11 +9826,11 @@ snapshots:
     transitivePeerDependencies:
       - '@opentelemetry/api'
 
-  '@orpc/tanstack-query@1.14.6(@opentelemetry/api@1.9.1)(@orpc/client@1.14.6(@opentelemetry/api@1.9.1))(@tanstack/query-core@5.90.12)':
+  '@orpc/tanstack-query@1.14.6(@opentelemetry/api@1.9.1)(@orpc/client@1.14.6(@opentelemetry/api@1.9.1))(@tanstack/query-core@5.101.2)':
     dependencies:
       '@orpc/client': 1.14.6(@opentelemetry/api@1.9.1)
       '@orpc/shared': 1.14.6(@opentelemetry/api@1.9.1)
-      '@tanstack/query-core': 5.90.12
+      '@tanstack/query-core': 5.101.2
     transitivePeerDependencies:
       - '@opentelemetry/api'
 
@@ -11025,19 +11037,19 @@ snapshots:
       postcss: 8.5.16
       tailwindcss: 4.3.2
 
-  '@tanstack/query-core@5.90.12': {}
+  '@tanstack/query-core@5.101.2': {}
 
-  '@tanstack/query-devtools@5.90.1': {}
+  '@tanstack/query-devtools@5.101.2': {}
 
-  '@tanstack/react-query-devtools@5.90.2(@tanstack/react-query@5.90.12(react@19.2.7))(react@19.2.7)':
+  '@tanstack/react-query-devtools@5.101.2(@tanstack/react-query@5.101.2(react@19.2.7))(react@19.2.7)':
     dependencies:
-      '@tanstack/query-devtools': 5.90.1
-      '@tanstack/react-query': 5.90.12(react@19.2.7)
+      '@tanstack/query-devtools': 5.101.2
+      '@tanstack/react-query': 5.101.2(react@19.2.7)
       react: 19.2.7
 
-  '@tanstack/react-query@5.90.12(react@19.2.7)':
+  '@tanstack/react-query@5.101.2(react@19.2.7)':
     dependencies:
-      '@tanstack/query-core': 5.90.12
+      '@tanstack/query-core': 5.101.2
       react: 19.2.7
 
   '@tanstack/react-table@8.21.3(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
@@ -11178,7 +11190,7 @@ snapshots:
   '@types/request@2.48.13':
     dependencies:
       '@types/caseless': 0.12.5
-      '@types/node': 24.13.2
+      '@types/node': 26.1.0
       '@types/tough-cookie': 4.0.5
       form-data: 4.0.6
 
@@ -13487,7 +13499,7 @@ snapshots:
 
   neo-async@2.6.2: {}
 
-  next-auth@5.0.0-beta.30(next@16.2.10(@opentelemetry/api@1.9.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(nodemailer@9.0.3)(react@19.2.7):
+  next-auth@5.0.0-beta.31(next@16.2.10(@opentelemetry/api@1.9.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(nodemailer@9.0.3)(react@19.2.7):
     dependencies:
       '@auth/core': 0.41.2(nodemailer@9.0.3)
       next: 16.2.10(@opentelemetry/api@1.9.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)

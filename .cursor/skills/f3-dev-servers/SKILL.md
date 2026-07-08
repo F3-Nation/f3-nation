@@ -1,38 +1,63 @@
 ---
 name: f3-dev-servers
-description: Start and manage f3-nation development servers (Caddy, API, Map). Use when the user wants to start dev servers, check if services are running, or troubleshoot the local development environment.
+description: Start and manage f3-nation development servers. Use when the user wants to start dev servers, check if services are running, or troubleshoot the local development environment.
 ---
 
 # F3 Nation Development Servers
 
-Start the three dev servers needed for local f3-nation development.
+Local dev has two layers:
 
-## Starting All Services (Agent Method)
+- **Docker infra** — Postgres, Adminer, GCS emulator, Mailpit (stateful services).
+- **App servers** — the Next.js apps (Map, API, Admin, Me, Auth, Homepage) and the
+  Python Slackbot, run natively with `pnpm dev`.
 
-The agent CAN start all three services by running Shell commands with `block_until_ms: 0` to background them immediately.
+## Starting Everything (Normal Method)
 
-Run these in parallel with `block_until_ms: 0` and `working_directory` set to the repo root:
+From the repo root:
 
 ```bash
-# 1. Caddy
-caddy run --config Caddyfile
-
-# 2. API
-PORT=3001 pnpm -F f3-api dev
-
-# 3. Map
-PORT=3000 pnpm -F f3-map dev
+pnpm docker:up   # start the Docker infra (detached) — needed once per session
+pnpm dev         # start ALL app servers (Turbo runs them in parallel)
 ```
 
-Note: nvm/rbenv/jenv should be auto-loaded via `~/.zshenv` so no prefix needed.
+`pnpm dev` starts every app **except** the Python Slackbot. To include it:
 
-**Agent workflow:**
+```bash
+pnpm dev --include-py
+```
 
-1. Run check-status.sh first to see what's already running
-2. Start only the services that aren't running (use `block_until_ms: 0` for each)
-3. Wait 5 seconds for services to initialize
-4. Run check-status.sh again to verify all services are up
-5. Optionally read terminal output files to check for startup errors
+First time on a fresh clone, run the one-time bootstrap instead of `docker:up`
+(copies `.env` files, starts Docker, migrates + seeds the DB):
+
+```bash
+pnpm local:setup
+```
+
+## App Ports
+
+| App      | Package name  | URL                     |
+| -------- | ------------- | ----------------------- |
+| Map      | `f3-map`      | <http://localhost:3000> |
+| API      | `f3-api`      | <http://localhost:3001> |
+| Admin    | `f3-admin`    | <http://localhost:3002> |
+| Me       | `f3-me`       | <http://localhost:3003> |
+| Auth     | `f3-auth`     | <http://localhost:3004> |
+| Homepage | `f3-homepage` | <http://localhost:3005> |
+| Slackbot | `f3-slackbot` | <http://localhost:3006> |
+
+Ports are baked into each app's `dev` script — you don't need to set `PORT=`.
+
+## Running Individual Apps
+
+To run just one (or a few) apps instead of everything:
+
+```bash
+pnpm -F f3-map dev                        # single app
+pnpm dev --filter=f3-map --filter=f3-api  # a subset (+ their deps)
+```
+
+Note: apps call each other at runtime (e.g. Map → API, and auth flows → Auth), so
+when testing a flow end-to-end, start the apps it depends on too.
 
 ## Quick Check: Are Services Running?
 
@@ -42,81 +67,39 @@ Run the status check script from the repo root:
 .cursor/skills/f3-dev-servers/scripts/check-status.sh
 ```
 
-This script uses `nc` (netcat) for fast port checking (~1 second). It checks ports 443, 3000, and 3001.
+It uses `nc` (netcat) for fast port checking (~1 second) — checks all seven app ports (3000–3006).
 
-Or check manually:
+Or check any port manually:
 
 ```bash
-# Fast check with netcat
-nc -z localhost 443 && echo "Caddy OK" || echo "Caddy DOWN"
 nc -z localhost 3000 && echo "Map OK" || echo "Map DOWN"
 nc -z localhost 3001 && echo "API OK" || echo "API DOWN"
 ```
 
 Note: Avoid using `lsof` for port checks on macOS - it takes 30+ seconds.
 
-## Manual Startup (User Method)
-
-If the user prefers to start manually in named terminals:
-
-### 1. Caddy (reverse proxy) - in `caddy` terminal
-
-```bash
-caddy run --config Caddyfile
-```
-
-Caddy proxies:
-
-- `https://map.f3nation.test` → `localhost:3000`
-- `https://api.f3nation.test` → `localhost:3001`
-
-### 2. API Server - in `api` terminal
-
-```bash
-PORT=3001 pnpm -F f3-api dev
-```
-
-### 3. Map App - in `map` terminal
-
-```bash
-PORT=3000 pnpm -F f3-map dev
-```
-
-## Startup Order
-
-Start in this order for best results:
-
-1. Caddy first (handles HTTPS)
-2. API second (the map app depends on API endpoints)
-3. Map app last
-
 ## Verifying Startup Success
 
-After starting, check terminal outputs for these success indicators:
+After starting, each Next.js app logs `✓ Ready in X.Xs` when it's up.
 
-- **Caddy**: Look for `"msg":"serving initial configuration"`
-- **API**: Look for `✓ Ready in X.Xs`
-- **Map**: Look for `✓ Ready in X.Xs`
+## Restarting After `.env` Changes
+
+Next.js reads `.env` **once at startup** and inlines `NEXT_PUBLIC_*` vars into the
+bundle. After editing any `.env`, restart the app servers or the change won't apply:
+
+```bash
+pkill -f "next dev"   # or Ctrl+C in the pnpm dev terminal
+pnpm dev
+```
 
 ## Stopping Services
 
-To stop services, use `pkill` (faster than lsof):
-
 ```bash
-pkill -f "caddy run"
-pkill -f "f3-api dev"
-pkill -f "f3-map dev"
+pkill -f "next dev"   # stop all app servers
+pnpm docker:down      # stop Docker infra (keeps data; add -v to wipe volumes)
 ```
 
-Or kill by port (slower, lsof takes 30+ seconds on macOS):
-
-```bash
-kill -9 $(lsof -t -i :3000)  # Map
-kill -9 $(lsof -t -i :3001)  # API
-sudo kill -9 $(lsof -t -i :443)   # Caddy (needs sudo for port 443)
-```
-
-For user-started services in IDE terminals, press `Ctrl+C` in the terminal.
+For servers started in an IDE terminal, press `Ctrl+C` in that terminal.
 
 ## Troubleshooting
 
@@ -147,23 +130,13 @@ export NVM_DIR="$HOME/.nvm"
 
 This ensures nvm is loaded for all zsh shells, including non-interactive ones from Cursor.
 
-### Caddy certificate issues
-
-Ensure the certificate files exist in the project root:
-
-- `map.f3nation.test+1-cert.pem`
-- `map.f3nation.test+1-key.pem`
-
-If missing, regenerate with mkcert:
-
-```bash
-mkcert map.f3nation.test api.f3nation.test
-```
-
 ### Database not running
 
-If you see database connection errors, ensure PostgreSQL/Docker is running:
+If you see database connection errors, ensure the Docker infra is up:
 
 ```bash
-docker ps  # Check if postgres container is running
+docker ps            # check the f3-postgres container is running
+pnpm docker:up       # start it if not
 ```
+
+For the full local Docker setup, see [`docs/LOCAL_DEV_DOCKER.md`](../../../docs/LOCAL_DEV_DOCKER.md).

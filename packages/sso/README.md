@@ -536,7 +536,7 @@ const auth = new AuthClient({
 
 Returns the public OAuth config (no secrets). Safe to pass to client-side code.
 
-**Returns:** `OauthClient`
+**Returns:** `OAuthClient`
 
 ```typescript
 const config = auth.getOAuthConfig();
@@ -716,10 +716,10 @@ interface AuthUser {
 }
 ```
 
-### `OauthClient`
+### `OAuthClient`
 
 ```typescript
-interface OauthClient {
+interface OAuthClient {
   clientId: string; // Safe to send to the browser
   redirectUri: string;
   authServerUrl: string;
