@@ -1,5 +1,28 @@
 # Changelog
 
+## [7.0.6](https://github.com/F3-Nation/f3-nation/compare/map@7.0.5...map@7.0.6) (2026-07-08)
+
+
+### Bug Fixes
+
+* **deps:** pin internal @acme/* refs to workspace:* to prevent release-please version drift ([#587](https://github.com/F3-Nation/f3-nation/issues/587)) ([21ded4b](https://github.com/F3-Nation/f3-nation/commit/21ded4bef25dbdd00b2e66e5d8abda516b7dd0b1))
+* **map:** mask session replay text and media ([#593](https://github.com/F3-Nation/f3-nation/issues/593)) ([a705d76](https://github.com/F3-Nation/f3-nation/commit/a705d767d4091566f8ed8224f968bc997694205e))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.3.0
+    * @acme/auth bumped to 0.1.3
+    * @acme/db bumped to 0.1.2
+    * @acme/mail bumped to 0.1.2
+    * @acme/shared bumped to 0.1.2
+    * @acme/storage bumped to 0.2.2
+    * @acme/tailwind-config bumped to 0.1.2
+    * @acme/ui bumped to 0.1.2
+    * @acme/validators bumped to 0.1.2
+
 ## [7.0.5](https://github.com/F3-Nation/f3-nation/compare/map@7.0.4...map@7.0.5) (2026-07-05)
 
 
