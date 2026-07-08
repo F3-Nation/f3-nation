@@ -44,6 +44,7 @@ it solve?
 ## 3. User stories
 
 - As a <role>, I want <capability> so that <outcome>.
+- As a <role>, I want <capability> so that <outcome>.
 
 ## 4. Acceptance criteria (testable, non-contradictory)
 
