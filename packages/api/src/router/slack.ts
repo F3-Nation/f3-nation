@@ -67,7 +67,7 @@ const createSlackJsonValueSchema = (
     : z.lazy(() =>
         z.union([
           z.string(),
-          z.number().finite(),
+          z.number(),
           z.boolean(),
           z.null(),
           z.array(createSlackJsonValueSchema(remainingDepth - 1)),
@@ -167,14 +167,14 @@ export const updateSlackMessageInputSchema = baseMessageInputSchema
   })
   .strict();
 
-export const slackMessageOutputSchema = z.object({
+const slackMessageOutputSchema = z.object({
   ok: z.literal(true),
   action: z.enum(["posted", "updated"]),
   channel: z.string(),
   ts: z.string(),
 });
 
-export const assertOrgAdmin = async (
+const assertOrgAdmin = async (
   ctx: Pick<Context, "session" | "db">,
   regionOrgId: number,
 ) => {
@@ -206,7 +206,7 @@ const assertActiveOrgExists = async (db: AppDb, regionOrgId: number) => {
   }
 };
 
-export const getSlackBotTokenForOrg = async (
+const getSlackBotTokenForOrg = async (
   db: AppDb,
   regionOrgId: number,
 ): Promise<string> => {
@@ -335,7 +335,7 @@ export const callSlackWebApi = async ({
 
   if (new TextEncoder().encode(body).byteLength > MAX_SLACK_PAYLOAD_BYTES) {
     throw new ORPCError("BAD_REQUEST", {
-      message: "Slack message payload is limited to 128 KB in size.",
+      message: `Slack message payload is limited to ${MAX_SLACK_PAYLOAD_BYTES / 1024} KB in size.`,
     });
   }
 
