@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.0.6](https://github.com/F3-Nation/f3-nation/compare/auth@2.0.5...auth@2.0.6) (2026-07-08)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.1.2
+    * @acme/shared bumped to 0.1.2
+  * devDependencies
+    * @acme/tailwind-config bumped to 0.1.2
+
 ## [2.0.5](https://github.com/F3-Nation/f3-nation/compare/auth@2.0.4...auth@2.0.5) (2026-07-05)
 
 
