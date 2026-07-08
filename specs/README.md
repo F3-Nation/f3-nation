@@ -1,13 +1,19 @@
 # Feature Specs
 
 This directory holds **feature specs**: the single, unambiguous source of truth
-for what a feature does, who may do it, and how we know it works. Every spec is
-written **before** code generation and reviewed by a human owner. Acceptance
-criteria are phrased so each one maps 1:1 to a future Playwright assertion.
+for what a feature does, who may do it, and how we know it works. A spec is
+written **before** code generation. Acceptance criteria are phrased so each one
+maps 1:1 to a future Playwright assertion.
 
 Rules of the road:
 
-- One spec per feature, at `specs/<feature-slug>.md`.
+- One spec per feature, at `specs/<feature-slug>.md`. Specs are scoped to a
+  feature, not to an app or package — a feature often spans several apps, so
+  the filename carries the grouping (`map-*`, `admin-*`). If the folder grows,
+  group by product area, not by app.
+- A spec is the source of truth once it merges to `main`, so it must describe
+  behavior that is in `main` (or lands together with its code) — never a future
+  or still-unmerged feature.
 - Acceptance criteria must be **testable and non-contradictory** — each
   independently verifiable, none conflicting with another. Contradicting
   criteria are the #1 efficiency killer for AI-assisted builds; be ruthless
@@ -15,11 +21,12 @@ Rules of the road:
 - The RBAC section must state explicitly who **can** and who **cannot** perform
   each action — this becomes the E2E authorization matrix. Remember:
   authenticated ≠ authorized.
-- The "Critical-path test cases" section is the small, must-never-break set
-  that will gate deploys (the blocking E2E tier). Keep it tight.
-- Humans always own sign-off on security, availability/reliability, and
-  scalability. A spec is not final until its owner approves the acceptance
-  criteria.
+- All acceptance criteria are binding. The "Critical-path test cases" section
+  only names the subset that must have end-to-end coverage first; the
+  blocking-vs-advisory tier split lives in
+  [`docs/E2E_TIERS.md`](../docs/E2E_TIERS.md), not here.
+- Security, availability/reliability, and scalability stay human-owned and are
+  signed off at PR review — not tracked with checkboxes inside the spec.
 
 ## Template
 
@@ -28,7 +35,6 @@ Copy everything below into `specs/<feature-slug>.md` for a new feature, excludin
 ```markdown
 # <Feature name>
 
-> Status: DRAFT — acceptance criteria pending owner approval
 > Human designer: <f3 name> (<github tag>)
 
 ## 1. Summary
@@ -39,7 +45,7 @@ it solve?
 ## 2. Context & links
 
 - App(s) affected: (map / api / auth / admin / me)
-- Key code: 
+- Key code:
 
 ## 3. User stories
 
@@ -67,8 +73,7 @@ do each action.
 
 ## 6. Data & migrations
 
-- Schema changes (Drizzle):
-- Migration + backfill plan:
+- Schema changes (Drizzle), if any:
 - ⚠️ Architectural / migration risk a human must review (e.g. destructive or
   irreversible operations):
 
@@ -76,24 +81,13 @@ do each action.
 
 -
 
-## 8. Critical-path test cases (blocking tier)
+## 8. Critical-path test cases
 
-The small, must-never-break set that gates deploy. Keep it tight.
+The small set that must have end-to-end coverage. Keep it tight.
 
 -
 
 ## 9. Observability
 
 - Events/metrics to emit, via `@acme/logger`:
-
-## 10. Open questions (resolve before final)
-
--
-
-## 11. Human sign-off checklist
-
-- [ ] Acceptance criteria approved by owner
-- [ ] Security reviewed (authorization, not just authentication)
-- [ ] Availability / reliability reviewed (multi-instance safe)
-- [ ] Scalability reviewed (query cost, no DB-melting patterns)
 ```

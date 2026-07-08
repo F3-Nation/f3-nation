@@ -1,7 +1,6 @@
 # Map browse, search & location detail
 
-> Status: DRAFT — acceptance criteria pending owner approval
-> Owner (human accountable): Declan Nishiyama (@DeclanNnnnn)
+> Human designer: Declan Nishiyama (@dnishiyama)
 
 ## 1. Summary
 
@@ -15,10 +14,6 @@ city X" to "this workout, this address, this time" in a few interactions.
 ## 2. Context & links
 
 - App(s) affected: **map** (UI), **api** (`packages/api` map/event routers).
-- Related Issues / PRs: map load performance and cache revalidation work
-  (SSG restore [#515](https://github.com/F3-Nation/f3-nation/pull/515),
-  on-demand revalidation); companion spec:
-  [`map-update-request-flow.md`](map-update-request-flow.md) (edit mode).
 - Key code: `apps/map/src/app/page.tsx` (SSG + ISR),
   `apps/map/src/app/_components/map/` (Google map, search, panels, filters),
   `apps/map/src/app/_components/marker-clusters/`,
@@ -53,8 +48,9 @@ city X" to "this workout, this address, this time" in a few interactions.
 
 - **AC-4** — GIVEN the user types 2+ characters in the search box THEN a
   results popover (`data-testid="map-searchbox-popover-content-desktop"`)
-  shows matches grouped by the toggleable kinds **F3 Workouts**, **F3
-  Regions**, and **Places**; unchecking a kind removes its rows.
+  shows **F3 Workouts** and **F3 Regions** matches; the **Places** (geocoded)
+  group fills in at 3+ characters. All three kinds are toggleable; unchecking
+  a kind removes its rows.
 - **AC-5** — GIVEN search results WHEN the user selects an F3 workout result
   THEN the map pans/zooms to that location and it becomes the selected item
   (`data-testid="selected-item-desktop"` on desktop).
@@ -68,7 +64,7 @@ city X" to "this workout, this address, this time" in a few interactions.
 - **AC-8** — GIVEN a visible pin WHEN the user clicks it (desktop) THEN the
   location panel opens (`data-testid="panel"`) showing the workout name, event
   type(s), address with a Google Maps directions link, schedule (day/time),
-  and region section; the "Close location panel" control closes it.
+  and region section; a close control dismisses it.
 - **AC-9** — GIVEN a location with multiple workouts WHEN its panel is open
   THEN all of that location's workouts are listed and selectable as chips.
 - **AC-10** — GIVEN an open location panel WHEN the user clicks "Copy Link to
@@ -81,11 +77,10 @@ city X" to "this workout, this address, this time" in a few interactions.
 ### Filters
 
 - **AC-12** — GIVEN pins are visible WHEN the user activates a day filter
-  (e.g. "Today") THEN only locations with at least one event matching the
-  filter remain on the map, and the nearby list shows a "No locations
-  found" empty state when nothing matches (the "matching your filters"
-  suffix appears only for day/type/time filters — AM/PM alone doesn't set
-  the filter-active flag).
+  (e.g. "Today") THEN only locations with at least one matching event remain
+  on the map; when nothing matches, the nearby list shows a "No locations
+  found" empty state. (The "matching your filters" suffix is added only for
+  day, event-type, and specific-time filters — AM/PM don't add it.)
 - **AC-13** — GIVEN the AM quick filter is active WHEN the user activates PM
   THEN AM deactivates (mutually exclusive), and Reset restores the unfiltered
   pin set.
@@ -95,21 +90,16 @@ city X" to "this workout, this address, this time" in a few interactions.
 - **AC-14** — GIVEN the user grants location permission WHEN they press the
   "My Location" control THEN the map centers on their position at street-level
   zoom and a location marker (`data-testid="geolocation-marker"`) renders;
-  denied permission leaves the map view unchanged with the control disabled
-  rather than erroring.
+  denied permission leaves the map view unchanged and shows the control in a
+  muted/disabled visual state rather than erroring.
 
 ## 5. Roles & authorization (RBAC)
 
-Browsing is anonymous by design. Today the map **API procedures are
+Browsing is anonymous by design. The map **API read procedures are
 `protectedProcedure`, not `publicProcedure`**: the map app itself is the
 trusted caller. Server-side (SSG) calls and the browser's `/api/orpc` proxy
 inject `F3_MAP_API_KEY` (the proxy strips any inbound auth headers first), so
 the end user never authenticates.
-
-Decided direction (see §10): map reads become **public procedures**, with the
-**source of each read recorded** (which app/client the request came from) so
-anonymous access doesn't mean anonymous telemetry. The table below describes
-current behavior until that migration lands.
 
 | Action                                                     | Allowed                                                         | Explicitly denied                           |
 | ---------------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------- |
@@ -117,30 +107,35 @@ current behavior until that migration lands.
 | Call map read procedures directly (no credential)          | Trusted callers holding the map API key; authenticated sessions | Unauthenticated direct calls (UNAUTHORIZED) |
 | Trigger cache revalidation (`/api/revalidate`)             | Internal callers with `SUPER_ADMIN_API_KEY`; nation admins      | Everyone else                               |
 
-All callers are subject to the per-IP rate limit (429 over ~200 req/min in
-production).
+All callers are subject to an in-memory per-IP rate limit (~200 req/min per
+instance in production; requests without a forwarded client IP fall into a
+shared "anonymous" bucket) — a per-instance limit, not a global cap.
 
 ## 6. Data & migrations
 
-- None — read-only feature. Reads must exclude inactive and non-public events
-  and inactive AOs (pinned by `packages/api/src/router/map/location.test.ts`).
+- None — read-only feature. Reads exclude inactive and non-public **events**
+  and inactive **locations** (pinned by
+  `packages/api/src/router/map/location.test.ts`). Known gap: events under a
+  deactivated **AO** are not yet excluded (the `aoOrg` join has no `isActive`
+  filter) — flagged for a separate code fix + test.
 
 ## 7. Out of scope / non-goals
 
-- Edit mode and update requests (see
-  [`map-update-request-flow.md`](map-update-request-flow.md)).
+- Edit mode and update requests (documented in the map edit-flow spec that
+  ships with that feature).
 - Region landing pages (`region-pages` app) and the homepage.
 - Mobile-app-specific behavior beyond the responsive mobile web layout.
-- Implementing the public-reads migration (§10 decision 3) — separate change
-  with its own review; this spec pins current behavior.
+- Making map read procedures public (with per-read source recording) — a
+  possible future change with its own review; this spec pins current behavior.
 
-## 8. Critical-path test cases (blocking tier)
+## 8. Critical-path test cases
 
 1. Anonymous map load renders pins/clusters, no auth wall (AC-1).
 2. Search for a known AO/workout → select → map navigates to it (AC-5).
 3. Pin click opens the detail panel with name, address/directions, and
    schedule (AC-8).
-4. Day/time filter visibly reduces pins; reset restores them (AC-12/13).
+4. AM/PM filter visibly changes the pin/nearby set; reset restores it
+   (AC-12/13).
 5. Copied event link reopens centered on that location (AC-10).
 
 ## 9. Observability
@@ -151,24 +146,3 @@ production).
   (SSG hit vs dynamic render), `map.revalidate.triggered` /
   `map.revalidate.warmed`, search-to-selection funnel counts, and
   `locationWorkout` latency.
-- Required for the public-reads migration (§10 decision 3): every map read
-  records its source (calling app/client), so public access remains
-  attributable.
-
-## 10. Decisions (owner-resolved 2026-07-03)
-
-1. The hard-coded sidebar count was a load-time tradeoff. It **may be made
-   live**, but only if map load performance does not get worse — any change
-   here must show it doesn't regress first load.
-2. Copied event links **centering the map (current behavior) is correct** —
-   no auto-open of the detail panel.
-3. Map reads **should become public procedures**, with the source of each
-   read recorded (see §5 and §9). Until that migration, the trusted map-app
-   key model stands.
-
-## 11. Human sign-off checklist
-
-- [ ] Acceptance criteria approved by owner
-- [ ] Security reviewed (authorization, not just authentication)
-- [ ] Availability / reliability reviewed (multi-instance safe)
-- [ ] Scalability reviewed (query cost, no DB-melting patterns)
