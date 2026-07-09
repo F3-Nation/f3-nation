@@ -110,7 +110,7 @@ const APP_GROUPS: AppGroup[] = [
       {
         name: "SyncBot",
         description:
-          "Slack app for syncing channels and messages across multiple workspaces (threads, reactions, and media)."
+          "Slack app for syncing channels and messages across multiple workspaces (threads, reactions, and media).",
         href: "https://github.com/F3-Nation/syncbot/blob/main/docs/USER_GUIDE.md",
         linkLabel: "Learn More",
       },
