@@ -20,6 +20,10 @@ Deeper guidance lives in `docs/`:
   data layer, multi-instance reliability) with a pre-flight checklist.
 - [`docs/AI_AUDIT_PLAYBOOK.md`](docs/AI_AUDIT_PLAYBOOK.md) — how to run a
   repository audit and file high-quality issues.
+- [`specs/`](specs/) — feature specs: the source of truth for **what** a
+  feature does, who may do it, and how it's verified. Read the relevant spec
+  before doing feature work (the docs above cover conventions and security;
+  specs cover behavior).
 
 When adding durable guidance, put it in `AGENTS.md` (or `docs/` for deep topics
 and link it) and keep the tool pointer files thin. Per-app specifics belong in

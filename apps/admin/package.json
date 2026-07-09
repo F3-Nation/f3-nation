@@ -59,6 +59,7 @@
     "eslint": "catalog:",
     "jiti": "catalog:",
     "postcss": "catalog:",
+    "postcss-load-config": "catalog:",
     "prettier": "catalog:",
     "typescript": "catalog:"
   },

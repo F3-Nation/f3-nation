@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 
-export type Channel = "local" | "ci" | "branch" | "dev" | "staging" | "prod";
+type Channel = "local" | "ci" | "branch" | "dev" | "staging" | "prod";
 
 // Shape returned by /api/runtime-config.
 interface RuntimeConfigData {
