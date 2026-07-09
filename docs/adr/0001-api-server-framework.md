@@ -96,6 +96,11 @@ Migrate `apps/api` to **Hono running on Node** (`@hono/node-server`), in
 independently shippable phases (epic
 [#644](https://github.com/F3-Nation/f3-nation/issues/644)):
 
+- **Phase 0-pre** — land a characterization test suite that pins current
+  transport, dispatch, auth-resolution, and error-envelope behavior against a
+  real test database, BEFORE any migration code changes
+  ([#660](https://github.com/F3-Nation/f3-nation/issues/660); see "Testing and
+  parity strategy" below). Blocks #646.
 - **Phase 0** — decouple shared packages while still on Next.js, zero behavior
   change: delete the vestigial `revalidatePath` calls
   ([#645](https://github.com/F3-Nation/f3-nation/issues/645)); replace the
@@ -112,7 +117,8 @@ independently shippable phases (epic
   generator move **verbatim** to framework-neutral modules; `/health` adopts
   the Health Contract (#634); `hono/compress` preserves the response
   compression Next standalone provides today (Cloud Run does not compress);
-  CI gains an OpenAPI byte-diff parity gate
+  CI runs the characterization suite against both the Next and Hono entries
+  with identical golden files
   ([#649](https://github.com/F3-Nation/f3-nation/issues/649)).
 - **Phase 3+4** — esbuild bundle (sharp/pino external), Dockerfile shed of all
   three Next-era hacks (replaced by functional smoke checks), unchanged Cloud
@@ -139,6 +145,47 @@ independently shippable phases (epic
   mismatches the existing fetch handlers, and oRPC already owns routing — a
   heavier rewrite for no benefit. Rejected.
 
+## Testing and parity strategy
+
+A coverage assessment shaped the plan's safety net:
+
+- **Router business logic is already well covered** by `packages/api`'s
+  integration tests: ~20 test files call the unmocked router through
+  `createRouterClient` against a real Postgres database
+  (`TEST_DATABASE_URL`), with Drizzle migrations and seed applied
+  automatically via turbo's `test → reset-test-db` dependency (Docker
+  locally, a `postgres:18` service container in CI). That harness is
+  framework-agnostic and survives the migration untouched.
+- **Auth resolution has zero end-to-end coverage.** The shared test setup
+  mocks `auth()` to return a pre-resolved session, which early-returns past
+  everything in `getSession` — the RS256 JWT-via-JWKS path, the DB API-key
+  lookup, the `Client`-header rule, cookie decoding, and the dev-mock branch
+  are never exercised. No RS256 test keypair or JWKS fixture exists, nothing
+  fires HTTP-level requests through `handleRequest` with an unmocked router,
+  and `apps/api`'s enforced ~90% coverage measures only Next wiring with the
+  router mocked out. The migration's blast radius is therefore exactly the
+  least-tested code — which is why Phase 0-pre exists and blocks #646.
+
+**The parity mechanism** ([#660](https://github.com/F3-Nation/f3-nation/issues/660)):
+a characterization suite written against a transport seam
+(`(req: Request) => Promise<Response>`, selected by `CHAR_TEST_TARGET`) so the
+identical tests and golden files run against (a) the Next `handleRequest`
+in-process, (b) the Hono `app.fetch` after Phase 2, and (c) a live base URL
+(local server or staging) for black-box smoke at cutover. It covers the full
+authorization matrix — API keys (valid/revoked/expired/roles), RS256 JWTs
+against an ephemeral in-test JWKS server (valid/expired/wrong-issuer/
+bad-signature/JWKS-outage), real cookie sessions (a `next/headers` shim lets
+the genuine `@auth/core` decode path run in-process; the cookie test doubles
+as #646's acceptance test, including the cookie-beats-bearer precedence pin),
+role guards exercised through real resolution, the `Client`-header rules, and
+rate limiting — plus wire-level pins: header-based dispatch, CORS preflight,
+error envelopes for both handlers, and a stable-stringified OpenAPI snapshot.
+
+**Golden-file freeze rule:** the suite's normalized snapshots are recorded on
+`main` before Phase 0a and are frozen for the duration of Phases 0a–4. Any
+snapshot diff in a migration PR is by definition a behavior change — either a
+migration bug or something requiring explicit sign-off in that PR.
+
 ## Consequences
 
 **Positive:** the three build hacks disappear; `next`, `react`, `react-dom`,
@@ -151,9 +198,10 @@ efforts (#576, #598).
 
 - Hono is a new (if tiny) framework in a Next-only TypeScript team.
 - Cookie-session parity is the top migration risk; mitigated by reusing the
-  exact shared `authConfig` through `@auth/core`, an optional dual-path
-  log-compare release, and a staging end-to-end gate before any framework
-  change ships.
+  exact shared `authConfig` through `@auth/core`, the characterization
+  suite's cookie and precedence cases plus a transitional
+  `getSessionFromHeaders`-vs-`auth()` equality test in #646, and a staging
+  end-to-end gate before any framework change ships.
 - Response compression and graceful shutdown become our explicit
   responsibility (`hono/compress`, SIGTERM handling) instead of Next
   defaults; both are called out as acceptance criteria in #649.
