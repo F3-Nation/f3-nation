@@ -28,6 +28,9 @@ export function StatusCard({ result }: { result: StatusResult }) {
           <div className="space-y-1">
             <CardTitle className="text-lg">{result.target.label}</CardTitle>
             <CardDescription>{result.target.url}</CardDescription>
+            <p className="text-xs text-muted-foreground">
+              Monitor: {result.source === "contract" ? "Contract" : "External"}
+            </p>
           </div>
           <Badge variant={badgeVariantForStatus(result.status)}>
             Status: {result.status.toUpperCase()}
@@ -36,7 +39,7 @@ export function StatusCard({ result }: { result: StatusResult }) {
       </CardHeader>
 
       <CardContent className="space-y-3 text-sm">
-        {result.ok ? (
+        {result.ok && result.source === "contract" ? (
           <>
             <p>
               <span className="font-medium">Contract version:</span>{" "}
@@ -68,12 +71,33 @@ export function StatusCard({ result }: { result: StatusResult }) {
               ))}
             </div>
           </>
+        ) : result.ok && result.source === "external" ? (
+          <div className="space-y-1">
+            <p>
+              <span className="font-medium">Provider:</span>{" "}
+              {result.data.provider}
+            </p>
+            <p>
+              <span className="font-medium">Provider status:</span>{" "}
+              {result.data.providerStatus}
+            </p>
+            <p>
+              <span className="font-medium">Active incidents:</span>{" "}
+              {result.data.incidents}
+            </p>
+            <p>
+              <span className="font-medium">Last updated:</span>{" "}
+              {result.data.timestamp}
+            </p>
+          </div>
         ) : (
           <div className="space-y-1">
             <p>
               <span className="font-medium">Reason:</span> {result.reason}
             </p>
-            <p className="text-muted-foreground">Source: contract monitor</p>
+            <p className="text-muted-foreground">
+              Source: {result.source} monitor
+            </p>
           </div>
         )}
       </CardContent>

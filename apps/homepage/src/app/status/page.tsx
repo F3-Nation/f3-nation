@@ -1,10 +1,10 @@
-import { fetchContractStatus } from "@/lib/status";
+import { fetchStatus } from "@/lib/status";
 import { StatusCard } from "@/app/status/status-card";
 import { STATUS_TARGETS } from "@/status-targets";
 
 export default async function StatusPage() {
   const results = await Promise.all(
-    STATUS_TARGETS.map((target) => fetchContractStatus(target)),
+    STATUS_TARGETS.map((target) => fetchStatus(target)),
   );
 
   return (
@@ -15,7 +15,7 @@ export default async function StatusPage() {
             Service Status
           </h1>
           <p className="max-w-2xl text-muted-foreground">
-            Contract-validated health checks for configured F3 services.
+            Contract and external monitor health checks for configured services.
           </p>
         </div>
 

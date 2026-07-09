@@ -51,6 +51,28 @@ function makeDownResult(
   };
 }
 
+function makeExternalResult(status: "ok" | "degraded" | "down"): StatusResult {
+  return {
+    ok: true,
+    source: "external",
+    target: {
+      id: "slack",
+      label: "Slack",
+      url: "https://status.slack.com",
+      source: "external",
+      provider: "slack",
+      apiUrl: "https://slack-status.com/api/v2.0.0/current",
+    },
+    status,
+    data: {
+      provider: "slack",
+      providerStatus: status,
+      incidents: status === "ok" ? 0 : 1,
+      timestamp: "2026-07-09T12:00:00.000Z",
+    },
+  };
+}
+
 describe("status card rendering", () => {
   it("renders OK state with explicit status text", () => {
     const html = renderToStaticMarkup(
@@ -58,6 +80,7 @@ describe("status card rendering", () => {
     );
 
     expect(html).toContain("Status: OK");
+    expect(html).toContain("Monitor: Contract");
     expect(html).toContain("Contract version:");
     expect(html).toContain("Last updated:");
   });
@@ -81,5 +104,19 @@ describe("status card rendering", () => {
     expect(html).toContain("Status: DOWN");
     expect(html).toContain("Reason:");
     expect(html).toContain("invalid_contract");
+  });
+
+  it("renders external monitor details and monitor source label", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(StatusCard, {
+        result: makeExternalResult("degraded"),
+      }),
+    );
+
+    expect(html).toContain("Status: DEGRADED");
+    expect(html).toContain("Monitor: External");
+    expect(html).toContain("Provider:");
+    expect(html).toContain("Provider status:");
+    expect(html).toContain("Active incidents:");
   });
 });
