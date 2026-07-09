@@ -281,6 +281,7 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup
       - run: pnpm lint
+      - run: pnpm lint:unused
 
   typecheck:
     runs-on: ubuntu-latest

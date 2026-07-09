@@ -5,7 +5,7 @@ import { eq, schema } from "@acme/db";
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import type { Context } from "../shared";
 
-export async function getEventInstanceOrgId(
+async function getEventInstanceOrgId(
   db: Context["db"],
   eventInstanceId: number,
 ): Promise<number | null> {
@@ -17,7 +17,7 @@ export async function getEventInstanceOrgId(
   return eventInstance?.orgId ?? null;
 }
 
-export async function requireEventInstanceOrgId(
+async function requireEventInstanceOrgId(
   db: Context["db"],
   eventInstanceId: number,
 ): Promise<number> {

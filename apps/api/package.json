@@ -17,12 +17,8 @@
   },
   "dependencies": {
     "@acme/api": "workspace:*",
-    "@acme/auth": "workspace:*",
-    "@acme/db": "workspace:*",
     "@acme/logger": "workspace:*",
     "@acme/shared": "workspace:*",
-    "@acme/ui": "workspace:*",
-    "@acme/validators": "workspace:*",
     "@orpc/openapi": "catalog:",
     "@orpc/server": "catalog:",
     "@orpc/zod": "catalog:",
