@@ -1117,6 +1117,9 @@ importers:
       '@acme/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@f3nation/health':
+        specifier: workspace:*
+        version: link:../../packages/health
       '@orpc/client':
         specifier: 'catalog:'
         version: 1.14.14(@opentelemetry/api@1.9.1)
@@ -1129,9 +1132,6 @@ importers:
       clsx:
         specifier: 'catalog:'
         version: 2.1.1
-      f3-health:
-        specifier: workspace:*
-        version: link:../../packages/health
       jose:
         specifier: 'catalog:'
         version: 6.2.3

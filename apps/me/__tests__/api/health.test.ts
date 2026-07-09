@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { healthResponseSchema, HEALTH_CONTRACT_VERSION } from "f3-health";
+import {
+  healthResponseSchema,
+  HEALTH_CONTRACT_VERSION,
+} from "@f3nation/health";
 
 vi.mock("@/lib/logging", () => ({
   logError: vi.fn(),

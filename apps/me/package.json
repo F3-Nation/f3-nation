@@ -23,11 +23,15 @@
     "@acme/sso": "workspace:*",
     "@acme/storage": "workspace:*",
     "@acme/ui": "workspace:*",
-    "f3-health": "workspace:*",
     "@orpc/client": "catalog:",
     "@orpc/server": "catalog:",
     "@t3-oss/env-nextjs": "catalog:",
     "clsx": "catalog:",
+<<<<<<< HEAD
+=======
+    "@f3nation/health": "workspace:*",
+    "jose": "catalog:",
+>>>>>>> f4075d70 (fix(health,me): tidying up)
     "next": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",

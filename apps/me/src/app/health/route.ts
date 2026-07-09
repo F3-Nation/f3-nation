@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { buildHealthResponse, runChecks } from "f3-health";
-import type { CheckRunnerResult } from "f3-health";
+import { buildHealthResponse, runChecks } from "@f3nation/health";
+import type { CheckRunnerResult } from "@f3nation/health";
 import { logError } from "@/lib/logging";
 
 const SERVICE_NAME = "f3-me";

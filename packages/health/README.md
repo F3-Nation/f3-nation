@@ -1,4 +1,4 @@
-# f3-health
+# @f3nation/health
 
 Shared health contract package for F3 services.
 
@@ -12,7 +12,7 @@ This package provides:
 ## Install
 
 ```bash
-pnpm add f3-health zod
+pnpm add @f3nation/health zod
 ```
 
 ## Quickstart
@@ -23,7 +23,7 @@ import {
   buildHealthResponse,
   healthResponseSchema,
   runChecks,
-} from "f3-health";
+} from "@f3nation/health";
 
 const startedAt = Date.now();
 
@@ -61,7 +61,7 @@ to send it. Every `/health` endpoint using this package must:
 - return JSON matching `healthResponseSchema`
 - set `Cache-Control: no-store`
 
-`f3-health` does not enforce transport headers directly because the package is
+`@f3nation/health` does not enforce transport headers directly because the package is
 intentionally framework-agnostic and must remain usable outside Next.js,
 including from non-JavaScript stacks. Header enforcement therefore belongs in
 each service endpoint implementation and its tests.

@@ -1,5 +1,5 @@
 {
-  "name": "f3-health",
+  "name": "@f3nation/health",
   "version": "1.0.0",
   "private": false,
   "type": "module",
