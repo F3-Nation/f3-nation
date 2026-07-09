@@ -135,8 +135,8 @@ export const FeatureMarker = ({
           eventId: eventId ?? events[0]?.id,
         });
 
-        // Must stop propagation to prevent the map from being clicked
-        e.stopPropagation();
+        // Must call stop to prevent the map from being clicked
+        e.stop();
       }}
       zIndex={
         isCurrentSelectedLocation

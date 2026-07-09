@@ -45,15 +45,7 @@ export enum ModalType {
 }
 
 export enum DeleteType {
-  USER = "USER",
-  AREA = "AREA",
-  LOCATION = "LOCATION",
-  AO = "AO",
   EVENT = "EVENT",
-  EVENT_TYPE = "EVENT_TYPE",
-  REGION = "REGION",
-  SECTOR = "SECTOR",
-  NATION = "NATION",
 }
 
 export const eventDefaults = {
