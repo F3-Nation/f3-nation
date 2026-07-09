@@ -25,8 +25,9 @@ Rules of the road:
   only names the subset that must have end-to-end coverage first; the
   blocking-vs-advisory tier split lives in
   [`docs/E2E_TIERS.md`](../docs/E2E_TIERS.md), not here.
-- Security, availability/reliability, and scalability stay human-owned and are
-  signed off at PR review — not tracked with checkboxes inside the spec.
+- Discussions involving security, availability/reliability, and scalability
+  stay human-owned and are managed in the PR associated with the spec. The
+  spec is a durable document.
 
 ## Template
 
@@ -71,23 +72,17 @@ do each action.
 | ------ | ------- | ----------------- |
 |        |         |                   |
 
-## 6. Data & migrations
-
-- Schema changes (Drizzle), if any:
-- ⚠️ Architectural / migration risk a human must review (e.g. destructive or
-  irreversible operations):
-
-## 7. Out of scope / non-goals
+## 6. Out of scope / non-goals
 
 -
 
-## 8. Critical-path test cases
+## 7. Critical-path test cases
 
 The small set that must have end-to-end coverage. Keep it tight.
 
 -
 
-## 9. Observability
+## 8. Observability
 
-- Events/metrics to emit, via `@acme/logger`:
+- Events/metrics emitted via `@acme/logger`:
 ```

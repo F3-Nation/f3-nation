@@ -104,30 +104,17 @@ the end user never authenticates.
 | ---------------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------- |
 | Browse map, search, view location detail (via the map app) | Everyone, anonymous included                                    | —                                           |
 | Call map read procedures directly (no credential)          | Trusted callers holding the map API key; authenticated sessions | Unauthenticated direct calls (UNAUTHORIZED) |
-| Trigger cache revalidation (`/api/revalidate`)             | Internal callers with `SUPER_ADMIN_API_KEY`; nation admins      | Everyone else                               |
 
 All callers are subject to an in-memory per-IP rate limit (~200 req/min per
 instance in production; requests without a forwarded client IP fall into a
 shared "anonymous" bucket) — a per-instance limit, not a global cap.
 
-## 6. Data & migrations
+## 6. Out of scope / non-goals
 
-- None — read-only feature. Reads exclude inactive and non-public **events**
-  and inactive **locations** (pinned by
-  `packages/api/src/router/map/location.test.ts`). Known gap: events under a
-  deactivated **AO** are not yet excluded (the `aoOrg` join has no `isActive`
-  filter) — flagged for a separate code fix + test.
-
-## 7. Out of scope / non-goals
-
-- Edit mode and update requests (documented in the map edit-flow spec that
-  ships with that feature).
-- Region landing pages (`region-pages` app) and the homepage.
+- Edit mode and update requests.
 - Mobile-app-specific behavior beyond the responsive mobile web layout.
-- Making map read procedures public (with per-read source recording) — a
-  possible future change with its own review; this spec pins current behavior.
 
-## 8. Critical-path test cases
+## 7. Critical-path test cases
 
 1. Anonymous map load renders pins/clusters, no auth wall (AC-1).
 2. Search for a known AO/workout → select → map navigates to it (AC-5).
@@ -137,11 +124,9 @@ shared "anonymous" bucket) — a per-instance limit, not a global cap.
    (AC-12/13).
 5. Copied event link reopens centered on that location (AC-10).
 
-## 9. Observability
+## 8. Observability
 
-- Today: `revalidate` endpoints log warm-up success/failure; standard request
-  logs otherwise.
-- To add (with the OTEL baseline work): page-load timing for the map route
-  (SSG hit vs dynamic render), `map.revalidate.triggered` /
-  `map.revalidate.warmed`, search-to-selection funnel counts, and
-  `locationWorkout` latency.
+- Events/metrics emitted via `@acme/logger`:
+  - **Warn**: one middleware warning can occur on map API calls if bearer
+    token API-key lookup fails (`api.auth.api_key_not_found` in `packages/api`
+    shared auth middleware).
