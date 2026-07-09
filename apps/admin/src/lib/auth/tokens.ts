@@ -1,5 +1,5 @@
-import {  verifyJwtPayload } from "@acme/sso";
-import type {AccessTokenPayload} from "@acme/sso";
+import type { AccessTokenPayload } from "@acme/sso";
+import { verifyJwtPayload } from "@acme/sso";
 
 import { env } from "~/env";
 

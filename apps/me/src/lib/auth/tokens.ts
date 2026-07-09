@@ -1,11 +1,10 @@
 import {
-  
   isJwtExpired,
   parseJwtPayload,
   verifyJwtPayload,
-  verifyJwtToken
+  verifyJwtToken,
 } from "@acme/sso";
-import type {AccessTokenPayload} from "@acme/sso";
+import type { AccessTokenPayload } from "@acme/sso";
 
 import { env } from "@/env";
 
