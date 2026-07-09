@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   HEALTH_CONTRACT_VERSION,
+  buildHealthResponse,
   healthCheckSchema,
   healthResponseSchema,
+  runChecks,
+  summarizeStatus,
 } from "./index";
 
 describe("health contract schemas", () => {
@@ -97,5 +100,94 @@ describe("health contract schemas", () => {
     });
 
     expect(parsed.severity).toBe("warning");
+  });
+
+  it("normalizes thrown check errors without exposing stack traces", async () => {
+    const checks = await runChecks([
+      {
+        id: "throws-error",
+        defaultSeverity: "critical",
+        run: () => {
+          throw new Error("db-password=super-secret");
+        },
+      },
+    ]);
+
+    expect(checks).toHaveLength(1);
+    expect(checks[0]).toMatchObject({
+      id: "throws-error",
+      status: "down",
+      severity: "critical",
+      message: "Check failed",
+      details: { reason: "error" },
+    });
+    expect(checks[0]?.message).not.toContain("super-secret");
+    expect(
+      (checks[0]?.details as { stack?: string } | undefined)?.stack,
+    ).toBeUndefined();
+  });
+
+  it("marks timed out checks as down with timeout details", async () => {
+    const checks = await runChecks([
+      {
+        id: "slow-check",
+        timeoutMs: 5,
+        defaultSeverity: "warning",
+        run: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          return { status: "ok" as const };
+        },
+      },
+    ]);
+
+    expect(checks).toHaveLength(1);
+    expect(checks[0]).toMatchObject({
+      id: "slow-check",
+      status: "down",
+      severity: "warning",
+      message: "Check timed out",
+      details: { reason: "timeout", timeoutMs: 5 },
+    });
+  });
+
+  it("summarizeStatus returns down for critical failures", () => {
+    const status = summarizeStatus([
+      { id: "db", status: "down", severity: "critical" },
+      { id: "cache", status: "ok", severity: "warning" },
+    ]);
+
+    expect(status).toBe("down");
+  });
+
+  it("summarizeStatus returns degraded for non-critical failures", () => {
+    const status = summarizeStatus([
+      { id: "upstream", status: "down", severity: "warning" },
+    ]);
+
+    expect(status).toBe("degraded");
+  });
+
+  it("summarizeStatus returns ok when all checks are ok", () => {
+    const status = summarizeStatus([
+      { id: "db", status: "ok", severity: "critical" },
+      { id: "cache", status: "ok", severity: "warning" },
+    ]);
+
+    expect(status).toBe("ok");
+  });
+
+  it("buildHealthResponse sets contractVersion, timestamp, and durationMs", () => {
+    const startedAt = Date.now() - 20;
+    const response = buildHealthResponse({
+      service: "f3-me",
+      version: "1.2.3+abc123",
+      startedAt,
+      checks: [{ id: "db", status: "ok", severity: "critical" }],
+    });
+
+    expect(response.contractVersion).toBe(HEALTH_CONTRACT_VERSION);
+    expect(new Date(response.timestamp).toString()).not.toBe("Invalid Date");
+    expect(response.durationMs).toBeGreaterThanOrEqual(0);
+    expect(response.status).toBe("ok");
   });
 });
