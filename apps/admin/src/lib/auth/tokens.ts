@@ -1,17 +1,7 @@
-import { verifyJwtPayload } from "@acme/sso";
-import type { JWTPayload } from "jose";
+import {  verifyJwtPayload } from "@acme/sso";
+import type {AccessTokenPayload} from "@acme/sso";
 
 import { env } from "~/env";
-
-export interface AccessTokenPayload extends JWTPayload {
-  sub: string;
-  email?: string;
-  name?: string;
-  exp?: number;
-  iat?: number;
-  scope?: string;
-  client_id?: string;
-}
 
 /**
  * Verify an access token's RS256 signature and expiry against the auth

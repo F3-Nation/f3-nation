@@ -1,6 +1,16 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import type { JWTPayload } from "jose";
 
+export interface AccessTokenPayload extends JWTPayload {
+  sub: string;
+  email?: string;
+  name?: string;
+  exp?: number;
+  iat?: number;
+  scope?: string;
+  client_id?: string;
+}
+
 export type JwtVerificationFailureCode =
   | "expired"
   | "issuer_mismatch"

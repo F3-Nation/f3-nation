@@ -1,21 +1,13 @@
 import {
+  
   isJwtExpired,
   parseJwtPayload,
   verifyJwtPayload,
-  verifyJwtToken,
+  verifyJwtToken
 } from "@acme/sso";
-import type { JWTPayload } from "jose";
+import type {AccessTokenPayload} from "@acme/sso";
 
 import { env } from "@/env";
-
-interface AccessTokenPayload extends JWTPayload {
-  sub: string;
-  email?: string;
-  exp?: number;
-  iat?: number;
-  scope?: string;
-  client_id?: string;
-}
 
 export function parseAccessTokenPayload(
   token: string,
