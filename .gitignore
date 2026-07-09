@@ -64,5 +64,5 @@ pr.md
 # claude code
 .claude/worktrees/
 
-# opencode deepwork session state
+# deepwork progress
 .slim/deepwork/

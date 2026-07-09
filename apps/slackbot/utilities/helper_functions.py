@@ -13,7 +13,6 @@ import requests
 from f3_data_models.models import (
     Location,
     Org,
-    Org_Type,
     Org_x_SlackSpace,
     Role,
     Role_x_User_x_Org,

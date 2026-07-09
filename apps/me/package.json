@@ -1,7 +1,7 @@
 {
   "name": "f3-me",
   "type": "module",
-  "version": "2.0.5",
+  "version": "2.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev --port 3003",
@@ -51,6 +51,7 @@
     "@vitest/coverage-v8": "catalog:",
     "eslint": "catalog:",
     "postcss": "catalog:",
+    "postcss-load-config": "catalog:",
     "prettier": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
