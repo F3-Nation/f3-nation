@@ -337,7 +337,11 @@ def handle_location_add(body: dict, client: WebClient, logger: Logger, context: 
             address_zip=safe_get(form_data, _LOCATION_ZIP),
             address_country=safe_get(form_data, _LOCATION_COUNTRY),
         )
-        trigger_map_revalidation(logger=logger, action="map.updated", map_update_data=MapUpdateData(locationId=int(location_id)))
+        trigger_map_revalidation(
+            logger=logger,
+            action="map.updated",
+            map_update_data=MapUpdateData(locationId=int(location_id)),
+        )
         created_location_id = int(location_id)
     else:
         new_location = service.create_location(
@@ -353,7 +357,11 @@ def handle_location_add(body: dict, client: WebClient, logger: Logger, context: 
             address_zip=safe_get(form_data, _LOCATION_ZIP),
             address_country=safe_get(form_data, _LOCATION_COUNTRY),
         )
-        trigger_map_revalidation(logger=logger, action="map.created", map_update_data=MapUpdateData(locationId=new_location.id))
+        trigger_map_revalidation(
+            logger=logger,
+            action="map.created",
+            map_update_data=MapUpdateData(locationId=new_location.id),
+        )
         created_location_id = new_location.id
 
     if safe_get(metadata, "update_view_id"):
@@ -415,7 +423,11 @@ def handle_location_edit_delete(
         locations = service.get_org_locations(region_record.org_id)
         deleted_name = next((get_location_display_name(loc) for loc in locations if loc.id == location_id), "selected")
         service.delete_location(location_id)
-        trigger_map_revalidation(logger=logger, action="map.deleted", map_update_data=MapUpdateData(locationId=location_id))
+        trigger_map_revalidation(
+            logger=logger,
+            action="map.deleted",
+            map_update_data=MapUpdateData(locationId=location_id),
+        )
         remaining = [loc for loc in locations if loc.id != location_id]
         remaining.sort(key=lambda loc: get_location_display_name(loc).lower())
         views = LocationViews()
