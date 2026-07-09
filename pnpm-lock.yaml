@@ -845,6 +845,9 @@ importers:
 
   apps/homepage:
     dependencies:
+      '@acme/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       '@f3nation/health':
         specifier: workspace:*
         version: link:../../packages/health
@@ -882,6 +885,9 @@ importers:
       '@types/react-dom':
         specifier: 'catalog:'
         version: 19.2.3(@types/react@19.2.17)
+      '@vitejs/plugin-react':
+        specifier: 'catalog:'
+        version: 6.0.3(vite@8.1.0(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.1.9(vitest@4.1.9)

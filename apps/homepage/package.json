@@ -15,6 +15,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@acme/ui": "workspace:*",
     "@f3nation/health": "workspace:*",
     "next": "catalog:",
     "react": "catalog:",
@@ -26,6 +27,7 @@
     "@acme/tailwind-config": "workspace:*",
     "@acme/tsconfig": "workspace:*",
     "@tailwindcss/postcss": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
