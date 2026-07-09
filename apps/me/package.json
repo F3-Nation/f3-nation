@@ -56,19 +56,5 @@
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"
-  },
-  "eslintConfig": {
-    "root": true,
-    "extends": [
-      "@acme/eslint-config/base",
-      "@acme/eslint-config/nextjs",
-      "@acme/eslint-config/react"
-    ],
-    "ignorePatterns": [
-      "next-env.d.ts",
-      "coverage/**",
-      "vitest.config.ts",
-      "vitest.setup.ts"
-    ]
   }
 }
