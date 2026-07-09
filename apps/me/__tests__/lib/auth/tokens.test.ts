@@ -119,7 +119,7 @@ describe("verifyAccessTokenPayload", () => {
     vi.clearAllMocks();
   });
 
-  it("returns null for an expired token without calling verifyJwtPayload", async () => {
+  it("returns null when verifyJwtPayload returns null", async () => {
     const expiredToken = createToken({ sub: "42", exp: 1 });
     vi.mocked(verifyJwtPayload).mockResolvedValueOnce(null);
     const result = await verifyAccessTokenPayload(expiredToken);
@@ -183,7 +183,7 @@ describe("verifyAccessToken", () => {
     vi.clearAllMocks();
   });
 
-  it("returns false for expired token without calling verifyJwtToken", async () => {
+  it("returns false when verifyJwtToken returns false", async () => {
     const expiredToken = createToken({ sub: "42", exp: 1 });
     vi.mocked(verifyJwtToken).mockResolvedValueOnce(false);
 

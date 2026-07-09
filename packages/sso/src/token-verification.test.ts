@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   isJwtExpired,
@@ -32,6 +32,10 @@ describe("token verification", () => {
     vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
     createRemoteJWKSetMock.mockClear();
     jwtVerifyMock.mockReset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("returns payload for valid token", async () => {

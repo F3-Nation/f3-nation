@@ -50,11 +50,12 @@ function decodeBase64Url(value: string): string {
   const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
   const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
 
-  if (typeof atob === "function") {
-    return atob(padded);
-  }
+  const bytes =
+    typeof atob === "function"
+      ? Uint8Array.from(atob(padded), (character) => character.charCodeAt(0))
+      : Buffer.from(padded, "base64");
 
-  return Buffer.from(padded, "base64").toString("utf-8");
+  return new TextDecoder().decode(bytes);
 }
 
 export function parseJwtPayload(token: string): JWTPayload | null {
@@ -94,7 +95,7 @@ function getJwksResolver(options: VerifyJwtWithJwksOptions) {
     authUrl.hostname === "localhost" || authUrl.hostname === "127.0.0.1";
 
   if (authUrl.protocol !== "https:" && !isLocalhost) {
-    throw new Error("AUTH_PROVIDER_URL must use https:// outside localhost");
+    throw new Error("authServerUrl must use https:// outside localhost");
   }
 
   const jwksUrl = new URL(options.jwksPath ?? DEFAULT_JWKS_PATH, authUrl);
