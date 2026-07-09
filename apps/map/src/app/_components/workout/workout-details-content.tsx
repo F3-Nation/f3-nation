@@ -112,6 +112,7 @@ export const WorkoutDetailsContent = ({
                 key="fullAddress"
                 href={`https://www.google.com/maps/search/?api=1&query=${location.lat},${location.lon}`}
                 target="_blank"
+                rel="noopener noreferrer"
                 className="underline"
               >
                 {location.fullAddress ?? "Directions"}
@@ -256,6 +257,7 @@ export const WorkoutDetailsContent = ({
                 <Link
                   href="https://f3nation.com/about-f3"
                   target="_blank"
+                  rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 text-blue-600 underline hover:text-blue-800 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
                 >
                   FAQs and more about F3 Nation

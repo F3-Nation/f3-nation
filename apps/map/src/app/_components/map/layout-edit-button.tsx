@@ -36,8 +36,8 @@ export const LayoutEditButton = ({
       >
         <div className={"flex flex-col lg:mx-2.5"}>
           <div
-            aria-label="My Location"
-            title="My Location"
+            aria-label="Edit map"
+            title="Edit map"
             className={cn(
               "cursor-pointer appearance-none overflow-hidden",
               "relative block",

@@ -10,7 +10,7 @@ interface InRegionFormValues {
 }
 
 // TODO: Fix selection form for all use cases
-export const InRegionForm = <_T extends InRegionFormValues>() => {
+export const InRegionForm = () => {
   const form = useFormContext<InRegionFormValues>();
 
   const { data: regions } = useQuery(
@@ -46,7 +46,10 @@ export const InRegionForm = <_T extends InRegionFormValues>() => {
                     const region = regions?.orgs.find(
                       (region) => region.id.toString() === item,
                     );
-                    field.onChange(region?.id ?? null);
+                    // Never write null — the request schemas require a
+                    // positive number, so an unresolved selection stays
+                    // undefined and surfaces the schema's required error.
+                    field.onChange(region?.id);
                   }}
                   searchPlaceholder="Select Region"
                 />

@@ -41,7 +41,7 @@ export const CreateAOAndLocationAndEventModal = ({
       <Form {...form}>
         <form className="w-[inherit] overflow-x-hidden p-0.5">
           {!isProduction && <FormDebugData />}
-          <InRegionForm<CreateAOAndLocationAndEventType> />
+          <InRegionForm />
           <LocationDetailsForm<CreateAOAndLocationAndEventType> />
           <AODetailsForm<CreateAOAndLocationAndEventType> />
           <EventDetailsForm<CreateAOAndLocationAndEventType> />
