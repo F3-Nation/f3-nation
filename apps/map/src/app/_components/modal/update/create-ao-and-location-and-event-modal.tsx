@@ -26,11 +26,6 @@ export const CreateAOAndLocationAndEventModal = ({
   });
 
   const handleSubmission = async (values: CreateAOAndLocationAndEventType) => {
-    if ("badImage" in values && values.badImage && !!values.aoLogo) {
-      form.setError("aoLogo", { message: "Invalid image URL" });
-      throw new Error("Invalid image URL");
-    }
-
     return await client.request.submitCreateAOAndLocationAndEventRequest(
       values,
     );

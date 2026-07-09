@@ -23,7 +23,6 @@ export const createAOAndLocationAndEventRequest = (
   requestType: "create_ao_and_location_and_event",
   submittedBy: "test@example.com",
   isReview: false,
-  badImage: false,
   originalRegionId: 1,
   // Event fields
   eventName: "Morning Beatdown",
@@ -102,7 +101,6 @@ export const createEditAOAndLocationRequest = (
   requestType: "edit_ao_and_location",
   submittedBy: "test@example.com",
   isReview: false,
-  badImage: false,
   originalRegionId: 1,
   originalAoId: 1,
   originalLocationId: 1,
@@ -206,7 +204,6 @@ export const createMoveEventToNewAORequest = (
   requestType: "move_event_to_new_ao",
   submittedBy: "test@example.com",
   isReview: false,
-  badImage: false,
   originalRegionId: 1,
   originalEventId: 1,
   originalAoId: 1,

@@ -302,35 +302,3 @@ describe("update modal submission", () => {
     },
   );
 });
-
-describe("EditAoAndLocationModal – submission guard", () => {
-  it("blocks submission and flags the logo when badImage is set", async () => {
-    renderWithProviders(
-      <EditAoAndLocationModal
-        data={
-          {
-            ...base,
-            ...aoFields,
-            ...locationFields,
-            requestType: "edit_ao_and_location" as const,
-            originalAoId: 30,
-            originalLocationId: 10,
-            badImage: true,
-            currentValues: {},
-          } as React.ComponentProps<typeof EditAoAndLocationModal>["data"]
-        }
-      />,
-    );
-
-    fireEvent.click(
-      screen.getByRole("button", { name: "Update AO and Location" }),
-    );
-
-    // The badImage guard throws before the request is sent.
-    await waitFor(() =>
-      expect(clientCalls.submitEditAOAndLocationRequest).toBeUndefined(),
-    );
-    expect(toast.success).not.toHaveBeenCalled();
-    expect(closeModal).not.toHaveBeenCalled();
-  });
-});

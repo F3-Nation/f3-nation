@@ -5,6 +5,7 @@ import { Input } from "@acme/ui/input";
 
 import { useRuntimeConfig } from "~/utils/runtime-config";
 import { DebouncedImage } from "../../debounced-image";
+import { noop } from "lodash";
 
 interface AODetailsFormValues {
   aoName?: string;
@@ -12,7 +13,6 @@ interface AODetailsFormValues {
   aoLogo?: string | null;
   originalRegionId?: number | null;
   id: string;
-  badImage: boolean;
 }
 
 export const AODetailsForm = <_T extends AODetailsFormValues>() => {
@@ -57,8 +57,8 @@ export const AODetailsForm = <_T extends AODetailsFormValues>() => {
               <DebouncedImage
                 src={aoLogo}
                 alt="AO Logo"
-                onImageFail={() => form.setValue("badImage", true)}
-                onImageSuccess={() => form.setValue("badImage", false)}
+                onImageFail={noop}
+                onImageSuccess={noop}
                 width={96}
                 height={96}
               />

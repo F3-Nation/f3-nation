@@ -66,14 +66,13 @@ accurate while regions retain control over their own data.
 
 - **AC-5** — GIVEN any request modal WHEN a required field is invalid per its
   schema (event name < 3 chars, start/end time not 24-hour `HHmm`, no event
-  type selected, AO name < 2 chars, AO logo/website not a URL, location
+  type selected, AO name < 2 chars, AO website not a URL, location
   address < 5 chars, missing lat/lng) THEN a field-level error is shown and
-  submission is blocked with no API call.
+  submission is blocked with no API call. (The logo is not editable from the
+  map — it is shown read-only and changed only in Admin — so there is no
+  user-entered logo URL to validate here.)
 - **AC-6** — GIVEN a signed-in user with a session email WHEN a request modal
   opens THEN the "Your Email" field is prefilled with that email and disabled.
-- **AC-7** — GIVEN an AO logo URL that fails to load WHEN the user submits
-  THEN the form shows "Invalid image URL" on the logo field and no API call is
-  made.
 
 ### Submission outcomes
 

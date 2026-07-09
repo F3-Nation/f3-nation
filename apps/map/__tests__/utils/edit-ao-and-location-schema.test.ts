@@ -55,9 +55,8 @@ describe("EditAOAndLocationSchema – valid submission", () => {
     }
   });
 
-  it("defaults badImage and isReview when omitted", () => {
+  it("defaults isReview when omitted", () => {
     const result = EditAOAndLocationSchema.parse(valid);
-    expect(result.badImage).toBe(false);
     expect(result.isReview).toBe(false);
   });
 

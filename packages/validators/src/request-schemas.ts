@@ -84,7 +84,6 @@ export type BaseSchemaType = z.infer<typeof BaseSchema>;
 
 export const CreateAOAndLocationAndEventSchema = BaseSchema.extend({
   requestType: z.literal("create_ao_and_location_and_event"),
-  badImage: z.boolean().default(false),
 })
   .extend(EventFields.shape)
   .extend(AOFields.shape)
@@ -120,7 +119,6 @@ export type EditEventType = z.infer<typeof EditEventSchema>;
 // EDIT AO AND LOCATION (edit-ao-and-location)
 export const EditAOAndLocationSchema = BaseSchema.extend({
   requestType: z.literal("edit_ao_and_location"),
-  badImage: z.boolean().default(false),
   originalAoId: z.number().positive("AO ID is required"),
   originalLocationId: z.number().positive("Location ID is required"),
 })
@@ -203,7 +201,6 @@ export const MoveEventToNewAOSchema = BaseSchema.extend({
     .positive("Target location ID is required")
     .nullable(),
   newRegionId: z.number().positive("Target region ID is required").optional(),
-  badImage: z.boolean().default(false),
 })
   .extend(EventFields.shape)
   .extend(AOFields.shape)

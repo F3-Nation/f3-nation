@@ -24,11 +24,6 @@ export const EditAoAndLocationModal = ({
   });
 
   const handleSubmission = async (values: EditAOAndLocationType) => {
-    if ("badImage" in values && values.badImage && !!values.aoLogo) {
-      form.setError("aoLogo", { message: "Invalid image URL" });
-      throw new Error("Invalid image URL");
-    }
-
     return await client.request.submitEditAOAndLocationRequest(values);
   };
 

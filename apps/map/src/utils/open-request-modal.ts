@@ -458,7 +458,6 @@ const getFormValues = async (params: {
     id: req?.id ?? uuidv4(),
     isReview: !!req,
     submittedBy: req?.submittedBy ?? cur.submittedBy,
-    badImage: false,
 
     eventTypeIds: req?.eventTypeIds ?? cur.eventTypeIds,
     eventDescription: req?.eventDescription ?? cur.eventDescription,

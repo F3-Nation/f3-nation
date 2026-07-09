@@ -36,10 +36,9 @@ describe("CreateAOAndLocationAndEventSchema – valid submissions", () => {
     });
   });
 
-  it("defaults badImage, isReview and locationCountry when omitted", () => {
+  it("defaults isReview and locationCountry when omitted", () => {
     const { locationCountry: _c, ...withoutCountry } = valid;
     const result = CreateAOAndLocationAndEventSchema.parse(withoutCountry);
-    expect(result.badImage).toBe(false);
     expect(result.isReview).toBe(false);
     expect(result.locationCountry).toBe("United States");
   });
