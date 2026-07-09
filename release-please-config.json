@@ -76,6 +76,11 @@
       "changelog-path": "CHANGELOG.md",
       "path": "packages/env"
     },
+    "packages/health": {
+      "component": "pkg-health",
+      "changelog-path": "CHANGELOG.md",
+      "path": "packages/health"
+    },
     "packages/logger": {
       "component": "pkg-logger",
       "changelog-path": "CHANGELOG.md",
