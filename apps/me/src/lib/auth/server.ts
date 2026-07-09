@@ -18,8 +18,8 @@ export interface SessionPayload {
  * that protected resources are not reachable with a forged or expired token
  * even if middleware is misconfigured or bypassed (#371).
  *
- * jose caches the JWKS response internally (15-minute TTL) so only the first
- * request per cold-start incurs a network round-trip.
+ * The shared verifier caches the JWKS response internally (15-minute TTL) so
+ * only the first request per cold-start incurs a network round-trip.
  */
 const getCachedSessionPayload = cache(async (accessToken: string) => {
   const payload = await verifyAccessTokenPayload(accessToken);

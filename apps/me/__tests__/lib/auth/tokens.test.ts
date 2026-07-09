@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
+  isJwtExpired,
+  parseJwtPayload,
+  verifyJwtPayload,
+  verifyJwtToken,
+} from "@acme/sso";
+import {
   isAccessTokenExpired,
   parseAccessTokenPayload,
   verifyAccessToken,
@@ -16,12 +22,17 @@ vi.mock("@/env", () => ({
   },
 }));
 
-vi.mock("jose", () => ({
-  createRemoteJWKSet: vi.fn(() => vi.fn()),
-  jwtVerify: vi.fn(),
-}));
+vi.mock("@acme/sso", async () => {
+  const actual = await vi.importActual("@acme/sso");
 
-import { jwtVerify } from "jose";
+  return {
+    ...actual,
+    isJwtExpired: vi.fn(),
+    parseJwtPayload: vi.fn(),
+    verifyJwtPayload: vi.fn(),
+    verifyJwtToken: vi.fn(),
+  };
+});
 
 function createToken(payload: Record<string, unknown>) {
   const encodedHeader = Buffer.from(
@@ -47,6 +58,11 @@ function createValidToken(extra: Record<string, unknown> = {}) {
 describe("auth tokens", () => {
   it("parses JWT payloads", () => {
     const token = createToken({ sub: "42", email: "test@f3.com", exp: 9999 });
+    vi.mocked(parseJwtPayload).mockReturnValueOnce({
+      sub: "42",
+      email: "test@f3.com",
+      exp: 9999,
+    });
 
     expect(parseAccessTokenPayload(token)).toEqual(
       expect.objectContaining({
@@ -58,32 +74,42 @@ describe("auth tokens", () => {
   });
 
   it("returns null for invalid JWT format", () => {
+    vi.mocked(parseJwtPayload).mockReturnValueOnce(null);
     expect(parseAccessTokenPayload("not-a-jwt")).toBeNull();
   });
 
   it("treats malformed payloads as expired", () => {
+    vi.mocked(isJwtExpired).mockReturnValueOnce(true);
     expect(isAccessTokenExpired("not-a-jwt")).toBe(true);
   });
 
   it("treats tokens without exp as expired", () => {
+    vi.mocked(isJwtExpired).mockReturnValueOnce(true);
     const token = createToken({ sub: "42", email: "test@f3.com" });
     expect(isAccessTokenExpired(token)).toBe(true);
   });
 
   it("treats tokens with non-numeric exp as expired", () => {
+    vi.mocked(isJwtExpired).mockReturnValueOnce(true);
     const token = createToken({ sub: "42", exp: "not-a-number" });
     expect(isAccessTokenExpired(token)).toBe(true);
   });
 
   it("accepts tokens whose exp is comfortably in the future", () => {
-    const futureExp = Math.floor(Date.now() / 1000) + 3600;
-    const token = createToken({ sub: "42", exp: futureExp });
+    vi.mocked(isJwtExpired).mockReturnValueOnce(false);
+    const token = createToken({
+      sub: "42",
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    });
     expect(isAccessTokenExpired(token)).toBe(false);
   });
 
   it("treats nearly-expired tokens as expired when within skew", () => {
-    const nearExp = Math.floor(Date.now() / 1000) + 30;
-    const token = createToken({ sub: "42", exp: nearExp });
+    vi.mocked(isJwtExpired).mockReturnValueOnce(true);
+    const token = createToken({
+      sub: "42",
+      exp: Math.floor(Date.now() / 1000) + 30,
+    });
     expect(isAccessTokenExpired(token)).toBe(true);
   });
 });
@@ -93,82 +119,59 @@ describe("verifyAccessTokenPayload", () => {
     vi.clearAllMocks();
   });
 
-  it("returns null for an expired token without calling jwtVerify", async () => {
+  it("returns null for an expired token without calling verifyJwtPayload", async () => {
     const expiredToken = createToken({ sub: "42", exp: 1 });
+    vi.mocked(verifyJwtPayload).mockResolvedValueOnce(null);
     const result = await verifyAccessTokenPayload(expiredToken);
     expect(result).toBeNull();
-    expect(jwtVerify).not.toHaveBeenCalled();
+    expect(verifyJwtPayload).toHaveBeenCalledTimes(1);
   });
 
-  it("returns payload when strict verify (aud claim) succeeds", async () => {
-    const futureExp = Math.floor(Date.now() / 1000) + 3600;
-    vi.mocked(jwtVerify).mockResolvedValueOnce({
-      payload: { sub: "42", email: "test@f3.com", exp: futureExp },
-      protectedHeader: { alg: "RS256" },
-    } as never);
+  it("returns payload when shared verifier succeeds", async () => {
+    vi.mocked(verifyJwtPayload).mockResolvedValueOnce({
+      sub: "42",
+      email: "test@f3.com",
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    });
 
     const result = await verifyAccessTokenPayload(createValidToken());
     expect(result).toMatchObject({ sub: "42", email: "test@f3.com" });
-    expect(jwtVerify).toHaveBeenCalledTimes(1);
+    expect(verifyJwtPayload).toHaveBeenCalledTimes(1);
   });
 
   it("returns null when strict verify succeeds but sub is not a string", async () => {
-    vi.mocked(jwtVerify).mockResolvedValueOnce({
-      payload: { sub: 42, email: "test@f3.com" },
-      protectedHeader: { alg: "RS256" },
-    } as never);
+    vi.mocked(verifyJwtPayload).mockResolvedValueOnce({
+      sub: 42 as never,
+      email: "test@f3.com",
+    });
 
     const result = await verifyAccessTokenPayload(createValidToken());
     expect(result).toBeNull();
   });
 
-  it("falls back to client_id path when strict verify throws, returns payload on match", async () => {
-    const futureExp = Math.floor(Date.now() / 1000) + 3600;
-    vi.mocked(jwtVerify)
-      .mockRejectedValueOnce(new Error("audience mismatch"))
-      .mockResolvedValueOnce({
-        payload: {
-          sub: "42",
-          email: "test@f3.com",
-          exp: futureExp,
-          client_id: "test-client-id",
-        },
-        protectedHeader: { alg: "RS256" },
-      } as never);
+  it("returns payload when shared verifier returns client_id payload", async () => {
+    vi.mocked(verifyJwtPayload).mockResolvedValueOnce({
+      sub: "42",
+      email: "test@f3.com",
+      exp: Math.floor(Date.now() / 1000) + 3600,
+      client_id: "test-client-id",
+    });
 
     const result = await verifyAccessTokenPayload(createValidToken());
     expect(result).toMatchObject({ sub: "42" });
-    expect(jwtVerify).toHaveBeenCalledTimes(2);
   });
 
-  it("returns null when fallback verify succeeds but client_id does not match", async () => {
-    vi.mocked(jwtVerify)
-      .mockRejectedValueOnce(new Error("audience mismatch"))
-      .mockResolvedValueOnce({
-        payload: { sub: "42", client_id: "wrong-client" },
-        protectedHeader: { alg: "RS256" },
-      } as never);
+  it("returns null when shared verifier returns a payload without sub", async () => {
+    vi.mocked(verifyJwtPayload).mockResolvedValueOnce({
+      email: "test@f3.com",
+    });
 
     const result = await verifyAccessTokenPayload(createValidToken());
     expect(result).toBeNull();
   });
 
-  it("returns null when fallback verify succeeds but sub is not a string", async () => {
-    vi.mocked(jwtVerify)
-      .mockRejectedValueOnce(new Error("audience mismatch"))
-      .mockResolvedValueOnce({
-        payload: { sub: 99, client_id: "test-client-id" },
-        protectedHeader: { alg: "RS256" },
-      } as never);
-
-    const result = await verifyAccessTokenPayload(createValidToken());
-    expect(result).toBeNull();
-  });
-
-  it("returns null when both jwtVerify calls throw", async () => {
-    vi.mocked(jwtVerify)
-      .mockRejectedValueOnce(new Error("sig invalid"))
-      .mockRejectedValueOnce(new Error("sig invalid"));
+  it("returns null when shared verifier returns null", async () => {
+    vi.mocked(verifyJwtPayload).mockResolvedValueOnce(null);
 
     const result = await verifyAccessTokenPayload(createValidToken());
     expect(result).toBeNull();
@@ -180,69 +183,44 @@ describe("verifyAccessToken", () => {
     vi.clearAllMocks();
   });
 
-  it("returns false for expired token without calling jwtVerify", async () => {
+  it("returns false for expired token without calling verifyJwtToken", async () => {
     const expiredToken = createToken({ sub: "42", exp: 1 });
+    vi.mocked(verifyJwtToken).mockResolvedValueOnce(false);
 
     const result = await verifyAccessToken(expiredToken);
 
     expect(result).toBe(false);
-    expect(jwtVerify).not.toHaveBeenCalled();
+    expect(verifyJwtToken).toHaveBeenCalledTimes(1);
   });
 
-  it("returns true when strict verify succeeds", async () => {
-    vi.mocked(jwtVerify).mockResolvedValueOnce({
-      payload: { sub: "42", exp: Math.floor(Date.now() / 1000) + 3600 },
-      protectedHeader: { alg: "RS256" },
-    } as never);
+  it("returns true when shared verifier succeeds", async () => {
+    vi.mocked(verifyJwtToken).mockResolvedValueOnce(true);
 
     const result = await verifyAccessToken(createValidToken());
 
     expect(result).toBe(true);
-    expect(jwtVerify).toHaveBeenCalledTimes(1);
+    expect(verifyJwtToken).toHaveBeenCalledTimes(1);
   });
 
-  it("returns true when strict verify fails and fallback client_id matches", async () => {
-    vi.mocked(jwtVerify)
-      .mockRejectedValueOnce(new Error("audience mismatch"))
-      .mockResolvedValueOnce({
-        payload: {
-          sub: "42",
-          exp: Math.floor(Date.now() / 1000) + 3600,
-          client_id: "test-client-id",
-        },
-        protectedHeader: { alg: "RS256" },
-      } as never);
-
-    const result = await verifyAccessToken(createValidToken());
-
-    expect(result).toBe(true);
-    expect(jwtVerify).toHaveBeenCalledTimes(2);
-  });
-
-  it("returns false when fallback verify succeeds but client_id mismatches", async () => {
-    vi.mocked(jwtVerify)
-      .mockRejectedValueOnce(new Error("audience mismatch"))
-      .mockResolvedValueOnce({
-        payload: {
-          sub: "42",
-          exp: Math.floor(Date.now() / 1000) + 3600,
-          client_id: "wrong-client",
-        },
-        protectedHeader: { alg: "RS256" },
-      } as never);
+  it("returns false when shared verifier reports failure", async () => {
+    vi.mocked(verifyJwtToken).mockResolvedValueOnce(false);
 
     const result = await verifyAccessToken(createValidToken());
 
     expect(result).toBe(false);
   });
 
-  it("returns false when both verification attempts throw", async () => {
-    vi.mocked(jwtVerify)
-      .mockRejectedValueOnce(new Error("sig invalid"))
-      .mockRejectedValueOnce(new Error("sig invalid"));
+  it("passes auth server settings to the shared verifier", async () => {
+    vi.mocked(verifyJwtToken).mockResolvedValueOnce(true);
 
-    const result = await verifyAccessToken(createValidToken());
+    await verifyAccessToken(createValidToken());
 
-    expect(result).toBe(false);
+    expect(verifyJwtToken).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        authServerUrl: "https://auth.test.com",
+        clientId: "test-client-id",
+      }),
+    );
   });
 });
