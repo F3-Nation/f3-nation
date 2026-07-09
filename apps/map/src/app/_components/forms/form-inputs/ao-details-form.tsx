@@ -1,9 +1,9 @@
-import { Controller, useFormContext } from "react-hook-form";
+import Link from "next/link";
+import { useFormContext } from "react-hook-form";
 
 import { Input } from "@acme/ui/input";
 
-import { scaleAndCropImage } from "~/utils/image/scale-and-crop-image";
-import { uploadLogo } from "~/utils/image/upload-logo";
+import { useRuntimeConfig } from "~/utils/runtime-config";
 import { DebouncedImage } from "../../debounced-image";
 
 interface AODetailsFormValues {
@@ -17,8 +17,10 @@ interface AODetailsFormValues {
 
 export const AODetailsForm = <_T extends AODetailsFormValues>() => {
   const form = useFormContext<AODetailsFormValues>();
-  const formOriginalRegionId = form.watch("originalRegionId");
-  const formId = form.watch("id");
+  const aoLogo = form.watch("aoLogo");
+
+  const { adminUrl } = useRuntimeConfig();
+
   return (
     <>
       <h2 className="mt-4 mb-2 text-xl font-semibold text-muted-foreground">
@@ -50,74 +52,34 @@ export const AODetailsForm = <_T extends AODetailsFormValues>() => {
           <div className="text-sm font-medium text-muted-foreground">
             AO Logo
           </div>
-          <Controller
-            control={form.control}
-            name="aoLogo"
-            render={({ field: { onChange, value } }) => {
-              return (
-                <div className="space-y-2">
-                  <Input
-                    type="file"
-                    name="aoLogo"
-                    accept="image/*"
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-
-                      if (
-                        typeof formOriginalRegionId !== "number" ||
-                        formOriginalRegionId <= -1 ||
-                        !formId
-                      ) {
-                        return;
-                      }
-
-                      try {
-                        const blob640 = await scaleAndCropImage(file, 640, 640);
-                        if (!blob640) {
-                          form.setError("aoLogo", {
-                            type: "manual",
-                            message:
-                              "Couldn't process that image. Please try a different file.",
-                          });
-                          return;
-                        }
-                        const url640 = await uploadLogo({
-                          file: blob640,
-                          orgId: formOriginalRegionId,
-                          requestId: formId,
-                        });
-                        onChange(url640);
-                      } catch (error) {
-                        console.error("AO logo upload failed", error);
-                        form.setError("aoLogo", {
-                          type: "manual",
-                          message: "Logo upload failed. Please try again.",
-                        });
-                      }
-                    }}
-                    disabled={
-                      typeof formOriginalRegionId !== "number" ||
-                      formOriginalRegionId <= -1
-                    }
-                    className="flex-1"
-                  />
-                  {value && (
-                    <div className="flex justify-center">
-                      <DebouncedImage
-                        src={value}
-                        alt="AO Logo"
-                        onImageFail={() => form.setValue("badImage", true)}
-                        onImageSuccess={() => form.setValue("badImage", false)}
-                        width={96}
-                        height={96}
-                      />
-                    </div>
-                  )}
-                </div>
-              );
-            }}
-          />
+          {aoLogo && (
+            <div className="flex justify-center">
+              <DebouncedImage
+                src={aoLogo}
+                alt="AO Logo"
+                onImageFail={() => form.setValue("badImage", true)}
+                onImageSuccess={() => form.setValue("badImage", false)}
+                width={96}
+                height={96}
+              />
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">
+            Logo changes must be done in{" "}
+            {adminUrl ? (
+              <Link
+                href={adminUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-500 hover:underline"
+              >
+                Admin
+              </Link>
+            ) : (
+              "Admin"
+            )}
+            .
+          </p>
         </div>
       </div>
     </>

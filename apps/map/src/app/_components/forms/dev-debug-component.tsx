@@ -14,7 +14,6 @@ interface DevLoadTestDataValues {
   eventDescription: string;
   eventTypeIds: number[];
   aoName: string;
-  aoLogo: string;
   aoWebsite: string;
   locationAddress: string;
   locationAddress2: string;
@@ -56,7 +55,6 @@ function applyAoTestData(
   values: DevLoadTestDataValues,
 ) {
   !values.aoName && form.setValue("aoName", "Test AO");
-  !values.aoLogo && form.setValue("aoLogo", "https://placehold.co/640x640");
   !values.aoWebsite && form.setValue("aoWebsite", "https://test.com");
 }
 

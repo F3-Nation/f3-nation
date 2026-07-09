@@ -96,6 +96,18 @@ pnpm lint --filter f3-map
 - User authentication
 - Responsive design
 
+## Contributing Map Changes
+
+Signed-in users can suggest new locations/AOs and edit existing AO details from
+the map (name, website, address, contact info, event times). These submissions
+are queued as change requests and go through admin review before they appear on
+the live map.
+
+**AO logos are not editable from the map.** The map shows an AO's current logo
+as read-only. To add or change a logo, use Admin at
+[admin.f3nation.com](https://admin.f3nation.com). Logo uploads have been removed
+from the map entirely.
+
 ## Architecture
 
 This application is built with:
