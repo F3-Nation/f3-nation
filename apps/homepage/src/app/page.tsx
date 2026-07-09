@@ -108,9 +108,9 @@ const APP_GROUPS: AppGroup[] = [
         href: "https://status.f3nation.com",
       },
       {
-        name: "Syncbot",
+        name: "SyncBot",
         description:
-          "Real-time health and status for all F3 Nation services. Check if something's down before filing a bug report.",
+          "Slack app for syncing channels and messages across multiple workspaces (threads, reactions, and media)."
         href: "https://github.com/F3-Nation/syncbot/blob/main/docs/USER_GUIDE.md",
         linkLabel: "Learn More",
       },
