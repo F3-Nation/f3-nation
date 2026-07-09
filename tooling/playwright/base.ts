@@ -1,3 +1,4 @@
+import { fileURLToPath } from "url";
 import type { PlaywrightTestConfig } from "@playwright/test";
 import { defineConfig, devices } from "@playwright/test";
 
@@ -13,8 +14,10 @@ import { defineConfig, devices } from "@playwright/test";
  * `playwright test --list` shows both tiers grouped by project.
  *
  * The suites run against a deployed target (per-PR preview environments in
- * CI — see .github/workflows/preview-env.yml), never a local dev server, so
- * `E2E_BASE_URL` is required. Preview environments scale to zero, which means
+ * CI) or a locally running stack, so `E2E_BASE_URL` is required to RUN tests —
+ * but the requirement is enforced in global-setup.ts, not here, so static
+ * analysis tools (knip, typecheck) can load an app's playwright.config.ts
+ * without E2E env vars set. Preview environments scale to zero, which means
  * the first navigation may sit through a Cloud Run cold start (~10s); the
  * timeouts below are sized for that.
  *
@@ -28,18 +31,11 @@ import { defineConfig, devices } from "@playwright/test";
 export function createBaseConfig(
   overrides: PlaywrightTestConfig = {},
 ): PlaywrightTestConfig {
-  const baseURL = process.env.E2E_BASE_URL;
-  if (!baseURL) {
-    throw new Error(
-      "E2E_BASE_URL is required but not set. Point it at the deployment " +
-        "under test, e.g. " +
-        "E2E_BASE_URL=https://pr-123-map-<project>.us-central1.run.app " +
-        "pnpm test:e2e",
-    );
-  }
-
   return defineConfig(
     {
+      // Fails fast when E2E_BASE_URL is unset — deferred to setup time so
+      // loading this config never requires the env var.
+      globalSetup: fileURLToPath(new URL("./global-setup.ts", import.meta.url)),
       // Cold-starting scale-to-zero target: allow generous per-test budget.
       timeout: 90_000,
       expect: { timeout: 15_000 },
@@ -51,7 +47,7 @@ export function createBaseConfig(
       forbidOnly: !!process.env.CI,
       reporter: [["list"], ["html", { open: "never" }]],
       use: {
-        baseURL,
+        baseURL: process.env.E2E_BASE_URL,
         trace: "retain-on-failure",
         video: "retain-on-failure",
         screenshot: "only-on-failure",
