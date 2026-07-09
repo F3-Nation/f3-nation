@@ -56,13 +56,13 @@ health contract natively.
 
 ## 5. Roles & authorization (RBAC)
 
-| Action                                                 | Allowed                                                                                      | Explicitly denied                                                                               |
-| ------------------------------------------------------ | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| View `apps/homepage/status` page                       | Everyone (public/anonymous users and authenticated users)                                    | None                                                                                            |
-| Poll service `/health` endpoints from status consumer  | Server-side status poller in homepage runtime                                                | Client-side browser direct polling flow is not relied on for source-of-truth status aggregation |
-| Poll third-party monitor adapters from status consumer | Server-side status poller in homepage runtime using configured adapter credentials/endpoints | Direct client-side credentialed calls from browsers                                             |
-| Produce `/health` response for a service               | Service backend runtime implementing its own endpoint                                        | Any caller attempting to mutate service state through `/health` (endpoint is read-only)         |
-| Publish/update health contract library implementation  | Repository maintainers/contributors via reviewed PRs                                         | Runtime users; anonymous/public users cannot change contract behavior                           |
+| Action                                                 | Allowed                                                                                                   | Explicitly denied                                                                               |
+| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| View `apps/homepage/status` page                       | Everyone (public/anonymous users and authenticated users)                                                 | None                                                                                            |
+| Poll service `/health` endpoints from status consumer  | Homepage status aggregation during static build, or a server-side poller when hosted with runtime support | Client-side browser direct polling flow is not relied on for source-of-truth status aggregation |
+| Poll third-party monitor adapters from status consumer | Homepage status aggregation during static build, or a server-side poller when hosted with runtime support | Direct client-side credentialed calls from browsers                                             |
+| Produce `/health` response for a service               | Service backend runtime implementing its own endpoint                                                     | Any caller attempting to mutate service state through `/health` (endpoint is read-only)         |
+| Publish/update health contract library implementation  | Repository maintainers/contributors via reviewed PRs                                                      | Runtime users; anonymous/public users cannot change contract behavior                           |
 
 ## 6. Out of scope / non-goals
 

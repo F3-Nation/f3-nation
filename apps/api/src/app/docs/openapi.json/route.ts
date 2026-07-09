@@ -162,6 +162,10 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
         name: "Slack",
         tags: ["slack"],
       },
+      {
+        name: "Status",
+        tags: ["status"],
+      },
     ],
     tags: [
       {
@@ -212,6 +216,10 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
         name: "slack",
         description:
           "Slack and F3 Nation Slack app integration endpoints for managing content",
+      },
+      {
+        name: "status",
+        description: "Service status and health check endpoints",
       },
     ],
 

@@ -16,13 +16,11 @@ describe("Health API route", () => {
   });
 
   it("returns HTTP 200 with cache-control no-store and contract-valid JSON", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-      }),
-    );
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+    });
+    vi.stubGlobal("fetch", fetchMock);
 
     const { GET } = await import("@/app/health/route");
     const response = await GET();
@@ -40,6 +38,14 @@ describe("Health API route", () => {
       expect(parsed.data.checks[0]?.id).toBe("f3-api-upstream");
       expect(parsed.data.status).toBe("ok");
     }
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.test.f3nation.com/v1/ping",
+      expect.objectContaining({
+        method: "GET",
+        cache: "no-store",
+      }),
+    );
   });
 
   it("returns degraded/down body status based on upstream HTTP failures", async () => {

@@ -59,6 +59,28 @@ describe("homepage status ingestion", () => {
     });
   });
 
+  it("maps contract timeout aborts to unreachable", async () => {
+    vi.useFakeTimers();
+    const fetchImpl = vi.fn().mockImplementation((_url, init?: RequestInit) => {
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          reject(new DOMException("Aborted", "AbortError"));
+        });
+      });
+    }) as typeof fetch;
+
+    const resultPromise = fetchContractStatus(target, fetchImpl);
+    await vi.advanceTimersByTimeAsync(5_000);
+    const result = await resultPromise;
+
+    expect(result).toMatchObject({
+      ok: false,
+      status: "down",
+      reason: "unreachable",
+    });
+    vi.useRealTimers();
+  });
+
   it("maps malformed JSON to invalid_json", async () => {
     const fetchImpl = vi
       .fn()
@@ -157,6 +179,29 @@ describe("homepage status ingestion", () => {
     expect(result.ok).toBe(true);
     expect(result.source).toBe("external");
     expect(result.status).toBe("degraded");
+  });
+
+  it("maps external timeout aborts to unreachable", async () => {
+    vi.useFakeTimers();
+    const fetchImpl = vi.fn().mockImplementation((_url, init?: RequestInit) => {
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          reject(new DOMException("Aborted", "AbortError"));
+        });
+      });
+    }) as typeof fetch;
+
+    const resultPromise = fetchExternalStatus(slackTarget, fetchImpl);
+    await vi.advanceTimersByTimeAsync(5_000);
+    const result = await resultPromise;
+
+    expect(result).toMatchObject({
+      ok: false,
+      source: "external",
+      status: "down",
+      reason: "unreachable",
+    });
+    vi.useRealTimers();
   });
 
   it("maps invalid external monitor config to invalid_monitor_config", async () => {

@@ -1,4 +1,4 @@
-import type { StatusTarget } from "@/lib/status";
+import type { StatusTarget } from "./status";
 
 const isLocal = process.env.NEXT_PUBLIC_LOCAL_DEV === "true";
 

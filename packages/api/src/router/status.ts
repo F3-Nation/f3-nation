@@ -3,6 +3,21 @@ import {
   healthResponseSchema,
 } from "@f3nation/health";
 import type { HealthResponse, HealthStatus } from "@f3nation/health";
+import { z } from "zod";
+
+import { publicProcedure } from "../shared";
+import { STATUS_TARGETS } from "./status-targets";
+
+const STATUS_FETCH_TIMEOUT_MS = 5_000;
+const STATUS_CACHE_TTL_MS = 60_000;
+
+interface StatusCacheEntry {
+  value: StatusResponse;
+  expiresAt: number;
+}
+
+let statusCache: StatusCacheEntry | null = null;
+let inFlightStatusRequest: Promise<StatusResponse> | null = null;
 
 type HealthFailureReason =
   | "unreachable"
@@ -12,7 +27,6 @@ type HealthFailureReason =
   | "invalid_monitor_config";
 
 type ExternalProvider = "slack";
-const STATUS_FETCH_TIMEOUT_MS = 5_000;
 
 interface SlackCurrentStatusResponse {
   status: string;
@@ -20,14 +34,14 @@ interface SlackCurrentStatusResponse {
   active_incidents?: unknown[];
 }
 
-export interface ContractStatusTarget {
+interface ContractStatusTarget {
   id: string;
   label: string;
   url: string;
   source: "contract";
 }
 
-export interface ExternalStatusTarget {
+interface ExternalStatusTarget {
   id: string;
   label: string;
   url: string;
@@ -75,13 +89,99 @@ interface ExternalStatusFailure {
   reason: HealthFailureReason;
 }
 
-export type StatusResult =
+type StatusResult =
   | ContractStatusSuccess
   | ContractStatusFailure
   | ExternalStatusSuccess
   | ExternalStatusFailure;
 
-export const CURRENT_HEALTH_CONTRACT_MAJOR = Number.parseInt(
+interface StatusResponse {
+  generatedAt: string;
+  ttlSeconds: number;
+  results: StatusResult[];
+}
+
+const externalSuccessSchema = z.object({
+  ok: z.literal(true),
+  source: z.literal("external"),
+  status: z.enum(["ok", "degraded", "down"]),
+  target: z.object({
+    id: z.string(),
+    label: z.string(),
+    url: z.string().url(),
+    source: z.literal("external"),
+    provider: z.literal("slack"),
+    apiUrl: z.string().url(),
+  }),
+  data: z.object({
+    provider: z.literal("slack"),
+    providerStatus: z.string(),
+    timestamp: z.string(),
+    incidents: z.number(),
+  }),
+});
+
+const statusResultSchema = z.union([
+  z.object({
+    ok: z.literal(true),
+    source: z.literal("contract"),
+    status: z.enum(["ok", "degraded", "down"]),
+    target: z.object({
+      id: z.string(),
+      label: z.string(),
+      url: z.string().url(),
+      source: z.literal("contract"),
+    }),
+    data: healthResponseSchema,
+  }),
+  z.object({
+    ok: z.literal(false),
+    source: z.literal("contract"),
+    status: z.literal("down"),
+    target: z.object({
+      id: z.string(),
+      label: z.string(),
+      url: z.string().url(),
+      source: z.literal("contract"),
+    }),
+    reason: z.enum([
+      "unreachable",
+      "invalid_json",
+      "invalid_contract",
+      "unsupported_contract_version",
+      "invalid_monitor_config",
+    ]),
+  }),
+  externalSuccessSchema,
+  z.object({
+    ok: z.literal(false),
+    source: z.literal("external"),
+    status: z.literal("down"),
+    target: z.object({
+      id: z.string(),
+      label: z.string(),
+      url: z.string().url(),
+      source: z.literal("external"),
+      provider: z.literal("slack"),
+      apiUrl: z.string().url(),
+    }),
+    reason: z.enum([
+      "unreachable",
+      "invalid_json",
+      "invalid_contract",
+      "unsupported_contract_version",
+      "invalid_monitor_config",
+    ]),
+  }),
+]);
+
+const statusResponseSchema = z.object({
+  generatedAt: z.string(),
+  ttlSeconds: z.number(),
+  results: z.array(statusResultSchema),
+});
+
+const CURRENT_HEALTH_CONTRACT_MAJOR = Number.parseInt(
   HEALTH_CONTRACT_VERSION.split(".")[0] ?? "1",
   10,
 );
@@ -101,7 +201,7 @@ function isSupportedContractMajor(
   return supportedMajors.has(serviceMajor);
 }
 
-export function parseContractStatusResponse(
+function parseContractStatusResponse(
   target: ContractStatusTarget,
   raw: unknown,
   currentContractMajor = CURRENT_HEALTH_CONTRACT_MAJOR,
@@ -137,21 +237,33 @@ export function parseContractStatusResponse(
   };
 }
 
-export async function fetchContractStatus(
+async function fetchWithTimeout(
+  url: string,
+  fetchImpl: typeof fetch,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), STATUS_FETCH_TIMEOUT_MS);
+
+  try {
+    return await fetchImpl(url, {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function fetchContractStatus(
   target: ContractStatusTarget,
   fetchImpl: typeof fetch = fetch,
   currentContractMajor = CURRENT_HEALTH_CONTRACT_MAJOR,
 ): Promise<StatusResult> {
   let response: Response;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), STATUS_FETCH_TIMEOUT_MS);
 
   try {
-    response = await fetchImpl(target.url, {
-      headers: { Accept: "application/json" },
-      cache: "no-store",
-      signal: controller.signal,
-    });
+    response = await fetchWithTimeout(target.url, fetchImpl);
   } catch {
     return {
       ok: false,
@@ -160,8 +272,6 @@ export async function fetchContractStatus(
       status: "down",
       reason: "unreachable",
     };
-  } finally {
-    clearTimeout(timeout);
   }
 
   const bodyText = await response.text();
@@ -264,7 +374,7 @@ function hasValidExternalConfig(target: ExternalStatusTarget): boolean {
   }
 }
 
-export async function fetchExternalStatus(
+async function fetchExternalStatus(
   target: ExternalStatusTarget,
   fetchImpl: typeof fetch = fetch,
 ): Promise<StatusResult> {
@@ -279,15 +389,9 @@ export async function fetchExternalStatus(
   }
 
   let response: Response;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), STATUS_FETCH_TIMEOUT_MS);
 
   try {
-    response = await fetchImpl(target.apiUrl, {
-      headers: { Accept: "application/json" },
-      cache: "no-store",
-      signal: controller.signal,
-    });
+    response = await fetchWithTimeout(target.apiUrl, fetchImpl);
   } catch {
     return {
       ok: false,
@@ -296,8 +400,6 @@ export async function fetchExternalStatus(
       status: "down",
       reason: "unreachable",
     };
-  } finally {
-    clearTimeout(timeout);
   }
 
   const bodyText = await response.text();
@@ -328,14 +430,68 @@ export async function fetchExternalStatus(
   };
 }
 
-export async function fetchStatus(
+async function fetchStatus(
   target: StatusTarget,
   fetchImpl: typeof fetch = fetch,
-  currentContractMajor = CURRENT_HEALTH_CONTRACT_MAJOR,
 ): Promise<StatusResult> {
   if (target.source === "contract") {
-    return fetchContractStatus(target, fetchImpl, currentContractMajor);
+    return fetchContractStatus(target, fetchImpl);
   }
 
   return fetchExternalStatus(target, fetchImpl);
 }
+
+async function computeStatusSnapshot(
+  fetchImpl: typeof fetch,
+): Promise<StatusResponse> {
+  const results = await Promise.all(
+    STATUS_TARGETS.map((target) => fetchStatus(target, fetchImpl)),
+  );
+
+  return {
+    generatedAt: new Date().toISOString(),
+    ttlSeconds: STATUS_CACHE_TTL_MS / 1000,
+    results,
+  };
+}
+
+async function getCachedStatus(
+  fetchImpl: typeof fetch = fetch,
+): Promise<StatusResponse> {
+  const now = Date.now();
+  if (statusCache && statusCache.expiresAt > now) {
+    return statusCache.value;
+  }
+
+  if (inFlightStatusRequest) {
+    return inFlightStatusRequest;
+  }
+
+  inFlightStatusRequest = computeStatusSnapshot(fetchImpl)
+    .then((value) => {
+      statusCache = {
+        value,
+        expiresAt: Date.now() + STATUS_CACHE_TTL_MS,
+      };
+      return value;
+    })
+    .finally(() => {
+      inFlightStatusRequest = null;
+    });
+
+  return inFlightStatusRequest;
+}
+
+export const statusRouter = publicProcedure
+  .route({
+    method: "GET",
+    path: "/status",
+    tags: ["ping"],
+    summary: "Aggregated status",
+    description:
+      "Returns aggregated status for contract and external monitors, cached for 60 seconds.",
+  })
+  .output(statusResponseSchema)
+  .handler(async () => {
+    return getCachedStatus();
+  });

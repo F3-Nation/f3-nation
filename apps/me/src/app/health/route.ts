@@ -23,7 +23,10 @@ async function checkUpstreamApi(): Promise<CheckRunnerResult> {
   }
 
   try {
-    const url = new URL("/health", apiBaseUrl).toString();
+    const normalizedBaseUrl = apiBaseUrl.endsWith("/")
+      ? apiBaseUrl
+      : `${apiBaseUrl}/`;
+    const url = new URL("ping", normalizedBaseUrl).toString();
     const response = await fetch(url, {
       method: "GET",
       headers: { Accept: "application/json" },
