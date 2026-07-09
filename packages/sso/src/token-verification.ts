@@ -89,15 +89,18 @@ export function isJwtExpired(
   return payload.exp <= now + skewSeconds;
 }
 
-function getJwksResolver(options: VerifyJwtWithJwksOptions) {
-  const authUrl = new URL(options.authServerUrl);
+function validateAuthServerUrl(authServerUrl: string): void {
+  const authUrl = new URL(authServerUrl);
   const isLocalhost =
     authUrl.hostname === "localhost" || authUrl.hostname === "127.0.0.1";
 
   if (authUrl.protocol !== "https:" && !isLocalhost) {
     throw new Error("authServerUrl must use https:// outside localhost");
   }
+}
 
+function getJwksResolver(options: VerifyJwtWithJwksOptions) {
+  const authUrl = new URL(options.authServerUrl);
   const jwksUrl = new URL(options.jwksPath ?? DEFAULT_JWKS_PATH, authUrl);
   const cacheKey = jwksUrl.toString();
   const existing = jwksCache.get(cacheKey);
@@ -142,7 +145,11 @@ function classifyVerificationError(error: unknown): {
     return { code: "invalid_claims", message: "Token claims are invalid" };
   }
 
-  if (error.name === "TypeError" || /fetch|network/i.test(error.message)) {
+  if (
+    error.name === "TypeError" ||
+    error.name === "JWKSTimeout" ||
+    /fetch|network/i.test(error.message)
+  ) {
     return {
       code: "jwks_unavailable",
       message: "Unable to reach JWKS endpoint",
@@ -158,6 +165,8 @@ export async function verifyJwtWithJwks<
   token: string,
   options: VerifyJwtWithJwksOptions,
 ): Promise<JwtVerificationResult<TPayload>> {
+  validateAuthServerUrl(options.authServerUrl);
+
   const skewSeconds = options.skewSeconds ?? DEFAULT_CLOCK_SKEW_SECONDS;
   const issuer = options.issuer ?? options.authServerUrl;
   const audience = options.audience ?? options.clientId;
@@ -181,7 +190,12 @@ export async function verifyJwtWithJwks<
     strictError = error;
   }
 
-  if (allowClientIdClaimFallback && options.clientId) {
+  const isAudienceMismatch =
+    strictError instanceof Error &&
+    strictError.name === "JWTClaimValidationFailed" &&
+    (strictError as Error & { claim?: string }).claim === "aud";
+
+  if (allowClientIdClaimFallback && options.clientId && isAudienceMismatch) {
     try {
       const { payload } = await jwtVerify(token, getJwksResolver(options), {
         algorithms: ["RS256"],
