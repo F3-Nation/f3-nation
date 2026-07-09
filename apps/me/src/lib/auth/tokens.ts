@@ -1,8 +1,14 @@
-import { createRemoteJWKSet, jwtVerify } from "jose";
+import {
+  isJwtExpired,
+  parseJwtPayload,
+  verifyJwtPayload,
+  verifyJwtToken,
+} from "@acme/sso";
+import type { JWTPayload } from "jose";
 
 import { env } from "@/env";
 
-interface AccessTokenPayload {
+interface AccessTokenPayload extends JWTPayload {
   sub: string;
   email?: string;
   exp?: number;
@@ -11,72 +17,16 @@ interface AccessTokenPayload {
   client_id?: string;
 }
 
-function decodeBase64Url(value: string): string {
-  const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
-
-  if (typeof atob === "function") {
-    return atob(padded);
-  }
-
-  return Buffer.from(padded, "base64").toString("utf-8");
-}
-
 export function parseAccessTokenPayload(
   token: string,
 ): AccessTokenPayload | null {
-  const parts = token.split(".");
-  if (parts.length !== 3) return null;
-  const payloadPart = parts[1];
-  if (!payloadPart) return null;
-
-  try {
-    const payload = JSON.parse(decodeBase64Url(payloadPart)) as unknown;
-    if (
-      typeof payload !== "object" ||
-      payload === null ||
-      typeof (payload as Record<string, unknown>).sub !== "string"
-    ) {
-      return null;
-    }
-
-    return payload as AccessTokenPayload;
-  } catch {
-    return null;
-  }
+  const payload = parseJwtPayload(token);
+  if (!payload || typeof payload.sub !== "string") return null;
+  return payload as AccessTokenPayload;
 }
 
 export function isAccessTokenExpired(token: string, skewSeconds = 60): boolean {
-  const payload = parseAccessTokenPayload(token);
-  if (typeof payload?.exp !== "number" || !Number.isFinite(payload.exp)) {
-    return true;
-  }
-
-  const now = Math.floor(Date.now() / 1000);
-  return payload.exp <= now + skewSeconds;
-}
-
-// ---------------------------------------------------------------------------
-// RS256 signature verification via JWKS
-// ---------------------------------------------------------------------------
-
-// Lazily-initialised singleton — jose caches the JWKS response internally
-// (default 15-minute TTL) so only the first request per cold-start hits the
-// network.
-let _jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
-
-function getRemoteJWKS(): ReturnType<typeof createRemoteJWKSet> {
-  if (!_jwks) {
-    const authUrl = new URL(env.AUTH_PROVIDER_URL);
-    const isLocalhost =
-      authUrl.hostname === "localhost" || authUrl.hostname === "127.0.0.1";
-    if (authUrl.protocol !== "https:" && !isLocalhost) {
-      throw new Error("AUTH_PROVIDER_URL must use https:// outside localhost");
-    }
-
-    _jwks = createRemoteJWKSet(new URL("/.well-known/jwks.json", authUrl));
-  }
-  return _jwks;
+  return isJwtExpired(token, skewSeconds);
 }
 
 /**
@@ -87,36 +37,10 @@ function getRemoteJWKS(): ReturnType<typeof createRemoteJWKSet> {
  * caller can fall through to the token-refresh path.
  */
 export async function verifyAccessToken(token: string): Promise<boolean> {
-  // Fast pre-flight: skip the JWKS network call for obviously-expired tokens.
-  if (isAccessTokenExpired(token)) return false;
-
-  const issuer = env.AUTH_PROVIDER_URL;
-  const clientId = env.OAUTH_CLIENT_ID;
-
-  // Try strict validation: signature + issuer + audience.
-  try {
-    await jwtVerify(token, getRemoteJWKS(), {
-      algorithms: ["RS256"],
-      issuer,
-      audience: clientId,
-    });
-    return true;
-  } catch {
-    // Some tokens may carry client_id instead of (or in addition to) aud.
-    // Fall back to verifying signature + issuer only, then assert client_id.
-  }
-
-  try {
-    const { payload } = await jwtVerify(token, getRemoteJWKS(), {
-      algorithms: ["RS256"],
-      issuer,
-    });
-    const p = payload as Record<string, unknown>;
-    if (p.client_id !== clientId) return false;
-    return true;
-  } catch {
-    return false;
-  }
+  return verifyJwtToken(token, {
+    authServerUrl: env.AUTH_PROVIDER_URL,
+    clientId: env.OAUTH_CLIENT_ID,
+  });
 }
 
 /**
@@ -127,32 +51,11 @@ export async function verifyAccessToken(token: string): Promise<boolean> {
 export async function verifyAccessTokenPayload(
   token: string,
 ): Promise<AccessTokenPayload | null> {
-  if (isAccessTokenExpired(token)) return null;
+  const payload = await verifyJwtPayload<AccessTokenPayload>(token, {
+    authServerUrl: env.AUTH_PROVIDER_URL,
+    clientId: env.OAUTH_CLIENT_ID,
+  });
 
-  const issuer = env.AUTH_PROVIDER_URL;
-  const clientId = env.OAUTH_CLIENT_ID;
-
-  try {
-    const { payload } = await jwtVerify(token, getRemoteJWKS(), {
-      algorithms: ["RS256"],
-      issuer,
-      audience: clientId,
-    });
-    if (typeof payload.sub !== "string") return null;
-    return payload as unknown as AccessTokenPayload;
-  } catch {
-    // Fall back: some tokens carry client_id instead of aud.
-  }
-
-  try {
-    const { payload } = await jwtVerify(token, getRemoteJWKS(), {
-      algorithms: ["RS256"],
-      issuer,
-    });
-    if (payload.client_id !== clientId) return null;
-    if (typeof payload.sub !== "string") return null;
-    return payload as unknown as AccessTokenPayload;
-  } catch {
-    return null;
-  }
+  if (typeof payload?.sub !== "string") return null;
+  return payload;
 }

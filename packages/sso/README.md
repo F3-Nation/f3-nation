@@ -837,6 +837,26 @@ The auth server rotates refresh tokens on every use. If you detect an `invalid_g
 
 Access tokens are RS256 JWTs. The F3 API validates them by fetching the public key from the JWKS endpoint (`/.well-known/jwks.json`). If you need to validate tokens in your own API, fetch the JWKS and verify the JWT signature — don't just decode it.
 
+For Next.js client apps that consume F3 SSO directly, use the shared helpers in
+`@acme/sso` instead of duplicating JWKS verification logic:
+
+```ts
+import { verifyJwtPayload } from "@acme/sso";
+
+const payload = await verifyJwtPayload(accessToken, {
+  authServerUrl: process.env.AUTH_PROVIDER_URL!,
+  clientId: process.env.OAUTH_CLIENT_ID!,
+});
+
+if (!payload) {
+  // Token is invalid, expired, or does not match expected issuer/audience.
+}
+```
+
+If you need structured failure reasons (for metrics/debugging), use
+`verifyJwtWithJwks(...)` which returns `{ ok: false, code, message }` on
+verification failures.
+
 ---
 
 ## How SSO Works

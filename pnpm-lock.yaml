@@ -1519,6 +1519,10 @@ importers:
         version: 6.0.3
 
   packages/sso:
+    dependencies:
+      jose:
+        specifier: 'catalog:'
+        version: 6.2.3
     devDependencies:
       '@acme/eslint-config':
         specifier: workspace:*
