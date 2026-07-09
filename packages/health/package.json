@@ -1,17 +1,45 @@
 {
   "name": "f3-health",
   "version": "1.0.0",
-  "private": true,
+  "private": false,
   "type": "module",
+  "description": "F3 health contract schemas and helper utilities for building and consuming /health endpoints.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/F3-Nation/f3-nation.git",
+    "directory": "packages/health"
+  },
+  "homepage": "https://github.com/F3-Nation/f3-nation/tree/main/packages/health",
+  "bugs": {
+    "url": "https://github.com/F3-Nation/f3-nation/issues"
+  },
+  "keywords": [
+    "f3",
+    "health",
+    "status",
+    "zod"
+  ],
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./*": "./src/*.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
   },
   "license": "MIT",
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "clean": "rm -rf .turbo node_modules",
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
     "lint": "eslint .",
+    "prepack": "pnpm build",
     "test": "vitest --run --coverage",
     "test:watch": "vitest -w",
     "typecheck": "tsc --noEmit"
