@@ -1,6 +1,6 @@
 import { fetchStatus } from "@/lib/status";
 import { StatusCard } from "@/app/status/status-card";
-import { STATUS_TARGETS } from "@/status-targets";
+import { STATUS_TARGETS } from "@/app/status/status-targets";
 
 export default async function StatusPage() {
   const results = await Promise.all(
