@@ -5,6 +5,7 @@ const config: KnipConfig = {
   ignore: [
     ".venv/**",
     "apps/**/src/lib/logging.ts",
+    "apps/auth/src/lib/auth.ts",
     "packages/**/src/logger.ts",
     "packages/db/src/**",
     "packages/shared/src/app/constants.ts",

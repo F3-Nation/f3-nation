@@ -8,4 +8,4 @@ export const {
   logError,
   logFatal,
   logger,
-} = createLogger("f3-map");
+} = createLogger("f3-auth");
