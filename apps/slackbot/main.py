@@ -89,7 +89,8 @@ try:
     )
 except Exception as exc:
     raise RuntimeError(
-        f"Error initializing Slackbot: you may need to set up your .env file with the appropriate Slack credentials. Exception: {exc}"
+        "Error initializing Slackbot: you may need to set up your .env file with the appropriate Slack credentials. "
+        f"Exception: {exc}"
     ) from exc
 
 # ----------------------------------------
@@ -196,7 +197,7 @@ try:
     app.event(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
     app.options(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
     app.shortcut(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
-except Exception as exc:
+except Exception:
     pass
 
 
@@ -223,11 +224,13 @@ if __name__ == "__main__":
 
     if LOCAL_DEVELOPMENT and not SOCKET_MODE:
         raise RuntimeError("Local development requires SOCKET_MODE=true.")
-    
+
     # Ensure SLACK_APP_TOKEN is present
     app_token = os.environ.get("SLACK_APP_TOKEN")
     if not app_token:
-        logging.getLogger().error("SLACK_APP_TOKEN is required to run the Slackbot. Please set it in your .env file.")
+        logging.getLogger().error(
+            "SLACK_APP_TOKEN is required to run the Slackbot. Please set it in your .env file."
+        )
         exit(1)
 
     if not SOCKET_MODE:
@@ -241,7 +244,6 @@ if __name__ == "__main__":
         if LOCAL_DEVELOPMENT:
             start_local_health_server(local_http_port)
             logging.getLogger().info(f"Local HTTP health server listening on http://localhost:{local_http_port}")
-            
 
         logging.getLogger().info("Running in local Socket Mode.")
 

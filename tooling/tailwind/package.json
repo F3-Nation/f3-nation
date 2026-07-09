@@ -10,7 +10,7 @@
   "scripts": {
     "clean": "rm -rf .turbo node_modules",
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
-    "lint": "eslint .",
+    "lint": "eslint \"src/**/*.{js,jsx,ts,tsx}\" --no-error-on-unmatched-pattern",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
