@@ -17,7 +17,7 @@ export default defineConfig({
       include: coverageInclude,
       exclude: coverageExclude,
       thresholds: {
-        autoUpdate: false,
+        autoUpdate: true,
         statements: 1.8,
         branches: 4,
         functions: 7,
