@@ -195,7 +195,12 @@ export async function verifyJwtWithJwks<
     strictError.name === "JWTClaimValidationFailed" &&
     (strictError as Error & { claim?: string }).claim === "aud";
 
-  if (allowClientIdClaimFallback && options.clientId && isAudienceMismatch) {
+  if (
+    allowClientIdClaimFallback &&
+    options.clientId &&
+    !options.audience &&
+    isAudienceMismatch
+  ) {
     try {
       const { payload } = await jwtVerify(token, getJwksResolver(options), {
         algorithms: ["RS256"],
