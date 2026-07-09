@@ -16,10 +16,7 @@
     "tw-animate-css": "catalog:"
   },
   "devDependencies": {
-    "@acme/eslint-config": "workspace:*",
     "@acme/prettier-config": "workspace:^0.1.0",
-    "@acme/tsconfig": "workspace:*",
-    "eslint": "catalog:",
     "prettier": "catalog:",
     "typescript": "catalog:"
   },

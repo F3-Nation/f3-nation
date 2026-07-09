@@ -21,7 +21,7 @@ import { DebouncedImage } from "../debounced-image";
 import { CountrySelect } from "../modal/country-select";
 import { ControlledTimeInput } from "../time-input";
 
-export const formatMetaId = (value: unknown) =>
+const formatMetaId = (value: unknown) =>
   typeof value === "number" || typeof value === "string" ? String(value) : "-";
 
 export const EventDetailsFields = () => {

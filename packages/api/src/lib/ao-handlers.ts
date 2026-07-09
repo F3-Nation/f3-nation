@@ -1,10 +1,7 @@
 import { eq } from "drizzle-orm";
 
-import { inArray, schema } from "@acme/db";
-import {
-  isTruthy,
-  removeUndefinedFromObject,
-} from "@acme/shared/common/functions";
+import { schema } from "@acme/db";
+import { removeUndefinedFromObject } from "@acme/shared/common/functions";
 
 import type { Context } from "../shared";
 import { moveAOLocsToNewRegion } from "./move-ao-locs-to-new-region";
@@ -103,24 +100,4 @@ export const updateAO = async (
 
     return { ...updatedAO, newLocationIds };
   });
-};
-
-export const getLocationIdsForAO = async (ctx: Context, aoId: number) => {
-  const events = await ctx.db
-    .select()
-    .from(schema.events)
-    .where(eq(schema.events.orgId, aoId));
-
-  const eventLocationIds = events
-    .map((event) => event.locationId)
-    .filter(isTruthy);
-
-  const locationIds = !eventLocationIds.length
-    ? []
-    : await ctx.db
-        .select({ id: schema.locations.id })
-        .from(schema.locations)
-        .where(inArray(schema.locations.id, eventLocationIds));
-
-  return locationIds.map((l) => l.id);
 };

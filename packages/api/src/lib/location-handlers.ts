@@ -95,39 +95,3 @@ export const updateLocation = async (
 
   return location;
 };
-
-/**
- * Creates or updates a location based on request data
- */
-export const handleLocation = async (
-  ctx: Context,
-  updateRequest: {
-    originalLocationId?: number;
-    regionId: number;
-    locationName?: string | null;
-    locationDescription?: string | null;
-    locationAddress?: string | null;
-    locationAddress2?: string | null;
-    locationCity?: string | null;
-    locationState?: string | null;
-    locationZip?: string | null;
-    locationCountry?: string | null;
-    locationLat?: number | null;
-    locationLng?: number | null;
-    locationContactEmail?: string | null;
-  },
-) => {
-  // If no locationId, create a new location
-  if (updateRequest.originalLocationId) {
-    const updatedLocation = await updateLocation(ctx, {
-      ...updateRequest,
-      locationId: updateRequest.originalLocationId,
-    });
-    return updatedLocation;
-  } else {
-    // Otherwise update existing location
-
-    const insertedLocation = await insertLocation(ctx, updateRequest);
-    return insertedLocation;
-  }
-};

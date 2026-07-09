@@ -15,7 +15,6 @@
     "with-env": "dotenv -e .env --"
   },
   "dependencies": {
-    "@acme/shared": "workspace:*",
     "@t3-oss/env-nextjs": "catalog:",
     "dotenv": "catalog:",
     "zod": "catalog:"

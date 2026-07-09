@@ -96,11 +96,7 @@ export const isF3RegionMapSearchResult = (
   return result.type === "region";
 };
 
-export type UpdateRequestTableItem =
-  RouterOutputs["request"]["all"]["requests"][number];
-export type UpdateRequestByIdResponse = NonNullable<
-  RouterOutputs["request"]["byId"]
->;
+type UpdateRequestByIdResponse = NonNullable<RouterOutputs["request"]["byId"]>;
 export type UpdateRequestById = NonNullable<
   UpdateRequestByIdResponse["request"]
 >;

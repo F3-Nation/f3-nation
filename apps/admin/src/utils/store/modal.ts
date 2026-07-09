@@ -101,14 +101,14 @@ export interface DataType {
   };
 }
 
-export interface Modal<T extends ModalType> {
+interface Modal<T extends ModalType> {
   open: boolean;
   type: T | undefined;
   content?: ReactNode;
   data?: DataType[T];
 }
 
-export const modalStore = new ZustandStore<{
+const modalStore = new ZustandStore<{
   modals: Modal<ModalType>[];
 }>({
   initialState: {

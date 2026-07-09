@@ -117,63 +117,6 @@ export const insertEvent = async (
 };
 
 /**
- * Updates or creates an event based on request data
- */
-export const handleEvent = async (
-  ctx: Context,
-  updateRequest: {
-    locationId: number;
-    aoId?: number | null;
-    originalEventId?: number | null;
-    eventName?: string | null;
-    eventDescription?: string | null;
-    eventStartDate?: string | null;
-    eventEndDate?: string | null;
-    eventStartTime?: string | null;
-    eventEndTime?: string | null;
-    eventDayOfWeek?: DayOfWeek | null;
-    eventSeriesId?: number | null;
-    eventRecurrencePattern?: "weekly" | "monthly" | null;
-    eventRecurrenceInterval?: number | null;
-    eventIndexWithinInterval?: number | null;
-    eventMeta?: EventMeta | null;
-    eventContactEmail?: string | null;
-    reviewedBy?: string | null;
-  },
-): Promise<number> => {
-  let eventId: number | undefined = updateRequest.originalEventId ?? undefined;
-
-  if (eventId) {
-    // Update existing event
-    const updated = await updateEvent(ctx, { ...updateRequest, eventId });
-    eventId = updated.id;
-  } else {
-    const aoId = updateRequest.aoId;
-    if (!aoId) {
-      throw new Error("AO ID is required to create an event");
-    }
-
-    if (!updateRequest.eventName) {
-      throw new Error("Event name is required to create an event");
-    }
-
-    // Create new event
-    const values = {
-      ...updateRequest,
-      eventId: undefined, // remove eventId from the values
-      eventStartDate:
-        updateRequest.eventStartDate ?? dayjs().format("YYYY-MM-DD"),
-      eventName: updateRequest.eventName ?? "",
-      aoId,
-    };
-    const event = await insertEvent(ctx, values);
-    eventId = event.id;
-  }
-
-  return eventId;
-};
-
-/**
  * Updates event types for an event
  */
 export const updateEventTypes = async (

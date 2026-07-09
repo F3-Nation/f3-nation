@@ -906,9 +906,6 @@ importers:
       '@auth/core':
         specifier: 0.41.2
         version: 0.41.2(nodemailer@9.0.1)
-      '@hookform/resolvers':
-        specifier: 'catalog:'
-        version: 5.4.0(react-hook-form@7.80.0(react@19.2.7))(zod@4.4.3)
       '@orpc/client':
         specifier: 'catalog:'
         version: 1.14.6(@opentelemetry/api@1.9.1)
@@ -1222,9 +1219,6 @@ importers:
       '@acme/shared':
         specifier: workspace:*
         version: link:../shared
-      '@acme/storage':
-        specifier: workspace:*
-        version: link:../storage
       '@acme/validators':
         specifier: workspace:*
         version: link:../validators
@@ -1265,12 +1259,6 @@ importers:
       '@types/lodash':
         specifier: 'catalog:'
         version: 4.17.24
-      '@types/nodemailer':
-        specifier: ^6.4.17
-        version: 6.4.24
-      '@types/uuid':
-        specifier: ^11.0.0
-        version: 11.0.0
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.1.9(vitest@4.1.9)
@@ -1423,9 +1411,6 @@ importers:
 
   packages/env:
     dependencies:
-      '@acme/shared':
-        specifier: workspace:*
-        version: link:../shared
       '@t3-oss/env-nextjs':
         specifier: 'catalog:'
         version: 0.13.11(typescript@6.0.3)(zod@4.4.3)
@@ -1940,18 +1925,9 @@ importers:
         specifier: 'catalog:'
         version: 1.4.0
     devDependencies:
-      '@acme/eslint-config':
-        specifier: workspace:*
-        version: link:../eslint
       '@acme/prettier-config':
         specifier: workspace:^0.1.0
         version: link:../prettier
-      '@acme/tsconfig':
-        specifier: workspace:*
-        version: link:../typescript
-      eslint:
-        specifier: 'catalog:'
-        version: 10.6.0(jiti@2.7.0)
       prettier:
         specifier: 'catalog:'
         version: 3.9.4
@@ -5039,9 +5015,6 @@ packages:
   '@types/node@25.9.2':
     resolution: {integrity: sha512-G05zqtJhcDLb8uslf5EjCxXg9G1KQxiV8OS0R26IC//Eoyitzqe8z37I7cqvnZlrlSfgocQRfSn/AHBZJJFyGw==}
 
-  '@types/nodemailer@6.4.24':
-    resolution: {integrity: sha512-Ww4u0rT9wQNXh4JiQaIwx3QWdcOFXzOjQA2zc+jtFYNmQiT4mIUqcDin51bDFdkzKubFnQCZNK7FIHlPKQ/q9w==}
-
   '@types/nodemailer@8.0.1':
     resolution: {integrity: sha512-PxpaInm8V1JQDd4j0ds5HfvWQk8JupS1C0Picb96QJsrrRDjBH+DlK7L4ZdNSqNULhiZRQHc40nLVShaGxXAMw==}
 
@@ -5067,10 +5040,6 @@ packages:
 
   '@types/trusted-types@2.0.7':
     resolution: {integrity: sha512-ScaPdn1dQczgbl0QFTeTOmVHFULt394XJgOQNoyVhZ6r2vLnMLJfBPd53SB52T/3G36VI1/g2MZaX0cwDuXsfw==}
-
-  '@types/uuid@11.0.0':
-    resolution: {integrity: sha512-HVyk8nj2m+jcFRNazzqyVKiZezyhDKrGUA3jlEcg/nZ6Ms+qHwocba1Y/AaVaznJTAM9xpdFSh+ptbNrhOGvZA==}
-    deprecated: This is a stub types definition. uuid provides its own type definitions, so you do not need this installed.
 
   '@typescript-eslint/eslint-plugin@8.62.0':
     resolution: {integrity: sha512-o+mpz7EYiMzXoySXiKmzlabIvTVqUuK5yLrAedRPRDA0IpPFMUV1IXt6OqljIxX/kumN6EjUYp41Hqelh6p/Dw==}
@@ -11209,10 +11178,6 @@ snapshots:
     dependencies:
       undici-types: 7.24.6
 
-  '@types/nodemailer@6.4.24':
-    dependencies:
-      '@types/node': 25.9.2
-
   '@types/nodemailer@8.0.1':
     dependencies:
       '@types/node': 25.9.2
@@ -11246,10 +11211,6 @@ snapshots:
 
   '@types/trusted-types@2.0.7':
     optional: true
-
-  '@types/uuid@11.0.0':
-    dependencies:
-      uuid: 9.0.1
 
   '@typescript-eslint/eslint-plugin@8.62.0(@typescript-eslint/parser@8.62.0(eslint@10.6.0(jiti@2.7.0))(typescript@6.0.3))(eslint@10.6.0(jiti@2.7.0))(typescript@6.0.3)':
     dependencies:

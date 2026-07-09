@@ -30,11 +30,6 @@ vi.mock("~/utils/image/upload-logo", () => ({
   uploadLogo: vi.fn(),
 }));
 
-vi.mock("~/app/_components/forms/location-event-form", () => ({
-  LocationEventForm: () => null,
-  FormDebugData: () => null,
-}));
-
 vi.mock("~/app/_components/forms/create-event-request-form", () => ({
   CreateEventRequestForm: () => null,
 }));

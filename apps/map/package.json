@@ -27,7 +27,6 @@
     "@acme/ui": "workspace:*",
     "@acme/validators": "workspace:*",
     "@auth/core": "catalog:",
-    "@hookform/resolvers": "catalog:",
     "@orpc/client": "catalog:",
     "@orpc/server": "catalog:",
     "@orpc/tanstack-query": "catalog:",

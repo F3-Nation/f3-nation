@@ -44,37 +44,6 @@ export enum ModalType {
   MOVE_EVENT_TO_NEW_AO = "MOVE_EVENT_TO_NEW_AO",
 }
 
-export enum DeleteType {
-  EVENT = "EVENT",
-}
-
-export const eventDefaults = {
-  newEventId: -1,
-  workoutName: "",
-  startTime: "0530",
-  endTime: "0615",
-  dayOfWeek: null,
-  eventTypeIds: [1],
-  eventDescription: "",
-  newAoId: null,
-  aoWebsite: "",
-};
-
-export const locationDefaults = {
-  locationId: null,
-  locationAddress: "",
-  locationAddress2: "",
-  locationCity: "",
-  locationState: "",
-  locationZip: "",
-  locationCountry: "",
-  locationDescription: "",
-  aoName: "",
-  aoLogo: "",
-  newRegionId: null,
-  regionWebsite: "",
-};
-
 export interface DataType {
   [ModalType.LOADING]: null;
   [ModalType.HOW_TO_JOIN]: { content?: ReactNode };
