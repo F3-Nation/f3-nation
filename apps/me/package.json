@@ -23,6 +23,7 @@
     "@acme/sso": "workspace:*",
     "@acme/storage": "workspace:*",
     "@acme/ui": "workspace:*",
+    "f3-health": "workspace:*",
     "@orpc/client": "catalog:",
     "@orpc/server": "catalog:",
     "@t3-oss/env-nextjs": "catalog:",

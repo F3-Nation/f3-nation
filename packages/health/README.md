@@ -52,6 +52,26 @@ return Response.json(payload, {
 });
 ```
 
+## HTTP requirements
+
+The health contract covers the JSON response body, not the HTTP framework used
+to send it. Every `/health` endpoint using this package must:
+
+- return HTTP `200`
+- return JSON matching `healthResponseSchema`
+- set `Cache-Control: no-store`
+
+`f3-health` does not enforce transport headers directly because the package is
+intentionally framework-agnostic and must remain usable outside Next.js,
+including from non-JavaScript stacks. Header enforcement therefore belongs in
+each service endpoint implementation and its tests.
+
+Recommended endpoint test assertions:
+
+- response status is `200`
+- `Cache-Control` header equals `no-store`
+- response body validates with `healthResponseSchema`
+
 ## Exports
 
 - `HEALTH_CONTRACT_VERSION`
