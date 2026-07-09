@@ -1,7 +1,5 @@
 import { fetchContractStatus, STATUS_TARGETS } from "@/lib/status";
 
-export const dynamic = "force-dynamic";
-
 function statusTone(status: "ok" | "degraded" | "down") {
   switch (status) {
     case "ok":

@@ -4,7 +4,7 @@ import {
 } from "@f3nation/health";
 import type { HealthResponse, HealthStatus } from "@f3nation/health";
 
-export type HealthFailureReason =
+type HealthFailureReason =
   | "unreachable"
   | "invalid_json"
   | "invalid_contract"
@@ -19,7 +19,7 @@ export interface ContractStatusTarget {
 
 export type StatusTarget = ContractStatusTarget;
 
-export interface ContractStatusSuccess {
+interface ContractStatusSuccess {
   ok: true;
   target: ContractStatusTarget;
   source: "contract";
@@ -27,7 +27,7 @@ export interface ContractStatusSuccess {
   data: HealthResponse;
 }
 
-export interface ContractStatusFailure {
+interface ContractStatusFailure {
   ok: false;
   target: ContractStatusTarget;
   source: "contract";
