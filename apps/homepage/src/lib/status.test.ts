@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   CURRENT_HEALTH_CONTRACT_MAJOR,
@@ -45,6 +45,9 @@ function makePayload(overrides: Partial<Record<string, unknown>> = {}) {
 }
 
 describe("homepage status ingestion", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
   it("maps network failures to unreachable", async () => {
     const fetchImpl = vi
       .fn()
@@ -78,7 +81,6 @@ describe("homepage status ingestion", () => {
       status: "down",
       reason: "unreachable",
     });
-    vi.useRealTimers();
   });
 
   it("maps malformed JSON to invalid_json", async () => {
@@ -201,7 +203,6 @@ describe("homepage status ingestion", () => {
       status: "down",
       reason: "unreachable",
     });
-    vi.useRealTimers();
   });
 
   it("maps invalid external monitor config to invalid_monitor_config", async () => {

@@ -45,12 +45,16 @@ export function StatusDashboardClient() {
 
     async function loadStatus() {
       const endpoint = statusEndpointUrl();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10_000);
 
       try {
         const response = await fetch(endpoint, {
           method: "GET",
           headers: { Accept: "application/json" },
+          signal: controller.signal,
         });
+        clearTimeout(timeoutId);
 
         if (!response.ok) {
           throw new Error(`${endpoint} returned HTTP ${response.status}`);
@@ -70,6 +74,7 @@ export function StatusDashboardClient() {
         setData(json as StatusApiResponse);
         setError(null);
       } catch (err) {
+        clearTimeout(timeoutId);
         if (!isMounted) return;
 
         if (err instanceof Error) {

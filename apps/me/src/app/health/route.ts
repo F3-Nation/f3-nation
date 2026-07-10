@@ -31,6 +31,7 @@ async function checkUpstreamApi(): Promise<CheckRunnerResult> {
       method: "GET",
       headers: { Accept: "application/json" },
       cache: "no-store",
+      signal: AbortSignal.timeout(CHECK_TIMEOUT_MS),
     });
 
     if (response.ok) {

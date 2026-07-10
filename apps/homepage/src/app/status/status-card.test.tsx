@@ -119,4 +119,31 @@ describe("status card rendering", () => {
     expect(html).toContain("Provider status:");
     expect(html).toContain("Active incidents:");
   });
+
+  it("renders external monitor failure with reason and source label", () => {
+    const result: StatusResult = {
+      ok: false,
+      source: "external",
+      target: {
+        id: "slack",
+        label: "Slack",
+        url: "https://status.slack.com",
+        source: "external",
+        provider: "slack",
+        apiUrl: "https://slack-status.com/api/v2.0.0/current",
+      },
+      status: "down",
+      reason: "unreachable",
+    };
+
+    const html = renderToStaticMarkup(
+      React.createElement(StatusCard, { result }),
+    );
+
+    expect(html).toContain("Status: DOWN");
+    expect(html).toContain("Reason:");
+    expect(html).toContain("unreachable");
+    expect(html).toContain("Source:");
+    expect(html).toContain("external");
+  });
 });

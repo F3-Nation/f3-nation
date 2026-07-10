@@ -290,7 +290,18 @@ async function fetchContractStatus(
     };
   }
 
-  const bodyText = await response.text();
+  let bodyText: string;
+  try {
+    bodyText = await response.text();
+  } catch {
+    return {
+      ok: false,
+      source: "contract",
+      target,
+      status: "down",
+      reason: "unreachable",
+    };
+  }
 
   let raw: unknown;
   try {
@@ -308,26 +319,32 @@ async function fetchContractStatus(
   return parseContractStatusResponse(target, raw, currentContractMajor);
 }
 
+const SLACK_DOWN_STATUSES = new Set([
+  "outage",
+  "major_outage",
+  "critical",
+  "down",
+]);
+const SLACK_DEGRADED_STATUSES = new Set([
+  "active",
+  "degraded",
+  "partial_outage",
+  "minor_outage",
+  "notice",
+  "warning",
+]);
+
 function mapSlackStatus(status: string, incidents: number): HealthStatus {
   const normalized = status.trim().toLowerCase();
   if (normalized === "ok") {
     return incidents > 0 ? "degraded" : "ok";
   }
 
-  if (["outage", "major_outage", "critical", "down"].includes(normalized)) {
+  if (SLACK_DOWN_STATUSES.has(normalized)) {
     return "down";
   }
 
-  if (
-    [
-      "active",
-      "degraded",
-      "partial_outage",
-      "minor_outage",
-      "notice",
-      "warning",
-    ].includes(normalized)
-  ) {
+  if (SLACK_DEGRADED_STATUSES.has(normalized)) {
     return "degraded";
   }
 
@@ -418,7 +435,18 @@ async function fetchExternalStatus(
     };
   }
 
-  const bodyText = await response.text();
+  let bodyText: string;
+  try {
+    bodyText = await response.text();
+  } catch {
+    return {
+      ok: false,
+      source: "external",
+      target,
+      status: "down",
+      reason: "unreachable",
+    };
+  }
 
   let raw: unknown;
   try {

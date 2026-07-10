@@ -137,21 +137,32 @@ export function parseContractStatusResponse(
   };
 }
 
+async function fetchWithTimeout(
+  url: string,
+  fetchImpl: typeof fetch,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), STATUS_FETCH_TIMEOUT_MS);
+  try {
+    return await fetchImpl(url, {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function fetchContractStatus(
   target: ContractStatusTarget,
   fetchImpl: typeof fetch = fetch,
   currentContractMajor = CURRENT_HEALTH_CONTRACT_MAJOR,
 ): Promise<StatusResult> {
   let response: Response;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), STATUS_FETCH_TIMEOUT_MS);
 
   try {
-    response = await fetchImpl(target.url, {
-      headers: { Accept: "application/json" },
-      cache: "no-store",
-      signal: controller.signal,
-    });
+    response = await fetchWithTimeout(target.url, fetchImpl);
   } catch {
     return {
       ok: false,
@@ -160,8 +171,6 @@ export async function fetchContractStatus(
       status: "down",
       reason: "unreachable",
     };
-  } finally {
-    clearTimeout(timeout);
   }
 
   const bodyText = await response.text();
@@ -279,15 +288,9 @@ export async function fetchExternalStatus(
   }
 
   let response: Response;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), STATUS_FETCH_TIMEOUT_MS);
 
   try {
-    response = await fetchImpl(target.apiUrl, {
-      headers: { Accept: "application/json" },
-      cache: "no-store",
-      signal: controller.signal,
-    });
+    response = await fetchWithTimeout(target.apiUrl, fetchImpl);
   } catch {
     return {
       ok: false,
@@ -296,8 +299,6 @@ export async function fetchExternalStatus(
       status: "down",
       reason: "unreachable",
     };
-  } finally {
-    clearTimeout(timeout);
   }
 
   const bodyText = await response.text();

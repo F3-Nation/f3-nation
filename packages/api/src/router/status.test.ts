@@ -50,6 +50,14 @@ function buildSlackOkResponse() {
   );
 }
 
+function getUrl(input: string | URL | Request): string {
+  return typeof input === "string"
+    ? input
+    : input instanceof URL
+      ? input.toString()
+      : input.url;
+}
+
 describe("Status Router", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -64,12 +72,7 @@ describe("Status Router", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn((input: string | URL | Request) => {
-        const url =
-          typeof input === "string"
-            ? input
-            : input instanceof URL
-              ? input.toString()
-              : input.url;
+        const url = getUrl(input);
 
         if (url.includes("/health")) {
           return buildContractOkResponse();
@@ -109,12 +112,7 @@ describe("Status Router", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn((input: string | URL | Request) => {
-        const url =
-          typeof input === "string"
-            ? input
-            : input instanceof URL
-              ? input.toString()
-              : input.url;
+        const url = getUrl(input);
 
         if (url.includes("/health")) {
           return Promise.reject(new Error("offline"));
@@ -144,12 +142,7 @@ describe("Status Router", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn((input: string | URL | Request) => {
-        const url =
-          typeof input === "string"
-            ? input
-            : input instanceof URL
-              ? input.toString()
-              : input.url;
+        const url = getUrl(input);
 
         if (url.includes("/health")) {
           return Promise.resolve(new Response("not json", { status: 200 }));
@@ -177,12 +170,7 @@ describe("Status Router", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn((input: string | URL | Request) => {
-        const url =
-          typeof input === "string"
-            ? input
-            : input instanceof URL
-              ? input.toString()
-              : input.url;
+        const url = getUrl(input);
 
         if (url.includes("/health")) {
           return Promise.resolve(
@@ -212,12 +200,7 @@ describe("Status Router", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn((input: string | URL | Request) => {
-        const url =
-          typeof input === "string"
-            ? input
-            : input instanceof URL
-              ? input.toString()
-              : input.url;
+        const url = getUrl(input);
 
         if (url.includes("/health")) {
           return Promise.resolve(
@@ -225,7 +208,7 @@ describe("Status Router", () => {
               JSON.stringify({
                 service: "f3-me",
                 version: "test",
-                contractVersion: "3.0.0",
+                contractVersion: "999.0.0",
                 status: "ok",
                 timestamp: "2026-07-09T12:00:00.000Z",
                 durationMs: 10,
@@ -261,12 +244,7 @@ describe("Status Router", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn((input: string | URL | Request) => {
-        const url =
-          typeof input === "string"
-            ? input
-            : input instanceof URL
-              ? input.toString()
-              : input.url;
+        const url = getUrl(input);
 
         if (url.includes("/health")) {
           return Promise.resolve(buildContractOkResponse());
@@ -289,6 +267,38 @@ describe("Status Router", () => {
     });
     expect(mockLogWarn).toHaveBeenCalledWith(
       "api.status.poll_invalid_json",
+      expect.objectContaining({ targetId: "slack", source: "external" }),
+    );
+  });
+
+  it("maps external fetch errors to unreachable and emits warning log", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: string | URL | Request) => {
+        const url = getUrl(input);
+
+        if (url.includes("/health")) {
+          return Promise.resolve(buildContractOkResponse());
+        }
+
+        return Promise.reject(new Error("network down"));
+      }),
+    );
+
+    const client = createTestClient();
+    const result = await client.status();
+    const external = result.results.find(
+      (entry) => entry.target.id === "slack",
+    );
+
+    expect(external).toMatchObject({
+      ok: false,
+      source: "external",
+      status: "down",
+      reason: "unreachable",
+    });
+    expect(mockLogWarn).toHaveBeenCalledWith(
+      "api.status.poll_unreachable",
       expect.objectContaining({ targetId: "slack", source: "external" }),
     );
   });
