@@ -784,13 +784,15 @@ describe("Request Router", () => {
         id: testRequest.id,
       });
 
-      // Verify it's rejected
+      // Verify it's rejected and the reviewer is stamped
       const [rejectedRequest] = await db
         .select()
         .from(schema.updateRequests)
         .where(eq(schema.updateRequests.id, testRequest.id));
 
       expect(rejectedRequest?.status).toBe("rejected");
+      expect(rejectedRequest?.reviewedBy).toBe("admin@example.com");
+      expect(rejectedRequest?.reviewedAt).not.toBeNull();
     });
 
     it("should require editor permission to reject", async () => {

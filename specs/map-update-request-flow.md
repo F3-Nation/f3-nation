@@ -157,8 +157,9 @@ Tiers from `packages/api/src/shared.ts`; per-org scoping via
   events).
 - Rate limiting beyond the existing per-IP limiter; per-user submission caps.
 - The admin app's other management surfaces (users, roles, event types).
-- Mandatory reviewer attribution on approve/reject (`reviewed_by` stays
-  optional for now; may revisit for audit later).
+- Schema-level enforcement of reviewer attribution (`reviewed_by` is stamped
+  from the session on both approve and reject, but the column stays nullable
+  for pre-existing rows).
 
 ## 8. Critical-path test cases
 

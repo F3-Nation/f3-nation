@@ -987,7 +987,11 @@ export const requestRouter = {
       }
       await ctx.db
         .update(schema.updateRequests)
-        .set({ status: "rejected" })
+        .set({
+          status: "rejected",
+          reviewedBy: ctx.session?.user?.email ?? null,
+          reviewedAt: new Date().toISOString(),
+        })
         .where(eq(schema.updateRequests.id, input.id));
 
       return {
