@@ -35,6 +35,7 @@ import {
   UserStatus,
 } from "@acme/shared/app/enums";
 import type {
+  AchievementAwardMeta,
   AttendanceMeta,
   EventMeta,
   LocationMeta,
@@ -858,6 +859,7 @@ export const achievementsXUsers = pgTable(
     dateAwarded: timestamp("date_awarded", { mode: "string" })
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
+    meta: jsonb().$type<AchievementAwardMeta>(),
   },
   (table) => [
     foreignKey({
