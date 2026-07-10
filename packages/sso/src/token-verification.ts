@@ -187,74 +187,83 @@ export async function verifyJwtWithJwks<
   token: string,
   options: VerifyJwtWithJwksOptions,
 ): Promise<JwtVerificationResult<TPayload>> {
-  validateAuthServerUrl(options.authServerUrl);
-
-  const skewSeconds = options.skewSeconds ?? DEFAULT_CLOCK_SKEW_SECONDS;
-  const issuer = options.issuer ?? options.authServerUrl;
-  const audience = options.audience ?? options.clientId;
-  const allowClientIdClaimFallback =
-    options.allowClientIdClaimFallback ?? false;
-
-  if (!parseJwtPayload(token)) {
-    return {
-      ok: false,
-      code: "invalid_token",
-      message: "Token is malformed",
-    };
-  }
-
-  if (isJwtExpired(token, skewSeconds)) {
-    return { ok: false, code: "expired", message: "Token expired" };
-  }
-
-  let strictError: unknown;
-
   try {
-    const { payload } = await jwtVerify(token, getJwksResolver(options), {
-      algorithms: ["RS256"],
-      issuer,
-      ...(audience ? { audience } : {}),
-    });
+    validateAuthServerUrl(options.authServerUrl);
 
-    return { ok: true, payload: payload as TPayload };
-  } catch (error) {
-    strictError = error;
-  }
+    const skewSeconds = options.skewSeconds ?? DEFAULT_CLOCK_SKEW_SECONDS;
+    const issuer = options.issuer ?? options.authServerUrl;
+    const audience = options.audience ?? options.clientId;
+    const allowClientIdClaimFallback =
+      options.allowClientIdClaimFallback ?? false;
 
-  const isAudienceMismatch =
-    strictError instanceof Error &&
-    (strictError as Error & { code?: string }).code ===
-      "ERR_JWT_CLAIM_VALIDATION_FAILED" &&
-    (strictError as Error & { claim?: string }).claim === "aud";
+    if (!parseJwtPayload(token)) {
+      return {
+        ok: false,
+        code: "invalid_token",
+        message: "Token is malformed",
+      };
+    }
 
-  if (
-    allowClientIdClaimFallback &&
-    options.clientId &&
-    !options.audience &&
-    isAudienceMismatch
-  ) {
+    if (isJwtExpired(token, skewSeconds)) {
+      return { ok: false, code: "expired", message: "Token expired" };
+    }
+
+    let strictError: unknown;
+
     try {
       const { payload } = await jwtVerify(token, getJwksResolver(options), {
         algorithms: ["RS256"],
         issuer,
+        ...(audience ? { audience } : {}),
       });
 
-      if (payload.client_id !== options.clientId) {
-        return {
-          ok: false,
-          code: "audience_mismatch",
-          message: "Token audience fallback client_id mismatch",
-        };
-      }
-
       return { ok: true, payload: payload as TPayload };
-    } catch {
-      // Preserve strict failure semantics for deterministic behavior.
+    } catch (error) {
+      strictError = error;
     }
-  }
 
-  const classified = classifyVerificationError(strictError);
-  return { ok: false, ...classified };
+    const isAudienceMismatch =
+      strictError instanceof Error &&
+      (strictError as Error & { code?: string }).code ===
+        "ERR_JWT_CLAIM_VALIDATION_FAILED" &&
+      (strictError as Error & { claim?: string }).claim === "aud";
+
+    if (
+      allowClientIdClaimFallback &&
+      options.clientId &&
+      !options.audience &&
+      isAudienceMismatch
+    ) {
+      try {
+        const { payload } = await jwtVerify(token, getJwksResolver(options), {
+          algorithms: ["RS256"],
+          issuer,
+        });
+
+        if (payload.client_id !== options.clientId) {
+          return {
+            ok: false,
+            code: "audience_mismatch",
+            message: "Token audience fallback client_id mismatch",
+          };
+        }
+
+        return { ok: true, payload: payload as TPayload };
+      } catch {
+        // Preserve strict failure semantics for deterministic behavior.
+      }
+    }
+
+    const classified = classifyVerificationError(strictError);
+    return { ok: false, ...classified };
+  } catch (error) {
+    return {
+      ok: false,
+      code: "invalid_token",
+      message:
+        error instanceof Error ? error.message : "Token verification failed",
+    };
+  }
 }
 
 export async function verifyJwtPayload<
@@ -268,7 +277,7 @@ export async function verifyAccessToken(
   token: string,
   authServerUrl: string,
   clientId: string,
-  allowClientIdClaimFallback = true,
+  allowClientIdClaimFallback = false,
 ): Promise<VerifyAccessTokenResult> {
   try {
     const result = await verifyJwtWithJwks(token, {

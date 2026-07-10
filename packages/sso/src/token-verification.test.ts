@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   isJwtExpired,
   parseJwtPayload,
+  verifyAccessToken,
   verifyJwtWithJwks,
 } from "./token-verification";
 
@@ -261,6 +262,20 @@ describe("token verification", () => {
     });
     expect(jwtVerifyMock).not.toHaveBeenCalled();
   });
+
+  it("returns invalid_token instead of throwing for misconfigured authServerUrl", async () => {
+    const result = await verifyJwtWithJwks(makeToken({ sub: "123" }), {
+      authServerUrl: "http://auth.example.com",
+      clientId: "web-client",
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      code: "invalid_token",
+      message: "authServerUrl must use https:// outside localhost",
+    });
+    expect(jwtVerifyMock).not.toHaveBeenCalled();
+  });
 });
 
 describe("token parsing helpers", () => {
@@ -272,5 +287,33 @@ describe("token parsing helpers", () => {
   it("marks token expired when exp is missing", () => {
     const token = makeToken({ sub: "123" });
     expect(isJwtExpired(token)).toBe(true);
+  });
+});
+
+describe("verifyAccessToken", () => {
+  beforeEach(() => {
+    jwtVerifyMock.mockReset();
+  });
+
+  it("keeps client_id fallback opt-in by default", async () => {
+    const token = makeToken({ sub: "123", exp: 1_900_000_000 });
+    const audError = makeClaimValidationError("aud");
+
+    jwtVerifyMock.mockRejectedValueOnce(audError).mockResolvedValueOnce({
+      payload: { sub: "123", client_id: "web-client" },
+    });
+
+    const result = await verifyAccessToken(
+      token,
+      "https://auth.example.com",
+      "web-client",
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      code: "audience_mismatch",
+      error: "Token audience mismatch",
+    });
+    expect(jwtVerifyMock).toHaveBeenCalledTimes(1);
   });
 });

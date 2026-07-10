@@ -855,7 +855,8 @@ if (!payload) {
 
 If you need structured failure reasons (for metrics/debugging), use
 `verifyJwtWithJwks(...)` which returns `{ ok: false, code, message }` on
-verification failures.
+verification failures, including misconfiguration/runtime errors that would
+otherwise have thrown.
 
 If you prefer a stricter server-side boundary, use the package-provided
 `verifyAccessToken(...)` helper.
@@ -886,6 +887,10 @@ if (!verification.ok) {
   });
 }
 ```
+
+The optional fourth argument is the `client_id` fallback. Leave it out for
+strict audience matching; pass `true` only for apps that intentionally accept
+that fallback path.
 
 ---
 
