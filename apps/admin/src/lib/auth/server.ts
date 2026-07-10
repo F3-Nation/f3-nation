@@ -1,20 +1,40 @@
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { verifyAccessToken } from "@acme/sso";
 
 import { routes } from "@acme/shared/app/constants";
 
 import { ACCESS_TOKEN_COOKIE_NAME } from "./constants";
 import type { AdminSession } from "./session";
-import { verifyAccessTokenPayload } from "./tokens";
+import { env } from "~/env";
+import { logDebug, logWarn } from "~/lib/logging";
 import { getMyProfile } from "~/lib/api/client";
 
 const NO_ADMIN_ACCESS_PATH = `${routes.admin.noAccess.__path}?reason=no-admin-access`;
 
 const getCachedSessionPayload = cache(async (accessToken: string) => {
-  const payload = await verifyAccessTokenPayload(accessToken);
+  const result = await verifyAccessToken(
+    accessToken,
+    env.AUTH_PROVIDER_URL,
+    env.OAUTH_CLIENT_ID,
+    true,
+  );
 
-  if (!payload?.sub || !payload.email) return null;
+  if (!result.ok) {
+    if (result.code === "expired") {
+      logDebug("admin.auth.session_token_expired", {});
+    } else {
+      logWarn("admin.auth.session_verify_failed", {
+        code: result.code ?? "misconfigured",
+        message: result.error,
+      });
+    }
+    return null;
+  }
+
+  const payload = result.payload;
+  if (!payload.sub || !payload.email) return null;
 
   const id = Number(payload.sub);
   if (!Number.isFinite(id) || id <= 0) return null;

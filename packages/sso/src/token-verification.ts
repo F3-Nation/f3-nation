@@ -34,6 +34,7 @@ export type JwtVerificationResult<TPayload extends JWTPayload = JWTPayload> =
 export type VerifyAccessTokenResult =
   | {
       ok: true;
+      payload: AccessTokenPayload;
     }
   | {
       ok: false;
@@ -287,7 +288,14 @@ export async function verifyAccessToken(
     });
 
     if (result.ok) {
-      return { ok: true };
+      if (!isAccessTokenPayload(result.payload)) {
+        return {
+          ok: false,
+          code: "invalid_claims",
+          error: "Token payload missing required sub claim",
+        };
+      }
+      return { ok: true, payload: result.payload };
     }
 
     return {

@@ -875,18 +875,32 @@ const verification = await verifyAccessToken(
   accessToken,
   process.env.AUTH_PROVIDER_URL!,
   process.env.OAUTH_CLIENT_ID!,
-  true,
+  true, // allowClientIdClaimFallback — omit for strict audience matching
 );
 
 if (!verification.ok) {
-  // verification.code is optional (for example, config/runtime errors may only
-  // provide verification.error).
-  logWarn("app.auth.access_token_verify_failed", {
-    code: verification.code ?? "misconfigured",
-    message: verification.error,
-  });
+  if (verification.code === "expired") {
+    // Normal expiry — token will be refreshed by middleware; log at debug.
+    logDebug("app.auth.access_token_expired", {});
+  } else {
+    // Unexpected failure: bad signature, JWKS down, misconfiguration, etc.
+    logWarn("app.auth.access_token_verify_failed", {
+      code: verification.code ?? "misconfigured",
+      message: verification.error,
+    });
+  }
+} else {
+  // verification.payload is a typed AccessTokenPayload (sub, email, …).
+  // isAccessTokenPayload() has already been checked internally — sub is
+  // guaranteed to be a non-empty string.
+  const { sub, email } = verification.payload;
 }
 ```
+
+The `isAccessTokenPayload` guard (non-empty string `sub`) is enforced inside
+`verifyAccessToken` — if the JWT verifies but lacks a valid `sub` the result is
+`{ ok: false, code: "invalid_claims", … }`. You do not need to re-check it at
+the call site.
 
 The optional fourth argument is the `client_id` fallback. Leave it out for
 strict audience matching; pass `true` only for apps that intentionally accept

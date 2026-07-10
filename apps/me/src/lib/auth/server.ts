@@ -1,8 +1,10 @@
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { verifyAccessToken } from "@acme/sso";
 import { ACCESS_TOKEN_COOKIE_NAME } from "@/lib/auth/constants";
-import { verifyAccessTokenPayload } from "@/lib/auth/tokens";
+import { env } from "@/env";
+import { logDebug, logWarn } from "@/lib/logging";
 
 export interface SessionPayload {
   // SSO subject is represented as a string in token/userinfo payloads.
@@ -22,8 +24,27 @@ export interface SessionPayload {
  * only the first request per cold-start incurs a network round-trip.
  */
 const getCachedSessionPayload = cache(async (accessToken: string) => {
-  const payload = await verifyAccessTokenPayload(accessToken);
-  if (!payload?.sub || !payload?.email) return null;
+  const result = await verifyAccessToken(
+    accessToken,
+    env.AUTH_PROVIDER_URL,
+    env.OAUTH_CLIENT_ID,
+    true,
+  );
+
+  if (!result.ok) {
+    if (result.code === "expired") {
+      logDebug("me.auth.session_token_expired", {});
+    } else {
+      logWarn("me.auth.session_verify_failed", {
+        code: result.code ?? "misconfigured",
+        message: result.error,
+      });
+    }
+    return null;
+  }
+
+  const payload = result.payload;
+  if (!payload.sub || !payload.email) return null;
 
   const userId = Number(payload.sub);
   if (!Number.isFinite(userId) || userId <= 0) return null;

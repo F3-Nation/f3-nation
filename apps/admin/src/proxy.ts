@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { verifyAccessToken } from "@acme/sso";
 
 import { routes } from "@acme/shared/app/constants";
 
@@ -10,8 +11,8 @@ import {
   REFRESH_TOKEN_MAX_AGE,
 } from "~/lib/auth/constants";
 import { refreshToken } from "~/lib/auth/oauth";
-import { verifyAccessTokenPayload } from "~/lib/auth/tokens";
-import { logWarn } from "~/lib/logging";
+import { env } from "~/env";
+import { logDebug, logWarn } from "~/lib/logging";
 
 const PUBLIC_PATHS = ["/auth/sign-in", routes.admin.noAccess.__path];
 const STATIC_ASSET_PATTERN =
@@ -145,9 +146,28 @@ export async function proxy(request: NextRequest) {
     REFRESH_TOKEN_COOKIE_NAME,
   )?.value;
 
+  async function checkToken(token: string) {
+    const result = await verifyAccessToken(
+      token,
+      env.AUTH_PROVIDER_URL,
+      env.OAUTH_CLIENT_ID,
+      true,
+    );
+    if (!result.ok) {
+      if (result.code === "expired") {
+        logDebug("admin.auth.access_token_expired", {});
+      } else {
+        logWarn("admin.auth.access_token_verify_failed", {
+          code: result.code ?? "misconfigured",
+          message: result.error,
+        });
+      }
+    }
+    return result;
+  }
+
   if (accessToken) {
-    const payload = await verifyAccessTokenPayload(accessToken);
-    if (payload) {
+    if ((await checkToken(accessToken)).ok) {
       return NextResponse.next({
         request: { headers: getRequestHeadersWithPath(request) },
       });
@@ -169,8 +189,7 @@ export async function proxy(request: NextRequest) {
         throw new Error("Refreshed access token missing");
       }
 
-      const payload = await verifyAccessTokenPayload(tokens.accessToken);
-      if (!payload) {
+      if (!(await checkToken(tokens.accessToken)).ok) {
         throw new Error("Refreshed access token verification failed");
       }
 

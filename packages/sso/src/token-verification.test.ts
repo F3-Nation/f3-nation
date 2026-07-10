@@ -295,6 +295,49 @@ describe("verifyAccessToken", () => {
     jwtVerifyMock.mockReset();
   });
 
+  it("returns ok with typed payload on success", async () => {
+    const token = makeToken({
+      sub: "42",
+      email: "test@f3.com",
+      exp: 1_900_000_000,
+    });
+
+    jwtVerifyMock.mockResolvedValueOnce({
+      payload: { sub: "42", email: "test@f3.com", exp: 1_900_000_000 },
+    });
+
+    const result = await verifyAccessToken(
+      token,
+      "https://auth.example.com",
+      "web-client",
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      payload: { sub: "42", email: "test@f3.com", exp: 1_900_000_000 },
+    });
+  });
+
+  it("returns invalid_claims when payload sub is not a string", async () => {
+    const token = makeToken({ sub: 42, exp: 1_900_000_000 });
+
+    jwtVerifyMock.mockResolvedValueOnce({
+      payload: { sub: 42, exp: 1_900_000_000 },
+    });
+
+    const result = await verifyAccessToken(
+      token,
+      "https://auth.example.com",
+      "web-client",
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      code: "invalid_claims",
+      error: "Token payload missing required sub claim",
+    });
+  });
+
   it("keeps client_id fallback opt-in by default", async () => {
     const token = makeToken({ sub: "123", exp: 1_900_000_000 });
     const audError = makeClaimValidationError("aud");
