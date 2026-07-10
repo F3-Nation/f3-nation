@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 from citext import CIText
 from sqlalchemy import (
     ARRAY,
-    JSON,
+    # JSON,
     REAL,
     TEXT,
     TIME,
@@ -251,7 +251,7 @@ class Base(DeclarativeBase):
     """
 
     type_annotation_map = {
-        Dict[str, Any]: JSON,
+        Dict[str, Any]: JSONB,
     }
 
     def get_id(self):
@@ -1242,8 +1242,8 @@ class Achievement(Base):
     auto_cadence: Mapped[Optional[Achievement_Cadence]]
     auto_threshold_type: Mapped[Optional[str]]
     auto_threshold: Mapped[Optional[int]]
-    auto_filters: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, default=dict)
-    meta: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, default=dict)
+    auto_filters: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, default=dict)
+    meta: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, default=dict)
     created: Mapped[dt_create]
     updated: Mapped[dt_update]
 
@@ -1675,7 +1675,7 @@ class CodexUserSubmission(Base):
 
     id: Mapped[intpk]
     submission_type: Mapped[str]
-    data: Mapped[Dict[str, Any]] = mapped_column(JSON)
+    data: Mapped[Dict[str, Any]] = mapped_column(JSONB)
     submitter_name: Mapped[Optional[str]]
     submitter_email: Mapped[Optional[str]]
     submitter_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"))
