@@ -952,7 +952,7 @@ class BlockView:
                 res = client.views_update(external_id=actions.DEBUG_FORM_EXTERNAL_ID, view=view)
             else:
                 res = client.views_update(view_id=view_id, view=view)
-        except Exception as e:
+        except Exception:
             # TODO: handle "not found" errors; post new instead of update?
             res = None
 
