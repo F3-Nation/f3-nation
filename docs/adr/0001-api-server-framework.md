@@ -3,12 +3,7 @@
 - **Status:** Accepted (implementation tracked in epic
   [#644](https://github.com/F3-Nation/f3-nation/issues/644))
 - **Date:** 2026-07-09
-- **Deciders:** F3 Nation maintainers
-
-> This is the repository's first Architecture Decision Record. ADRs live in
-> `docs/adr/` and record significant, hard-to-reverse technical decisions with
-> their context and rejected alternatives. Feature behavior specs belong in
-> `/specs`; decisions about _how the system is built_ belong here.
+- **Deciders:** @taterhead247, @BigGillyStyle, @evanpetzoldt
 
 ## Context
 
@@ -126,6 +121,31 @@ independently shippable phases (epic
   splitting with instant rollback to the Next revision, then the final
   deletion of every Next/React dependency
   ([#650](https://github.com/F3-Nation/f3-nation/issues/650)).
+
+## Authentication impact
+
+The API accepts several kinds of credentials today. Surface by surface, what
+the migration changes:
+
+| Who                                           | How they authenticate today                                                          | After the migration                                                                                                                         |
+| --------------------------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Map users (map.f3nation.com)                  | next-auth session cookie, forwarded to the API by the map's proxy                    | Unchanged — the same cookie is accepted. Phase 0b (#646) re-implements the cookie decode without Next.js, proven identical before it ships. |
+| Bare API tokens (scripts, integrations)       | `Authorization: Bearer <key>` + `Client` header, checked against the database        | Unchanged — this code lives in `packages/api` and never touched Next.js.                                                                    |
+| me / admin (via `packages/sso` + `apps/auth`) | OAuth login against `apps/auth`, which issues an RS256 JWT the API verifies via JWKS | Unchanged — the JWT verification moves to Hono verbatim. `apps/auth` and `packages/sso` are not touched at all.                             |
+| API `/docs` (Scalar UI) + `openapi.json`      | Public, no authentication                                                            | Still public — the route moves to Hono with no auth added or removed.                                                                       |
+
+Two further points:
+
+- **Migrating map and the API to `packages/sso` later (#576, #598) remains
+  fully possible** — and Phase 0b makes it _easier_: replacing the implicit
+  Next-only `auth()` with explicit header-based session resolution is exactly
+  the seam a future auth-provider swap plugs into.
+- **Verification is automatic on both sides of the change.** The
+  characterization suite (#660) runs the full credential matrix — cookies,
+  API keys, JWTs, precedence, role guards — against the Next.js server before
+  any migration code lands, and the identical tests with identical frozen
+  golden files against the Hono server after, plus a live smoke run against
+  staging at cutover. Any difference in how a credential is treated fails CI.
 
 ## Alternatives considered
 
