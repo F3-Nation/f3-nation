@@ -7,8 +7,8 @@ from application.attendance.service import AttendanceService
 from application.event_instance import EventInstanceData
 from application.event_instance.service import EventInstanceService
 from application.preblast import (
-    HC_ANNOUNCEMENT_KEY,
     HC_ANNOUNCED_META_KEY,
+    HC_ANNOUNCEMENT_KEY,
     PREBLAST_CHANNEL_META_KEY,
     PREBLAST_POST_CHANNEL_META_KEY,
     SECOND_F_CATEGORY,
@@ -167,10 +167,18 @@ class PreblastService:
             preblast_channel_id=desired_channel_id,
         )
 
-    def save_event_update(self, command: PreblastUpdateCommand) -> EventInstanceData:
+    def save_event_update(
+        self,
+        command: PreblastUpdateCommand,
+        *,
+        existing_event: EventInstanceData | None = None,
+    ) -> EventInstanceData:
         if self._event_instance_service is None:
             raise ValueError("EventInstanceService is required to save preblast updates")
-        return self._event_instance_service.update_preblast_fields(**command.model_dump())
+        payload = command.model_dump()
+        if existing_event is not None:
+            payload["existing_instance"] = existing_event
+        return self._event_instance_service.update_preblast_fields(**payload)
 
     def persist_posted_preblast(
         self,
@@ -178,14 +186,17 @@ class PreblastService:
         instance_id: int,
         preblast_ts: int | float,
         channel_id: str,
+        existing_event: EventInstanceData | None = None,
     ) -> EventInstanceData:
         if self._event_instance_service is None:
             raise ValueError("EventInstanceService is required to persist posted preblast data")
-        return self._event_instance_service.persist_posted_preblast(
-            instance_id,
-            preblast_ts=preblast_ts,
-            preblast_post_channel_id=channel_id,
-        )
+        payload: dict[str, Any] = {
+            "preblast_ts": preblast_ts,
+            "preblast_post_channel_id": channel_id,
+        }
+        if existing_event is not None:
+            payload["existing_instance"] = existing_event
+        return self._event_instance_service.persist_posted_preblast(instance_id, **payload)
 
     def add_hc(self, event_instance_id: int | str, user_id: int | str):
         if self._attendance_service is None:

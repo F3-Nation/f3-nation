@@ -7,7 +7,9 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
 
 from application.event_instance import EventInstanceData
+from application.attendance import AttendanceData, HC_TYPE_ID, Q_TYPE_ID
 from application.preblast.service import PreblastService
+from features.calendar.event_preblast import handle_event_preblast_edit
 from features.calendar.preblast_views import PREBLAST_CHANNEL_SELECTOR, PreblastViews
 from utilities.slack import actions
 from utilities.slack.sdk_orm import SdkBlockView
@@ -155,6 +157,16 @@ class PreblastViewsTest(unittest.TestCase):
         rich_block = next(b for b in result.blocks if getattr(b, "block_id", None) == actions.EVENT_PREBLAST_MOLESKINE_EDIT)
         self.assertIsNotNone(rich_block.element.initial_value)
 
+    def test_build_preblast_form_preloads_existing_coqs(self):
+        event = _event()
+        result = self._build_form(event, initial_coq_slack_ids=["UCOQ1", "UCOQ2"])
+
+        coq_block = next(
+            b for b in result.blocks
+            if getattr(b, "block_id", None) == actions.EVENT_PREBLAST_COQS
+        )
+        self.assertEqual(coq_block.element.initial_users, ["UCOQ1", "UCOQ2"])
+
     def test_build_preblast_form_uses_moleskin_template_fallback(self):
         """When event has no preblast_rich, fall back to moleskin template."""
         event = _event(preblast_rich=None)
@@ -179,6 +191,63 @@ class PreblastViewsTest(unittest.TestCase):
         result = PreblastViews.build_select_form([])
         block_ids = [getattr(b, "block_id", None) for b in result.blocks]
         self.assertIn("preblast_select_empty", block_ids)
+
+    @patch("features.calendar.event_preblast.get_user")
+    @patch("features.calendar.event_preblast.extract_state_values")
+    @patch("features.calendar.event_preblast._build_attendance_service")
+    @patch("features.calendar.event_preblast._build_event_instance_service")
+    @patch("features.calendar.event_preblast._build_preblast_service")
+    def test_handle_event_preblast_edit_preserves_existing_q_when_assigning_coq(
+        self,
+        mock_build_preblast_service,
+        mock_build_event_service,
+        mock_build_attendance_service,
+        mock_extract_state_values,
+        mock_get_user,
+    ):
+        event_id = 42
+        existing_q_user_id = 100
+        coq_user_id = 200
+        event = _event(id=event_id)
+
+        preblast_service = MagicMock()
+        preblast_service.build_update_command.return_value = object()
+        preblast_service.save_event_update.return_value = event
+        mock_build_preblast_service.return_value = preblast_service
+
+        event_service = MagicMock()
+        event_service.get_by_id.return_value = event
+        mock_build_event_service.return_value = event_service
+
+        attendance_service = MagicMock()
+        attendance_service.get_planned_for_event_instance.return_value = [
+            AttendanceData(
+                id=1,
+                event_instance_id=event_id,
+                user_id=existing_q_user_id,
+                attendance_type_ids=[HC_TYPE_ID, Q_TYPE_ID],
+            )
+        ]
+        mock_build_attendance_service.return_value = attendance_service
+
+        mock_extract_state_values.return_value = {
+            actions.EVENT_PREBLAST_COQS: ["USLACKCOQ"],
+        }
+        mock_get_user.return_value = MagicMock(user_id=coq_user_id)
+
+        body = {
+            "view": {
+                "private_metadata": f'{{"event_instance_id": {event_id}, "preblast_ts": "None"}}'
+            }
+        }
+
+        handle_event_preblast_edit(body, MagicMock(), MagicMock(), {}, MagicMock())
+
+        preblast_service.assign_qs.assert_called_once_with(
+            event_id,
+            existing_q_user_id,
+            [coq_user_id],
+        )
 
 
 if __name__ == "__main__":

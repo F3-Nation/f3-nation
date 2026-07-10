@@ -217,6 +217,15 @@ class PreblastServiceTest(unittest.TestCase):
             preblast_channel_id="CDEST",
         )
 
+    def test_save_event_update_can_reuse_existing_event(self):
+        event_service = MagicMock()
+        service = PreblastService(event_instance_service=event_service)
+        event = _event(id=55)
+        command = service.build_update_command(event, name="New Title")
+        service.save_event_update(command, existing_event=event)
+        _, kwargs = event_service.update_preblast_fields.call_args
+        self.assertEqual(kwargs["existing_instance"], event)
+
     def test_persist_posted_preblast_delegates_channel_persistence(self):
         event_service = MagicMock()
         service = PreblastService(event_instance_service=event_service)
@@ -226,6 +235,19 @@ class PreblastServiceTest(unittest.TestCase):
             preblast_ts=1234567890,
             preblast_post_channel_id="CPOST",
         )
+
+    def test_persist_posted_preblast_can_reuse_existing_event(self):
+        event_service = MagicMock()
+        service = PreblastService(event_instance_service=event_service)
+        event = _event(id=55)
+        service.persist_posted_preblast(
+            instance_id=55,
+            preblast_ts=1234567890,
+            channel_id="CPOST",
+            existing_event=event,
+        )
+        _, kwargs = event_service.persist_posted_preblast.call_args
+        self.assertEqual(kwargs["existing_instance"], event)
 
     def test_attendance_transitions_delegate_when_service_available(self):
         attendance_service = MagicMock()

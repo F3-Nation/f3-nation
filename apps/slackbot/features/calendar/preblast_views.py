@@ -60,6 +60,7 @@ class PreblastViews:
         default_channel_id: str | None = None,
         existing_preblast_ts: int | float | None = None,
         preblast_moleskin_template: Any | None = None,
+        initial_coq_slack_ids: list[str] | None = None,
     ) -> SdkBlockView:
         """Build the editable preblast form modal as an ``SdkBlockView``.
 
@@ -122,7 +123,11 @@ class PreblastViews:
         blocks.append(
             InputBlock(
                 label="Co-Qs",
-                element=UserMultiSelectElement(action_id=actions.EVENT_PREBLAST_COQS, placeholder="Select Co-Qs"),
+                element=UserMultiSelectElement(
+                    action_id=actions.EVENT_PREBLAST_COQS,
+                    placeholder="Select Co-Qs",
+                    initial_users=initial_coq_slack_ids or None,
+                ),
                 optional=True,
                 block_id=actions.EVENT_PREBLAST_COQS,
             )

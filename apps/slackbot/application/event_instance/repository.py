@@ -94,6 +94,7 @@ class EventInstanceRepository(Protocol):
         event_tag_ids: list[int] | None = None,
         meta_updates: dict | None = None,
         preblast_channel_id: str | None = None,
+        existing_instance: EventInstanceData | None = None,
     ) -> EventInstanceData:
         """Safely update preblast-related fields while preserving required crupdate fields."""
         ...
@@ -104,6 +105,7 @@ class EventInstanceRepository(Protocol):
         *,
         preblast_ts: int | float,
         preblast_post_channel_id: str,
+        existing_instance: EventInstanceData | None = None,
     ) -> EventInstanceData:
         """Persist posted Slack timestamp and actual post channel in meta."""
         ...

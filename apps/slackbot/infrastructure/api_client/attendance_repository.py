@@ -116,9 +116,13 @@ class ApiAttendanceRepository:
         return _parse_attendance(result.get("attendance") or result.get("result") or result)
 
     def assign_qs(self, event_instance_id: int, q_user_id: int | None, co_q_user_ids: list[int]) -> None:
+        payload = {"eventInstanceId": event_instance_id, "coQUserIds": co_q_user_ids}
+        if q_user_id is not None:
+            payload["qUserId"] = q_user_id
+
         self._client.put(
             "/v1/attendance/assign-q",
-            json={"eventInstanceId": event_instance_id, "qUserId": q_user_id, "coQUserIds": co_q_user_ids},
+            json=payload,
         )
 
 

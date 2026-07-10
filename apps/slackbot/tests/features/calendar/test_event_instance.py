@@ -153,7 +153,12 @@ class EventInstanceServiceTest(unittest.TestCase):
         repo.persist_posted_preblast.return_value = _make_instance(id=5, preblast_ts=1234567890)
         service = EventInstanceService(repository=repo)
         result = service.persist_posted_preblast(5, preblast_ts=1234567890, preblast_post_channel_id="C123")
-        repo.persist_posted_preblast.assert_called_once_with(5, preblast_ts=1234567890, preblast_post_channel_id="C123")
+        repo.persist_posted_preblast.assert_called_once_with(
+            5,
+            preblast_ts=1234567890,
+            preblast_post_channel_id="C123",
+            existing_instance=None,
+        )
         self.assertEqual(result.preblast_ts, 1234567890)
 
     def test_close_instance_fetches_meta_and_closes(self):
@@ -422,7 +427,22 @@ class ApiEventInstanceRepositoryTest(unittest.TestCase):
         self.assertEqual(kwargs["json"]["name"], "New Title")
         self.assertEqual(kwargs["json"]["meta"], {"keep": "yes", "new": "value", "preblast_channel_id": "CDEST"})
         self.assertEqual(result.id, 10)
-        self.assertEqual(self.client.get.call_count, 2)  # fetch before update, then authoritative refetch
+        self.assertEqual(self.client.get.call_count, 1)  # fetch before update; POST response supplies result
+
+    def test_update_preblast_fields_can_reuse_existing_instance(self):
+        existing = _make_instance(id=10, meta={"keep": "yes"})
+        self.client.post.return_value = {"eventInstance": self._raw_instance(id=10)}
+        result = self.repo.update_preblast_fields(
+            10,
+            name="New Title",
+            meta_updates={"new": "value"},
+            existing_instance=existing,
+        )
+        self.client.get.assert_not_called()
+        _, kwargs = self.client.post.call_args
+        self.assertEqual(kwargs["json"]["name"], "New Title")
+        self.assertEqual(kwargs["json"]["meta"], {"keep": "yes", "new": "value"})
+        self.assertEqual(result.id, 10)
 
     def test_update_preblast_fields_can_clear_location(self):
         self.client.get.return_value = {"eventInstance": {**self._raw_instance(id=10), "locationId": 99}}
@@ -463,7 +483,22 @@ class ApiEventInstanceRepositoryTest(unittest.TestCase):
         self.assertEqual(kwargs["json"]["preblastTs"], 222)
         self.assertEqual(kwargs["json"]["meta"], {"keep": "yes", "preblast_post_channel_id": "CPOST"})
         self.assertEqual(result.id, 11)
-        self.assertEqual(self.client.get.call_count, 2)
+        self.assertEqual(self.client.get.call_count, 1)
+
+    def test_persist_posted_preblast_can_reuse_existing_instance(self):
+        existing = _make_instance(id=11, meta={"keep": "yes"})
+        self.client.post.return_value = {"eventInstance": self._raw_instance(id=11)}
+        result = self.repo.persist_posted_preblast(
+            11,
+            preblast_ts=222,
+            preblast_post_channel_id="CPOST",
+            existing_instance=existing,
+        )
+        self.client.get.assert_not_called()
+        _, kwargs = self.client.post.call_args
+        self.assertEqual(kwargs["json"]["preblastTs"], 222)
+        self.assertEqual(kwargs["json"]["meta"], {"keep": "yes", "preblast_post_channel_id": "CPOST"})
+        self.assertEqual(result.id, 11)
 
     def test_close_posts_correct_payload(self):
         instance = _make_instance(id=3, meta={"existing_key": "val"})

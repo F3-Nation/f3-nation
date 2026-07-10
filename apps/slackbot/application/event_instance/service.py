@@ -134,6 +134,7 @@ class EventInstanceService:
         event_tag_ids: list[int] | None = None,
         meta_updates: dict | None = None,
         preblast_channel_id: str | None = None,
+        existing_instance: EventInstanceData | None = None,
     ) -> EventInstanceData:
         """Update preblast-safe fields through the repository helper."""
         return self._repository.update_preblast_fields(
@@ -148,6 +149,7 @@ class EventInstanceService:
             event_tag_ids=event_tag_ids,
             meta_updates=meta_updates,
             preblast_channel_id=preblast_channel_id,
+            existing_instance=existing_instance,
         )
 
     def persist_posted_preblast(
@@ -156,12 +158,14 @@ class EventInstanceService:
         *,
         preblast_ts: int | float,
         preblast_post_channel_id: str,
+        existing_instance: EventInstanceData | None = None,
     ) -> EventInstanceData:
         """Persist the successful preblast post timestamp and actual channel."""
         return self._repository.persist_posted_preblast(
             instance_id,
             preblast_ts=preblast_ts,
             preblast_post_channel_id=preblast_post_channel_id,
+            existing_instance=existing_instance,
         )
 
     def _get_existing_instance_for_state_change(self, instance_id: int) -> EventInstanceData:

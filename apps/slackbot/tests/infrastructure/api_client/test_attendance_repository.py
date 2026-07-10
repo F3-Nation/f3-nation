@@ -133,6 +133,13 @@ class ApiAttendanceRepositoryTest(unittest.TestCase):
             json={"eventInstanceId": 10, "qUserId": 20, "coQUserIds": [30, 40]},
         )
 
+    def test_assign_qs_omits_null_q_user_id(self):
+        self.repo.assign_qs(10, None, [30])
+        self.client.put.assert_called_once_with(
+            "/v1/attendance/assign-q",
+            json={"eventInstanceId": 10, "coQUserIds": [30]},
+        )
+
     def test_remove_q_returns_none_for_success_only_response(self):
         self.client.delete.return_value = {"success": True}
         result = self.repo.remove_q(10, 20)

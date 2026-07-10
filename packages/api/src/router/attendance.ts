@@ -750,6 +750,32 @@ export const attendanceRouter = {
         );
       }
 
+      const assignedUserIds = new Set([
+        ...(qUserId ? [qUserId] : []),
+        ...coQUserIds.filter((coQUserId) => coQUserId !== qUserId),
+      ]);
+      const demotedAttendanceIds = existingAttendance
+        .filter(
+          (attendance) =>
+            !assignedUserIds.has(attendance.userId) &&
+            existingQCoQAssignments.some(
+              (assignment) => assignment.attendanceId === attendance.id,
+            ),
+        )
+        .map((attendance) => attendance.id);
+
+      if (demotedAttendanceIds.length > 0) {
+        await ctx.db
+          .insert(schema.attendanceXAttendanceTypes)
+          .values(
+            demotedAttendanceIds.map((attendanceId) => ({
+              attendanceId,
+              attendanceTypeId: ATTENDANCE_TYPE_IDS.PAX,
+            })),
+          )
+          .onConflictDoNothing();
+      }
+
       // Helper to ensure user has attendance record and add type
       const ensureAttendanceWithType = async (
         userId: number,
@@ -758,7 +784,13 @@ export const attendanceRouter = {
         const existing = existingAttendance.find((a) => a.userId === userId);
 
         if (existing) {
-          // Add type to existing attendance
+          // Assigned Q/Co-Q attendance should have exactly the role type
+          await ctx.db
+            .delete(schema.attendanceXAttendanceTypes)
+            .where(
+              eq(schema.attendanceXAttendanceTypes.attendanceId, existing.id),
+            );
+
           await ctx.db
             .insert(schema.attendanceXAttendanceTypes)
             .values({
@@ -778,14 +810,10 @@ export const attendanceRouter = {
             .returning({ id: schema.attendance.id });
 
           if (newAttendance) {
-            // Add PAX and the specific type
-            await ctx.db.insert(schema.attendanceXAttendanceTypes).values([
-              {
-                attendanceId: newAttendance.id,
-                attendanceTypeId: ATTENDANCE_TYPE_IDS.PAX,
-              },
-              { attendanceId: newAttendance.id, attendanceTypeId: typeId },
-            ]);
+            await ctx.db.insert(schema.attendanceXAttendanceTypes).values({
+              attendanceId: newAttendance.id,
+              attendanceTypeId: typeId,
+            });
           }
         }
       };

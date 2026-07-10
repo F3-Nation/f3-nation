@@ -177,6 +177,21 @@ def _require_start_date(instance: EventInstanceData) -> date:
     return instance.start_date
 
 
+def _parse_mutation_response(result: dict, fallback: EventInstanceData) -> EventInstanceData:
+    """Parse a crupdate response, falling back to the locally computed update.
+
+    The event-instance API normally returns the updated object.  Some tests and
+    older API shapes only return an acknowledgement, so callers provide a
+    best-effort fallback to avoid an extra GET after every POST.
+    """
+    raw = result.get("eventInstance") or result.get("result")
+    if raw is None and result.get("id") is not None:
+        raw = result
+    if isinstance(raw, dict) and raw.get("id") is not None:
+        return _parse_instance(raw)
+    return fallback
+
+
 def _build_state_change_payload(
     instance: EventInstanceData,
     *,
@@ -365,10 +380,13 @@ class ApiEventInstanceRepository:
         event_tag_ids: list[int] | None = None,
         meta_updates: dict | None = None,
         preblast_channel_id: str | None = None,
+        existing_instance: EventInstanceData | None = None,
     ) -> EventInstanceData:
-        existing = self.get_by_id(instance_id)
+        existing = existing_instance or self.get_by_id(instance_id)
         if existing is None:
             raise ValueError(f"Event instance {instance_id} was not found")
+        if existing.id != instance_id:
+            raise ValueError(f"Existing event instance {existing.id} does not match requested id {instance_id}")
         if not existing.event_type_ids:
             raise ValueError(f"Event instance {instance_id} is missing required field 'event_type_ids'")
         meta_updates = _merged_meta(
@@ -402,11 +420,20 @@ class ApiEventInstanceRepository:
             payload["eventTagId"] = None
         if clear_location_id:
             payload["locationId"] = None
-        self._client.post("/v1/event-instance", json=payload)
-        updated = self.get_by_id(instance_id)
-        if updated is None:
-            raise ValueError(f"Event instance {instance_id} was not found after update")
-        return updated
+        result = self._client.post("/v1/event-instance", json=payload)
+        fallback = existing.model_copy(
+            update={
+                "name": payload["name"],
+                "start_date": start_date or existing.start_date,
+                "start_time": payload["startTime"],
+                "location_id": resolved_location_id,
+                "event_tag_ids": tag_ids,
+                "meta": payload.get("meta"),
+                "preblast_rich": payload.get("preblastRich", existing.preblast_rich),
+                "preblast": payload.get("preblast", existing.preblast),
+            }
+        )
+        return _parse_mutation_response(result, fallback)
 
     def persist_posted_preblast(
         self,
@@ -414,10 +441,13 @@ class ApiEventInstanceRepository:
         *,
         preblast_ts: int | float,
         preblast_post_channel_id: str,
+        existing_instance: EventInstanceData | None = None,
     ) -> EventInstanceData:
-        existing = self.get_by_id(instance_id)
+        existing = existing_instance or self.get_by_id(instance_id)
         if existing is None:
             raise ValueError(f"Event instance {instance_id} was not found")
+        if existing.id != instance_id:
+            raise ValueError(f"Existing event instance {existing.id} does not match requested id {instance_id}")
         if not existing.event_type_ids:
             raise ValueError(f"Event instance {instance_id} is missing required field 'event_type_ids'")
         payload = _build_crupdate_payload(
@@ -439,11 +469,14 @@ class ApiEventInstanceRepository:
             preblast_ts=preblast_ts,
         )
         payload["id"] = instance_id
-        self._client.post("/v1/event-instance", json=payload)
-        updated = self.get_by_id(instance_id)
-        if updated is None:
-            raise ValueError(f"Event instance {instance_id} was not found after update")
-        return updated
+        result = self._client.post("/v1/event-instance", json=payload)
+        fallback = existing.model_copy(
+            update={
+                "meta": payload.get("meta"),
+                "preblast_ts": preblast_ts,
+            }
+        )
+        return _parse_mutation_response(result, fallback)
 
 
 # ---------------------------------------------------------------------------
