@@ -17,8 +17,6 @@ for AI coding guidance. Read these, in order:
 If you are asked to **audit** the repo and file issues, follow
 [`docs/AI_AUDIT_PLAYBOOK.md`](docs/AI_AUDIT_PLAYBOOK.md).
 
-Project agent skills live in the vendor-neutral [`.agents/skills/`](.agents/skills/)
-directory and are mirrored into the gitignored `.claude/skills/` at session
-start (see the "Agent skills" section of `AGENTS.md`). Claude-specific commands
-and settings live under [`.claude/`](.claude/). Keep this file thin — put
-durable guidance in `AGENTS.md` or `docs/`, not here.
+Project-specific Claude skills and commands live under
+[`.claude/`](.claude/). Keep this file thin — put durable guidance in
+`AGENTS.md` or `docs/`, not here.
