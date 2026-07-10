@@ -85,7 +85,7 @@ export async function GET() {
   } catch (err) {
     logError(
       "me.health.endpoint_failed",
-      { apiBaseUrl: process.env.F3_API_BASE_URL },
+      { hasApiBaseUrl: Boolean(process.env.F3_API_BASE_URL) },
       err,
     );
 

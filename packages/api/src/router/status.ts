@@ -486,7 +486,7 @@ export const statusRouter = publicProcedure
   .route({
     method: "GET",
     path: "/status",
-    tags: ["ping"],
+    tags: ["status"],
     summary: "Aggregated status",
     description:
       "Returns aggregated status for contract and external monitors, cached for 60 seconds.",
