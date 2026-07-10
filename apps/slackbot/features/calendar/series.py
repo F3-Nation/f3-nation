@@ -312,7 +312,11 @@ def handle_series_add(body: dict, client: WebClient, logger: Logger, context: di
         build_series_list_form(
             body, client, logger, context, region_record, update_view_id=safe_get(body, "view", "previous_view_id")
         )
-        trigger_map_revalidation(logger=logger, action="map.updated", map_update_data=MapUpdateData(eventId=metadata["series_id"]))
+        trigger_map_revalidation(
+            logger=logger,
+            action="map.updated",
+            map_update_data=MapUpdateData(eventId=metadata["series_id"]),
+        )
         post_bot_log(
             client=client,
             region_record=region_record,
@@ -353,7 +357,11 @@ def handle_series_add(body: dict, client: WebClient, logger: Logger, context: di
             created_series.append(created)
         # The API cascade automatically creates all future EventInstances; no local create needed.
         for record in created_series:
-            trigger_map_revalidation(logger=logger, action="map.created", map_update_data=MapUpdateData(eventId=record.id))
+            trigger_map_revalidation(
+                logger=logger,
+                action="map.created",
+                map_update_data=MapUpdateData(eventId=record.id),
+            )
         post_bot_log(
             client=client,
             region_record=region_record,

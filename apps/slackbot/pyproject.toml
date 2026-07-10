@@ -1,6 +1,7 @@
 [tool.ruff]
 line-length = 120
 
+[tool.ruff.lint]
 select = [
     "E", # pycodestyle errors (settings from FastAPI, thanks, @tiangolo!)
     "W", # pycodestyle warnings
@@ -13,7 +14,7 @@ ignore = [
     "C901", # too complex
 ]
 
-[tool.ruff.isort]
+[tool.ruff.lint.isort]
 order-by-type = true
 relative-imports-order = "closest-to-furthest"
 extra-standard-library = ["typing"]
@@ -59,6 +60,7 @@ dev = [
     "pytest>=8.4.2,<9.0.0",
     "debugpy>=1.8.17,<2.0.0",
     "pre-commit>=4.2.0,<5.0.0",
+    "ruff>=0.14.0,<1.0.0",
 ]
 scripts = [
     "mplcyberpunk>=0.7.6,<0.8.0",
