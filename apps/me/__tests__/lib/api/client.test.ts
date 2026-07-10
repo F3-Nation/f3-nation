@@ -136,12 +136,12 @@ describe("API client (oRPC)", () => {
     expect(users[0]?.f3Name).toBe("Pax");
   });
 
-  it("getUsers passes undefined when homeRegionId is not provided", async () => {
+  it("getUsers passes userId when provided", async () => {
     mockMe.users.mockResolvedValueOnce({ users: [] });
 
     const { getUsers } = await import("@/lib/api/client");
-    await getUsers();
+    await getUsers({ userId: 7 });
 
-    expect(mockMe.users).toHaveBeenCalledWith(undefined);
+    expect(mockMe.users).toHaveBeenCalledWith({ userId: 7 });
   });
 });
