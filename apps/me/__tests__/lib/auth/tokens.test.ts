@@ -11,7 +11,7 @@ import {
   verifyAccessToken,
   verifyAccessTokenPayload,
 } from "@/lib/auth/tokens";
-import { logError, logWarn } from "@/lib/logging";
+import { logWarn } from "@/lib/logging";
 
 // tokens.ts reads credentials from the validated `@/env` module, which
 // @t3-oss/env-nextjs evaluates from process.env once at import time. Mock it so
@@ -203,7 +203,7 @@ describe("verifyAccessTokenPayload", () => {
     expect(result).toBeNull();
   });
 
-  it("logs non-expired verifier failures", async () => {
+  it("returns null for non-expired verifier failures", async () => {
     vi.mocked(verifyJwtWithJwks).mockResolvedValueOnce({
       ok: false,
       code: "invalid_signature",
@@ -212,23 +212,15 @@ describe("verifyAccessTokenPayload", () => {
 
     const result = await verifyAccessTokenPayload(createValidToken());
     expect(result).toBeNull();
-    expect(logWarn).toHaveBeenCalledWith(
-      "me.auth.access_token_payload_verify_failed",
-      { code: "invalid_signature" },
-    );
   });
 
-  it("logs thrown verifier errors as misconfiguration", async () => {
+  it("propagates thrown verifier errors", async () => {
     vi.mocked(verifyJwtWithJwks).mockRejectedValueOnce(
       new Error("authServerUrl must use https:// outside localhost"),
     );
 
-    const result = await verifyAccessTokenPayload(createValidToken());
-    expect(result).toBeNull();
-    expect(logError).toHaveBeenCalledWith(
-      "me.auth.access_token_payload_verify_misconfigured",
-      {},
-      expect.any(Error),
+    await expect(verifyAccessTokenPayload(createValidToken())).rejects.toThrow(
+      "authServerUrl must use https:// outside localhost",
     );
   });
 });
@@ -286,7 +278,7 @@ describe("verifyAccessToken", () => {
     );
   });
 
-  it("logs helper failures without verification code as misconfiguration", async () => {
+  it("logs helper failures with one warning line", async () => {
     vi.mocked(verifyAccessTokenWithResult).mockResolvedValueOnce({
       ok: false,
       error: "authServerUrl must use https:// outside localhost",
@@ -294,11 +286,9 @@ describe("verifyAccessToken", () => {
 
     const result = await verifyAccessToken(createValidToken());
     expect(result).toBe(false);
-    expect(logError).toHaveBeenCalledWith(
-      "me.auth.access_token_verify_misconfigured",
-      {
-        message: "authServerUrl must use https:// outside localhost",
-      },
-    );
+    expect(logWarn).toHaveBeenCalledWith("me.auth.access_token_verify_failed", {
+      code: "misconfigured",
+      message: "authServerUrl must use https:// outside localhost",
+    });
   });
 });
