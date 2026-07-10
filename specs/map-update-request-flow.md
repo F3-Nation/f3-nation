@@ -142,7 +142,7 @@ Tiers from `packages/api/src/shared.ts`; per-org scoping via
 - Schema changes (Drizzle): the `request_type` enum is replaced — old values
   (`create_location`, `create_event`, `edit`, `delete_event`) superseded by the
   specific per-action types plus a retained legacy `edit`; `update_requests.event_name`
-  becomes nullable. Migration `packages/db/drizzle/0015_even_thing.sql` drops
+  becomes nullable. Migration `packages/db/drizzle/0017_even_thing.sql` drops
   and recreates the Postgres enum and casts the column.
 - ⚠️ Human review required: the enum drop/recreate migration and the cast of
   existing `request_type` values must be verified against production data
