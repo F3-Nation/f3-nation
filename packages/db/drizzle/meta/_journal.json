@@ -106,6 +106,20 @@
       "when": 1780878115389,
       "tag": "0014_dapper_tenebrous",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1783562089254,
+      "tag": "0015_migrate_json_to_jsonb",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1783683195965,
+      "tag": "0016_add_achievement_award_meta",
+      "breakpoints": true
     }
   ]
 }
