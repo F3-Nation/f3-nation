@@ -26,7 +26,7 @@ from slack_sdk.models.blocks.basic_components import PlainTextObject, MarkdownTe
 from application.event_instance import EventInstanceData
 from application.preblast import PREBLAST_CHANNEL_META_KEY, PreblastEventTypeData
 from application.preblast.service import PreblastService
-from apps.slackbot.build.lib.utilities.helper_functions import current_date_cst
+from utilities.helper_functions import current_date_cst
 from utilities.slack import actions
 from utilities.slack.sdk_orm import SdkBlockView, as_selector_options
 
