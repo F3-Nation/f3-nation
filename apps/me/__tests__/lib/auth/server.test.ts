@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const cookiesMock = vi.fn();
 const verifyAccessTokenMock = vi.fn();
+const logWarnMock = vi.fn();
 const redirectMock = vi.fn((path: string) => {
   throw new Error(`redirect:${path}`);
 });
@@ -26,7 +27,7 @@ vi.mock("@/env", () => ({
   },
 }));
 
-vi.mock("@/lib/logging", () => ({ logDebug: vi.fn(), logWarn: vi.fn() }));
+vi.mock("@/lib/logging", () => ({ logDebug: vi.fn(), logWarn: logWarnMock }));
 
 describe("auth server helpers", () => {
   beforeEach(() => {
@@ -62,6 +63,41 @@ describe("auth server helpers", () => {
     expect(user).toBeNull();
   });
 
+  it("logs a warning and returns null when verification fails with a non-expired code", async () => {
+    cookiesMock.mockResolvedValue({
+      get: vi.fn().mockReturnValue({ value: "token" }),
+    });
+    verifyAccessTokenMock.mockResolvedValue({
+      ok: false,
+      code: "invalid_signature",
+      error: "Token signature verification failed",
+    });
+
+    const { getSessionUser } = await import("@/lib/auth/server");
+    const user = await getSessionUser();
+
+    expect(user).toBeNull();
+    expect(logWarnMock).toHaveBeenCalledWith("me.auth.session_verify_failed", {
+      code: "invalid_signature",
+      message: "Token signature verification failed",
+    });
+  });
+
+  it("returns null when payload is missing email", async () => {
+    cookiesMock.mockResolvedValue({
+      get: vi.fn().mockReturnValue({ value: "token" }),
+    });
+    verifyAccessTokenMock.mockResolvedValue({
+      ok: true,
+      payload: { sub: "42" },
+    });
+
+    const { getSessionUser } = await import("@/lib/auth/server");
+    const user = await getSessionUser();
+
+    expect(user).toBeNull();
+  });
+
   it("returns null when token subject is not a positive number", async () => {
     cookiesMock.mockResolvedValue({
       get: vi.fn().mockReturnValue({ value: "token" }),
@@ -69,6 +105,21 @@ describe("auth server helpers", () => {
     verifyAccessTokenMock.mockResolvedValue({
       ok: true,
       payload: { sub: "not-a-number", email: "test@example.com" },
+    });
+
+    const { getSessionUser } = await import("@/lib/auth/server");
+    const user = await getSessionUser();
+
+    expect(user).toBeNull();
+  });
+
+  it("returns null when token subject is zero or negative", async () => {
+    cookiesMock.mockResolvedValue({
+      get: vi.fn().mockReturnValue({ value: "token" }),
+    });
+    verifyAccessTokenMock.mockResolvedValue({
+      ok: true,
+      payload: { sub: "0", email: "test@example.com" },
     });
 
     const { getSessionUser } = await import("@/lib/auth/server");
