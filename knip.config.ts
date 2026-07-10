@@ -9,6 +9,7 @@ const config: KnipConfig = {
     "packages/**/src/logger.ts",
     "packages/db/src/**",
     "packages/shared/src/app/constants.ts",
+    "scripts/sync-agent-skills.mjs",
     "tooling/typescript/type-extensions.d.ts",
     "turbo/generators/config.ts",
   ],
