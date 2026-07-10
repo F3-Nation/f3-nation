@@ -96,15 +96,16 @@ independently shippable phases (epic
   real test database, BEFORE any migration code changes
   ([#660](https://github.com/F3-Nation/f3-nation/issues/660); see "Testing and
   parity strategy" below). Blocks #646.
-- **Phase 0** — decouple shared packages while still on Next.js, zero behavior
-  change: delete the vestigial `revalidatePath` calls
-  ([#645](https://github.com/F3-Nation/f3-nation/issues/645)); replace the
-  no-arg `auth()` with explicit header-based session resolution via
-  `@auth/core`'s `Auth()` against the same shared `authConfig`
-  ([#646](https://github.com/F3-Nation/f3-nation/issues/646) — the
-  highest-risk change, deliberately first so it soaks in production);
-  swap to `@t3-oss/env-core`
+- **Phase 0a** — decouple shared packages while still on Next.js, zero
+  behavior change: delete the vestigial `revalidatePath` calls
+  ([#645](https://github.com/F3-Nation/f3-nation/issues/645)); swap to
+  `@t3-oss/env-core`
   ([#647](https://github.com/F3-Nation/f3-nation/issues/647)).
+- **Phase 0b** — replace the no-arg `auth()` with explicit header-based
+  session resolution via `@auth/core`'s `Auth()` against the same shared
+  `authConfig`
+  ([#646](https://github.com/F3-Nation/f3-nation/issues/646) — the
+  highest-risk change, deliberately first so it soaks in production).
 - **Phase 1** — delete the dead map-app skeleton; valuable even if the
   migration stops here
   ([#648](https://github.com/F3-Nation/f3-nation/issues/648)).
