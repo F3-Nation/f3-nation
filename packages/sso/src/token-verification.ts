@@ -31,6 +31,16 @@ export type JwtVerificationResult<TPayload extends JWTPayload = JWTPayload> =
       message: string;
     };
 
+export type VerifyAccessTokenResult =
+  | {
+      ok: true;
+    }
+  | {
+      ok: false;
+      error: string;
+      code?: JwtVerificationFailureCode;
+    };
+
 export interface VerifyJwtWithJwksOptions {
   authServerUrl: string;
   issuer?: string;
@@ -252,6 +262,36 @@ export async function verifyJwtPayload<
 >(token: string, options: VerifyJwtWithJwksOptions): Promise<TPayload | null> {
   const result = await verifyJwtWithJwks<TPayload>(token, options);
   return result.ok ? result.payload : null;
+}
+
+export async function verifyAccessToken(
+  token: string,
+  authServerUrl: string,
+  clientId: string,
+  allowClientIdClaimFallback = true,
+): Promise<VerifyAccessTokenResult> {
+  try {
+    const result = await verifyJwtWithJwks(token, {
+      authServerUrl,
+      clientId,
+      allowClientIdClaimFallback,
+    });
+
+    if (result.ok) {
+      return { ok: true };
+    }
+
+    return {
+      ok: false,
+      code: result.code,
+      error: result.message,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Token verification failed",
+    };
+  }
 }
 
 export function isAccessTokenPayload(

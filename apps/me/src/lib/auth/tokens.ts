@@ -1,24 +1,19 @@
-import {
-  isAccessTokenPayload,
-  isJwtExpired,
-  parseJwtPayload,
-  verifyJwtWithJwks,
-} from "@acme/sso";
 import type { AccessTokenPayload } from "@acme/sso";
+import * as sso from "@acme/sso";
 
 import { env } from "@/env";
-import { logError, logWarn } from "@/lib/logging";
+import { logWarn } from "@/lib/logging";
 
 export function parseAccessTokenPayload(
   token: string,
 ): AccessTokenPayload | null {
-  const payload = parseJwtPayload(token);
-  if (!isAccessTokenPayload(payload)) return null;
+  const payload = sso.parseJwtPayload(token);
+  if (!sso.isAccessTokenPayload(payload)) return null;
   return payload;
 }
 
 export function isAccessTokenExpired(token: string, skewSeconds = 60): boolean {
-  return isJwtExpired(token, skewSeconds);
+  return sso.isJwtExpired(token, skewSeconds);
 }
 
 /**
@@ -29,29 +24,21 @@ export function isAccessTokenExpired(token: string, skewSeconds = 60): boolean {
  * caller can fall through to the token-refresh path.
  */
 export async function verifyAccessToken(token: string): Promise<boolean> {
-  try {
-    const result = await verifyJwtWithJwks(token, {
-      authServerUrl: env.AUTH_PROVIDER_URL,
-      clientId: env.OAUTH_CLIENT_ID,
-      allowClientIdClaimFallback: true,
+  const result = await sso.verifyAccessToken(
+    token,
+    env.AUTH_PROVIDER_URL,
+    env.OAUTH_CLIENT_ID,
+    true,
+  );
+
+  if (!result.ok) {
+    logWarn("me.auth.access_token_verify_failed", {
+      code: result.code ?? "misconfigured",
+      message: result.error,
     });
-
-    if (!result.ok && result.code !== "expired") {
-      if (
-        result.code === "jwks_unavailable" ||
-        result.code === "issuer_mismatch"
-      ) {
-        logError("me.auth.access_token_verify_failed", { code: result.code });
-      } else {
-        logWarn("me.auth.access_token_verify_failed", { code: result.code });
-      }
-    }
-
-    return result.ok;
-  } catch (err) {
-    logError("me.auth.access_token_verify_misconfigured", {}, err);
-    return false;
   }
+
+  return result.ok;
 }
 
 /**
@@ -62,35 +49,16 @@ export async function verifyAccessToken(token: string): Promise<boolean> {
 export async function verifyAccessTokenPayload(
   token: string,
 ): Promise<AccessTokenPayload | null> {
-  try {
-    const result = await verifyJwtWithJwks<AccessTokenPayload>(token, {
-      authServerUrl: env.AUTH_PROVIDER_URL,
-      clientId: env.OAUTH_CLIENT_ID,
-      allowClientIdClaimFallback: true,
-    });
+  const result = await sso.verifyJwtWithJwks<AccessTokenPayload>(token, {
+    authServerUrl: env.AUTH_PROVIDER_URL,
+    clientId: env.OAUTH_CLIENT_ID,
+    allowClientIdClaimFallback: true,
+  });
 
-    if (!result.ok) {
-      if (result.code !== "expired") {
-        if (
-          result.code === "jwks_unavailable" ||
-          result.code === "issuer_mismatch"
-        ) {
-          logError("me.auth.access_token_payload_verify_failed", {
-            code: result.code,
-          });
-        } else {
-          logWarn("me.auth.access_token_payload_verify_failed", {
-            code: result.code,
-          });
-        }
-      }
-      return null;
-    }
-
-    if (!isAccessTokenPayload(result.payload)) return null;
-    return result.payload;
-  } catch (err) {
-    logError("me.auth.access_token_payload_verify_misconfigured", {}, err);
+  if (!result.ok) {
     return null;
   }
+
+  if (!sso.isAccessTokenPayload(result.payload)) return null;
+  return result.payload;
 }

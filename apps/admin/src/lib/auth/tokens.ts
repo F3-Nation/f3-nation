@@ -1,8 +1,26 @@
 import type { AccessTokenPayload } from "@acme/sso";
-import { isAccessTokenPayload, verifyJwtWithJwks } from "@acme/sso";
+import * as sso from "@acme/sso";
 
 import { env } from "~/env";
-import { logError, logWarn } from "~/lib/logging";
+import { logWarn } from "~/lib/logging";
+
+export async function verifyAccessToken(token: string): Promise<boolean> {
+  const result = await sso.verifyAccessToken(
+    token,
+    env.AUTH_PROVIDER_URL,
+    env.OAUTH_CLIENT_ID,
+    true,
+  );
+
+  if (!result.ok) {
+    logWarn("admin.auth.access_token_verify_failed", {
+      code: result.code ?? "misconfigured",
+      message: result.error,
+    });
+  }
+
+  return result.ok;
+}
 
 /**
  * Verify an access token's RS256 signature and return decoded claims on
@@ -11,42 +29,23 @@ import { logError, logWarn } from "~/lib/logging";
 export async function verifyAccessTokenPayload(
   token: string,
 ): Promise<AccessTokenPayload | null> {
-  try {
-    const result = await verifyJwtWithJwks<AccessTokenPayload>(token, {
-      authServerUrl: env.AUTH_PROVIDER_URL,
-      clientId: env.OAUTH_CLIENT_ID,
-      allowClientIdClaimFallback: true,
-    });
+  const result = await sso.verifyJwtWithJwks<AccessTokenPayload>(token, {
+    authServerUrl: env.AUTH_PROVIDER_URL,
+    clientId: env.OAUTH_CLIENT_ID,
+    allowClientIdClaimFallback: true,
+  });
 
-    if (!result.ok) {
-      if (result.code !== "expired") {
-        if (
-          result.code === "jwks_unavailable" ||
-          result.code === "issuer_mismatch"
-        ) {
-          logError("admin.auth.access_token_payload_verify_failed", {
-            code: result.code,
-          });
-        } else {
-          logWarn("admin.auth.access_token_payload_verify_failed", {
-            code: result.code,
-          });
-        }
-      }
-      return null;
-    }
-
-    return parseAccessTokenPayloadFromClaims(result.payload);
-  } catch (err) {
-    logError("admin.auth.access_token_payload_verify_misconfigured", {}, err);
+  if (!result.ok) {
     return null;
   }
+
+  return parseAccessTokenPayloadFromClaims(result.payload);
 }
 
 function parseAccessTokenPayloadFromClaims(
   payload: Record<string, unknown> | null | undefined,
 ): AccessTokenPayload | null {
-  if (!payload || !isAccessTokenPayload(payload)) return null;
+  if (!payload || !sso.isAccessTokenPayload(payload)) return null;
 
   return {
     ...payload,

@@ -10,7 +10,7 @@ import {
   REFRESH_TOKEN_MAX_AGE,
 } from "~/lib/auth/constants";
 import { refreshToken } from "~/lib/auth/oauth";
-import { verifyAccessTokenPayload } from "~/lib/auth/tokens";
+import { verifyAccessToken } from "~/lib/auth/tokens";
 import { logWarn } from "~/lib/logging";
 
 const PUBLIC_PATHS = ["/auth/sign-in", routes.admin.noAccess.__path];
@@ -145,13 +145,10 @@ export async function proxy(request: NextRequest) {
     REFRESH_TOKEN_COOKIE_NAME,
   )?.value;
 
-  if (accessToken) {
-    const payload = await verifyAccessTokenPayload(accessToken);
-    if (payload) {
-      return NextResponse.next({
-        request: { headers: getRequestHeadersWithPath(request) },
-      });
-    }
+  if (accessToken && (await verifyAccessToken(accessToken))) {
+    return NextResponse.next({
+      request: { headers: getRequestHeadersWithPath(request) },
+    });
   }
 
   if (refreshTokenCookie) {
@@ -165,25 +162,22 @@ export async function proxy(request: NextRequest) {
 
     try {
       const tokens = await refreshToken({ refreshToken: refreshTokenCookie });
-      if (tokens.accessToken) {
-        const payload = await verifyAccessTokenPayload(tokens.accessToken);
-        if (payload) {
-          const requestHeaders = withRefreshedCookieHeader(
-            request,
-            tokens.accessToken,
-            tokens.refreshToken,
-          );
-          const response = NextResponse.next({
-            request: { headers: requestHeaders },
-          });
-          setRefreshedCookies(
-            response,
-            tokens.accessToken,
-            tokens.expiresIn,
-            tokens.refreshToken,
-          );
-          return response;
-        }
+      if (tokens.accessToken && (await verifyAccessToken(tokens.accessToken))) {
+        const requestHeaders = withRefreshedCookieHeader(
+          request,
+          tokens.accessToken,
+          tokens.refreshToken,
+        );
+        const response = NextResponse.next({
+          request: { headers: requestHeaders },
+        });
+        setRefreshedCookies(
+          response,
+          tokens.accessToken,
+          tokens.expiresIn,
+          tokens.refreshToken,
+        );
+        return response;
       }
     } catch (err) {
       logWarn("admin.auth.refresh_failed", {

@@ -857,6 +857,36 @@ If you need structured failure reasons (for metrics/debugging), use
 `verifyJwtWithJwks(...)` which returns `{ ok: false, code, message }` on
 verification failures.
 
+If you prefer a stricter server-side boundary, use the package-provided
+`verifyAccessToken(...)` helper.
+
+This helper should still be called from server-only code (route handlers,
+middleware, server components), not client components.
+
+```ts
+import { verifyAccessToken } from "@acme/sso";
+```
+
+Example call site:
+
+```ts
+const verification = await verifyAccessToken(
+  accessToken,
+  process.env.AUTH_PROVIDER_URL!,
+  process.env.OAUTH_CLIENT_ID!,
+  true,
+);
+
+if (!verification.ok) {
+  // verification.code is optional (for example, config/runtime errors may only
+  // provide verification.error).
+  logWarn("app.auth.access_token_verify_failed", {
+    code: verification.code ?? "misconfigured",
+    message: verification.error,
+  });
+}
+```
+
 ---
 
 ## How SSO Works

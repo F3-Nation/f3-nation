@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { isJwtExpired, parseJwtPayload, verifyJwtWithJwks } from "@acme/sso";
+import {
+  isJwtExpired,
+  parseJwtPayload,
+  verifyAccessToken as verifyAccessTokenWithResult,
+  verifyJwtWithJwks,
+} from "@acme/sso";
 import {
   isAccessTokenExpired,
   parseAccessTokenPayload,
@@ -25,6 +30,7 @@ vi.mock("@acme/sso", async () => {
     ...actual,
     isJwtExpired: vi.fn(),
     parseJwtPayload: vi.fn(),
+    verifyAccessToken: vi.fn(),
     verifyJwtWithJwks: vi.fn(),
   };
 });
@@ -234,35 +240,32 @@ describe("verifyAccessToken", () => {
 
   it("returns false when verifier returns false-like result", async () => {
     const expiredToken = createToken({ sub: "42", exp: 1 });
-    vi.mocked(verifyJwtWithJwks).mockResolvedValueOnce({
+    vi.mocked(verifyAccessTokenWithResult).mockResolvedValueOnce({
       ok: false,
       code: "expired",
-      message: "Token expired",
+      error: "Token expired",
     });
 
     const result = await verifyAccessToken(expiredToken);
 
     expect(result).toBe(false);
-    expect(verifyJwtWithJwks).toHaveBeenCalledTimes(1);
+    expect(verifyAccessTokenWithResult).toHaveBeenCalledTimes(1);
   });
 
   it("returns true when shared verifier succeeds", async () => {
-    vi.mocked(verifyJwtWithJwks).mockResolvedValueOnce({
-      ok: true,
-      payload: { sub: "42" },
-    });
+    vi.mocked(verifyAccessTokenWithResult).mockResolvedValueOnce({ ok: true });
 
     const result = await verifyAccessToken(createValidToken());
 
     expect(result).toBe(true);
-    expect(verifyJwtWithJwks).toHaveBeenCalledTimes(1);
+    expect(verifyAccessTokenWithResult).toHaveBeenCalledTimes(1);
   });
 
   it("returns false when shared verifier reports failure", async () => {
-    vi.mocked(verifyJwtWithJwks).mockResolvedValueOnce({
+    vi.mocked(verifyAccessTokenWithResult).mockResolvedValueOnce({
       ok: false,
       code: "invalid_token",
-      message: "Token verification failed",
+      error: "Token verification failed",
     });
 
     const result = await verifyAccessToken(createValidToken());
@@ -271,34 +274,31 @@ describe("verifyAccessToken", () => {
   });
 
   it("passes auth server settings to the shared verifier", async () => {
-    vi.mocked(verifyJwtWithJwks).mockResolvedValueOnce({
-      ok: true,
-      payload: { sub: "42" },
-    });
+    vi.mocked(verifyAccessTokenWithResult).mockResolvedValueOnce({ ok: true });
 
     await verifyAccessToken(createValidToken());
 
-    expect(verifyJwtWithJwks).toHaveBeenCalledWith(
+    expect(verifyAccessTokenWithResult).toHaveBeenCalledWith(
       expect.any(String),
-      expect.objectContaining({
-        authServerUrl: "https://auth.test.com",
-        clientId: "test-client-id",
-        allowClientIdClaimFallback: true,
-      }),
+      "https://auth.test.com",
+      "test-client-id",
+      true,
     );
   });
 
-  it("logs thrown verifier errors as misconfiguration", async () => {
-    vi.mocked(verifyJwtWithJwks).mockRejectedValueOnce(
-      new Error("authServerUrl must use https:// outside localhost"),
-    );
+  it("logs helper failures without verification code as misconfiguration", async () => {
+    vi.mocked(verifyAccessTokenWithResult).mockResolvedValueOnce({
+      ok: false,
+      error: "authServerUrl must use https:// outside localhost",
+    });
 
     const result = await verifyAccessToken(createValidToken());
     expect(result).toBe(false);
     expect(logError).toHaveBeenCalledWith(
       "me.auth.access_token_verify_misconfigured",
-      {},
-      expect.any(Error),
+      {
+        message: "authServerUrl must use https:// outside localhost",
+      },
     );
   });
 });
