@@ -245,11 +245,10 @@ export const meRouter = {
       // submit). Read-modify-write would let the second writer overwrite the
       // first writer's merge. Postgres `jsonb ||` is a single-statement
       // shallow merge that matches the JS `{ ...existing, ...input }`
-      // semantics the tests assert on. The `users.meta` column is `json`
-      // (not `jsonb`), so we cast both sides to jsonb for the merge — the
-      // resulting jsonb value is implicitly cast back to json on assignment.
+      // semantics the tests assert on. `users.meta` is `jsonb`, so the
+      // column needs no cast; the incoming text literal is cast to jsonb.
       if (metaInput !== undefined) {
-        updateSet.meta = sql`(COALESCE(${schema.users.meta}::jsonb, '{}'::jsonb) || ${JSON.stringify(metaInput)}::jsonb)`;
+        updateSet.meta = sql`(COALESCE(${schema.users.meta}, '{}'::jsonb) || ${JSON.stringify(metaInput)}::jsonb)`;
       }
 
       // Only update if there's something to set

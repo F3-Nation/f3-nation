@@ -410,3 +410,5 @@ declare module "next-auth" {
     apiKey?: ApiKeyInfo;
   }
 }
+
+export type AchievementAwardMeta = Record<string, unknown>;
