@@ -708,7 +708,7 @@ describe("Request Router", () => {
       expect(mockNotifyMapDataChange).not.toHaveBeenCalled();
     });
 
-    it("records pending further review when the reviewer lacks permission on another affected region", async () => {
+    it("throws UNAUTHORIZED when the reviewer lacks permission on another affected region", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
 
@@ -719,8 +719,9 @@ describe("Request Router", () => {
       const ao = await createTestAO(originalRegion.id);
       if (!ao) return;
 
-      // Editor on the target region only: allowed to review, but the move
-      // also affects the original region, so it goes to further review.
+      // Editor on the target region only: allowed to review that region, but
+      // the move also affects the original region, so the approve must fail
+      // loudly instead of silently re-recording the request as pending.
       const targetRegionSession = createEditorSession({
         orgId: newRegion.id,
         orgName: newRegion.name,
@@ -728,17 +729,16 @@ describe("Request Router", () => {
       await mockAuthWithSession(targetRegionSession);
 
       const client = createTestClient();
-      const result = await client.request.validateSubmissionByAdmin({
-        id: crypto.randomUUID(),
-        requestType: "move_ao_to_different_region",
-        submittedBy: "editor@example.com",
-        originalAoId: ao.id,
-        originalRegionId: originalRegion.id,
-        newRegionId: newRegion.id,
-      });
-      createdRequestIds.push(result.updateRequest.id);
-
-      expect(result.status).toBe("pending");
+      await expect(
+        client.request.validateSubmissionByAdmin({
+          id: crypto.randomUUID(),
+          requestType: "move_ao_to_different_region",
+          submittedBy: "editor@example.com",
+          originalAoId: ao.id,
+          originalRegionId: originalRegion.id,
+          newRegionId: newRegion.id,
+        }),
+      ).rejects.toThrow(/ask an admin/i);
       expect(mockNotifyMapDataChange).not.toHaveBeenCalled();
     });
   });

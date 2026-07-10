@@ -853,8 +853,6 @@ export const requestRouter = {
 
       // Reviewers must hold the editor role on the region the request is
       // filed under (editorProcedure only proves a role on *some* org).
-      // Lacking permission on other affected orgs is not an error — that
-      // case is re-recorded as pending for further review by handleRequest.
       const reviewRegionId =
         ("newRegionId" in parsedInput ? parsedInput.newRegionId : undefined) ??
         parsedInput.originalRegionId;
@@ -867,6 +865,20 @@ export const requestRouter = {
       if (!canReviewRegion) {
         throw new ORPCError("UNAUTHORIZED", {
           message: "You are not authorized to edit this region",
+        });
+      }
+
+      // An approve must apply. If the reviewer lacks the editor role on any
+      // org the change touches, fail loudly instead of letting handleRequest
+      // silently re-record the request as pending and re-notify its admins.
+      const reviewPermissions = await checkUpdatePermissions({
+        ctx,
+        input: parsedInput,
+      });
+      if (!reviewPermissions.success) {
+        throw new ORPCError("UNAUTHORIZED", {
+          message:
+            "You can't approve this request: it affects an org you don't have the editor role on. Ask an admin of the affected org(s) to review it.",
         });
       }
 

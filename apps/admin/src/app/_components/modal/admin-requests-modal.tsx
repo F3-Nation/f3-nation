@@ -137,20 +137,13 @@ export default function AdminRequestsModal({
           eventEndTime: convertHH_mmToHHmm(valuesToSubmit.eventEndTime ?? ""),
         } as Parameters<typeof validateSubmissionByAdmin.mutateAsync>[0];
 
-        const result =
-          await validateSubmissionByAdmin.mutateAsync(submissionInput);
+        await validateSubmissionByAdmin.mutateAsync(submissionInput);
 
         void invalidateQueries("request");
         void invalidateQueries("event");
         void invalidateQueries("location");
         router.refresh();
-        if (result.status === "approved") {
-          toast.success("Approved update");
-        } else {
-          toast.info(
-            "You don't have permission for every affected region — the request was submitted for further review",
-          );
-        }
+        toast.success("Approved update");
         closeModal();
       } catch (error) {
         if (!(error instanceof ORPCError)) {
@@ -163,6 +156,10 @@ export default function AdminRequestsModal({
             message: "End time must be after start time",
           });
           throw new Error("End time must be after start time");
+        } else if (error.code === "UNAUTHORIZED") {
+          // Surface the API's explanation (e.g. approve touching an org the
+          // reviewer can't edit → "ask an admin of the affected org(s)").
+          toast.error(error.message);
         } else {
           toast.error("Failed to approve update");
         }

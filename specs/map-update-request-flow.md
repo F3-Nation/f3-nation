@@ -116,10 +116,12 @@ accurate while regions retain control over their own data.
 - **AC-16** — GIVEN an approved `delete_ao` or `delete_event` request THEN the
   AO/event (and, for `delete_ao`, its events) are deactivated
   (`is_active = false`), never hard-deleted, and no longer render on the map.
-- **AC-17** — GIVEN an editor clicks Approve on a request that touches a region
-  they cannot edit WHEN the approval is processed THEN it is not applied — it
-  is re-recorded `pending` for a scoped reviewer, and the UI tells the approver
-  it was submitted for further review rather than showing "Approved update".
+- **AC-17** — GIVEN an editor clicks Approve on a request that touches an org
+  they cannot edit WHEN the approval is processed THEN nothing is applied and
+  the approve fails with UNAUTHORIZED — the UI surfaces the error, telling the
+  approver to ask an admin of the affected org(s) to review the request. The
+  request stays `pending` untouched (no re-record, no duplicate notification
+  to that region's admins).
 
 ## 5. Roles & authorization (RBAC)
 
@@ -134,7 +136,7 @@ Tiers from `packages/api/src/shared.ts`; per-org scoping via
 | Auto-apply on submit                                     | Submitter with `editor`/`admin` on **all** affected orgs (event org, locations' orgs, original + new region)                     | Any submitter lacking editor on ≥1 affected org → request is recorded `pending` instead                                                   |
 | Load admin portal / Requests page                        | Any user with an `editor` or `admin` role                                                                                        | Role `user` only → no-access redirect; anonymous → sign-in                                                                                |
 | List requests / view request detail (`editorProcedure`)  | Any editor/admin — cross-region read visibility is intended (default view scoped to own editable regions; nation admin sees all) | Non-editor authenticated users; anonymous                                                                                                 |
-| Approve (`validateSubmissionByAdmin`, `editorProcedure`) | Editor/admin of **all** orgs the change touches (same per-org check as auto-apply)                                               | Editor lacking scope on ≥1 affected org — the change is **not** applied; it is re-recorded `pending` and surfaced to the approver (AC-17) |
+| Approve (`validateSubmissionByAdmin`, `editorProcedure`) | Editor/admin of **all** orgs the change touches (same per-org check as auto-apply)                                               | Editor lacking scope on ≥1 affected org — UNAUTHORIZED; nothing applied, request stays `pending`, approver told to ask an admin (AC-17)   |
 | Reject (`rejectSubmission`, `editorProcedure`)           | Editor/admin of the request's region (or ancestor)                                                                               | Editor of an unrelated region (UNAUTHORIZED); request stays `pending`                                                                     |
 
 ## 6. Data & migrations

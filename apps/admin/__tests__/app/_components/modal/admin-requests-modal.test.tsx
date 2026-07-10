@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import AdminRequestsModal from "~/app/_components/modal/admin-requests-modal";
+import { ORPCError } from "~/orpc/react";
 
 const { toastMock, validateMutateAsync, rejectMutateAsync } = vi.hoisted(
   () => ({
@@ -61,7 +62,13 @@ vi.mock("@acme/ui/form", () => ({
 }));
 
 vi.mock("~/orpc/react", () => ({
-  ORPCError: class ORPCError extends Error {},
+  ORPCError: class ORPCError extends Error {
+    code: string;
+    constructor(code: string, options?: { message?: string }) {
+      super(options?.message ?? code);
+      this.code = code;
+    }
+  },
   invalidateQueries: vi.fn(),
   useQuery: (options: { queryKey: string[] }) => {
     if (options.queryKey.includes("request.byId")) {
@@ -146,18 +153,20 @@ describe("AdminRequestsModal review feedback toasts", () => {
     expect(toastMock.error).not.toHaveBeenCalled();
   });
 
-  it("surfaces further review instead of 'Approved update' when the approval is re-recorded as pending (AC-17)", async () => {
-    validateMutateAsync.mockResolvedValue({ status: "pending" });
+  it("surfaces the UNAUTHORIZED message instead of 'Approved update' when the reviewer can't edit every affected org (AC-17)", async () => {
+    const message =
+      "You can't approve this request: it affects an org you don't have the editor role on. Ask an admin of the affected org(s) to review it.";
+    validateMutateAsync.mockRejectedValue(
+      new ORPCError("UNAUTHORIZED", { message }),
+    );
     renderModal();
 
     fireEvent.click(screen.getByRole("button", { name: "Approve" }));
 
     await waitFor(() => {
-      expect(toastMock.info).toHaveBeenCalledWith(
-        "You don't have permission for every affected region — the request was submitted for further review",
-      );
+      expect(toastMock.error).toHaveBeenCalledWith(message);
     });
     expect(toastMock.success).not.toHaveBeenCalledWith("Approved update");
-    expect(toastMock.error).not.toHaveBeenCalled();
+    expect(toastMock.info).not.toHaveBeenCalled();
   });
 });
