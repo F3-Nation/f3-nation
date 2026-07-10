@@ -248,6 +248,6 @@ class SdkBlockView:
                 return client.views_update(external_id=external_id, view=view.to_dict())
             else:
                 return client.views_update(view_id=view_id, view=view.to_dict())
-        except Exception as e:
+        except Exception:
             # TODO: handle "not found" errors; post new instead of update?
             pass

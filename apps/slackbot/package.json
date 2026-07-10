@@ -5,6 +5,6 @@
   "scripts": {
     "dev": "uv run bash ./app_startup.sh",
     "test": "uv run pytest",
-    "lint": "uv run ruff check ."
+    "lint": "bash ./scripts/lint.sh"
   }
 }
