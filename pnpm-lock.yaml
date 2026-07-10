@@ -1925,9 +1925,18 @@ importers:
         specifier: 'catalog:'
         version: 1.4.0
     devDependencies:
+      '@acme/eslint-config':
+        specifier: workspace:*
+        version: link:../eslint
       '@acme/prettier-config':
         specifier: workspace:*
         version: link:../prettier
+      '@acme/tsconfig':
+        specifier: workspace:*
+        version: link:../typescript
+      eslint:
+        specifier: 'catalog:'
+        version: 10.6.0(jiti@2.7.0)
       prettier:
         specifier: 'catalog:'
         version: 3.9.4
