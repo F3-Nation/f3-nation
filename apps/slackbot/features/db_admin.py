@@ -6,7 +6,6 @@ from logging import Logger
 from f3_data_models.models import Org, Org_Type, Org_x_SlackSpace, Role, Role_x_User_x_Org, SlackSpace
 from f3_data_models.utils import DbManager
 from slack_sdk.web import WebClient
-from sqlalchemy import engine
 
 # from features.calendar.series import create_events
 from scripts.calendar_images import generate_calendar_images
