@@ -47,6 +47,7 @@
     "lucide-react": "catalog:",
     "next-themes": "catalog:",
     "react-hook-form": "catalog:",
+    "react-qr-code": "catalog:",
     "sonner": "catalog:",
     "tailwind-merge": "catalog:"
   },

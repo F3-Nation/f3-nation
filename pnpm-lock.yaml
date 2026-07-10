@@ -1683,6 +1683,9 @@ importers:
       react-hook-form:
         specifier: 'catalog:'
         version: 7.80.0(react@19.2.7)
+      react-qr-code:
+        specifier: 'catalog:'
+        version: 2.2.0(react@19.2.7)
       sonner:
         specifier: 'catalog:'
         version: 2.0.7(react-dom@19.2.7(react@19.2.7))(react@19.2.7)

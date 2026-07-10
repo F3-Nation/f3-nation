@@ -1,25 +1,25 @@
 "use client";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
-import { cn } from "@acme/ui";
-import { Button } from "@acme/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@acme/ui/dialog";
 
-import type { DataType, ModalType } from "~/utils/store/modal";
-import { closeModal } from "~/utils/store/modal";
+import { cn } from ".";
+import { Button } from "./button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./dialog";
+
+export interface DeleteModalData {
+  type: string;
+  onConfirm: () => void;
+}
 
 export default function DeleteModal({
   data,
+  onClose,
 }: {
-  data: DataType[ModalType.DELETE_CONFIRMATION];
+  data: DeleteModalData;
+  onClose: () => void;
 }) {
   return (
-    <Dialog open={true} onOpenChange={() => closeModal()}>
+    <Dialog open={true} onOpenChange={() => onClose()}>
       <DialogContent
         style={{ zIndex: Z_INDEX.HOW_TO_JOIN_MODAL }}
         className={cn(`max-w-[90%] rounded-lg lg:max-w-[400px]`)}
@@ -38,7 +38,7 @@ export default function DeleteModal({
             <Button
               type="button"
               variant="outline"
-              onClick={() => closeModal()}
+              onClick={() => onClose()}
               className="w-full"
             >
               Cancel

@@ -1,7 +1,13 @@
 "use client";
 
+import DeleteModal from "@acme/ui/delete-modal";
+import { FullImageModal } from "@acme/ui/full-image-modal";
+import { QRCodeModal } from "@acme/ui/qr-code-modal";
+import SignInModal from "@acme/ui/sign-in-modal";
+
 import type { DataType } from "~/utils/store/modal";
-import { ModalType, useOpenModal } from "~/utils/store/modal";
+import { AuthContent } from "~/app/auth/components/auth-components";
+import { closeModal, ModalType, useOpenModal } from "~/utils/store/modal";
 import AdminAOsModal from "./admin-aos-modal";
 import AdminApiKeysModal from "./admin-api-keys-modal";
 import AdminPositionsModal from "./admin-positions-modal";
@@ -17,10 +23,6 @@ import AdminRequestsModal from "./admin-requests-modal";
 import AdminSectorsModal from "./admin-sectors-modal";
 import AdminUsersModal from "./admin-users-modal";
 import AdminWorkoutsModal from "./admin-workouts-modal";
-import DeleteModal from "./delete-modal";
-import { FullImageModal } from "./full-image-modal";
-import { QRCodeModal } from "./qr-code-modal";
-import SignInModal from "./sign-in-modal";
 
 interface ModalRuntimeConfig {
   googleApiKey: string;
@@ -105,7 +107,10 @@ export const ModalSwitcher = ({
       );
     case ModalType.DELETE_CONFIRMATION:
       return (
-        <DeleteModal data={data as DataType[ModalType.DELETE_CONFIRMATION]} />
+        <DeleteModal
+          data={data as DataType[ModalType.DELETE_CONFIRMATION]}
+          onClose={() => closeModal()}
+        />
       );
     case ModalType.ADMIN_DELETE_REQUEST:
       return (
@@ -114,11 +119,28 @@ export const ModalSwitcher = ({
         />
       );
     case ModalType.QR_CODE:
-      return <QRCodeModal data={data as DataType[ModalType.QR_CODE]} />;
+      return (
+        <QRCodeModal
+          data={data as DataType[ModalType.QR_CODE]}
+          onClose={() => closeModal()}
+        />
+      );
     case ModalType.FULL_IMAGE:
-      return <FullImageModal data={data as DataType[ModalType.FULL_IMAGE]} />;
+      return (
+        <FullImageModal
+          data={data as DataType[ModalType.FULL_IMAGE]}
+          onClose={() => closeModal()}
+        />
+      );
     case ModalType.SIGN_IN:
-      return <SignInModal data={data as DataType[ModalType.SIGN_IN]} />;
+      return (
+        <SignInModal onClose={() => closeModal()}>
+          <AuthContent
+            callbackUrl={(data as DataType[ModalType.SIGN_IN]).callbackUrl}
+            withWrapper={false}
+          />
+        </SignInModal>
+      );
     default:
       console.error(`Modal type ${type} not found`);
       return null;

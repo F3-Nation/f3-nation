@@ -1,3 +1,5 @@
+"use client";
+
 /**
  * Generated with v0.
  * @see https://v0.dev/t/1U7tA9qTarA
@@ -10,8 +12,8 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from "@acme/ui/form";
-import { Input } from "@acme/ui/input";
+} from "./form";
+import { Input } from "./input";
 
 interface TimeInputProps {
   label?: string;

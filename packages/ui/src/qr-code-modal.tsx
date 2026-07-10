@@ -1,21 +1,24 @@
+"use client";
+
 import QRCode from "react-qr-code";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
-import { cn } from "@acme/ui";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@acme/ui/dialog";
 
-import type { DataType, ModalType } from "~/utils/store/modal";
-import { closeModal } from "~/utils/store/modal";
+import { cn } from ".";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./dialog";
+
+export interface QRCodeModalData {
+  url: string;
+  fileName: string;
+  title: string;
+}
 
 export const QRCodeModal = ({
   data,
+  onClose,
 }: {
-  data: DataType[ModalType.QR_CODE];
+  data: QRCodeModalData;
+  onClose: () => void;
 }) => {
   // https://github.com/rosskhanas/react-qr-code/blob/master/demo/src/components/App.js
   const onImageDownload = () => {
@@ -39,7 +42,7 @@ export const QRCodeModal = ({
   };
 
   return (
-    <Dialog open={true} onOpenChange={() => closeModal()}>
+    <Dialog open={true} onOpenChange={() => onClose()}>
       <DialogContent
         style={{ zIndex: Z_INDEX.HOW_TO_JOIN_MODAL }}
         className={cn(`max-w-[90%] rounded-lg lg:max-w-[600px]`)}

@@ -8,12 +8,14 @@ export interface VersionInfoProps extends HTMLAttributes<HTMLSpanElement> {
   channel: string;
   commitHash?: string | null;
   versionLabel: ReactNode;
+  onChannelClick?: () => void;
 }
 
 export const VersionInfo = ({
   channel,
   commitHash,
   versionLabel,
+  onChannelClick,
   className,
   ...rest
 }: VersionInfoProps) => {
@@ -22,10 +24,21 @@ export const VersionInfo = ({
   return (
     <span className={cn("inline-flex items-center gap-1", className)} {...rest}>
       {versionLabel}
-      <span className="cursor-default">
-        ({channel}
-        {commitHashString})
-      </span>
+      {onChannelClick ? (
+        <button
+          type="button"
+          onClick={onChannelClick}
+          className="cursor-default"
+        >
+          ({channel}
+          {commitHashString})
+        </button>
+      ) : (
+        <span className="cursor-default">
+          ({channel}
+          {commitHashString})
+        </span>
+      )}
     </span>
   );
 };

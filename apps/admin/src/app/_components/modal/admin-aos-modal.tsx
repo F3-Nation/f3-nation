@@ -48,7 +48,7 @@ import {
   closeModal,
   openModal,
 } from "~/utils/store/modal";
-import { DebouncedImage } from "../debounced-image";
+import { DebouncedImage } from "@acme/ui/debounced-image";
 
 export default function AdminAOsModal({
   data,

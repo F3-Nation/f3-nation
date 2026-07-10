@@ -1,15 +1,18 @@
+"use client";
+
 import type { Control, FieldValues, Path } from "react-hook-form";
 import { useMemo } from "react";
 import { Controller } from "react-hook-form";
 
 import { COUNTRIES } from "@acme/shared/app/constants";
+
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@acme/ui/select";
+} from "./select";
 
 interface CountrySelectProps<T extends FieldValues> {
   control: Control<T>;

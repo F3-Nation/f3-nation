@@ -59,7 +59,7 @@ import {
   ModalType,
   openModal,
 } from "~/utils/store/modal";
-import { ControlledTimeInput } from "../time-input";
+import { ControlledTimeInput } from "@acme/ui/time-input";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 
 const EventInsertForm = EventInsertSchema.extend({

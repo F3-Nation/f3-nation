@@ -18,9 +18,9 @@ import { orpc, useQuery } from "~/orpc/react";
 import { useUpdateLocationFormContext } from "~/utils/forms";
 import { uploadLogo } from "~/utils/image/upload-logo";
 import { mapStore } from "~/utils/store/map";
-import { DebouncedImage } from "../debounced-image";
-import { CountrySelect } from "../modal/country-select";
-import { ControlledTimeInput } from "../time-input";
+import { DebouncedImage } from "@acme/ui/debounced-image";
+import { CountrySelect } from "@acme/ui/country-select";
+import { ControlledTimeInput } from "@acme/ui/time-input";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 
 export const LocationEventForm = ({
