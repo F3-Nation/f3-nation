@@ -23,6 +23,7 @@ from slack_sdk.models.views import View, ViewState
 from slack_sdk.web import WebClient
 
 # from features.calendar.series import create_events
+from utilities.constants import LOCAL_DEVELOPMENT
 from utilities.database.orm import SlackSettings
 from utilities.helper_functions import (
     get_region_record,
@@ -31,7 +32,6 @@ from utilities.helper_functions import (
     update_local_region_records,
 )
 from utilities.slack.actions import LOADING_ID
-from utilities.constants import LOCAL_DEVELOPMENT
 
 CONNECT_EXISTING_REGION = "connect_existing_region"
 CREATE_NEW_REGION = "create_new_region"
@@ -278,9 +278,9 @@ def handle_existing_region_selection(
             )
         except Exception as e:
             logger.error(f"Error sending region connection request: {e}")
-    
+
     # update modal to indicate that the request has been submitted and is pending review
-    
+
     form: View = View(
         type="modal",
         title="Connect existing region",
@@ -297,7 +297,7 @@ def handle_new_region_creation(
     body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings
 ):
     state = ViewState(**safe_get(body, "view", "state"))
-    region_name = state.values.get(NEW_REGION_NAME).get(NEW_REGION_NAME)
+    _region_name = state.values.get(NEW_REGION_NAME).get(NEW_REGION_NAME)
 
 
 def handle_approve_connection(

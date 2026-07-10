@@ -32,6 +32,5 @@ export const env = createEnv({
   skipValidation:
     !!process.env.CI ||
     !!process.env.SKIP_ENV_VALIDATION ||
-    process.env.NODE_ENV === "test" ||
     process.env.npm_lifecycle_event === "lint",
 });
