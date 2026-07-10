@@ -63,6 +63,8 @@ pr.md
 
 # claude code
 .claude/worktrees/
+# generated mirror of .agents/skills/ (see scripts/sync-agent-skills.mjs)
+.claude/skills/
 
 # deepwork progress
 .slim/deepwork/

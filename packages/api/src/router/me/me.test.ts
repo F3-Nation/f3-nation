@@ -27,6 +27,7 @@ import { createRouterClient } from "@orpc/server";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { mockAuthWithSession } from "../../__tests__/test-utils";
 import { router } from "../../index";
+import { MAX_USERS_RESULTS } from "./index";
 
 /** Build a minimal Session object for test mocking. */
 const makeTestSession = (
@@ -607,7 +608,7 @@ describe("Me Router", () => {
       expect(names1).toEqual([`${prefix}-A`, `${prefix}-B`]);
     });
 
-    it("should cap results at 50 rows", async () => {
+    it("should cap results at MAX_USERS_RESULTS rows", async () => {
       const client = createDirectClient();
 
       const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -616,9 +617,9 @@ describe("Me Router", () => {
       const inserted = await db
         .insert(schema.users)
         .values(
-          Array.from({ length: 51 }, (_, i) => ({
+          Array.from({ length: MAX_USERS_RESULTS + 1 }, (_, i) => ({
             email: `${prefix}-${i}@example.com`,
-            f3Name: `${prefix}-${String(i).padStart(2, "0")}`,
+            f3Name: `${prefix}-${String(i).padStart(3, "0")}`,
             homeRegionId: regionOrgId,
           })),
         )
@@ -627,7 +628,7 @@ describe("Me Router", () => {
       createdUserIds.push(...inserted.map((u) => u.id));
 
       const result = await client.me.users({ searchTerm: prefix });
-      expect(result.users).toHaveLength(50);
+      expect(result.users).toHaveLength(MAX_USERS_RESULTS);
     });
 
     it("should reject a searchTerm shorter than 2 characters", async () => {

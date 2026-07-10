@@ -114,7 +114,7 @@ const meProfileSchema = z.object({
 });
 
 /** Hard cap on rows returned by me.users; a dropdown never needs more. */
-const MAX_USERS_RESULTS = 50;
+export const MAX_USERS_RESULTS = 100;
 
 const meUsersListItemSchema = z.object({
   id: z.number().int().min(1),
@@ -414,7 +414,7 @@ export const meRouter = {
 
   /**
    * List users for the "Who Brought You?" dropdown.
-   * Requires either userId (to resolve a specific user) or searchTerm (≥2 chars); results are capped at 50 rows.
+   * Requires either userId (to resolve a specific user) or searchTerm (≥2 characters); results are capped at MAX_USERS_RESULTS rows.
    */
   users: protectedProcedure
     .input(
@@ -445,8 +445,8 @@ export const meRouter = {
       summary: "List users for dropdown",
       description:
         "Return a lightweight user list for the 'Who Brought You?' dropdown. " +
-        "Requires userId to resolve a specific user, or searchTerm (≥2 chars) to search all users. " +
-        "Results are capped at 50 rows.",
+        "Requires userId to resolve a specific user, or searchTerm (≥2 characters) to search all users. " +
+        `Results are capped at ${MAX_USERS_RESULTS} rows.`,
     })
     .output(
       z.object({
