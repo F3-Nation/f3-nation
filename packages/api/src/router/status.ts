@@ -5,6 +5,7 @@ import {
 import type { HealthResponse, HealthStatus } from "@f3nation/health";
 import { z } from "zod";
 
+import { logInfo, logWarn } from "../logger";
 import { publicProcedure } from "../shared";
 import { STATUS_TARGETS } from "./status-targets";
 
@@ -100,6 +101,21 @@ interface StatusResponse {
   ttlSeconds: number;
   results: StatusResult[];
 }
+
+const STATUS_FAILURE_EVENT_BY_REASON: Record<
+  HealthFailureReason,
+  | "api.status.poll_unreachable"
+  | "api.status.poll_invalid_json"
+  | "api.status.poll_invalid_contract"
+  | "api.status.poll_unsupported_contract_version"
+  | "api.status.poll_invalid_monitor_config"
+> = {
+  unreachable: "api.status.poll_unreachable",
+  invalid_json: "api.status.poll_invalid_json",
+  invalid_contract: "api.status.poll_invalid_contract",
+  unsupported_contract_version: "api.status.poll_unsupported_contract_version",
+  invalid_monitor_config: "api.status.poll_invalid_monitor_config",
+};
 
 const externalSuccessSchema = z.object({
   ok: z.literal(true),
@@ -434,11 +450,31 @@ async function fetchStatus(
   target: StatusTarget,
   fetchImpl: typeof fetch = fetch,
 ): Promise<StatusResult> {
-  if (target.source === "contract") {
-    return fetchContractStatus(target, fetchImpl);
+  const result =
+    target.source === "contract"
+      ? await fetchContractStatus(target, fetchImpl)
+      : await fetchExternalStatus(target, fetchImpl);
+
+  if (result.ok) {
+    logInfo("api.status.poll_success", {
+      targetId: result.target.id,
+      source: result.source,
+      status: result.status,
+      ...(result.source === "contract"
+        ? { contractVersion: result.data.contractVersion }
+        : { provider: result.data.provider }),
+    });
+    return result;
   }
 
-  return fetchExternalStatus(target, fetchImpl);
+  logWarn(STATUS_FAILURE_EVENT_BY_REASON[result.reason], {
+    targetId: result.target.id,
+    source: result.source,
+    status: result.status,
+    reason: result.reason,
+  });
+
+  return result;
 }
 
 async function computeStatusSnapshot(
@@ -480,6 +516,11 @@ async function getCachedStatus(
     });
 
   return inFlightStatusRequest;
+}
+
+export function __resetStatusCacheForTests(): void {
+  statusCache = null;
+  inFlightStatusRequest = null;
 }
 
 export const statusRouter = publicProcedure

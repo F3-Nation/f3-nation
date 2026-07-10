@@ -84,3 +84,18 @@ Recommended endpoint test assertions:
 - `buildHealthResponse`
 - `HealthStatus`, `HealthSeverity`, `HealthCheck`, `HealthResponse`
 - `CheckRunnerResult`, `CheckRunner`, `CheckSpec`
+
+## Packaging note (workspace vs publish)
+
+This repository intentionally uses source-first entrypoints in
+`packages/health/package.json` for monorepo workspace consumers, while using
+`publishConfig` to rewrite entrypoints to `dist` for published artifacts.
+
+Why this is intentional:
+
+- workspace apps resolve quickly against source during local dev and CI
+- published consumers resolve compiled JS/types from `dist`
+
+Do not remove `publishConfig` unless the workspace build orchestration is also
+changed to guarantee `dist` artifacts exist before every consumer resolves this
+package.

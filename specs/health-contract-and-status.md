@@ -4,7 +4,7 @@
 
 ## 1. Summary
 
-F3 maintains one shared health contract package and one unified status page so operators and contributors can reliably see service health across sanctioned apps without bespoke parsing logic per app. The feature standardizes `/health` responses through `packages/health` and renders a consistent `/status` experience in `apps/homepage`, including degraded/down reasons when a service is unreachable or returns invalid contract data.
+F3 maintains one shared health contract package and one unified status page so operators and contributors can reliably see service health across sanctioned apps without bespoke parsing logic per app. The feature standardizes `/health` responses through `packages/health`, aggregates monitor evaluations in `packages/api` (`GET /v1/status`), and renders a consistent `/status` experience in `apps/homepage`, including degraded/down reasons when a service is unreachable or returns invalid contract data.
 The `/status` page also supports selected third-party services via external monitor adapters when those services do not provide the F3
 health contract natively.
 
@@ -14,7 +14,9 @@ health contract natively.
 - Package(s) affected: **packages/health**.
 - Key code:
   - `packages/health/src/index.ts` (schemas, types, check helpers, response builder)
-  - `apps/homepage/src/app/status/*` (status route, data fetch, rendering)
+  - `packages/api/src/router/status.ts` (status aggregation, classification, caching, logging)
+  - `packages/api/src/router/status-targets.ts` (monitor target configuration)
+  - `apps/homepage/src/app/status/*` (status page rendering)
   - each app's `/health` endpoint implementation (contract producer)
 
 ## 3. User stories
@@ -44,25 +46,25 @@ health contract natively.
 - **AC-7** — GIVEN any sanctioned service WHEN `/health` is requested THEN response is HTTP `200`, JSON, includes `Cache-Control: no-store`, and validates against `healthResponseSchema`.
 - **AC-8** — GIVEN a service has partial dependency failure WHEN `/health` is requested THEN body `status` reflects contract semantics (`degraded` for warning/info issues; `down` for critical failures), regardless of HTTP status code.
 
-### Status consumer (`apps/homepage/status`)
+### Status aggregation + consumer (`packages/api` + `apps/homepage/status`)
 
-- **AC-9** — GIVEN homepage status polling receives network failure or timeout WHEN evaluating a service THEN service is rendered as `down` with reason `unreachable`.
-- **AC-10** — GIVEN homepage status polling receives non-JSON response WHEN evaluating a service THEN service is rendered as `down` with reason `invalid_json`.
-- **AC-11** — GIVEN homepage status polling receives JSON that fails contract validation WHEN evaluating a service THEN service is rendered as `down` with reason `invalid_contract`.
-- **AC-12** — GIVEN homepage status polling receives valid contract JSON with unsupported contract major version WHEN evaluating a service THEN service is rendered as `down` with reason `unsupported_contract_version`.
-- **AC-13** — GIVEN homepage status polling receives valid and supported contract JSON WHEN evaluating a service THEN rendered service status equals body `status` and displays check-level degradation/failure details, last updated timestamp, and contract version.
-- **AC-14** — GIVEN a configured third-party monitor (without native `healthResponseSchema`) WHEN homepage evaluates that monitor THEN `/status` maps provider response into the same rendered status model (`ok`, `degraded`, `down`) with a monitor type label indicating external/synthetic source.
-- **AC-15** — GIVEN a third-party monitor configuration is invalid or missing required adapter settings WHEN `/status` starts polling THEN the monitor is rendered as `down` with reason `invalid_monitor_config` and does not crash the page.
+- **AC-9** — GIVEN status aggregation in `packages/api` encounters network failure or timeout WHEN evaluating a monitor THEN API result is `down` with reason `unreachable`, and homepage renders that reason.
+- **AC-10** — GIVEN status aggregation in `packages/api` receives non-JSON response WHEN evaluating a monitor THEN API result is `down` with reason `invalid_json`, and homepage renders that reason.
+- **AC-11** — GIVEN status aggregation in `packages/api` receives JSON that fails contract validation WHEN evaluating a contract monitor THEN API result is `down` with reason `invalid_contract`, and homepage renders that reason.
+- **AC-12** — GIVEN status aggregation in `packages/api` receives valid contract JSON with unsupported contract major version WHEN evaluating a contract monitor THEN API result is `down` with reason `unsupported_contract_version`, and homepage renders that reason.
+- **AC-13** — GIVEN status aggregation in `packages/api` receives valid and supported contract JSON WHEN evaluating a contract monitor THEN API result status equals body `status`, and homepage displays check-level degradation/failure details, last updated timestamp, and contract version.
+- **AC-14** — GIVEN a configured third-party monitor (without native `healthResponseSchema`) WHEN `packages/api` evaluates that monitor THEN `/v1/status` maps provider response into the same rendered status model (`ok`, `degraded`, `down`) with a monitor type label indicating external/synthetic source.
+- **AC-15** — GIVEN a third-party monitor configuration is invalid or missing required adapter settings WHEN `packages/api` evaluates that monitor THEN API result is `down` with reason `invalid_monitor_config`, and homepage does not crash.
 
 ## 5. Roles & authorization (RBAC)
 
-| Action                                                 | Allowed                                                                                                   | Explicitly denied                                                                               |
-| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| View `apps/homepage/status` page                       | Everyone (public/anonymous users and authenticated users)                                                 | None                                                                                            |
-| Poll service `/health` endpoints from status consumer  | Homepage status aggregation during static build, or a server-side poller when hosted with runtime support | Client-side browser direct polling flow is not relied on for source-of-truth status aggregation |
-| Poll third-party monitor adapters from status consumer | Homepage status aggregation during static build, or a server-side poller when hosted with runtime support | Direct client-side credentialed calls from browsers                                             |
-| Produce `/health` response for a service               | Service backend runtime implementing its own endpoint                                                     | Any caller attempting to mutate service state through `/health` (endpoint is read-only)         |
-| Publish/update health contract library implementation  | Repository maintainers/contributors via reviewed PRs                                                      | Runtime users; anonymous/public users cannot change contract behavior                           |
+| Action                                                 | Allowed                                                                  | Explicitly denied                                                                       |
+| ------------------------------------------------------ | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| View `apps/homepage/status` page                       | Everyone (public/anonymous users and authenticated users)                | None                                                                                    |
+| Poll service `/health` endpoints from status consumer  | API status aggregation (`packages/api` `/v1/status`) running server-side | Client-side browser direct polling of service `/health` as source of truth              |
+| Poll third-party monitor adapters from status consumer | API status aggregation (`packages/api` `/v1/status`) running server-side | Direct client-side credentialed calls from browsers                                     |
+| Produce `/health` response for a service               | Service backend runtime implementing its own endpoint                    | Any caller attempting to mutate service state through `/health` (endpoint is read-only) |
+| Publish/update health contract library implementation  | Repository maintainers/contributors via reviewed PRs                     | Runtime users; anonymous/public users cannot change contract behavior                   |
 
 ## 6. Out of scope / non-goals
 
@@ -76,17 +78,18 @@ health contract natively.
 2. `runChecks` maps thrown errors and timeout to normalized failures (AC-3/AC-4).
 3. `summarizeStatus` matrix for down/degraded/ok (AC-5).
 4. `/health` returns HTTP 200 + `no-store` + schema-valid body for a sanctioned service (AC-7).
-5. Status consumer maps `unreachable`, `invalid_json`, and `invalid_contract` correctly (AC-9/AC-10/AC-11).
-6. Status page renders supported valid response using body status and displays check/timestamp/contractVersion fields (AC-13).
+5. API status aggregation maps `unreachable`, `invalid_json`, `invalid_contract`, and `unsupported_contract_version` correctly (AC-9/AC-10/AC-11/AC-12).
+6. Status page renders supported valid response using API result status and displays check/timestamp/contractVersion fields (AC-13).
 7. Third-party monitor adapter maps provider response into shared status model and renders monitor type/source (AC-14).
+8. API status aggregation handles invalid monitor configuration as `invalid_monitor_config` without breaking response generation (AC-15).
 
 ## 8. Observability
 
-- Events/metrics emitted via `@acme/logger`:
-  - `homepage.status.poll_unreachable`
-  - `homepage.status.poll_invalid_json`
-  - `homepage.status.poll_invalid_contract`
-  - `homepage.status.poll_unsupported_contract_version`
-  - `homepage.status.poll_success`
-  - `health.check.timeout`
-  - `health.check.error_normalized`
+- API status aggregation events emitted via `@acme/logger` in `packages/api/src/router/status.ts`:
+  - `api.status.poll_unreachable`
+  - `api.status.poll_invalid_json`
+  - `api.status.poll_invalid_contract`
+  - `api.status.poll_unsupported_contract_version`
+  - `api.status.poll_invalid_monitor_config`
+  - `api.status.poll_success`
+- Service-level health check normalization/timeout events (for check producers) remain owned by each service's `/health` implementation.
