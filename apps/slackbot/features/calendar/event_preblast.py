@@ -1011,6 +1011,10 @@ def build_preblast_info(
     org_meta = event.org_meta or (event.meta or {}).get("org_meta") or {}
     if org_meta.get("slack_channel_id"):
         location_display += f"<#{org_meta['slack_channel_id']}>"
+    elif event.org_name:
+        location_display += event.org_name
+    else:
+        location_display += "Unknown AO"
     if event.location_name:
         loc_name = event.location_name
         if event.location_latitude and event.location_longitude:
@@ -1020,8 +1024,6 @@ def build_preblast_info(
             )
         elif location_display:
             location_display += f" - {loc_name}"
-        else:
-            location_display = loc_name
 
     # Build event details string
     event_type_display = " / ".join(event.event_type_names) if event.event_type_names else "TBD"
