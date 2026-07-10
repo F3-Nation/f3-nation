@@ -12,7 +12,7 @@ This package provides:
 ## Install
 
 ```bash
-pnpm add @f3nation/health zod
+pnpm add @f3nation/health
 ```
 
 ## Quickstart

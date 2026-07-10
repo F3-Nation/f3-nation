@@ -56,10 +56,18 @@ export function StatusDashboardClient() {
           throw new Error(`${endpoint} returned HTTP ${response.status}`);
         }
 
-        const json = (await response.json()) as StatusApiResponse;
+        const json = (await response.json()) as unknown;
+
+        if (
+          typeof json !== "object" ||
+          json === null ||
+          !Array.isArray((json as Record<string, unknown>).results)
+        ) {
+          throw new Error(`Unexpected response shape from ${endpoint}`);
+        }
 
         if (!isMounted) return;
-        setData(json);
+        setData(json as StatusApiResponse);
         setError(null);
       } catch (err) {
         if (!isMounted) return;
