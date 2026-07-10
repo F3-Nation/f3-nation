@@ -16,16 +16,8 @@ vi.mock("next/navigation", () => ({
   redirect: redirectMock,
 }));
 
-vi.mock("@acme/sso", async () => {
-  const actual = await vi.importActual("@acme/sso");
-  return { ...actual, verifyAccessToken: verifyAccessTokenMock };
-});
-
-vi.mock("@/env", () => ({
-  env: {
-    AUTH_PROVIDER_URL: "https://auth.test.com",
-    OAUTH_CLIENT_ID: "me-client",
-  },
+vi.mock("@/lib/auth/tokens", () => ({
+  verifyAccessTokenPayload: verifyAccessTokenPayloadMock,
 }));
 
 vi.mock("@/lib/logging", () => ({
@@ -48,18 +40,14 @@ describe("auth server helpers", () => {
     const user = await getSessionUser();
 
     expect(user).toBeNull();
-    expect(verifyAccessTokenMock).not.toHaveBeenCalled();
+    expect(verifyAccessTokenPayloadMock).not.toHaveBeenCalled();
   });
 
   it("returns null when token verification fails", async () => {
     cookiesMock.mockResolvedValue({
       get: vi.fn().mockReturnValue({ value: "token-expired" }),
     });
-    verifyAccessTokenMock.mockResolvedValue({
-      ok: false,
-      code: "expired",
-      error: "Token expired",
-    });
+    verifyAccessTokenPayloadMock.mockResolvedValue(null);
 
     const { getSessionUser } = await import("@/lib/auth/server");
     const user = await getSessionUser();
@@ -115,10 +103,7 @@ describe("auth server helpers", () => {
     cookiesMock.mockResolvedValue({
       get: vi.fn().mockReturnValue({ value: "token-no-email" }),
     });
-    verifyAccessTokenMock.mockResolvedValue({
-      ok: true,
-      payload: { sub: "42" },
-    });
+    verifyAccessTokenPayloadMock.mockResolvedValue({ sub: "42" });
 
     const { getSessionUser } = await import("@/lib/auth/server");
     const user = await getSessionUser();
@@ -160,9 +145,9 @@ describe("auth server helpers", () => {
     cookiesMock.mockResolvedValue({
       get: vi.fn().mockReturnValue({ value: "token-zero-sub" }),
     });
-    verifyAccessTokenMock.mockResolvedValue({
-      ok: true,
-      payload: { sub: "0", email: "test@example.com" },
+    verifyAccessTokenPayloadMock.mockResolvedValue({
+      sub: "0",
+      email: "test@example.com",
     });
 
     const { getSessionUser } = await import("@/lib/auth/server");
@@ -175,9 +160,9 @@ describe("auth server helpers", () => {
     cookiesMock.mockResolvedValue({
       get: vi.fn().mockReturnValue({ value: "token-valid" }),
     });
-    verifyAccessTokenMock.mockResolvedValue({
-      ok: true,
-      payload: { sub: "42", email: "test@example.com" },
+    verifyAccessTokenPayloadMock.mockResolvedValue({
+      sub: "42",
+      email: "test@example.com",
     });
 
     const { getSessionUser } = await import("@/lib/auth/server");
@@ -214,9 +199,9 @@ describe("auth server helpers", () => {
     cookiesMock.mockResolvedValue({
       get: vi.fn().mockReturnValue({ value: "token-auth" }),
     });
-    verifyAccessTokenMock.mockResolvedValue({
-      ok: true,
-      payload: { sub: "7", email: "auth@example.com" },
+    verifyAccessTokenPayloadMock.mockResolvedValue({
+      sub: "7",
+      email: "auth@example.com",
     });
 
     const { requireAuth } = await import("@/lib/auth/server");
