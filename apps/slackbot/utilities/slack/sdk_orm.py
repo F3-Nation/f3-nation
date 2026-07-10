@@ -9,6 +9,7 @@ from slack_sdk.models.views import View
 from utilities.constants import ENABLE_DEBUGGING
 from utilities.helper_functions import safe_get
 from utilities.slack import actions
+import logging
 
 
 def as_selector_options(names: List[str], values: List[str] = None, descriptions: List[str] = None) -> List[Option]:
@@ -255,10 +256,8 @@ class SdkBlockView:
                 return client.views_update(external_id=external_id, view=view.to_dict())
             else:
                 return client.views_update(view_id=view_id, view=view.to_dict())
-        except Exception:
+        except Exception as e:
             # TODO: handle "not found" errors; post new instead of update?
-            import logging
-
             logging.getLogger(__name__).error(
                 "SdkBlockView.update_modal failed for view_id=%s: %s", view_id, e
             )

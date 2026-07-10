@@ -181,21 +181,8 @@ def post_hc_thread_reply(
     if event_instance_id is not None:
         try:
             svc = _build_preblast_service()
-            if svc._event_instance_service:
-                event = svc._event_instance_service.get_by_id(event_instance_id)
-                if event and event.meta is not None:
-                    if svc.has_hc_announcement_been_sent(event.meta, slack_user_id, is_hc=is_hc):
-                        return
-                    updated_meta = svc.mark_hc_announcement_sent(event.meta, slack_user_id, is_hc=is_hc)
-                    if svc._event_instance_service:
-                        svc._event_instance_service.update_preblast_fields(
-                            event_instance_id,
-                            meta_updates={
-                                k: updated_meta[k]
-                                for k in updated_meta
-                                if k not in (event.meta or {}) or updated_meta[k] != event.meta.get(k)
-                            },
-                        )
+            if not svc.check_and_mark_hc_announcement(event_instance_id, slack_user_id, is_hc=is_hc):
+                return
         except Exception as e:
             logger.warning(f"HC dedupe check failed for event {event_instance_id}: {e}")
 
@@ -259,7 +246,7 @@ def build_event_preblast_select_form(
         attendance_filter=[
             Attendance.user_id == user_id,
             Attendance.is_planned,
-            Attendance.attendance_types.any(AttendanceType.id.in_([2, 3])),
+            Attendance.attendance_types.any(AttendanceType.id.in_([Q_TYPE_ID, CO_Q_TYPE_ID])),
         ],
         event_filter=[
             EventInstance.start_date >= current_date_cst(),
@@ -721,7 +708,7 @@ def send_preblast(
     slack_user_id = safe_get(body, "user", "id") or safe_get(body, "user_id")
     preblast_info = build_preblast_info(body, client, logger, context, region_record, event_instance_id)
     q_attendance = next(
-        (r for r in preblast_info.attendance_records if 2 in r.get("attendance_type_ids", [])),
+        (r for r in preblast_info.attendance_records if Q_TYPE_ID in r.get("attendance_type_ids", [])),
         None,
     )
     q_slack_id = None
@@ -729,7 +716,7 @@ def send_preblast(
         q_slack_id = preblast_info.attendance_slack_dict.get(q_attendance["user_id"])
     q_list = [
         r for r in preblast_info.attendance_records
-        if bool({2, 3}.intersection(r.get("attendance_type_ids", [])))
+        if bool({Q_TYPE_ID, CO_Q_TYPE_ID}.intersection(r.get("attendance_type_ids", [])))
     ]
 
     blocks = list(preblast_info.preblast_blocks)
@@ -763,7 +750,7 @@ def send_preblast(
         slack_id = q_slack_id or slack_user_id
         q_name, q_url = get_user_names([slack_id], logger, client, return_urls=True)
         q_name = (q_name or [""])[0]
-        q_url = q_url[0]
+        q_url = q_url[0] if q_url else None
         username = f"{q_name} (via F3 Nation)"
         icon_url = q_url
     else:
@@ -801,7 +788,8 @@ def send_preblast(
 
     if decision.mode == PostMode.SAVE:
         action_text = "saved"
-    elif decision.mode == PostMode.POST_NEW:
+    if decision.mode in (PostMode.POST_NEW, PostMode.POST_NEW_CHANNEL):
+        action_text = "posted" if decision.mode == PostMode.POST_NEW else "posted in new channel"
         try:
             res = _post_blocks(
                 client.chat_postMessage,
@@ -821,33 +809,6 @@ def send_preblast(
                 channel_id=desired_channel,
                 existing_event=event,
             )
-            action_text = "posted"
-        except Exception as e:
-            logger.error(f"Error posting preblast for event {event_instance_id}: {e}")
-            action_text = "post_failed"
-    elif decision.mode == PostMode.POST_NEW_CHANNEL:
-        # Changed destination: post new message in desired channel,
-        # do NOT touch the old post.
-        try:
-            res = _post_blocks(
-                client.chat_postMessage,
-                blocks,
-                logger,
-                channel=desired_channel,
-                text="Event Preblast",
-                metadata={"event_type": "preblast", "event_payload": metadata_dict},
-                unfurl_links=False,
-                username=username,
-                icon_url=icon_url,
-            )
-            ts = float(res["ts"])
-            svc.persist_posted_preblast(
-                instance_id=event_instance_id,
-                preblast_ts=ts,
-                channel_id=desired_channel,
-                existing_event=event,
-            )
-            action_text = "posted in new channel"
         except Exception as e:
             logger.error(f"Error posting preblast for event {event_instance_id}: {e}")
             action_text = "post_failed"
@@ -943,13 +904,13 @@ def build_preblast_info(
         user_is_q = any(
             att.user_id == user_id
             for att in attendance_data
-            if bool({2, 3}.intersection(att.attendance_type_ids))
+            if bool({Q_TYPE_ID, CO_Q_TYPE_ID}.intersection(att.attendance_type_ids))
         )
 
     # Build Q list with Slack mentions
     q_attendance = [
         att for att in attendance_data
-        if bool({2, 3}.intersection(att.attendance_type_ids))
+        if bool({Q_TYPE_ID, CO_Q_TYPE_ID}.intersection(att.attendance_type_ids))
     ]
     q_mentions = [
         f"<@{attendance_slack_dict[att.user_id]}>"
@@ -1148,7 +1109,10 @@ def handle_event_preblast_action(
             preblast_info = build_preblast_info(body, client, logger, context, region_record, event_instance_id)
             blocks = list(preblast_info.preblast_blocks) + [
                 b.as_form_field() for b in get_preblast_action_blocks(
-                    has_q=len(preblast_info.action_blocks) > 0,
+                    has_q=any(
+                        bool({Q_TYPE_ID, CO_Q_TYPE_ID}.intersection(r.get("attendance_type_ids", [])))
+                        for r in preblast_info.attendance_records
+                    ),
                     event_instance_id=event_instance_id,
                 )
             ]
@@ -1164,7 +1128,7 @@ def handle_event_preblast_action(
 
             q_name, q_url = get_user_names([slack_user_id], logger, client, return_urls=True)
             q_name = (q_name or [""])[0]
-            q_url = q_url[0]
+            q_url = q_url[0] if q_url else None
             preblast_channel = get_preblast_channel(region_record, preblast_info)
             try:
                 client.chat_update(
@@ -1217,7 +1181,7 @@ def handle_event_preblast_action(
             q_id_list = [
                 r.get("user_id")
                 for r in preblast_info.attendance_records
-                if bool({2, 3}.intersection(r.get("attendance_type_ids", [])))
+                if bool({Q_TYPE_ID, CO_Q_TYPE_ID}.intersection(r.get("attendance_type_ids", [])))
             ]
             metadata = {
                 "event_instance_id": event_instance_id,
@@ -1243,7 +1207,7 @@ def handle_event_preblast_action(
 
             q_name, q_url = get_user_names([slack_user_id], logger, client, return_urls=True)
             q_name = (q_name or [""])[0]
-            q_url = q_url[0]
+            q_url = q_url[0] if q_url else None
             preblast_channel = get_preblast_channel(region_record, preblast_info)
 
             try:

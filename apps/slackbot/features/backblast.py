@@ -1220,6 +1220,9 @@ COUNT: {count}
         ssl_ctx.check_hostname = False
         ssl_ctx.verify_mode = ssl.CERT_NONE
 
+        region_org = DbManager.get(Org, region_record.org_id)
+        region_name = region_org.name if region_org else region_record.workspace_name
+
         for home_region_id in foreign_region_ids:
             ox = DbManager.find_first_record(Org_x_SlackSpace, [Org_x_SlackSpace.org_id == home_region_id])
             if not ox:
@@ -1239,9 +1242,6 @@ COUNT: {count}
                 continue
             if dr_settings.downrange_channel_posting != "enabled" or not dr_settings.downrange_channel:
                 continue
-
-            region_org = DbManager.get(Org, region_record.org_id)
-            region_name = region_org.name if region_org else region_record.workspace_name
 
             cross_post_msg = f""":airplane: *Downrange! {title}*
 *DATE*: {the_date}

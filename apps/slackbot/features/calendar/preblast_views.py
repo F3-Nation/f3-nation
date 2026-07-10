@@ -26,6 +26,7 @@ from slack_sdk.models.blocks.basic_components import PlainTextObject, MarkdownTe
 from application.event_instance import EventInstanceData
 from application.preblast import PREBLAST_CHANNEL_META_KEY, PreblastEventTypeData
 from application.preblast.service import PreblastService
+from apps.slackbot.build.lib.utilities.helper_functions import current_date_cst
 from utilities.slack import actions
 from utilities.slack.sdk_orm import SdkBlockView, as_selector_options
 
@@ -242,7 +243,7 @@ class PreblastViews:
 
             schedule_default = "Send now"
             if event.start_date:
-                today = date.today()
+                today = current_date_cst()
                 if event.start_date > today and (event.start_date - today).days > 1:
                     schedule_default = "Send a day before the event"
             send_options = as_selector_options(

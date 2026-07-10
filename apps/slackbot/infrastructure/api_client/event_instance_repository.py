@@ -26,6 +26,19 @@ from infrastructure.api_client.exceptions import F3ApiNotFoundError
 PREBLAST_CHANNEL_META_KEY = "preblast_channel_id"
 PREBLAST_POST_CHANNEL_META_KEY = "preblast_post_channel_id"
 
+def _resolve_and_validate_existing(
+    repo: ApiEventInstanceRepository,
+    instance_id: int,
+    existing_instance: EventInstanceData | None,
+) -> EventInstanceData:
+    existing = existing_instance or repo.get_by_id(instance_id)
+    if existing is None:
+        raise ValueError(f"Event instance {instance_id} was not found")
+    if existing.id != instance_id:
+        raise ValueError(f"Existing event instance {existing.id} does not match requested id {instance_id}")
+    if not existing.event_type_ids:
+        raise ValueError(f"Event instance {instance_id} is missing required field 'event_type_ids'")
+    return existing
 
 def _parse_instance(raw: dict) -> EventInstanceData:
     """Convert a raw API response dict to an ``EventInstanceData`` object."""
@@ -382,13 +395,7 @@ class ApiEventInstanceRepository:
         preblast_channel_id: str | None = None,
         existing_instance: EventInstanceData | None = None,
     ) -> EventInstanceData:
-        existing = existing_instance or self.get_by_id(instance_id)
-        if existing is None:
-            raise ValueError(f"Event instance {instance_id} was not found")
-        if existing.id != instance_id:
-            raise ValueError(f"Existing event instance {existing.id} does not match requested id {instance_id}")
-        if not existing.event_type_ids:
-            raise ValueError(f"Event instance {instance_id} is missing required field 'event_type_ids'")
+        existing = _resolve_and_validate_existing(self, instance_id, existing_instance)
         meta_updates = _merged_meta(
             meta_updates,
             {PREBLAST_CHANNEL_META_KEY: preblast_channel_id} if preblast_channel_id else None,
@@ -443,13 +450,7 @@ class ApiEventInstanceRepository:
         preblast_post_channel_id: str,
         existing_instance: EventInstanceData | None = None,
     ) -> EventInstanceData:
-        existing = existing_instance or self.get_by_id(instance_id)
-        if existing is None:
-            raise ValueError(f"Event instance {instance_id} was not found")
-        if existing.id != instance_id:
-            raise ValueError(f"Existing event instance {existing.id} does not match requested id {instance_id}")
-        if not existing.event_type_ids:
-            raise ValueError(f"Event instance {instance_id} is missing required field 'event_type_ids'")
+        existing = _resolve_and_validate_existing(self, instance_id, existing_instance)
         payload = _build_crupdate_payload(
             name=existing.name or "",
             org_id=existing.org_id,

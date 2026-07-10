@@ -222,3 +222,24 @@ class PreblastService:
         if self._attendance_service is None:
             raise ValueError("AttendanceService is required to update attendance")
         return self._attendance_service.assign_qs(event_instance_id, q_user_id, co_q_user_ids)
+    
+    def check_and_mark_hc_announcement(
+        self, event_instance_id: int, slack_user_id: str, *, is_hc: bool
+    ) -> bool:
+        """Return True if the HC announcement should be posted (and mark it sent)."""
+        if not self._event_instance_service:
+            return True  # fail open
+        event = self._event_instance_service.get_by_id(event_instance_id)
+        if not event or not event.meta:
+            return True
+        if self.has_hc_announcement_been_sent(event.meta, slack_user_id, is_hc=is_hc):
+            return False
+        updated_meta = self.mark_hc_announcement_sent(event.meta, slack_user_id, is_hc=is_hc)
+        self._event_instance_service.update_preblast_fields(
+            event_instance_id,
+            meta_updates={
+                k: updated_meta[k] for k in updated_meta
+                if k not in (event.meta or {}) or updated_meta[k] != event.meta.get(k)
+            },
+        )
+        return True
