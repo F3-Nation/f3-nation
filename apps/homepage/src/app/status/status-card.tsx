@@ -51,24 +51,26 @@ export function StatusCard({ result }: { result: StatusResult }) {
             </p>
             <Separator />
             <div className="space-y-2">
-              {result.data.checks.map((check) => (
-                <div key={check.id} className="rounded-md border p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="font-medium">{check.id}</span>
-                    <Badge
-                      variant={badgeVariantForStatus(check.status)}
-                      className="text-[10px]"
-                    >
-                      {check.status.toUpperCase()}
-                    </Badge>
+              {result.data.checks.map(
+                (check: (typeof result.data.checks)[number]) => (
+                  <div key={check.id} className="rounded-md border p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-medium">{check.id}</span>
+                      <Badge
+                        variant={badgeVariantForStatus(check.status)}
+                        className="text-[10px]"
+                      >
+                        {check.status.toUpperCase()}
+                      </Badge>
+                    </div>
+                    {check.message ? (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        {check.message}
+                      </p>
+                    ) : null}
                   </div>
-                  {check.message ? (
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      {check.message}
-                    </p>
-                  ) : null}
-                </div>
-              ))}
+                ),
+              )}
             </div>
           </>
         ) : result.ok && result.source === "external" ? (
