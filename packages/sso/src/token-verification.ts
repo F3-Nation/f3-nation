@@ -54,6 +54,7 @@ export interface VerifyJwtWithJwksOptions {
 
 const DEFAULT_CLOCK_SKEW_SECONDS = 60;
 const DEFAULT_JWKS_PATH = "/.well-known/jwks.json";
+const JWKS_CACHE_MAX_SIZE = 20;
 
 const jwksCache = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
 
@@ -119,6 +120,12 @@ function getJwksResolver(options: VerifyJwtWithJwksOptions) {
   if (existing) return existing;
 
   const resolver = createRemoteJWKSet(jwksUrl);
+  // Evict the oldest entry when the cache is full (FIFO) to prevent unbounded
+  // memory growth in long-lived processes that verify against many auth servers.
+  if (jwksCache.size >= JWKS_CACHE_MAX_SIZE) {
+    const oldest = jwksCache.keys().next().value;
+    if (oldest !== undefined) jwksCache.delete(oldest);
+  }
   jwksCache.set(cacheKey, resolver);
   return resolver;
 }

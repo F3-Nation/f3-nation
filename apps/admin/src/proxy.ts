@@ -209,10 +209,18 @@ export async function proxy(request: NextRequest) {
       );
       return response;
     } catch (err) {
-      logWarn("admin.auth.refresh_failed", {
-        isNavigationRequest,
-        errorMessage: err instanceof Error ? err.message : String(err),
-      });
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      const isExpectedRotationLoss =
+        !isNavigationRequest && /invalid_grant/i.test(errorMessage);
+
+      if (isExpectedRotationLoss) {
+        logDebug("admin.auth.refresh_invalid_grant", { isNavigationRequest });
+      } else {
+        logWarn("admin.auth.refresh_failed", {
+          isNavigationRequest,
+          errorMessage,
+        });
+      }
 
       // Non-navigation requests (API, prefetch): return 401 without touching
       // cookies so the winning rotation's Set-Cookie headers are not clobbered.
