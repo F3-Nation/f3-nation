@@ -7,7 +7,7 @@ import {
   foreignKey,
   index,
   integer,
-  json,
+  jsonb,
   pgEnum,
   pgSchema,
   pgTable,
@@ -35,6 +35,7 @@ import {
   UserStatus,
 } from "@acme/shared/app/enums";
 import type {
+  AchievementAwardMeta,
   AttendanceMeta,
   EventMeta,
   LocationMeta,
@@ -99,13 +100,13 @@ export const eventInstances = pgTable(
     fngCount: integer("fng_count"),
     preblast: varchar(),
     backblast: varchar(),
-    preblastRich: json("preblast_rich"),
-    backblastRich: json("backblast_rich"),
+    preblastRich: jsonb("preblast_rich"),
+    backblastRich: jsonb("backblast_rich"),
     preblastTs: doublePrecision("preblast_ts"),
     backblastTs: doublePrecision("backblast_ts"),
     isPrivate: boolean("is_private").default(false).notNull(),
     seriesException: seriesException("series_exception"),
-    meta: json(),
+    meta: jsonb(),
     created: timestamp({ mode: "string" })
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
@@ -170,7 +171,7 @@ export const slackSpaces = pgTable(
     teamId: varchar("team_id").notNull(),
     workspaceName: varchar("workspace_name"),
     botToken: varchar("bot_token"),
-    settings: json().$type<SlackSpacesMeta>(),
+    settings: jsonb().$type<SlackSpacesMeta>(),
     created: timestamp({ mode: "string" })
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
@@ -214,7 +215,7 @@ export const slackUsers = pgTable(
     stravaRefreshToken: varchar("strava_refresh_token"),
     stravaExpiresAt: timestamp("strava_expires_at", { mode: "string" }),
     stravaAthleteId: integer("strava_athlete_id"),
-    meta: json().$type<SlackUserMeta>(),
+    meta: jsonb().$type<SlackUserMeta>(),
     slackUpdated: integer("slack_updated"),
     created: timestamp({ mode: "string" })
       .default(sql`timezone('utc'::text, now())`)
@@ -243,7 +244,7 @@ export const attendance = pgTable(
     id: serial().primaryKey().notNull(),
     userId: integer("user_id").notNull(),
     isPlanned: boolean("is_planned").notNull(),
-    meta: json().$type<AttendanceMeta>(),
+    meta: jsonb().$type<AttendanceMeta>(),
     created: timestamp({ mode: "string" })
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
@@ -302,7 +303,7 @@ export const locations = pgTable(
     addressState: varchar("address_state"),
     addressZip: varchar("address_zip"),
     addressCountry: varchar("address_country"),
-    meta: json().$type<LocationMeta>(),
+    meta: jsonb().$type<LocationMeta>(),
     created: timestamp({ mode: "string" })
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
@@ -381,7 +382,7 @@ export const users = pgTable(
     phone: varchar(),
     homeRegionId: integer("home_region_id"),
     avatarUrl: varchar("avatar_url"),
-    meta: json().$type<UserMeta>(),
+    meta: jsonb().$type<UserMeta>(),
     created: timestamp({ mode: "string" })
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
@@ -423,8 +424,8 @@ export const achievements = pgTable(
     autoCadence: achievementCadence("auto_cadence"),
     autoThresholdType: varchar("auto_threshold_type"),
     autoThreshold: integer("auto_threshold"),
-    autoFilters: json("auto_filters"),
-    meta: json(),
+    autoFilters: jsonb("auto_filters"),
+    meta: jsonb(),
   },
   (table) => [
     foreignKey({
@@ -479,7 +480,7 @@ export const orgs = pgTable(
     instagram: varchar(),
     lastAnnualReview: date("last_annual_review"),
     aoCount: integer("ao_count").default(0),
-    meta: json().$type<OrgMeta>(),
+    meta: jsonb().$type<OrgMeta>(),
     created: timestamp({ mode: "string" })
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
@@ -553,7 +554,7 @@ export const events = pgTable(
     recurrencePattern: eventCadence("recurrence_pattern"),
     recurrenceInterval: integer("recurrence_interval"),
     indexWithinInterval: integer("index_within_interval"),
-    meta: json().$type<EventMeta>(),
+    meta: jsonb().$type<EventMeta>(),
     isPrivate: boolean("is_private").default(false).notNull(),
     created: timestamp({ mode: "string" })
       .default(sql`timezone('utc'::text, now())`)
@@ -617,7 +618,7 @@ export const updateRequests = pgTable(
     eventRecurrencePattern: eventCadence("event_recurrence_pattern"),
     eventRecurrenceInterval: integer("event_recurrence_interval"),
     eventIndexWithinInterval: integer("event_index_within_interval"),
-    eventMeta: json("event_meta").$type<EventMeta>(),
+    eventMeta: jsonb("event_meta").$type<EventMeta>(),
     eventContactEmail: varchar("event_contact_email"),
     locationName: varchar("location_name"),
     locationDescription: varchar("location_description"),
@@ -640,7 +641,7 @@ export const updateRequests = pgTable(
     reviewedBy: varchar("reviewed_by"),
     reviewedAt: timestamp("reviewed_at", { mode: "string" }),
     status: updateRequestStatus().default("pending").notNull(),
-    meta: json().$type<UpdateRequestMeta>(),
+    meta: jsonb().$type<UpdateRequestMeta>(),
     created: timestamp({ mode: "string" })
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
@@ -858,6 +859,7 @@ export const achievementsXUsers = pgTable(
     dateAwarded: timestamp("date_awarded", { mode: "string" })
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
+    meta: jsonb().$type<AchievementAwardMeta>(),
   },
   (table) => [
     foreignKey({
