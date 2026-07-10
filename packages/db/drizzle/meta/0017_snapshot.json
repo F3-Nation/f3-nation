@@ -1,6 +1,6 @@
 {
-  "id": "0b73f86f-6be0-49de-916c-b6bf70d28293",
-  "prevId": "2f88060c-ded2-4895-93bb-95f6ce597256",
+  "id": "72204992-f1c1-4a67-9fb9-9b5b193c8d4a",
+  "prevId": "b1ecbc41-c169-4115-b529-6e29e610d37f",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -156,6 +156,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "timezone('utc'::text, now())"
+        },
+        "meta": {
+          "name": "meta",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {},
@@ -3481,7 +3487,7 @@
           "name": "event_name",
           "type": "varchar",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "event_description": {
           "name": "event_description",
@@ -3926,10 +3932,19 @@
       "name": "request_type",
       "schema": "public",
       "values": [
-        "create_location",
+        "create_ao_and_location_and_event",
         "create_event",
-        "edit",
-        "delete_event"
+        "edit_event",
+        "edit_ao_and_location",
+        "move_ao_to_different_region",
+        "move_ao_to_new_location",
+        "move_ao_to_different_location",
+        "move_event_to_different_ao",
+        "move_event_to_new_location",
+        "move_event_to_new_ao",
+        "delete_event",
+        "delete_ao",
+        "edit"
       ]
     },
     "public.series_exception": {

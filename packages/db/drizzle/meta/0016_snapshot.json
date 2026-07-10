@@ -1,6 +1,6 @@
 {
-  "id": "0b73f86f-6be0-49de-916c-b6bf70d28293",
-  "prevId": "2f88060c-ded2-4895-93bb-95f6ce597256",
+  "id": "b1ecbc41-c169-4115-b529-6e29e610d37f",
+  "prevId": "0b73f86f-6be0-49de-916c-b6bf70d28293",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -156,6 +156,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "timezone('utc'::text, now())"
+        },
+        "meta": {
+          "name": "meta",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {},

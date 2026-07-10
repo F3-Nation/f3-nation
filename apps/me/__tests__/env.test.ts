@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // `@/env` is built with @t3-oss/env-nextjs, which reads process.env once at
-// import time. Its `skipValidation` is a four-operand `||` chain whose branch
+// import time. Its `skipValidation` is a three-operand `||` chain whose branch
 // coverage otherwise depends on the ambient environment (e.g. CI short-circuits
 // on `process.env.CI`, so only the first operand is ever evaluated there). These
 // cases drive each operand deterministically via vi.stubEnv + a fresh import, so
@@ -32,17 +32,9 @@ describe("env skipValidation", () => {
     expect(await importEnv()).toBeDefined();
   });
 
-  it("skips validation under NODE_ENV=test (operand 3)", async () => {
+  it("skips validation for the lint lifecycle event (operand 3)", async () => {
     vi.stubEnv("CI", "");
     vi.stubEnv("SKIP_ENV_VALIDATION", "");
-    vi.stubEnv("NODE_ENV", "test");
-    expect(await importEnv()).toBeDefined();
-  });
-
-  it("skips validation for the lint lifecycle event (operand 4)", async () => {
-    vi.stubEnv("CI", "");
-    vi.stubEnv("SKIP_ENV_VALIDATION", "");
-    vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("npm_lifecycle_event", "lint");
     expect(await importEnv()).toBeDefined();
   });
