@@ -26,7 +26,8 @@
     "seed:local": "pnpm with-env tsx src/local-seed.ts",
     "typecheck": "tsc --noEmit",
     "with-env": "dotenv -e ../env/.env --",
-    "update-db": "pnpm with-env node -r esbuild-register src/update-db.ts"
+    "update-db": "pnpm with-env node -r esbuild-register src/update-db.ts",
+    "convert-legacy-edits": "pnpm with-env node -r esbuild-register src/convert-legacy-edit-requests.ts"
   },
   "dependencies": {
     "@acme/env": "workspace:*",
