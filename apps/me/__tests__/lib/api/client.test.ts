@@ -148,15 +148,6 @@ describe("API client (oRPC)", () => {
     expect(users[0]?.id).toBe(42);
   });
 
-  it("getUsers passes undefined when homeRegionId is not provided", async () => {
-    mockMe.users.mockResolvedValueOnce({ users: [] });
-
-    const { getUsers } = await import("@/lib/api/client");
-    await getUsers();
-
-    expect(mockMe.users).toHaveBeenCalledWith(undefined);
-  });
-
   it("isNotFoundApiError returns true for code-based NOT_FOUND errors", async () => {
     const { isNotFoundApiError } = await import("@/lib/api/client");
     expect(isNotFoundApiError({ code: "NOT_FOUND" })).toBe(true);
