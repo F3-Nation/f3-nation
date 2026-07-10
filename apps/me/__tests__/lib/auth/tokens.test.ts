@@ -1,16 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import {
-  isJwtExpired,
-  parseJwtPayload,
-  verifyJwtPayload,
-  verifyJwtToken,
-} from "@acme/sso";
+import { isJwtExpired, parseJwtPayload, verifyJwtWithJwks } from "@acme/sso";
 import {
   isAccessTokenExpired,
   parseAccessTokenPayload,
   verifyAccessToken,
   verifyAccessTokenPayload,
 } from "@/lib/auth/tokens";
+import { logError, logWarn } from "@/lib/logging";
 
 // tokens.ts reads credentials from the validated `@/env` module, which
 // @t3-oss/env-nextjs evaluates from process.env once at import time. Mock it so
@@ -29,10 +25,14 @@ vi.mock("@acme/sso", async () => {
     ...actual,
     isJwtExpired: vi.fn(),
     parseJwtPayload: vi.fn(),
-    verifyJwtPayload: vi.fn(),
-    verifyJwtToken: vi.fn(),
+    verifyJwtWithJwks: vi.fn(),
   };
 });
+
+vi.mock("@/lib/logging", () => ({
+  logError: vi.fn(),
+  logWarn: vi.fn(),
+}));
 
 function createToken(payload: Record<string, unknown>) {
   const encodedHeader = Buffer.from(
@@ -119,30 +119,40 @@ describe("verifyAccessTokenPayload", () => {
     vi.clearAllMocks();
   });
 
-  it("returns null when verifyJwtPayload returns null", async () => {
+  it("returns null when verifier returns failure result", async () => {
     const expiredToken = createToken({ sub: "42", exp: 1 });
-    vi.mocked(verifyJwtPayload).mockResolvedValueOnce(null);
+    vi.mocked(verifyJwtWithJwks).mockResolvedValueOnce({
+      ok: false,
+      code: "expired",
+      message: "Token expired",
+    });
     const result = await verifyAccessTokenPayload(expiredToken);
     expect(result).toBeNull();
-    expect(verifyJwtPayload).toHaveBeenCalledTimes(1);
+    expect(verifyJwtWithJwks).toHaveBeenCalledTimes(1);
   });
 
   it("returns payload when shared verifier succeeds", async () => {
-    vi.mocked(verifyJwtPayload).mockResolvedValueOnce({
-      sub: "42",
-      email: "test@f3.com",
-      exp: Math.floor(Date.now() / 1000) + 3600,
+    vi.mocked(verifyJwtWithJwks).mockResolvedValueOnce({
+      ok: true,
+      payload: {
+        sub: "42",
+        email: "test@f3.com",
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      },
     });
 
     const result = await verifyAccessTokenPayload(createValidToken());
     expect(result).toMatchObject({ sub: "42", email: "test@f3.com" });
-    expect(verifyJwtPayload).toHaveBeenCalledTimes(1);
+    expect(verifyJwtWithJwks).toHaveBeenCalledTimes(1);
   });
 
   it("returns null when strict verify succeeds but sub is not a string", async () => {
-    vi.mocked(verifyJwtPayload).mockResolvedValueOnce({
-      sub: 42 as never,
-      email: "test@f3.com",
+    vi.mocked(verifyJwtWithJwks).mockResolvedValueOnce({
+      ok: true,
+      payload: {
+        sub: 42 as never,
+        email: "test@f3.com",
+      },
     });
 
     const result = await verifyAccessTokenPayload(createValidToken());
@@ -150,11 +160,14 @@ describe("verifyAccessTokenPayload", () => {
   });
 
   it("returns payload when shared verifier returns client_id payload", async () => {
-    vi.mocked(verifyJwtPayload).mockResolvedValueOnce({
-      sub: "42",
-      email: "test@f3.com",
-      exp: Math.floor(Date.now() / 1000) + 3600,
-      client_id: "test-client-id",
+    vi.mocked(verifyJwtWithJwks).mockResolvedValueOnce({
+      ok: true,
+      payload: {
+        sub: "42",
+        email: "test@f3.com",
+        exp: Math.floor(Date.now() / 1000) + 3600,
+        client_id: "test-client-id",
+      },
     });
 
     const result = await verifyAccessTokenPayload(createValidToken());
@@ -162,8 +175,11 @@ describe("verifyAccessTokenPayload", () => {
   });
 
   it("returns null when shared verifier returns a payload without sub", async () => {
-    vi.mocked(verifyJwtPayload).mockResolvedValueOnce({
-      email: "test@f3.com",
+    vi.mocked(verifyJwtWithJwks).mockResolvedValueOnce({
+      ok: true,
+      payload: {
+        email: "test@f3.com",
+      },
     });
 
     const result = await verifyAccessTokenPayload(createValidToken());
@@ -171,10 +187,43 @@ describe("verifyAccessTokenPayload", () => {
   });
 
   it("returns null when shared verifier returns null", async () => {
-    vi.mocked(verifyJwtPayload).mockResolvedValueOnce(null);
+    vi.mocked(verifyJwtWithJwks).mockResolvedValueOnce({
+      ok: false,
+      code: "invalid_token",
+      message: "Token verification failed",
+    });
 
     const result = await verifyAccessTokenPayload(createValidToken());
     expect(result).toBeNull();
+  });
+
+  it("logs non-expired verifier failures", async () => {
+    vi.mocked(verifyJwtWithJwks).mockResolvedValueOnce({
+      ok: false,
+      code: "invalid_signature",
+      message: "Token signature verification failed",
+    });
+
+    const result = await verifyAccessTokenPayload(createValidToken());
+    expect(result).toBeNull();
+    expect(logWarn).toHaveBeenCalledWith(
+      "me.auth.access_token_payload_verify_failed",
+      { code: "invalid_signature" },
+    );
+  });
+
+  it("logs thrown verifier errors as misconfiguration", async () => {
+    vi.mocked(verifyJwtWithJwks).mockRejectedValueOnce(
+      new Error("authServerUrl must use https:// outside localhost"),
+    );
+
+    const result = await verifyAccessTokenPayload(createValidToken());
+    expect(result).toBeNull();
+    expect(logError).toHaveBeenCalledWith(
+      "me.auth.access_token_payload_verify_misconfigured",
+      {},
+      expect.any(Error),
+    );
   });
 });
 
@@ -183,27 +232,38 @@ describe("verifyAccessToken", () => {
     vi.clearAllMocks();
   });
 
-  it("returns false when verifyJwtToken returns false", async () => {
+  it("returns false when verifier returns false-like result", async () => {
     const expiredToken = createToken({ sub: "42", exp: 1 });
-    vi.mocked(verifyJwtToken).mockResolvedValueOnce(false);
+    vi.mocked(verifyJwtWithJwks).mockResolvedValueOnce({
+      ok: false,
+      code: "expired",
+      message: "Token expired",
+    });
 
     const result = await verifyAccessToken(expiredToken);
 
     expect(result).toBe(false);
-    expect(verifyJwtToken).toHaveBeenCalledTimes(1);
+    expect(verifyJwtWithJwks).toHaveBeenCalledTimes(1);
   });
 
   it("returns true when shared verifier succeeds", async () => {
-    vi.mocked(verifyJwtToken).mockResolvedValueOnce(true);
+    vi.mocked(verifyJwtWithJwks).mockResolvedValueOnce({
+      ok: true,
+      payload: { sub: "42" },
+    });
 
     const result = await verifyAccessToken(createValidToken());
 
     expect(result).toBe(true);
-    expect(verifyJwtToken).toHaveBeenCalledTimes(1);
+    expect(verifyJwtWithJwks).toHaveBeenCalledTimes(1);
   });
 
   it("returns false when shared verifier reports failure", async () => {
-    vi.mocked(verifyJwtToken).mockResolvedValueOnce(false);
+    vi.mocked(verifyJwtWithJwks).mockResolvedValueOnce({
+      ok: false,
+      code: "invalid_token",
+      message: "Token verification failed",
+    });
 
     const result = await verifyAccessToken(createValidToken());
 
@@ -211,16 +271,34 @@ describe("verifyAccessToken", () => {
   });
 
   it("passes auth server settings to the shared verifier", async () => {
-    vi.mocked(verifyJwtToken).mockResolvedValueOnce(true);
+    vi.mocked(verifyJwtWithJwks).mockResolvedValueOnce({
+      ok: true,
+      payload: { sub: "42" },
+    });
 
     await verifyAccessToken(createValidToken());
 
-    expect(verifyJwtToken).toHaveBeenCalledWith(
+    expect(verifyJwtWithJwks).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
         authServerUrl: "https://auth.test.com",
         clientId: "test-client-id",
+        allowClientIdClaimFallback: true,
       }),
+    );
+  });
+
+  it("logs thrown verifier errors as misconfiguration", async () => {
+    vi.mocked(verifyJwtWithJwks).mockRejectedValueOnce(
+      new Error("authServerUrl must use https:// outside localhost"),
+    );
+
+    const result = await verifyAccessToken(createValidToken());
+    expect(result).toBe(false);
+    expect(logError).toHaveBeenCalledWith(
+      "me.auth.access_token_verify_misconfigured",
+      {},
+      expect.any(Error),
     );
   });
 });

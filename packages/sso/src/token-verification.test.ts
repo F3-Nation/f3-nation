@@ -26,6 +26,20 @@ function makeToken(payload: Record<string, unknown>): string {
   ].join(".");
 }
 
+function makeClaimValidationError(claim: string): Error & {
+  code: string;
+  claim: string;
+} {
+  const error = new Error("claim failed") as Error & {
+    code: string;
+    claim: string;
+  };
+  error.name = "JWTClaimValidationFailed";
+  error.code = "ERR_JWT_CLAIM_VALIDATION_FAILED";
+  error.claim = claim;
+  return error;
+}
+
 describe("token verification", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -58,6 +72,11 @@ describe("token verification", () => {
       ok: true,
       payload: { sub: "123", email: "test@example.com" },
     });
+    expect(jwtVerifyMock).toHaveBeenCalledWith(token, expect.anything(), {
+      algorithms: ["RS256"],
+      issuer: "https://auth.example.com",
+      audience: "web-client",
+    });
   });
 
   it("returns expired for token with past exp claim", async () => {
@@ -78,8 +97,11 @@ describe("token verification", () => {
 
   it("returns invalid_signature for bad signature", async () => {
     const token = makeToken({ sub: "123", exp: 1_900_000_000 });
-    const signatureError = new Error("signature failed");
+    const signatureError = new Error("signature failed") as Error & {
+      code: string;
+    };
     signatureError.name = "JWSSignatureVerificationFailed";
+    signatureError.code = "ERR_JWS_SIGNATURE_VERIFICATION_FAILED";
 
     jwtVerifyMock.mockRejectedValue(signatureError);
 
@@ -98,9 +120,7 @@ describe("token verification", () => {
 
   it("returns issuer_mismatch when issuer claim check fails", async () => {
     const token = makeToken({ sub: "123", exp: 1_900_000_000 });
-    const claimError = new Error("claim failed") as Error & { claim?: string };
-    claimError.name = "JWTClaimValidationFailed";
-    claimError.claim = "iss";
+    const claimError = makeClaimValidationError("iss");
 
     jwtVerifyMock.mockRejectedValue(claimError);
 
@@ -119,9 +139,7 @@ describe("token verification", () => {
 
   it("returns audience_mismatch when audience claim check fails", async () => {
     const token = makeToken({ sub: "123", exp: 1_900_000_000 });
-    const claimError = new Error("claim failed") as Error & { claim?: string };
-    claimError.name = "JWTClaimValidationFailed";
-    claimError.claim = "aud";
+    const claimError = makeClaimValidationError("aud");
 
     jwtVerifyMock.mockRejectedValue(claimError);
 
@@ -140,11 +158,7 @@ describe("token verification", () => {
 
   it("falls back to client_id check when aud claim is absent", async () => {
     const token = makeToken({ sub: "123", exp: 1_900_000_000 });
-    const audError = new Error("audience mismatch") as Error & {
-      claim?: string;
-    };
-    audError.name = "JWTClaimValidationFailed";
-    audError.claim = "aud";
+    const audError = makeClaimValidationError("aud");
 
     jwtVerifyMock
       .mockRejectedValueOnce(audError)
@@ -153,12 +167,99 @@ describe("token verification", () => {
     const result = await verifyJwtWithJwks(token, {
       authServerUrl: "https://auth.example.com",
       clientId: "web",
+      allowClientIdClaimFallback: true,
     });
 
     expect(result).toEqual({
       ok: true,
       payload: { sub: "123", client_id: "web" },
     });
+    expect(jwtVerifyMock).toHaveBeenNthCalledWith(1, token, expect.anything(), {
+      algorithms: ["RS256"],
+      issuer: "https://auth.example.com",
+      audience: "web",
+    });
+    expect(jwtVerifyMock).toHaveBeenNthCalledWith(2, token, expect.anything(), {
+      algorithms: ["RS256"],
+      issuer: "https://auth.example.com",
+    });
+  });
+
+  it("returns audience_mismatch when fallback client_id does not match", async () => {
+    const token = makeToken({ sub: "123", exp: 1_900_000_000 });
+    const audError = makeClaimValidationError("aud");
+
+    jwtVerifyMock.mockRejectedValueOnce(audError).mockResolvedValueOnce({
+      payload: { sub: "123", client_id: "different-client" },
+    });
+
+    const result = await verifyJwtWithJwks(token, {
+      authServerUrl: "https://auth.example.com",
+      clientId: "web",
+      allowClientIdClaimFallback: true,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      code: "audience_mismatch",
+      message: "Token audience fallback client_id mismatch",
+    });
+  });
+
+  it("returns audience_mismatch when fallback token has no client_id", async () => {
+    const token = makeToken({ sub: "123", exp: 1_900_000_000 });
+    const audError = makeClaimValidationError("aud");
+
+    jwtVerifyMock
+      .mockRejectedValueOnce(audError)
+      .mockResolvedValueOnce({ payload: { sub: "123" } });
+
+    const result = await verifyJwtWithJwks(token, {
+      authServerUrl: "https://auth.example.com",
+      clientId: "web",
+      allowClientIdClaimFallback: true,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      code: "audience_mismatch",
+      message: "Token audience fallback client_id mismatch",
+    });
+  });
+
+  it("preserves strict audience mismatch when fallback verify throws", async () => {
+    const token = makeToken({ sub: "123", exp: 1_900_000_000 });
+    const audError = makeClaimValidationError("aud");
+
+    jwtVerifyMock
+      .mockRejectedValueOnce(audError)
+      .mockRejectedValueOnce(new Error("fallback verify failed"));
+
+    const result = await verifyJwtWithJwks(token, {
+      authServerUrl: "https://auth.example.com",
+      clientId: "web",
+      allowClientIdClaimFallback: true,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      code: "audience_mismatch",
+      message: "Token audience mismatch",
+    });
+  });
+
+  it("returns invalid_token for malformed token before expiration check", async () => {
+    const result = await verifyJwtWithJwks("not-a-jwt", {
+      authServerUrl: "https://auth.example.com",
+      clientId: "web-client",
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      code: "invalid_token",
+      message: "Token is malformed",
+    });
+    expect(jwtVerifyMock).not.toHaveBeenCalled();
   });
 });
 

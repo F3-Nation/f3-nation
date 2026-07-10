@@ -81,6 +81,7 @@ export function isJwtExpired(
   skewSeconds = DEFAULT_CLOCK_SKEW_SECONDS,
 ): boolean {
   const payload = parseJwtPayload(token);
+  // Treat missing or unparseable exp as expired to force full re-auth.
   if (typeof payload?.exp !== "number" || !Number.isFinite(payload.exp)) {
     return true;
   }
@@ -119,18 +120,27 @@ function classifyVerificationError(error: unknown): {
     return { code: "invalid_token", message: "Token verification failed" };
   }
 
-  if (error.name === "JWTExpired") {
+  const joseCode = (error as Error & { code?: string }).code;
+
+  if (joseCode === "ERR_JWT_EXPIRED") {
     return { code: "expired", message: "Token expired" };
   }
 
-  if (error.name === "JWSSignatureVerificationFailed") {
+  if (joseCode === "ERR_JWS_SIGNATURE_VERIFICATION_FAILED") {
     return {
       code: "invalid_signature",
       message: "Token signature verification failed",
     };
   }
 
-  if (error.name === "JWTClaimValidationFailed") {
+  if (joseCode === "ERR_JWKS_NO_MATCHING_KEY") {
+    return {
+      code: "invalid_signature",
+      message: "No matching signing key found for token",
+    };
+  }
+
+  if (joseCode === "ERR_JWT_CLAIM_VALIDATION_FAILED") {
     const claim = (error as Error & { claim?: string }).claim;
     if (claim === "iss") {
       return { code: "issuer_mismatch", message: "Token issuer mismatch" };
@@ -146,8 +156,10 @@ function classifyVerificationError(error: unknown): {
   }
 
   if (
+    joseCode === "ERR_JWKS_TIMEOUT" ||
+    joseCode === "ERR_JWKS_INVALID" ||
+    joseCode === "ERR_JWKS_MULTIPLE_MATCHING_KEYS" ||
     error.name === "TypeError" ||
-    error.name === "JWKSTimeout" ||
     /fetch|network/i.test(error.message)
   ) {
     return {
@@ -170,7 +182,16 @@ export async function verifyJwtWithJwks<
   const skewSeconds = options.skewSeconds ?? DEFAULT_CLOCK_SKEW_SECONDS;
   const issuer = options.issuer ?? options.authServerUrl;
   const audience = options.audience ?? options.clientId;
-  const allowClientIdClaimFallback = options.allowClientIdClaimFallback ?? true;
+  const allowClientIdClaimFallback =
+    options.allowClientIdClaimFallback ?? false;
+
+  if (!parseJwtPayload(token)) {
+    return {
+      ok: false,
+      code: "invalid_token",
+      message: "Token is malformed",
+    };
+  }
 
   if (isJwtExpired(token, skewSeconds)) {
     return { ok: false, code: "expired", message: "Token expired" };
@@ -192,7 +213,8 @@ export async function verifyJwtWithJwks<
 
   const isAudienceMismatch =
     strictError instanceof Error &&
-    strictError.name === "JWTClaimValidationFailed" &&
+    (strictError as Error & { code?: string }).code ===
+      "ERR_JWT_CLAIM_VALIDATION_FAILED" &&
     (strictError as Error & { claim?: string }).claim === "aud";
 
   if (
@@ -211,7 +233,7 @@ export async function verifyJwtWithJwks<
         return {
           ok: false,
           code: "audience_mismatch",
-          message: "Token client_id mismatch",
+          message: "Token audience fallback client_id mismatch",
         };
       }
 
@@ -230,6 +252,12 @@ export async function verifyJwtPayload<
 >(token: string, options: VerifyJwtWithJwksOptions): Promise<TPayload | null> {
   const result = await verifyJwtWithJwks<TPayload>(token, options);
   return result.ok ? result.payload : null;
+}
+
+export function isAccessTokenPayload(
+  payload: JWTPayload | null | undefined,
+): payload is AccessTokenPayload {
+  return typeof payload?.sub === "string" && payload.sub.length > 0;
 }
 
 export async function verifyJwtToken(

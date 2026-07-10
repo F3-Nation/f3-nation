@@ -11,6 +11,7 @@ import {
 } from "~/lib/auth/constants";
 import { refreshToken } from "~/lib/auth/oauth";
 import { verifyAccessTokenPayload } from "~/lib/auth/tokens";
+import { logWarn } from "~/lib/logging";
 
 const PUBLIC_PATHS = ["/auth/sign-in", routes.admin.noAccess.__path];
 const STATIC_ASSET_PATTERN =
@@ -184,7 +185,12 @@ export async function proxy(request: NextRequest) {
           return response;
         }
       }
-    } catch {
+    } catch (err) {
+      logWarn("admin.auth.refresh_failed", {
+        isNavigationRequest,
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
+
       // Non-navigation requests (API, prefetch): return 401 without touching
       // cookies so the winning rotation's Set-Cookie headers are not clobbered.
       if (!isNavigationRequest) {
