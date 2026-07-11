@@ -1,0 +1,237 @@
+# ADR 0001: Migrate `apps/api` off Next.js to Hono on Node
+
+- **Status:** Accepted (implementation tracked in epic
+  [#644](https://github.com/F3-Nation/f3-nation/issues/644))
+- **Date:** 2026-07-09
+- **Deciders:** @taterhead247, @BigGillyStyle, @evanpetzoldt
+
+## Context
+
+`apps/api` (`f3-api`, https://api.f3nation.com) is the organization's central
+API server. It runs on Next.js 16 — not because the API needs Next.js, but
+because the app skeleton was copied from `apps/map` when the service was
+created. No decision record exists for that choice; this ADR is partly a
+correction of that gap.
+
+A July 2026 architectural assessment established the following.
+
+### What the service actually is
+
+A pure [oRPC](https://orpc.unnoq.com/) server. The entire Next.js surface is
+three route files:
+
+| File                                 | Role                                                                                                                                                                                                                                                       |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/app/[[...rest]]/route.ts`       | Optional catch-all. One `handleRequest(request: Request)` exported for all seven HTTP methods; dispatches on the `Client` header to oRPC's `RPCHandler` (`/v1`, fetch adapter) or `OpenAPIHandler`; CORS via oRPC's `CORSPlugin`; redirects `/` → `/docs`. |
+| `src/app/docs/route.ts`              | Scalar API-reference UI.                                                                                                                                                                                                                                   |
+| `src/app/docs/openapi.json/route.ts` | Runtime OpenAPI 3 generation from the router, with post-processing that injects the required `Client` header parameter.                                                                                                                                    |
+
+All real routing, method dispatch, CORS, authentication, authorization, rate
+limiting, and OpenAPI generation live in `packages/api` (oRPC procedures and
+middleware). The route handlers use **zero** Next.js APIs — no
+`NextRequest`/`NextResponse`, no `next/headers`, no ISR/revalidate, no edge
+runtime. Tests already invoke the handlers with plain `new Request(...)`.
+Next.js contributes only: `route.ts` file discovery, `output: "standalone"`
+for the Docker image, `transpilePackages` for the monorepo, the
+`instrumentation.ts` hook, and `@sentry/nextjs`.
+
+### What Next.js costs here
+
+**Build workarounds fighting the bundler:**
+
+- `outputFileTracingIncludes` glob forcing `@img/sharp-libvips-*` into the
+  standalone trace (Turbopack drops the dlopen'd libvips `.so`), guarded by a
+  `find libvips-cpp*` assertion in the Dockerfile because the glob silently
+  no-ops when it stops matching (see PR #556/#558 history).
+- `serverExternalPackages: ["pino", "pino-pretty", "thread-stream"]` because
+  Next tries to bundle worker-thread code.
+- A pnpm `verifyDepsBeforeRun: false` injection in the Dockerfile to reconcile
+  `turbo prune` catalog drift with `next build`.
+
+**Dead map-app skeleton carried along:** inert next-auth edge middleware
+(`proxy.ts` + `middleware/with-{admin,editor}.ts`, matching `/admin/*` routes
+that do not exist), a React `global-error.tsx`, browser Sentry session replay
+(`instrumentation-client.ts`), `images.remotePatterns`, a `/map` redirect, a
+Sentry `tunnelRoute`, and a README describing the map app. The `next-auth`,
+`react`, and `react-dom` dependencies exist almost entirely for this dead
+code, and the test setup requires jsdom/React tooling for one dead component.
+
+**Ongoing tax:** the Next.js major-upgrade treadmill on the org's most
+load-bearing service, and — significant for an AI-agent-heavy contribution
+model — an architecture that misleads readers into treating this as a web app.
+
+### What actually couples the code to Next.js (verified)
+
+1. **Cookie sessions are load-bearing.** `getSession()` in
+   `packages/api/src/shared.ts` tries next-auth's no-arg `auth()` _first_.
+   The session cookie domain is deliberately `.f3nation.com`
+   (`packages/auth/src/config.ts`), and the map app's oRPC proxy forwards the
+   browser's `cookie` header, so logged-in map editors authenticate to the API
+   via next-auth cookies. The no-arg `auth()` depends on Next's
+   AsyncLocalStorage and cannot run elsewhere.
+2. **`revalidatePath` in `packages/api` is vestigial.** The two `next/cache`
+   call sites (`lib/webhook-events.ts`, `router/map/index.ts`) only touch the
+   API app's own (page-less) cache — their own comments say so. The real
+   mechanism is `triggerMapAppRevalidation()`, an HTTP POST to the map app's
+   `/api/revalidate`, which already exists and is already the load-bearing
+   path. These are the only `next` imports in packages bundled into the API.
+3. Straight swaps: `@t3-oss/env-nextjs` → `@t3-oss/env-core`,
+   `@sentry/nextjs` → `@sentry/node`, `@scalar/nextjs-api-reference` → the
+   framework-agnostic Scalar variant.
+4. `sharp` is genuinely required (`packages/storage/src/resize.ts`), but the
+   libvips hack is purely a Next-standalone-tracing artifact; a plain Node
+   deployment with real production `node_modules` (or an esbuild bundle with
+   `sharp` external) eliminates it.
+5. `apps/map`'s in-process router usage (`src/orpc/client.server.ts`) is
+   unaffected — it constructs the router inside the map's own Next process.
+
+## Decision
+
+Migrate `apps/api` to **Hono running on Node** (`@hono/node-server`), in
+independently shippable phases (epic
+[#644](https://github.com/F3-Nation/f3-nation/issues/644)):
+
+- **Phase 0-pre** — land a characterization test suite that pins current
+  transport, dispatch, auth-resolution, and error-envelope behavior against a
+  real test database, BEFORE any migration code changes
+  ([#660](https://github.com/F3-Nation/f3-nation/issues/660); see "Testing and
+  parity strategy" below). Blocks #646.
+- **Phase 0a** — decouple shared packages while still on Next.js, zero
+  behavior change: delete the vestigial `revalidatePath` calls
+  ([#645](https://github.com/F3-Nation/f3-nation/issues/645)); swap to
+  `@t3-oss/env-core`
+  ([#647](https://github.com/F3-Nation/f3-nation/issues/647)).
+- **Phase 0b** — replace the no-arg `auth()` with explicit header-based
+  session resolution via `@auth/core`'s `Auth()` against the same shared
+  `authConfig`
+  ([#646](https://github.com/F3-Nation/f3-nation/issues/646) — the
+  highest-risk change, deliberately first so it soaks in production).
+- **Phase 1** — delete the dead map-app skeleton; valuable even if the
+  migration stops here
+  ([#648](https://github.com/F3-Nation/f3-nation/issues/648)).
+- **Phase 2** — Hono app + server entry. `handleRequest` and the OpenAPI
+  generator move **verbatim** to framework-neutral modules; `/health` adopts
+  the Health Contract (#634); `hono/compress` preserves the response
+  compression Next standalone provides today (Cloud Run does not compress);
+  CI runs the characterization suite against both the Next and Hono entries
+  with identical golden files
+  ([#649](https://github.com/F3-Nation/f3-nation/issues/649)).
+- **Phase 3+4** — esbuild bundle (sharp/pino external), Dockerfile shed of all
+  three Next-era hacks (replaced by functional smoke checks), unchanged Cloud
+  Run service/workflows, prod cutover via `--no-traffic` revision + traffic
+  splitting with instant rollback to the Next revision, then the final
+  deletion of every Next/React dependency
+  ([#650](https://github.com/F3-Nation/f3-nation/issues/650)).
+
+## Authentication impact
+
+The API accepts several kinds of credentials today. Surface by surface, what
+the migration changes:
+
+| Who                                           | How they authenticate today                                                          | After the migration                                                                                                                         |
+| --------------------------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Map users (map.f3nation.com)                  | next-auth session cookie, forwarded to the API by the map's proxy                    | Unchanged — the same cookie is accepted. Phase 0b (#646) re-implements the cookie decode without Next.js, proven identical before it ships. |
+| Bare API tokens (scripts, integrations)       | `Authorization: Bearer <key>` + `Client` header, checked against the database        | Unchanged — this code lives in `packages/api` and never touched Next.js.                                                                    |
+| me / admin (via `packages/sso` + `apps/auth`) | OAuth login against `apps/auth`, which issues an RS256 JWT the API verifies via JWKS | Unchanged — the JWT verification moves to Hono verbatim. `apps/auth` and `packages/sso` are not touched at all.                             |
+| API `/docs` (Scalar UI) + `openapi.json`      | Public, no authentication                                                            | Still public — the route moves to Hono with no auth added or removed.                                                                       |
+
+Two further points:
+
+- **Migrating map and the API to `packages/sso` later (#576, #598) remains
+  fully possible** — and Phase 0b makes it _easier_: replacing the implicit
+  Next-only `auth()` with explicit header-based session resolution is exactly
+  the seam a future auth-provider swap plugs into.
+- **Verification is automatic on both sides of the change.** The
+  characterization suite (#660) runs the full credential matrix — cookies,
+  API keys, JWTs, precedence, role guards — against the Next.js server before
+  any migration code lands, and the identical tests with identical frozen
+  golden files against the Hono server after, plus a live smoke run against
+  staging at cutover. Any difference in how a credential is treated fails CI.
+
+## Alternatives considered
+
+- **Stay on Next.js and clean house.** Fixes the dead code but keeps every
+  build hack and the upgrade treadmill permanently, and leaves the
+  architecture misleading. Rejected — though its cleanup half survives as
+  Phases 0–1, which are pure wins regardless.
+- **Plain `node:http` + `@orpc/server/node`** (the option hinted at by the
+  comment in `route.ts:1`). Close second. Rejected because "no framework"
+  means ~100–150 lines of bespoke bootstrap (routing for `/docs`, `/health`,
+  static assets, compression, graceful shutdown) — exactly the kind of
+  undocumented custom code that rots in an all-volunteer org and that AI
+  agents mishandle. Hono replaces it with ~30 lines of conventional,
+  zero-dependency, well-documented, fetch-native code, and the existing
+  handlers mount verbatim: `app.all("*", (c) => handleRequest(c.req.raw))`.
+- **Express or Fastify.** The conventional choice, but their req/res model
+  mismatches the existing fetch handlers, and oRPC already owns routing — a
+  heavier rewrite for no benefit. Rejected.
+
+## Testing and parity strategy
+
+A coverage assessment shaped the plan's safety net:
+
+- **Router business logic is already well covered** by `packages/api`'s
+  integration tests: ~20 test files call the unmocked router through
+  `createRouterClient` against a real Postgres database
+  (`TEST_DATABASE_URL`), with Drizzle migrations and seed applied
+  automatically via turbo's `test → reset-test-db` dependency (Docker
+  locally, a `postgres:18` service container in CI). That harness is
+  framework-agnostic and survives the migration untouched.
+- **Auth resolution has zero end-to-end coverage.** The shared test setup
+  mocks `auth()` to return a pre-resolved session, which early-returns past
+  everything in `getSession` — the RS256 JWT-via-JWKS path, the DB API-key
+  lookup, the `Client`-header rule, cookie decoding, and the dev-mock branch
+  are never exercised. No RS256 test keypair or JWKS fixture exists, nothing
+  fires HTTP-level requests through `handleRequest` with an unmocked router,
+  and `apps/api`'s enforced ~90% coverage measures only Next wiring with the
+  router mocked out. The migration's blast radius is therefore exactly the
+  least-tested code — which is why Phase 0-pre exists and blocks #646.
+
+**The parity mechanism** ([#660](https://github.com/F3-Nation/f3-nation/issues/660)):
+a characterization suite written against a transport seam
+(`(req: Request) => Promise<Response>`, selected by `CHAR_TEST_TARGET`) so the
+identical tests and golden files run against (a) the Next `handleRequest`
+in-process, (b) the Hono `app.fetch` after Phase 2, and (c) a live base URL
+(local server or staging) for black-box smoke at cutover. It covers the full
+authorization matrix — API keys (valid/revoked/expired/roles), RS256 JWTs
+against an ephemeral in-test JWKS server (valid/expired/wrong-issuer/
+bad-signature/JWKS-outage), real cookie sessions (a `next/headers` shim lets
+the genuine `@auth/core` decode path run in-process; the cookie test doubles
+as #646's acceptance test, including the cookie-beats-bearer precedence pin),
+role guards exercised through real resolution, the `Client`-header rules, and
+rate limiting — plus wire-level pins: header-based dispatch, CORS preflight,
+error envelopes for both handlers, and a stable-stringified OpenAPI snapshot.
+
+**Golden-file freeze rule:** the suite's normalized snapshots are recorded on
+`main` before Phase 0a and are frozen for the duration of Phases 0a–4. Any
+snapshot diff in a migration PR is by definition a behavior change — either a
+migration bug or something requiring explicit sign-off in that PR.
+
+## Consequences
+
+**Positive:** the three build hacks disappear; `next`, `react`, `react-dom`,
+`next-auth`, and the React test toolchain leave the API's dependency tree;
+builds get faster and the image smaller; the codebase says what it is; the
+session-resolution work (#646) is a stepping stone for the auth-provider
+efforts (#576, #598).
+
+**Negative / accepted risks:**
+
+- Hono is a new (if tiny) framework in a Next-only TypeScript team.
+- Cookie-session parity is the top migration risk; mitigated by reusing the
+  exact shared `authConfig` through `@auth/core`, the characterization
+  suite's cookie and precedence cases plus a transitional
+  `getSessionFromHeaders`-vs-`auth()` equality test in #646, and a staging
+  end-to-end gate before any framework change ships.
+- Response compression and graceful shutdown become our explicit
+  responsibility (`hono/compress`, SIGTERM handling) instead of Next
+  defaults; both are called out as acceptance criteria in #649.
+- Sentry span shapes change (`@sentry/node` vs Next instrumentation);
+  verified on staging before cutover.
+- Known carry-overs move verbatim and are _not_ addressed by the migration:
+  reflective CORS (#361), per-instance rate limiter (#359), Sentry config
+  hardening (#355).
+
+**Rollback:** at every stage before Phase 4, the previous Next.js revision
+remains deployed on the same Cloud Run service; rollback is an instant
+traffic shift. Phase 0 changes are framework-neutral and stand on their own.
