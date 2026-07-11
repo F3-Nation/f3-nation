@@ -1,6 +1,6 @@
 {
   "name": "f3-map",
-  "version": "7.0.5",
+  "version": "7.0.6",
   "private": true,
   "type": "module",
   "scripts": {
@@ -18,9 +18,7 @@
   "dependencies": {
     "@acme/api": "workspace:*",
     "@acme/auth": "workspace:*",
-    "@acme/db": "workspace:*",
     "@acme/logger": "workspace:*",
-    "@acme/mail": "workspace:*",
     "@acme/shared": "workspace:*",
     "@acme/storage": "workspace:*",
     "@acme/tailwind-config": "workspace:*",
@@ -40,7 +38,6 @@
     "dompurify": "catalog:",
     "dotenv-cli": "catalog:",
     "geist": "catalog:",
-    "google-auth-library": "catalog:",
     "lodash": "catalog:",
     "lottie-react": "catalog:",
     "lucide-react": "catalog:",
@@ -55,7 +52,6 @@
     "react-responsive": "catalog:",
     "server-only": "catalog:",
     "supercluster": "catalog:",
-    "superjson": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
@@ -80,6 +76,7 @@
     "jiti": "catalog:",
     "jsdom": "catalog:",
     "postcss": "catalog:",
+    "postcss-load-config": "catalog:",
     "prettier": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",

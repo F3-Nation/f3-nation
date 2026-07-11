@@ -5,7 +5,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { ChevronLeft, XCircle } from "lucide-react";
 
-import { DEFAULT_CENTER, Z_INDEX } from "@acme/shared/app/constants";
+import {
+  DEFAULT_CENTER,
+  MIN_TEXT_LENGTH_FOR_SEARCH_RESULTS,
+  Z_INDEX,
+} from "@acme/shared/app/constants";
 import { cn } from "@acme/ui";
 import { Input } from "@acme/ui/input";
 
@@ -142,7 +146,7 @@ export function MapSearchBoxMobile({
                 const value = e.target.value;
                 if (!value) {
                   searchStore.setState({ placesResults: [] });
-                } else if (value.length > 2) {
+                } else if (value.length >= MIN_TEXT_LENGTH_FOR_SEARCH_RESULTS) {
                   const center = mapStore.get("center") ?? {
                     lat: DEFAULT_CENTER[0] ?? 37.7937,
                     lng: DEFAULT_CENTER[1] ?? -122.3965,

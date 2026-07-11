@@ -1,6 +1,6 @@
 {
   "name": "f3-admin",
-  "version": "2.0.5",
+  "version": "2.1.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -59,6 +59,7 @@
     "eslint": "catalog:",
     "jiti": "catalog:",
     "postcss": "catalog:",
+    "postcss-load-config": "catalog:",
     "prettier": "catalog:",
     "typescript": "catalog:"
   },

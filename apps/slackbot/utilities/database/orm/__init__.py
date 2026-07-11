@@ -87,3 +87,4 @@ class SlackSettings:
     downrange_channel: Optional[str] = None
     open_event_color: Optional[str] = None
     bot_log_channel: Optional[str] = None
+    calendar_config_special_days_out: Optional[int] = None

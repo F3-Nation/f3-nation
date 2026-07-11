@@ -1,6 +1,6 @@
 {
   "name": "@acme/storage",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "type": "module",
   "private": true,
   "exports": {
@@ -17,9 +17,7 @@
   },
   "dependencies": {
     "@google-cloud/storage": "catalog:",
-    "@t3-oss/env-nextjs": "catalog:",
-    "sharp": "catalog:",
-    "zod": "catalog:"
+    "sharp": "catalog:"
   },
   "devDependencies": {
     "@acme/eslint-config": "workspace:*",

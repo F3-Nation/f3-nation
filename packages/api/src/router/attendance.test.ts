@@ -17,7 +17,7 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   }),
 }));
 
-import { and, eq, schema } from "@acme/db";
+import { and, eq, inArray, schema } from "@acme/db";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   cleanup,
@@ -1196,7 +1196,7 @@ describe("Attendance Router", () => {
             eq(schema.attendanceXAttendanceTypes.attendanceId, qAttendance.id),
           );
         const qTypeIds = qTypes.map((t) => t.attendanceTypeId);
-        expect(qTypeIds).toContain(ATTENDANCE_TYPE_IDS!.Q); // Q type
+        expect(qTypeIds).toEqual([ATTENDANCE_TYPE_IDS!.Q]); // Q type only
       }
 
       if (coQAttendance) {
@@ -1210,7 +1210,94 @@ describe("Attendance Router", () => {
             ),
           );
         const coQTypeIds = coQTypes.map((t) => t.attendanceTypeId);
-        expect(coQTypeIds).toContain(ATTENDANCE_TYPE_IDS!.COQ); // Co-Q type
+        expect(coQTypeIds).toEqual([ATTENDANCE_TYPE_IDS!.COQ]); // Co-Q type only
+      }
+    });
+
+    it("should demote prior Q and Co-Q users to PAX when no longer assigned", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const { ao } = await createTestAO();
+      if (!ao) return;
+
+      const eventInstance = await createTestEventInstance(ao.id);
+      if (!eventInstance) return;
+
+      const oldQUser = await createTestUser();
+      const oldCoQUser = await createTestUser();
+      const newQUser = await createTestUser();
+      if (!oldQUser || !oldCoQUser || !newQUser) return;
+
+      const oldAttendance = await db
+        .insert(schema.attendance)
+        .values([
+          {
+            eventInstanceId: eventInstance.id,
+            userId: oldQUser.id,
+            isPlanned: true,
+          },
+          {
+            eventInstanceId: eventInstance.id,
+            userId: oldCoQUser.id,
+            isPlanned: true,
+          },
+        ])
+        .returning({
+          id: schema.attendance.id,
+          userId: schema.attendance.userId,
+        });
+
+      oldAttendance.forEach((attendance) =>
+        createdAttendanceIds.push(attendance.id),
+      );
+
+      await db.insert(schema.attendanceXAttendanceTypes).values(
+        oldAttendance.map((attendance) => ({
+          attendanceId: attendance.id,
+          attendanceTypeId:
+            attendance.userId === oldQUser.id
+              ? ATTENDANCE_TYPE_IDS!.Q
+              : ATTENDANCE_TYPE_IDS!.COQ,
+        })),
+      );
+
+      const client = createTestClient();
+      const result = await client.attendance.assignQAndCoQs({
+        eventInstanceId: eventInstance.id,
+        qUserId: newQUser.id,
+        coQUserIds: [],
+      });
+
+      expect(result.success).toBe(true);
+
+      const [newQAttendance] = await db
+        .select({ id: schema.attendance.id })
+        .from(schema.attendance)
+        .where(
+          and(
+            eq(schema.attendance.eventInstanceId, eventInstance.id),
+            eq(schema.attendance.userId, newQUser.id),
+          ),
+        );
+      if (newQAttendance) createdAttendanceIds.push(newQAttendance.id);
+
+      const attendanceTypes = await db
+        .select()
+        .from(schema.attendanceXAttendanceTypes)
+        .where(
+          inArray(
+            schema.attendanceXAttendanceTypes.attendanceId,
+            oldAttendance.map((attendance) => attendance.id),
+          ),
+        );
+
+      for (const attendance of oldAttendance) {
+        expect(
+          attendanceTypes
+            .filter((type) => type.attendanceId === attendance.id)
+            .map((type) => type.attendanceTypeId),
+        ).toEqual([ATTENDANCE_TYPE_IDS!.PAX]);
       }
     });
 

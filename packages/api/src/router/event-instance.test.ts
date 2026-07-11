@@ -35,6 +35,7 @@ describe("Event Instance Router", () => {
   const createdEventInstanceIds: number[] = [];
   const createdOrgIds: number[] = [];
   const createdEventTypeIds: number[] = [];
+  const createdEventTagIds: number[] = [];
   const createdLocationIds: number[] = [];
 
   beforeEach(() => {
@@ -83,6 +84,18 @@ describe("Event Instance Router", () => {
     for (const eventTypeId of createdEventTypeIds.reverse()) {
       try {
         await cleanup.eventType(eventTypeId);
+      } catch {
+        // Ignore errors during cleanup
+      }
+    }
+    for (const eventTagId of createdEventTagIds.reverse()) {
+      try {
+        await db
+          .delete(schema.eventTagsXEventInstances)
+          .where(eq(schema.eventTagsXEventInstances.eventTagId, eventTagId));
+        await db
+          .delete(schema.eventTags)
+          .where(eq(schema.eventTags.id, eventTagId));
       } catch {
         // Ignore errors during cleanup
       }
@@ -166,6 +179,22 @@ describe("Event Instance Router", () => {
       createdEventInstanceIds.push(eventInstance.id);
     }
     return eventInstance;
+  };
+
+  const createTestEventTag = async () => {
+    const [eventTag] = await db
+      .insert(schema.eventTags)
+      .values({
+        name: `Test Event Tag ${uniqueId()}`,
+        color: "#FF0000",
+        isActive: true,
+      })
+      .returning();
+
+    if (eventTag) {
+      createdEventTagIds.push(eventTag.id);
+    }
+    return eventTag;
   };
 
   describe("all", () => {
@@ -648,6 +677,81 @@ describe("Event Instance Router", () => {
         expect(linkRecord).toBeDefined();
         expect(linkRecord?.eventTypeId).toBe(eventType.id);
       }
+    });
+
+    it("should create event instance with event tag", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      const eventTag = await createTestEventTag();
+      if (!eventTag) return;
+
+      const client = createTestClient();
+      const result = await client.eventInstance.crupdate({
+        name: `Event With Tag ${uniqueId()}`,
+        orgId: ao.id,
+        startDate: new Date().toISOString().split("T")[0]!,
+        eventTagId: eventTag.id,
+      });
+
+      expect(result).toBeDefined();
+
+      if (result.id) {
+        createdEventInstanceIds.push(result.id);
+
+        const [linkRecord] = await db
+          .select()
+          .from(schema.eventTagsXEventInstances)
+          .where(
+            eq(schema.eventTagsXEventInstances.eventInstanceId, result.id),
+          );
+
+        expect(linkRecord).toBeDefined();
+        expect(linkRecord?.eventTagId).toBe(eventTag.id);
+      }
+    });
+
+    it("should clear event tag when eventTagId is null", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      const eventInstance = await createTestEventInstance(ao.id);
+      const eventTag = await createTestEventTag();
+      if (!eventInstance || !eventTag) return;
+
+      await db.insert(schema.eventTagsXEventInstances).values({
+        eventInstanceId: eventInstance.id,
+        eventTagId: eventTag.id,
+      });
+
+      const client = createTestClient();
+      await client.eventInstance.crupdate({
+        id: eventInstance.id,
+        orgId: ao.id,
+        startDate: eventInstance.startDate,
+        eventTagId: null,
+      });
+
+      const linkRecords = await db
+        .select()
+        .from(schema.eventTagsXEventInstances)
+        .where(
+          eq(schema.eventTagsXEventInstances.eventInstanceId, eventInstance.id),
+        );
+
+      expect(linkRecords).toHaveLength(0);
     });
 
     it("should require editor role", async () => {

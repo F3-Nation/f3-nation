@@ -629,6 +629,7 @@ def build_backblast_form(
             actions.BACKBLAST_MOLESKIN: moleskin_block or region_record.backblast_moleskin_template,
             actions.BACKBLAST_FNGS: safe_get(backblast_metadata, actions.BACKBLAST_FNGS) or "",
             actions.BACKBLAST_NONSLACK_PAX: safe_get(backblast_metadata, actions.BACKBLAST_NONSLACK_PAX) or "",
+            actions.BACKBLAST_COUNT: safe_get(backblast_metadata, actions.BACKBLAST_COUNT) or "",
             # actions.BACKBLAST_EVENT_TYPE: str(event_record.event_types[0].id),  # picking the first for now
             # TODO: non-slack pax
         }
@@ -1196,17 +1197,6 @@ COUNT: {count}
     # ── Downrange cross-posting ────────────────────────────────────────────────
     # Find PAX who have a home region different from the current region and cross-post
     # backblasts to those regions if they have cross-posting enabled.
-    cross_post_msg = f""":airplane: *Downrange! {title}*
-*DATE*: {the_date}
-*REGION*: {region_record.workspace_name or event_org.name}
-*AO*: {event_org.name}
-*Q*: {q_name}{the_coqs_names}
-*PAX*: {pax_names}
-*FNGs*: {fngs_formatted}
-*COUNT*: {count}"""
-    for field, value in custom_fields.items():
-        if field not in ("files", "file_ids", "downrange_posts") and not field.endswith("_low_rez") and value:
-            cross_post_msg += f"\n*{field}*: {str(value)}"
 
     all_user_ids = [u.user_id for u in db_users if u.user_id]
     if all_user_ids:
@@ -1230,6 +1220,9 @@ COUNT: {count}
         ssl_ctx.check_hostname = False
         ssl_ctx.verify_mode = ssl.CERT_NONE
 
+        region_org = DbManager.get(Org, region_record.org_id)
+        region_name = region_org.name if region_org else region_record.workspace_name
+
         for home_region_id in foreign_region_ids:
             ox = DbManager.find_first_record(Org_x_SlackSpace, [Org_x_SlackSpace.org_id == home_region_id])
             if not ox:
@@ -1250,6 +1243,18 @@ COUNT: {count}
             if dr_settings.downrange_channel_posting != "enabled" or not dr_settings.downrange_channel:
                 continue
 
+            cross_post_msg = f""":airplane: *Downrange! {title}*
+*DATE*: {the_date}
+*REGION*: {region_name}
+*AO*: {event_org.name}
+*Q*: {q_name}{the_coqs_names}
+*PAX*: {pax_names}
+*FNGs*: {fngs_formatted}
+*COUNT*: {count}"""
+            for field, value in custom_fields.items():
+                if field not in ("files", "file_ids", "downrange_posts") and not field.endswith("_low_rez") and value:
+                    cross_post_msg += f"\n*{field}*: {str(value)}"
+
             cross_blocks = [
                 slack_orm.SectionBlock(label=cross_post_msg).as_form_field(),
                 moleskin_w_names,
@@ -1266,7 +1271,7 @@ COUNT: {count}
             cross_blocks.append(
                 slack_orm.ContextBlock(
                     element=slack_orm.ContextElement(
-                        initial_value=f"Cross-posted from *{event_org.name}* for PAX: {', '.join(foreign_user_names.get(home_region_id) or [])}"  # noqa: E501
+                        initial_value=f"Cross-posted from *{region_name}* for PAX: {', '.join(foreign_user_names.get(home_region_id) or [])}"  # noqa: E501
                     )
                 ).as_form_field()
             )
@@ -1323,7 +1328,8 @@ def handle_backblast_edit_button(
     else:
         slack_user = get_user(user_id, region_record, client, logger)
         admin_users = get_admin_users(region_record.org_id, region_record.team_id)
-        user_is_admin = any(u[0].id == slack_user.user_id for u in admin_users)
+        aoq_users = get_aoq_users(region_record.org_id)
+        user_is_admin = any(u[0].id == slack_user.user_id for u in admin_users) or any(u[0].id == slack_user.user_id for u in aoq_users)
 
     backblast_data = safe_get(body, "message", "metadata", "event_payload") or json.loads(
         safe_get(body, "actions", 0, "value") or "{}"
