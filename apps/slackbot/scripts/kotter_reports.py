@@ -26,7 +26,7 @@ from utilities.database.orm import SlackSettings
 from utilities.database.special_queries import get_admin_users, get_site_q_slack_ids_by_ao
 
 Q_ATTENDANCE_TYPE_IDS = [2, 3]
-DEFAULT_NO_POST_WEEKS = 4
+DEFAULT_NO_POST_WEEKS = 2
 DEFAULT_HOME_AO_WEEKS = 8
 DEFAULT_NO_Q_WEEKS = 12
 DEFAULT_NO_Q_POSTS = 4

@@ -765,7 +765,7 @@ KOTTER_REPORT_CONFIG_FORM = orm.BlockView(
                 initial_value="disable",
                 options=orm.as_selector_options(names=["Enable", "Disable"], values=["enable", "disable"]),
             ),
-            hint="Top-level scheduler/report enablement. Defaults: Monday at 8 CST when day/hour are not specified.",
+            hint="Defaults: Monday at 8 CST when day/hour are not specified.",
         ),
         orm.InputBlock(
             label="Weekly send day",
@@ -778,21 +778,18 @@ KOTTER_REPORT_CONFIG_FORM = orm.BlockView(
                     values=["0", "1", "2", "3", "4", "5", "6"],
                 ),
             ),
-            hint="Defaults to Monday when not specified.",
         ),
         orm.InputBlock(
             label="Weekly send hour CST",
             action=actions.KOTTER_REPORT_HOUR_CST,
             optional=False,
             element=orm.NumberInputElement(is_decimal_allowed=False, min_value=0, max_value=23),
-            hint="Defaults to 8 CST when not specified.",
         ),
         orm.DividerBlock(),
         orm.SectionBlock(
             label=(
                 "*AO reports*\n"
                 "When enabled, AO-specific reports are sent automatically to matching Site Qs based on Home AO. "
-                "There is no fallback delivery for AO reports."
             ),
             action="kotter_report_ao_heading",
         ),
@@ -805,7 +802,7 @@ KOTTER_REPORT_CONFIG_FORM = orm.BlockView(
                 options=orm.as_selector_options(names=["Yes", "No"], values=["yes", "no"]),
             ),
             hint=(
-                "Defaults to No. AO reports go only to matching Site Qs automatically; rows without a "
+                "AO reports go only to matching Site Qs based on the AO the Kotter posts at the most; rows without a "
                 "Site Q match are not sent as AO reports."
             ),
         ),
@@ -836,14 +833,12 @@ KOTTER_REPORT_CONFIG_FORM = orm.BlockView(
                 initial_value="no",
                 options=orm.as_selector_options(names=["Yes", "No"], values=["yes", "no"]),
             ),
-            hint="Defaults to No.",
         ),
         orm.InputBlock(
-            label="Explicit full list recipient users",
+            label="Other full list recipient users",
             action=actions.KOTTER_REPORT_RECIPIENT_USERS,
             optional=True,
             element=orm.MultiUsersSelectElement(placeholder="Select users..."),
-            hint="Select users who should receive the full list report.",
         ),
         orm.DividerBlock(),
         orm.SectionBlock(label="*Thresholds*", action="kotter_report_thresholds_heading"),
@@ -852,35 +847,35 @@ KOTTER_REPORT_CONFIG_FORM = orm.BlockView(
             action=actions.KOTTER_REPORT_NO_POST_WEEKS,
             optional=True,
             element=orm.NumberInputElement(is_decimal_allowed=False, min_value=0),
-            hint="Defaults to 4 weeks when not specified.",
+            hint="The number of weeks of no-post activity before triggering the report. Defaults to 2 weeks.",
         ),
         orm.InputBlock(
             label="Remove-after weeks",
             action=actions.KOTTER_REPORT_REMOVE_WEEKS,
             optional=True,
             element=orm.NumberInputElement(is_decimal_allowed=False, min_value=0),
-            hint="Disabled/unbounded unless set beyond the no-post threshold.",
+            hint="The number of weeks after the no-post threshold before removing a user. Disabled/unbounded unless set beyond the no-post threshold.",
         ),
         orm.InputBlock(
             label="Home AO capture weeks",
             action=actions.KOTTER_REPORT_HOME_AO_WEEKS,
             optional=True,
             element=orm.NumberInputElement(is_decimal_allowed=False, min_value=0),
-            hint="Defaults to 8 weeks when not specified.",
+            hint="The number of weeks used to determine home AO. Defaults to 8 weeks.",
         ),
         orm.InputBlock(
             label="No-Q threshold weeks",
             action=actions.KOTTER_REPORT_NO_Q_WEEKS,
             optional=True,
             element=orm.NumberInputElement(is_decimal_allowed=False, min_value=0),
-            hint="Defaults to 12 weeks when not specified.",
+            hint="The number of weeks of no-Q activity before triggering the report. Defaults to 12 weeks.",
         ),
         orm.InputBlock(
             label="No-Q minimum posts",
             action=actions.KOTTER_REPORT_NO_Q_POSTS,
             optional=True,
             element=orm.NumberInputElement(is_decimal_allowed=False, min_value=0),
-            hint="Defaults to 4 posts when not specified.",
+            hint="The number of posts required to avoid triggering the Q report. Defaults to 4 posts.",
         ),
     ]
 )
