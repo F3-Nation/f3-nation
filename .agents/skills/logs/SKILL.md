@@ -27,7 +27,7 @@ When the user runs this skill, use the helper scripts in `scripts/` to fetch and
 Run the fetch script with the user's arguments:
 
 ```bash
-bash .claude/skills/logs/scripts/fetch-logs.sh $ARGS > /tmp/f3-logs.json
+bash .agents/skills/logs/scripts/fetch-logs.sh $ARGS > /tmp/f3-logs.json
 ```
 
 The script handles all argument parsing (app, environment, severity, time range, limit, custom filters) and writes JSON to stdout. Metadata (app, env, project, service, limit, filter) is printed to stderr.
@@ -37,10 +37,10 @@ The script handles all argument parsing (app, environment, severity, time range,
 Pipe the JSON through the format script:
 
 ```bash
-cat /tmp/f3-logs.json | bash .claude/skills/logs/scripts/format-logs.sh
+cat /tmp/f3-logs.json | bash .agents/skills/logs/scripts/format-logs.sh
 ```
 
-This produces a markdown table with columns: Timestamp, Severity, Method + URL, Status, Latency, Remote IP — plus a summary footer with counts and status code breakdown.
+This produces a Markdown table with columns: Timestamp, Severity, Method + URL, Status, Latency, Remote IP — plus a summary footer with counts and status code breakdown.
 
 ### Step 3 — Follow up
 
