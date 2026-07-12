@@ -23,7 +23,7 @@ Adding a provider is more than extending the string union. Use this checklist:
 - File: `../../../../../packages/api/src/router/status.ts`
 - Update `ExternalProvider` to include the new provider name.
 
-2. Add provider adapter logic
+1. Add provider adapter logic
 
 - File: `../../../../../packages/api/src/router/status.ts`
 - Add provider-specific payload parsing and mapping into shared states:
@@ -32,13 +32,13 @@ Adding a provider is more than extending the string union. Use this checklist:
   - `down`
 - Normalize parse/network failures into deterministic reasons (for example `invalid_json`, `unreachable`).
 
-3. Update adapter dispatch
+1. Update adapter dispatch
 
 - File: `../../../../../packages/api/src/router/status.ts`
 - Extend `fetchExternalStatus(...)` dispatch so your provider routes to its parser/mapper.
 - Keep unknown/invalid configuration paths deterministic with `invalid_monitor_config`.
 
-4. Add provider config entry
+1. Add provider config entry
 
 - File: `../../../../../packages/api/src/router/status-targets.ts`
 - Add a target with:
@@ -47,7 +47,7 @@ Adding a provider is more than extending the string union. Use this checklist:
   - `apiUrl` for the provider's status endpoint
   - user-facing `label` and `url`
 
-5. Add test coverage
+1. Add test coverage
 
 - File: `../../../../packages/api/src/router/status.test.ts`
   - success mapping for representative provider responses

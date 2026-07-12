@@ -54,7 +54,6 @@ export function StatusDashboardClient() {
           headers: { Accept: "application/json" },
           signal: controller.signal,
         });
-        clearTimeout(timeoutId);
 
         if (!response.ok) {
           throw new Error(`${endpoint} returned HTTP ${response.status}`);
@@ -74,7 +73,6 @@ export function StatusDashboardClient() {
         setData(json as StatusApiResponse);
         setError(null);
       } catch (err) {
-        clearTimeout(timeoutId);
         if (!isMounted) return;
 
         if (err instanceof Error) {
@@ -83,6 +81,7 @@ export function StatusDashboardClient() {
           setError(`Unable to load status data from ${endpoint}.`);
         }
       } finally {
+        clearTimeout(timeoutId);
         if (isMounted) {
           setIsLoading(false);
         }

@@ -140,15 +140,16 @@ export function parseContractStatusResponse(
 async function fetchWithTimeout(
   url: string,
   fetchImpl: typeof fetch,
-): Promise<Response> {
+): Promise<string> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), STATUS_FETCH_TIMEOUT_MS);
   try {
-    return await fetchImpl(url, {
+    const response = await fetchImpl(url, {
       headers: { Accept: "application/json" },
       cache: "no-store",
       signal: controller.signal,
     });
+    return await response.text();
   } finally {
     clearTimeout(timeout);
   }
@@ -159,10 +160,10 @@ export async function fetchContractStatus(
   fetchImpl: typeof fetch = fetch,
   currentContractMajor = CURRENT_HEALTH_CONTRACT_MAJOR,
 ): Promise<StatusResult> {
-  let response: Response;
+  let bodyText: string;
 
   try {
-    response = await fetchWithTimeout(target.url, fetchImpl);
+    bodyText = await fetchWithTimeout(target.url, fetchImpl);
   } catch {
     return {
       ok: false,
@@ -172,8 +173,6 @@ export async function fetchContractStatus(
       reason: "unreachable",
     };
   }
-
-  const bodyText = await response.text();
 
   let raw: unknown;
   try {
@@ -287,10 +286,10 @@ export async function fetchExternalStatus(
     };
   }
 
-  let response: Response;
+  let bodyText: string;
 
   try {
-    response = await fetchWithTimeout(target.apiUrl, fetchImpl);
+    bodyText = await fetchWithTimeout(target.apiUrl, fetchImpl);
   } catch {
     return {
       ok: false,
@@ -300,8 +299,6 @@ export async function fetchExternalStatus(
       reason: "unreachable",
     };
   }
-
-  const bodyText = await response.text();
 
   let raw: unknown;
   try {
