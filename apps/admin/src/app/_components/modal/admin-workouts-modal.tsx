@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { z } from "zod";
 
 import { EVENT_CATEGORY_LABEL_MAP, Z_INDEX } from "@acme/shared/app/constants";
-import { DayOfWeek } from "@acme/shared/app/enums";
+import { DayOfWeek, EventCadence } from "@acme/shared/app/enums";
 import {
   convertHH_mmToHHmm,
   convertHHmmToHH_mm,
@@ -74,6 +74,15 @@ const EventInsertForm = EventInsertSchema.extend({
   dayOfWeek: z.enum(DayOfWeek, {
     error: "Day of week is required",
   }),
+  recurrencePattern: z.enum(EventCadence).optional().nullable(),
+  recurrenceInterval: z.coerce.number().int().min(1).optional().nullable(),
+  indexWithinInterval: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(5)
+    .optional()
+    .nullable(),
 });
 type EventInsertFormType = z.infer<typeof EventInsertForm>;
 
@@ -113,6 +122,14 @@ export default function AdminWorkoutsModal({
 
   // Watch regionId from form to filter event types
   const formRegionId = form.watch("regionId");
+  const formRecurrencePattern = form.watch("recurrencePattern");
+  const formRecurrenceInterval = form.watch("recurrenceInterval");
+  const scheduleType =
+    formRecurrencePattern === "monthly"
+      ? "monthly"
+      : formRecurrenceInterval === 2
+        ? "biweekly"
+        : "weekly";
 
   const { data: eventTypes } = useQuery(
     orpc.eventType.all.queryOptions({
@@ -145,6 +162,9 @@ export default function AdminWorkoutsModal({
       },
       description: event?.description ?? "",
       isPrivate: event?.isPrivate ?? false,
+      recurrencePattern: event?.recurrencePattern ?? null,
+      recurrenceInterval: event?.recurrenceInterval ?? null,
+      indexWithinInterval: event?.indexWithinInterval ?? null,
     });
   }, [form, event]);
 
@@ -478,6 +498,76 @@ export default function AdminWorkoutsModal({
                     placeholder="Select a day of the week"
                   />
                 </div>
+                <div className="mb-4 w-1/2 px-2">
+                  <FormItem>
+                    <FormLabel>Schedule</FormLabel>
+                    <Select
+                      value={scheduleType}
+                      onValueChange={(v) => {
+                        if (v === "biweekly") {
+                          form.setValue("recurrencePattern", "weekly");
+                          form.setValue("recurrenceInterval", 2);
+                        } else {
+                          form.setValue(
+                            "recurrencePattern",
+                            v === "monthly" ? "monthly" : "weekly",
+                          );
+                          form.setValue("recurrenceInterval", null);
+                        }
+                        if (v !== "monthly") {
+                          form.setValue("indexWithinInterval", null);
+                        }
+                      }}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Every week" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="weekly">Every week</SelectItem>
+                        <SelectItem value="biweekly">Every 2 weeks</SelectItem>
+                        <SelectItem value="monthly">Once a month</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                </div>
+                {formRecurrencePattern === "monthly" && (
+                  <div className="mb-4 w-1/2 px-2">
+                    <FormField
+                      control={form.control}
+                      name="indexWithinInterval"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Which occurrence?</FormLabel>
+                          <Select
+                            value={
+                              typeof field.value === "number"
+                                ? String(field.value)
+                                : ""
+                            }
+                            onValueChange={(v) =>
+                              field.onChange(v ? Number(v) : null)
+                            }
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select occurrence" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="1">1st</SelectItem>
+                              <SelectItem value="2">2nd</SelectItem>
+                              <SelectItem value="3">3rd</SelectItem>
+                              <SelectItem value="4">4th</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                )}
                 <div className="mb-4 w-1/2 px-2">
                   <FormField
                     control={form.control}

@@ -29,6 +29,9 @@ export const EventChip = (props: {
     id: number;
     locationId?: number | null;
     eventTypes: { id: number; name: string }[];
+    recurrencePattern?: string | null;
+    recurrenceInterval?: number | null;
+    indexWithinInterval?: number | null;
   };
   location: {
     id: number | null;
@@ -92,6 +95,9 @@ export const EventChip = (props: {
     startTime: event.startTime,
     endTime: event.endTime,
     condensed: true,
+    recurrencePattern: event.recurrencePattern,
+    recurrenceInterval: event.recurrenceInterval,
+    indexWithinInterval: event.indexWithinInterval,
   });
 
   return (

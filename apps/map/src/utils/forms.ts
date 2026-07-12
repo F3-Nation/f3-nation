@@ -15,5 +15,18 @@ export const {
     eventEndTime: z.string().regex(/^\d{2}:\d{2}$/, {
       message: "End time must be in 24hr format (HH:mm)",
     }),
+    eventIndexWithinInterval: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(5)
+      .nullable()
+      .optional(),
+    eventRecurrenceInterval: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .nullable()
+      .optional(),
   }),
 );

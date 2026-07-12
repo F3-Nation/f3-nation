@@ -7,11 +7,22 @@ import {
 } from "@acme/shared/app/constants";
 import { getReadableDayOfWeek } from "@acme/shared/app/functions";
 
+const ORDINALS: Record<number, string> = {
+  1: "1st",
+  2: "2nd",
+  3: "3rd",
+  4: "4th",
+  5: "5th",
+};
+
 export const getWhenFromWorkout = (params: {
   startTime: string | null;
   endTime?: string | null;
   dayOfWeek: DayOfWeek | null;
   condensed?: boolean;
+  recurrencePattern?: string | null;
+  recurrenceInterval?: number | null;
+  indexWithinInterval?: number | null;
 }) => {
   const event = params;
   const condensed = params.condensed ?? false;
@@ -43,7 +54,23 @@ export const getWhenFromWorkout = (params: {
 
   const dayOfTheWeek = getReadableDayOfWeek(event.dayOfWeek);
 
-  const dayOfTheWeekText = dayOfTheWeek ? `${dayOfTheWeek} ` : "";
+  const ordinalPrefix =
+    event.recurrencePattern === "monthly" && event.indexWithinInterval
+      ? `${ORDINALS[event.indexWithinInterval] ?? event.indexWithinInterval} `
+      : "";
+
+  const intervalPrefix =
+    event.recurrencePattern !== "monthly" &&
+    event.recurrenceInterval &&
+    event.recurrenceInterval > 1
+      ? event.recurrenceInterval === 2
+        ? "Every other "
+        : `Every ${event.recurrenceInterval} weeks on `
+      : "";
+
+  const dayOfTheWeekText = dayOfTheWeek
+    ? `${ordinalPrefix}${intervalPrefix}${dayOfTheWeek} `
+    : "";
   const timeText =
     startTime && endTime
       ? `${startTime} - ${endTime} `

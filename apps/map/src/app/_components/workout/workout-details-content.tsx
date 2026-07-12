@@ -148,7 +148,14 @@ export const WorkoutDetailsContent = ({
                 </p>
               ) : null,
             ].filter(isTruthy),
-            When: event ? getWhenFromWorkout(event) : "",
+            When: event
+              ? getWhenFromWorkout({
+                  ...event,
+                  recurrencePattern: event.recurrencePattern,
+                  recurrenceInterval: event.recurrenceInterval,
+                  indexWithinInterval: event.indexWithinInterval,
+                })
+              : "",
             Contact:
               hasAoContact && aoContact ? (
                 <ContactLinks contact={aoContact} iconSize="sm" />
@@ -300,6 +307,9 @@ export const WorkoutDetailsContent = ({
                 startTime: event.startTime,
                 endTime: event.endTime,
                 eventTypes: event.eventTypes,
+                recurrencePattern: event.recurrencePattern,
+                recurrenceInterval: event.recurrenceInterval,
+                indexWithinInterval: event.indexWithinInterval,
               }}
               location={{
                 lat: location?.lat ?? null,

@@ -68,10 +68,8 @@ let jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
 function getRemoteJWKS(): ReturnType<typeof createRemoteJWKSet> {
   if (!jwks) {
     const authUrl = new URL(env.AUTH_PROVIDER_URL);
-    const isLocalhost =
-      authUrl.hostname === "localhost" || authUrl.hostname === "127.0.0.1";
-    if (authUrl.protocol !== "https:" && !isLocalhost) {
-      throw new Error("AUTH_PROVIDER_URL must use https:// outside localhost");
+    if (env.NODE_ENV === "production" && authUrl.protocol !== "https:") {
+      throw new Error("AUTH_PROVIDER_URL must use HTTPS in production");
     }
 
     jwks = createRemoteJWKSet(new URL("/.well-known/jwks.json", authUrl));

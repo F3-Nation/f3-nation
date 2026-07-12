@@ -9,7 +9,14 @@ import { Case } from "@acme/shared/common/enums";
 import { convertCase, isTruthy } from "@acme/shared/common/functions";
 import { Input } from "@acme/ui/input";
 import { MultiSelect } from "@acme/ui/multi-select";
-import { ControlledSelect } from "@acme/ui/select";
+import {
+  ControlledSelect,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@acme/ui/select";
 import { Textarea } from "@acme/ui/textarea";
 import { toast } from "@acme/ui/toast";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
@@ -33,6 +40,14 @@ export const LocationEventForm = ({
   const formRegionId = form.watch("regionId");
   const formLocationId = form.watch("locationId");
   const formAoId = form.watch("aoId");
+  const formRecurrencePattern = form.watch("eventRecurrencePattern");
+  const formRecurrenceInterval = form.watch("eventRecurrenceInterval");
+  const scheduleType =
+    formRecurrencePattern === "monthly"
+      ? "monthly"
+      : formRecurrenceInterval === 2
+        ? "biweekly"
+        : "weekly";
   console.log("form eventTypeIds", form.getValues().eventTypeIds);
 
   const { data: regionsResponse } = useQuery(
@@ -124,6 +139,69 @@ export const LocationEventForm = ({
             {form.formState.errors.eventDayOfWeek?.message}
           </p>
         </div>
+
+        <div className="space-y-2">
+          <div className="text-sm font-medium text-muted-foreground">
+            Schedule
+          </div>
+          <Select
+            value={scheduleType}
+            onValueChange={(v) => {
+              if (v === "biweekly") {
+                form.setValue("eventRecurrencePattern", "weekly");
+                form.setValue("eventRecurrenceInterval", 2);
+              } else {
+                form.setValue(
+                  "eventRecurrencePattern",
+                  v === "monthly" ? "monthly" : "weekly",
+                );
+                form.setValue("eventRecurrenceInterval", null);
+              }
+              if (v !== "monthly") {
+                form.setValue("eventIndexWithinInterval", null);
+              }
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Every week" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="weekly">Every week</SelectItem>
+              <SelectItem value="biweekly">Every 2 weeks</SelectItem>
+              <SelectItem value="monthly">Once a month</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {formRecurrencePattern === "monthly" && (
+          <div className="space-y-2">
+            <div className="text-sm font-medium text-muted-foreground">
+              Which occurrence?
+            </div>
+            <Controller
+              control={form.control}
+              name="eventIndexWithinInterval"
+              render={({ field }) => (
+                <Select
+                  value={
+                    typeof field.value === "number" ? String(field.value) : ""
+                  }
+                  onValueChange={(v) => field.onChange(v ? Number(v) : null)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select occurrence" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">1st</SelectItem>
+                    <SelectItem value="2">2nd</SelectItem>
+                    <SelectItem value="3">3rd</SelectItem>
+                    <SelectItem value="4">4th</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            />
+          </div>
+        )}
 
         <div className="space-y-2">
           <ControlledTimeInput

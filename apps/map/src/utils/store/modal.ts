@@ -1,6 +1,10 @@
 import type { ReactNode } from "react";
 
-import type { DayOfWeek, RequestType } from "@acme/shared/app/enums";
+import type {
+  DayOfWeek,
+  EventCadence,
+  RequestType,
+} from "@acme/shared/app/enums";
 import { ZustandStore } from "@acme/shared/common/classes";
 
 import type { RouterOutputs } from "~/orpc/types";
@@ -32,6 +36,9 @@ export const eventDefaults = {
   startTime: "0530",
   endTime: "0615",
   dayOfWeek: null,
+  recurrencePattern: null,
+  recurrenceInterval: null,
+  indexWithinInterval: null,
   eventTypeIds: [1],
   eventDescription: "",
   aoId: null,
@@ -83,6 +90,10 @@ export const eventAndLocationToUpdateRequest = ({
     startTime: event?.startTime ?? null,
     endTime: event?.endTime ?? null,
     dayOfWeek: event?.dayOfWeek ?? null,
+    recurrencePattern:
+      (event?.recurrencePattern as EventCadence | null | undefined) ?? null,
+    recurrenceInterval: event?.recurrenceInterval ?? null,
+    indexWithinInterval: event?.indexWithinInterval ?? null,
     eventTypeIds: event?.eventTypes.map((type) => type.id) ?? [],
     eventDescription: event?.description ?? null,
     locationId: location.id,
@@ -122,6 +133,9 @@ export interface DataType {
     startTime: string | null;
     endTime: string | null;
     dayOfWeek: DayOfWeek | null;
+    recurrencePattern: EventCadence | null;
+    recurrenceInterval: number | null;
+    indexWithinInterval: number | null;
     eventTypeIds: number[];
     eventDescription: string | null;
     locationAddress: string | null;

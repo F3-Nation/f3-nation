@@ -194,6 +194,9 @@ export const UpdateLocationModal = ({
       form.setValue("eventDayOfWeek", null);
     }
     form.setValue("eventTypeIds", data.eventTypeIds);
+    form.setValue("eventRecurrencePattern", data.recurrencePattern ?? null);
+    form.setValue("eventRecurrenceInterval", data.recurrenceInterval ?? null);
+    form.setValue("eventIndexWithinInterval", data.indexWithinInterval ?? null);
 
     form.setValue("submittedBy", session?.email || appStore.get("myEmail"));
   }, [data, eventTypes, form, session?.email]);
