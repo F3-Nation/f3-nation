@@ -112,7 +112,10 @@ export const EditEventSchema = BaseSchema.extend({
   .extend(EventFields.partial().shape)
   .extend(AOFields.partial().shape)
   .extend(LocationFields.partial().shape)
-  .extend({ currentValues: makeSchemaLoose(EventFields) });
+  // Optional: `currentValues` carries the entity's prior values for the review
+  // UI only (stripped before persistence). Optional so the admin normalizer no
+  // longer has to fabricate an empty object just to satisfy the union. (#13)
+  .extend({ currentValues: makeSchemaLoose(EventFields).optional() });
 
 export type EditEventType = z.infer<typeof EditEventSchema>;
 
@@ -125,7 +128,9 @@ export const EditAOAndLocationSchema = BaseSchema.extend({
   .extend(AOFields.partial().shape)
   .extend(LocationFields.partial().shape)
   .extend({
-    currentValues: makeSchemaLoose(AOFields.extend(LocationFields.shape)),
+    currentValues: makeSchemaLoose(
+      AOFields.extend(LocationFields.shape),
+    ).optional(),
   });
 
 export type EditAOAndLocationType = z.infer<typeof EditAOAndLocationSchema>;
@@ -151,7 +156,7 @@ export const MoveAOToNewLocationSchema = BaseSchema.extend({
 })
   .extend(LocationFields.shape)
   .extend({
-    currentValues: makeSchemaLoose(LocationFields),
+    currentValues: makeSchemaLoose(LocationFields).optional(),
   });
 
 export type MoveAOToNewLocationType = z.infer<typeof MoveAOToNewLocationSchema>;
@@ -215,7 +220,7 @@ export const MoveEventToNewLocationSchema = BaseSchema.extend({
   originalLocationId: z.number().positive("Location ID is required"),
 })
   .extend(LocationFields.shape)
-  .extend({ currentValues: makeSchemaLoose(LocationFields) });
+  .extend({ currentValues: makeSchemaLoose(LocationFields).optional() });
 
 export type MoveEventToNewLocationType = z.infer<
   typeof MoveEventToNewLocationSchema

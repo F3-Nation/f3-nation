@@ -149,6 +149,25 @@ const hydrateEventFields = async (
 };
 
 /**
+ * The id-bearing fields recordUpdateRequest reads off the (heterogeneous)
+ * request object to derive DB columns. Naming them explicitly gives getVal a
+ * checked key set — see the getVal comment below. (#12)
+ */
+interface MappableRequestIds {
+  newAoId?: number | null;
+  newLocationId?: number | null;
+  newRegionId?: number | null;
+  regionId?: number | null;
+  originalRegionId?: number | null;
+  originalAoId?: number | null;
+  aoId?: number | null;
+  originalLocationId?: number | null;
+  locationId?: number | null;
+  originalEventId?: number | null;
+  eventId?: number | null;
+}
+
+/**
  * Records an update request in the database
  */
 export const recordUpdateRequest = async (params: {
@@ -164,8 +183,12 @@ export const recordUpdateRequest = async (params: {
 
   const meta = buildMeta(req);
 
-  // Map to DB columns safely
-  const getVal = (key: string) => req[key] as number | undefined;
+  // Map to DB columns safely. Constraining getVal's key to the known set of
+  // id-bearing fields (rather than an arbitrary `string`) means a typo or a
+  // dropped mapping is a compile error here instead of silently returning
+  // undefined and mis-linking the audit row's region/AO/location/event. (#12)
+  const getVal = (key: keyof MappableRequestIds) =>
+    req[key] as number | undefined;
 
   const newAoId = getVal("newAoId");
   const newLocationId = getVal("newLocationId");

@@ -75,8 +75,12 @@ const ValidateSubmissionByAdminSchema = z.discriminatedUnion("requestType", [
   DeleteAOSchema,
 ]);
 
-const normalizeAdminRequestInput = (input: Record<string, unknown>) => {
-  const normalized = { ...input };
+const normalizeAdminRequestInput = (input: unknown) => {
+  const source =
+    input && typeof input === "object"
+      ? (input as Record<string, unknown>)
+      : {};
+  const normalized = { ...source };
   const meta =
     normalized.meta && typeof normalized.meta === "object"
       ? (normalized.meta as Record<string, unknown>)
@@ -86,9 +90,6 @@ const normalizeAdminRequestInput = (input: Record<string, unknown>) => {
     "create_event",
     "edit_event",
   ].includes(String(normalized.requestType));
-  const usesCurrentValues = ["edit_ao_and_location", "edit_event"].includes(
-    String(normalized.requestType),
-  );
 
   if (usesOriginalIds) {
     normalized.originalRegionId ??= normalized.regionId;
@@ -130,7 +131,6 @@ const normalizeAdminRequestInput = (input: Record<string, unknown>) => {
     normalized.originalAoId ??= meta.originalAoId ?? normalized.aoId;
     normalized.originalLocationId ??=
       meta.originalLocationId ?? normalized.locationId;
-    normalized.currentValues ??= {};
   }
 
   if (normalized.requestType === "move_ao_to_different_region") {
@@ -166,7 +166,6 @@ const normalizeAdminRequestInput = (input: Record<string, unknown>) => {
     normalized.originalEventId ??= meta.originalEventId ?? normalized.eventId;
     normalized.originalLocationId ??=
       meta.originalLocationId ?? normalized.locationId;
-    normalized.currentValues ??= {};
   }
 
   if (normalized.requestType === "delete_event") {
@@ -179,10 +178,6 @@ const normalizeAdminRequestInput = (input: Record<string, unknown>) => {
     normalized.originalRegionId ??=
       meta.originalRegionId ?? normalized.regionId;
     normalized.originalAoId ??= meta.originalAoId ?? normalized.aoId;
-  }
-
-  if (usesCurrentValues) {
-    normalized.currentValues ??= {};
   }
 
   return normalized;
@@ -848,7 +843,12 @@ export const requestRouter = {
       return await handleRequest({ ctx, input, handler });
     }),
   validateSubmissionByAdmin: editorProcedure
-    .input(z.record(z.string(), z.unknown()))
+    // Normalize (backfill originalIds/currentValues from meta) then validate
+    // against the discriminated union at the input boundary, so the handler
+    // receives a fully-typed request instead of an untyped record. A new
+    // request type now fails to type-check at the switch below rather than
+    // slipping through un-normalized to a runtime error. (#9)
+    .input(z.preprocess(normalizeAdminRequestInput, ValidateSubmissionByAdminSchema))
     .route({
       method: "POST",
       path: "/validate-submission-by-admin",
@@ -858,15 +858,12 @@ export const requestRouter = {
     })
     .output(updateRequestMutationOutput)
     .handler(async ({ context: ctx, input }) => {
-      const normalizedInput = normalizeAdminRequestInput(input);
-      const parsedInput =
-        ValidateSubmissionByAdminSchema.parse(normalizedInput);
-
+      // `input` is already normalized + validated by the preprocess above.
       // Reviewers must hold the editor role on the region the request is
       // filed under (editorProcedure only proves a role on *some* org).
       const reviewRegionId =
-        ("newRegionId" in parsedInput ? parsedInput.newRegionId : undefined) ??
-        parsedInput.originalRegionId;
+        ("newRegionId" in input ? input.newRegionId : undefined) ??
+        input.originalRegionId;
       const { success: canReviewRegion } = await checkHasRoleOnOrg({
         orgId: reviewRegionId,
         session: ctx.session,
@@ -884,7 +881,7 @@ export const requestRouter = {
       // silently re-record the request as pending and re-notify its admins.
       const reviewPermissions = await checkUpdatePermissions({
         ctx,
-        input: parsedInput,
+        input,
       });
       if (!reviewPermissions.success) {
         throw new ORPCError("UNAUTHORIZED", {
@@ -893,79 +890,90 @@ export const requestRouter = {
         });
       }
 
-      switch (parsedInput.requestType) {
+      switch (input.requestType) {
         case "create_ao_and_location_and_event":
           return await handleRequest({
             ctx,
-            input: parsedInput,
+            input,
             handler: handleCreateLocationAndEvent,
           });
         case "create_event":
           return await handleRequest({
             ctx,
-            input: parsedInput,
+            input,
             handler: handleCreateEvent,
           });
         case "edit_event":
           return await handleRequest({
             ctx,
-            input: parsedInput,
+            input,
             handler: handleEditEvent,
           });
         case "edit_ao_and_location":
           return await handleRequest({
             ctx,
-            input: parsedInput,
+            input,
             handler: handleEditAOAndLocation,
           });
         case "move_ao_to_different_region":
           return await handleRequest({
             ctx,
-            input: parsedInput,
+            input,
             handler: handleMoveAOToDifferentRegion,
           });
         case "move_ao_to_different_location":
           return await handleRequest({
             ctx,
-            input: parsedInput,
+            input,
             handler: handleMoveAOToDifferentLocation,
           });
         case "move_ao_to_new_location":
           return await handleRequest({
             ctx,
-            input: parsedInput,
+            input,
             handler: handleMoveAOToNewLocation,
           });
         case "move_event_to_different_ao":
           return await handleRequest({
             ctx,
-            input: parsedInput,
+            input,
             handler: handleMoveEventToDifferentAO,
           });
         case "move_event_to_new_ao":
           return await handleRequest({
             ctx,
-            input: parsedInput,
+            input,
             handler: handleMoveEventToNewAO,
           });
         case "move_event_to_new_location":
           return await handleRequest({
             ctx,
-            input: parsedInput,
+            input,
             handler: handleMoveEventToNewLocation,
           });
         case "delete_event":
           return await handleRequest({
             ctx,
-            input: parsedInput,
+            input,
             handler: handleDeleteEvent,
           });
         case "delete_ao":
           return await handleRequest({
             ctx,
-            input: parsedInput,
+            input,
             handler: handleDeleteAO,
           });
+        default: {
+          // Exhaustiveness guard: if a new request type is added to
+          // ValidateSubmissionByAdminSchema without a case here, this fails to
+          // compile instead of silently falling through to an empty response.
+          const _exhaustive: never = input;
+          throw new ORPCError("BAD_REQUEST", {
+            message: `Unhandled request type: ${String(
+              (_exhaustive as { requestType?: string }).requestType,
+            )}`,
+          });
+        }
       }
     }),
 
