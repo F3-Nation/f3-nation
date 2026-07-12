@@ -136,7 +136,18 @@ const normalizeAdminRequestInput = (input: Record<string, unknown>) => {
   if (normalized.requestType === "move_ao_to_different_region") {
     normalized.originalRegionId ??= meta.originalRegionId;
     normalized.originalAoId ??= meta.originalAoId ?? normalized.aoId;
-    normalized.newRegionId ??= meta.newRegionId ?? normalized.regionId;
+    // The review form's RegionSelectField binds to `regionId`, and for this
+    // request type the stored `regionId` column IS the destination region
+    // (recordUpdateRequest writes newRegionId into regionId). An `??=` here let
+    // the originally-requested meta.newRegionId shadow a reviewer's edit, so an
+    // admin who changed the destination was silently ignored. Honor an
+    // explicitly-submitted positive regionId over meta.newRegionId. (#8)
+    const submittedRegionId =
+      typeof normalized.regionId === "number" && normalized.regionId > 0
+        ? normalized.regionId
+        : undefined;
+    normalized.newRegionId =
+      submittedRegionId ?? normalized.newRegionId ?? meta.newRegionId;
   }
 
   if (normalized.requestType === "move_event_to_new_ao") {
@@ -997,14 +1008,29 @@ export const requestRouter = {
           message: "You are not authorized to edit this region",
         });
       }
-      await ctx.db
+      // Only a pending request can be rejected. Guard atomically (status is in
+      // the WHERE clause) so racing reviewers can't reject an already-applied
+      // approval and leave the audit trail contradicting the live map. (#11)
+      const [rejected] = await ctx.db
         .update(schema.updateRequests)
         .set({
           status: "rejected",
           reviewedBy: ctx.session?.user?.email ?? null,
           reviewedAt: new Date().toISOString(),
         })
-        .where(eq(schema.updateRequests.id, input.id));
+        .where(
+          and(
+            eq(schema.updateRequests.id, input.id),
+            eq(schema.updateRequests.status, "pending"),
+          ),
+        )
+        .returning({ id: schema.updateRequests.id });
+
+      if (!rejected) {
+        throw new ORPCError("CONFLICT", {
+          message: `This request has already been ${updateRequest.status}.`,
+        });
+      }
 
       return {
         status: "rejected",
@@ -1104,6 +1130,7 @@ const REQUEST_TYPE_TO_MAP_EVENT: Record<
 };
 
 type HandleableRequestInput = CheckRequestInput & {
+  id?: string | null;
   requestType: UpdateRequestData["requestType"];
   submittedBy: string;
   reviewedBy?: string | null;
@@ -1143,6 +1170,26 @@ const handleRequest = async <T extends HandleableRequestInput>({
     // after such a failure can't apply the change twice).
     const updateRequest = await ctx.db.transaction(async (tx) => {
       const txCtx: Context = { ...ctx, db: tx as unknown as Context["db"] };
+      // Guard against re-applying an already-reviewed request (two reviewers
+      // racing to approve the same queue item, or an approve after the row was
+      // already resolved). Lock the stored row and require it to still be
+      // pending. A fresh submission has no matching row yet, so this is a no-op
+      // for the submit path. Without this, a second approve re-runs the apply
+      // handler — duplicating created entities — while onConflictDoUpdate reuses
+      // the same audit row. (#11)
+      const existingId = typeof input.id === "string" ? input.id : undefined;
+      if (existingId) {
+        const [existing] = await tx
+          .select({ status: schema.updateRequests.status })
+          .from(schema.updateRequests)
+          .where(eq(schema.updateRequests.id, existingId))
+          .for("update");
+        if (existing && existing.status !== "pending") {
+          throw new ORPCError("CONFLICT", {
+            message: `This request has already been ${existing.status}.`,
+          });
+        }
+      }
       const created = (await handler(txCtx, input)) ?? {};
       return await recordUpdateRequest({
         ctx: txCtx,
