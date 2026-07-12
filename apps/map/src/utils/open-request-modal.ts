@@ -7,7 +7,6 @@ import { requestTypeToTitle } from "@acme/shared/app/functions";
 import { toast } from "@acme/ui/toast";
 
 import type { UpdateRequestById } from "./types";
-import { logError } from "~/lib/logging";
 import { client } from "~/orpc/client";
 import { getQueryData, orpc } from "~/orpc/react";
 import { mapStore } from "./store/map";
@@ -319,7 +318,7 @@ const getRequestOverrides = (request: UpdateRequestById) => {
     // silently drops every source/destination id below, opening a
     // blank-looking review form a reviewer could approve against defaults with
     // no idea anything was lost. Leave a trace and warn the reviewer. (#18)
-    logError(
+    console.error(
       "map.request.meta_parse_failed",
       { requestId: request.id },
       parsedMeta.error,

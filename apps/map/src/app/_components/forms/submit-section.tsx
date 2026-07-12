@@ -9,7 +9,6 @@ import { Button } from "@acme/ui/button";
 import { Spinner } from "@acme/ui/spinner";
 import { toast } from "@acme/ui/toast";
 
-import { logError } from "~/lib/logging";
 import { invalidateQueries, orpc, useMutation, useQuery } from "~/orpc/react";
 import type { RouterOutputs } from "~/orpc/types";
 import { closeModal } from "~/utils/store/modal";
@@ -96,7 +95,7 @@ function useRegionPermissions(params: {
 
   useEffect(() => {
     if (permissionError) {
-      logError("map.request.permission_check_failed", { orgIds }, error);
+      console.error("map.request.permission_check_failed", { orgIds }, error);
     }
   }, [permissionError, error, orgIds]);
 

@@ -848,7 +848,9 @@ export const requestRouter = {
     // receives a fully-typed request instead of an untyped record. A new
     // request type now fails to type-check at the switch below rather than
     // slipping through un-normalized to a runtime error. (#9)
-    .input(z.preprocess(normalizeAdminRequestInput, ValidateSubmissionByAdminSchema))
+    .input(
+      z.preprocess(normalizeAdminRequestInput, ValidateSubmissionByAdminSchema),
+    )
     .route({
       method: "POST",
       path: "/validate-submission-by-admin",

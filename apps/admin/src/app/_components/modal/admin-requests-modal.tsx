@@ -27,7 +27,6 @@ import {
   useMutation,
   useQuery,
 } from "~/orpc/react";
-import { logError } from "~/lib/logging";
 import { useUpdateLocationForm } from "~/utils/forms";
 import { uploadLogo } from "~/utils/image/upload-logo";
 import type { DataType, ModalType } from "~/utils/store/modal";
@@ -149,7 +148,11 @@ export default function AdminRequestsModal({
       } catch (error) {
         // Always leave a trace: without this, a reported "approve doesn't work"
         // has nothing in the console or the error reporter to debug. (#16)
-        logError("admin.request.approve_failed", { requestId: formId }, error);
+        console.error(
+          "admin.request.approve_failed",
+          { requestId: formId },
+          error,
+        );
 
         if (!(error instanceof ORPCError)) {
           toast.error("Something went wrong approving this update.");
@@ -189,7 +192,7 @@ export default function AdminRequestsModal({
       const message =
         (typeof firstError?.message === "string" && firstError.message) ||
         "Please fix the highlighted fields before approving.";
-      logError("admin.request.approve_invalid", {
+      console.error("admin.request.approve_invalid", {
         requestId: formId,
         fields: Object.keys(fieldErrors),
       });
@@ -211,7 +214,11 @@ export default function AdminRequestsModal({
       toast.success("Rejected update");
       closeModal();
     } catch (error) {
-      logError("admin.request.reject_failed", { requestId: formId }, error);
+      console.error(
+        "admin.request.reject_failed",
+        { requestId: formId },
+        error,
+      );
       if (
         error instanceof ORPCError &&
         (error.code === "UNAUTHORIZED" ||
