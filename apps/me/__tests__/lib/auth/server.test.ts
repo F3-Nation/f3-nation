@@ -141,6 +141,21 @@ describe("auth server helpers", () => {
     expect(user).toBeNull();
   });
 
+  it("returns null when token subject is a non-integer number", async () => {
+    cookiesMock.mockResolvedValue({
+      get: vi.fn().mockReturnValue({ value: "token-float-sub" }),
+    });
+    verifyAccessTokenMock.mockResolvedValue({
+      ok: true,
+      payload: { sub: "1.5", email: "test@example.com" },
+    });
+
+    const { getSessionUser } = await import("@/lib/auth/server");
+    const user = await getSessionUser();
+
+    expect(user).toBeNull();
+  });
+
   it("returns null when token subject is zero or negative", async () => {
     cookiesMock.mockResolvedValue({
       get: vi.fn().mockReturnValue({ value: "token-zero-sub" }),

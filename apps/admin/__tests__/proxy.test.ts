@@ -134,4 +134,30 @@ describe("proxy middleware", () => {
       expect.anything(),
     );
   });
+
+  it("returns 401 without clearing cookies when the refreshed token fails verification", async () => {
+    // Initial token: expired
+    verifyAccessTokenMock.mockResolvedValueOnce({ ok: false, code: "expired" });
+    // Refresh call succeeds
+    refreshTokenMock.mockResolvedValue({ accessToken: "refreshed-bad-tok" });
+    // Refreshed token: fails verification (e.g. bad signature)
+    verifyAccessTokenMock.mockResolvedValueOnce({
+      ok: false,
+      code: "invalid_signature",
+      error: "Signature verification failed",
+    });
+
+    const response = await proxy(
+      makeRequest("/api/data", {
+        accessToken: "expired-tok",
+        refreshToken: "refresh-tok",
+        secFetchMode: "cors",
+      }),
+    );
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: "unauthorized" });
+    // Cookies must not be cleared on a non-navigation failure
+    expect(response.headers.get("set-cookie")).toBeNull();
+  });
 });

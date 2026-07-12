@@ -52,8 +52,8 @@ const getCachedSessionPayload = cache(async (accessToken: string) => {
   }
 
   const userId = Number(payload.sub);
-  if (!Number.isFinite(userId) || userId <= 0) {
-    logWarn("me.auth.session_claims_invalid", { reason: "non_numeric_sub" });
+  if (!Number.isInteger(userId) || userId <= 0) {
+    logWarn("me.auth.session_claims_invalid", { reason: "non_integer_sub" });
     return null;
   }
 

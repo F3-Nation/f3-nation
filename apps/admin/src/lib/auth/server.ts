@@ -42,8 +42,8 @@ const getCachedSessionPayload = cache(async (accessToken: string) => {
   }
 
   const id = Number(payload.sub);
-  if (!Number.isFinite(id) || id <= 0) {
-    logWarn("admin.auth.session_claims_invalid", { reason: "non_numeric_sub" });
+  if (!Number.isInteger(id) || id <= 0) {
+    logWarn("admin.auth.session_claims_invalid", { reason: "non_integer_sub" });
     return null;
   }
 
