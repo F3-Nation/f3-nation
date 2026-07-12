@@ -49,7 +49,7 @@ describe("auth server helpers", () => {
 
   it("returns null when token verification fails", async () => {
     cookiesMock.mockResolvedValue({
-      get: vi.fn().mockReturnValue({ value: "token" }),
+      get: vi.fn().mockReturnValue({ value: "token-expired" }),
     });
     verifyAccessTokenMock.mockResolvedValue({
       ok: false,
@@ -65,7 +65,7 @@ describe("auth server helpers", () => {
 
   it("logs a warning and returns null when verification fails with a non-expired code", async () => {
     cookiesMock.mockResolvedValue({
-      get: vi.fn().mockReturnValue({ value: "token" }),
+      get: vi.fn().mockReturnValue({ value: "token-invalid-sig" }),
     });
     verifyAccessTokenMock.mockResolvedValue({
       ok: false,
@@ -83,9 +83,28 @@ describe("auth server helpers", () => {
     });
   });
 
+  it("falls back to 'misconfigured' code when code is absent from failure result", async () => {
+    cookiesMock.mockResolvedValue({
+      get: vi.fn().mockReturnValue({ value: "token-no-code" }),
+    });
+    verifyAccessTokenMock.mockResolvedValue({
+      ok: false,
+      error: "Unexpected configuration error",
+    });
+
+    const { getSessionUser } = await import("@/lib/auth/server");
+    const user = await getSessionUser();
+
+    expect(user).toBeNull();
+    expect(logWarnMock).toHaveBeenCalledWith("me.auth.session_verify_failed", {
+      code: "misconfigured",
+      message: "Unexpected configuration error",
+    });
+  });
+
   it("returns null when payload is missing email", async () => {
     cookiesMock.mockResolvedValue({
-      get: vi.fn().mockReturnValue({ value: "token" }),
+      get: vi.fn().mockReturnValue({ value: "token-no-email" }),
     });
     verifyAccessTokenMock.mockResolvedValue({
       ok: true,
@@ -100,7 +119,7 @@ describe("auth server helpers", () => {
 
   it("returns null when token subject is not a positive number", async () => {
     cookiesMock.mockResolvedValue({
-      get: vi.fn().mockReturnValue({ value: "token" }),
+      get: vi.fn().mockReturnValue({ value: "token-nan-sub" }),
     });
     verifyAccessTokenMock.mockResolvedValue({
       ok: true,
@@ -115,7 +134,7 @@ describe("auth server helpers", () => {
 
   it("returns null when token subject is zero or negative", async () => {
     cookiesMock.mockResolvedValue({
-      get: vi.fn().mockReturnValue({ value: "token" }),
+      get: vi.fn().mockReturnValue({ value: "token-zero-sub" }),
     });
     verifyAccessTokenMock.mockResolvedValue({
       ok: true,
@@ -130,7 +149,7 @@ describe("auth server helpers", () => {
 
   it("returns normalized session payload for valid token payload", async () => {
     cookiesMock.mockResolvedValue({
-      get: vi.fn().mockReturnValue({ value: "token" }),
+      get: vi.fn().mockReturnValue({ value: "token-valid" }),
     });
     verifyAccessTokenMock.mockResolvedValue({
       ok: true,
@@ -160,7 +179,7 @@ describe("auth server helpers", () => {
 
   it("requireAuth returns session payload when authenticated", async () => {
     cookiesMock.mockResolvedValue({
-      get: vi.fn().mockReturnValue({ value: "token" }),
+      get: vi.fn().mockReturnValue({ value: "token-auth" }),
     });
     verifyAccessTokenMock.mockResolvedValue({
       ok: true,
