@@ -11,7 +11,7 @@ import { cpSync, existsSync, mkdirSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const source = join(repoRoot, ".agents", "skills");
 const target = join(repoRoot, ".claude", "skills");
 
@@ -27,8 +27,8 @@ if (existsSync(source)) {
 }
 
 // Ask Claude Code to re-scan skill directories so mirrored skills load in this session.
-console.log(
+process.stdout.write(
   JSON.stringify({
     hookSpecificOutput: { hookEventName: "SessionStart", reloadSkills: true },
-  }),
+  }) + "\n",
 );

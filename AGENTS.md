@@ -33,7 +33,7 @@ Reusable agent skills (procedural runbooks in the
 [`.agents/skills/`](.agents/skills/) — the cross-vendor convention scanned
 natively by Cursor, Codex, Gemini CLI, and others. Claude Code only scans
 `.claude/skills/`, so a `SessionStart` hook (`.claude/settings.json`) runs
-[`scripts/sync-agent-skills.mjs`](scripts/sync-agent-skills.mjs) to mirror
+[`.claude/scripts/sync-agent-skills.mjs`](.claude/scripts/sync-agent-skills.mjs) to mirror
 `.agents/skills/` into the gitignored `.claude/skills/`. Add or edit skills in
 `.agents/skills/` only; never commit anything under `.claude/skills/`.
 

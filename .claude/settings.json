@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/sync-agent-skills.mjs\""
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/scripts/sync-agent-skills.mjs\""
           }
         ]
       }
