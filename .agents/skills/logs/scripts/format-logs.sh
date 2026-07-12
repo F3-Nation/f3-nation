@@ -22,9 +22,9 @@ fi
 
 # --- summary counts ---
 TOTAL=$(echo "$INPUT" | jq 'length' 2>/dev/null || echo 0)
-ERRORS=$(echo "$INPUT" | jq '[.[] | select(.severity == "ERROR")] | length' 2>/dev/null || echo 0)
+ERRORS=$(echo "$INPUT" | jq '[.[] | select(.severity == "ERROR" or .severity == "CRITICAL" or .severity == "ALERT" or .severity == "EMERGENCY")] | length' 2>/dev/null || echo 0)
 WARNINGS=$(echo "$INPUT" | jq '[.[] | select(.severity == "WARNING")] | length' 2>/dev/null || echo 0)
-INFOS=$(echo "$INPUT" | jq '[.[] | select(.severity == "INFO" or .severity == "DEFAULT" or .severity == null)] | length' 2>/dev/null || echo 0)
+INFOS=$(echo "$INPUT" | jq '[.[] | select(.severity == "INFO" or .severity == "DEFAULT" or .severity == null or .severity == "NOTICE" or .severity == "DEBUG")] | length' 2>/dev/null || echo 0)
 
 # --- table header ---
 echo "| Timestamp | Severity | Method + URL | Status | Latency | Remote IP |"
