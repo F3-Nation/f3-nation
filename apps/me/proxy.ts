@@ -55,13 +55,20 @@ export async function proxy(request: NextRequest) {
         logDebug("me.auth.access_token_expired", {});
       } else {
         logWarn("me.auth.access_token_verify_failed", {
-          code: verification.code ?? "misconfigured",
+          code: verification.code,
           message: verification.error,
         });
       }
     }
 
     if (verification.ok) {
+      return NextResponse.next();
+    }
+    // When JWKS is unavailable the token may be valid — the auth server is
+    // temporarily unreachable. Falling through to the refresh/clear path would
+    // fail for the same reason and log users out. Preserve the session and let
+    // the server component surface the outage instead.
+    if (verification.code === "jwks_unavailable") {
       return NextResponse.next();
     }
   }

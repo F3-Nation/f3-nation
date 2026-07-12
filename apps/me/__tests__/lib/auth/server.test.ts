@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const cookiesMock = vi.fn();
 const verifyAccessTokenMock = vi.fn();
+const logDebugMock = vi.fn();
 const logWarnMock = vi.fn();
 const redirectMock = vi.fn((path: string) => {
   throw new Error(`redirect:${path}`);
@@ -27,7 +28,10 @@ vi.mock("@/env", () => ({
   },
 }));
 
-vi.mock("@/lib/logging", () => ({ logDebug: vi.fn(), logWarn: logWarnMock }));
+vi.mock("@/lib/logging", () => ({
+  logDebug: logDebugMock,
+  logWarn: logWarnMock,
+}));
 
 describe("auth server helpers", () => {
   beforeEach(() => {
@@ -61,6 +65,10 @@ describe("auth server helpers", () => {
     const user = await getSessionUser();
 
     expect(user).toBeNull();
+    expect(logDebugMock).toHaveBeenCalledWith(
+      "me.auth.session_token_expired",
+      {},
+    );
   });
 
   it("logs a warning and returns null when verification fails with a non-expired code", async () => {
@@ -83,13 +91,14 @@ describe("auth server helpers", () => {
     });
   });
 
-  it("falls back to 'misconfigured' code when code is absent from failure result", async () => {
+  it("logs a warning and returns null for an invalid_token failure code", async () => {
     cookiesMock.mockResolvedValue({
-      get: vi.fn().mockReturnValue({ value: "token-no-code" }),
+      get: vi.fn().mockReturnValue({ value: "token-invalid" }),
     });
     verifyAccessTokenMock.mockResolvedValue({
       ok: false,
-      error: "Unexpected configuration error",
+      code: "invalid_token",
+      error: "Token verification failed",
     });
 
     const { getSessionUser } = await import("@/lib/auth/server");
@@ -97,8 +106,8 @@ describe("auth server helpers", () => {
 
     expect(user).toBeNull();
     expect(logWarnMock).toHaveBeenCalledWith("me.auth.session_verify_failed", {
-      code: "misconfigured",
-      message: "Unexpected configuration error",
+      code: "invalid_token",
+      message: "Token verification failed",
     });
   });
 
@@ -159,6 +168,15 @@ describe("auth server helpers", () => {
     const { getSessionUser } = await import("@/lib/auth/server");
     const user = await getSessionUser();
 
+    // The fourth positional arg (`true`) enables the client_id fallback that
+    // F3 tokens require — assert it is passed so a transposition or omission
+    // fails loudly rather than silently breaking every real session.
+    expect(verifyAccessTokenMock).toHaveBeenCalledWith(
+      "token-valid",
+      "https://auth.test.com",
+      "me-client",
+      true,
+    );
     expect(user).toEqual({
       sub: "42",
       email: "test@example.com",

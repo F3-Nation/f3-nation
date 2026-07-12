@@ -96,6 +96,45 @@ describe("token verification", () => {
     expect(jwtVerifyMock).not.toHaveBeenCalled();
   });
 
+  it("treats a nearly-expired token within the 60 s default skew as expired", async () => {
+    // exp = now + 59 s satisfies exp <= now + 60 → expired
+    const now = Math.floor(Date.now() / 1000);
+    const token = makeToken({ sub: "123", exp: now + 59 });
+
+    const result = await verifyJwtWithJwks(token, {
+      authServerUrl: "https://auth.example.com",
+      clientId: "web-client",
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      code: "expired",
+      message: "Token expired",
+    });
+    expect(jwtVerifyMock).not.toHaveBeenCalled();
+  });
+
+  it("does not treat a token expiring in 61 s as expired and proceeds to jwtVerify", async () => {
+    // exp = now + 61 s does not satisfy exp <= now + 60 → proceeds to verify
+    const now = Math.floor(Date.now() / 1000);
+    const token = makeToken({ sub: "123", exp: now + 61 });
+
+    jwtVerifyMock.mockResolvedValue({
+      payload: { sub: "123", email: "test@example.com" },
+    });
+
+    const result = await verifyJwtWithJwks(token, {
+      authServerUrl: "https://auth.example.com",
+      clientId: "web-client",
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      payload: { sub: "123", email: "test@example.com" },
+    });
+    expect(jwtVerifyMock).toHaveBeenCalledTimes(1);
+  });
+
   it("returns invalid_signature for bad signature", async () => {
     const token = makeToken({ sub: "123", exp: 1_900_000_000 });
     const signatureError = new Error("signature failed") as Error & {
@@ -228,7 +267,7 @@ describe("token verification", () => {
     });
   });
 
-  it("preserves strict audience mismatch when fallback verify throws", async () => {
+  it("preserves strict audience mismatch with fallback error included when fallback verify throws", async () => {
     const token = makeToken({ sub: "123", exp: 1_900_000_000 });
     const audError = makeClaimValidationError("aud");
 
@@ -245,8 +284,32 @@ describe("token verification", () => {
     expect(result).toEqual({
       ok: false,
       code: "audience_mismatch",
+      message:
+        "Token audience mismatch (fallback also failed: fallback verify failed)",
+    });
+  });
+
+  it("does not fall back to client_id when an explicit audience is configured", async () => {
+    const token = makeToken({ sub: "123", exp: 1_900_000_000 });
+    const audError = makeClaimValidationError("aud");
+
+    jwtVerifyMock.mockRejectedValueOnce(audError);
+
+    const result = await verifyJwtWithJwks(token, {
+      authServerUrl: "https://auth.example.com",
+      audience: "explicit-audience",
+      clientId: "some-client",
+      allowClientIdClaimFallback: true,
+    });
+
+    // The !options.audience gate must prevent the fallback even when
+    // allowClientIdClaimFallback is true — verify jwtVerify was called once.
+    expect(result).toEqual({
+      ok: false,
+      code: "audience_mismatch",
       message: "Token audience mismatch",
     });
+    expect(jwtVerifyMock).toHaveBeenCalledTimes(1);
   });
 
   it("returns invalid_token for malformed token before expiration check", async () => {
@@ -263,7 +326,7 @@ describe("token verification", () => {
     expect(jwtVerifyMock).not.toHaveBeenCalled();
   });
 
-  it("returns invalid_token instead of throwing for misconfigured authServerUrl", async () => {
+  it("returns internal_error instead of throwing for misconfigured authServerUrl", async () => {
     const result = await verifyJwtWithJwks(makeToken({ sub: "123" }), {
       authServerUrl: "http://auth.example.com",
       clientId: "web-client",
@@ -271,8 +334,8 @@ describe("token verification", () => {
 
     expect(result).toEqual({
       ok: false,
-      code: "invalid_token",
-      message: "authServerUrl must use https:// outside localhost",
+      code: "internal_error",
+      message: "Error: authServerUrl must use https:// outside localhost",
     });
     expect(jwtVerifyMock).not.toHaveBeenCalled();
   });

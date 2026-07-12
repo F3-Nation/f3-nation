@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { verifyAccessToken } from "@acme/sso";
+import { verifyAccessToken, AuthError } from "@acme/sso";
 
 import { routes } from "@acme/shared/app/constants";
 
@@ -158,7 +158,7 @@ export async function proxy(request: NextRequest) {
         logDebug("admin.auth.access_token_expired", {});
       } else {
         logWarn("admin.auth.access_token_verify_failed", {
-          code: result.code ?? "misconfigured",
+          code: result.code,
           message: result.error,
         });
       }
@@ -167,7 +167,17 @@ export async function proxy(request: NextRequest) {
   }
 
   if (accessToken) {
-    if ((await checkToken(accessToken)).ok) {
+    const tokenResult = await checkToken(accessToken);
+    if (tokenResult.ok) {
+      return NextResponse.next({
+        request: { headers: getRequestHeadersWithPath(request) },
+      });
+    }
+    // When JWKS is unavailable the token may be valid — the auth server is
+    // temporarily unreachable. Falling through to the refresh/clear path would
+    // fail for the same reason and log users out. Preserve the session and let
+    // the server component surface the outage instead.
+    if (tokenResult.code === "jwks_unavailable") {
       return NextResponse.next({
         request: { headers: getRequestHeadersWithPath(request) },
       });
@@ -189,7 +199,16 @@ export async function proxy(request: NextRequest) {
         throw new Error("Refreshed access token missing");
       }
 
-      if (!(await checkToken(tokens.accessToken)).ok) {
+      // Verify without logging — the catch below emits a single coherent
+      // "refresh_failed" record. Using checkToken here would emit a duplicate
+      // (and produce a contradictory debug+warn pair for an expired refreshed token).
+      const refreshedVerify = await verifyAccessToken(
+        tokens.accessToken,
+        env.AUTH_PROVIDER_URL,
+        env.OAUTH_CLIENT_ID,
+        true,
+      );
+      if (!refreshedVerify.ok) {
         throw new Error("Refreshed access token verification failed");
       }
 
@@ -211,7 +230,9 @@ export async function proxy(request: NextRequest) {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       const isExpectedRotationLoss =
-        !isNavigationRequest && /invalid_grant/i.test(errorMessage);
+        !isNavigationRequest &&
+        err instanceof AuthError &&
+        err.code === "invalid_grant";
 
       if (isExpectedRotationLoss) {
         logDebug("admin.auth.refresh_invalid_grant", { isNavigationRequest });

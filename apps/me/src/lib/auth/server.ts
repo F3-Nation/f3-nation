@@ -21,7 +21,7 @@ export interface SessionPayload {
  * even if middleware is misconfigured or bypassed (#371).
  *
  * The shared verifier caches the JWKS response internally (10-minute TTL) so
- * only the first request per cold-start incurs a network round-trip.
+ * at most one JWKS fetch occurs per 10-minute window per instance.
  */
 const getCachedSessionPayload = cache(async (accessToken: string) => {
   const result = await verifyAccessToken(
@@ -36,7 +36,7 @@ const getCachedSessionPayload = cache(async (accessToken: string) => {
       logDebug("me.auth.session_token_expired", {});
     } else {
       logWarn("me.auth.session_verify_failed", {
-        code: result.code ?? "misconfigured",
+        code: result.code,
         message: result.error,
       });
     }
@@ -44,10 +44,18 @@ const getCachedSessionPayload = cache(async (accessToken: string) => {
   }
 
   const payload = result.payload;
-  if (!payload.sub || !payload.email) return null;
+  if (!payload.sub || !payload.email) {
+    logWarn("me.auth.session_claims_invalid", {
+      reason: !payload.sub ? "missing_sub" : "missing_email",
+    });
+    return null;
+  }
 
   const userId = Number(payload.sub);
-  if (!Number.isFinite(userId) || userId <= 0) return null;
+  if (!Number.isFinite(userId) || userId <= 0) {
+    logWarn("me.auth.session_claims_invalid", { reason: "non_numeric_sub" });
+    return null;
+  }
 
   return {
     sub: payload.sub,

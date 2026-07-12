@@ -846,10 +846,15 @@ import { verifyJwtPayload } from "@acme/sso";
 const payload = await verifyJwtPayload(accessToken, {
   authServerUrl: process.env.AUTH_PROVIDER_URL!,
   clientId: process.env.OAUTH_CLIENT_ID!,
+  // F3 access tokens carry `client_id` rather than an `aud` claim.
+  // This flag accepts `client_id` in place of `aud` during verification.
+  // Omitting it will reject every valid F3 token until the auth server
+  // is updated to set `aud`.
+  allowClientIdClaimFallback: true,
 });
 
 if (!payload) {
-  // Token is invalid, expired, or does not match expected issuer/audience.
+  // Token is invalid, expired, or the client_id doesn\'t match.
 }
 ```
 
@@ -875,7 +880,7 @@ const verification = await verifyAccessToken(
   accessToken,
   process.env.AUTH_PROVIDER_URL!,
   process.env.OAUTH_CLIENT_ID!,
-  true, // allowClientIdClaimFallback — omit for strict audience matching
+  true, // allowClientIdClaimFallback — required for F3 tokens (carry `client_id`, not `aud`)
 );
 
 if (!verification.ok) {
@@ -902,9 +907,28 @@ The `isAccessTokenPayload` guard (non-empty string `sub`) is enforced inside
 `{ ok: false, code: "invalid_claims", … }`. You do not need to re-check it at
 the call site.
 
-The optional fourth argument is the `client_id` fallback. Leave it out for
-strict audience matching; pass `true` only for apps that intentionally accept
-that fallback path.
+The optional fourth argument is the `client_id` fallback. Pass `true` for all
+current F3 apps — the auth server mints tokens with `client_id` rather than
+`aud`, so strict audience matching (`false`, the default) rejects every valid
+token. Only switch to `false` if/when the auth server is updated to set `aud`.
+
+**`jwks_unavailable` in middleware:** This code means the JWKS endpoint was
+unreachable, not that the token is invalid. In Next.js middleware/proxy code,
+handle it separately — falling through to a refresh attempt will fail for the
+same reason and a navigation request will end in a cookie-clearing redirect,
+logging every user out during a transient auth-server blip:
+
+```ts
+// In middleware/proxy — after verifyAccessToken returns !ok:
+if (verification.code === "jwks_unavailable") {
+  // Auth server temporarily unreachable; the token may still be valid.
+  // Pass through without refreshing or clearing cookies so the session
+  // is preserved. The server component will surface the outage.
+  return NextResponse.next();
+}
+// Only attempt refresh / fall through to clear-cookies for other codes
+// (expired, invalid_token, etc.)
+```
 
 ---
 

@@ -18,7 +18,8 @@ export type JwtVerificationFailureCode =
   | "invalid_signature"
   | "invalid_claims"
   | "jwks_unavailable"
-  | "invalid_token";
+  | "invalid_token"
+  | "internal_error";
 
 export type JwtVerificationResult<TPayload extends JWTPayload = JWTPayload> =
   | {
@@ -39,7 +40,7 @@ export type VerifyAccessTokenResult =
   | {
       ok: false;
       error: string;
-      code?: JwtVerificationFailureCode;
+      code: JwtVerificationFailureCode;
     };
 
 export interface VerifyJwtWithJwksOptions {
@@ -93,7 +94,7 @@ export function isJwtExpired(
   skewSeconds = DEFAULT_CLOCK_SKEW_SECONDS,
 ): boolean {
   const payload = parseJwtPayload(token);
-  // Treat missing or unparseable exp as expired to force full re-auth.
+  // Treat missing/unparseable exp as expired (fail closed).
   if (typeof payload?.exp !== "number" || !Number.isFinite(payload.exp)) {
     return true;
   }
@@ -177,8 +178,9 @@ function classifyVerificationError(error: unknown): {
     joseCode === "ERR_JWKS_TIMEOUT" ||
     joseCode === "ERR_JWKS_INVALID" ||
     joseCode === "ERR_JWKS_MULTIPLE_MATCHING_KEYS" ||
-    error.name === "TypeError" ||
-    /fetch|network/i.test(error.message)
+    // Match undici/fetch failures precisely to avoid classifying programming
+    // errors (property-read-of-undefined, etc.) as connectivity problems.
+    (error.name === "TypeError" && /fetch failed/i.test(error.message))
   ) {
     return {
       code: "jwks_unavailable",
@@ -257,19 +259,35 @@ export async function verifyJwtWithJwks<
         }
 
         return { ok: true, payload: payload as TPayload };
-      } catch {
-        // Preserve strict failure semantics for deterministic behavior.
+      } catch (fallbackError) {
+        // Surface the fallback error so a JWKS outage between the two calls
+        // isn't silently misread as audience_mismatch.
+        const fallbackMsg =
+          fallbackError instanceof Error
+            ? fallbackError.message
+            : String(fallbackError);
+        const classified = classifyVerificationError(strictError);
+        return {
+          ok: false,
+          code: classified.code,
+          message: `${classified.message} (fallback also failed: ${fallbackMsg})`,
+        };
       }
     }
 
     const classified = classifyVerificationError(strictError);
     return { ok: false, ...classified };
   } catch (error) {
+    // A distinct code keeps internal bugs (bad URL, unexpected throw in
+    // classifyVerificationError, etc.) distinguishable from routine token
+    // failures so on-call engineers don't chase phantom connectivity issues.
+    const errName = error instanceof Error ? error.name : "UnknownError";
+    const errMsg =
+      error instanceof Error ? error.message : "Token verification failed";
     return {
       ok: false,
-      code: "invalid_token",
-      message:
-        error instanceof Error ? error.message : "Token verification failed",
+      code: "internal_error",
+      message: `${errName}: ${errMsg}`,
     };
   }
 }
@@ -313,6 +331,7 @@ export async function verifyAccessToken(
   } catch (err) {
     return {
       ok: false,
+      code: "internal_error",
       error: err instanceof Error ? err.message : "Token verification failed",
     };
   }
@@ -321,7 +340,14 @@ export async function verifyAccessToken(
 export function isAccessTokenPayload(
   payload: JWTPayload | null | undefined,
 ): payload is AccessTokenPayload {
-  return typeof payload?.sub === "string" && payload.sub.length > 0;
+  return (
+    typeof payload?.sub === "string" &&
+    payload.sub.length > 0 &&
+    (payload.email === undefined || typeof payload.email === "string") &&
+    (payload.name === undefined || typeof payload.name === "string") &&
+    (payload.scope === undefined || typeof payload.scope === "string") &&
+    (payload.client_id === undefined || typeof payload.client_id === "string")
+  );
 }
 
 export async function verifyJwtToken(
