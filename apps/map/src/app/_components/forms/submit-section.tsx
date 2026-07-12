@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFormContext } from "react-hook-form";
 
@@ -9,6 +9,7 @@ import { Button } from "@acme/ui/button";
 import { Spinner } from "@acme/ui/spinner";
 import { toast } from "@acme/ui/toast";
 
+import { logError } from "~/lib/logging";
 import { invalidateQueries, orpc, useMutation, useQuery } from "~/orpc/react";
 import type { RouterOutputs } from "~/orpc/types";
 import { closeModal } from "~/utils/store/modal";
@@ -47,6 +48,8 @@ interface SubmitButtonProps {
 interface PermissionMessageProps {
   canEdit: boolean;
   isReview?: boolean;
+  permissionError?: boolean;
+  onRetry?: () => void;
 }
 
 type CanEditRegionsResult = RouterOutputs["request"]["canEditRegions"];
@@ -65,7 +68,12 @@ function useRegionPermissions(params: {
     [params.originalRegionId, params.newRegionId],
   );
 
-  const { data: canEditRegion } = useQuery(
+  const {
+    data: canEditRegion,
+    isError,
+    error,
+    refetch,
+  } = useQuery(
     orpc.request.canEditRegions.queryOptions({
       input: { orgIds },
       enabled: orgIds.length > 0,
@@ -80,7 +88,19 @@ function useRegionPermissions(params: {
       ? permissionResults.every((result) => result.success)
       : false;
 
-  return { canEdit };
+  // A failed permission check must not read as "no permission": on error we
+  // previously fell back to canEdit=false, so a transient 500 told a legitimate
+  // editor they lacked access (and disabled Approve/Reject with no retry). Track
+  // the failure distinctly so the UI can offer a retry instead. (#17)
+  const permissionError = orgIds.length > 0 && isError;
+
+  useEffect(() => {
+    if (permissionError) {
+      logError("map.request.permission_check_failed", { orgIds }, error);
+    }
+  }, [permissionError, error, orgIds]);
+
+  return { canEdit, permissionError, refetchPermissions: refetch };
 }
 
 /**
@@ -225,7 +245,31 @@ function SubmitButton({
 /**
  * Message showing permission status
  */
-function PermissionMessage({ canEdit, isReview }: PermissionMessageProps) {
+function PermissionMessage({
+  canEdit,
+  isReview,
+  permissionError,
+  onRetry,
+}: PermissionMessageProps) {
+  // A permission-check failure is not the same as lacking permission — say so,
+  // and offer a retry, rather than falsely claiming the user can't edit. (#17)
+  if (permissionError) {
+    return (
+      <div className="mb-2 text-center text-xs text-destructive">
+        Couldn&apos;t verify your edit permissions.{" "}
+        {onRetry && (
+          <button
+            type="button"
+            className="underline underline-offset-2"
+            onClick={onRetry}
+          >
+            Retry
+          </button>
+        )}
+      </div>
+    );
+  }
+
   const getMessage = () => {
     if (isReview) {
       return canEdit
@@ -305,10 +349,12 @@ export function SubmitSection<T extends SubmitSectionFormValues>({
   const newRegionId = form.watch("newRegionId");
   const isReview = form.watch("isReview");
 
-  const { canEdit } = useRegionPermissions({
-    originalRegionId,
-    newRegionId,
-  });
+  const { canEdit, permissionError, refetchPermissions } = useRegionPermissions(
+    {
+      originalRegionId,
+      newRegionId,
+    },
+  );
 
   const { isSubmitting, submitForm, rejectForm } = useFormSubmission({
     mutationFn,
@@ -335,7 +381,12 @@ export function SubmitSection<T extends SubmitSectionFormValues>({
         />
       )}
 
-      <PermissionMessage canEdit={canEdit} isReview={isReview} />
+      <PermissionMessage
+        canEdit={canEdit}
+        isReview={isReview}
+        permissionError={permissionError}
+        onRetry={() => void refetchPermissions()}
+      />
 
       <Button
         type="button"

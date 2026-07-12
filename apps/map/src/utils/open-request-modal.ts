@@ -7,6 +7,7 @@ import { requestTypeToTitle } from "@acme/shared/app/functions";
 import { toast } from "@acme/ui/toast";
 
 import type { UpdateRequestById } from "./types";
+import { logError } from "~/lib/logging";
 import { client } from "~/orpc/client";
 import { getQueryData, orpc } from "~/orpc/react";
 import { mapStore } from "./store/map";
@@ -312,6 +313,21 @@ const MetaOverridesSchema = z.object({
 
 const getRequestOverrides = (request: UpdateRequestById) => {
   const parsedMeta = MetaOverridesSchema.safeParse(request.meta);
+
+  if (!parsedMeta.success) {
+    // A malformed stored meta (a legacy row, an id persisted as a string)
+    // silently drops every source/destination id below, opening a
+    // blank-looking review form a reviewer could approve against defaults with
+    // no idea anything was lost. Leave a trace and warn the reviewer. (#18)
+    logError(
+      "map.request.meta_parse_failed",
+      { requestId: request.id },
+      parsedMeta.error,
+    );
+    toast.error(
+      "Some of this request's saved details couldn't be loaded. Check the fields carefully before approving.",
+    );
+  }
 
   return {
     id: request.id,

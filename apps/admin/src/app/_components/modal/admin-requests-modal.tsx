@@ -27,6 +27,7 @@ import {
   useMutation,
   useQuery,
 } from "~/orpc/react";
+import { logError } from "~/lib/logging";
 import { useUpdateLocationForm } from "~/utils/forms";
 import { uploadLogo } from "~/utils/image/upload-logo";
 import type { DataType, ModalType } from "~/utils/store/modal";
@@ -146,8 +147,12 @@ export default function AdminRequestsModal({
         toast.success("Approved update");
         closeModal();
       } catch (error) {
+        // Always leave a trace: without this, a reported "approve doesn't work"
+        // has nothing in the console or the error reporter to debug. (#16)
+        logError("admin.request.approve_failed", { requestId: formId }, error);
+
         if (!(error instanceof ORPCError)) {
-          toast.error("Failed to approve update");
+          toast.error("Something went wrong approving this update.");
           return;
         }
 
@@ -156,10 +161,19 @@ export default function AdminRequestsModal({
             message: "End time must be after start time",
           });
           throw new Error("End time must be after start time");
-        } else if (error.code === "UNAUTHORIZED") {
-          // Surface the API's explanation (e.g. approve touching an org the
-          // reviewer can't edit → "ask an admin of the affected org(s)").
+        } else if (
+          error.code === "UNAUTHORIZED" ||
+          error.code === "CONFLICT" ||
+          error.code === "NOT_FOUND"
+        ) {
+          // Surface the API's explanation verbatim: UNAUTHORIZED ("ask an admin
+          // of the affected org(s)"), CONFLICT ("already been approved" — a
+          // racing reviewer), NOT_FOUND ("no longer exists").
           toast.error(error.message);
+          if (error.code === "CONFLICT" || error.code === "NOT_FOUND") {
+            // The queue is stale — refresh so the resolved row drops out.
+            void invalidateQueries("request");
+          }
         } else {
           toast.error("Failed to approve update");
         }
@@ -167,24 +181,53 @@ export default function AdminRequestsModal({
         setStatus("idle");
       }
     },
-    () => {
-      toast.error("Failed to approve update");
+    (fieldErrors) => {
+      // Distinguish a client-side validation failure from a server rejection:
+      // surface the first invalid field so "approve doesn't work" isn't a
+      // mystery. (#16)
+      const firstError = Object.values(fieldErrors)[0];
+      const message =
+        (typeof firstError?.message === "string" && firstError.message) ||
+        "Please fix the highlighted fields before approving.";
+      logError("admin.request.approve_invalid", {
+        requestId: formId,
+        fields: Object.keys(fieldErrors),
+      });
+      toast.error(message);
     },
   );
 
   const onReject = async () => {
-    setStatus("rejecting");
-    await rejectSubmissionByAdmin
-      .mutateAsync({
-        id: formId,
-      })
-      .then(() => {
-        void invalidateQueries("request");
-        router.refresh();
-        setStatus("idle");
-        toast.success("Rejected update");
-        closeModal();
-      });
+    // Mirror onSubmit's try/catch/finally: without it, a failed rejection is an
+    // unhandled rejection that leaves the button stuck on "Rejecting…" forever
+    // with nothing toasted or logged. rejectSubmission now throws UNAUTHORIZED
+    // (wrong region) and CONFLICT (already reviewed), both of which land here.
+    // (#15)
+    try {
+      setStatus("rejecting");
+      await rejectSubmissionByAdmin.mutateAsync({ id: formId });
+      void invalidateQueries("request");
+      router.refresh();
+      toast.success("Rejected update");
+      closeModal();
+    } catch (error) {
+      logError("admin.request.reject_failed", { requestId: formId }, error);
+      if (
+        error instanceof ORPCError &&
+        (error.code === "UNAUTHORIZED" ||
+          error.code === "CONFLICT" ||
+          error.code === "NOT_FOUND")
+      ) {
+        toast.error(error.message);
+        if (error.code === "CONFLICT" || error.code === "NOT_FOUND") {
+          void invalidateQueries("request");
+        }
+      } else {
+        toast.error("Failed to reject update");
+      }
+    } finally {
+      setStatus("idle");
+    }
   };
 
   const handleAoLogoFileChange: AdminRequestFormProps["onAoLogoFileChange"] = (
