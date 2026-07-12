@@ -833,4 +833,329 @@ describe("Request Router", () => {
       ).rejects.toThrow();
     });
   });
+
+  // Helper: insert a stored pending request row (the approve path requires a
+  // matching pending row — see the #11 status guard).
+  const insertPendingRequest = async (values: {
+    id: string;
+    regionId: number;
+    requestType: typeof schema.updateRequests.$inferInsert.requestType;
+  }) => {
+    const [row] = await db
+      .insert(schema.updateRequests)
+      .values({
+        id: values.id,
+        regionId: values.regionId,
+        requestType: values.requestType,
+        submittedBy: "submitter@example.com",
+        status: "pending",
+      })
+      .returning();
+    if (row) createdRequestIds.push(row.id);
+    return row;
+  };
+
+  describe("validateSubmissionByAdmin — approve success path (#10)", () => {
+    it("applies an authorized reviewer's approval end-to-end and stamps reviewedBy", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+      const location = await createTestLocation(ao.id);
+      if (!location) return;
+      const event = await createTestEvent(ao.id, location.id);
+      if (!event) return;
+
+      const requestId = crypto.randomUUID();
+      await insertPendingRequest({
+        id: requestId,
+        regionId: region.id,
+        requestType: "delete_event",
+      });
+
+      const client = createTestClient();
+      const result = await client.request.validateSubmissionByAdmin({
+        id: requestId,
+        requestType: "delete_event",
+        submittedBy: "submitter@example.com",
+        originalEventId: event.id,
+        originalRegionId: region.id,
+      });
+
+      expect(result.status).toBe("approved");
+
+      // Domain mutation applied
+      const [applied] = await db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.id, event.id));
+      expect(applied?.isActive).toBe(false);
+
+      // Audit row flipped to approved with the reviewer stamped
+      const [row] = await db
+        .select()
+        .from(schema.updateRequests)
+        .where(eq(schema.updateRequests.id, requestId));
+      expect(row?.status).toBe("approved");
+      expect(row?.reviewedBy).toBe("admin@example.com");
+      expect(row?.reviewedAt).not.toBeNull();
+      expect(mockNotifyMapDataChange).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "map.deleted" }),
+      );
+    });
+  });
+
+  describe("checkUpdatePermissions cross-region matrix (#7)", () => {
+    it("approves a region move only when the reviewer edits BOTH source and target", async () => {
+      const admin = await createAdminSession();
+      await mockAuthWithSession(admin);
+
+      const source = await createTestRegion();
+      if (!source) return;
+      const target = await createTestRegion();
+      if (!target) return;
+      const ao = await createTestAO(source.id);
+      if (!ao) return;
+
+      // Editor on BOTH regions — the `.every(c => c.success)` rule should pass.
+      const session = createEditorSession({
+        orgId: source.id,
+        orgName: source.name,
+      });
+      session.roles?.push({
+        orgId: target.id,
+        orgName: target.name,
+        roleName: "editor",
+      });
+      session.user?.roles?.push({
+        orgId: target.id,
+        orgName: target.name,
+        roleName: "editor",
+      });
+      await mockAuthWithSession(session);
+
+      const requestId = crypto.randomUUID();
+      await insertPendingRequest({
+        id: requestId,
+        regionId: target.id,
+        requestType: "move_ao_to_different_region",
+      });
+
+      const client = createTestClient();
+      const result = await client.request.validateSubmissionByAdmin({
+        id: requestId,
+        requestType: "move_ao_to_different_region",
+        submittedBy: "submitter@example.com",
+        originalAoId: ao.id,
+        originalRegionId: source.id,
+        newRegionId: target.id,
+      });
+
+      expect(result.status).toBe("approved");
+      const [movedAo] = await db
+        .select()
+        .from(schema.orgs)
+        .where(eq(schema.orgs.id, ao.id));
+      expect(movedAo?.parentId).toBe(target.id);
+    });
+  });
+
+  describe("validateSubmissionByAdmin — reviewer-edited region (#8)", () => {
+    it("moves the AO to the reviewer's edited destination, not the originally-requested one", async () => {
+      const admin = await createAdminSession();
+      await mockAuthWithSession(admin);
+
+      const source = await createTestRegion();
+      if (!source) return;
+      const requested = await createTestRegion();
+      if (!requested) return;
+      const edited = await createTestRegion();
+      if (!edited) return;
+      const ao = await createTestAO(source.id);
+      if (!ao) return;
+
+      const requestId = crypto.randomUUID();
+      await insertPendingRequest({
+        id: requestId,
+        regionId: requested.id,
+        requestType: "move_ao_to_different_region",
+      });
+
+      // The review form re-submits meta.newRegionId (the originally requested
+      // region) but the RegionSelectField wrote the *edited* destination into
+      // regionId. The edited region must win.
+      const client = createTestClient();
+      await client.request.validateSubmissionByAdmin({
+        id: requestId,
+        requestType: "move_ao_to_different_region",
+        submittedBy: "submitter@example.com",
+        originalAoId: ao.id,
+        originalRegionId: source.id,
+        regionId: edited.id,
+        meta: { newRegionId: requested.id, originalRegionId: source.id },
+      });
+
+      const [movedAo] = await db
+        .select()
+        .from(schema.orgs)
+        .where(eq(schema.orgs.id, ao.id));
+      expect(movedAo?.parentId).toBe(edited.id);
+      expect(movedAo?.parentId).not.toBe(requested.id);
+    });
+  });
+
+  describe("validateSubmissionByAdmin — double-review guard (#11)", () => {
+    it("409s when approving an already-approved request", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+      const location = await createTestLocation(ao.id);
+      if (!location) return;
+      const event = await createTestEvent(ao.id, location.id);
+      if (!event) return;
+
+      const requestId = crypto.randomUUID();
+      const [row] = await db
+        .insert(schema.updateRequests)
+        .values({
+          id: requestId,
+          regionId: region.id,
+          requestType: "delete_event",
+          submittedBy: "submitter@example.com",
+          status: "approved", // already resolved
+        })
+        .returning();
+      if (row) createdRequestIds.push(row.id);
+
+      const client = createTestClient();
+      await expect(
+        client.request.validateSubmissionByAdmin({
+          id: requestId,
+          requestType: "delete_event",
+          submittedBy: "submitter@example.com",
+          originalEventId: event.id,
+          originalRegionId: region.id,
+        }),
+      ).rejects.toThrow(/already been approved/i);
+
+      // The apply handler must not have run a second time
+      const [unchanged] = await db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.id, event.id));
+      expect(unchanged?.isActive).toBe(true);
+    });
+
+    it("409s when rejecting an already-rejected request", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+      session.roles?.push({
+        orgId: region.id,
+        orgName: region.name,
+        roleName: "editor",
+      });
+      session.user?.roles?.push({
+        orgId: region.id,
+        orgName: region.name,
+        roleName: "editor",
+      });
+      await mockAuthWithSession(session);
+
+      const requestId = crypto.randomUUID();
+      const [row] = await db
+        .insert(schema.updateRequests)
+        .values({
+          id: requestId,
+          regionId: region.id,
+          requestType: "create_event",
+          eventName: `Already Rejected ${uniqueId()}`,
+          submittedBy: "submitter@example.com",
+          status: "rejected",
+        })
+        .returning();
+      if (row) createdRequestIds.push(row.id);
+
+      const client = createTestClient();
+      await expect(
+        client.request.rejectSubmission({ id: requestId }),
+      ).rejects.toThrow(/already been rejected/i);
+    });
+  });
+
+  describe("moveAOLocsToNewRegion carries each event to its own location (#14)", () => {
+    it("lands each event on the copy of its own location, not all on the last one", async () => {
+      const admin = await createAdminSession();
+      await mockAuthWithSession(admin);
+
+      const source = await createTestRegion();
+      if (!source) return;
+      const target = await createTestRegion();
+      if (!target) return;
+      const ao = await createTestAO(source.id);
+      if (!ao) return;
+
+      // Two DISTINCT locations in the source region, one event on each.
+      const locA = await createTestLocation(source.id);
+      const locB = await createTestLocation(source.id);
+      if (!locA || !locB) return;
+      const eventA = await createTestEvent(ao.id, locA.id);
+      const eventB = await createTestEvent(ao.id, locB.id);
+      if (!eventA || !eventB) return;
+
+      const requestId = crypto.randomUUID();
+      await insertPendingRequest({
+        id: requestId,
+        regionId: target.id,
+        requestType: "move_ao_to_different_region",
+      });
+
+      const client = createTestClient();
+      await client.request.validateSubmissionByAdmin({
+        id: requestId,
+        requestType: "move_ao_to_different_region",
+        submittedBy: "submitter@example.com",
+        originalAoId: ao.id,
+        originalRegionId: source.id,
+        newRegionId: target.id,
+      });
+
+      const [movedA] = await db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.id, eventA.id));
+      const [movedB] = await db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.id, eventB.id));
+
+      const [newLocA] = await db
+        .select()
+        .from(schema.locations)
+        .where(eq(schema.locations.id, movedA?.locationId ?? -1));
+      const [newLocB] = await db
+        .select()
+        .from(schema.locations)
+        .where(eq(schema.locations.id, movedB?.locationId ?? -1));
+      if (newLocA) createdLocationIds.push(newLocA.id);
+      if (newLocB) createdLocationIds.push(newLocB.id);
+
+      // Each event follows the copy of ITS OWN location (identified by name),
+      // in the target region — not both piled onto the last location's copy.
+      expect(newLocA?.name).toBe(locA.name);
+      expect(newLocB?.name).toBe(locB.name);
+      expect(newLocA?.orgId).toBe(target.id);
+      expect(newLocB?.orgId).toBe(target.id);
+      expect(movedA?.locationId).not.toBe(movedB?.locationId);
+    });
+  });
 });
