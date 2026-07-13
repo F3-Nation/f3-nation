@@ -651,6 +651,88 @@ describe("Request Router", () => {
         }),
       );
     });
+
+    it("records the created ao, location, and event ids on the approved request row", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const [eventType] = await db
+        .insert(schema.eventTypes)
+        .values({
+          name: `Test Event Type ${uniqueId()}`,
+          eventCategory: "first_f",
+        })
+        .returning();
+      if (!eventType) return;
+      createdEventTypeIds.push(eventType.id);
+
+      const client = createTestClient();
+      const result =
+        await client.request.submitCreateAOAndLocationAndEventRequest({
+          id: crypto.randomUUID(),
+          requestType: "create_ao_and_location_and_event",
+          submittedBy: "admin@example.com",
+          originalRegionId: region.id,
+          aoName: `Created AO ${uniqueId()}`,
+          eventName: `Created Event ${uniqueId()}`,
+          eventDayOfWeek: "monday",
+          eventStartTime: "0530",
+          eventEndTime: "0615",
+          eventTypeIds: [eventType.id],
+          locationLat: 36.21,
+          locationLng: -81.68,
+          locationAddress: "123 Test Street",
+          locationCity: "Boone",
+          locationState: "NC",
+          locationZip: "28607",
+          locationCountry: "United States",
+        });
+      createdRequestIds.push(result.updateRequest.id ?? "");
+
+      expect(result.status).toBe("approved");
+
+      // The approved row links to all three entities the handler created — not
+      // just the event (the create_event case above), but the AO and location
+      // too (created.aoId/locationId → the aoId/locationId columns). (#5)
+      const [savedRequest] = await db
+        .select()
+        .from(schema.updateRequests)
+        .where(eq(schema.updateRequests.id, result.updateRequest.id ?? ""));
+      expect(savedRequest?.aoId).toBeTruthy();
+      expect(savedRequest?.locationId).toBeTruthy();
+      expect(savedRequest?.eventId).toBeTruthy();
+
+      if (savedRequest?.aoId) createdOrgIds.push(savedRequest.aoId);
+      if (savedRequest?.locationId)
+        createdLocationIds.push(savedRequest.locationId);
+      if (savedRequest?.eventId) createdEventIds.push(savedRequest.eventId);
+
+      // The created event belongs to the created AO, and the AO to the region
+      const [createdEvent] = await db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.id, savedRequest?.eventId ?? -1));
+      expect(createdEvent?.orgId).toBe(savedRequest?.aoId);
+
+      const [createdAo] = await db
+        .select()
+        .from(schema.orgs)
+        .where(eq(schema.orgs.id, savedRequest?.aoId ?? -1));
+      expect(createdAo?.parentId).toBe(region.id);
+
+      // The webhook payload carries all three created ids
+      expect(mockNotifyMapDataChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "map.created",
+          eventId: savedRequest?.eventId,
+          locationId: savedRequest?.locationId,
+          orgId: savedRequest?.aoId,
+        }),
+      );
+    });
   });
 
   describe("submitMoveEventToDifferentAoRequest", () => {

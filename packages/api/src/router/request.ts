@@ -1037,8 +1037,12 @@ export const requestRouter = {
         .returning({ id: schema.updateRequests.id });
 
       if (!rejected) {
+        // The row was pending when we read it above but the guarded UPDATE
+        // matched nothing, so another reviewer resolved it in between. Don't
+        // interpolate the stale pre-read status (it would say "already been
+        // pending") — the current state is approved-or-rejected either way.
         throw new ORPCError("CONFLICT", {
-          message: `This request has already been ${updateRequest.status}.`,
+          message: "This request has already been reviewed.",
         });
       }
 

@@ -163,7 +163,10 @@ export default function AdminRequestsModal({
           form.setError("eventEndTime", {
             message: "End time must be after start time",
           });
-          throw new Error("End time must be after start time");
+          // `setError` already surfaces this on the field; returning avoids an
+          // unhandled promise rejection out of the un-awaited `onSubmit()`
+          // onClick handler. (#274 review)
+          return;
         } else if (
           error.code === "UNAUTHORIZED" ||
           error.code === "CONFLICT" ||

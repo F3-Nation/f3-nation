@@ -313,7 +313,11 @@ const MetaOverridesSchema = z.object({
 const getRequestOverrides = (request: UpdateRequestById) => {
   const parsedMeta = MetaOverridesSchema.safeParse(request.meta);
 
-  if (!parsedMeta.success) {
+  // `meta` is a nullable column, and a null/absent meta is legitimate (a request
+  // with no override ids) — only a *present-but-unparseable* value is the problem
+  // the warning below is for. Guarding on `!= null` avoids crying wolf on every
+  // legacy/null-meta row in the review queue. (#274 review)
+  if (request.meta != null && !parsedMeta.success) {
     // A malformed stored meta (a legacy row, an id persisted as a string)
     // silently drops every source/destination id below, opening a
     // blank-looking review form a reviewer could approve against defaults with
