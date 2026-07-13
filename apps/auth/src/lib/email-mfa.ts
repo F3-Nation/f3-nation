@@ -8,7 +8,7 @@ import { emailMfaCodes, users } from "@acme/db/schema/schema";
 import { isValidCallbackUrl } from "~/lib/callback-url";
 import { constantTimeEqual } from "~/lib/crypto-utils";
 import { db } from "~/lib/db";
-import { logWarn } from "~/lib/logging";
+import { logInfo, logWarn } from "~/lib/logging";
 import { env } from "~/env";
 
 const MAX_ATTEMPTS = 5;
@@ -107,6 +107,13 @@ export async function sendEmailCode(
       </div>
     `,
   });
+
+  // In non-production environments email is caught by Mailpit (never a real
+  // inbox). Log the code and magic link directly to the server console so
+  // developers never need to leave their terminal. Never runs in production.
+  if (env.NODE_ENV !== "production") {
+    logInfo("auth.email_mfa.dev_code_sent", { code, magicLink });
+  }
 }
 
 /**
