@@ -73,7 +73,7 @@ and signs off — no exceptions:
 1. **Security** — authorization models, RBAC changes, secrets handling,
    attack surface.
 2. **Availability / reliability** — multi-instance behavior, failure modes,
-   anything that can take the map down.
+   anything that can take the app down.
 3. **Scalability** — query cost at production scale, architectural and
    migration risk.
 
