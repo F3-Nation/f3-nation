@@ -1,6 +1,7 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
 
 import { env } from "~/env";
+import { logError } from "~/lib/logging";
 
 export interface AccessTokenPayload {
   sub: string;
@@ -119,7 +120,7 @@ export async function verifyAccessTokenPayload(
     if (payload.client_id !== clientId) return null;
     return parseAccessTokenPayloadFromClaims(payload);
   } catch (err) {
-    console.error("Access token verification failed", err);
+    logError("auth.access_token.verification_failed", {}, err);
     return null;
   }
 }

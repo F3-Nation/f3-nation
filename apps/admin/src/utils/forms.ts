@@ -19,7 +19,7 @@ export const {
       .number()
       .int()
       .min(1)
-      .max(5)
+      .max(4)
       .nullable()
       .optional(),
     eventRecurrenceInterval: z.coerce

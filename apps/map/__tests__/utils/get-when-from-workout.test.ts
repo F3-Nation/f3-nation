@@ -73,4 +73,15 @@ describe("getWhenFromWorkout", () => {
       }),
     ).toBe("Every other month on 1st Monday");
   });
+
+  it("does not combine the monthly-interval and no-index fallback prefixes", () => {
+    expect(
+      getWhenFromWorkout({
+        ...base,
+        recurrencePattern: "monthly",
+        recurrenceInterval: 2,
+        indexWithinInterval: null,
+      }),
+    ).toBe("Every other month on Monday");
+  });
 });

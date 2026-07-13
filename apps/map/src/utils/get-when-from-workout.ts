@@ -1,6 +1,6 @@
 import dayjs from "dayjs";
 
-import type { DayOfWeek } from "@acme/shared/app/enums";
+import type { DayOfWeek, EventCadence } from "@acme/shared/app/enums";
 import {
   START_END_TIME_DB_FORMAT,
   START_END_TIME_DISPLAY_FORMAT,
@@ -20,7 +20,7 @@ export const getWhenFromWorkout = (params: {
   endTime?: string | null;
   dayOfWeek: DayOfWeek | null;
   condensed?: boolean;
-  recurrencePattern?: string | null;
+  recurrencePattern?: EventCadence | null;
   recurrenceInterval?: number | null;
   indexWithinInterval?: number | null;
 }) => {
@@ -55,10 +55,8 @@ export const getWhenFromWorkout = (params: {
   const dayOfTheWeek = getReadableDayOfWeek(event.dayOfWeek);
 
   const ordinalPrefix =
-    event.recurrencePattern === "monthly"
-      ? event.indexWithinInterval
-        ? `${ORDINALS[event.indexWithinInterval] ?? event.indexWithinInterval} `
-        : "Monthly on "
+    event.recurrencePattern === "monthly" && event.indexWithinInterval
+      ? `${ORDINALS[event.indexWithinInterval] ?? event.indexWithinInterval} `
       : "";
 
   const intervalPrefix =
@@ -71,12 +69,14 @@ export const getWhenFromWorkout = (params: {
       : "";
 
   const monthlyIntervalPrefix =
-    event.recurrencePattern === "monthly" &&
-    event.recurrenceInterval &&
-    event.recurrenceInterval > 1
-      ? event.recurrenceInterval === 2
-        ? "Every other month on "
-        : `Every ${event.recurrenceInterval} months on `
+    event.recurrencePattern === "monthly"
+      ? event.recurrenceInterval && event.recurrenceInterval > 1
+        ? event.recurrenceInterval === 2
+          ? "Every other month on "
+          : `Every ${event.recurrenceInterval} months on `
+        : event.indexWithinInterval
+          ? ""
+          : "Monthly on "
       : "";
 
   const dayOfTheWeekText = dayOfTheWeek

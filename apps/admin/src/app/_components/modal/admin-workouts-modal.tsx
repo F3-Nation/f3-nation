@@ -81,7 +81,7 @@ const EventInsertForm = EventInsertSchema.extend({
     .number()
     .int()
     .min(1)
-    .max(5)
+    .max(4)
     .optional()
     .nullable(),
 }).superRefine((data, ctx) => {
