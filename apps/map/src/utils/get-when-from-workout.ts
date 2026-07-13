@@ -55,12 +55,14 @@ export const getWhenFromWorkout = (params: {
   const dayOfTheWeek = getReadableDayOfWeek(event.dayOfWeek);
 
   const ordinalPrefix =
-    event.recurrencePattern === "monthly" && event.indexWithinInterval
-      ? `${ORDINALS[event.indexWithinInterval] ?? event.indexWithinInterval} `
+    event.recurrencePattern === "monthly"
+      ? event.indexWithinInterval
+        ? `${ORDINALS[event.indexWithinInterval] ?? event.indexWithinInterval} `
+        : "Monthly on "
       : "";
 
   const intervalPrefix =
-    event.recurrencePattern !== "monthly" &&
+    event.recurrencePattern === "weekly" &&
     event.recurrenceInterval &&
     event.recurrenceInterval > 1
       ? event.recurrenceInterval === 2
@@ -68,8 +70,17 @@ export const getWhenFromWorkout = (params: {
         : `Every ${event.recurrenceInterval} weeks on `
       : "";
 
+  const monthlyIntervalPrefix =
+    event.recurrencePattern === "monthly" &&
+    event.recurrenceInterval &&
+    event.recurrenceInterval > 1
+      ? event.recurrenceInterval === 2
+        ? "Every other month on "
+        : `Every ${event.recurrenceInterval} months on `
+      : "";
+
   const dayOfTheWeekText = dayOfTheWeek
-    ? `${ordinalPrefix}${intervalPrefix}${dayOfTheWeek} `
+    ? `${monthlyIntervalPrefix}${ordinalPrefix}${intervalPrefix}${dayOfTheWeek} `
     : "";
   const timeText =
     startTime && endTime

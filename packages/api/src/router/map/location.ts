@@ -12,7 +12,7 @@ import {
   schema,
   sql,
 } from "@acme/db";
-import { DayOfWeek } from "@acme/shared/app/enums";
+import { DayOfWeek, EventCadence } from "@acme/shared/app/enums";
 import { getFullAddress } from "@acme/shared/app/functions";
 import { isTruthy } from "@acme/shared/common/functions";
 import type { LowBandwidthF3Marker } from "@acme/validators";
@@ -292,7 +292,7 @@ export const mapLocationRouter = os.router({
                   aoWebsite: z.string().nullable().describe("AO website"),
                   aoName: z.string().nullable().describe("AO name"),
                   recurrencePattern: z
-                    .string()
+                    .enum(EventCadence)
                     .nullable()
                     .describe("Recurrence pattern"),
                   recurrenceInterval: z

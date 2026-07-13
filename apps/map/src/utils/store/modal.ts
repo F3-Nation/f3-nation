@@ -90,8 +90,7 @@ export const eventAndLocationToUpdateRequest = ({
     startTime: event?.startTime ?? null,
     endTime: event?.endTime ?? null,
     dayOfWeek: event?.dayOfWeek ?? null,
-    recurrencePattern:
-      (event?.recurrencePattern as EventCadence | null | undefined) ?? null,
+    recurrencePattern: event?.recurrencePattern ?? null,
     recurrenceInterval: event?.recurrenceInterval ?? null,
     indexWithinInterval: event?.indexWithinInterval ?? null,
     eventTypeIds: event?.eventTypes.map((type) => type.id) ?? [],

@@ -151,9 +151,6 @@ export const WorkoutDetailsContent = ({
             When: event
               ? getWhenFromWorkout({
                   ...event,
-                  recurrencePattern: event.recurrencePattern,
-                  recurrenceInterval: event.recurrenceInterval,
-                  indexWithinInterval: event.indexWithinInterval,
                 })
               : "",
             Contact:

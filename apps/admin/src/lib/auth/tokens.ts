@@ -93,8 +93,14 @@ export async function verifyAccessTokenPayload(
   const issuer = env.AUTH_PROVIDER_URL;
   const clientId = env.OAUTH_CLIENT_ID;
 
+  // Resolved eagerly, outside the try/catch blocks below: a misconfigured
+  // AUTH_PROVIDER_URL must throw loudly rather than being swallowed as a
+  // routine verification failure, which would otherwise present as a silent,
+  // undiagnosable re-auth loop for every user.
+  const jwks = getRemoteJWKS();
+
   try {
-    const { payload } = await jwtVerify(token, getRemoteJWKS(), {
+    const { payload } = await jwtVerify(token, jwks, {
       algorithms: ["RS256"],
       issuer,
       audience: clientId,
@@ -106,13 +112,14 @@ export async function verifyAccessTokenPayload(
   }
 
   try {
-    const { payload } = await jwtVerify(token, getRemoteJWKS(), {
+    const { payload } = await jwtVerify(token, jwks, {
       algorithms: ["RS256"],
       issuer,
     });
     if (payload.client_id !== clientId) return null;
     return parseAccessTokenPayloadFromClaims(payload);
-  } catch {
+  } catch (err) {
+    console.error("Access token verification failed", err);
     return null;
   }
 }

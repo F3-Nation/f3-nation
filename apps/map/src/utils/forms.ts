@@ -28,5 +28,16 @@ export const {
       .min(1)
       .nullable()
       .optional(),
+  }).superRefine((data, ctx) => {
+    if (
+      data.eventRecurrencePattern === "monthly" &&
+      data.eventIndexWithinInterval == null
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["eventIndexWithinInterval"],
+        message: "Select which occurrence of the month",
+      });
+    }
   }),
 );
