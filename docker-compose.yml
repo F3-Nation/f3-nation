@@ -43,7 +43,7 @@ services:
     command: -scheme http -port 9023 -public-host localhost:9023 -backend filesystem -filesystem-root /data
 
   mailpit:
-    image: axllent/mailpit:latest@sha256:956d688cbd13dca36c72d8e94c34d6d1cdf4a005aa6aa4ff6edaaac56c34d8df # v1.30.3
+    image: axllent/mailpit:latest@sha256:5a49a77c5bdbe7c5474450b4f46348d09949df3695257729c93a30369382d4f6 # v1.30.3
     container_name: f3-mailpit
     restart: unless-stopped
     ports:
