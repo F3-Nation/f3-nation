@@ -1170,7 +1170,7 @@ describe("Request Router", () => {
       const client = createTestClient();
       await expect(
         client.request.rejectSubmission({ id: requestId }),
-      ).rejects.toThrow(/already been rejected/i);
+      ).rejects.toThrow(/already been reviewed/i);
     });
   });
 
