@@ -69,4 +69,24 @@ describe("Auth /logout route", () => {
     expect(response.status).toBe(200);
     expect(revokeToken).not.toHaveBeenCalled();
   });
+
+  it("still clears cookies when revokeToken throws an Error", async () => {
+    vi.mocked(revokeToken).mockRejectedValueOnce(
+      new Error("revocation failed"),
+    );
+
+    const { POST } = await import("@/app/api/auth/logout/route");
+    const response = await POST();
+
+    expect(response.status).toBe(200);
+  });
+
+  it("still clears cookies when revokeToken throws a non-Error", async () => {
+    vi.mocked(revokeToken).mockRejectedValueOnce("plain string error");
+
+    const { POST } = await import("@/app/api/auth/logout/route");
+    const response = await POST();
+
+    expect(response.status).toBe(200);
+  });
 });
