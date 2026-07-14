@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.1.1](https://github.com/F3-Nation/f3-nation/compare/admin@2.1.0...admin@2.1.1) (2026-07-14)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.3.1
+    * @acme/shared bumped to 0.1.3
+    * @acme/sso bumped to 0.2.1
+    * @acme/tailwind-config bumped to 0.1.3
+    * @acme/ui bumped to 0.1.3
+    * @acme/validators bumped to 0.1.3
+
 ## [2.1.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.0.5...admin@2.1.0) (2026-07-08)
 
 
