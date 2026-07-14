@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { verifyAccessToken } from "@acme/sso";
 import {
   ACCESS_TOKEN_COOKIE_NAME,
   ACCESS_TOKEN_DEFAULT_MAX_AGE,
@@ -7,7 +8,8 @@ import {
   REFRESH_TOKEN_MAX_AGE,
 } from "@/lib/auth/constants";
 import { refreshToken } from "@/lib/auth/oauth";
-import { verifyAccessToken } from "@/lib/auth/tokens";
+import { env } from "@/env";
+import { logDebug, logWarn } from "@/lib/logging";
 
 const PUBLIC_PATHS = ["/", "/api/auth/login", "/api/auth/callback"];
 const STATIC_ASSET_PATTERN =
@@ -40,8 +42,35 @@ export async function proxy(request: NextRequest) {
     REFRESH_TOKEN_COOKIE_NAME,
   )?.value;
 
-  if (accessToken && (await verifyAccessToken(accessToken))) {
-    return NextResponse.next();
+  if (accessToken) {
+    const verification = await verifyAccessToken(
+      accessToken,
+      env.AUTH_PROVIDER_URL,
+      env.OAUTH_CLIENT_ID,
+      true,
+    );
+
+    if (!verification.ok) {
+      if (verification.code === "expired") {
+        logDebug("me.auth.access_token_expired", {});
+      } else {
+        logWarn("me.auth.access_token_verify_failed", {
+          code: verification.code,
+          message: verification.error,
+        });
+      }
+    }
+
+    if (verification.ok) {
+      return NextResponse.next();
+    }
+    // When JWKS is unavailable the token may be valid — the auth server is
+    // temporarily unreachable. Falling through to the refresh/clear path would
+    // fail for the same reason and log users out. Preserve the session and let
+    // the server component surface the outage instead.
+    if (verification.code === "jwks_unavailable") {
+      return NextResponse.next();
+    }
   }
 
   if (refreshTokenCookie) {

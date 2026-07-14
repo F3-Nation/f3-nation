@@ -837,6 +837,99 @@ The auth server rotates refresh tokens on every use. If you detect an `invalid_g
 
 Access tokens are RS256 JWTs. The F3 API validates them by fetching the public key from the JWKS endpoint (`/.well-known/jwks.json`). If you need to validate tokens in your own API, fetch the JWKS and verify the JWT signature — don't just decode it.
 
+For Next.js client apps that consume F3 SSO directly, use the shared helpers in
+`@acme/sso` instead of duplicating JWKS verification logic:
+
+```ts
+import { verifyJwtPayload } from "@acme/sso";
+
+const payload = await verifyJwtPayload(accessToken, {
+  authServerUrl: process.env.AUTH_PROVIDER_URL!,
+  clientId: process.env.OAUTH_CLIENT_ID!,
+  // F3 access tokens carry `client_id` rather than an `aud` claim.
+  // This flag accepts `client_id` in place of `aud` during verification.
+  // Omitting it will reject every valid F3 token until the auth server
+  // is updated to set `aud`.
+  allowClientIdClaimFallback: true,
+});
+
+if (!payload) {
+  // Token is invalid, expired, or the client_id doesn\'t match.
+}
+```
+
+If you need structured failure reasons (for metrics/debugging), use
+`verifyJwtWithJwks(...)` which returns `{ ok: false, code, message }` on
+verification failures, including misconfiguration/runtime errors that would
+otherwise have thrown.
+
+If you prefer a stricter server-side boundary, use the package-provided
+`verifyAccessToken(...)` helper.
+
+This helper should still be called from server-only code (route handlers,
+middleware, server components), not client components.
+
+```ts
+import { verifyAccessToken } from "@acme/sso";
+```
+
+Example call site:
+
+```ts
+const verification = await verifyAccessToken(
+  accessToken,
+  process.env.AUTH_PROVIDER_URL!,
+  process.env.OAUTH_CLIENT_ID!,
+  true, // allowClientIdClaimFallback — required for F3 tokens (carry `client_id`, not `aud`)
+);
+
+if (!verification.ok) {
+  if (verification.code === "expired") {
+    // Normal expiry — token will be refreshed by middleware; log at debug.
+    logDebug("app.auth.access_token_expired", {});
+  } else {
+    // Unexpected failure: bad signature, JWKS down, misconfiguration, etc.
+    logWarn("app.auth.access_token_verify_failed", {
+      code: verification.code ?? "misconfigured",
+      message: verification.error,
+    });
+  }
+} else {
+  // verification.payload is a typed AccessTokenPayload (sub, email, …).
+  // isAccessTokenPayload() has already been checked internally — sub is
+  // guaranteed to be a non-empty string.
+  const { sub, email } = verification.payload;
+}
+```
+
+The `isAccessTokenPayload` guard (non-empty string `sub`) is enforced inside
+`verifyAccessToken` — if the JWT verifies but lacks a valid `sub` the result is
+`{ ok: false, code: "invalid_claims", … }`. You do not need to re-check it at
+the call site.
+
+The optional fourth argument is the `client_id` fallback. Pass `true` for all
+current F3 apps — the auth server mints tokens with `client_id` rather than
+`aud`, so strict audience matching (`false`, the default) rejects every valid
+token. Only switch to `false` if/when the auth server is updated to set `aud`.
+
+**`jwks_unavailable` in middleware:** This code means the JWKS endpoint was
+unreachable, not that the token is invalid. In Next.js middleware/proxy code,
+handle it separately — falling through to a refresh attempt will fail for the
+same reason and a navigation request will end in a cookie-clearing redirect,
+logging every user out during a transient auth-server blip:
+
+```ts
+// In middleware/proxy — after verifyAccessToken returns !ok:
+if (verification.code === "jwks_unavailable") {
+  // Auth server temporarily unreachable; the token may still be valid.
+  // Pass through without refreshing or clearing cookies so the session
+  // is preserved. The server component will surface the outage.
+  return NextResponse.next();
+}
+// Only attempt refresh / fall through to clear-cookies for other codes
+// (expired, invalid_token, etc.)
+```
+
 ---
 
 ## How SSO Works
