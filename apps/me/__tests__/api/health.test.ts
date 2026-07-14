@@ -70,6 +70,30 @@ describe("Health API route", () => {
     expect(data.checks[0]?.severity).toBe("critical");
   });
 
+  it("returns degraded body status for non-5xx upstream failures", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+      }),
+    );
+
+    const { GET } = await import("@/app/health/route");
+    const response = await GET();
+    const data = (await response.json()) as {
+      status: string;
+      checks: { status: string; severity: string }[];
+    };
+
+    expect(response.status).toBe(200);
+    // A 404 is a client-side error, not a server outage — status should be degraded.
+    expect(data.checks[0]?.status).toBe("degraded");
+    // Even with critical severity, a degraded check must not roll up to "down".
+    expect(data.checks[0]?.severity).toBe("critical");
+    expect(data.status).toBe("degraded");
+  });
+
   it("returns contract-valid down response when upstream is unreachable", async () => {
     vi.stubGlobal(
       "fetch",

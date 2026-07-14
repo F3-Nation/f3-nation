@@ -22,11 +22,22 @@ async function checkUpstreamApi(): Promise<CheckRunnerResult> {
     };
   }
 
+  const normalizedBaseUrl = apiBaseUrl.endsWith("/")
+    ? apiBaseUrl
+    : `${apiBaseUrl}/`;
+
+  let url: string;
   try {
-    const normalizedBaseUrl = apiBaseUrl.endsWith("/")
-      ? apiBaseUrl
-      : `${apiBaseUrl}/`;
-    const url = new URL("ping", normalizedBaseUrl).toString();
+    url = new URL("ping", normalizedBaseUrl).toString();
+  } catch {
+    return {
+      status: "down",
+      message: `F3_API_BASE_URL is not a valid URL: ${apiBaseUrl}`,
+      details: { reason: "invalid_config" },
+    };
+  }
+
+  try {
     const response = await fetch(url, {
       method: "GET",
       headers: { Accept: "application/json" },

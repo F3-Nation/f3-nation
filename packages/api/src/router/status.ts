@@ -67,6 +67,7 @@ interface ContractStatusFailure {
   source: "contract";
   status: "down";
   reason: HealthFailureReason;
+  details?: Record<string, unknown>;
 }
 
 interface ExternalStatusSuccess {
@@ -88,6 +89,7 @@ interface ExternalStatusFailure {
   source: "external";
   status: "down";
   reason: HealthFailureReason;
+  details?: Record<string, unknown>;
 }
 
 type StatusResult =
@@ -230,6 +232,11 @@ function parseContractStatusResponse(
       target,
       status: "down",
       reason: "invalid_contract",
+      details: {
+        validationErrors: parsed.error.issues
+          .slice(0, 5)
+          .map((i) => `${i.path.join(".")}: ${i.message}`),
+      },
     };
   }
 
@@ -313,6 +320,7 @@ async function fetchContractStatus(
       target,
       status: "down",
       reason: "invalid_json",
+      details: { bodyPreview: bodyText.slice(0, 200) },
     };
   }
 
@@ -348,7 +356,12 @@ function mapSlackStatus(status: string, incidents: number): HealthStatus {
     return "degraded";
   }
 
-  return incidents > 0 ? "degraded" : "ok";
+  logWarn("api.status.poll_slack_unknown_status", {
+    providerStatus: status,
+    normalizedStatus: normalized,
+    incidents,
+  });
+  return "degraded";
 }
 
 function parseSlackStatusResponse(
@@ -500,6 +513,7 @@ async function fetchStatus(
     source: result.source,
     status: result.status,
     reason: result.reason,
+    ...(result.details ? { details: result.details } : {}),
   });
 
   return result;

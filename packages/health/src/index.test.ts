@@ -102,7 +102,7 @@ describe("health contract schemas", () => {
     expect(parsed.severity).toBe("warning");
   });
 
-  it("normalizes thrown check errors without exposing stack traces", async () => {
+  it("captures thrown error message in details but does not expose stack traces", async () => {
     const checks = await runChecks([
       {
         id: "throws-error",
@@ -119,9 +119,11 @@ describe("health contract schemas", () => {
       status: "down",
       severity: "critical",
       message: "Check failed",
-      details: { reason: "error" },
+      details: { reason: "error", error: "db-password=super-secret" },
     });
+    // The top-level message field must not contain raw error content.
     expect(checks[0]?.message).not.toContain("super-secret");
+    // Stack traces must not appear — callers must not forward details verbatim to public clients.
     expect(
       (checks[0]?.details as { stack?: string } | undefined)?.stack,
     ).toBeUndefined();
@@ -150,6 +152,14 @@ describe("health contract schemas", () => {
     });
   });
 
+  it("summarizeStatus treats degraded+critical as degraded, not down", () => {
+    const status = summarizeStatus([
+      { id: "db", status: "degraded", severity: "critical" },
+    ]);
+
+    expect(status).toBe("degraded");
+  });
+
   it("summarizeStatus returns down for critical failures", () => {
     const status = summarizeStatus([
       { id: "db", status: "down", severity: "critical" },
@@ -174,6 +184,29 @@ describe("health contract schemas", () => {
     ]);
 
     expect(status).toBe("ok");
+  });
+
+  it("runChecks passes through runner-provided severity, message, and details", async () => {
+    const checks = await runChecks([
+      {
+        id: "latency-check",
+        defaultSeverity: "critical",
+        run: () => ({
+          status: "degraded" as const,
+          severity: "info" as const,
+          message: "p99 latency spike",
+          details: { p99Ms: 450, threshold: 300 },
+        }),
+      },
+    ]);
+
+    expect(checks[0]).toMatchObject({
+      id: "latency-check",
+      status: "degraded",
+      severity: "info",
+      message: "p99 latency spike",
+      details: { p99Ms: 450, threshold: 300 },
+    });
   });
 
   it("buildHealthResponse sets contractVersion, timestamp, and durationMs", () => {

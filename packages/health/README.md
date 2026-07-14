@@ -11,8 +11,27 @@ This package provides:
 
 ## Install
 
-```bash
-pnpm add @f3nation/health
+This package is not (yet) published to npm. Add it as a workspace dependency:
+
+```jsonc
+// package.json
+{
+  "dependencies": {
+    "@f3nation/health": "workspace:*",
+  },
+}
+```
+
+Also add a TypeScript path alias to your `tsconfig.json`:
+
+```jsonc
+{
+  "compilerOptions": {
+    "paths": {
+      "@f3nation/health": ["../../packages/health/src/index.ts"],
+    },
+  },
+}
 ```
 
 ## Quickstart

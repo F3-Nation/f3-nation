@@ -99,9 +99,11 @@ describe("Status Router", () => {
     const result = await client.status();
 
     expect(result.ttlSeconds).toBe(60);
-    expect(Array.isArray(result.results)).toBe(true);
-    expect(result.results.length).toBeGreaterThan(0);
     expect(result.generatedAt).toBeTruthy();
+    const resultIds = result.results.map((r) => r.target.id);
+    expect(resultIds).toContain("me");
+    expect(resultIds).toContain("slack");
+    expect(result.results.every((r) => r.ok)).toBe(true);
     expect(mockLogInfo).toHaveBeenCalledWith(
       "api.status.poll_success",
       expect.objectContaining({ targetId: "me", source: "contract" }),
@@ -301,5 +303,60 @@ describe("Status Router", () => {
       "api.status.poll_unreachable",
       expect.objectContaining({ targetId: "slack", source: "external" }),
     );
+  });
+
+  describe("cache and in-flight coalescing", () => {
+    it("serves a cached response on second call without re-fetching", async () => {
+      const client = createTestClient();
+      const first = await client.status();
+      const second = await client.status();
+
+      expect(second.generatedAt).toBe(first.generatedAt);
+
+      const fetchMock = vi.mocked(globalThis.fetch);
+      const healthCalls = fetchMock.mock.calls.filter(([input]) =>
+        getUrl(input).includes("/health"),
+      );
+      expect(healthCalls).toHaveLength(1);
+    });
+
+    it("re-fetches after the cache TTL has elapsed", async () => {
+      vi.useFakeTimers();
+      const client = createTestClient();
+
+      await client.status();
+      vi.advanceTimersByTime(61_000);
+      await client.status();
+
+      const fetchMock = vi.mocked(globalThis.fetch);
+      const healthCalls = fetchMock.mock.calls.filter(([input]) =>
+        getUrl(input).includes("/health"),
+      );
+      expect(healthCalls).toHaveLength(2);
+
+      vi.useRealTimers();
+    });
+
+    it("coalesces concurrent requests into a single upstream fetch fan-out", async () => {
+      const fetchMock = vi.fn((input: string | URL | Request) => {
+        const url = getUrl(input);
+        if (url.includes("/health"))
+          return Promise.resolve(buildContractOkResponse());
+        return Promise.resolve(buildSlackOkResponse());
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const client = createTestClient();
+      const p1 = client.status();
+      const p2 = client.status();
+
+      const [r1, r2] = await Promise.all([p1, p2]);
+
+      expect(r1.generatedAt).toBe(r2.generatedAt);
+      const healthCalls = fetchMock.mock.calls.filter(([input]) =>
+        getUrl(input).includes("/health"),
+      );
+      expect(healthCalls).toHaveLength(1);
+    });
   });
 });

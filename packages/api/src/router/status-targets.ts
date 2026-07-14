@@ -1,6 +1,7 @@
+import { isDevelopment } from "@acme/shared/common/constants";
 import type { StatusTarget } from "./status";
 
-const isLocal = process.env.NEXT_PUBLIC_LOCAL_DEV === "true";
+const isLocal = isDevelopment;
 
 export const STATUS_TARGETS: StatusTarget[] = [
   {

@@ -9,7 +9,7 @@ The `/status` page supports two monitor types:
 
 Status target configuration now lives in the API aggregator:
 
-- `../../../../../packages/api/src/router/status-targets.ts`
+- `packages/api/src/router/status-targets.ts`
 
 Homepage `/status` consumes aggregated results from `GET /v1/status` and does
 not define monitor targets locally.
@@ -20,12 +20,12 @@ Adding a provider is more than extending the string union. Use this checklist:
 
 1. Extend provider type
 
-- File: `../../../../../packages/api/src/router/status.ts`
+- File: `packages/api/src/router/status.ts`
 - Update `ExternalProvider` to include the new provider name.
 
 1. Add provider adapter logic
 
-- File: `../../../../../packages/api/src/router/status.ts`
+- File: `packages/api/src/router/status.ts`
 - Add provider-specific payload parsing and mapping into shared states:
   - `ok`
   - `degraded`
@@ -34,13 +34,13 @@ Adding a provider is more than extending the string union. Use this checklist:
 
 1. Update adapter dispatch
 
-- File: `../../../../../packages/api/src/router/status.ts`
+- File: `packages/api/src/router/status.ts`
 - Extend `fetchExternalStatus(...)` dispatch so your provider routes to its parser/mapper.
 - Keep unknown/invalid configuration paths deterministic with `invalid_monitor_config`.
 
 1. Add provider config entry
 
-- File: `../../../../../packages/api/src/router/status-targets.ts`
+- File: `packages/api/src/router/status-targets.ts`
 - Add a target with:
   - `source: "external"`
   - `provider: "<your-provider>"`
@@ -49,7 +49,7 @@ Adding a provider is more than extending the string union. Use this checklist:
 
 1. Add test coverage
 
-- File: `../../../../packages/api/src/router/status.test.ts`
+- File: `packages/api/src/router/status.test.ts`
   - success mapping for representative provider responses
   - failure mapping (network/invalid json)
   - invalid config path (`invalid_monitor_config`)
@@ -60,7 +60,7 @@ Adding a provider is more than extending the string union. Use this checklist:
 
 Current pilot implementation:
 
-- Target config: `../../../../packages/api/src/router/status-targets.ts`
-- Adapter logic: `../../../../packages/api/src/router/status.ts`
+- Target config: `packages/api/src/router/status-targets.ts`
+- Adapter logic: `packages/api/src/router/status.ts`
 
 Slack JSON is fetched from `https://slack-status.com/api/v2.0.0/current` and mapped into shared status semantics so it renders alongside contract-based services.
