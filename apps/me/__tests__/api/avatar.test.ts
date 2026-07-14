@@ -423,6 +423,31 @@ describe("Avatar API route", () => {
     expect(data.error).toContain("service account was not found");
   });
 
+  it("returns 500 with configuration message when GCS credentials payload is invalid", async () => {
+    vi.mocked(requireAuth).mockResolvedValue(mockSession);
+    vi.mocked(uploadAvatar).mockRejectedValue(
+      new Error("invalid gcs_credentials payload: missing field"),
+    );
+
+    const { POST } = await import("@/app/api/profile/avatar/route");
+    const content = new Uint8Array([0xff, 0xd8]);
+    const file = Object.assign(
+      new File([content], "avatar.jpg", { type: "image/jpeg" }),
+      { arrayBuffer: async () => content.buffer },
+    );
+    const mockFormData = {
+      get: (key: string) => (key === "file" ? file : null),
+    } as unknown as FormData;
+    const req = {
+      formData: async () => mockFormData,
+    } as unknown as NextRequest;
+
+    const response = await POST(req);
+    expect(response.status).toBe(500);
+    const data = (await response.json()) as { error: string };
+    expect(data.error).toContain("Set GCS_CREDENTIALS");
+  });
+
   it("returns 500 when updateMyProfile throws after upload", async () => {
     vi.mocked(requireAuth).mockResolvedValue(mockSession);
     vi.mocked(uploadAvatar).mockResolvedValue(
