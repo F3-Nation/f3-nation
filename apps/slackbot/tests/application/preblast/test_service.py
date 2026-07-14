@@ -9,10 +9,12 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 from application.event_instance import EventInstanceData
 from application.preblast import (
     HC_ANNOUNCED_META_KEY,
+    HC_ANNOUNCEMENT_KEY,
     PREBLAST_CHANNEL_META_KEY,
     PREBLAST_POST_CHANNEL_META_KEY,
     PostMode,
     PreblastEventTypeData,
+    UNHC_ANNOUNCEMENT_KEY,
 )
 from application.preblast.service import PreblastService
 
@@ -178,6 +180,64 @@ class PreblastServiceTest(unittest.TestCase):
         self.assertTrue(self.service.has_hc_announcement_been_sent(meta, 20, is_hc=False))
         self.assertEqual(_announcement_ids(meta, "hc"), ["20"])
         self.assertEqual(_announcement_ids(meta, "unhc"), ["20"])
+
+    def test_check_and_mark_hc_announcement_fails_open_without_event_service(self):
+        service = PreblastService()
+
+        self.assertTrue(service.check_and_mark_hc_announcement(55, "U123", is_hc=True))
+
+    def test_check_and_mark_hc_announcement_fails_open_when_event_not_found(self):
+        event_service = MagicMock()
+        event_service.get_by_id.return_value = None
+        service = PreblastService(event_instance_service=event_service)
+
+        self.assertTrue(service.check_and_mark_hc_announcement(55, "U123", is_hc=True))
+
+        event_service.get_by_id.assert_called_once_with(55)
+        event_service.update_preblast_fields.assert_not_called()
+
+    def test_check_and_mark_hc_announcement_skips_already_announced_user(self):
+        event = _event(
+            id=55,
+            meta={HC_ANNOUNCED_META_KEY: {HC_ANNOUNCEMENT_KEY: ["U123"]}},
+        )
+        event_service = MagicMock()
+        event_service.get_by_id.return_value = event
+        service = PreblastService(event_instance_service=event_service)
+
+        self.assertFalse(service.check_and_mark_hc_announcement(55, "U123", is_hc=True))
+
+        event_service.get_by_id.assert_called_once_with(55)
+        event_service.update_preblast_fields.assert_not_called()
+
+    def test_check_and_mark_hc_announcement_persists_only_changed_meta_keys(self):
+        event = _event(
+            id=55,
+            meta={
+                "keep": "unchanged",
+                HC_ANNOUNCED_META_KEY: {
+                    HC_ANNOUNCEMENT_KEY: ["U111"],
+                    UNHC_ANNOUNCEMENT_KEY: ["U123"],
+                },
+            },
+        )
+        event_service = MagicMock()
+        event_service.get_by_id.return_value = event
+        service = PreblastService(event_instance_service=event_service)
+
+        self.assertTrue(service.check_and_mark_hc_announcement(55, "U123", is_hc=True))
+
+        event_service.get_by_id.assert_called_once_with(55)
+        event_service.update_preblast_fields.assert_called_once_with(
+            55,
+            existing_instance=event,
+            meta_updates={
+                HC_ANNOUNCED_META_KEY: {
+                    HC_ANNOUNCEMENT_KEY: ["U111", "U123"],
+                    UNHC_ANNOUNCEMENT_KEY: ["U123"],
+                },
+            },
+        )
 
     def test_build_update_command_assembles_event_update_payload(self):
         command = self.service.build_update_command(
