@@ -21,7 +21,7 @@ services:
       retries: 10
 
   adminer:
-    image: adminer:latest@sha256:983261ecc40a4aaf11e25aeda8ef821f5a43a9f024b3967c81cbcc0e6ce43ba3 # 5.4.2
+    image: adminer:5.4.2@sha256:983261ecc40a4aaf11e25aeda8ef821f5a43a9f024b3967c81cbcc0e6ce43ba3
     container_name: f3-adminer
     restart: unless-stopped
     ports:
@@ -33,7 +33,7 @@ services:
         condition: service_healthy
 
   gcs-emulator:
-    image: fsouza/fake-gcs-server:latest@sha256:3730da0e31f7e5186a90ec4899dc2c336104e7599df400411392ef17e684c31f # 1.54.0
+    image: fsouza/fake-gcs-server:1.54.0@sha256:3730da0e31f7e5186a90ec4899dc2c336104e7599df400411392ef17e684c31f
     container_name: f3-gcs
     restart: unless-stopped
     ports:
@@ -43,7 +43,7 @@ services:
     command: -scheme http -port 9023 -public-host localhost:9023 -backend filesystem -filesystem-root /data
 
   mailpit:
-    image: axllent/mailpit:latest@sha256:5a49a77c5bdbe7c5474450b4f46348d09949df3695257729c93a30369382d4f6 # v1.30.3
+    image: axllent/mailpit:v1.30.4@sha256:5a49a77c5bdbe7c5474450b4f46348d09949df3695257729c93a30369382d4f6
     container_name: f3-mailpit
     restart: unless-stopped
     ports:
