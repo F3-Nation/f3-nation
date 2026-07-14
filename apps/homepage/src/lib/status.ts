@@ -13,14 +13,14 @@ type HealthFailureReason =
 
 type ExternalProvider = "slack";
 
-export interface ContractStatusTarget {
+interface ContractStatusTarget {
   id: string;
   label: string;
   url: string;
   source: "contract";
 }
 
-export interface ExternalStatusTarget {
+interface ExternalStatusTarget {
   id: string;
   label: string;
   url: string;
@@ -28,8 +28,6 @@ export interface ExternalStatusTarget {
   provider: ExternalProvider;
   apiUrl: string;
 }
-
-export type StatusTarget = ContractStatusTarget | ExternalStatusTarget;
 
 interface ContractStatusSuccess {
   ok: true;
