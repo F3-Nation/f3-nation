@@ -210,4 +210,32 @@ describe("Auth /callback route", () => {
       expect.objectContaining({ userSub: 42, returnTo: "/profile" }),
     );
   });
+
+  it("redirects when token exchange returns without accessToken", async () => {
+    vi.mocked(exchangeCodeForToken).mockResolvedValueOnce({ accessToken: "" });
+
+    const { GET } = await import("@/app/api/auth/callback/route");
+    const response = await GET(
+      makeRequest(
+        "https://me.f3nation.test/api/auth/callback?code=abc&state=ok-state",
+        { oauth_csrf: "csrf-token", oauth_code_verifier: "code-verifier" },
+      ),
+    );
+
+    expect(response.headers.get("location")).toContain("token_exchange_failed");
+  });
+
+  it("throws when NEXT_PUBLIC_SITE_URL is not configured", async () => {
+    const savedUrl = process.env.NEXT_PUBLIC_SITE_URL;
+    delete process.env.NEXT_PUBLIC_SITE_URL;
+
+    try {
+      const { GET } = await import("@/app/api/auth/callback/route");
+      await expect(
+        GET(makeRequest("http://localhost/api/auth/callback?error=test")),
+      ).rejects.toThrow("NEXT_PUBLIC_SITE_URL is not configured");
+    } finally {
+      process.env.NEXT_PUBLIC_SITE_URL = savedUrl;
+    }
+  });
 });

@@ -17,6 +17,9 @@
     "test:watch": "vitest -w",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "jose": "catalog:"
+  },
   "devDependencies": {
     "@acme/eslint-config": "workspace:*",
     "@acme/prettier-config": "workspace:*",

@@ -3,7 +3,6 @@ import { KnipConfig } from "knip";
 const config: KnipConfig = {
   treatConfigHintsAsErrors: true,
   ignore: [
-    ".venv/**",
     "apps/**/src/lib/logging.ts",
     "apps/auth/src/lib/auth.ts",
     "packages/**/src/logger.ts",
