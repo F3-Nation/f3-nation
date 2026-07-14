@@ -181,8 +181,8 @@ catalogs:
       specifier: ^7.1.3
       version: 7.1.3
     '@vis.gl/react-google-maps':
-      specifier: ^1.9.0
-      version: 1.9.0
+      specifier: ~1.8.3
+      version: 1.8.3
     '@vitejs/plugin-react':
       specifier: ^6.0.3
       version: 6.0.3
@@ -493,7 +493,7 @@ importers:
         version: 8.21.3(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@vis.gl/react-google-maps':
         specifier: 'catalog:'
-        version: 1.9.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+        version: 1.8.3(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       dayjs:
         specifier: 'catalog:'
         version: 1.11.21
@@ -914,7 +914,7 @@ importers:
         version: 5.101.2(@tanstack/react-query@5.101.2(react@19.2.7))(react@19.2.7)
       '@vis.gl/react-google-maps':
         specifier: 'catalog:'
-        version: 1.9.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+        version: 1.8.3(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       dayjs:
         specifier: 'catalog:'
         version: 1.11.21
@@ -5220,8 +5220,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@vis.gl/react-google-maps@1.9.0':
-    resolution: {integrity: sha512-ELL/zo8mRMPGDQZwHRClf2tE1/PMYYKjg+C/dUn8rmlQ0e+s7rkcNmCgaeBAV48GJzEcrBsr+vjDv4AvzJrlUA==}
+  '@vis.gl/react-google-maps@1.8.3':
+    resolution: {integrity: sha512-DW7nEuvOJ299DmdBnvGiUARrgS/+sTEO1iJgG9J8YaErZqLoq7S4TJ22f3EjJvR4dti4L4gft43JEK77nnKXDw==}
     peerDependencies:
       react: '>=16.8.0 || ^19.0 || ^19.0.0-rc'
       react-dom: '>=16.8.0 || ^19.0 || ^19.0.0-rc'
@@ -6223,10 +6223,6 @@ packages:
 
   fast-deep-equal@3.1.3:
     resolution: {integrity: sha512-f3qQ9oQy9j2AhBe/H9VC91wLmKBCCU/gDOnKNAYG5hswO7BLKj09Hc5HYNz9cGI++xlpDCIgDaitVs03ATR84Q==}
-
-  fast-equals@6.0.2:
-    resolution: {integrity: sha512-sAjhj9ZhOxYCGiNMnZLaucOqf5ZeFnHNoKoAZiD9thhJ0N8RP85qJK759/97C/3L7NzzmGVB5uiX9AUpySZmUQ==}
-    engines: {node: '>=6.0.0'}
 
   fast-glob@3.3.1:
     resolution: {integrity: sha512-kNFPyjhh5cKjrUltxs+wFx+ZkbRaxxmZ+X0ZU31SOsxCEtP9VPgtq2teZw1DebupL5GmDaNQ6yKMMVcM41iqDg==}
@@ -11402,11 +11398,11 @@ snapshots:
   '@unrs/resolver-binding-win32-x64-msvc@1.11.1':
     optional: true
 
-  '@vis.gl/react-google-maps@1.9.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
+  '@vis.gl/react-google-maps@1.8.3(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     dependencies:
       '@googlemaps/js-api-loader': 2.1.1
       '@types/google.maps': 3.65.2
-      fast-equals: 6.0.2
+      fast-deep-equal: 3.1.3
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
 
@@ -12564,8 +12560,6 @@ snapshots:
   fast-copy@4.0.3: {}
 
   fast-deep-equal@3.1.3: {}
-
-  fast-equals@6.0.2: {}
 
   fast-glob@3.3.1:
     dependencies:
