@@ -1,10 +1,13 @@
+import path from "path";
 import { coverageExclude, coverageInclude } from "@acme/vitest-config";
 import { defineConfig } from "vitest/config";
-import path from "path";
+import react from "@vitejs/plugin-react";
 
 export default defineConfig({
+  plugins: [react()],
   test: {
-    environment: "node",
+    globals: true,
+    environment: "jsdom",
     env: { NODE_ENV: "test", SKIP_ENV_VALIDATION: "1" },
     include: ["src/**/*.test.{ts,tsx}", "__tests__/**/*.test.{ts,tsx}"],
     coverage: {
