@@ -521,9 +521,6 @@ importers:
       react-hook-form:
         specifier: 'catalog:'
         version: 7.81.0(react@19.2.7)
-      react-qr-code:
-        specifier: 'catalog:'
-        version: 2.2.0(react@19.2.7)
       server-only:
         specifier: 'catalog:'
         version: 0.0.1
@@ -957,9 +954,6 @@ importers:
       react-hook-form:
         specifier: 'catalog:'
         version: 7.81.0(react@19.2.7)
-      react-qr-code:
-        specifier: 'catalog:'
-        version: 2.2.0(react@19.2.7)
       react-responsive:
         specifier: 'catalog:'
         version: 10.0.1(react@19.2.7)

@@ -42,7 +42,6 @@
     "react": "catalog:",
     "react-dom": "catalog:",
     "react-hook-form": "catalog:",
-    "react-qr-code": "catalog:",
     "server-only": "catalog:",
     "zod": "catalog:"
   },
