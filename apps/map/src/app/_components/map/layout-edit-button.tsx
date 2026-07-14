@@ -28,9 +28,7 @@ export const LayoutEditButton = ({
               appStore.setState({ mode: "edit" });
             }
           } else {
-            openModal(ModalType.SIGN_IN, {
-              message: "You must log in to edit the map",
-            });
+            openModal(ModalType.SIGN_IN, {});
           }
         }}
       >

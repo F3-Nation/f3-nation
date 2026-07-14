@@ -15,7 +15,10 @@ import {
 } from "./form";
 import { Input } from "./input";
 
-interface TimeInputProps {
+interface TimeInputProps extends Pick<
+  React.ComponentProps<typeof Input>,
+  "placeholder" | "disabled"
+> {
   label?: string;
   id?: string;
   value: string;
@@ -28,12 +31,9 @@ type ControlledTimeInputProps<T extends FieldValues> = Omit<
 > & {
   control: Control<T>;
   name: Path<T>;
-  label?: string;
-  placeholder?: string;
-  disabled?: boolean;
 };
 
-const TimeInput = ({ label, id, value, onChange }: TimeInputProps) => {
+const TimeInput = ({ label, id, value, onChange, ...rest }: TimeInputProps) => {
   return (
     <Input
       type="time"
@@ -42,6 +42,7 @@ const TimeInput = ({ label, id, value, onChange }: TimeInputProps) => {
       id={id}
       aria-label={label}
       className="w-full"
+      {...rest}
     />
   );
 };

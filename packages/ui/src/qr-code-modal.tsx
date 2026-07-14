@@ -1,6 +1,8 @@
 "use client";
 
-import QRCode from "react-qr-code";
+import type { ComponentProps } from "react";
+import { useRef } from "react";
+import ReactQRCode from "react-qr-code";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
 
@@ -13,6 +15,16 @@ export interface QRCodeModalData {
   title: string;
 }
 
+// react-qr-code's d.ts mistypes the component as a class; at runtime it forwards its ref to the <svg>
+const QRCode = ReactQRCode as unknown as React.FC<
+  Omit<ComponentProps<typeof ReactQRCode>, "ref"> & {
+    ref?: React.Ref<SVGSVGElement>;
+  }
+>;
+
+const toBase64 = (value: string) =>
+  btoa(String.fromCharCode(...new TextEncoder().encode(value)));
+
 export const QRCodeModal = ({
   data,
   onClose,
@@ -20,11 +32,12 @@ export const QRCodeModal = ({
   data: QRCodeModalData;
   onClose: () => void;
 }) => {
+  const svgRef = useRef<SVGSVGElement>(null);
+
   // https://github.com/rosskhanas/react-qr-code/blob/master/demo/src/components/App.js
   const onImageDownload = () => {
-    const svg = document.getElementById("QRCode");
-    if (!svg) return;
-    const svgData = new XMLSerializer().serializeToString(svg);
+    if (!svgRef.current) return;
+    const svgData = new XMLSerializer().serializeToString(svgRef.current);
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
     const img = new Image();
@@ -34,11 +47,14 @@ export const QRCodeModal = ({
       ctx?.drawImage(img, 0, 0);
       const pngFile = canvas.toDataURL("image/png");
       const downloadLink = document.createElement("a");
-      downloadLink.download = data.fileName ?? "QRCode";
+      downloadLink.download = data.fileName;
       downloadLink.href = pngFile;
       downloadLink.click();
     };
-    img.src = `data:image/svg+xml;base64,${btoa(svgData)}`;
+    img.onerror = () => {
+      console.error("Failed to render QR code SVG for download");
+    };
+    img.src = `data:image/svg+xml;base64,${toBase64(svgData)}`;
   };
 
   return (
@@ -54,11 +70,10 @@ export const QRCodeModal = ({
         </DialogHeader>
         <div className="flex flex-col items-center">
           <QRCode
-            id="QRCode"
+            ref={svgRef}
             size={256}
             style={{ height: "256", maxWidth: "100%", width: "100%" }}
-            // We know that url is not null because of the check above
-            value={data.url ?? ""}
+            value={data.url}
             viewBox={`0 0 256 256`}
           />
           {/* Pretty button */}

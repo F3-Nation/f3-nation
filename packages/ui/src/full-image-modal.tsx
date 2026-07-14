@@ -27,9 +27,7 @@ export const FullImageModal = ({
         className={cn(`max-w-[90%] rounded-lg lg:max-w-[600px]`)}
       >
         <DialogHeader>
-          <DialogTitle className="text-center">
-            {data.title ?? "Logo"}
-          </DialogTitle>
+          <DialogTitle className="text-center">{data.title}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col items-center">
           <ImageWithFallback

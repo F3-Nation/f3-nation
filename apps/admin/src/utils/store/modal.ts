@@ -1,6 +1,9 @@
 import type { ReactNode } from "react";
 
 import { ZustandStore } from "@acme/shared/common/classes";
+import type { DeleteModalData } from "@acme/ui/delete-modal";
+import type { FullImageModalData } from "@acme/ui/full-image-modal";
+import type { QRCodeModalData } from "@acme/ui/qr-code-modal";
 
 export enum ModalType {
   ADMIN_USERS = "ADMIN_USERS",
@@ -78,30 +81,17 @@ export interface DataType {
     id: number;
     type: DeleteType;
   };
-  [ModalType.DELETE_CONFIRMATION]: {
-    type: DeleteType;
-    onConfirm: () => void;
-  };
+  [ModalType.DELETE_CONFIRMATION]: DeleteModalData & { type: DeleteType };
   [ModalType.ADMIN_DELETE_REQUEST]: {
     id: string;
   };
-  [ModalType.QR_CODE]: {
-    url: string;
-    fileName: string;
-    title: string;
-  };
-  [ModalType.FULL_IMAGE]: {
-    title: string;
-    src: string;
-    fallbackSrc: string;
-    alt: string;
-  };
+  [ModalType.QR_CODE]: QRCodeModalData;
+  [ModalType.FULL_IMAGE]: FullImageModalData;
   [ModalType.ADMIN_EVENT_TYPES]: {
     id?: number | null;
   };
   [ModalType.SIGN_IN]: {
     callbackUrl?: string;
-    message?: string;
   };
 }
 

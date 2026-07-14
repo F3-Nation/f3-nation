@@ -2,6 +2,9 @@ import type { ReactNode } from "react";
 
 import type { DayOfWeek, RequestType } from "@acme/shared/app/enums";
 import { ZustandStore } from "@acme/shared/common/classes";
+import type { DeleteModalData } from "@acme/ui/delete-modal";
+import type { FullImageModalData } from "@acme/ui/full-image-modal";
+import type { QRCodeModalData } from "@acme/ui/qr-code-modal";
 
 import type { RouterOutputs } from "~/orpc/types";
 import { mapStore } from "./map";
@@ -139,26 +142,13 @@ export interface DataType {
   [ModalType.INFO]: null;
   [ModalType.USER_LOCATION_INFO]: null;
   [ModalType.SETTINGS]: null;
-  [ModalType.DELETE_CONFIRMATION]: {
-    type: DeleteType;
-    onConfirm: () => void;
-  };
-  [ModalType.QR_CODE]: {
-    url: string;
-    fileName: string;
-    title: string;
-  };
+  [ModalType.DELETE_CONFIRMATION]: DeleteModalData & { type: DeleteType };
+  [ModalType.QR_CODE]: QRCodeModalData;
   [ModalType.ABOUT_MAP]: null;
-  [ModalType.FULL_IMAGE]: {
-    title: string;
-    src: string;
-    fallbackSrc: string;
-    alt: string;
-  };
+  [ModalType.FULL_IMAGE]: FullImageModalData;
   [ModalType.MAP_HELP]: null;
   [ModalType.SIGN_IN]: {
     callbackUrl?: string;
-    message?: string;
   };
   [ModalType.EDIT_MODE_INFO]: null;
 }

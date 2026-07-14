@@ -1,6 +1,5 @@
 "use client";
 
-import type { DetailedHTMLProps, ImgHTMLAttributes } from "react";
 import { useEffect, useState } from "react";
 
 export function DebouncedImage({
@@ -8,11 +7,9 @@ export function DebouncedImage({
   alt,
   onImageFail,
   onImageSuccess,
-}: Omit<
-  DetailedHTMLProps<ImgHTMLAttributes<HTMLImageElement>, HTMLImageElement>,
-  "src"
-> & {
+}: {
   src?: string;
+  alt?: string;
   onImageFail: () => void;
   onImageSuccess: () => void;
 }) {
