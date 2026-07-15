@@ -1,5 +1,5 @@
 import { isDevelopment } from "@acme/shared/common/constants";
-import type { StatusTarget } from "./status";
+import type { StatusTarget } from "@f3nation/health";
 
 const isLocal = isDevelopment;
 

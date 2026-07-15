@@ -6,6 +6,9 @@ import { logError } from "@/lib/logging";
 const SERVICE_NAME = "f3-me";
 const CHECK_ID = "f3-api-upstream";
 const CHECK_TIMEOUT_MS = 1_500;
+// Give the fetch abort a 200 ms head-start so a slow upstream consistently
+// surfaces as "unreachable" rather than racing with the outer runChecks timeout.
+const FETCH_ABORT_MS = CHECK_TIMEOUT_MS - 200;
 
 function getServiceVersion(): string {
   return process.env.NODE_ENV === "production" ? "production" : "dev";
@@ -42,7 +45,7 @@ async function checkUpstreamApi(): Promise<CheckRunnerResult> {
       method: "GET",
       headers: { Accept: "application/json" },
       cache: "no-store",
-      signal: AbortSignal.timeout(CHECK_TIMEOUT_MS),
+      signal: AbortSignal.timeout(FETCH_ABORT_MS),
     });
 
     if (response.ok) {

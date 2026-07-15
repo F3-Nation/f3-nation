@@ -7,7 +7,7 @@ import {
   CardTitle,
 } from "@acme/ui/card";
 import { Separator } from "@acme/ui/separator";
-import type { StatusResult } from "@/lib/status";
+import type { StatusResult } from "@f3nation/health";
 
 function badgeVariantForStatus(status: "ok" | "degraded" | "down") {
   switch (status) {

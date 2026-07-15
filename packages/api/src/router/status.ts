@@ -2,7 +2,14 @@ import {
   HEALTH_CONTRACT_VERSION,
   healthResponseSchema,
 } from "@f3nation/health";
-import type { HealthResponse, HealthStatus } from "@f3nation/health";
+import type {
+  HealthFailureReason,
+  HealthStatus,
+  ContractStatusTarget,
+  ExternalStatusTarget,
+  StatusTarget,
+  StatusResult,
+} from "@f3nation/health";
 import { z } from "zod";
 
 import { logInfo, logWarn } from "../logger";
@@ -20,83 +27,11 @@ interface StatusCacheEntry {
 let statusCache: StatusCacheEntry | null = null;
 let inFlightStatusRequest: Promise<StatusResponse> | null = null;
 
-type HealthFailureReason =
-  | "unreachable"
-  | "invalid_json"
-  | "invalid_contract"
-  | "unsupported_contract_version"
-  | "invalid_monitor_config";
-
-type ExternalProvider = "slack";
-
 interface SlackCurrentStatusResponse {
   status: string;
   date_updated?: string;
   active_incidents?: unknown[];
 }
-
-interface ContractStatusTarget {
-  id: string;
-  label: string;
-  url: string;
-  source: "contract";
-}
-
-interface ExternalStatusTarget {
-  id: string;
-  label: string;
-  url: string;
-  source: "external";
-  provider: ExternalProvider;
-  apiUrl: string;
-}
-
-export type StatusTarget = ContractStatusTarget | ExternalStatusTarget;
-
-interface ContractStatusSuccess {
-  ok: true;
-  target: ContractStatusTarget;
-  source: "contract";
-  status: HealthStatus;
-  data: HealthResponse;
-}
-
-interface ContractStatusFailure {
-  ok: false;
-  target: ContractStatusTarget;
-  source: "contract";
-  status: "down";
-  reason: HealthFailureReason;
-  details?: Record<string, unknown>;
-}
-
-interface ExternalStatusSuccess {
-  ok: true;
-  target: ExternalStatusTarget;
-  source: "external";
-  status: HealthStatus;
-  data: {
-    provider: ExternalProvider;
-    providerStatus: string;
-    timestamp: string;
-    incidents: number;
-  };
-}
-
-interface ExternalStatusFailure {
-  ok: false;
-  target: ExternalStatusTarget;
-  source: "external";
-  status: "down";
-  reason: HealthFailureReason;
-  details?: Record<string, unknown>;
-}
-
-type StatusResult =
-  | ContractStatusSuccess
-  | ContractStatusFailure
-  | ExternalStatusSuccess
-  | ExternalStatusFailure;
 
 interface StatusResponse {
   generatedAt: string;
@@ -248,6 +183,7 @@ function parseContractStatusResponse(
       target,
       status: "down",
       reason: "unsupported_contract_version",
+      details: { serviceMajor, currentContractMajor },
     };
   }
 

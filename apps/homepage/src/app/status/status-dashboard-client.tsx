@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { StatusCard } from "@/app/status/status-card";
-import type { StatusResult } from "@/lib/status";
+import type { StatusResult } from "@f3nation/health";
 
 interface StatusApiResponse {
   generatedAt: string;

@@ -20,7 +20,7 @@ export const healthResponseSchema = z.object({
   version: z.string().min(1),
   contractVersion: z.string().min(1),
   status: healthStatusSchema,
-  timestamp: z.string().datetime(),
+  timestamp: z.iso.datetime(),
   durationMs: z.number().int().nonnegative(),
   checks: z.array(healthCheckSchema).min(1),
   notes: z.array(z.string()).optional(),
@@ -152,3 +152,81 @@ export function buildHealthResponse(input: {
     ...(input.notes ? { notes: input.notes } : {}),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Status aggregation types
+//
+// Keeping them here ensures a single source of truth.
+// ---------------------------------------------------------------------------
+
+export type HealthFailureReason =
+  | "unreachable"
+  | "invalid_json"
+  | "invalid_contract"
+  | "unsupported_contract_version"
+  | "invalid_monitor_config";
+
+export type ExternalProvider = "slack";
+
+export interface ContractStatusTarget {
+  id: string;
+  label: string;
+  url: string;
+  source: "contract";
+}
+
+export interface ExternalStatusTarget {
+  id: string;
+  label: string;
+  url: string;
+  source: "external";
+  provider: ExternalProvider;
+  apiUrl: string;
+}
+
+export type StatusTarget = ContractStatusTarget | ExternalStatusTarget;
+
+interface ContractStatusSuccess {
+  ok: true;
+  target: ContractStatusTarget;
+  source: "contract";
+  status: HealthStatus;
+  data: HealthResponse;
+}
+
+interface ContractStatusFailure {
+  ok: false;
+  target: ContractStatusTarget;
+  source: "contract";
+  status: "down";
+  reason: HealthFailureReason;
+  details?: Record<string, unknown>;
+}
+
+interface ExternalStatusSuccess {
+  ok: true;
+  target: ExternalStatusTarget;
+  source: "external";
+  status: HealthStatus;
+  data: {
+    provider: ExternalProvider;
+    providerStatus: string;
+    timestamp: string;
+    incidents: number;
+  };
+}
+
+interface ExternalStatusFailure {
+  ok: false;
+  target: ExternalStatusTarget;
+  source: "external";
+  status: "down";
+  reason: HealthFailureReason;
+  details?: Record<string, unknown>;
+}
+
+export type StatusResult =
+  | ContractStatusSuccess
+  | ContractStatusFailure
+  | ExternalStatusSuccess
+  | ExternalStatusFailure;

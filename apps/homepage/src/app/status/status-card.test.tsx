@@ -1,7 +1,7 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { StatusResult } from "@/lib/status";
+import type { StatusResult } from "@f3nation/health";
 import { StatusCard } from "@/app/status/status-card";
 
 function makeOkResult(status: "ok" | "degraded"): StatusResult {

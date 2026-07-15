@@ -115,6 +115,25 @@ describe("Health API route", () => {
     }
   });
 
+  it("returns contract-valid down response when F3_API_BASE_URL is malformed", async () => {
+    process.env.F3_API_BASE_URL = "not a valid url";
+    vi.stubGlobal("fetch", vi.fn());
+
+    const { GET } = await import("@/app/health/route");
+    const response = await GET();
+    const data = (await response.json()) as unknown;
+
+    expect(response.status).toBe(200);
+    const parsed = healthResponseSchema.safeParse(data);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.status).toBe("down");
+      expect(parsed.data.checks[0]?.details).toMatchObject({
+        reason: "invalid_config",
+      });
+    }
+  });
+
   it("returns contract-valid down response when F3_API_BASE_URL is missing", async () => {
     delete process.env.F3_API_BASE_URL;
     vi.stubGlobal("fetch", vi.fn());

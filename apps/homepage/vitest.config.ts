@@ -13,7 +13,7 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "json", "html"],
       reportsDirectory: "./coverage",
-      include: ["src/lib/**/*.ts"],
+      include: ["src/lib/**/*.ts", "src/app/status/**/*.{ts,tsx}"],
       thresholds: {
         autoUpdate: true,
       },
