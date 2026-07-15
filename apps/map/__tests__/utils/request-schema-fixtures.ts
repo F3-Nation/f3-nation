@@ -4,7 +4,7 @@ import { expect } from "vitest";
 // request validation tests. These mirror the values the map's request modals
 // submit on a happy path.
 export const base = {
-  id: "11111111-1111-1111-1111-111111111111",
+  id: "11111111-1111-4111-8111-111111111111",
   submittedBy: "tester@example.com",
   originalRegionId: 5,
 };
