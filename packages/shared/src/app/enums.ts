@@ -36,11 +36,16 @@ export type EventCadence = (typeof EventCadence)[number];
 export const EventCategory = ["first_f", "second_f", "third_f"] as const;
 export type EventCategory = (typeof EventCategory)[number];
 
-export const RequestType = [
-  "create_ao_and_location_and_event", // creates an ao and an event
+// The request types that can actually be submitted, reviewed, and handled —
+// every discriminated-union schema (packages/validators/src/request-schemas.ts)
+// and handler (packages/api/src/lib/update-request-handlers.ts) is keyed by
+// exactly this set. Use this (not RequestType) for any Record/switch that must
+// stay exhaustive — RequestType also carries the legacy "edit" type below.
+export const ActiveRequestType = [
+  "create_ao_and_location_and_event", // creates a location, an ao, and an event
   "create_event", // at an existing ao
-  "edit_event", // edits event, ao, location, and region details
-  "edit_ao_and_location", // edits event, ao, location, and region details
+  "edit_event", // edits an event's own details (name, description, day, times, types)
+  "edit_ao_and_location", // edits ao details (name, logo, website) and its location
   "move_ao_to_different_region",
   "move_ao_to_new_location",
   "move_ao_to_different_location",
@@ -48,10 +53,20 @@ export const RequestType = [
   "move_event_to_new_location",
   "move_event_to_new_ao",
   "delete_event",
-  "delete_ao", // deletes an ao, its workouts, and possibly the location
-  "edit", // I might need this for legacy purposes
+  "delete_ao", // deactivates an ao and its workouts (location rows are untouched)
+] as const;
+export type ActiveRequestType = (typeof ActiveRequestType)[number];
+
+export const RequestType = [
+  ...ActiveRequestType,
+  "edit", // legacy rows only; kept so stored requests remain readable (see convert-legacy-edit-requests.ts)
 ] as const;
 export type RequestType = (typeof RequestType)[number];
+
+export const isActiveRequestType = (
+  requestType: RequestType,
+): requestType is ActiveRequestType =>
+  (ActiveRequestType as readonly string[]).includes(requestType);
 
 export enum EventTypes {
   Bootcamp = "Bootcamp",

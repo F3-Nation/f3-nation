@@ -6,6 +6,7 @@ import { isTruthy } from "@acme/shared/common/functions";
 
 import { orpc, useQuery } from "~/orpc/react";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
+import { SelectorLoadError } from "./selector-load-error";
 
 const NEW_LOCATION_VALUE = "new";
 
@@ -30,13 +31,18 @@ export const ExistingLocationPickerForm = (params: {
   const disabled = activeRegionId == null;
 
   // Fetch only the locations in the selected region (filtered server-side).
-  const { data: locations } = useQuery(
-    orpc.location.all.queryOptions({
+  const {
+    data: locations,
+    isError,
+    refetch,
+  } = useQuery({
+    ...orpc.location.all.queryOptions({
       input:
         activeRegionId != null ? { regionIds: [activeRegionId] } : undefined,
       enabled: activeRegionId != null,
     }),
-  );
+    throwOnError: false,
+  });
 
   const sortedRegionLocationOptions = useMemo(() => {
     const newLocationOption = {
@@ -122,9 +128,13 @@ export const ExistingLocationPickerForm = (params: {
                   }}
                   searchPlaceholder="Select destination location"
                 />
-                <p className="text-xs text-destructive">
-                  {form.formState.errors.newLocationId?.message?.toString()}
-                </p>
+                {isError ? (
+                  <SelectorLoadError onRetry={() => void refetch()} />
+                ) : (
+                  <p className="text-xs text-destructive">
+                    {form.formState.errors.newLocationId?.message?.toString()}
+                  </p>
+                )}
               </div>
             )}
           />

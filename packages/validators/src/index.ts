@@ -359,19 +359,6 @@ export const OrgInsertSchema = createInsertSchema(orgs, {
 });
 export const OrgSelectSchema = createSelectSchema(orgs);
 
-export const DeleteRequestSchema = z.object({
-  eventId: z.number().nullish(),
-  eventName: z.string().nullish(),
-  aoName: z.string().nullish(),
-  originalAoId: z.number().nullish(),
-  originalLocationId: z.number().nullish(),
-  originalRegionId: z.number(),
-  submittedBy: z.string(),
-  requestType: z.enum(["delete_event", "delete_ao"]),
-});
-
-export type DeleteRequestType = z.infer<typeof DeleteRequestSchema>;
-
 export const RequestInsertSchema = createInsertSchema(updateRequests, {
   eventTypeIds: (s: z.ZodArray<z.ZodNumber>) =>
     s.min(1, { error: "Please select at least one event type" }),

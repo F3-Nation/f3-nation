@@ -62,7 +62,7 @@ export const UpdatePane = () => {
     });
   };
 
-  // Move existing event to new AO here
+  // Move existing event to a new location here (AO unchanged)
   const handleMoveEvent = (e: { stopPropagation: () => void }) => {
     e.stopPropagation();
     if (!updateLocation) {

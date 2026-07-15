@@ -12,10 +12,11 @@ import {
   schema,
   sql,
 } from "@acme/db";
-import type { OrgType } from "@acme/shared/app/enums";
+import type { ActiveRequestType, OrgType } from "@acme/shared/app/enums";
 import { DayOfWeek } from "@acme/shared/app/enums";
 import { RequestType, UpdateRequestStatus } from "@acme/shared/app/enums";
 import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
+import type { UpdateRequestOrgIdFields } from "@acme/validators/request-schemas";
 import {
   CreateAOAndLocationAndEventSchema,
   CreateEventSchema,
@@ -1052,12 +1053,7 @@ export const requestRouter = {
     }),
 };
 
-interface CheckRequestInput {
-  originalEventId?: number | null;
-  originalLocationId?: number | null;
-  newLocationId?: number | null;
-  originalRegionId?: number | null;
-  newRegionId?: number | null;
+interface CheckRequestInput extends UpdateRequestOrgIdFields {
   submittedBy: string;
 }
 
@@ -1125,7 +1121,7 @@ const notifyPendingRequest = async ({
 };
 
 const REQUEST_TYPE_TO_MAP_EVENT: Record<
-  RequestType,
+  ActiveRequestType,
   "map.created" | "map.updated" | "map.deleted"
 > = {
   create_ao_and_location_and_event: "map.created",
@@ -1140,7 +1136,6 @@ const REQUEST_TYPE_TO_MAP_EVENT: Record<
   move_event_to_new_ao: "map.updated",
   delete_event: "map.deleted",
   delete_ao: "map.deleted",
-  edit: "map.updated",
 };
 
 type HandleableRequestInput = CheckRequestInput & {
@@ -1223,7 +1218,11 @@ const handleRequest = async <T extends HandleableRequestInput>({
     });
     // Notify webhooks and invalidate the map cache only after the commit
     notifyMapDataChange({
-      type: REQUEST_TYPE_TO_MAP_EVENT[updateRequest.requestType],
+      // handleRequest is only ever invoked by the active-request approve
+      // handlers below; the legacy "edit" type never reaches this path.
+      type: REQUEST_TYPE_TO_MAP_EVENT[
+        updateRequest.requestType as ActiveRequestType
+      ],
       eventId: updateRequest.eventId ?? undefined,
       locationId: updateRequest.locationId ?? undefined,
       orgId: updateRequest.aoId ?? updateRequest.regionId,
@@ -1231,6 +1230,23 @@ const handleRequest = async <T extends HandleableRequestInput>({
     const result = { status: "approved" as const, updateRequest };
     return result;
   } else {
+    // An existing row for this id means we're reviewing an already-submitted
+    // request without permission (a fresh submission's id never collides).
+    // Reject here instead of letting onConflictDoUpdate below silently reset
+    // it to "pending" and re-notify admins.
+    const existingId = typeof input.id === "string" ? input.id : undefined;
+    if (existingId) {
+      const [existing] = await ctx.db
+        .select({ status: schema.updateRequests.status })
+        .from(schema.updateRequests)
+        .where(eq(schema.updateRequests.id, existingId));
+      if (existing) {
+        throw new ORPCError("UNAUTHORIZED", {
+          message:
+            "You can't approve this request: it affects an org you don't have the editor role on. Ask an admin of the affected org(s) to review it.",
+        });
+      }
+    }
     const updateRequest = await recordUpdateRequest({
       ctx,
       updateRequest: updateRequestData,

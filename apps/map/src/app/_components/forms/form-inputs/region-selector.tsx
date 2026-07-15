@@ -4,6 +4,7 @@ import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 
 import { orpc, useQuery } from "~/orpc/react";
 import { useOptions } from "~/utils/use-options";
+import { SelectorLoadError } from "./selector-load-error";
 
 interface RegionSelectorProps {
   label?: string;
@@ -18,7 +19,6 @@ interface RegionSelectorFormValues {
   originalAoId?: number | null;
   newAoId?: number | null;
   originalEventId?: number | null;
-  newEventId?: number | null;
 }
 
 /**
@@ -34,9 +34,14 @@ export function RegionSelector<_T extends RegionSelectorFormValues>({
   syncWithField,
 }: RegionSelectorProps) {
   const form = useFormContext<RegionSelectorFormValues>();
-  const { data: regions } = useQuery(
-    orpc.org.all.queryOptions({ input: { orgTypes: ["region"] } }),
-  );
+  const {
+    data: regions,
+    isError,
+    refetch,
+  } = useQuery({
+    ...orpc.org.all.queryOptions({ input: { orgTypes: ["region"] } }),
+    throwOnError: false,
+  });
 
   const regionOptions = useOptions(
     regions?.orgs,
@@ -44,7 +49,7 @@ export function RegionSelector<_T extends RegionSelectorFormValues>({
     (r) => r.id.toString(),
   );
 
-  // Determine which dependent fields to clear based on the region field
+  // Determine which dependent fields to clear based on the region field.
   const getDependentFields = () => {
     if (fieldName === "originalRegionId") {
       return {
@@ -54,7 +59,7 @@ export function RegionSelector<_T extends RegionSelectorFormValues>({
     }
     return {
       aoField: "newAoId" as const,
-      eventField: "newEventId" as const,
+      eventField: null,
     };
   };
 
@@ -88,14 +93,20 @@ export function RegionSelector<_T extends RegionSelectorFormValues>({
                 // Clear dependent fields when region changes
                 if (field.value !== newValue) {
                   form.setValue(aoField, null);
-                  form.setValue(eventField, null);
+                  if (eventField) {
+                    form.setValue(eventField, null);
+                  }
                 }
               }}
               searchPlaceholder="Select Region"
             />
-            <p className="text-xs text-destructive">
-              {fieldState.error?.message?.toString()}
-            </p>
+            {isError ? (
+              <SelectorLoadError onRetry={() => void refetch()} />
+            ) : (
+              <p className="text-xs text-destructive">
+                {fieldState.error?.message?.toString()}
+              </p>
+            )}
           </>
         )}
       />

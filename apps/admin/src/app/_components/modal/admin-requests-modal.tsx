@@ -31,7 +31,8 @@ import { useUpdateLocationForm } from "~/utils/forms";
 import { uploadLogo } from "~/utils/image/upload-logo";
 import type { DataType, ModalType } from "~/utils/store/modal";
 import { closeModal } from "~/utils/store/modal";
-import type { RequestType } from "@acme/shared/app/enums";
+import type { ActiveRequestType } from "@acme/shared/app/enums";
+import { isActiveRequestType } from "@acme/shared/app/enums";
 
 import type { AdminRequestFormProps } from "../forms/admin-request-form-props";
 import { CreateAoLocationEventRequestForm } from "../forms/create-ao-location-event-request-form";
@@ -46,8 +47,8 @@ import { DeleteEventRequestForm } from "../forms/delete-event-request-form";
 import { DeleteAoRequestForm } from "../forms/delete-ao-request-form";
 
 const REQUEST_FORM_MAP: Record<
-  RequestType,
-  React.ComponentType<AdminRequestFormProps> | null
+  ActiveRequestType,
+  React.ComponentType<AdminRequestFormProps>
 > = {
   create_ao_and_location_and_event: CreateAoLocationEventRequestForm,
   create_event: CreateEventRequestForm,
@@ -61,8 +62,6 @@ const REQUEST_FORM_MAP: Record<
   move_event_to_new_location: MoveEventToNewLocationRequestForm,
   delete_event: DeleteEventRequestForm,
   delete_ao: DeleteAoRequestForm,
-  // Legacy request type with no dedicated form; handled by the runtime guard.
-  edit: null,
 };
 
 export default function AdminRequestsModal({
@@ -80,21 +79,43 @@ export default function AdminRequestsModal({
   const [selectedAoLogoPreviewUrl, setSelectedAoLogoPreviewUrl] = useState<
     string | null
   >(null);
-  const { data: requestResponse } = useQuery(
-    orpc.request.byId.queryOptions({
+  const {
+    data: requestResponse,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    ...orpc.request.byId.queryOptions({
       input: { id: requestData.id },
       enabled: !!requestData.id,
     }),
-  );
+    // Surface load failures in the modal (error state + retry) instead of
+    // throwing to an error boundary — the query client defaults throwOnError to
+    // true, and the admin app has no boundary to catch it.
+    throwOnError: false,
+  });
   const request = requestResponse?.request;
+
+  useEffect(() => {
+    if (isError) {
+      console.error(
+        "admin.request.by_id_failed",
+        { requestId: requestData.id },
+        error,
+      );
+    }
+  }, [isError, error, requestData.id]);
   const form = useUpdateLocationForm({
     defaultValues: { id: request?.id ?? crypto.randomUUID() },
   });
 
   const formId = form.watch("id");
 
-  // Some legacy request types (e.g. "edit") have no dedicated form.
-  const FormComponent = request ? REQUEST_FORM_MAP[request.requestType] : null;
+  // The legacy "edit" request type has no dedicated form.
+  const FormComponent =
+    request && isActiveRequestType(request.requestType)
+      ? REQUEST_FORM_MAP[request.requestType]
+      : null;
 
   const { data: eventTypes } = useQuery(
     orpc.eventType.all.queryOptions({ input: undefined }),
@@ -300,7 +321,25 @@ export default function AdminRequestsModal({
         style={{ zIndex: Z_INDEX.HOW_TO_JOIN_MODAL }}
         className="mb-40 rounded-lg px-4 sm:px-6 lg:px-8"
       >
-        {!request ? (
+        {isError ? (
+          <div className="flex flex-col items-center justify-center gap-3 p-8 text-center">
+            <p className="text-sm text-destructive">
+              Couldn&apos;t load this request. This may be a temporary issue.
+            </p>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => closeModal()}
+              >
+                Close
+              </Button>
+              <Button type="button" onClick={() => void refetch()}>
+                Retry
+              </Button>
+            </div>
+          </div>
+        ) : !request ? (
           <div className="flex items-center justify-center p-8">
             <Spinner className="size-8" />
           </div>

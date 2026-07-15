@@ -4,6 +4,8 @@ import { z } from "zod";
 
 import type { RequestType } from "@acme/shared/app/enums";
 import { requestTypeToTitle } from "@acme/shared/app/functions";
+import { PRESERVED_META_FIELDS } from "@acme/shared/app/types";
+import type { PreservedMetaField } from "@acme/shared/app/types";
 import { toast } from "@acme/ui/toast";
 
 import type { UpdateRequestById } from "./types";
@@ -17,16 +19,7 @@ export const openRequestModal = async (params: {
   locationId?: number | null;
   eventId?: number | null;
   aoId?: number | null;
-  meta?: {
-    originalRegionId?: number;
-    originalAoId?: number;
-    originalLocationId?: number;
-    originalEventId?: number;
-    newRegionId?: number;
-    newAoId?: number;
-    newLocationId?: number;
-    newEventId?: number;
-  };
+  meta?: Partial<Record<PreservedMetaField, number>>;
   review?: {
     request: UpdateRequestById;
   };
@@ -77,10 +70,9 @@ export const openRequestModal = async (params: {
       break;
 
     // Update pane 3
-    case "move_event_to_new_location": // Move existing event here, Move Workout to New Location
+    case "move_event_to_new_location": // Move to a new AO (event menu), Move Workout to New
       openModal(ModalType.MOVE_EVENT_TO_NEW_LOCATION, {
         ...formValues,
-        ...updateLocation,
         ...updateLocation,
         requestType,
         currentValues,
@@ -191,7 +183,7 @@ export const openRequestModal = async (params: {
       });
       break;
 
-    case "move_event_to_new_ao": // Move existing event here, Move Workout to New AO
+    case "move_event_to_new_ao": // Move to a new AO
       if (!formValues.originalRegionId) {
         toastError(requestType, "Region id not found");
         return;
@@ -298,17 +290,18 @@ const toastError = (requestType: RequestType, message: string) => {
   toast.error(`${requestTypeToTitle(requestType)}: ${message}`);
 };
 
-// Zod schema for the overrides related to "meta" fields
-const MetaOverridesSchema = z.object({
-  originalRegionId: z.number().nullish(),
-  originalAoId: z.number().nullish(),
-  originalLocationId: z.number().nullish(),
-  originalEventId: z.number().nullish(),
-  newRegionId: z.number().nullish(),
-  newAoId: z.number().nullish(),
-  newLocationId: z.number().nullish(),
-  newEventId: z.number().nullish(),
-});
+// Zod schema for the overrides related to "meta" fields. Derived from
+// PRESERVED_META_FIELDS (the same list the writer in
+// packages/api/src/lib/update-request-handlers.ts persists into meta) so the
+// reader can't silently drift from what's actually stored.
+const metaOverridesShape = PRESERVED_META_FIELDS.reduce<
+  Partial<Record<PreservedMetaField, z.ZodOptional<z.ZodNullable<z.ZodNumber>>>>
+>((shape, field) => {
+  shape[field] = z.number().nullish();
+  return shape;
+}, {}) as Record<PreservedMetaField, z.ZodOptional<z.ZodNullable<z.ZodNumber>>>;
+
+const MetaOverridesSchema = z.object(metaOverridesShape);
 
 const getRequestOverrides = (request: UpdateRequestById) => {
   const parsedMeta = MetaOverridesSchema.safeParse(request.meta);
@@ -389,7 +382,6 @@ const getRequestOverrides = (request: UpdateRequestById) => {
           newRegionId: parsedMeta.data.newRegionId ?? undefined,
           newAoId: parsedMeta.data.newAoId ?? undefined,
           newLocationId: parsedMeta.data.newLocationId ?? undefined,
-          newEventId: parsedMeta.data.newEventId ?? undefined,
         }
       : {}),
   };
@@ -508,7 +500,6 @@ const getFormValues = async (params: {
     newRegionId: req?.newRegionId ?? undefined,
     newAoId: req?.newAoId ?? undefined,
     newLocationId: req?.newLocationId ?? undefined,
-    newEventId: req?.newEventId ?? undefined,
   };
 
   return {

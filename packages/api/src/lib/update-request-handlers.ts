@@ -15,6 +15,7 @@ import type {
   MoveEventToNewLocationType,
 } from "@acme/validators/request-schemas";
 import { eq, schema } from "@acme/db";
+import { PRESERVED_META_FIELDS } from "@acme/shared/app/types";
 import { RequestInsertSchema } from "@acme/validators";
 
 import type { Context } from "../shared";
@@ -23,17 +24,6 @@ import { logError, logInfo } from "../logger";
 import { createAO, updateAO } from "./ao-handlers";
 import { insertEvent, updateEvent, updateEventTypes } from "./event-handlers";
 import { insertLocation, updateLocation } from "./location-handlers";
-
-const PRESERVED_META_FIELDS = [
-  "originalRegionId",
-  "originalAoId",
-  "originalLocationId",
-  "originalEventId",
-  "newRegionId",
-  "newAoId",
-  "newLocationId",
-  "newEventId",
-] as const;
 
 /**
  * Copies the request's original/new id fields into meta, since some of them
@@ -45,7 +35,9 @@ const buildMeta = (req: Record<string, unknown>): UpdateRequestMeta => {
   for (const field of PRESERVED_META_FIELDS) {
     const val = req[field];
     if (val !== undefined && val !== null) {
-      meta[field] = val;
+      // req is typed loosely as Record<string, unknown> here, but every
+      // caller passes a Zod-validated request where these fields are numbers.
+      meta[field] = val as number;
     }
   }
   return meta;

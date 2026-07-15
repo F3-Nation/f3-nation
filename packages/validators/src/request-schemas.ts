@@ -63,15 +63,13 @@ export const RegionFields = z.object({
 
 export type RegionFieldsType = z.infer<typeof RegionFields>;
 
-// Base schema with common fields
+// Base schema with common fields.
 export const BaseSchema = RequestInsertSchema.pick({
   requestType: true,
   submittedBy: true,
-  reviewedBy: true,
   eventMeta: true,
 }).extend({
-  id: z.string(),
-  isReview: z.boolean().default(false),
+  id: z.uuid(),
   eventMeta: z.record(z.string(), z.unknown()).optional(),
   originalEventId: z.number().nullish(),
   originalLocationId: z.number().nullish(),
@@ -79,6 +77,24 @@ export const BaseSchema = RequestInsertSchema.pick({
   originalRegionId: z.number().positive("Original region ID is required"),
 });
 export type BaseSchemaType = z.infer<typeof BaseSchema>;
+
+// The org-id fields that drive editor-permission checks (checkRequest /
+// checkUpdatePermissions in packages/api). Shared so a refactor of one
+// consumer can't silently narrow away a field the other still reads —
+// fewer checked orgs means checkUpdatePermissions fails open, not closed.
+export type UpdateRequestOrgIdFields = Partial<
+  Pick<
+    BaseSchemaType,
+    | "originalEventId"
+    | "originalAoId"
+    | "originalLocationId"
+    | "originalRegionId"
+  >
+> & {
+  newAoId?: number | null;
+  newLocationId?: number | null;
+  newRegionId?: number | null;
+};
 
 // CREATE LOCATION AND EVENT (create_ao_and_location_and_event)
 

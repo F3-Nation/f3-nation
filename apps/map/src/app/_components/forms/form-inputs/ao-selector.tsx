@@ -2,6 +2,7 @@ import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 import { Controller, useFormContext } from "react-hook-form";
 
 import { orpc, useQuery } from "~/orpc/react";
+import { SelectorLoadError } from "./selector-load-error";
 
 interface AOSelectorProps {
   label?: string;
@@ -15,7 +16,6 @@ interface AOSelectorFormValues {
   originalAoId?: number | null;
   newAoId?: number | null;
   originalEventId?: number | null;
-  newEventId?: number | null;
 }
 
 /**
@@ -32,12 +32,17 @@ export function AOSelector<_T extends AOSelectorFormValues>({
   const form = useFormContext<AOSelectorFormValues>();
   const regionId = form.watch(regionFieldName);
 
-  const { data: results } = useQuery(
-    orpc.map.location.getAOsInRegion.queryOptions({
+  const {
+    data: results,
+    isError,
+    refetch,
+  } = useQuery({
+    ...orpc.map.location.getAOsInRegion.queryOptions({
       input: { regionId: regionId ?? -1 },
       enabled: regionId != null,
     }),
-  );
+    throwOnError: false,
+  });
 
   const aoOptions =
     results?.aos
@@ -57,15 +62,10 @@ export function AOSelector<_T extends AOSelectorFormValues>({
       }))
       .sort((a, b) => a.label.localeCompare(b.label)) ?? [];
 
-  // Determine which event field to clear based on the AO field
-  const getEventField = () => {
-    if (fieldName === "originalAoId") {
-      return "originalEventId" as const;
-    }
-    return "newEventId" as const;
-  };
-
-  const eventField = getEventField();
+  // The event field to clear when the AO changes. Selecting a destination AO
+  // ("newAoId") has no dependent event field: no request type picks an event
+  // under a destination AO
+  const eventField = fieldName === "originalAoId" ? "originalEventId" : null;
 
   return (
     <div className="flex-1 space-y-2">
@@ -89,15 +89,19 @@ export function AOSelector<_T extends AOSelectorFormValues>({
                 field.onChange(newValue);
 
                 // Clear dependent event field when AO changes
-                if (field.value !== newValue) {
+                if (field.value !== newValue && eventField) {
                   form.setValue(eventField, null);
                 }
               }}
               searchPlaceholder="Select AO"
             />
-            <p className="text-xs text-destructive">
-              {fieldState.error?.message?.toString()}
-            </p>
+            {isError ? (
+              <SelectorLoadError onRetry={() => void refetch()} />
+            ) : (
+              <p className="text-xs text-destructive">
+                {fieldState.error?.message?.toString()}
+              </p>
+            )}
           </>
         )}
       />

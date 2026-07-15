@@ -1,11 +1,12 @@
+import { useState } from "react";
 import Link from "next/link";
+import { ImageOff } from "lucide-react";
 import { useFormContext } from "react-hook-form";
 
 import { Input } from "@acme/ui/input";
 
 import { useRuntimeConfig } from "~/utils/runtime-config";
 import { DebouncedImage } from "../../debounced-image";
-import { noop } from "lodash";
 
 interface AODetailsFormValues {
   aoName?: string;
@@ -18,6 +19,7 @@ interface AODetailsFormValues {
 export const AODetailsForm = <_T extends AODetailsFormValues>() => {
   const form = useFormContext<AODetailsFormValues>();
   const aoLogo = form.watch("aoLogo");
+  const [imageFailed, setImageFailed] = useState(false);
 
   const { adminUrl } = useRuntimeConfig();
 
@@ -53,15 +55,23 @@ export const AODetailsForm = <_T extends AODetailsFormValues>() => {
             AO Logo
           </div>
           {aoLogo && (
-            <div className="flex justify-center">
+            <div className="flex flex-col items-center gap-1">
               <DebouncedImage
                 src={aoLogo}
                 alt="AO Logo"
-                onImageFail={noop}
-                onImageSuccess={noop}
+                onImageFail={() => setImageFailed(true)}
+                onImageSuccess={() => setImageFailed(false)}
                 width={96}
                 height={96}
               />
+              {imageFailed && (
+                <span
+                  className="inline-flex items-center gap-1 text-xs text-destructive"
+                  title="The stored logo URL couldn't be loaded"
+                >
+                  <ImageOff className="size-3.5" /> Unavailable
+                </span>
+              )}
             </div>
           )}
           <p className="text-xs text-muted-foreground">

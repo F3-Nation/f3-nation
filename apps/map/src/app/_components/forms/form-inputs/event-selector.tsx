@@ -6,10 +6,11 @@ import { dayOfWeekToShortDayOfWeek } from "@acme/shared/app/functions";
 import { orpc, useQuery } from "~/orpc/react";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 import { useOptions } from "~/utils/use-options";
+import { SelectorLoadError } from "./selector-load-error";
 
 interface EventSelectorProps {
   label?: string;
-  fieldName?: "originalEventId" | "newEventId";
+  fieldName?: "originalEventId";
   regionFieldName?: "originalRegionId" | "newRegionId";
   aoFieldName?: "originalAoId" | "newAoId";
 }
@@ -20,7 +21,6 @@ interface EventSelectorFormValues {
   originalAoId?: number | null;
   newAoId?: number | null;
   originalEventId?: number | null;
-  newEventId?: number | null;
 }
 
 /**
@@ -30,7 +30,7 @@ interface EventSelectorFormValues {
  */
 export function EventSelector({
   label = "Event to move:",
-  fieldName = "newEventId",
+  fieldName = "originalEventId",
   regionFieldName = "newRegionId",
   aoFieldName = "newAoId",
 }: EventSelectorProps) {
@@ -39,15 +39,20 @@ export function EventSelector({
   const aoId = form.watch(aoFieldName);
   const selectedEventId = form.watch(fieldName);
 
-  const { data: events } = useQuery(
-    orpc.event.all.queryOptions({
+  const {
+    data: events,
+    isError,
+    refetch,
+  } = useQuery({
+    ...orpc.event.all.queryOptions({
       input: {
         ...(aoId ? { aoIds: [aoId] } : {}),
         ...(regionId ? { regionIds: [regionId] } : {}),
       },
       enabled: regionId != null,
     }),
-  );
+    throwOnError: false,
+  });
 
   const eventOptions = useOptions(
     events?.events,
@@ -86,9 +91,13 @@ export function EventSelector({
               }}
               searchPlaceholder="Select Event"
             />
-            <p className="text-xs text-destructive">
-              {fieldState.error?.message?.toString()}
-            </p>
+            {isError ? (
+              <SelectorLoadError onRetry={() => void refetch()} />
+            ) : (
+              <p className="text-xs text-destructive">
+                {fieldState.error?.message?.toString()}
+              </p>
+            )}
           </>
         )}
       />

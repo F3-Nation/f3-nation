@@ -14,6 +14,7 @@ import { vi } from "vitest";
 // Use vi.hoisted to ensure mockLimit is available when vi.mock runs (mocks are hoisted)
 const mockLimit = vi.hoisted(() => vi.fn());
 const mockNotifyMapDataChange = vi.hoisted(() => vi.fn());
+const mockNotifyMapChangeRequest = vi.hoisted(() => vi.fn());
 
 vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   MemoryRatelimiter: vi.fn(function () {
@@ -23,6 +24,10 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
 
 vi.mock("../lib/webhook-events", () => ({
   notifyMapDataChange: mockNotifyMapDataChange,
+}));
+
+vi.mock("../services/map-request-notification", () => ({
+  notifyMapChangeRequest: mockNotifyMapChangeRequest,
 }));
 
 import { eq, schema } from "@acme/db";
@@ -55,6 +60,7 @@ describe("Request Router", () => {
       remaining: 9,
       reset: Date.now() + 60000,
     });
+    mockNotifyMapChangeRequest.mockResolvedValue(undefined);
   });
 
   afterAll(async () => {
@@ -510,6 +516,89 @@ describe("Request Router", () => {
       expect(savedRequest?.reviewedBy).toBeNull();
       expect(savedRequest?.reviewedAt).toBeNull();
     });
+
+    it("fires notifyMapChangeRequest to alert admins when a submission lands pending", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+      const location = await createTestLocation(ao.id);
+      if (!location) return;
+      const event = await createTestEvent(ao.id, location.id);
+      if (!event) return;
+
+      // Editor on an unrelated org has no permission on this region, so the
+      // request is recorded pending instead of applied.
+      const noPermSession = createEditorSession({
+        orgId: 99999,
+        orgName: "Other Org",
+      });
+      await mockAuthWithSession(noPermSession);
+
+      const client = createTestClient();
+      const result = await client.request.submitDeleteEventRequest({
+        id: crypto.randomUUID(),
+        requestType: "delete_event",
+        submittedBy: "editor@example.com",
+        originalEventId: event.id,
+        originalRegionId: region.id,
+      });
+      createdRequestIds.push(result.updateRequest.id);
+
+      expect(result.status).toBe("pending");
+      expect(mockNotifyMapChangeRequest).toHaveBeenCalledWith(
+        expect.objectContaining({ requestId: result.updateRequest.id }),
+      );
+    });
+
+    it("swallows a notifyMapChangeRequest failure instead of failing the submission", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+      const location = await createTestLocation(ao.id);
+      if (!location) return;
+      const event = await createTestEvent(ao.id, location.id);
+      if (!event) return;
+
+      const noPermSession = createEditorSession({
+        orgId: 99999,
+        orgName: "Other Org",
+      });
+      await mockAuthWithSession(noPermSession);
+
+      mockNotifyMapChangeRequest.mockRejectedValueOnce(
+        new Error("notification service unavailable"),
+      );
+
+      const client = createTestClient();
+      const result = await client.request.submitDeleteEventRequest({
+        id: crypto.randomUUID(),
+        requestType: "delete_event",
+        submittedBy: "editor@example.com",
+        originalEventId: event.id,
+        originalRegionId: region.id,
+      });
+      createdRequestIds.push(result.updateRequest.id);
+
+      expect(mockNotifyMapChangeRequest).toHaveBeenCalledWith(
+        expect.objectContaining({ requestId: result.updateRequest.id }),
+      );
+
+      // The submission itself must succeed as pending despite the failed notify
+      expect(result.status).toBe("pending");
+      const [savedRequest] = await db
+        .select()
+        .from(schema.updateRequests)
+        .where(eq(schema.updateRequests.id, result.updateRequest.id));
+      expect(savedRequest?.status).toBe("pending");
+    });
   });
 
   describe("approved request atomicity", () => {
@@ -753,6 +842,166 @@ describe("Request Router", () => {
         }),
       ).rejects.toThrow();
     });
+
+    it("hydrates the destination AO's name and default location onto the approved request row", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+      const sourceAo = await createTestAO(region.id);
+      if (!sourceAo) return;
+      const sourceLocation = await createTestLocation(sourceAo.id);
+      if (!sourceLocation) return;
+      const event = await createTestEvent(sourceAo.id, sourceLocation.id);
+      if (!event) return;
+
+      const destinationAo = await createTestAO(region.id);
+      if (!destinationAo) return;
+      const destinationLocation = await createTestLocation(destinationAo.id);
+      if (!destinationLocation) return;
+
+      // Give the destination AO a default location with address details
+      // distinct from anything the client submits, so a passing assertion
+      // can only mean hydrateDestinationAo's join actually ran.
+      await db
+        .update(schema.orgs)
+        .set({ defaultLocationId: destinationLocation.id })
+        .where(eq(schema.orgs.id, destinationAo.id));
+      await db
+        .update(schema.locations)
+        .set({
+          addressStreet: "999 Destination Ave",
+          addressCity: "Destination City",
+          addressState: "NC",
+          addressZip: "28999",
+        })
+        .where(eq(schema.locations.id, destinationLocation.id));
+
+      const client = createTestClient();
+      const result = await client.request.submitMoveEventToDifferentAoRequest({
+        id: crypto.randomUUID(),
+        requestType: "move_event_to_different_ao",
+        submittedBy: "admin@example.com",
+        originalEventId: event.id,
+        originalAoId: sourceAo.id,
+        originalRegionId: region.id,
+        newAoId: destinationAo.id,
+        // newLocationId is deliberately omitted — the map UI never sends it
+        // for this request type (see location-edit-buttons.tsx), relying on
+        // the backend to hydrate it from the destination AO's default
+        // location instead.
+      });
+      createdRequestIds.push(result.updateRequest.id ?? "");
+
+      expect(result.status).toBe("approved");
+
+      const [savedRequest] = await db
+        .select()
+        .from(schema.updateRequests)
+        .where(eq(schema.updateRequests.id, result.updateRequest.id ?? ""));
+
+      expect(savedRequest?.aoId).toBe(destinationAo.id);
+      expect(savedRequest?.aoName).toBe(destinationAo.name);
+      expect(savedRequest?.locationId).toBe(destinationLocation.id);
+      expect(savedRequest?.locationAddress).toBe("999 Destination Ave");
+      expect(savedRequest?.locationCity).toBe("Destination City");
+
+      // The webhook payload (and the map cache invalidation it drives) must
+      // point at the destination location too, not the source.
+      expect(mockNotifyMapDataChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "map.updated",
+          locationId: destinationLocation.id,
+          orgId: destinationAo.id,
+        }),
+      );
+    });
+  });
+
+  describe("submitMoveEventToNewLocationRequest", () => {
+    it("backfills the event's existing name, schedule, and event types onto the approved request row", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+      const originalLocation = await createTestLocation(ao.id);
+      if (!originalLocation) return;
+      const event = await createTestEvent(ao.id, originalLocation.id);
+      if (!event) return;
+
+      const [eventType] = await db
+        .insert(schema.eventTypes)
+        .values({
+          name: `Test Event Type ${uniqueId()}`,
+          eventCategory: "first_f",
+        })
+        .returning();
+      if (!eventType) return;
+      createdEventTypeIds.push(eventType.id);
+
+      // Give the event a distinguishing name/description the request never
+      // submits, plus an event type — move_event_to_new_location's schema has
+      // no event-field slots at all, so hydrateEventFields must copy these
+      // straight from the existing row.
+      await db
+        .update(schema.events)
+        .set({
+          name: "Original Beatdown Name",
+          description: "Original beatdown description",
+        })
+        .where(eq(schema.events.id, event.id));
+      await db.insert(schema.eventsXEventTypes).values({
+        eventId: event.id,
+        eventTypeId: eventType.id,
+      });
+
+      const client = createTestClient();
+      const result = await client.request.submitMoveEventToNewLocationRequest({
+        id: crypto.randomUUID(),
+        requestType: "move_event_to_new_location",
+        submittedBy: "admin@example.com",
+        originalEventId: event.id,
+        originalLocationId: originalLocation.id,
+        originalRegionId: region.id,
+        locationLat: 35.9,
+        locationLng: -81.1,
+        locationAddress: "42 New Location Way",
+        locationCity: "Newtown",
+        locationState: "NC",
+        locationZip: "28601",
+        locationCountry: "United States",
+      });
+      createdRequestIds.push(result.updateRequest.id ?? "");
+
+      expect(result.status).toBe("approved");
+
+      const [savedRequest] = await db
+        .select()
+        .from(schema.updateRequests)
+        .where(eq(schema.updateRequests.id, result.updateRequest.id ?? ""));
+      if (savedRequest?.locationId) {
+        createdLocationIds.push(savedRequest.locationId);
+      }
+
+      // The client never sent any of these — they must come from the
+      // existing event row.
+      expect(savedRequest?.eventName).toBe("Original Beatdown Name");
+      expect(savedRequest?.eventDescription).toBe(
+        "Original beatdown description",
+      );
+      expect(savedRequest?.eventDayOfWeek).toBe("monday");
+      expect(savedRequest?.eventStartTime).toBe("0530");
+      expect(savedRequest?.eventTypeIds).toEqual([eventType.id]);
+
+      // The location itself must be the newly created destination, not the
+      // original.
+      expect(savedRequest?.locationId).not.toBe(originalLocation.id);
+      expect(savedRequest?.locationAddress).toBe("42 New Location Way");
+    });
   });
 
   describe("validateSubmissionByAdmin", () => {
@@ -987,6 +1236,148 @@ describe("Request Router", () => {
       expect(mockNotifyMapDataChange).toHaveBeenCalledWith(
         expect.objectContaining({ type: "map.deleted" }),
       );
+    });
+  });
+
+  describe("submit*Request review path — permission gate parity with validateSubmissionByAdmin", () => {
+    it("throws UNAUTHORIZED instead of re-recording as pending when reviewing an existing row without permission on an affected org", async () => {
+      const admin = await createAdminSession();
+      await mockAuthWithSession(admin);
+
+      const originalRegion = await createTestRegion();
+      if (!originalRegion) return;
+      const newRegion = await createTestRegion();
+      if (!newRegion) return;
+      const ao = await createTestAO(originalRegion.id);
+      if (!ao) return;
+
+      const requestId = crypto.randomUUID();
+      await insertPendingRequest({
+        id: requestId,
+        regionId: newRegion.id,
+        requestType: "move_ao_to_different_region",
+      });
+
+      // Editor on the target region only, matching what the map's review UI
+      // (which only checks originalRegionId/newRegionId) would let through as
+      // "canEdit". The original region is also affected by this move, so the
+      // plain submit endpoint's Approve call must fail loudly instead of
+      // silently re-recording the request as pending and re-notifying admins.
+      const targetRegionSession = createEditorSession({
+        orgId: newRegion.id,
+        orgName: newRegion.name,
+      });
+      await mockAuthWithSession(targetRegionSession);
+
+      const client = createTestClient();
+      await expect(
+        client.request.submitMoveAOToDifferentRegionRequest({
+          id: requestId,
+          requestType: "move_ao_to_different_region",
+          submittedBy: "editor@example.com",
+          originalAoId: ao.id,
+          originalRegionId: originalRegion.id,
+          newRegionId: newRegion.id,
+        }),
+      ).rejects.toThrow(/ask an admin/i);
+
+      expect(mockNotifyMapDataChange).not.toHaveBeenCalled();
+
+      // The stored row must remain pending, not be silently re-recorded
+      const [row] = await db
+        .select()
+        .from(schema.updateRequests)
+        .where(eq(schema.updateRequests.id, requestId));
+      expect(row?.status).toBe("pending");
+    });
+
+    it("still applies an authorized reviewer's approval when reviewing an existing pending row via the plain submit endpoint", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+      const location = await createTestLocation(ao.id);
+      if (!location) return;
+      const event = await createTestEvent(ao.id, location.id);
+      if (!event) return;
+
+      const requestId = crypto.randomUUID();
+      await insertPendingRequest({
+        id: requestId,
+        regionId: region.id,
+        requestType: "delete_event",
+      });
+
+      const client = createTestClient();
+      const result = await client.request.submitDeleteEventRequest({
+        id: requestId,
+        requestType: "delete_event",
+        submittedBy: "submitter@example.com",
+        originalEventId: event.id,
+        originalRegionId: region.id,
+      });
+
+      expect(result.status).toBe("approved");
+      const [applied] = await db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.id, event.id));
+      expect(applied?.isActive).toBe(false);
+    });
+
+    it("throws UNAUTHORIZED rather than flipping an already-resolved request back to pending", async () => {
+      const admin = await createAdminSession();
+      await mockAuthWithSession(admin);
+
+      const region = await createTestRegion();
+      if (!region) return;
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+      const location = await createTestLocation(ao.id);
+      if (!location) return;
+      const event = await createTestEvent(ao.id, location.id);
+      if (!event) return;
+
+      const requestId = crypto.randomUUID();
+      const [seeded] = await db
+        .insert(schema.updateRequests)
+        .values({
+          id: requestId,
+          regionId: region.id,
+          requestType: "delete_event",
+          submittedBy: "submitter@example.com",
+          status: "approved",
+          reviewedBy: "admin@example.com",
+          reviewedAt: new Date().toISOString(),
+        })
+        .returning();
+      if (seeded) createdRequestIds.push(seeded.id);
+
+      const noPermSession = createEditorSession({
+        orgId: 99999,
+        orgName: "Other Org",
+      });
+      await mockAuthWithSession(noPermSession);
+
+      const client = createTestClient();
+      await expect(
+        client.request.submitDeleteEventRequest({
+          id: requestId,
+          requestType: "delete_event",
+          submittedBy: "editor@example.com",
+          originalEventId: event.id,
+          originalRegionId: region.id,
+        }),
+      ).rejects.toThrow(/ask an admin/i);
+
+      const [after] = await db
+        .select()
+        .from(schema.updateRequests)
+        .where(eq(schema.updateRequests.id, requestId));
+      expect(after?.status).toBe("approved");
     });
   });
 

@@ -102,7 +102,6 @@ export const DevLoadTestData = <_T extends DevLoadTestDataValues>() => {
 interface FormDebugValues {
   id: string;
   originalEventId?: string;
-  newEventId?: string;
 
   originalLocationId?: string;
   newLocationId?: string;
@@ -117,7 +116,6 @@ export const FormDebugData = <_T extends FormDebugValues>() => {
   const form = useFormContext<FormDebugValues>();
   const formId = form.watch("id");
   const formOriginalEventId = form.watch("originalEventId");
-  const formNewEventId = form.watch("newEventId");
 
   const formOriginalLocationId = form.watch("originalLocationId");
   const formNewLocationId = form.watch("newLocationId");
@@ -132,9 +130,6 @@ export const FormDebugData = <_T extends FormDebugValues>() => {
       <p className="text-sm text-muted-foreground">formId: {formId};</p>
       <p className="text-sm text-muted-foreground">
         originalEventId: {formOriginalEventId};
-      </p>
-      <p className="text-sm text-muted-foreground">
-        newEventId: {formNewEventId};
       </p>
       <p className="text-sm text-muted-foreground">
         originalLocationId: {formOriginalLocationId};

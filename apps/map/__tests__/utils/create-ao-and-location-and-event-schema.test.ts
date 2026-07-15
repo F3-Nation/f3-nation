@@ -36,10 +36,9 @@ describe("CreateAOAndLocationAndEventSchema – valid submissions", () => {
     });
   });
 
-  it("defaults isReview and locationCountry when omitted", () => {
+  it("defaults locationCountry when omitted", () => {
     const { locationCountry: _c, ...withoutCountry } = valid;
     const result = CreateAOAndLocationAndEventSchema.parse(withoutCountry);
-    expect(result.isReview).toBe(false);
     expect(result.locationCountry).toBe("United States");
   });
 
@@ -70,12 +69,6 @@ describe("CreateAOAndLocationAndEventSchema – valid submissions", () => {
       eventStartDate: "2026-07-01",
       locationAddress2: "Suite 200",
       locationDescription: "Back parking lot",
-    }));
-
-  it("accepts a review submission flagged with isReview", () =>
-    expectValid(CreateAOAndLocationAndEventSchema, {
-      ...valid,
-      isReview: true,
     }));
 });
 

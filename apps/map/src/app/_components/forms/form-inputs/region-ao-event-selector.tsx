@@ -9,7 +9,7 @@ interface RegionAOEventSelectorProps {
   eventLabel?: string;
   regionFieldName?: "originalRegionId" | "newRegionId";
   aoFieldName?: "originalAoId" | "newAoId";
-  eventFieldName?: "originalEventId" | "newEventId";
+  eventFieldName?: "originalEventId";
 }
 
 /**
@@ -24,7 +24,7 @@ export function RegionAOEventSelector({
   eventLabel = "Event to move:",
   regionFieldName = "newRegionId",
   aoFieldName = "newAoId",
-  eventFieldName = "newEventId",
+  eventFieldName = "originalEventId",
 }: RegionAOEventSelectorProps) {
   return (
     <>

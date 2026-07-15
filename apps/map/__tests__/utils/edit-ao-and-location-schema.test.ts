@@ -55,11 +55,6 @@ describe("EditAOAndLocationSchema – valid submission", () => {
     }
   });
 
-  it("defaults isReview when omitted", () => {
-    const result = EditAOAndLocationSchema.parse(valid);
-    expect(result.isReview).toBe(false);
-  });
-
   it("allows optional AO/location fields to be absent", () =>
     expectValid(EditAOAndLocationSchema, {
       ...base,

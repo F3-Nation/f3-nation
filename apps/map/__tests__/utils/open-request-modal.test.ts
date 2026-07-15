@@ -64,6 +64,7 @@ vi.mock("~/utils/store/modal", async (importOriginal) => {
 
 import { openRequestModal } from "~/utils/open-request-modal";
 import { ModalType } from "~/utils/store/modal";
+import type { UpdateRequestById } from "~/utils/types";
 
 // A location with everything downstream code reads, so the id guards pass.
 const LOCATION = {
@@ -235,6 +236,143 @@ describe("openRequestModal – legacy & unknown types", () => {
   it("throws for an unimplemented request type", async () => {
     await expect(run("not_a_real_type" as RequestType)).rejects.toThrow(
       "Not implemented",
+    );
+  });
+});
+
+// A review request that opens via `move_ao_to_new_location`, which has no id
+// guards of its own — so these cases isolate the `meta` parsing contract in
+// getRequestOverrides rather than an unrelated guard failure.
+const buildReviewRequest = (meta: unknown): UpdateRequestById => ({
+  id: "req-1",
+  token: "token-1",
+  regionId: 5,
+  submittedBy: "submitter@example.com",
+  status: "pending",
+  created: "2026-01-01T00:00:00.000Z",
+  updated: "2026-01-01T00:00:00.000Z",
+  requestType: "move_ao_to_new_location",
+  eventId: null,
+  eventTypeIds: null,
+  eventTag: null,
+  eventSeriesId: null,
+  eventIsSeries: null,
+  eventIsActive: null,
+  eventHighlight: null,
+  eventStartDate: null,
+  eventEndDate: null,
+  eventStartTime: null,
+  eventEndTime: null,
+  eventDayOfWeek: null,
+  eventName: null,
+  eventDescription: null,
+  eventRecurrencePattern: null,
+  eventRecurrenceInterval: null,
+  eventIndexWithinInterval: null,
+  eventMeta: null,
+  eventContactEmail: null,
+  locationName: null,
+  locationDescription: null,
+  locationAddress: null,
+  locationAddress2: null,
+  locationCity: null,
+  locationState: null,
+  locationZip: null,
+  locationCountry: null,
+  locationLat: null,
+  locationLng: null,
+  locationId: null,
+  locationContactEmail: null,
+  aoId: null,
+  aoName: null,
+  aoLogo: null,
+  aoWebsite: null,
+  submitterValidated: null,
+  reviewedBy: null,
+  reviewedAt: null,
+  meta,
+});
+
+const NO_OVERRIDE_IDS = {
+  originalRegionId: undefined,
+  originalAoId: undefined,
+  originalLocationId: undefined,
+  originalEventId: undefined,
+  newRegionId: undefined,
+  newAoId: undefined,
+  newLocationId: undefined,
+};
+
+describe("openRequestModal – review request meta override contract", () => {
+  it("opens the form with override ids absent and no toast when meta is null", async () => {
+    const request = buildReviewRequest(null);
+    await openRequestModal({
+      type: "move_ao_to_new_location",
+      review: { request },
+    });
+
+    expect(h.toastError).not.toHaveBeenCalled();
+    expect(h.openModal).toHaveBeenLastCalledWith(
+      ModalType.MOVE_AO_TO_NEW_LOCATION,
+      expect.objectContaining(NO_OVERRIDE_IDS),
+    );
+  });
+
+  it("toasts an error but still opens the form when meta is malformed", async () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const request = buildReviewRequest({ originalAoId: "30" });
+
+    await openRequestModal({
+      type: "move_ao_to_new_location",
+      review: { request },
+    });
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "map.request.meta_parse_failed",
+      { requestId: request.id },
+      expect.anything(),
+    );
+    expect(h.toastError).toHaveBeenCalledTimes(1);
+    // The malformed value is dropped entirely rather than partially applied.
+    expect(h.openModal).toHaveBeenLastCalledWith(
+      ModalType.MOVE_AO_TO_NEW_LOCATION,
+      expect.objectContaining(NO_OVERRIDE_IDS),
+    );
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("threads valid override ids from meta through to the openModal payload", async () => {
+    h.locationWorkout.mockResolvedValue({ location: LOCATION });
+    const request = buildReviewRequest({
+      originalRegionId: 5,
+      originalAoId: 30,
+      originalLocationId: 10,
+      originalEventId: 20,
+      newRegionId: 6,
+      newAoId: 31,
+      newLocationId: 11,
+    });
+
+    await openRequestModal({
+      type: "move_ao_to_new_location",
+      review: { request },
+    });
+
+    expect(h.toastError).not.toHaveBeenCalled();
+    expect(h.openModal).toHaveBeenLastCalledWith(
+      ModalType.MOVE_AO_TO_NEW_LOCATION,
+      expect.objectContaining({
+        originalRegionId: 5,
+        originalAoId: 30,
+        originalLocationId: 10,
+        originalEventId: 20,
+        newRegionId: 6,
+        newAoId: 31,
+        newLocationId: 11,
+      }),
     );
   });
 });

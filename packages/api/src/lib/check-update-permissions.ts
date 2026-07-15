@@ -2,18 +2,11 @@ import type { Session } from "@acme/auth";
 import type { AppDb } from "@acme/db/client";
 import { eq, inArray, schema } from "@acme/db";
 import { isTruthy, onlyUnique } from "@acme/shared/common/functions";
+import type { UpdateRequestOrgIdFields } from "@acme/validators/request-schemas";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 
-export interface CheckUpdatePermissionsInput {
-  originalEventId?: number | null;
-  originalAoId?: number | null;
-  newAoId?: number | null;
-  originalLocationId?: number | null;
-  newLocationId?: number | null;
-  originalRegionId?: number | null;
-  newRegionId?: number | null;
-}
+export type CheckUpdatePermissionsInput = UpdateRequestOrgIdFields;
 
 type RoleCheckResult = Awaited<ReturnType<typeof checkHasRoleOnOrg>>;
 
