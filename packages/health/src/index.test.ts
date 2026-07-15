@@ -102,7 +102,7 @@ describe("health contract schemas", () => {
     expect(parsed.severity).toBe("warning");
   });
 
-  it("captures thrown error message in details but does not expose stack traces", async () => {
+  it("normalizes thrown check errors without exposing exception messages or stack traces", async () => {
     const checks = await runChecks([
       {
         id: "throws-error",
@@ -119,13 +119,15 @@ describe("health contract schemas", () => {
       status: "down",
       severity: "critical",
       message: "Check failed",
-      details: { reason: "error", error: "db-password=super-secret" },
+      details: { reason: "error" },
     });
-    // The top-level message field must not contain raw error content.
-    expect(checks[0]?.message).not.toContain("super-secret");
-    // Stack traces must not appear — callers must not forward details verbatim to public clients.
+    // Raw exception messages and stack traces must not appear in the payload.
+    expect(JSON.stringify(checks[0]?.details)).not.toContain("super-secret");
     expect(
       (checks[0]?.details as { stack?: string } | undefined)?.stack,
+    ).toBeUndefined();
+    expect(
+      (checks[0]?.details as { error?: string } | undefined)?.error,
     ).toBeUndefined();
   });
 

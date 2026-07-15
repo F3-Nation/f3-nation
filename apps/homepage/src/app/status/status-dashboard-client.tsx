@@ -35,10 +35,14 @@ export function StatusDashboardClient() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const refreshMs = useMemo(
-    () => (data?.ttlSeconds ?? FALLBACK_TTL_SECONDS) * 1000,
-    [data?.ttlSeconds],
-  );
+  const refreshMs = useMemo(() => {
+    const ttl = data?.ttlSeconds;
+    const validTtl =
+      typeof ttl === "number" && Number.isFinite(ttl) && ttl > 0
+        ? ttl
+        : FALLBACK_TTL_SECONDS;
+    return validTtl * 1000;
+  }, [data?.ttlSeconds]);
 
   useEffect(() => {
     let isMounted = true;
@@ -52,6 +56,7 @@ export function StatusDashboardClient() {
         const response = await fetch(endpoint, {
           method: "GET",
           headers: { Accept: "application/json" },
+          cache: "no-store",
           signal: controller.signal,
         });
 

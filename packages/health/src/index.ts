@@ -106,7 +106,7 @@ export async function runChecks(specs: CheckSpec[]): Promise<HealthCheck[]> {
           ...(result.value.message ? { message: result.value.message } : {}),
           ...(result.value.details ? { details: result.value.details } : {}),
         } satisfies HealthCheck;
-      } catch (err: unknown) {
+      } catch {
         return {
           id: spec.id,
           status: "down",
@@ -115,7 +115,6 @@ export async function runChecks(specs: CheckSpec[]): Promise<HealthCheck[]> {
           message: "Check failed",
           details: {
             reason: "error",
-            error: err instanceof Error ? err.message : String(err),
           },
         } satisfies HealthCheck;
       }

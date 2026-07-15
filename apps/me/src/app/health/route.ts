@@ -32,7 +32,7 @@ async function checkUpstreamApi(): Promise<CheckRunnerResult> {
   } catch {
     return {
       status: "down",
-      message: `F3_API_BASE_URL is not a valid URL: ${apiBaseUrl}`,
+      message: "F3_API_BASE_URL is not a valid URL",
       details: { reason: "invalid_config" },
     };
   }
