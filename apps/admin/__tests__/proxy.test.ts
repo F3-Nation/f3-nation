@@ -23,7 +23,7 @@ class AuthError extends Error {
   }
 }
 
-vi.mock("@acme/sso", () => ({
+vi.mock("@f3nation/sso", () => ({
   verifyAccessToken: verifyAccessTokenMock,
   AuthError,
 }));

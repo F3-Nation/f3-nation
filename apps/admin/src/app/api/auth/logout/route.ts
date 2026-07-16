@@ -1,51 +1,43 @@
-import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { handleLogoutRoute } from "@f3nation/sso-next";
 
-import { REFRESH_TOKEN_COOKIE_NAME } from "~/lib/auth/constants";
-import { clearAuthCookies } from "~/lib/auth/cookies";
-import { getOAuthConfig, revokeToken } from "~/lib/auth/oauth";
+import {
+  ACCESS_TOKEN_COOKIE_NAME,
+  REFRESH_TOKEN_COOKIE_NAME,
+  OAUTH_CSRF_COOKIE_NAME,
+  OAUTH_CODE_VERIFIER_COOKIE_NAME,
+} from "~/lib/auth/constants";
+import { sso } from "~/lib/auth/oauth";
 
-function getLogoutUrl(): string {
-  const { authServerUrl } = getOAuthConfig();
-  const siteUrl = (
-    process.env.F3_ADMIN_BASE_URL ?? "http://localhost:3002"
-  ).replace(/\/+$/, "");
-  const postLogoutRedirectUri = `${siteUrl}/auth/sign-in?logged_out=true`;
+const COOKIE_NAMES = {
+  accessToken: ACCESS_TOKEN_COOKIE_NAME,
+  refreshToken: REFRESH_TOKEN_COOKIE_NAME,
+  oauthCsrf: OAUTH_CSRF_COOKIE_NAME,
+  oauthCodeVerifier: OAUTH_CODE_VERIFIER_COOKIE_NAME,
+};
 
-  return `${authServerUrl}/api/oauth/logout?post_logout_redirect_uri=${encodeURIComponent(
-    postLogoutRedirectUri,
-  )}`;
+function buildPostLogoutUri(): string {
+  const siteUrl = process.env.F3_ADMIN_BASE_URL ?? "http://localhost:3002";
+  return `${siteUrl.replace(/\/+$/, "")}/auth/sign-in?logged_out=true`;
 }
 
-async function revokeRefreshToken(): Promise<void> {
+async function getRefreshToken(): Promise<string | undefined> {
   const cookieStore = await cookies();
-  const refreshToken = cookieStore.get(REFRESH_TOKEN_COOKIE_NAME)?.value;
-  if (!refreshToken) return;
-
-  try {
-    await revokeToken(refreshToken);
-  } catch (error) {
-    console.warn("Failed to revoke admin SSO refresh token", error);
-  }
+  return cookieStore.get(COOKIE_NAMES.refreshToken)?.value;
 }
 
 export async function POST() {
-  await revokeRefreshToken();
-
-  const response = NextResponse.json({
-    ok: true,
-    redirectTo: getLogoutUrl(),
+  return handleLogoutRoute(getRefreshToken, {
+    adapter: sso,
+    cookieNames: COOKIE_NAMES,
+    postLogoutRedirectUri: buildPostLogoutUri(),
   });
-  clearAuthCookies(response);
-
-  return response;
 }
 
 export async function GET() {
-  await revokeRefreshToken();
-
-  const response = NextResponse.redirect(getLogoutUrl());
-  clearAuthCookies(response);
-
-  return response;
+  return handleLogoutRoute(getRefreshToken, {
+    adapter: sso,
+    cookieNames: COOKIE_NAMES,
+    postLogoutRedirectUri: buildPostLogoutUri(),
+  });
 }

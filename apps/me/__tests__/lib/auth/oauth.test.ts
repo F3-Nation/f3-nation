@@ -27,7 +27,7 @@ async function loadModuleWithEnv(envOverrides: {
 }) {
   vi.resetModules();
 
-  vi.doMock("@acme/sso", () => ({
+  vi.doMock("@f3nation/sso", () => ({
     AuthClient: AuthClientMock,
   }));
 

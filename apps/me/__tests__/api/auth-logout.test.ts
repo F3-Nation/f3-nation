@@ -4,16 +4,22 @@ const mockCookieStore = {
   get: vi.fn().mockReturnValue({ value: "refresh-token-value" }),
 };
 
+const ssoMock = vi.hoisted(() => ({
+  getOAuthConfig: vi.fn(() => ({
+    authServerUrl: "http://localhost:3002",
+    clientId: "c",
+    redirectUri: "http://r",
+  })),
+  revokeToken: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock("next/headers", () => ({
   cookies: vi.fn().mockResolvedValue(mockCookieStore),
 }));
 
 vi.mock("@/lib/auth/oauth", () => ({
-  getOAuthConfig: vi.fn(() => ({ authServerUrl: "http://localhost:3002" })),
-  revokeToken: vi.fn().mockResolvedValue(undefined),
+  sso: ssoMock,
 }));
-
-import { revokeToken } from "@/lib/auth/oauth";
 
 describe("Auth /logout route", () => {
   beforeEach(() => {
@@ -41,7 +47,7 @@ describe("Auth /logout route", () => {
     const { POST } = await import("@/app/api/auth/logout/route");
     await POST();
 
-    expect(revokeToken).toHaveBeenCalledWith("refresh-token-value");
+    expect(ssoMock.revokeToken).toHaveBeenCalledWith("refresh-token-value");
   });
 
   it("sets httpOnly on the cleared cookie", async () => {
@@ -67,13 +73,11 @@ describe("Auth /logout route", () => {
     const response = await POST();
 
     expect(response.status).toBe(200);
-    expect(revokeToken).not.toHaveBeenCalled();
+    expect(ssoMock.revokeToken).not.toHaveBeenCalled();
   });
 
   it("still clears cookies when revokeToken throws an Error", async () => {
-    vi.mocked(revokeToken).mockRejectedValueOnce(
-      new Error("revocation failed"),
-    );
+    ssoMock.revokeToken.mockRejectedValueOnce(new Error("revocation failed"));
 
     const { POST } = await import("@/app/api/auth/logout/route");
     const response = await POST();
@@ -82,7 +86,7 @@ describe("Auth /logout route", () => {
   });
 
   it("still clears cookies when revokeToken throws a non-Error", async () => {
-    vi.mocked(revokeToken).mockRejectedValueOnce("plain string error");
+    ssoMock.revokeToken.mockRejectedValueOnce("plain string error");
 
     const { POST } = await import("@/app/api/auth/logout/route");
     const response = await POST();

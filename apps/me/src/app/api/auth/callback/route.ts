@@ -1,8 +1,5 @@
-import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { isOAuthStateExpired, parseOAuthState } from "@acme/sso";
-import { exchangeCodeForToken, getUserInfo } from "@/lib/auth/oauth";
-import { safeReturnTo } from "@/lib/auth/validation";
+import { handleCallbackRoute } from "@f3nation/sso-next";
 import {
   ACCESS_TOKEN_COOKIE_NAME,
   REFRESH_TOKEN_COOKIE_NAME,
@@ -11,7 +8,15 @@ import {
   ACCESS_TOKEN_DEFAULT_MAX_AGE,
   REFRESH_TOKEN_MAX_AGE,
 } from "@/lib/auth/constants";
+import { sso } from "@/lib/auth/oauth";
 import { logError, logInfo, logWarn } from "@/lib/logging";
+
+const COOKIE_NAMES = {
+  accessToken: ACCESS_TOKEN_COOKIE_NAME,
+  refreshToken: REFRESH_TOKEN_COOKIE_NAME,
+  oauthCsrf: OAUTH_CSRF_COOKIE_NAME,
+  oauthCodeVerifier: OAUTH_CODE_VERIFIER_COOKIE_NAME,
+};
 
 function getPublicOrigin(): string {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
@@ -19,145 +24,52 @@ function getPublicOrigin(): string {
   return siteUrl.replace(/\/+$/, "");
 }
 
-function errorRedirect(baseUrl: string, error: string, returnTo?: string) {
-  const url = new URL("/", baseUrl);
-  url.searchParams.set("error", error);
-  if (returnTo) url.searchParams.set("redirect", returnTo);
-  return NextResponse.redirect(url.toString());
-}
-
 export async function GET(request: NextRequest) {
-  const { searchParams } = request.nextUrl;
-  const code = searchParams.get("code");
-  const stateParam = searchParams.get("state");
-  const errorParam = searchParams.get("error");
-  const baseUrl = getPublicOrigin();
+  const publicOrigin = getPublicOrigin();
 
-  if (errorParam) {
-    return errorRedirect(baseUrl, errorParam);
-  }
-
-  if (!code || !stateParam) {
-    return errorRedirect(baseUrl, "missing_params");
-  }
-
-  const state = parseOAuthState(stateParam);
-  if (!state) {
-    return errorRedirect(baseUrl, "invalid_state");
-  }
-
-  // Check timestamp (10 minute window)
-  if (isOAuthStateExpired(state, 600_000)) {
-    return errorRedirect(baseUrl, "expired_state");
-  }
-
-  // Validate CSRF token against cookie
-  const csrfCookie = request.cookies.get(OAUTH_CSRF_COOKIE_NAME)?.value;
-  if (!csrfCookie || csrfCookie !== state.csrfToken) {
-    return errorRedirect(baseUrl, "csrf_mismatch");
-  }
-
-  // Re-validate returnTo from state (defense-in-depth against tampered state)
-  const returnTo = safeReturnTo(state.returnTo);
-
-  // Validate PKCE code verifier cookie
-  const codeVerifier = request.cookies.get(
-    OAUTH_CODE_VERIFIER_COOKIE_NAME,
-  )?.value;
-  if (!codeVerifier) {
-    return errorRedirect(baseUrl, "missing_code_verifier", returnTo);
-  }
-
-  // Exchange code for tokens
-  let accessToken: string;
-  let refreshTokenValue: string | undefined;
-  let expiresIn: number | undefined;
-  try {
-    const tokens = await exchangeCodeForToken({ code, codeVerifier });
-    if (!tokens.accessToken) {
-      return errorRedirect(baseUrl, "token_exchange_failed", returnTo);
-    }
-    accessToken = tokens.accessToken;
-    refreshTokenValue = tokens.refreshToken;
-    expiresIn =
-      typeof tokens.expiresIn === "number" ? tokens.expiresIn : undefined;
-  } catch (err) {
-    logError(
-      "me.auth.callback.token_exchange_failed",
-      {
-        returnTo,
+  return handleCallbackRoute(request, {
+    adapter: {
+      exchangeCodeForToken: async (params) => {
+        try {
+          const tokens = await sso.exchangeCodeForToken(params);
+          logInfo("me.auth.callback.token_exchange_success", {});
+          return tokens;
+        } catch (err) {
+          logError("me.auth.callback.token_exchange_failed", {}, err);
+          throw err;
+        }
       },
-      err,
-    );
-    return errorRedirect(baseUrl, "token_exchange_failed", returnTo);
-  }
-
-  // Fetch user info — sub is the numeric user ID
-  let userInfo: { sub: number; email?: string; name?: string };
-  try {
-    userInfo = await getUserInfo(accessToken);
-  } catch (err) {
-    logError(
-      "me.auth.callback.userinfo_failed",
-      {
-        returnTo,
+      getUserInfo: async (accessToken) => {
+        try {
+          const user = await sso.getUserInfo(accessToken);
+          logInfo("me.auth.callback.userinfo_received", {
+            userSub: user.sub,
+            hasEmail: Boolean(user.email),
+          });
+          return user;
+        } catch (err) {
+          logError("me.auth.callback.userinfo_failed", {}, err);
+          throw err;
+        }
       },
-      err,
-    );
-    return errorRedirect(baseUrl, "userinfo_failed", returnTo);
-  }
-
-  logInfo("me.auth.callback.userinfo_received", {
-    userSub: userInfo.sub,
-    hasEmail: Boolean(userInfo.email),
-    returnTo,
+    },
+    cookieNames: COOKIE_NAMES,
+    publicOrigin,
+    errorPath: "/",
+    errorReturnToParam: "redirect",
+    defaultReturnTo: "/profile",
+    accessTokenMaxAge: ACCESS_TOKEN_DEFAULT_MAX_AGE,
+    refreshTokenMaxAge: REFRESH_TOKEN_MAX_AGE,
+    validateUser: (user, returnTo) => {
+      if (!user.email) {
+        logWarn("me.auth.callback.user_missing_email", {
+          userSub: user.sub,
+          returnTo,
+        });
+        return false;
+      }
+      logInfo("me.auth.callback.success", { userSub: user.sub, returnTo });
+      return true;
+    },
   });
-
-  if (!userInfo.email) {
-    logWarn("me.auth.callback.user_missing_email", {
-      userSub: userInfo.sub,
-      returnTo,
-    });
-    return errorRedirect(baseUrl, "user_not_found", returnTo);
-  }
-
-  const response = NextResponse.redirect(new URL(returnTo, baseUrl).toString());
-  const accessTokenMaxAge = expiresIn ?? ACCESS_TOKEN_DEFAULT_MAX_AGE;
-  const refreshTokenMaxAge = REFRESH_TOKEN_MAX_AGE;
-
-  response.cookies.set(ACCESS_TOKEN_COOKIE_NAME, accessToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: accessTokenMaxAge,
-  });
-
-  if (refreshTokenValue) {
-    response.cookies.set(REFRESH_TOKEN_COOKIE_NAME, refreshTokenValue, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: refreshTokenMaxAge,
-    });
-  }
-
-  // Clear OAuth flow cookies
-  const clearCookieOpts = {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax" as const,
-    path: "/",
-    maxAge: 0,
-  };
-  response.cookies.set(OAUTH_CSRF_COOKIE_NAME, "", clearCookieOpts);
-  response.cookies.set(OAUTH_CODE_VERIFIER_COOKIE_NAME, "", clearCookieOpts);
-
-  logInfo("me.auth.callback.success", {
-    userSub: userInfo.sub,
-    returnTo,
-  });
-
-  return response;
 }

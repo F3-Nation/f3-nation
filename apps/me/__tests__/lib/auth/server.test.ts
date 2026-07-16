@@ -16,8 +16,8 @@ vi.mock("next/navigation", () => ({
   redirect: redirectMock,
 }));
 
-vi.mock("@acme/sso", async () => {
-  const actual = await vi.importActual("@acme/sso");
+vi.mock("@f3nation/sso", async () => {
+  const actual = await vi.importActual("@f3nation/sso");
   return { ...actual, verifyAccessToken: verifyAccessTokenMock };
 });
 

@@ -1,18 +1,26 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NextRequest } from "next/server";
+import { createOAuthLoginFlowArtifacts } from "@f3nation/sso";
 
-vi.mock("@acme/sso", () => ({
-  parseOAuthState: vi.fn(),
-  isOAuthStateExpired: vi.fn(),
+// ---------------------------------------------------------------------------
+// Mocks
+// ---------------------------------------------------------------------------
+
+const ssoMock = vi.hoisted(() => ({
+  getOAuthConfig: vi.fn(() => ({
+    clientId: "test-client",
+    redirectUri: "https://me.f3nation.test/api/auth/callback",
+    authServerUrl: "https://auth.f3nation.test",
+  })),
+  getAuthorizationUrl: vi.fn(),
+  exchangeCodeForToken: vi.fn(),
+  getUserInfo: vi.fn(),
+  refreshToken: vi.fn(),
+  revokeToken: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/oauth", () => ({
-  exchangeCodeForToken: vi.fn(),
-  getUserInfo: vi.fn(),
-}));
-
-vi.mock("@/lib/auth/validation", () => ({
-  safeReturnTo: vi.fn(),
+  sso: ssoMock,
 }));
 
 vi.mock("@/lib/logging", () => ({
@@ -21,10 +29,11 @@ vi.mock("@/lib/logging", () => ({
   logWarn: vi.fn(),
 }));
 
-import { isOAuthStateExpired, parseOAuthState } from "@acme/sso";
-import { exchangeCodeForToken, getUserInfo } from "@/lib/auth/oauth";
-import { safeReturnTo } from "@/lib/auth/validation";
 import { logError, logInfo, logWarn } from "@/lib/logging";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 function makeRequest(url: string, cookieValues: Record<string, string> = {}) {
   return {
@@ -38,23 +47,34 @@ function makeRequest(url: string, cookieValues: Record<string, string> = {}) {
   } as unknown as NextRequest;
 }
 
+/** Build a request with a cryptographically valid CSRF token + state. */
+async function makeValidRequest(returnTo = "/profile") {
+  const artifacts = await createOAuthLoginFlowArtifacts({ returnTo });
+  const url = `https://me.f3nation.test/api/auth/callback?code=auth_code&state=${artifacts.state}`;
+  return {
+    request: makeRequest(url, {
+      oauth_csrf: artifacts.csrfToken,
+      oauth_code_verifier: artifacts.codeVerifier,
+    }),
+    ...artifacts,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
 describe("Auth /callback route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.resetModules();
     process.env.NEXT_PUBLIC_SITE_URL = "https://me.f3nation.test";
-    vi.mocked(parseOAuthState).mockReturnValue({
-      csrfToken: "csrf-token",
-      returnTo: "/profile",
-      timestamp: Date.now(),
-    });
-    vi.mocked(isOAuthStateExpired).mockReturnValue(false);
-    vi.mocked(safeReturnTo).mockReturnValue("/profile");
-    vi.mocked(exchangeCodeForToken).mockResolvedValue({
+    ssoMock.exchangeCodeForToken.mockResolvedValue({
       accessToken: "access-token",
       refreshToken: "refresh-token",
       expiresIn: 3600,
     });
-    vi.mocked(getUserInfo).mockResolvedValue({
+    ssoMock.getUserInfo.mockResolvedValue({
       sub: 42,
       email: "me@f3nation.test",
       name: "Pax",
@@ -69,11 +89,8 @@ describe("Auth /callback route", () => {
       ),
     );
 
-    expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe(
-      "https://me.f3nation.test/?error=access_denied",
-    );
-    expect(parseOAuthState).not.toHaveBeenCalled();
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toContain("error=access_denied");
   });
 
   it("handles missing params and invalid state", async () => {
@@ -82,160 +99,127 @@ describe("Auth /callback route", () => {
     const missing = await GET(
       makeRequest("https://me.f3nation.test/api/auth/callback?code=abc"),
     );
-    expect(missing.headers.get("location")).toBe(
-      "https://me.f3nation.test/?error=missing_params",
-    );
+    expect(missing.headers.get("location")).toContain("error=missing_params");
 
-    vi.mocked(parseOAuthState).mockReturnValueOnce(null);
     const invalidState = await GET(
       makeRequest(
-        "https://me.f3nation.test/api/auth/callback?code=abc&state=bad-state",
+        "https://me.f3nation.test/api/auth/callback?code=abc&state=not-base64!",
       ),
     );
-    expect(invalidState.headers.get("location")).toBe(
-      "https://me.f3nation.test/?error=invalid_state",
+    expect(invalidState.headers.get("location")).toContain(
+      "error=invalid_state",
     );
   });
 
-  it("rejects expired state and csrf mismatch", async () => {
+  it("rejects CSRF mismatch", async () => {
     const { GET } = await import("@/app/api/auth/callback/route");
+    const { state } = await makeValidRequest();
 
-    vi.mocked(isOAuthStateExpired).mockReturnValueOnce(true);
-    const expired = await GET(
+    const response = await GET(
       makeRequest(
-        "https://me.f3nation.test/api/auth/callback?code=abc&state=ok-state",
-      ),
-    );
-    expect(expired.headers.get("location")).toBe(
-      "https://me.f3nation.test/?error=expired_state",
-    );
-
-    const csrfMismatch = await GET(
-      makeRequest(
-        "https://me.f3nation.test/api/auth/callback?code=abc&state=ok-state",
+        `https://me.f3nation.test/api/auth/callback?code=abc&state=${state}`,
         { oauth_csrf: "wrong-token" },
       ),
     );
-    expect(csrfMismatch.headers.get("location")).toBe(
-      "https://me.f3nation.test/?error=csrf_mismatch",
+    expect(response.headers.get("location")).toContain("error=csrf_mismatch");
+  });
+
+  it("rejects missing code verifier", async () => {
+    const { GET } = await import("@/app/api/auth/callback/route");
+    const { state, csrfToken } = await makeValidRequest();
+
+    const response = await GET(
+      makeRequest(
+        `https://me.f3nation.test/api/auth/callback?code=abc&state=${state}`,
+        { oauth_csrf: csrfToken },
+        // no oauth_code_verifier cookie
+      ),
+    );
+    expect(response.headers.get("location")).toContain(
+      "error=missing_code_verifier",
     );
   });
 
-  it("handles missing code verifier and exchange/userinfo failures", async () => {
+  it("handles token exchange failure", async () => {
+    ssoMock.exchangeCodeForToken.mockRejectedValueOnce(new Error("boom"));
+
     const { GET } = await import("@/app/api/auth/callback/route");
+    const { request } = await makeValidRequest();
+    const response = await GET(request);
 
-    const missingVerifier = await GET(
-      makeRequest(
-        "https://me.f3nation.test/api/auth/callback?code=abc&state=ok-state",
-        { oauth_csrf: "csrf-token" },
-      ),
-    );
-    expect(missingVerifier.headers.get("location")).toBe(
-      "https://me.f3nation.test/?error=missing_code_verifier&redirect=%2Fprofile",
-    );
-
-    vi.mocked(exchangeCodeForToken).mockRejectedValueOnce(new Error("boom"));
-    const exchangeFailure = await GET(
-      makeRequest(
-        "https://me.f3nation.test/api/auth/callback?code=abc&state=ok-state",
-        { oauth_csrf: "csrf-token", oauth_code_verifier: "code-verifier" },
-      ),
-    );
-    expect(exchangeFailure.headers.get("location")).toBe(
-      "https://me.f3nation.test/?error=token_exchange_failed&redirect=%2Fprofile",
+    expect(response.headers.get("location")).toContain(
+      "error=token_exchange_failed",
     );
     expect(logError).toHaveBeenCalledWith(
       "me.auth.callback.token_exchange_failed",
-      { returnTo: "/profile" },
+      {},
       expect.any(Error),
-    );
-
-    vi.mocked(exchangeCodeForToken).mockResolvedValueOnce({ accessToken: "a" });
-    vi.mocked(getUserInfo).mockRejectedValueOnce(new Error("userinfo failed"));
-    const userInfoFailure = await GET(
-      makeRequest(
-        "https://me.f3nation.test/api/auth/callback?code=abc&state=ok-state",
-        { oauth_csrf: "csrf-token", oauth_code_verifier: "code-verifier" },
-      ),
-    );
-    expect(userInfoFailure.headers.get("location")).toBe(
-      "https://me.f3nation.test/?error=userinfo_failed&redirect=%2Fprofile",
     );
   });
 
-  it("rejects user without email", async () => {
-    vi.mocked(getUserInfo).mockResolvedValueOnce({ sub: 42 });
+  it("handles userinfo failure", async () => {
+    ssoMock.getUserInfo.mockRejectedValueOnce(new Error("userinfo failed"));
 
     const { GET } = await import("@/app/api/auth/callback/route");
-    const response = await GET(
-      makeRequest(
-        "https://me.f3nation.test/api/auth/callback?code=abc&state=ok-state",
-        { oauth_csrf: "csrf-token", oauth_code_verifier: "code-verifier" },
-      ),
-    );
+    const { request } = await makeValidRequest();
+    const response = await GET(request);
 
-    expect(response.headers.get("location")).toBe(
-      "https://me.f3nation.test/?error=user_not_found&redirect=%2Fprofile",
-    );
+    expect(response.headers.get("location")).toContain("error=userinfo_failed");
+  });
+
+  it("rejects user without email", async () => {
+    ssoMock.getUserInfo.mockResolvedValueOnce({ sub: 42 });
+
+    const { GET } = await import("@/app/api/auth/callback/route");
+    const { request } = await makeValidRequest();
+    const response = await GET(request);
+
+    expect(response.headers.get("location")).toContain("error=user_not_found");
     expect(logWarn).toHaveBeenCalledWith(
       "me.auth.callback.user_missing_email",
-      {
-        userSub: 42,
-        returnTo: "/profile",
-      },
+      expect.objectContaining({ userSub: 42 }),
     );
   });
 
   it("sets auth cookies and clears oauth flow cookies on success", async () => {
     const { GET } = await import("@/app/api/auth/callback/route");
-    const response = await GET(
-      makeRequest(
-        "https://me.f3nation.test/api/auth/callback?code=abc&state=ok-state",
-        { oauth_csrf: "csrf-token", oauth_code_verifier: "code-verifier" },
+    const { request } = await makeValidRequest("/profile");
+    const response = await GET(request);
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toContain("/profile");
+
+    const setCookies = response.headers.getSetCookie();
+    const names = setCookies.map((c) => c.split("=")[0]);
+    expect(names).toContain("access_token");
+    expect(names).toContain("refresh_token");
+    expect(
+      setCookies.some(
+        (c) => c.startsWith("oauth_csrf=") && c.includes("Max-Age=0"),
       ),
-    );
-
-    expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe(
-      "https://me.f3nation.test/profile",
-    );
-
-    const setCookieHeader = response.headers.get("set-cookie");
-    expect(setCookieHeader).toContain("access_token=access-token");
-    expect(setCookieHeader).toContain("refresh_token=refresh-token");
-    expect(setCookieHeader).toContain("oauth_csrf=");
-    expect(setCookieHeader).toContain("oauth_code_verifier=");
+    ).toBe(true);
     expect(logInfo).toHaveBeenCalledWith(
       "me.auth.callback.success",
-      expect.objectContaining({ userSub: 42, returnTo: "/profile" }),
+      expect.objectContaining({ userSub: 42 }),
     );
   });
 
   it("redirects when token exchange returns without accessToken", async () => {
-    vi.mocked(exchangeCodeForToken).mockResolvedValueOnce({ accessToken: "" });
+    ssoMock.exchangeCodeForToken.mockResolvedValueOnce({ accessToken: "" });
 
     const { GET } = await import("@/app/api/auth/callback/route");
-    const response = await GET(
-      makeRequest(
-        "https://me.f3nation.test/api/auth/callback?code=abc&state=ok-state",
-        { oauth_csrf: "csrf-token", oauth_code_verifier: "code-verifier" },
-      ),
-    );
+    const { request } = await makeValidRequest();
+    const response = await GET(request);
 
     expect(response.headers.get("location")).toContain("token_exchange_failed");
   });
 
   it("throws when NEXT_PUBLIC_SITE_URL is not configured", async () => {
-    const savedUrl = process.env.NEXT_PUBLIC_SITE_URL;
     delete process.env.NEXT_PUBLIC_SITE_URL;
 
-    try {
-      const { GET } = await import("@/app/api/auth/callback/route");
-      await expect(
-        GET(makeRequest("http://localhost/api/auth/callback?error=test")),
-      ).rejects.toThrow("NEXT_PUBLIC_SITE_URL is not configured");
-    } finally {
-      process.env.NEXT_PUBLIC_SITE_URL = savedUrl;
-    }
+    const { GET } = await import("@/app/api/auth/callback/route");
+    await expect(
+      GET(makeRequest("http://localhost/api/auth/callback?error=test")),
+    ).rejects.toThrow("NEXT_PUBLIC_SITE_URL is not configured");
   });
 });

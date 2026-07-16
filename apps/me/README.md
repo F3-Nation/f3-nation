@@ -17,19 +17,19 @@ F3 Nation users need a way to manage their own profile information without requi
 
 ## Tech Stack
 
-| Layer         | Choice                               |
-| ------------- | ------------------------------------ |
-| Framework     | Next.js 15 (App Router)              |
-| Styling       | TailwindCSS + shadcn/ui              |
-| Auth          | F3 SSO (`@acme/sso`) + token cookies |
-| API Backend   | F3 Nation API (api.f3nation.com)     |
-| Image Storage | Google Cloud Storage                 |
-| Hosting       | GCP Cloud Run (via GitHub Actions)   |
-| Node          | 24.x                                 |
+| Layer         | Choice                                   |
+| ------------- | ---------------------------------------- |
+| Framework     | Next.js 15 (App Router)                  |
+| Styling       | TailwindCSS + shadcn/ui                  |
+| Auth          | F3 SSO (`@f3nation/sso`) + token cookies |
+| API Backend   | F3 Nation API (api.f3nation.com)         |
+| Image Storage | Google Cloud Storage                     |
+| Hosting       | GCP Cloud Run (via GitHub Actions)       |
+| Node          | 24.x                                     |
 
 ## Auth Architecture
 
-F3 Me uses [`@acme/sso`](../../packages/sso/README.md) for OAuth and OpenID Connect interactions with the F3 auth provider. The shared package is responsible for:
+F3 Me uses [`@f3nation/sso`](../../packages/sso/README.md) for OAuth and OpenID Connect interactions with the F3 auth provider. The shared package is responsible for:
 
 - Building the authorization URL
 - Exchanging the authorization code for tokens
@@ -40,13 +40,13 @@ F3 Me stores the OAuth access token and refresh token in `httpOnly` cookies and 
 
 Current auth flow:
 
-1. `/api/auth/login` generates CSRF + PKCE values, stores short-lived OAuth cookies, and redirects using `@acme/sso`.
-2. `/api/auth/callback` validates state and PKCE, exchanges the code via `@acme/sso`, validates the user via `userinfo`, and stores `access_token` and `refresh_token` cookies.
+1. `/api/auth/login` generates CSRF + PKCE values, stores short-lived OAuth cookies, and redirects using `@f3nation/sso`.
+2. `/api/auth/callback` validates state and PKCE, exchanges the code via `@f3nation/sso`, validates the user via `userinfo`, and stores `access_token` and `refresh_token` cookies.
 3. Middleware refreshes the access token when needed using the refresh token.
 4. Server-side routes call the F3 API with `Authorization: Bearer <access_token>`.
 5. `/api/auth/logout` revokes the refresh token, clears auth cookies, and sends the browser through provider logout.
 
-This is aligned with the generic `@acme/sso` integration model: the shared package handles OAuth, while the app owns cookie storage and request/session plumbing.
+This is aligned with the generic `@f3nation/sso` integration model: the shared package handles OAuth, while the app owns cookie storage and request/session plumbing.
 
 ## Project Structure
 
@@ -273,7 +273,7 @@ This requires access to the auth provider admin. The project owner handles this.
 
 ## Security Notes
 
-- `@acme/sso` is used for OAuth operations only; Next.js responses, redirects, and cookie/session handling remain app-owned.
+- `@f3nation/sso` is used for OAuth operations only; Next.js responses, redirects, and cookie/session handling remain app-owned.
 - The app stores `access_token` and `refresh_token` in `httpOnly` cookies and never exposes them to client-side JavaScript.
 - Middleware refreshes expired access tokens using the refresh token before protected requests continue.
 - Profile updates are authorized using the authenticated user's OAuth access token; users can only edit their own profile.

@@ -1,14 +1,7 @@
-import { AuthClient } from "@acme/sso";
-import type {
-  AuthClientConfig,
-  AuthTokens,
-  AuthUser,
-  OAuthClient,
-} from "@acme/sso";
-
+import { createSsoAdapter } from "@f3nation/sso-next";
 import { env } from "@/env";
 
-function buildAuthConfig(): AuthClientConfig {
+export const sso = createSsoAdapter(() => {
   const authServerUrl = env.AUTH_PROVIDER_URL;
   if (env.NODE_ENV === "production" && !authServerUrl.startsWith("https://")) {
     throw new Error("AUTH_PROVIDER_URL must use HTTPS in production");
@@ -19,47 +12,17 @@ function buildAuthConfig(): AuthClientConfig {
     redirectUri: env.OAUTH_REDIRECT_URI,
     authServerUrl,
   };
-}
+});
 
-let _authClient: AuthClient | null = null;
-function getAuthClient(): AuthClient {
-  _authClient ??= new AuthClient(buildAuthConfig());
-  return _authClient;
-}
-
-export function getOAuthConfig(): OAuthClient {
-  return getAuthClient().getOAuthConfig();
-}
-
-export function getAuthorizationUrl(params: {
-  scope?: string;
-  state?: string;
-  codeChallenge?: string;
-  codeChallengeMethod?: string;
-}): string {
-  return getAuthClient().getAuthorizationUrl(params);
-}
-
-export async function exchangeCodeForToken(params: {
-  code: string;
-  codeVerifier: string;
-}): Promise<AuthTokens> {
-  return getAuthClient().exchangeCodeForToken({
-    code: params.code,
-    codeVerifier: params.codeVerifier,
-  });
-}
-
-export async function getUserInfo(accessToken: string): Promise<AuthUser> {
-  return getAuthClient().getUserInfo(accessToken);
-}
-
-export async function refreshToken(params: {
-  refreshToken: string;
-}): Promise<AuthTokens> {
-  return getAuthClient().refreshToken({ refreshToken: params.refreshToken });
-}
-
-export async function revokeToken(token: string): Promise<void> {
-  return getAuthClient().revokeToken(token);
-}
+// Re-export individual helpers for files that import them by name.
+export const getOAuthConfig = () => sso.getOAuthConfig();
+export const getAuthorizationUrl = (
+  p: Parameters<typeof sso.getAuthorizationUrl>[0],
+) => sso.getAuthorizationUrl(p);
+export const exchangeCodeForToken = (
+  p: Parameters<typeof sso.exchangeCodeForToken>[0],
+) => sso.exchangeCodeForToken(p);
+export const getUserInfo = (token: string) => sso.getUserInfo(token);
+export const refreshToken = (p: Parameters<typeof sso.refreshToken>[0]) =>
+  sso.refreshToken(p);
+export const revokeToken = (token: string) => sso.revokeToken(token);

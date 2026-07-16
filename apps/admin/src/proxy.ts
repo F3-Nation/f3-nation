@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { verifyAccessToken, AuthError } from "@acme/sso";
+import { verifyAccessToken, AuthError } from "@f3nation/sso";
 
 import { routes } from "@acme/shared/app/constants";
 
