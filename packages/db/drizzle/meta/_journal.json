@@ -120,6 +120,13 @@
       "when": 1783683195965,
       "tag": "0016_add_achievement_award_meta",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1784170328845,
+      "tag": "0017_add_oauth_public_clients",
+      "breakpoints": true
     }
   ]
 }

@@ -89,7 +89,7 @@ export async function createAuthorizationCode(params: {
 export async function exchangeAuthorizationCode(params: {
   code: string;
   clientId: string;
-  clientSecret: string;
+  clientSecret?: string;
   redirectUri: string;
   codeVerifier?: string;
 }) {
@@ -107,13 +107,23 @@ export async function exchangeAuthorizationCode(params: {
   if (authCode.redirectUri !== params.redirectUri)
     return { error: "invalid_grant" as const };
 
-  // Validate client secret (compare hash)
+  // Validate client authentication.
+  // Confidential clients (default) must present the client secret.
+  // Public clients (RFC 8252 native/mobile apps, is_public = true) cannot
+  // keep a secret confidential, so they authenticate with PKCE alone —
+  // which is enforced unconditionally below for all client types.
   const client = await getClient(params.clientId);
   if (!client) return { error: "invalid_client" as const };
-  if (
-    !constantTimeEqual(client.clientSecretHash, hashSecret(params.clientSecret))
-  )
-    return { error: "invalid_client" as const };
+  if (!client.isPublic) {
+    if (!params.clientSecret) return { error: "invalid_client" as const };
+    if (
+      !constantTimeEqual(
+        client.clientSecretHash,
+        hashSecret(params.clientSecret),
+      )
+    )
+      return { error: "invalid_client" as const };
+  }
 
   // PKCE is required — reject codes that have no challenge stored (e.g. issued
   // before enforcement was in place) so there is no bypass window.
@@ -174,15 +184,24 @@ export async function exchangeAuthorizationCode(params: {
 export async function exchangeRefreshToken(params: {
   refreshToken: string;
   clientId: string;
-  clientSecret: string;
+  clientSecret?: string;
 }) {
-  // Validate client
+  // Validate client. Public clients skip the secret check (see
+  // exchangeAuthorizationCode); their refresh grant is protected by
+  // possession of the (single-use, rotated-below) refresh token itself,
+  // per RFC 6749 §6 + RFC 8252 §8.2 guidance for native apps.
   const client = await getClient(params.clientId);
   if (!client) return { error: "invalid_client" as const };
-  if (
-    !constantTimeEqual(client.clientSecretHash, hashSecret(params.clientSecret))
-  )
-    return { error: "invalid_client" as const };
+  if (!client.isPublic) {
+    if (!params.clientSecret) return { error: "invalid_client" as const };
+    if (
+      !constantTimeEqual(
+        client.clientSecretHash,
+        hashSecret(params.clientSecret),
+      )
+    )
+      return { error: "invalid_client" as const };
+  }
 
   // Find refresh token
   const [existing] = await db

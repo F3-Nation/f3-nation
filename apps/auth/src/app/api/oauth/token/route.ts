@@ -50,7 +50,10 @@ export async function POST(request: NextRequest) {
     const redirectUri = formData.get("redirect_uri") as string | null;
     const codeVerifier = formData.get("code_verifier") as string | null;
 
-    if (!code || !redirectUri || !resolvedClientSecret) {
+    // client_secret is intentionally not required here: public clients
+    // (is_public = true) authenticate with PKCE alone. Whether a secret is
+    // required for this client is decided in exchangeAuthorizationCode.
+    if (!code || !redirectUri) {
       return NextResponse.json(
         { error: "invalid_request" },
         { status: 400, headers: corsHeaders },
@@ -60,7 +63,7 @@ export async function POST(request: NextRequest) {
     const result = await exchangeAuthorizationCode({
       code,
       clientId: resolvedClientId,
-      clientSecret: resolvedClientSecret,
+      clientSecret: resolvedClientSecret ?? undefined,
       redirectUri,
       codeVerifier: codeVerifier ?? undefined,
     });
@@ -78,7 +81,7 @@ export async function POST(request: NextRequest) {
   if (grantType === "refresh_token") {
     const refreshToken = formData.get("refresh_token") as string | null;
 
-    if (!refreshToken || !resolvedClientSecret) {
+    if (!refreshToken) {
       return NextResponse.json(
         { error: "invalid_request" },
         { status: 400, headers: corsHeaders },
@@ -88,7 +91,7 @@ export async function POST(request: NextRequest) {
     const result = await exchangeRefreshToken({
       refreshToken,
       clientId: resolvedClientId,
-      clientSecret: resolvedClientSecret,
+      clientSecret: resolvedClientSecret ?? undefined,
     });
 
     if ("error" in result) {

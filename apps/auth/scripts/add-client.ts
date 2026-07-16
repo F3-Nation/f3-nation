@@ -50,14 +50,24 @@ function isValidClientId(id: string): boolean {
   return CLIENT_ID_REGEX.test(id) && id.length >= 3;
 }
 
-function isValidRedirectUri(uri: string): boolean {
+function isValidRedirectUri(uri: string, isPublic: boolean): boolean {
   try {
     const parsed = new URL(uri);
-    return (
+    if (
       parsed.protocol === "https:" ||
       parsed.hostname === "localhost" ||
       parsed.hostname === "127.0.0.1"
-    );
+    ) {
+      return true;
+    }
+    // Public clients (native apps) may register a private-use / custom
+    // scheme redirect, e.g. com.example.app:/oauth2redirect (RFC 8252 §7.1).
+    // Reverse-domain style is enforced loosely: scheme must contain a dot.
+    if (isPublic) {
+      const scheme = parsed.protocol.replace(/:$/, "");
+      return scheme.includes(".");
+    }
+    return false;
   } catch {
     return false;
   }
@@ -141,6 +151,7 @@ async function main() {
     console.log(`  Origin:        ${existing.allowedOrigin}`);
     console.log(`  Scopes:        ${existing.scopes}`);
     console.log(`  Active:        ${existing.isActive}`);
+    console.log(`  Public:        ${existing.isPublic}`);
     console.log();
 
     if (!(await confirm("Update this client and regenerate secret?"))) {
@@ -153,17 +164,28 @@ async function main() {
   let redirectUris: string[];
   let allowedOrigin: string;
   let scopes: string;
+  let isPublic: boolean;
 
   if (isUpdate && existing) {
     clientId = existing.id;
     redirectUris = JSON.parse(existing.redirectUris) as string[];
     allowedOrigin = existing.allowedOrigin;
     scopes = existing.scopes ?? "openid profile email";
+    isPublic = existing.isPublic;
 
     // Allow editing
     const newUris = await ask(`Redirect URIs [${redirectUris.join(", ")}]: `);
     if (newUris.trim()) {
       redirectUris = newUris.split(",").map((u) => u.trim());
+      for (const uri of redirectUris) {
+        if (!isValidRedirectUri(uri, isPublic)) {
+          console.error(
+            `Invalid redirect URI: ${uri}. Must be HTTPS or localhost` +
+              (isPublic ? " or a custom scheme (public client)." : "."),
+          );
+          process.exit(1);
+        }
+      }
     }
 
     const newOrigin = await ask(`Allowed origin [${allowedOrigin}]: `);
@@ -199,6 +221,11 @@ async function main() {
       clientId = crypto.randomBytes(16).toString("hex");
     }
 
+    isPublic = await confirm(
+      "Public client? (native/mobile app that cannot keep a client_secret; " +
+        "token exchange uses PKCE only)",
+    );
+
     const rawUris = await ask("Redirect URIs (comma-separated): ");
     redirectUris = rawUris
       .split(",")
@@ -209,9 +236,12 @@ async function main() {
       process.exit(1);
     }
     for (const uri of redirectUris) {
-      if (!isValidRedirectUri(uri)) {
+      if (!isValidRedirectUri(uri, isPublic)) {
         console.error(
-          `Invalid redirect URI: ${uri}. Must be HTTPS or localhost.`,
+          `Invalid redirect URI: ${uri}. Must be HTTPS or localhost` +
+            (isPublic
+              ? " or a custom scheme like com.example.app:/callback (public client)."
+              : "."),
         );
         process.exit(1);
       }
@@ -228,11 +258,13 @@ async function main() {
     scopes = rawScopes.trim() || "openid profile email";
   }
 
-  // Generate new secret and hash it
+  // Generate new secret and hash it. Public clients get a random unusable
+  // hash (never revealed): the column is NOT NULL, but token exchange for
+  // public clients never consults it — they authenticate via PKCE.
   const clientSecret = crypto.randomBytes(32).toString("base64url");
   const clientSecretHash = crypto
     .createHash("sha256")
-    .update(clientSecret)
+    .update(isPublic ? crypto.randomBytes(32).toString("base64url") : clientSecret)
     .digest("hex");
 
   // Review
@@ -242,6 +274,7 @@ async function main() {
   console.log(`  Redirect URIs: ${JSON.stringify(redirectUris)}`);
   console.log(`  Origin:        ${allowedOrigin}`);
   console.log(`  Scopes:        ${scopes}`);
+  console.log(`  Public:        ${isPublic}`);
   console.log();
 
   if (!(await confirm("Save this client?"))) {
@@ -256,6 +289,7 @@ async function main() {
         redirectUris: JSON.stringify(redirectUris),
         allowedOrigin,
         scopes,
+        isPublic,
       })
       .where(eq(oauthClients.id, clientId));
   } else {
@@ -266,13 +300,21 @@ async function main() {
       redirectUris: JSON.stringify(redirectUris),
       allowedOrigin,
       scopes,
+      isPublic,
     });
   }
 
   console.log("\n✅ Client saved successfully!\n");
   console.log(`  Client ID:     ${clientId}`);
-  console.log(`  Client Secret: ${clientSecret}`);
-  console.log("\n⚠️  Save the secret now — it cannot be retrieved later.\n");
+  if (isPublic) {
+    console.log("  Client Secret: (none — public client, PKCE only)");
+  } else {
+    console.log(`  Client Secret: ${clientSecret}`);
+    console.log(
+      "\n⚠️  Save the secret now — it cannot be retrieved later.",
+    );
+  }
+  console.log();
 
   rl.close();
   await sql.end();
