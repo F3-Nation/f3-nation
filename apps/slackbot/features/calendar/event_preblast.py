@@ -534,6 +534,13 @@ def handle_event_preblast_edit(
 
     if event is None:
         logger.error(f"Event instance {event_instance_id} not found for preblast edit")
+        update_submission_wait_view(
+            client=client,
+            title="Error",
+            text=f"Event instance not found and may have been deleted.",
+            level=constants.AlertLevel.ERROR,
+            logger=logger,
+        )
         return
 
     # Slack-only transforms
