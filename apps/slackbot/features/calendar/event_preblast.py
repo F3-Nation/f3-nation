@@ -19,6 +19,8 @@ from dataclasses import dataclass
 from logging import Logger
 from typing import Any
 
+from slack_sdk.models.views import View
+
 from f3_data_models.models import Attendance, AttendanceType, EventInstance, Org
 from slack_sdk.errors import SlackApiError
 from slack_sdk.web import WebClient
@@ -41,7 +43,7 @@ from infrastructure.api_client import (
 )
 from utilities import constants
 from utilities.bot_logger import post_bot_log
-from utilities.builders import add_loading_form
+from utilities.builders import add_loading_form, update_submission_wait_view
 from utilities.database.orm import SlackSettings
 from utilities.database.special_queries import event_attendance_query, get_admin_users, get_aoq_users
 from utilities.helper_functions import (
@@ -458,32 +460,22 @@ def _build_and_show_preblast_form(
     svc = _build_preblast_service()
     event_type_svc = _build_event_type_service()
 
-    event_types: list[PreblastEventTypeData] = []
-    try:
-        raw_types = event_type_svc.get_all_event_types_for_org(org_id)
-        event_types = [PreblastEventTypeData(id=t.id, event_category=t.event_category) for t in raw_types]
-    except Exception as e:
-        logger.exception(f"Failed to load event types for form: {e}")
+    raw_types = event_type_svc.get_all_event_types_for_org(org_id)
+    event_types = [PreblastEventTypeData(id=t.id, event_category=t.event_category) for t in raw_types]
 
-    locations: list[dict[str, Any]] = []
-    try:
-        from application.location.service import LocationService
-        from infrastructure.api_client import get_api_location_repository
-        loc_svc = LocationService(repository=get_api_location_repository())
-        location_data = loc_svc.get_org_locations(org_id)
-        locations = [{"id": loc.id, "name": get_location_display_name(loc)} for loc in location_data]
-    except Exception as e:
-        logger.exception(f"Failed to load locations for form: {e}")
+    from application.location.service import LocationService
+    from infrastructure.api_client import get_api_location_repository
 
-    event_tags_list: list[dict[str, Any]] = []
-    try:
-        from application.event_tag.service import EventTagService
-        from infrastructure.api_client import get_api_event_tag_repository
-        tag_svc = EventTagService(repository=get_api_event_tag_repository())
-        tag_data = tag_svc.get_all_tags_for_org(org_id)
-        event_tags_list = [{"id": tag.id, "name": tag.name} for tag in tag_data]
-    except Exception as e:
-        logger.exception(f"Failed to load event tags for form: {e}")
+    loc_svc = LocationService(repository=get_api_location_repository())
+    location_data = loc_svc.get_org_locations(org_id)
+    locations = [{"id": loc.id, "name": get_location_display_name(loc)} for loc in location_data]
+
+    from application.event_tag.service import EventTagService
+    from infrastructure.api_client import get_api_event_tag_repository
+
+    tag_svc = EventTagService(repository=get_api_event_tag_repository())
+    tag_data = tag_svc.get_all_tags_for_org(org_id)
+    event_tags_list = [{"id": tag.id, "name": tag.name} for tag in tag_data]
 
     title_text = "Edit Event Preblast"
     submit_button_text = "Update"
@@ -656,6 +648,15 @@ def handle_event_preblast_edit(
             event_instance_id,
             repost=repost,
         )
+    
+    else:
+        update_submission_wait_view(
+            client=client,
+            title="Complete!",
+            text="Preblast saved successfully!",
+            level=constants.AlertLevel.SUCCESS,
+            logger=logger,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -705,6 +706,7 @@ def send_preblast(
     Uses ``PreblastService.decide_post_mode()`` and ``persist_posted_preblast()``
     to handle all post-mode scenarios.
     """
+    outcome = "success" # used for logging and user feedback
     slack_user_id = safe_get(body, "user", "id") or safe_get(body, "user_id")
     preblast_info = build_preblast_info(body, client, logger, context, region_record, event_instance_id)
     q_attendance = next(
@@ -809,9 +811,11 @@ def send_preblast(
                 channel_id=desired_channel,
                 existing_event=event,
             )
+            event.preblast_ts = ts
         except Exception as e:
             logger.error(f"Error posting preblast for event {event_instance_id}: {e}")
             action_text = "post_failed"
+            outcome = "error"
     elif decision.mode == PostMode.UPDATE_EXISTING:
         posted_channel = decision.posted_channel_id or desired_channel
         try:
@@ -829,21 +833,34 @@ def send_preblast(
             action_text = "updated"
         except Exception as e:
             logger.error(f"Error updating preblast for event {event_instance_id}: {e}")
-            action_text = "update_failed"
+            action_text = f"update failed"
+            outcome = "error"
 
     log_msg = (
         f":mega: Preblast {action_text} for *{event.name}* "
         f"on *{event.start_date}* by <@{slack_user_id or 'app'}>"
     )
+    user_msg = f"Preblast {action_text}"
+    if outcome == "success":
+        user_msg += f" successfully!"
     if desired_channel and event.preblast_ts:
         log_msg += (
             f" <slack://channel?team={region_record.team_id}"
             f"&id={desired_channel}&ts={event.preblast_ts}|Link>\n"
         )
+        user_msg += f" <slack://channel?team={region_record.team_id}&id={desired_channel}&ts={event.preblast_ts}| Link>"
     post_bot_log(
         client=client,
         region_record=region_record,
         text=log_msg,
+        logger=logger,
+    )
+
+    update_submission_wait_view(
+        client=client,
+        title="Complete!" if outcome == "success" else "Error",
+        text=user_msg,
+        level=constants.AlertLevel.SUCCESS if outcome == "success" else constants.AlertLevel.ERROR,
         logger=logger,
     )
 

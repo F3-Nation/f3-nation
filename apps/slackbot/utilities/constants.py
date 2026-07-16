@@ -1,6 +1,7 @@
 import os
 
 import dotenv
+from enum import StrEnum
 
 dotenv.load_dotenv()
 
@@ -279,3 +280,10 @@ ACHIEVEMENTS_ALPHA_TESTING_ORG_IDS = [
     int(org_id) for org_id in os.environ.get("ACHIEVEMENTS_ALPHA_TESTING_ORG_IDS", "").split(",") if org_id
 ]
 ACHIEVEMENT_AWARD_HOUR_CST = int(os.environ.get("ACHIEVEMENT_AWARD_HOUR_CST", 9))
+
+class AlertLevel(StrEnum):
+    DEFAULT = "default"
+    INFO = "info"
+    SUCCESS = "success"
+    WARNING = "warning"
+    ERROR = "error"
