@@ -6,11 +6,12 @@ from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
 
+from application.attendance import HC_TYPE_ID, Q_TYPE_ID, AttendanceData
 from application.event_instance import EventInstanceData
-from application.attendance import AttendanceData, HC_TYPE_ID, Q_TYPE_ID
 from application.preblast.service import PreblastService
 from features.calendar.event_preblast import handle_event_preblast_edit
 from features.calendar.preblast_views import PREBLAST_CHANNEL_SELECTOR, PreblastViews
+from utilities import constants
 from utilities.slack import actions
 from utilities.slack.sdk_orm import SdkBlockView
 
@@ -154,7 +155,10 @@ class PreblastViewsTest(unittest.TestCase):
         block_ids = [getattr(b, "block_id", None) for b in result.blocks]
         self.assertIn(actions.EVENT_PREBLAST_MOLESKINE_EDIT, block_ids)
         # Check that the initial value was set
-        rich_block = next(b for b in result.blocks if getattr(b, "block_id", None) == actions.EVENT_PREBLAST_MOLESKINE_EDIT)
+        rich_block = next(
+            b for b in result.blocks
+            if getattr(b, "block_id", None) == actions.EVENT_PREBLAST_MOLESKINE_EDIT
+        )
         self.assertIsNotNone(rich_block.element.initial_value)
 
     def test_build_preblast_form_preloads_existing_coqs(self):
@@ -248,6 +252,178 @@ class PreblastViewsTest(unittest.TestCase):
             existing_q_user_id,
             [coq_user_id],
         )
+
+    @patch("features.calendar.event_preblast.get_user")
+    @patch("features.calendar.event_preblast.extract_state_values")
+    @patch("features.calendar.event_preblast._build_attendance_service")
+    @patch("features.calendar.event_preblast._build_event_instance_service")
+    @patch("features.calendar.event_preblast._build_preblast_service")
+    def test_handle_event_preblast_edit_clears_coqs_when_multiselect_is_empty(
+        self,
+        mock_build_preblast_service,
+        mock_build_event_service,
+        mock_build_attendance_service,
+        mock_extract_state_values,
+        mock_get_user,
+    ):
+        event_id = 42
+        existing_q_user_id = 100
+        event = _event(id=event_id)
+
+        preblast_service = MagicMock()
+        preblast_service.build_update_command.return_value = object()
+        preblast_service.save_event_update.return_value = event
+        mock_build_preblast_service.return_value = preblast_service
+
+        event_service = MagicMock()
+        event_service.get_by_id.return_value = event
+        mock_build_event_service.return_value = event_service
+
+        attendance_service = MagicMock()
+        attendance_service.get_planned_for_event_instance.return_value = [
+            AttendanceData(
+                id=1,
+                event_instance_id=event_id,
+                user_id=existing_q_user_id,
+                attendance_type_ids=[HC_TYPE_ID, Q_TYPE_ID],
+            )
+        ]
+        mock_build_attendance_service.return_value = attendance_service
+
+        mock_extract_state_values.return_value = {
+            actions.EVENT_PREBLAST_COQS: [],
+        }
+
+        body = {
+            "view": {
+                "private_metadata": f'{{"event_instance_id": {event_id}, "preblast_ts": "None"}}'
+            }
+        }
+
+        handle_event_preblast_edit(body, MagicMock(), MagicMock(), {}, MagicMock())
+
+        mock_get_user.assert_not_called()
+        preblast_service.assign_qs.assert_called_once_with(
+            event_id,
+            existing_q_user_id,
+            [],
+        )
+
+    @patch("features.calendar.event_preblast.update_submission_wait_view")
+    @patch("features.calendar.event_preblast.get_user")
+    @patch("features.calendar.event_preblast.extract_state_values")
+    @patch("features.calendar.event_preblast._build_attendance_service")
+    @patch("features.calendar.event_preblast._build_event_instance_service")
+    @patch("features.calendar.event_preblast._build_preblast_service")
+    def test_handle_event_preblast_edit_surfaces_unresolved_coq_and_skips_assignment(
+        self,
+        mock_build_preblast_service,
+        mock_build_event_service,
+        mock_build_attendance_service,
+        mock_extract_state_values,
+        mock_get_user,
+        mock_update_submission_wait_view,
+    ):
+        event_id = 42
+        event = _event(id=event_id)
+
+        preblast_service = MagicMock()
+        preblast_service.build_update_command.return_value = object()
+        preblast_service.save_event_update.return_value = event
+        mock_build_preblast_service.return_value = preblast_service
+
+        event_service = MagicMock()
+        event_service.get_by_id.return_value = event
+        mock_build_event_service.return_value = event_service
+
+        attendance_service = MagicMock()
+        mock_build_attendance_service.return_value = attendance_service
+
+        mock_extract_state_values.return_value = {
+            actions.EVENT_PREBLAST_COQS: ["UBADCOQ"],
+        }
+        mock_get_user.side_effect = RuntimeError("not found")
+
+        body = {
+            "view": {
+                "private_metadata": f'{{"event_instance_id": {event_id}, "preblast_ts": "None"}}'
+            }
+        }
+
+        handle_event_preblast_edit(body, MagicMock(), MagicMock(), {}, MagicMock())
+
+        preblast_service.assign_qs.assert_not_called()
+        attendance_service.get_planned_for_event_instance.assert_not_called()
+        mock_update_submission_wait_view.assert_called_once()
+        _, kwargs = mock_update_submission_wait_view.call_args
+        self.assertEqual(kwargs["title"], "Co-Qs not saved")
+        self.assertIn("<@UBADCOQ>", kwargs["text"])
+        self.assertEqual(kwargs["level"], constants.AlertLevel.ERROR)
+
+    @patch("features.calendar.event_preblast.update_submission_wait_view")
+    @patch("features.calendar.event_preblast.get_user")
+    @patch("features.calendar.event_preblast.extract_state_values")
+    @patch("features.calendar.event_preblast._build_attendance_service")
+    @patch("features.calendar.event_preblast._build_event_instance_service")
+    @patch("features.calendar.event_preblast._build_preblast_service")
+    def test_handle_event_preblast_edit_surfaces_assign_qs_failure(
+        self,
+        mock_build_preblast_service,
+        mock_build_event_service,
+        mock_build_attendance_service,
+        mock_extract_state_values,
+        mock_get_user,
+        mock_update_submission_wait_view,
+    ):
+        event_id = 42
+        existing_q_user_id = 100
+        coq_user_id = 200
+        event = _event(id=event_id)
+
+        preblast_service = MagicMock()
+        preblast_service.build_update_command.return_value = object()
+        preblast_service.save_event_update.return_value = event
+        preblast_service.assign_qs.side_effect = RuntimeError("api failed")
+        mock_build_preblast_service.return_value = preblast_service
+
+        event_service = MagicMock()
+        event_service.get_by_id.return_value = event
+        mock_build_event_service.return_value = event_service
+
+        attendance_service = MagicMock()
+        attendance_service.get_planned_for_event_instance.return_value = [
+            AttendanceData(
+                id=1,
+                event_instance_id=event_id,
+                user_id=existing_q_user_id,
+                attendance_type_ids=[HC_TYPE_ID, Q_TYPE_ID],
+            )
+        ]
+        mock_build_attendance_service.return_value = attendance_service
+
+        mock_extract_state_values.return_value = {
+            actions.EVENT_PREBLAST_COQS: ["USLACKCOQ"],
+        }
+        mock_get_user.return_value = MagicMock(user_id=coq_user_id)
+
+        body = {
+            "view": {
+                "private_metadata": f'{{"event_instance_id": {event_id}, "preblast_ts": "None"}}'
+            }
+        }
+
+        handle_event_preblast_edit(body, MagicMock(), MagicMock(), {}, MagicMock())
+
+        preblast_service.assign_qs.assert_called_once_with(
+            event_id,
+            existing_q_user_id,
+            [coq_user_id],
+        )
+        mock_update_submission_wait_view.assert_called_once()
+        _, kwargs = mock_update_submission_wait_view.call_args
+        self.assertEqual(kwargs["title"], "Co-Qs not saved")
+        self.assertIn("<@USLACKCOQ>", kwargs["text"])
+        self.assertEqual(kwargs["level"], constants.AlertLevel.ERROR)
 
 
 if __name__ == "__main__":

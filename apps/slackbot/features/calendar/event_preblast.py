@@ -19,8 +19,6 @@ from dataclasses import dataclass
 from logging import Logger
 from typing import Any
 
-from slack_sdk.models.views import View
-
 from f3_data_models.models import Attendance, AttendanceType, EventInstance, Org
 from slack_sdk.errors import SlackApiError
 from slack_sdk.web import WebClient
@@ -537,7 +535,7 @@ def handle_event_preblast_edit(
         update_submission_wait_view(
             client=client,
             title="Error",
-            text=f"Event instance not found and may have been deleted.",
+            text="Event instance not found and may have been deleted.",
             level=constants.AlertLevel.ERROR,
             logger=logger,
         )
@@ -599,32 +597,66 @@ def handle_event_preblast_edit(
     # Save via service
     svc.save_event_update(command, existing_event=event)
 
-    # Handle Co-Q list — use assign_qs to set Q + Co-Qs atomically
-    coq_slack_ids = form_data.get(actions.EVENT_PREBLAST_COQS) or []
-    if coq_slack_ids:
-        coq_user_ids: list[int] = []
+    # Handle Co-Q list — use assign_qs to set Q + Co-Qs atomically. If the
+    # multiselect field is present, its value is authoritative; an empty value
+    # intentionally clears all Co-Qs while preserving the existing Q.
+    if actions.EVENT_PREBLAST_COQS in form_data:
+        coq_slack_ids = form_data.get(actions.EVENT_PREBLAST_COQS) or []
+        coq_user_ids: list[int | str] = []
+        unresolved_coq_slack_ids: list[str] = []
         for slack_id in coq_slack_ids:
             try:
                 user = get_user(slack_id, region_record, client, logger)
                 coq_user_ids.append(user.user_id)
             except Exception as e:
+                unresolved_coq_slack_ids.append(str(slack_id))
                 logger.error(f"Error resolving Co-Q {slack_id} for event {event_instance_id}: {e}")
-        if coq_user_ids:
-            try:
-                planned_attendance = _build_attendance_service().get_planned_for_event_instance(
-                    event_instance_id
-                )
-                q_user_id = next(
-                    (
-                        attendance.user_id
-                        for attendance in planned_attendance
-                        if Q_TYPE_ID in attendance.attendance_type_ids
-                    ),
-                    None,
-                )
-                svc.assign_qs(event_instance_id, q_user_id, coq_user_ids)
-            except Exception as e:
-                logger.error(f"Error assigning Co-Qs for event {event_instance_id}: {e}")
+
+        if unresolved_coq_slack_ids:
+            failed_coqs = ", ".join(f"<@{slack_id}>" for slack_id in unresolved_coq_slack_ids)
+            update_submission_wait_view(
+                client=client,
+                title="Co-Qs not saved",
+                text=(
+                    "Preblast details were saved, but Co-Qs were not updated because "
+                    f"these Slack users could not be resolved: {failed_coqs}. "
+                    "Please reopen the form and try again."
+                ),
+                level=constants.AlertLevel.ERROR,
+                logger=logger,
+            )
+            return
+
+        try:
+            planned_attendance = _build_attendance_service().get_planned_for_event_instance(event_instance_id)
+            q_user_id = next(
+                (
+                    attendance.user_id
+                    for attendance in planned_attendance
+                    if Q_TYPE_ID in attendance.attendance_type_ids
+                ),
+                None,
+            )
+            svc.assign_qs(event_instance_id, q_user_id, coq_user_ids)
+        except Exception as e:
+            logger.error(f"Error assigning Co-Qs for event {event_instance_id}: {e}")
+            coq_failure_detail = (
+                "These Co-Qs were not assigned: "
+                + ", ".join(f"<@{slack_id}>" for slack_id in coq_slack_ids)
+                if coq_slack_ids
+                else "Existing Co-Qs were not cleared."
+            )
+            update_submission_wait_view(
+                client=client,
+                title="Co-Qs not saved",
+                text=(
+                    "Preblast details were saved, but Co-Qs were not updated. "
+                    f"{coq_failure_detail} Please reopen the form and try again."
+                ),
+                level=constants.AlertLevel.ERROR,
+                logger=logger,
+            )
+            return
 
     # Determine if we should post/send the preblast now
     preblast_send = (
@@ -655,7 +687,7 @@ def handle_event_preblast_edit(
             event_instance_id,
             repost=repost,
         )
-    
+
     else:
         update_submission_wait_view(
             client=client,
@@ -840,7 +872,7 @@ def send_preblast(
             action_text = "updated"
         except Exception as e:
             logger.error(f"Error updating preblast for event {event_instance_id}: {e}")
-            action_text = f"update failed"
+            action_text = "update failed"
             outcome = "error"
 
     log_msg = (
@@ -849,7 +881,7 @@ def send_preblast(
     )
     user_msg = f"Preblast {action_text}"
     if outcome == "success":
-        user_msg += f" successfully!"
+        user_msg += " successfully!"
     if desired_channel and event.preblast_ts:
         log_msg += (
             f" <slack://channel?team={region_record.team_id}"
