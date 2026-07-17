@@ -57,10 +57,7 @@ export const ActiveRequestType = [
 ] as const;
 export type ActiveRequestType = (typeof ActiveRequestType)[number];
 
-export const RequestType = [
-  ...ActiveRequestType,
-  "edit", // legacy rows only; kept so stored requests remain readable (see convert-legacy-edit-requests.ts)
-] as const;
+export const RequestType = [...ActiveRequestType, "edit"] as const;
 export type RequestType = (typeof RequestType)[number];
 
 export const isActiveRequestType = (
