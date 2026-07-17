@@ -24,6 +24,8 @@
     "drop": "pnpm with-env drizzle-kit drop",
     "reset-test-db": "SKIP_ENV_VALIDATION=1 NODE_ENV=test pnpm with-env node -r esbuild-register src/utils/run-reset-test-db.ts",
     "seed:local": "pnpm with-env tsx src/local-seed.ts",
+    "test": "pnpm with-env vitest --run --coverage",
+    "test:watch": "pnpm with-env vitest -w",
     "typecheck": "tsc --noEmit",
     "with-env": "dotenv -e ../env/.env --",
     "update-db": "pnpm with-env node -r esbuild-register src/update-db.ts",
@@ -44,11 +46,13 @@
     "@acme/eslint-config": "workspace:*",
     "@acme/prettier-config": "workspace:*",
     "@acme/tsconfig": "workspace:*",
+    "@vitest/coverage-v8": "catalog:",
     "drizzle-kit": "catalog:",
     "eslint": "catalog:",
     "prettier": "catalog:",
     "tsx": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "prettier": "@acme/prettier-config"
 }
