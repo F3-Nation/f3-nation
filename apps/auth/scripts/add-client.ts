@@ -62,10 +62,13 @@ function isValidRedirectUri(uri: string, isPublic: boolean): boolean {
     }
     // Public clients (native apps) may register a private-use / custom
     // scheme redirect, e.g. com.example.app:/oauth2redirect (RFC 8252 §7.1).
-    // Reverse-domain style is enforced loosely: scheme must contain a dot.
+    // The scheme must be reverse-domain (contain a dot) AND have NO authority
+    // component — RFC 8252 §7.1 uses `scheme:/path`, not `scheme://host/...`.
+    // Rejecting an authority closes off spoofed forms like
+    // `com.example.app://attacker/callback`.
     if (isPublic) {
       const scheme = parsed.protocol.replace(/:$/, "");
-      return scheme.includes(".");
+      return scheme.includes(".") && parsed.host === "";
     }
     return false;
   } catch {

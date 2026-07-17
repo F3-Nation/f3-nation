@@ -203,10 +203,12 @@ export async function exchangeRefreshToken(params: {
       return { error: "invalid_client" as const };
   }
 
-  // Find refresh token
+  // Atomically consume + rotate the refresh token: DELETE ... RETURNING so
+  // two concurrent refreshes with the same token can't both succeed (only one
+  // DELETE removes a row and gets it back). Mirrors the authorization-code
+  // consumption above.
   const [existing] = await db
-    .select()
-    .from(oauthRefreshTokens)
+    .delete(oauthRefreshTokens)
     .where(
       and(
         eq(oauthRefreshTokens.token, params.refreshToken),
@@ -214,14 +216,9 @@ export async function exchangeRefreshToken(params: {
         gt(oauthRefreshTokens.expiresAt, new Date().toISOString()),
       ),
     )
-    .limit(1);
+    .returning();
 
   if (!existing) return { error: "invalid_grant" as const };
-
-  // Delete old refresh token (rotation)
-  await db
-    .delete(oauthRefreshTokens)
-    .where(eq(oauthRefreshTokens.token, params.refreshToken));
 
   // Look up user email for JWT claims
   const [user] = await db

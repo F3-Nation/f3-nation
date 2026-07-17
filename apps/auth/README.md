@@ -449,10 +449,13 @@ can extract it from the compiled binary. Per RFC 8252, register these as
 **public clients**: answer `y` to the "Public client?" prompt. For public
 clients:
 
-- Token exchange requires **PKCE only** (S256, already mandatory for all
-  clients) — no `client_secret` is issued or accepted.
-- Redirect URIs may additionally use a reverse-domain custom scheme
-  (e.g. `com.example.app:/oauth2redirect`) alongside HTTPS/localhost.
+- No `client_secret` is issued or accepted. The authorization-code grant is
+  protected by **PKCE** (S256), which is already mandatory for all clients;
+  the refresh-token grant is protected by single-use rotation of the (opaque)
+  refresh token. Neither grant consults a secret for a public client.
+- Redirect URIs may additionally use a reverse-domain custom scheme with no
+  authority component (e.g. `com.example.app:/oauth2redirect`, per RFC 8252
+  §7.1) alongside HTTPS/localhost.
 
 Confidential (server-side) clients are unchanged and still require the
 secret.
