@@ -808,7 +808,7 @@ def send_preblast(
     # Desired channel: prefer form override saved in meta, else default
     desired_channel = str(
         (event.meta or {}).get("preblast_channel_id") or default_channel
-    ) if default_channel else None
+    )
 
     if not desired_channel:
         action_text = "saved (no channel)"
@@ -831,6 +831,7 @@ def send_preblast(
         action_text = "saved"
     if decision.mode in (PostMode.POST_NEW, PostMode.POST_NEW_CHANNEL):
         action_text = "posted" if decision.mode == PostMode.POST_NEW else "posted in new channel"
+        res = None
         try:
             res = _post_blocks(
                 client.chat_postMessage,
@@ -843,18 +844,26 @@ def send_preblast(
                 username=username,
                 icon_url=icon_url,
             )
-            ts = float(res["ts"])
-            svc.persist_posted_preblast(
-                instance_id=event_instance_id,
-                preblast_ts=ts,
-                channel_id=desired_channel,
-                existing_event=event,
-            )
-            event.preblast_ts = ts
         except Exception as e:
             logger.error(f"Error posting preblast for event {event_instance_id}: {e}")
-            action_text = "post_failed"
+            action_text = "post failed on posting"
             outcome = "error"
+        
+        # Persist the posted preblast ts and channel id if the post was successful     
+        if res:
+            try:        
+                ts = float(res["ts"])
+                svc.persist_posted_preblast(
+                    instance_id=event_instance_id,
+                    preblast_ts=ts,
+                    channel_id=desired_channel,
+                    existing_event=event,
+                )
+                event.preblast_ts = ts
+            except Exception as e:
+                logger.error(f"Error persisting posted preblast for event {event_instance_id}: {e}")
+                action_text = "was posted but was not fully saved; it may not be marked as posted in the database."
+                outcome = "error"
     elif decision.mode == PostMode.UPDATE_EXISTING:
         posted_channel = decision.posted_channel_id or desired_channel
         try:
@@ -863,7 +872,7 @@ def send_preblast(
                 blocks,
                 logger,
                 channel=posted_channel,
-                ts=str(decision.existing_preblast_ts),
+                ts=f"{decision.existing_preblast_ts:.6f}",
                 text="Event Preblast",
                 metadata={"event_type": "preblast", "event_payload": metadata_dict},
                 username=username,
