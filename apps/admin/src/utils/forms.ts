@@ -21,5 +21,19 @@ export const {
     eventName: z.string().optional().or(z.literal("")),
     aoName: z.string().optional().or(z.literal("")),
     eventTypeIds: z.array(z.number()).optional(),
+  }).superRefine((data, ctx) => {
+    // "HH:mm" strings compare correctly lexicographically, so a plain string
+    // comparison is enough here without parsing to minutes.
+    if (
+      data.eventStartTime &&
+      data.eventEndTime &&
+      data.eventStartTime >= data.eventEndTime
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message: "End time must be after start time",
+        path: ["eventEndTime"],
+      });
+    }
   }),
 );

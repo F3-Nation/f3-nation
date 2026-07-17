@@ -45,8 +45,16 @@ export const ContactLinks = ({
 }: ContactLinksProps) => {
   const { website, email, phone, twitter, facebook, instagram } = contact;
 
-  const hasAnyContact =
-    website ?? email ?? phone ?? twitter ?? facebook ?? instagram;
+  // An empty string is a real "no value" case for these fields, so `??`
+  // (which only falls through on null/undefined) would wrongly treat it as set.
+  const hasAnyContact = [
+    website,
+    email,
+    phone,
+    twitter,
+    facebook,
+    instagram,
+  ].some(Boolean);
   if (!hasAnyContact) return null;
 
   const iconClass = iconSizes[iconSize];

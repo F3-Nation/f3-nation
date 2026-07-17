@@ -23,6 +23,31 @@ export const EventFields = z.object({
 
 export type EventFieldsType = z.infer<typeof EventFields>;
 
+// HHmm strings ("0530", "1815") compare correctly lexicographically, so a
+// plain string comparison is enough here without parsing to minutes. Chained
+// onto each concrete schema below (rather than onto EventFields itself)
+// because `.extend(EventFields.shape)` copies only the raw field defs and
+// drops any refinement attached to EventFields.
+const checkEventTimeOrder = (
+  data: { eventStartTime?: unknown; eventEndTime?: unknown },
+  ctx: z.RefinementCtx,
+) => {
+  const { eventStartTime, eventEndTime } = data;
+  if (
+    typeof eventStartTime === "string" &&
+    typeof eventEndTime === "string" &&
+    eventStartTime !== "" &&
+    eventEndTime !== "" &&
+    eventStartTime >= eventEndTime
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      message: "End time must be after start time",
+      path: ["eventEndTime"],
+    });
+  }
+};
+
 // AO-related fields
 export const AOFields = z.object({
   aoName: z.string().min(2, "AO name must be at least 2 characters"),
@@ -38,19 +63,33 @@ export const AOFields = z.object({
 
 export type AOFieldsType = z.infer<typeof AOFields>;
 
-// Location-related fields
+// Location-related fields. Only lat/lng are required — many workouts have no
+// street address, so every address field must accept missing/blank values.
+const optionalAddressField = (schema: z.ZodString) =>
+  z.preprocess(
+    (val) => (val === "" ? undefined : val),
+    schema.optional().nullable(),
+  );
+
 export const LocationFields = z.object({
   locationLat: z.number(),
   locationLng: z.number(),
-  locationAddress: z.string().min(5, "Address must be at least 5 characters"),
+  locationAddress: optionalAddressField(
+    z.string().min(5, "Address must be at least 5 characters"),
+  ),
   locationAddress2: z.string().optional().nullable(),
-  locationCity: z.string().min(2, "City must be at least 2 characters"),
-  locationState: z.string().min(2, "State must be at least 2 characters"),
-  locationZip: z.string().min(3, "ZIP code must be at least 3 characters"),
-  locationCountry: z
-    .string()
-    .min(2, "Country must be at least 2 characters")
-    .default("United States"),
+  locationCity: optionalAddressField(
+    z.string().min(2, "City must be at least 2 characters"),
+  ),
+  locationState: optionalAddressField(
+    z.string().min(2, "State must be at least 2 characters"),
+  ),
+  locationZip: optionalAddressField(
+    z.string().min(3, "ZIP code must be at least 3 characters"),
+  ),
+  locationCountry: optionalAddressField(
+    z.string().min(2, "Country must be at least 2 characters"),
+  ),
   locationDescription: z.string().optional().nullable(),
 });
 
@@ -104,7 +143,8 @@ export const CreateAOAndLocationAndEventSchema = BaseSchema.extend({
   .extend(EventFields.shape)
   .extend(AOFields.shape)
   .extend(LocationFields.shape)
-  .extend(RegionFields.shape);
+  .extend(RegionFields.shape)
+  .superRefine(checkEventTimeOrder);
 
 export type CreateAOAndLocationAndEventType = z.infer<
   typeof CreateAOAndLocationAndEventSchema
@@ -116,7 +156,9 @@ export const CreateEventSchema = BaseSchema.extend({
   originalAoId: z.number().positive("AO ID is required"),
   originalLocationId: z.number().positive("Location ID is required"),
   originalRegionId: z.number().positive("Region ID is required"),
-}).extend(EventFields.shape);
+})
+  .extend(EventFields.shape)
+  .superRefine(checkEventTimeOrder);
 
 export type CreateEventType = z.infer<typeof CreateEventSchema>;
 
@@ -131,7 +173,8 @@ export const EditEventSchema = BaseSchema.extend({
   // Optional: `currentValues` carries the entity's prior values for the review
   // UI only (stripped before persistence). Optional so the admin normalizer no
   // longer has to fabricate an empty object just to satisfy the union. (#13)
-  .extend({ currentValues: makeSchemaLoose(EventFields).optional() });
+  .extend({ currentValues: makeSchemaLoose(EventFields).optional() })
+  .superRefine(checkEventTimeOrder);
 
 export type EditEventType = z.infer<typeof EditEventSchema>;
 
@@ -205,7 +248,8 @@ export const MoveEventToDifferentAOSchema = BaseSchema.extend({
     .optional(),
 })
   .extend(EventFields.partial().shape)
-  .extend(LocationFields.partial().shape);
+  .extend(LocationFields.partial().shape)
+  .superRefine(checkEventTimeOrder);
 
 export type MoveEventToDifferentAOType = z.infer<
   typeof MoveEventToDifferentAOSchema
@@ -225,7 +269,8 @@ export const MoveEventToNewAOSchema = BaseSchema.extend({
 })
   .extend(EventFields.shape)
   .extend(AOFields.shape)
-  .extend(LocationFields.shape);
+  .extend(LocationFields.shape)
+  .superRefine(checkEventTimeOrder);
 
 export type MoveEventToNewAOType = z.infer<typeof MoveEventToNewAOSchema>;
 

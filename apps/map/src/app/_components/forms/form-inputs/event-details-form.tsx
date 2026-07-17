@@ -131,6 +131,9 @@ export const EventDetailsForm = <_T extends EventDetailsFormValues>() => {
                 {formatTime(currentValues.eventEndTime)}
               </p>
             )}
+          <p className="text-xs text-destructive">
+            {form.formState.errors.eventEndTime?.message?.toString()}
+          </p>
         </div>
         <div className="space-y-2 sm:col-span-2">
           <div className="text-sm font-medium text-muted-foreground">

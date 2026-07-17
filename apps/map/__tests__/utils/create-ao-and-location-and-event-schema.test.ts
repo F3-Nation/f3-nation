@@ -39,7 +39,7 @@ describe("CreateAOAndLocationAndEventSchema – valid submissions", () => {
   it("defaults locationCountry when omitted", () => {
     const { locationCountry: _c, ...withoutCountry } = valid;
     const result = CreateAOAndLocationAndEventSchema.parse(withoutCountry);
-    expect(result.locationCountry).toBe("United States");
+    expect(result.locationCountry).toBeUndefined();
   });
 
   it("treats empty-string aoLogo/aoWebsite as omitted (preprocess)", () => {
@@ -69,6 +69,12 @@ describe("CreateAOAndLocationAndEventSchema – valid submissions", () => {
       eventStartDate: "2026-07-01",
       locationAddress2: "Suite 200",
       locationDescription: "Back parking lot",
+    }));
+
+  it("accepts a missing location address", () =>
+    expectValid(CreateAOAndLocationAndEventSchema, {
+      ...valid,
+      locationAddress: "",
     }));
 });
 
@@ -133,10 +139,10 @@ describe("CreateAOAndLocationAndEventSchema – invalid AO fields", () => {
 });
 
 describe("CreateAOAndLocationAndEventSchema – invalid location fields", () => {
-  it("rejects a missing location address", () =>
+  it("rejects an address shorter than 5 characters", () =>
     expectInvalidAt(
       CreateAOAndLocationAndEventSchema,
-      { ...valid, locationAddress: "" },
+      { ...valid, locationAddress: "Elm" },
       "locationAddress",
     ));
 

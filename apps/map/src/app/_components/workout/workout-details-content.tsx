@@ -82,13 +82,10 @@ export const WorkoutDetailsContent = ({
 
   const hasAoContact = useMemo(
     () =>
-      aoContact &&
-      (aoContact.website ??
-        aoContact.email ??
-        aoContact.phone ??
-        aoContact.twitter ??
-        aoContact.facebook ??
-        aoContact.instagram),
+      // An empty string is a real "no value" case for these fields, so `??`
+      // (which only falls through on null/undefined) would wrongly hide the
+      // whole contact section whenever the first field happens to be "".
+      !!aoContact && Object.values(aoContact).some(Boolean),
     [aoContact],
   );
 
@@ -139,6 +136,33 @@ export const WorkoutDetailsContent = ({
 
   const hasMultipleWorkouts = (results?.location?.events.length ?? 0) > 1;
   const shouldShowAOSection = hasMultipleWorkouts && event?.aoName;
+
+  const regionContact = useMemo(
+    () =>
+      location
+        ? {
+            website: location.regionWebsite,
+            email: location.regionEmail,
+            phone: location.regionPhone,
+            twitter: location.regionTwitter,
+            facebook: location.regionFacebook,
+            instagram: location.regionInstagram,
+          }
+        : null,
+    [location],
+  );
+
+  const hasRegionContact = useMemo(
+    () =>
+      regionContact &&
+      (regionContact.website ??
+        regionContact.email ??
+        regionContact.phone ??
+        regionContact.twitter ??
+        regionContact.facebook ??
+        regionContact.instagram),
+    [regionContact],
+  );
 
   if (isLoading) {
     return <WorkoutDetailsSkeleton />;
@@ -406,6 +430,13 @@ export const WorkoutDetailsContent = ({
               <line x1="10" y1="14" x2="21" y2="3"></line>
             </svg>
           </Link>
+        )}
+        {hasRegionContact && regionContact && (
+          <ContactLinks
+            contact={regionContact}
+            iconSize="sm"
+            className="mt-3"
+          />
         )}
       </div>
 

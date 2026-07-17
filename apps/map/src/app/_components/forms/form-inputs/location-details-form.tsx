@@ -6,7 +6,7 @@ import { Textarea } from "@acme/ui/textarea";
 import { CountrySelect } from "../../modal/country-select";
 
 interface LocationDetailsFormValues {
-  locationAddress?: string;
+  locationAddress?: string | null;
   locationAddress2?: string | null;
   locationCity?: string | null;
   locationState?: string | null;
