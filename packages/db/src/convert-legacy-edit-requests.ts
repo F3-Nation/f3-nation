@@ -29,11 +29,10 @@ import { randomUUID } from "crypto";
 
 import { sql } from "drizzle-orm";
 
-import type { AppDb } from "./client";
 import { db } from "./client";
 import { getDbUrl } from "./utils/functions";
 
-export interface LegacyRow {
+interface LegacyRow {
   id: string;
   event_id: number | null;
   ao_id: number | null;
@@ -42,10 +41,15 @@ export interface LegacyRow {
   meta: Record<string, unknown> | null;
 }
 
-export type Classification =
-  "edit_event" | "edit_ao_and_location" | "both" | "unclassifiable";
+const args = process.argv.slice(2);
+const apply = args.includes("--apply");
+const split = args.includes("--split");
+const expectDbIdx = args.indexOf("--expect-db");
+const expectDb = expectDbIdx >= 0 ? args[expectDbIdx + 1] : undefined;
 
-export const classify = (row: LegacyRow): Classification => {
+const classify = (
+  row: LegacyRow,
+): "edit_event" | "edit_ao_and_location" | "both" | "unclassifiable" => {
   const hasEvent = row.event_id != null;
   const hasAoOrLocation = row.ao_id != null || row.location_id != null;
   if (hasEvent && hasAoOrLocation) return "both";
@@ -54,77 +58,15 @@ export const classify = (row: LegacyRow): Classification => {
   return "unclassifiable";
 };
 
-export const buildMeta = (
-  row: LegacyRow,
-  now: string = new Date().toISOString(),
-): Record<string, unknown> => ({
+const buildMeta = (row: LegacyRow): Record<string, unknown> => ({
   ...(row.meta ?? {}),
   ...(row.event_id != null && { originalEventId: row.event_id }),
   ...(row.ao_id != null && { originalAoId: row.ao_id }),
   ...(row.location_id != null && { originalLocationId: row.location_id }),
   ...(row.region_id != null && { originalRegionId: row.region_id }),
   convertedFrom: "edit",
-  convertedAt: now,
+  convertedAt: new Date().toISOString(),
 });
-
-/**
- * --split: the original row becomes the AO/location edit, and a linked copy
- * carries the event edit. Both keep every field column, so each new form
- * simply reads the subset it renders. Runs in a single transaction so the two
- * rows are always created together. Returns the id of the new edit_event row.
- */
-export const applySplit = async (
-  row: LegacyRow,
-  meta: Record<string, unknown>,
-  database: Pick<AppDb, "transaction"> = db,
-): Promise<string> => {
-  const newId = randomUUID();
-  await database.transaction(async (tx) => {
-    await tx.execute(sql`
-      UPDATE update_requests
-      SET request_type = 'edit_ao_and_location',
-          meta = ${JSON.stringify({ ...meta, splitSiblingId: newId })}::jsonb
-      WHERE id = ${row.id}
-    `);
-    await tx.execute(sql`
-      INSERT INTO update_requests
-        (id, token, region_id, event_id, event_name, event_description,
-         event_start_time, event_end_time, event_day_of_week,
-         event_type_ids, ao_id, location_id, submitted_by, status,
-         request_type, meta, created)
-      SELECT ${newId}, gen_random_uuid(), region_id, event_id, event_name,
-         event_description, event_start_time, event_end_time,
-         event_day_of_week, event_type_ids, ao_id, location_id,
-         submitted_by, status, 'edit_event',
-         ${JSON.stringify({ ...meta, splitFromId: row.id })}::jsonb, created
-      FROM update_requests WHERE id = ${row.id}
-    `);
-  });
-  return newId;
-};
-
-/**
- * Reclassify a single-target legacy row to its new request type in place,
- * re-asserting the pending/edit guard so a concurrent review can't be clobbered.
- */
-export const applyConversion = async (
-  row: LegacyRow,
-  kind: "edit_event" | "edit_ao_and_location",
-  database: Pick<AppDb, "execute"> = db,
-): Promise<void> => {
-  await database.execute(sql`
-    UPDATE update_requests
-    SET request_type = ${kind}::request_type,
-        meta = ${JSON.stringify(buildMeta(row))}::jsonb
-    WHERE id = ${row.id} AND status = 'pending' AND request_type = 'edit'
-  `);
-};
-
-const args = process.argv.slice(2);
-const apply = args.includes("--apply");
-const split = args.includes("--split");
-const expectDbIdx = args.indexOf("--expect-db");
-const expectDb = expectDbIdx >= 0 ? args[expectDbIdx + 1] : undefined;
 
 const main = async () => {
   const { databaseName } = getDbUrl();
@@ -178,18 +120,48 @@ const main = async () => {
     }
 
     if (kind === "both") {
+      // --split: original row becomes the AO/location edit; a linked copy
+      // carries the event edit. Both keep every field column, so each new
+      // form simply reads the subset it renders.
+      const meta = buildMeta(row);
       console.log(
         `SPLIT ${row.id}  -> edit_ao_and_location + new edit_event row (${ids})`,
       );
       if (apply) {
-        await applySplit(row, buildMeta(row));
+        await db.transaction(async (tx) => {
+          const newId = randomUUID();
+          await tx.execute(sql`
+            UPDATE update_requests
+            SET request_type = 'edit_ao_and_location',
+                meta = ${JSON.stringify({ ...meta, splitSiblingId: newId })}::jsonb
+            WHERE id = ${row.id}
+          `);
+          await tx.execute(sql`
+            INSERT INTO update_requests
+              (id, token, region_id, event_id, event_name, event_description,
+               event_start_time, event_end_time, event_day_of_week,
+               event_type_ids, ao_id, location_id, submitted_by, status,
+               request_type, meta, created)
+            SELECT ${newId}, gen_random_uuid(), region_id, event_id, event_name,
+               event_description, event_start_time, event_end_time,
+               event_day_of_week, event_type_ids, ao_id, location_id,
+               submitted_by, status, 'edit_event',
+               ${JSON.stringify({ ...meta, splitFromId: row.id })}::jsonb, created
+            FROM update_requests WHERE id = ${row.id}
+          `);
+        });
       }
       continue;
     }
 
     console.log(`CONV  ${row.id}  -> ${kind} (${ids})`);
     if (apply) {
-      await applyConversion(row, kind);
+      await db.execute(sql`
+        UPDATE update_requests
+        SET request_type = ${kind}::request_type,
+            meta = ${JSON.stringify(buildMeta(row))}::jsonb
+        WHERE id = ${row.id} AND status = 'pending' AND request_type = 'edit'
+      `);
     }
   }
 
@@ -200,12 +172,7 @@ const main = async () => {
   process.exit(0);
 };
 
-// Only run when executed as a script; skip under test so importing the pure
-// helpers above (classify/buildMeta/applySplit/applyConversion) doesn't kick
-// off the whole conversion against a database.
-if (process.env.NODE_ENV !== "test") {
-  main().catch((err) => {
-    console.error(err);
-    process.exit(1);
-  });
-}
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
