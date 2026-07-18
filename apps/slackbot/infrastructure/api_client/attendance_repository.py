@@ -13,8 +13,8 @@ def _parse_attendance(raw: dict) -> AttendanceData:
         type_ids = [int(t) for t in types_raw if t is not None]
     return AttendanceData(
         id=int(raw["id"]),
-        event_instance_id=int(raw.get("eventInstanceId", raw.get("event_instance_id", 0))),
-        user_id=int(raw.get("userId", raw.get("user_id", 0))),
+        event_instance_id=int(raw["eventInstanceId"]),
+        user_id=int(raw["userId"]),
         f3_name=raw.get("f3Name", raw.get("f3_name", user_raw.get("f3Name", user_raw.get("f3_name")))),
         is_planned=raw.get("isPlanned", raw.get("is_planned", True)),
         attendance_type_ids=type_ids,

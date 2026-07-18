@@ -629,7 +629,7 @@ def build_backblast_form(
             actions.BACKBLAST_MOLESKIN: moleskin_block or region_record.backblast_moleskin_template,
             actions.BACKBLAST_FNGS: safe_get(backblast_metadata, actions.BACKBLAST_FNGS) or "",
             actions.BACKBLAST_NONSLACK_PAX: safe_get(backblast_metadata, actions.BACKBLAST_NONSLACK_PAX) or "",
-            actions.BACKBLAST_COUNT: safe_get(backblast_metadata, actions.BACKBLAST_COUNT) or "",
+            actions.BACKBLAST_COUNT: safe_get(backblast_metadata, actions.BACKBLAST_COUNT) or None,
             # actions.BACKBLAST_EVENT_TYPE: str(event_record.event_types[0].id),  # picking the first for now
             # TODO: non-slack pax
         }
