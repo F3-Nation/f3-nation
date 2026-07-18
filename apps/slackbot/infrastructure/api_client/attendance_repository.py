@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from application.attendance import CO_Q_TYPE_ID, HC_TYPE_ID, Q_TYPE_ID, AttendanceData
+from application.attendance import HC_TYPE_ID, Q_TYPE_ID, AttendanceData
 from infrastructure.api_client.client import F3ApiClient, get_f3_api_client
 
 
 def _parse_attendance(raw: dict) -> AttendanceData:
     types_raw = raw.get("attendanceTypes", raw.get("attendance_types", raw.get("attendance_type_ids", [])))
+    user_raw = raw.get("user") or {}
     if types_raw and isinstance(types_raw[0], dict):
         type_ids = [int(t.get("id", t.get("attendanceTypeId", 0))) for t in types_raw]
     else:
@@ -14,6 +15,7 @@ def _parse_attendance(raw: dict) -> AttendanceData:
         id=int(raw["id"]),
         event_instance_id=int(raw.get("eventInstanceId", raw.get("event_instance_id", 0))),
         user_id=int(raw.get("userId", raw.get("user_id", 0))),
+        f3_name=raw.get("f3Name", raw.get("f3_name", user_raw.get("f3Name", user_raw.get("f3_name")))),
         is_planned=raw.get("isPlanned", raw.get("is_planned", True)),
         attendance_type_ids=type_ids,
         meta=raw.get("meta"),

@@ -24,7 +24,7 @@ from slack_sdk.errors import SlackApiError
 from slack_sdk.web import WebClient
 from sqlalchemy import or_
 
-from application.attendance import CO_Q_TYPE_ID, Q_TYPE_ID
+from application.attendance import CO_Q_TYPE_ID, Q_TYPE_ID, AttendanceData
 from application.attendance.service import AttendanceService
 from application.event_instance import EventInstanceData
 from application.event_instance.service import EventInstanceService
@@ -726,6 +726,13 @@ def _post_blocks(api_call, blocks: list, logger: Logger, max_retries: int = 3, *
             raise
 
 
+def _format_attendance_user(attendance: AttendanceData, attendance_slack_dict: dict[int, str]) -> str:
+    slack_id = attendance_slack_dict.get(attendance.user_id)
+    if slack_id:
+        return f"<@{slack_id}>"
+    return f"@{attendance.f3_name or 'Unknown'}"
+
+
 # ---------------------------------------------------------------------------
 # send_preblast
 # ---------------------------------------------------------------------------
@@ -848,10 +855,10 @@ def send_preblast(
             logger.error(f"Error posting preblast for event {event_instance_id}: {e}")
             action_text = "post failed on posting"
             outcome = "error"
-        
-        # Persist the posted preblast ts and channel id if the post was successful     
+
+        # Persist the posted preblast ts and channel id if the post was successful
         if res:
-            try:        
+            try:
                 ts = float(res["ts"])
                 svc.persist_posted_preblast(
                     instance_id=event_instance_id,
@@ -954,7 +961,10 @@ def build_preblast_info(
             for su in slack_users:
                 attendance_slack_dict[su.user_id] = su.slack_id
         except Exception as e:
-            logger.warning(f"Failed to resolve Slack user IDs for attendance: {e}")
+            message = f"Failed to resolve Slack user IDs for attendance on event {event_instance_id}: {e}"
+            if logger:
+                logger.exception(message)
+            raise RuntimeError(message) from e
 
     # Build action blocks as plain dicts
     action_blocks: list[dict[str, Any]] = []
@@ -977,11 +987,7 @@ def build_preblast_info(
         att for att in attendance_data
         if bool({Q_TYPE_ID, CO_Q_TYPE_ID}.intersection(att.attendance_type_ids))
     ]
-    q_mentions = [
-        f"<@{attendance_slack_dict[att.user_id]}>"
-        for att in q_attendance
-        if att.user_id in attendance_slack_dict
-    ]
+    q_mentions = [_format_attendance_user(att, attendance_slack_dict) for att in q_attendance]
     q_list = " ".join(q_mentions) if q_mentions else "Open!"
     if not q_attendance:
         action_blocks.append(
@@ -1024,11 +1030,7 @@ def build_preblast_info(
         )
 
     # Build HC list with Slack mentions
-    hc_mentions = [
-        f"<@{attendance_slack_dict[att.user_id]}>"
-        for att in attendance_data
-        if att.user_id in attendance_slack_dict
-    ]
+    hc_mentions = [_format_attendance_user(att, attendance_slack_dict) for att in attendance_data]
     hc_list = " ".join(hc_mentions) if hc_mentions else "None"
     hc_count = len({att.user_id for att in attendance_data})
 

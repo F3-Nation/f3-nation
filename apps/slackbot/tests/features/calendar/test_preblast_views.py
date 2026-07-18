@@ -6,10 +6,10 @@ from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
 
-from application.attendance import HC_TYPE_ID, Q_TYPE_ID, AttendanceData
+from application.attendance import CO_Q_TYPE_ID, HC_TYPE_ID, Q_TYPE_ID, AttendanceData
 from application.event_instance import EventInstanceData
 from application.preblast.service import PreblastService
-from features.calendar.event_preblast import handle_event_preblast_edit
+from features.calendar.event_preblast import build_preblast_info, handle_event_preblast_edit
 from features.calendar.preblast_views import PREBLAST_CHANNEL_SELECTOR, PreblastViews
 from utilities import constants
 from utilities.slack import actions
@@ -195,6 +195,87 @@ class PreblastViewsTest(unittest.TestCase):
         result = PreblastViews.build_select_form([])
         block_ids = [getattr(b, "block_id", None) for b in result.blocks]
         self.assertIn("preblast_select_empty", block_ids)
+
+    @patch("f3_data_models.utils.DbManager.find_records")
+    @patch("features.calendar.event_preblast._build_attendance_service")
+    @patch("features.calendar.event_preblast._build_event_instance_service")
+    def test_build_preblast_info_uses_f3_name_fallback_when_slack_id_missing(
+        self,
+        mock_build_event_service,
+        mock_build_attendance_service,
+        mock_find_records,
+    ):
+        event_id = 42
+        event_service = MagicMock()
+        event_service.get_by_id.return_value = _event(id=event_id, org_name="The AO")
+        mock_build_event_service.return_value = event_service
+
+        attendance_service = MagicMock()
+        attendance_service.get_planned_for_event_instance.return_value = [
+            AttendanceData(
+                id=1,
+                event_instance_id=event_id,
+                user_id=100,
+                f3_name="Dredd",
+                attendance_type_ids=[HC_TYPE_ID, Q_TYPE_ID],
+            ),
+            AttendanceData(
+                id=2,
+                event_instance_id=event_id,
+                user_id=200,
+                f3_name="Ghost",
+                attendance_type_ids=[HC_TYPE_ID, CO_Q_TYPE_ID],
+            ),
+        ]
+        mock_build_attendance_service.return_value = attendance_service
+        mock_find_records.return_value = [MagicMock(user_id=200, slack_id="UGHOST")]
+
+        preblast_info = build_preblast_info(
+            logger=MagicMock(),
+            region_record=MagicMock(team_id="T123"),
+            event_instance_id=event_id,
+        )
+
+        event_details = preblast_info.preblast_blocks[0]["text"]["text"]
+        self.assertIn("*Q:* @Dredd <@UGHOST>", event_details)
+        self.assertIn("*HCs:* @Dredd <@UGHOST>", event_details)
+        self.assertNotIn("*Q:* Open!", event_details)
+        self.assertNotIn("*HCs:* None", event_details)
+
+    @patch("f3_data_models.utils.DbManager.find_records", side_effect=RuntimeError("db unavailable"))
+    @patch("features.calendar.event_preblast._build_attendance_service")
+    @patch("features.calendar.event_preblast._build_event_instance_service")
+    def test_build_preblast_info_raises_when_slack_id_resolution_fails(
+        self,
+        mock_build_event_service,
+        mock_build_attendance_service,
+        _mock_find_records,
+    ):
+        event_id = 42
+        event_service = MagicMock()
+        event_service.get_by_id.return_value = _event(id=event_id)
+        mock_build_event_service.return_value = event_service
+
+        attendance_service = MagicMock()
+        attendance_service.get_planned_for_event_instance.return_value = [
+            AttendanceData(
+                id=1,
+                event_instance_id=event_id,
+                user_id=100,
+                f3_name="Dredd",
+                attendance_type_ids=[HC_TYPE_ID, Q_TYPE_ID],
+            )
+        ]
+        mock_build_attendance_service.return_value = attendance_service
+        logger = MagicMock()
+
+        with self.assertRaises(RuntimeError):
+            build_preblast_info(
+                logger=logger,
+                region_record=MagicMock(team_id="T123"),
+                event_instance_id=event_id,
+            )
+        logger.exception.assert_called_once()
 
     @patch("features.calendar.event_preblast.get_user")
     @patch("features.calendar.event_preblast.extract_state_values")

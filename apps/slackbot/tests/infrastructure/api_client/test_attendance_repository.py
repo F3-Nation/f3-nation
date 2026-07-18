@@ -20,6 +20,7 @@ class ApiAttendanceRepositoryTest(unittest.TestCase):
                     "id": 1,
                     "eventInstanceId": 10,
                     "userId": 20,
+                    "user": {"id": 20, "f3Name": "Dredd"},
                     "isPlanned": True,
                     "attendanceTypes": [{"id": 2}],
                 }
@@ -28,6 +29,7 @@ class ApiAttendanceRepositoryTest(unittest.TestCase):
         result = self.repo.get_planned_for_event_instance(10)
         self.client.get.assert_called_once_with("/v1/attendance/event-instance/10", params={"isPlanned": True})
         self.assertEqual(result[0].attendance_type_ids, [2])
+        self.assertEqual(result[0].f3_name, "Dredd")
 
     def test_add_hc_preserves_existing_q_and_co_q(self):
         self.client.get.return_value = {
