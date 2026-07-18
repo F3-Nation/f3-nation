@@ -267,7 +267,9 @@ async function main() {
   const clientSecret = crypto.randomBytes(32).toString("base64url");
   const clientSecretHash = crypto
     .createHash("sha256")
-    .update(isPublic ? crypto.randomBytes(32).toString("base64url") : clientSecret)
+    .update(
+      isPublic ? crypto.randomBytes(32).toString("base64url") : clientSecret,
+    )
     .digest("hex");
 
   // Review
@@ -313,9 +315,7 @@ async function main() {
     console.log("  Client Secret: (none — public client, PKCE only)");
   } else {
     console.log(`  Client Secret: ${clientSecret}`);
-    console.log(
-      "\n⚠️  Save the secret now — it cannot be retrieved later.",
-    );
+    console.log("\n⚠️  Save the secret now — it cannot be retrieved later.");
   }
   console.log();
 
