@@ -1329,7 +1329,9 @@ def handle_backblast_edit_button(
         slack_user = get_user(user_id, region_record, client, logger)
         admin_users = get_admin_users(region_record.org_id, region_record.team_id)
         aoq_users = get_aoq_users(region_record.org_id)
-        user_is_admin = any(u[0].id == slack_user.user_id for u in admin_users) or any(u[0].id == slack_user.user_id for u in aoq_users)
+        user_is_admin = any(u[0].id == slack_user.user_id for u in admin_users) or any(
+            u.id == slack_user.user_id for u in aoq_users
+        )
 
     backblast_data = safe_get(body, "message", "metadata", "event_payload") or json.loads(
         safe_get(body, "actions", 0, "value") or "{}"

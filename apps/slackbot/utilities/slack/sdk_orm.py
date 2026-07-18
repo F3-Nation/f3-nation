@@ -1,4 +1,5 @@
 import json
+import logging
 from typing import Any, Dict, List
 
 from slack_sdk.models.blocks import Block, ImageBlock, InputBlock, SectionBlock
@@ -9,7 +10,6 @@ from slack_sdk.models.views import View
 from utilities.constants import ENABLE_DEBUGGING
 from utilities.helper_functions import safe_get
 from utilities.slack import actions
-import logging
 
 
 def as_selector_options(names: List[str], values: List[str] = None, descriptions: List[str] = None) -> List[Option]:

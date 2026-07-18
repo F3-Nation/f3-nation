@@ -40,7 +40,7 @@
     "lint:fix": "turbo lint --continue -- --fix --cache --cache-location node_modules/.cache/.eslintcache",
     "lint:ws": "pnpm dlx sherif@1.1.0",
     "lint:unused": "SKIP_ENV_VALIDATION=true DATABASE_URL=placeholder knip",
-    "lint": "turbo run lint --continue -- --cache --cache-location node_modules/.cache/.eslintcache; pnpm run lint:ws",
+    "lint": "bash scripts/lint.sh",
     "local:setup": "bash scripts/local-setup.sh",
     "postinstall": "bash scripts/postinstall-uv-sync.sh",
     "python:install": "uv sync --all-packages",

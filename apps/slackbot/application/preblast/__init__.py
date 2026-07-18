@@ -6,7 +6,6 @@ from typing import Any
 
 from pydantic import BaseModel
 
-
 PREBLAST_CHANNEL_META_KEY = "preblast_channel_id"
 PREBLAST_POST_CHANNEL_META_KEY = "preblast_post_channel_id"
 HC_ANNOUNCED_META_KEY = "hc_announced"

@@ -925,7 +925,7 @@ def extract_state_values(body: dict) -> dict[str, Any]:
 
     Args:
         body (dict): The Slack view submission payload.
-    
+
     Returns:
         dict: A dictionary containing the state values.
     """

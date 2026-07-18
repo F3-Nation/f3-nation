@@ -1,7 +1,7 @@
 import os
+from enum import StrEnum
 
 import dotenv
-from enum import StrEnum
 
 dotenv.load_dotenv()
 

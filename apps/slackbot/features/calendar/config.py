@@ -84,7 +84,9 @@ def handle_calendar_config_general(
     region_record.send_q_lineups_hour_cst = (
         safe_convert(send_q_lineups_time.split(":")[0], int) if send_q_lineups_time else 17
     )
-    region_record.calendar_config_special_days_out = safe_convert(safe_get(values, CALENDAR_CONFIG_SPECIAL_DAYS_OUT), int)
+    region_record.calendar_config_special_days_out = safe_convert(
+        safe_get(values, CALENDAR_CONFIG_SPECIAL_DAYS_OUT), int
+    )
     DbManager.update_records(
         cls=SlackSpace,
         filters=[SlackSpace.team_id == region_record.team_id],
@@ -174,7 +176,10 @@ CALENDAR_CONFIG_GENERAL_FORM = orm.BlockView(
                 initial_value=180,
             ),
             optional=True,
-            hint="This setting controls how many days in advance special days are displayed on the calendar image. Set to 0 to disable special days.",
+            hint=(
+                "This setting controls how many days in advance special days are displayed on the calendar image. "
+                "Set to 0 to disable special days."
+            ),
         ),
         orm.InputBlock(
             label="Group Calendar By Option",

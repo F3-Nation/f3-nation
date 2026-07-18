@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any, Iterable
 
 from slack_sdk.models.blocks import InputBlock, SectionBlock
+from slack_sdk.models.blocks.basic_components import MarkdownTextObject, PlainTextObject
 from slack_sdk.models.blocks.block_elements import (
     ChannelSelectElement,
     FileInputElement,
@@ -21,10 +22,9 @@ from slack_sdk.models.blocks.block_elements import (
     TimePickerElement,
     UserMultiSelectElement,
 )
-from slack_sdk.models.blocks.basic_components import PlainTextObject, MarkdownTextObject
 
 from application.event_instance import EventInstanceData
-from application.preblast import PREBLAST_CHANNEL_META_KEY, PreblastEventTypeData
+from application.preblast import PreblastEventTypeData
 from application.preblast.service import PreblastService
 from utilities.helper_functions import current_date_cst
 from utilities.slack import actions
@@ -104,7 +104,11 @@ class PreblastViews:
         blocks.append(
             InputBlock(
                 label="Location",
-                element=StaticSelectElement(action_id=actions.EVENT_PREBLAST_LOCATION, placeholder="Select a location", options=loc_options),
+                element=StaticSelectElement(
+                    action_id=actions.EVENT_PREBLAST_LOCATION,
+                    placeholder="Select a location",
+                    options=loc_options,
+                ),
                 optional=False,
                 block_id=actions.EVENT_PREBLAST_LOCATION,
             )
@@ -157,7 +161,10 @@ class PreblastViews:
         blocks.append(
             InputBlock(
                 label="Preblast",
-                element=RichTextInputElement(action_id=actions.EVENT_PREBLAST_MOLESKINE_EDIT, placeholder="Give us an event preview!"),
+                element=RichTextInputElement(
+                    action_id=actions.EVENT_PREBLAST_MOLESKINE_EDIT,
+                    placeholder="Give us an event preview!",
+                ),
                 optional=False,
                 block_id=actions.EVENT_PREBLAST_MOLESKINE_EDIT,
             )
@@ -173,7 +180,10 @@ class PreblastViews:
                     max_files=1,
                 ),
                 optional=True,
-                hint="Missing images from iOS? HEICs are a pain, write Tim Cook and tell him to stop using proprietary formats that break everything",
+                hint=(
+                    "Missing images from iOS? HEICs are a pain, write Tim Cook and tell him to stop using "
+                    "proprietary formats that break everything"
+                ),
                 block_id=actions.EVENT_PREBLAST_IMAGE,
             )
         )
@@ -239,7 +249,6 @@ class PreblastViews:
         else:
             # Not posted yet — show send options
             # Default to "Send a day before" if event is >1 day away, else "Send now"
-            from datetime import date
 
             schedule_default = "Send now"
             if event.start_date:
@@ -323,7 +332,10 @@ class PreblastViews:
             blocks.append(
                 SectionBlock(
                     text=PlainTextObject(
-                        text="Looks like you are caught up! You have no upcoming Qs that have not already been posted for."
+                        text=(
+                            "Looks like you are caught up! You have no upcoming Qs that have not already been "
+                            "posted for."
+                        )
                     ),
                     block_id="preblast_select_empty",
                 )

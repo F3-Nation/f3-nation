@@ -222,7 +222,7 @@ class PreblastService:
         if self._attendance_service is None:
             raise ValueError("AttendanceService is required to update attendance")
         return self._attendance_service.assign_qs(event_instance_id, q_user_id, co_q_user_ids)
-    
+
     def check_and_mark_hc_announcement(
         self, event_instance_id: int, slack_user_id: str, *, is_hc: bool
     ) -> bool:
