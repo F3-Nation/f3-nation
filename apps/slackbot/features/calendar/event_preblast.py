@@ -199,6 +199,31 @@ def post_hc_thread_reply(
         logger.error(f"Error posting HC thread reply for event in channel {preblast_channel}: {e}")
 
 
+def post_hc_failure_ephemeral(
+    body: dict,
+    client: WebClient,
+    logger: Logger,
+    metadata: dict,
+    slack_user_id: str,
+    text: str,
+) -> None:
+    """Notify the acting user that their HC mutation failed, when a channel is available."""
+    channel_id = (
+        safe_get(body, "channel", "id")
+        or safe_get(body, "container", "channel_id")
+        or safe_get(body, "message", "channel")
+        or safe_get(metadata, "preblast_channel_id")
+    )
+    if not channel_id:
+        logger.warning("Could not post HC failure ephemeral: no Slack channel available")
+        return
+
+    try:
+        client.chat_postEphemeral(channel=channel_id, user=slack_user_id, text=text)
+    except Exception as e:
+        logger.error(f"Error posting HC failure ephemeral in channel {channel_id}: {e}")
+
+
 # ---------------------------------------------------------------------------
 # Middleware / routing
 # ---------------------------------------------------------------------------
@@ -499,6 +524,7 @@ def _build_and_show_preblast_form(
     metadata = {
         "event_instance_id": event_instance_id,
         "preblast_ts": str(preblast_info.event_record.preblast_ts),
+        "preblast_channel_id": preblast_channel,
     }
 
     form.update_modal(
@@ -1154,12 +1180,30 @@ def handle_event_preblast_action(
             try:
                 svc.add_hc(event_instance_id, user_id)
             except Exception as e:
-                logger.error(f"Error HC for event {event_instance_id}: {e}")
+                logger.warning(f"Error HC for event {event_instance_id}: {e}")
+                post_hc_failure_ephemeral(
+                    body,
+                    client,
+                    logger,
+                    metadata,
+                    slack_user_id,
+                    "Sorry, we couldn't record your HC — please try again.",
+                )
+                return
         elif action_id == actions.EVENT_PREBLAST_UN_HC:
             try:
                 svc.remove_hc(event_instance_id, user_id)
             except Exception as e:
-                logger.error(f"Error Un-HC for event {event_instance_id}: {e}")
+                logger.warning(f"Error Un-HC for event {event_instance_id}: {e}")
+                post_hc_failure_ephemeral(
+                    body,
+                    client,
+                    logger,
+                    metadata,
+                    slack_user_id,
+                    "Sorry, we couldn't update your HC — please try again.",
+                )
+                return
         elif action_id == actions.EVENT_PREBLAST_TAKE_Q:
             try:
                 svc.take_q(event_instance_id, user_id)
@@ -1238,11 +1282,29 @@ def handle_event_preblast_action(
                     svc.remove_hc(event_instance_id, user_id)
                 except Exception as e:
                     logger.warning(f"Error Un-HC for event {event_instance_id}: {e}")
+                    post_hc_failure_ephemeral(
+                        body,
+                        client,
+                        logger,
+                        metadata,
+                        slack_user_id,
+                        "Sorry, we couldn't update your HC — please try again.",
+                    )
+                    return
             else:
                 try:
                     svc.add_hc(event_instance_id, user_id)
                 except Exception as e:
                     logger.warning(f"Error HC for event {event_instance_id}: {e}")
+                    post_hc_failure_ephemeral(
+                        body,
+                        client,
+                        logger,
+                        metadata,
+                        slack_user_id,
+                        "Sorry, we couldn't record your HC — please try again.",
+                    )
+                    return
 
             preblast_info = build_preblast_info(body, client, logger, context, region_record, event_instance_id)
             q_id_list = [
@@ -1276,6 +1338,7 @@ def handle_event_preblast_action(
             q_name = (q_name or [""])[0]
             q_url = q_url[0] if q_url else None
             preblast_channel = get_preblast_channel(region_record, preblast_info)
+            metadata["preblast_channel_id"] = preblast_channel
 
             try:
                 client.chat_update(
