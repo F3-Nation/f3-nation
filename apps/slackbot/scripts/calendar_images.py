@@ -544,8 +544,9 @@ def generate_calendar_images(force: bool = False):
 
 def create_special_events_text(events: List[EventInstance], slack_settings_dict: dict, max_events: int = 10) -> str:
     text = ""
-    if slack_settings_dict.get("calendar_config_special_days_out"):
-        events = [e for e in events if (e.start_date - current_date_cst()).days <= slack_settings_dict.get("calendar_config_special_days_out")]  # noqa
+    special_days_out = slack_settings_dict.get("calendar_config_special_days_out")  
+    if special_days_out is not None:  
+        events = [e for e in events if (e.start_date - current_date_cst()).days <= special_days_out]
 
     for i, event in enumerate(events[:max_events]):
         text += f"{i + 1}. *{event.name}* - {event.start_date.strftime('%A, %B %d')} - {event.start_time} @ {event.org.name}\n"  # noqa
