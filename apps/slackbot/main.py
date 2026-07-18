@@ -24,7 +24,7 @@ from infrastructure.api_client.exceptions import (
     F3ApiError,
     F3ApiNotFoundError,
 )
-from utilities.builders import add_debug_form, add_loading_form, send_error_response, SUBMISSION_WAIT_VIEW
+from utilities.builders import SUBMISSION_WAIT_VIEW, add_debug_form, add_loading_form, send_error_response
 from utilities.constants import ENABLE_DEBUGGING, LOCAL_DEVELOPMENT, SOCKET_MODE
 from utilities.database.orm import SlackSettings
 from utilities.helper_functions import (
@@ -143,6 +143,10 @@ def main_response(body: dict, logger: logging.Logger, client: WebClient, ack: Ac
             body[LOADING_ID] = add_loading_form(body=body, client=client)
 
         if request_type == "view_submission":
+            submission_view_id = safe_get(body, "view", "id")
+            if submission_view_id:
+                body["submission_view_id"] = submission_view_id
+
             if has_submission_ack:
                 logger.info("View submission received, sending loading modal...")
                 ack(

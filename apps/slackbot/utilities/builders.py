@@ -1,7 +1,7 @@
 import copy
 import time
 from logging import Logger
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from slack_sdk.models.blocks import (
     ContextBlock,
@@ -17,76 +17,69 @@ from utilities.database.orm import SlackSettings
 from utilities.helper_functions import safe_get
 from utilities.slack import actions, forms
 
-# from pymysql.err import ProgrammingError
-SUBMISSION_EXTERNAL_ID = "submission-wait-view"
 SUBMISSION_WAIT_VIEW = View(
     type="modal",
     title="Submitting...",
-    external_id=SUBMISSION_EXTERNAL_ID,
     blocks=[
-		{
-			"type": "alert",
-			"text": {
-				"type": "mrkdwn",
-				"text": "Submitting your form, please wait... :hourglass_flowing_sand:",
-				"verbatim": False
-			},
-			"level": "info"
-		},
-		{
-			"type": "divider"
-		},
-		{
-			"type": "context",
-			"elements": [
-				{
-					"type": "mrkdwn",
-					"text": "If this takes longer than 10 seconds, please check back later or contact support."
-				}
-			]
-		}
+        {
+            "type": "alert",
+            "text": {
+                "type": "mrkdwn",
+                "text": "Submitting your form, please wait... :hourglass_flowing_sand:",
+                "verbatim": False,
+            },
+            "level": "info",
+        },
+        {"type": "divider"},
+        {
+            "type": "context",
+            "elements": [
+                {
+                    "type": "mrkdwn",
+                    "text": "If this takes longer than 10 seconds, please check back later or contact support.",
+                }
+            ],
+        },
     ],
 )
 
-def update_submission_wait_view(client: WebClient, logger: Logger, title: str, level: constants.AlertLevel, text: str) -> None:
+
+def update_submission_wait_view(
+    client: WebClient,
+    logger: Logger,
+    title: str,
+    level: constants.AlertLevel,
+    text: str,
+    view_id: Optional[str] = None,
+) -> None:
     """
     Update the submission wait view with a new title, level, and text.
     """
+    # truncate text to 200 characters
+    if len(text) > 200:
+        text = text[:197] + "..."
+
     view = View(
         type="modal",
         title=title,
-        external_id=SUBMISSION_EXTERNAL_ID,
         blocks=[
-            {
-                "type": "alert",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": text,
-                    "verbatim": False
-                },
-                "level": level.value
-            },
-            {
-                "type": "divider"
-            },
-            {
-                "type": "context",
-                "elements": [
-                    {
-                        "type": "mrkdwn",
-                        "text": "You can close this form now."
-                    }
-                ]
-            }
+            {"type": "alert", "text": {"type": "mrkdwn", "text": text, "verbatim": False}, "level": level.value},
+            {"type": "divider"},
+            {"type": "context", "elements": [{"type": "mrkdwn", "text": "You can close this form now."}]},
         ],
     )
+    if not view_id:
+        logger.error("Failed to update submission wait view: missing view_id")
+        return
+
     try:
         client.views_update(
-            external_id=SUBMISSION_EXTERNAL_ID,
+            view_id=view_id,
             view=view,
         )
     except Exception as e:
         logger.error(f"Failed to update submission wait view: {e}")
+
 
 def submit_modal() -> Dict[str, Any]:
     return {

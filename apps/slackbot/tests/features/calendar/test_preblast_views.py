@@ -427,6 +427,7 @@ class PreblastViewsTest(unittest.TestCase):
 
         body = {
             "view": {
+                "id": "V_SUBMISSION_1",
                 "private_metadata": f'{{"event_instance_id": {event_id}, "preblast_ts": "None"}}'
             }
         }
@@ -440,6 +441,7 @@ class PreblastViewsTest(unittest.TestCase):
         self.assertEqual(kwargs["title"], "Co-Qs not saved")
         self.assertIn("<@UBADCOQ>", kwargs["text"])
         self.assertEqual(kwargs["level"], constants.AlertLevel.ERROR)
+        self.assertEqual(kwargs["view_id"], "V_SUBMISSION_1")
 
     @patch("features.calendar.event_preblast.update_submission_wait_view")
     @patch("features.calendar.event_preblast.get_user")
@@ -489,6 +491,7 @@ class PreblastViewsTest(unittest.TestCase):
 
         body = {
             "view": {
+                "id": "V_SUBMISSION_2",
                 "private_metadata": f'{{"event_instance_id": {event_id}, "preblast_ts": "None"}}'
             }
         }
@@ -505,6 +508,7 @@ class PreblastViewsTest(unittest.TestCase):
         self.assertEqual(kwargs["title"], "Co-Qs not saved")
         self.assertIn("<@USLACKCOQ>", kwargs["text"])
         self.assertEqual(kwargs["level"], constants.AlertLevel.ERROR)
+        self.assertEqual(kwargs["view_id"], "V_SUBMISSION_2")
 
 
 if __name__ == "__main__":

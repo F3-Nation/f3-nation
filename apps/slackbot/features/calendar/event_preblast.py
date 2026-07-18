@@ -546,6 +546,7 @@ def handle_event_preblast_edit(
     body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings
 ):
     """Handle preblast form submission — assemble command and save through ``PreblastService``."""
+    submission_view_id = safe_get(body, "submission_view_id") or safe_get(body, "view", "id")
     metadata = json.loads(safe_get(body, "view", "private_metadata") or "{}")
     event_instance_id = safe_get(metadata, "event_instance_id")
     existing_ts = safe_get(metadata, "preblast_ts")
@@ -564,6 +565,7 @@ def handle_event_preblast_edit(
             text="Event instance not found and may have been deleted.",
             level=constants.AlertLevel.ERROR,
             logger=logger,
+            view_id=submission_view_id,
         )
         return
 
@@ -650,6 +652,7 @@ def handle_event_preblast_edit(
                 ),
                 level=constants.AlertLevel.ERROR,
                 logger=logger,
+                view_id=submission_view_id,
             )
             return
 
@@ -681,6 +684,7 @@ def handle_event_preblast_edit(
                 ),
                 level=constants.AlertLevel.ERROR,
                 logger=logger,
+                view_id=submission_view_id,
             )
             return
 
@@ -721,6 +725,7 @@ def handle_event_preblast_edit(
             text="Preblast saved successfully!",
             level=constants.AlertLevel.SUCCESS,
             logger=logger,
+            view_id=submission_view_id,
         )
 
 
@@ -943,6 +948,7 @@ def send_preblast(
         text=user_msg,
         level=constants.AlertLevel.SUCCESS if outcome == "success" else constants.AlertLevel.ERROR,
         logger=logger,
+        view_id=safe_get(body, "submission_view_id") or safe_get(body, "view", "id"),
     )
 
 
