@@ -754,6 +754,44 @@ describe("Event Instance Router", () => {
       expect(linkRecords).toHaveLength(0);
     });
 
+    it("should preserve event tag when eventTagId is omitted", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      const eventInstance = await createTestEventInstance(ao.id);
+      const eventTag = await createTestEventTag();
+      if (!eventInstance || !eventTag) return;
+
+      await db.insert(schema.eventTagsXEventInstances).values({
+        eventInstanceId: eventInstance.id,
+        eventTagId: eventTag.id,
+      });
+
+      const client = createTestClient();
+      await client.eventInstance.crupdate({
+        id: eventInstance.id,
+        name: `Updated Event ${uniqueId()}`,
+        orgId: ao.id,
+        startDate: eventInstance.startDate,
+      });
+
+      const linkRecords = await db
+        .select()
+        .from(schema.eventTagsXEventInstances)
+        .where(
+          eq(schema.eventTagsXEventInstances.eventInstanceId, eventInstance.id),
+        );
+
+      expect(linkRecords).toHaveLength(1);
+      expect(linkRecords[0]?.eventTagId).toBe(eventTag.id);
+    });
+
     it("should require editor role", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
