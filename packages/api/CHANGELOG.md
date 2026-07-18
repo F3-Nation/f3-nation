@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.3.1](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.3.0...pkg-api@0.3.1) (2026-07-14)
+
+
+### Bug Fixes
+
+* **api,me:** require filters and cap results on me.users ([#662](https://github.com/F3-Nation/f3-nation/issues/662)) ([70375fc](https://github.com/F3-Nation/f3-nation/commit/70375fc0b396b9f8f0aefd74b407a4ba9aae3b7f))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/auth bumped to 0.1.4
+    * @acme/db bumped to 0.1.3
+    * @acme/shared bumped to 0.1.3
+    * @acme/validators bumped to 0.1.3
+
 ## [0.3.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.2.1...pkg-api@0.3.0) (2026-07-08)
 
 
