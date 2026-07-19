@@ -1,11 +1,12 @@
 import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 
-import { and, eq, schema } from "@acme/db";
+import { and, eq, schema, sql } from "@acme/db";
+import { db as appDb } from "@acme/db/client";
 import type { AppDb } from "@acme/db/client";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
-import { protectedProcedure } from "../shared";
+import { protectedProcedure, publicProcedure } from "../shared";
 import type { Context } from "../shared";
 
 type JsonValue =
@@ -174,6 +175,118 @@ const slackMessageOutputSchema = z.object({
   ts: z.string(),
 });
 
+const MAX_SLACK_SETTINGS_PATCH_BYTES = 128 * 1024;
+
+export const slackSettingsPatchSchema = z
+  .record(z.string(), slackJsonValueSchema)
+  .refine((value) => Object.keys(value).length > 0, {
+    message: "Settings patch must include at least one field",
+  })
+  .superRefine((value, ctx) => {
+    if (
+      new TextEncoder().encode(JSON.stringify(value)).byteLength >
+      MAX_SLACK_SETTINGS_PATCH_BYTES
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Settings patch is limited to 128 KB",
+      });
+    }
+
+    if ("team_id" in value && typeof value.team_id !== "string") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["team_id"],
+        message: "team_id must be a string",
+      });
+    }
+
+    for (const nullableStringKey of ["bot_token", "workspace_name"] as const) {
+      if (
+        nullableStringKey in value &&
+        value[nullableStringKey] !== null &&
+        typeof value[nullableStringKey] !== "string"
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: [nullableStringKey],
+          message: `${nullableStringKey} must be a string or null`,
+        });
+      }
+    }
+  });
+
+const slackSettingsRegionInputSchema = z.object({
+  regionOrgId: z.coerce.number().int().positive(),
+});
+
+export const updateSlackSettingsInputSchema = z
+  .object({
+    regionOrgId: z.coerce.number().int().positive(),
+    settings: slackSettingsPatchSchema,
+  })
+  .strict();
+
+const adminSlackSettingsOutputSchema = z.object({
+  regionOrgId: z.number(),
+  slackSpaceId: z.number(),
+  teamId: z.string().nullable(),
+  workspaceName: z.string().nullable(),
+  settings: z.record(z.string(), slackJsonValueSchema),
+});
+
+const rawSlackSettingsCacheOutputSchema = z.array(
+  z.object({
+    org_id: z.number(),
+    db_id: z.number(),
+    team_id: z.string().nullable(),
+    workspace_name: z.string().nullable(),
+    bot_token: z.string().nullable(),
+    settings: z.unknown(),
+  }),
+);
+
+const SLACKBOT_SERVICE_API_KEY_ENV = "SLACKBOT_SERVICE_API_KEY";
+
+const assertSlackbotServiceAuth = (ctx: { reqHeaders?: Headers | null }) => {
+  const configured = process.env[SLACKBOT_SERVICE_API_KEY_ENV]?.trim();
+  const provided = ctx.reqHeaders?.get("x-slackbot-service-key")?.trim();
+  if (!configured || !provided || configured !== provided) {
+    throw new ORPCError("UNAUTHORIZED");
+  }
+};
+
+const normalizeSlackSettingsObject = (settings: unknown) => {
+  if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
+    return {};
+  }
+  const parsed = z.record(z.string(), slackJsonValueSchema).safeParse(settings);
+  return parsed.success ? parsed.data : {};
+};
+
+const getRawSlackSettingsCache = async (db: AppDb) =>
+  db
+    .select({
+      org_id: schema.orgs.id,
+      db_id: schema.slackSpaces.id,
+      team_id: schema.slackSpaces.teamId,
+      workspace_name: schema.slackSpaces.workspaceName,
+      bot_token: schema.slackSpaces.botToken,
+      settings: schema.slackSpaces.settings,
+    })
+    .from(schema.orgs)
+    .innerJoin(
+      schema.orgsXSlackSpaces,
+      eq(schema.orgsXSlackSpaces.orgId, schema.orgs.id),
+    )
+    .innerJoin(
+      schema.slackSpaces,
+      eq(schema.orgsXSlackSpaces.slackSpaceId, schema.slackSpaces.id),
+    )
+    .where(
+      and(eq(schema.orgs.isActive, true), eq(schema.orgs.orgType, "region")),
+    );
+
 const assertOrgAdmin = async (
   ctx: Pick<Context, "session" | "db">,
   regionOrgId: number,
@@ -204,6 +317,44 @@ const assertActiveOrgExists = async (db: AppDb, regionOrgId: number) => {
       message: "Active org not found",
     });
   }
+};
+
+const getSingleSlackSpaceForRegion = async (db: AppDb, regionOrgId: number) => {
+  const rows = await db
+    .select({
+      regionOrgId: schema.orgs.id,
+      slackSpaceId: schema.slackSpaces.id,
+      teamId: schema.slackSpaces.teamId,
+      workspaceName: schema.slackSpaces.workspaceName,
+      settings: schema.slackSpaces.settings,
+    })
+    .from(schema.orgs)
+    .innerJoin(
+      schema.orgsXSlackSpaces,
+      eq(schema.orgsXSlackSpaces.orgId, schema.orgs.id),
+    )
+    .innerJoin(
+      schema.slackSpaces,
+      eq(schema.orgsXSlackSpaces.slackSpaceId, schema.slackSpaces.id),
+    )
+    .where(
+      and(
+        eq(schema.orgs.id, regionOrgId),
+        eq(schema.orgs.isActive, true),
+        eq(schema.orgs.orgType, "region"),
+      ),
+    )
+    .limit(2);
+
+  if (rows.length === 0) {
+    throw new ORPCError("NOT_FOUND", { message: "Slack settings not found" });
+  }
+  if (rows.length > 1) {
+    throw new ORPCError("CONFLICT", {
+      message: "Multiple Slack spaces are linked to this region",
+    });
+  }
+  return rows[0]!;
 };
 
 const getSlackBotTokenForOrg = async (
@@ -415,6 +566,71 @@ export const callSlackWebApi = async ({
 };
 
 export const slackRouter = {
+  getBotSettings: protectedProcedure
+    .input(slackSettingsRegionInputSchema)
+    .route({ method: "GET", path: "/bot/settings", tags: ["slack"] })
+    .output(adminSlackSettingsOutputSchema)
+    .handler(async ({ context: ctx, input }) => {
+      await assertOrgAdmin(ctx, input.regionOrgId);
+      const row = await getSingleSlackSpaceForRegion(ctx.db, input.regionOrgId);
+      return {
+        regionOrgId: row.regionOrgId,
+        slackSpaceId: row.slackSpaceId,
+        teamId: row.teamId,
+        workspaceName: row.workspaceName,
+        settings: normalizeSlackSettingsObject(row.settings),
+      };
+    }),
+
+  getBotSettingsCache: publicProcedure
+    .route({ method: "GET", path: "/bot/settings/cache", tags: ["slack"] })
+    .output(rawSlackSettingsCacheOutputSchema)
+    .handler(async ({ context: ctx }) => {
+      assertSlackbotServiceAuth(ctx);
+      return getRawSlackSettingsCache(appDb);
+    }),
+
+  updateBotSettings: protectedProcedure
+    .input(updateSlackSettingsInputSchema)
+    .route({ method: "PATCH", path: "/bot/settings", tags: ["slack"] })
+    .output(adminSlackSettingsOutputSchema)
+    .handler(async ({ context: ctx, input }) => {
+      await assertOrgAdmin(ctx, input.regionOrgId);
+      const row = await getSingleSlackSpaceForRegion(ctx.db, input.regionOrgId);
+      const patch = input.settings;
+      const [updated] = await ctx.db
+        .update(schema.slackSpaces)
+        .set({
+          settings: sql`(case when jsonb_typeof(${schema.slackSpaces.settings}::jsonb) = 'object' then ${schema.slackSpaces.settings}::jsonb else '{}'::jsonb end) || ${JSON.stringify(patch)}::jsonb`,
+          updated: sql`timezone('utc'::text, now())`,
+          ...("bot_token" in patch
+            ? { botToken: patch.bot_token as string | null }
+            : {}),
+          ...("team_id" in patch ? { teamId: patch.team_id as string } : {}),
+          ...("workspace_name" in patch
+            ? { workspaceName: patch.workspace_name as string | null }
+            : {}),
+        })
+        .where(eq(schema.slackSpaces.id, row.slackSpaceId))
+        .returning({
+          teamId: schema.slackSpaces.teamId,
+          workspaceName: schema.slackSpaces.workspaceName,
+          settings: schema.slackSpaces.settings,
+        });
+      if (!updated) {
+        throw new ORPCError("NOT_FOUND", {
+          message: "Slack settings not found",
+        });
+      }
+      return {
+        regionOrgId: row.regionOrgId,
+        slackSpaceId: row.slackSpaceId,
+        teamId: updated.teamId,
+        workspaceName: updated.workspaceName,
+        settings: normalizeSlackSettingsObject(updated.settings),
+      };
+    }),
+
   postMessage: protectedProcedure
     .input(postSlackMessageInputSchema)
     .route({
