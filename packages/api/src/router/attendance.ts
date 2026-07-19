@@ -13,7 +13,7 @@ import { protectedProcedure } from "../shared";
 /**
  * Get attendance type IDs by type name from the database
  */
-async function getAttendanceTypeIds(db: AppDb) {
+async function getAttendanceTypeIds(db: Pick<AppDb, "select">) {
   const types = await db
     .select({
       id: schema.attendanceTypes.id,
@@ -698,117 +698,152 @@ export const attendanceRouter = {
         message: "You are not authorized to assign Q and Co-Qs",
       });
 
-      const ATTENDANCE_TYPE_IDS = await getAttendanceTypeIds(ctx.db);
+      return ctx.db.transaction(async (tx) => {
+        const ATTENDANCE_TYPE_IDS = await getAttendanceTypeIds(tx);
 
-      // Get all existing planned attendance for this event
-      const existingAttendance = await ctx.db
-        .select({
-          id: schema.attendance.id,
-          userId: schema.attendance.userId,
-        })
-        .from(schema.attendance)
-        .where(
-          and(
-            eq(schema.attendance.eventInstanceId, eventInstanceId),
-            eq(schema.attendance.isPlanned, true),
-          ),
-        );
-
-      // Get existing Q/Co-Q type assignments
-      const existingQCoQAssignments = await ctx.db
-        .select({
-          attendanceId: schema.attendanceXAttendanceTypes.attendanceId,
-          attendanceTypeId: schema.attendanceXAttendanceTypes.attendanceTypeId,
-        })
-        .from(schema.attendanceXAttendanceTypes)
-        .where(
-          and(
-            inArray(
-              schema.attendanceXAttendanceTypes.attendanceId,
-              existingAttendance.map((a) => a.id),
+        // Get all existing planned attendance for this event
+        const existingAttendance = await tx
+          .select({
+            id: schema.attendance.id,
+            userId: schema.attendance.userId,
+          })
+          .from(schema.attendance)
+          .where(
+            and(
+              eq(schema.attendance.eventInstanceId, eventInstanceId),
+              eq(schema.attendance.isPlanned, true),
             ),
-            inArray(schema.attendanceXAttendanceTypes.attendanceTypeId, [
-              ATTENDANCE_TYPE_IDS.Q,
-              ATTENDANCE_TYPE_IDS.COQ,
-            ]),
-          ),
-        );
+          );
 
-      // Remove all existing Q/Co-Q type assignments
-      if (existingQCoQAssignments.length > 0) {
-        await ctx.db.delete(schema.attendanceXAttendanceTypes).where(
-          and(
-            inArray(
-              schema.attendanceXAttendanceTypes.attendanceId,
-              existingQCoQAssignments.map((a) => a.attendanceId),
+        // Get existing Q/Co-Q type assignments
+        const existingQCoQAssignments = await tx
+          .select({
+            attendanceId: schema.attendanceXAttendanceTypes.attendanceId,
+            attendanceTypeId:
+              schema.attendanceXAttendanceTypes.attendanceTypeId,
+          })
+          .from(schema.attendanceXAttendanceTypes)
+          .where(
+            and(
+              inArray(
+                schema.attendanceXAttendanceTypes.attendanceId,
+                existingAttendance.map((a) => a.id),
+              ),
+              inArray(schema.attendanceXAttendanceTypes.attendanceTypeId, [
+                ATTENDANCE_TYPE_IDS.Q,
+                ATTENDANCE_TYPE_IDS.COQ,
+              ]),
             ),
-            inArray(schema.attendanceXAttendanceTypes.attendanceTypeId, [
-              ATTENDANCE_TYPE_IDS.Q,
-              ATTENDANCE_TYPE_IDS.COQ,
-            ]),
-          ),
-        );
-      }
+          );
 
-      // Helper to ensure user has attendance record and add type
-      const ensureAttendanceWithType = async (
-        userId: number,
-        typeId: number,
-      ) => {
-        const existing = existingAttendance.find((a) => a.userId === userId);
+        // Remove all existing Q/Co-Q type assignments
+        if (existingQCoQAssignments.length > 0) {
+          await tx.delete(schema.attendanceXAttendanceTypes).where(
+            and(
+              inArray(
+                schema.attendanceXAttendanceTypes.attendanceId,
+                existingQCoQAssignments.map((a) => a.attendanceId),
+              ),
+              inArray(schema.attendanceXAttendanceTypes.attendanceTypeId, [
+                ATTENDANCE_TYPE_IDS.Q,
+                ATTENDANCE_TYPE_IDS.COQ,
+              ]),
+            ),
+          );
+        }
 
-        if (existing) {
-          // Add type to existing attendance
-          await ctx.db
+        const assignedUserIds = new Set([
+          ...(qUserId ? [qUserId] : []),
+          ...coQUserIds.filter((coQUserId) => coQUserId !== qUserId),
+        ]);
+        const demotedAttendanceIds = existingAttendance
+          .filter(
+            (attendance) =>
+              !assignedUserIds.has(attendance.userId) &&
+              existingQCoQAssignments.some(
+                (assignment) => assignment.attendanceId === attendance.id,
+              ),
+          )
+          .map((attendance) => attendance.id);
+
+        if (demotedAttendanceIds.length > 0) {
+          await tx
             .insert(schema.attendanceXAttendanceTypes)
-            .values({
-              attendanceId: existing.id,
-              attendanceTypeId: typeId,
-            })
-            .onConflictDoNothing();
-        } else {
-          // Create new attendance with the type
-          const [newAttendance] = await ctx.db
-            .insert(schema.attendance)
-            .values({
-              eventInstanceId,
-              userId,
-              isPlanned: true,
-            })
-            .returning({ id: schema.attendance.id });
-
-          if (newAttendance) {
-            // Add PAX and the specific type
-            await ctx.db.insert(schema.attendanceXAttendanceTypes).values([
-              {
-                attendanceId: newAttendance.id,
+            .values(
+              demotedAttendanceIds.map((attendanceId) => ({
+                attendanceId,
                 attendanceTypeId: ATTENDANCE_TYPE_IDS.PAX,
-              },
-              { attendanceId: newAttendance.id, attendanceTypeId: typeId },
-            ]);
+              })),
+            )
+            .onConflictDoNothing();
+        }
+
+        // Helper to ensure user has attendance record and add type
+        const ensureAttendanceWithType = async (
+          userId: number,
+          typeId: number,
+        ) => {
+          const existing = existingAttendance.find((a) => a.userId === userId);
+
+          if (existing) {
+            // Assigned Q/Co-Q attendance should have exactly the role type
+            await tx
+              .delete(schema.attendanceXAttendanceTypes)
+              .where(
+                eq(schema.attendanceXAttendanceTypes.attendanceId, existing.id),
+              );
+
+            await tx
+              .insert(schema.attendanceXAttendanceTypes)
+              .values({
+                attendanceId: existing.id,
+                attendanceTypeId: typeId,
+              })
+              .onConflictDoNothing();
+          } else {
+            // Create new attendance with the type
+            const [newAttendance] = await tx
+              .insert(schema.attendance)
+              .values({
+                eventInstanceId,
+                userId,
+                isPlanned: true,
+              })
+              .returning({ id: schema.attendance.id });
+
+            if (!newAttendance) {
+              throw new ORPCError("INTERNAL_SERVER_ERROR", {
+                message: "Failed to create attendance record",
+              });
+            }
+
+            await tx.insert(schema.attendanceXAttendanceTypes).values({
+              attendanceId: newAttendance.id,
+              attendanceTypeId: typeId,
+            });
+          }
+        };
+
+        // Assign Q
+        if (qUserId) {
+          await ensureAttendanceWithType(qUserId, ATTENDANCE_TYPE_IDS.Q);
+        }
+
+        // Assign Co-Qs
+        for (const coQUserId of coQUserIds) {
+          // Don't assign Co-Q to the Q user
+          if (coQUserId !== qUserId) {
+            await ensureAttendanceWithType(coQUserId, ATTENDANCE_TYPE_IDS.COQ);
           }
         }
-      };
 
-      // Assign Q
-      if (qUserId) {
-        await ensureAttendanceWithType(qUserId, ATTENDANCE_TYPE_IDS.Q);
-      }
+        // Update event instance timestamp to trigger calendar refresh
+        await tx
+          .update(schema.eventInstances)
+          .set({ updated: new Date().toISOString() })
+          .where(eq(schema.eventInstances.id, eventInstanceId));
 
-      // Assign Co-Qs
-      for (const coQUserId of coQUserIds) {
-        // Don't assign Co-Q to the Q user
-        if (coQUserId !== qUserId) {
-          await ensureAttendanceWithType(coQUserId, ATTENDANCE_TYPE_IDS.COQ);
-        }
-      }
-
-      // Update event instance timestamp to trigger calendar refresh
-      await ctx.db
-        .update(schema.eventInstances)
-        .set({ updated: new Date().toISOString() })
-        .where(eq(schema.eventInstances.id, eventInstanceId));
-
-      return { success: true };
+        return { success: true };
+      });
     }),
 };
