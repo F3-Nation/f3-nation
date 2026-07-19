@@ -98,12 +98,14 @@ Concretely:
    `roles_x_permissions` tables:
 
    ```ts
-   export const Permission = [
+   export const PERMISSIONS = [
      "entities.manage",
      "security.manage",
      "messages.send",
      "pii.read",
    ] as const;
+
+   export type Permission = (typeof PERMISSIONS)[number];
 
    export const ROLE_PERMISSIONS: Record<RegionRole, readonly Permission[]> = {
      admin: ["entities.manage", "security.manage", "messages.send", "pii.read"],
@@ -136,9 +138,7 @@ Concretely:
    `entities.manage` later is cheap, merging is painful.
 
 5. **Unblock new roles:** migrate the `region_role` Postgres enum (add
-   `comz`), or convert `roles.name` to `varchar` validated at the app layer
-   so future roles are TypeScript-only changes. Either way this is the one
-   unavoidable schema migration.
+   `comz`).
 
 6. **Fold `isNationAdminFromSession` into the framework** — it becomes
    `security.manage` (or the relevant permission) scoped to the nation org,
