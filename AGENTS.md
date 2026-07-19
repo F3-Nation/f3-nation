@@ -12,6 +12,9 @@ file that routes back here so guidance never drifts:
 
 Deeper guidance lives in `docs/`:
 
+- [`docs/AI_GUARDRAILS.md`](docs/AI_GUARDRAILS.md) — operating boundaries
+  (Always / Never / Can) and the domains where humans always have final say
+  (security, availability/reliability, scalability).
 - [`docs/AI_DEVELOPMENT_GUIDE.md`](docs/AI_DEVELOPMENT_GUIDE.md) — secure patterns
   and pitfalls to avoid (API authorization, auth/tokens, secrets, web security,
   data layer, multi-instance reliability) with a pre-flight checklist.
