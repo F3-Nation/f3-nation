@@ -1,7 +1,7 @@
 {
   "name": "f3-me",
   "type": "module",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "private": true,
   "scripts": {
     "dev": "next dev --port 3003",
@@ -27,7 +27,6 @@
     "@orpc/server": "catalog:",
     "@t3-oss/env-nextjs": "catalog:",
     "clsx": "catalog:",
-    "jose": "catalog:",
     "next": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",

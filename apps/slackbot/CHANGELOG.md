@@ -2,6 +2,13 @@
 
 <!-- version list -->
 
+## [2.0.4](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.0.3...slackbot@2.0.4) (2026-07-14)
+
+
+### Bug Fixes
+
+* **slackbot,tailwind,sso:** fixing local lint issues ([#659](https://github.com/F3-Nation/f3-nation/issues/659)) ([030cb9b](https://github.com/F3-Nation/f3-nation/commit/030cb9becb28159e32f6340201dc5bf9149f0124))
+
 ## [2.0.3](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.0.2...slackbot@2.0.3) (2026-07-08)
 
 

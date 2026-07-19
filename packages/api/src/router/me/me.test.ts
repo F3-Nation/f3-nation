@@ -27,6 +27,7 @@ import { createRouterClient } from "@orpc/server";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { mockAuthWithSession } from "../../__tests__/test-utils";
 import { router } from "../../index";
+import { MAX_USERS_RESULTS } from "./index";
 
 /** Build a minimal Session object for test mocking. */
 const makeTestSession = (
@@ -521,22 +522,15 @@ describe("Me Router", () => {
   // users (GET)
   // -----------------------------------------------------------------------
   describe("users", () => {
-    it("should return all users when no filter is provided", async () => {
+    it("should reject a call without userId or searchTerm", async () => {
       const client = createDirectClient();
-      const result = await client.me.users();
-
-      expect(result).toHaveProperty("users");
-      expect(Array.isArray(result.users)).toBe(true);
-      expect(result.users.length).toBeGreaterThanOrEqual(1);
-
-      // Verify shape
-      const first = result.users[0]!;
-      expect(first).toHaveProperty("id");
-      expect(first).toHaveProperty("f3Name");
-      expect(first).toHaveProperty("homeRegionId");
-      expect(first).toHaveProperty("status");
-      expect(first).not.toHaveProperty("firstName");
-      expect(first).not.toHaveProperty("lastName");
+      // @ts-expect-error - input is required; the empty call is the regression under test
+      await expect(client.me.users()).rejects.toMatchObject({
+        code: "BAD_REQUEST",
+      });
+      await expect(client.me.users({})).rejects.toMatchObject({
+        code: "BAD_REQUEST",
+      });
     });
 
     it("should filter by searchTerm", async () => {
@@ -549,6 +543,15 @@ describe("Me Router", () => {
       for (const u of result.users) {
         expect(u.f3Name?.toLowerCase()).toContain("Test".toLowerCase());
       }
+
+      // Verify shape
+      const first = result.users[0]!;
+      expect(first).toHaveProperty("id");
+      expect(first).toHaveProperty("f3Name");
+      expect(first).toHaveProperty("homeRegionId");
+      expect(first).toHaveProperty("status");
+      expect(first).not.toHaveProperty("firstName");
+      expect(first).not.toHaveProperty("lastName");
     });
 
     it("should return empty array for a searchTerm with no matches", async () => {
@@ -603,6 +606,29 @@ describe("Me Router", () => {
 
       const names1 = result1.users.map((u) => u.f3Name);
       expect(names1).toEqual([`${prefix}-A`, `${prefix}-B`]);
+    });
+
+    it("should cap results at MAX_USERS_RESULTS rows", async () => {
+      const client = createDirectClient();
+
+      const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const prefix = `LimitTest-${suffix}`;
+
+      const inserted = await db
+        .insert(schema.users)
+        .values(
+          Array.from({ length: MAX_USERS_RESULTS + 1 }, (_, i) => ({
+            email: `${prefix}-${i}@example.com`,
+            f3Name: `${prefix}-${String(i).padStart(3, "0")}`,
+            homeRegionId: regionOrgId,
+          })),
+        )
+        .returning({ id: schema.users.id });
+
+      createdUserIds.push(...inserted.map((u) => u.id));
+
+      const result = await client.me.users({ searchTerm: prefix });
+      expect(result.users).toHaveLength(MAX_USERS_RESULTS);
     });
 
     it("should reject a searchTerm shorter than 2 characters", async () => {

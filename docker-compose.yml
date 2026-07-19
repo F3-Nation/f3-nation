@@ -2,7 +2,7 @@ name: f3-local
 
 services:
   postgres:
-    image: postgres:18@sha256:4aabea78cf39b90e834caf3af7d602a18565f6fe2508705c8d01aa63245c2e20
+    image: postgres:18.4-trixie@sha256:22c89fe0d0f507606260237fd55e51f6137f58b2d5bcf6152242b96d9fe8f9a4
     container_name: f3-postgres
     restart: unless-stopped
     environment:
@@ -21,7 +21,7 @@ services:
       retries: 10
 
   adminer:
-    image: adminer:latest@sha256:983261ecc40a4aaf11e25aeda8ef821f5a43a9f024b3967c81cbcc0e6ce43ba3 # 5.4.2
+    image: adminer:5.4.2@sha256:983261ecc40a4aaf11e25aeda8ef821f5a43a9f024b3967c81cbcc0e6ce43ba3
     container_name: f3-adminer
     restart: unless-stopped
     ports:
@@ -33,7 +33,7 @@ services:
         condition: service_healthy
 
   gcs-emulator:
-    image: fsouza/fake-gcs-server:latest@sha256:3730da0e31f7e5186a90ec4899dc2c336104e7599df400411392ef17e684c31f # 1.54.0
+    image: fsouza/fake-gcs-server:1.54.0@sha256:3730da0e31f7e5186a90ec4899dc2c336104e7599df400411392ef17e684c31f
     container_name: f3-gcs
     restart: unless-stopped
     ports:
@@ -43,7 +43,7 @@ services:
     command: -scheme http -port 9023 -public-host localhost:9023 -backend filesystem -filesystem-root /data
 
   mailpit:
-    image: axllent/mailpit:latest@sha256:956d688cbd13dca36c72d8e94c34d6d1cdf4a005aa6aa4ff6edaaac56c34d8df # v1.30.3
+    image: axllent/mailpit:v1.30.4@sha256:5a49a77c5bdbe7c5474450b4f46348d09949df3695257729c93a30369382d4f6
     container_name: f3-mailpit
     restart: unless-stopped
     ports:

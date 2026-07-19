@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/F3-Nation/f3-nation/compare/tailwind-config@0.1.2...tailwind-config@0.1.3) (2026-07-14)
+
+
+### Bug Fixes
+
+* **slackbot,tailwind,sso:** fixing local lint issues ([#659](https://github.com/F3-Nation/f3-nation/issues/659)) ([030cb9b](https://github.com/F3-Nation/f3-nation/commit/030cb9becb28159e32f6340201dc5bf9149f0124))
+
 ## [0.1.2](https://github.com/F3-Nation/f3-nation/compare/tailwind-config@0.1.1...tailwind-config@0.1.2) (2026-07-08)
 
 
