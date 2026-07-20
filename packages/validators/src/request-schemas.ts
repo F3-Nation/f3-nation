@@ -246,10 +246,7 @@ export const MoveEventToDifferentAOSchema = BaseSchema.extend({
     .number()
     .positive("Target location ID is required")
     .optional(),
-})
-  .extend(EventFields.partial().shape)
-  .extend(LocationFields.partial().shape)
-  .superRefine(checkEventTimeOrder);
+}).extend(LocationFields.partial().shape);
 
 export type MoveEventToDifferentAOType = z.infer<
   typeof MoveEventToDifferentAOSchema
