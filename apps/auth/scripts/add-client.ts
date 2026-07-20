@@ -10,6 +10,7 @@
 
 import crypto from "crypto";
 import readline from "readline";
+import { fileURLToPath } from "url";
 
 import { drizzle } from "drizzle-orm/postgres-js";
 import { eq } from "drizzle-orm";
@@ -26,13 +27,20 @@ const { oauthClients } = (
 // CLI helpers
 // ---------------------------------------------------------------------------
 
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout,
-});
+// Created lazily (not at module scope) so importing this file for its pure
+// helpers (e.g. isValidRedirectUri, from a test) doesn't open an interface
+// on process.stdin that nothing ever closes.
+let rl: readline.Interface | undefined;
+function getRl(): readline.Interface {
+  rl ??= readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  return rl;
+}
 
 function ask(question: string): Promise<string> {
-  return new Promise((resolve) => rl.question(question, resolve));
+  return new Promise((resolve) => getRl().question(question, resolve));
 }
 
 async function confirm(question: string): Promise<boolean> {
@@ -50,7 +58,7 @@ function isValidClientId(id: string): boolean {
   return CLIENT_ID_REGEX.test(id) && id.length >= 3;
 }
 
-function isValidRedirectUri(uri: string, isPublic: boolean): boolean {
+export function isValidRedirectUri(uri: string, isPublic: boolean): boolean {
   try {
     const parsed = new URL(uri);
     if (
@@ -157,7 +165,10 @@ async function main() {
     console.log(`  Public:        ${existing.isPublic}`);
     console.log();
 
-    if (!(await confirm("Update this client and regenerate secret?"))) {
+    const regenLabel = existing.isPublic
+      ? "Update this client?"
+      : "Update this client and regenerate secret?";
+    if (!(await confirm(regenLabel))) {
       process.exit(0);
     }
     isUpdate = true;
@@ -176,18 +187,32 @@ async function main() {
     scopes = existing.scopes ?? "openid profile email";
     isPublic = existing.isPublic;
 
+    const newPublicAnswer = await ask(
+      `Public client? [currently ${isPublic}] (y=public / n=confidential / Enter=keep): `,
+    );
+    if (newPublicAnswer.trim()) {
+      isPublic = newPublicAnswer.trim().toLowerCase() === "y";
+    }
+
     // Allow editing
     const newUris = await ask(`Redirect URIs [${redirectUris.join(", ")}]: `);
     if (newUris.trim()) {
       redirectUris = newUris.split(",").map((u) => u.trim());
-      for (const uri of redirectUris) {
-        if (!isValidRedirectUri(uri, isPublic)) {
-          console.error(
-            `Invalid redirect URI: ${uri}. Must be HTTPS or localhost` +
-              (isPublic ? " or a custom scheme (public client)." : "."),
-          );
-          process.exit(1);
-        }
+    }
+    // Re-validate even when the URIs weren't re-entered: if the public flag
+    // just changed, the existing URIs may no longer be valid for the new
+    // type (custom schemes are public-only, https/localhost is
+    // confidential-only).
+    for (const uri of redirectUris) {
+      if (!isValidRedirectUri(uri, isPublic)) {
+        console.error(
+          `Invalid redirect URI: ${uri}. Must be HTTPS or localhost` +
+            (isPublic ? " or a custom scheme (public client)." : ".") +
+            (newPublicAnswer.trim()
+              ? " The public/confidential type just changed — re-enter matching redirect URIs."
+              : ""),
+        );
+        process.exit(1);
       }
     }
 
@@ -313,17 +338,35 @@ async function main() {
   console.log(`  Client ID:     ${clientId}`);
   if (isPublic) {
     console.log("  Client Secret: (none — public client, PKCE only)");
-  } else {
+  } else if (process.stdout.isTTY) {
+    // Only print the plaintext secret to an interactive terminal — if
+    // stdout is redirected or piped (CI logs, a wrapper script), printing
+    // it here would put it in a persistent log.
     console.log(`  Client Secret: ${clientSecret}`);
     console.log("\n⚠️  Save the secret now — it cannot be retrieved later.");
+  } else {
+    console.error(
+      "\n⚠️  Client secret generated but not printed: stdout isn't an " +
+        "interactive terminal, so it looks redirected/piped/logged. " +
+        "Re-run this script directly in a terminal to view the secret.",
+    );
   }
   console.log();
 
-  rl.close();
+  getRl().close();
   await sql.end();
 }
 
-main().catch((err) => {
-  console.error("Fatal error:", err);
-  process.exit(1);
-});
+// Guard so importing this module (e.g. from a test, to reuse
+// isValidRedirectUri) doesn't kick off the interactive CLI. This package is
+// "type": "module", so `require.main` isn't available — compare argv[1]
+// against this module's own path instead.
+const isMain =
+  process.argv[1] !== undefined &&
+  fileURLToPath(import.meta.url) === process.argv[1];
+if (isMain) {
+  main().catch((err) => {
+    console.error("Fatal error:", err);
+    process.exit(1);
+  });
+}

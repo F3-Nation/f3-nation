@@ -12,6 +12,7 @@ import { importJWK, jwtVerify } from "jose";
 import { constantTimeEqual } from "~/lib/crypto-utils";
 import { db } from "~/lib/db";
 import { getJWKS, signAccessToken } from "~/lib/jwt";
+import { logError, logWarn } from "~/lib/logging";
 
 function generateOpaqueToken(): string {
   return crypto.randomBytes(32).toString("base64url");
@@ -93,19 +94,31 @@ export async function exchangeAuthorizationCode(params: {
   redirectUri: string;
   codeVerifier?: string;
 }) {
+  const reject = (
+    reason: string,
+    error: "invalid_grant" | "invalid_client" = "invalid_grant",
+  ) => {
+    logWarn("auth.oauth.token_rejected", {
+      clientId: params.clientId,
+      grantType: "authorization_code",
+      reason,
+    });
+    return { error };
+  };
+
   // Atomically consume the code (DELETE + RETURNING prevents TOCTOU races)
   const [authCode] = await db
     .delete(oauthAuthorizationCodes)
     .where(eq(oauthAuthorizationCodes.code, params.code))
     .returning();
 
-  if (!authCode) return { error: "invalid_grant" as const };
+  if (!authCode) return reject("code_not_found");
   if (new Date(authCode.expiresAt) < new Date())
-    return { error: "invalid_grant" as const };
+    return reject("code_expired");
   if (authCode.clientId !== params.clientId)
-    return { error: "invalid_grant" as const };
+    return reject("client_mismatch");
   if (authCode.redirectUri !== params.redirectUri)
-    return { error: "invalid_grant" as const };
+    return reject("redirect_uri_mismatch");
 
   // Validate client authentication.
   // Confidential clients (default) must present the client secret.
@@ -113,22 +126,30 @@ export async function exchangeAuthorizationCode(params: {
   // keep a secret confidential, so they authenticate with PKCE alone —
   // which is enforced unconditionally below for all client types.
   const client = await getClient(params.clientId);
-  if (!client) return { error: "invalid_client" as const };
+  if (!client) return reject("unknown_client", "invalid_client");
   if (!client.isPublic) {
-    if (!params.clientSecret) return { error: "invalid_client" as const };
+    if (!params.clientSecret)
+      return reject("missing_client_secret", "invalid_client");
     if (
       !constantTimeEqual(
         client.clientSecretHash,
         hashSecret(params.clientSecret),
       )
     )
-      return { error: "invalid_client" as const };
+      return reject("invalid_client_secret", "invalid_client");
+  } else if (params.clientSecret) {
+    // Protocol anomaly (RFC 6749 §2.3): a public client should never present
+    // a secret. Not fatal — PKCE is still enforced below — but worth a
+    // signal in case the client is misconfigured or a DB flip mislabeled it.
+    logWarn("auth.oauth.public_client_sent_secret", {
+      clientId: params.clientId,
+    });
   }
 
   // PKCE is required — reject codes that have no challenge stored (e.g. issued
   // before enforcement was in place) so there is no bypass window.
-  if (!authCode.codeChallenge) return { error: "invalid_grant" as const };
-  if (!params.codeVerifier) return { error: "invalid_grant" as const };
+  if (!authCode.codeChallenge) return reject("missing_code_challenge");
+  if (!params.codeVerifier) return reject("missing_code_verifier");
 
   const computedChallenge = crypto
     .createHash("sha256")
@@ -136,7 +157,7 @@ export async function exchangeAuthorizationCode(params: {
     .digest("base64url");
 
   if (!constantTimeEqual(computedChallenge, authCode.codeChallenge))
-    return { error: "invalid_grant" as const };
+    return reject("pkce_verifier_mismatch");
 
   // Look up user email for JWT claims
   const [user] = await db
@@ -144,7 +165,16 @@ export async function exchangeAuthorizationCode(params: {
     .from(users)
     .where(eq(users.id, authCode.userId))
     .limit(1);
-  if (!user) return { error: "invalid_grant" as const };
+  if (!user) {
+    // The code's userId came straight from a FK-constrained insert, so a
+    // missing user here means backend data corruption, not a client error.
+    logError("auth.oauth.user_not_found", {
+      clientId: params.clientId,
+      grantType: "authorization_code",
+      userId: authCode.userId,
+    });
+    return { error: "invalid_grant" as const };
+  }
 
   // Create tokens — access token is a JWT, refresh token is opaque
   const ACCESS_TOKEN_TTL = 3600; // 1 hour
@@ -186,78 +216,111 @@ export async function exchangeRefreshToken(params: {
   clientId: string;
   clientSecret?: string;
 }) {
+  const reject = (
+    reason: string,
+    error: "invalid_grant" | "invalid_client" = "invalid_grant",
+  ) => {
+    logWarn("auth.oauth.token_rejected", {
+      clientId: params.clientId,
+      grantType: "refresh_token",
+      reason,
+    });
+    return { error };
+  };
+
   // Validate client. Public clients skip the secret check (see
   // exchangeAuthorizationCode); their refresh grant is protected by
   // possession of the (single-use, rotated-below) refresh token itself,
   // per RFC 6749 §6 + RFC 8252 §8.2 guidance for native apps.
   const client = await getClient(params.clientId);
-  if (!client) return { error: "invalid_client" as const };
+  if (!client) return reject("unknown_client", "invalid_client");
   if (!client.isPublic) {
-    if (!params.clientSecret) return { error: "invalid_client" as const };
+    if (!params.clientSecret)
+      return reject("missing_client_secret", "invalid_client");
     if (
       !constantTimeEqual(
         client.clientSecretHash,
         hashSecret(params.clientSecret),
       )
     )
-      return { error: "invalid_client" as const };
+      return reject("invalid_client_secret", "invalid_client");
+  } else if (params.clientSecret) {
+    // See matching comment in exchangeAuthorizationCode — not fatal, PKCE
+    // rotation is still the real credential here, but worth a signal.
+    logWarn("auth.oauth.public_client_sent_secret", {
+      clientId: params.clientId,
+    });
   }
 
-  // Atomically consume + rotate the refresh token: DELETE ... RETURNING so
-  // two concurrent refreshes with the same token can't both succeed (only one
-  // DELETE removes a row and gets it back). Mirrors the authorization-code
-  // consumption above.
-  const [existing] = await db
-    .delete(oauthRefreshTokens)
-    .where(
-      and(
-        eq(oauthRefreshTokens.token, params.refreshToken),
-        eq(oauthRefreshTokens.clientId, params.clientId),
-        gt(oauthRefreshTokens.expiresAt, new Date().toISOString()),
-      ),
-    )
-    .returning();
+  // Consume + reissue inside one transaction: if signing or the new-row
+  // insert throws after the old refresh token is deleted, the whole thing
+  // rolls back instead of leaving the caller's session burned with nothing
+  // to show for it (this is the client's *only* credential for public
+  // clients, so a half-completed rotation would strand them at re-login).
+  return db.transaction(async (tx) => {
+    // Atomically consume + rotate the refresh token: DELETE ... RETURNING so
+    // two concurrent refreshes with the same token can't both succeed (only
+    // one DELETE removes a row and gets it back). Mirrors the
+    // authorization-code consumption above.
+    const [existing] = await tx
+      .delete(oauthRefreshTokens)
+      .where(
+        and(
+          eq(oauthRefreshTokens.token, params.refreshToken),
+          eq(oauthRefreshTokens.clientId, params.clientId),
+          gt(oauthRefreshTokens.expiresAt, new Date().toISOString()),
+        ),
+      )
+      .returning();
 
-  if (!existing) return { error: "invalid_grant" as const };
+    if (!existing) return reject("refresh_token_invalid_or_expired");
 
-  // Look up user email for JWT claims
-  const [user] = await db
-    .select({ email: users.email })
-    .from(users)
-    .where(eq(users.id, existing.userId))
-    .limit(1);
-  if (!user) return { error: "invalid_grant" as const };
+    // Look up user email for JWT claims
+    const [user] = await tx
+      .select({ email: users.email })
+      .from(users)
+      .where(eq(users.id, existing.userId))
+      .limit(1);
+    if (!user) {
+      logError("auth.oauth.user_not_found", {
+        clientId: params.clientId,
+        grantType: "refresh_token",
+        userId: existing.userId,
+      });
+      return { error: "invalid_grant" as const };
+    }
 
-  const scopes = client.scopes ?? "openid profile email";
-  const ACCESS_TOKEN_TTL = 3600; // 1 hour
+    const scopes = client.scopes ?? "openid profile email";
+    const ACCESS_TOKEN_TTL = 3600; // 1 hour
 
-  const accessToken = await signAccessToken({
-    sub: existing.userId,
-    email: user.email,
-    scope: scopes,
-    clientId: existing.clientId,
-    expiresInSeconds: ACCESS_TOKEN_TTL,
+    const accessToken = await signAccessToken({
+      sub: existing.userId,
+      email: user.email,
+      scope: scopes,
+      clientId: existing.clientId,
+      expiresInSeconds: ACCESS_TOKEN_TTL,
+    });
+
+    const refreshToken = generateOpaqueToken();
+    const refreshExpiresAt = new Date(
+      Date.now() + 30 * 24 * 60 * 60 * 1000,
+    ).toISOString();
+
+    await tx.insert(oauthRefreshTokens).values({
+      token: refreshToken,
+      clientId: existing.clientId,
+      userId: existing.userId,
+      expiresAt: refreshExpiresAt,
+    });
+
+    return {
+      access_token: accessToken,
+      token_type: "Bearer" as const,
+      expires_in: ACCESS_TOKEN_TTL,
+      refresh_token: refreshToken,
+      scope: scopes,
+    };
   });
-
-  const refreshToken = generateOpaqueToken();
-  const refreshExpiresAt = new Date(
-    Date.now() + 30 * 24 * 60 * 60 * 1000,
-  ).toISOString();
-
-  await db.insert(oauthRefreshTokens).values({
-    token: refreshToken,
-    clientId: existing.clientId,
-    userId: existing.userId,
-    expiresAt: refreshExpiresAt,
-  });
-
-  return {
-    access_token: accessToken,
-    token_type: "Bearer" as const,
-    expires_in: ACCESS_TOKEN_TTL,
-    refresh_token: refreshToken,
-    scope: scopes,
-  };
 }
 
 // ---------------------------------------------------------------------------

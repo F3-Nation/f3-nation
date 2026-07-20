@@ -1,6 +1,7 @@
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  resolve: { tsconfigPaths: true },
   test: {
     globals: true,
     environment: "node",
@@ -8,13 +9,13 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "json", "html"],
       reportsDirectory: "./coverage",
-      include: ["src/lib/phone.ts"],
+      include: ["src/lib/phone.ts", "src/lib/oauth.ts"],
       thresholds: {
         autoUpdate: true,
-        statements: 91.66,
+        statements: 80,
         branches: 80,
-        functions: 100,
-        lines: 90.9,
+        functions: 90,
+        lines: 80,
       },
     },
   },
