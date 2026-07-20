@@ -24,7 +24,7 @@ from infrastructure.api_client.exceptions import (
     F3ApiError,
     F3ApiNotFoundError,
 )
-from utilities.builders import add_debug_form, add_loading_form, send_error_response
+from utilities.builders import SUBMISSION_WAIT_VIEW, add_debug_form, add_loading_form, send_error_response
 from utilities.constants import ENABLE_DEBUGGING, LOCAL_DEVELOPMENT, SOCKET_MODE
 from utilities.database.orm import SlackSettings
 from utilities.helper_functions import (
@@ -135,14 +135,28 @@ def main_response(body: dict, logger: logging.Logger, client: WebClient, ack: Ac
     lookup: Tuple[Callable, bool] = safe_get(safe_get(MAIN_MAPPER, request_type), request_id)
 
     if lookup:
-        run_function, add_loading = lookup
+        run_function, add_loading, has_submission_ack = lookup
         if ENABLE_DEBUGGING and request_type != "view_submission":
             body[LOADING_ID] = add_debug_form(body=body, client=client)
             # NOTE: do not put debugging breakpoints above this line
         elif add_loading:
             body[LOADING_ID] = add_loading_form(body=body, client=client)
 
-        if request_type != "block_suggestion":
+        if request_type == "view_submission":
+            submission_view_id = safe_get(body, "view", "id")
+            if submission_view_id:
+                body["submission_view_id"] = submission_view_id
+
+            if has_submission_ack:
+                logger.info("View submission received, sending loading modal...")
+                ack(
+                    response_action="update",
+                    view=SUBMISSION_WAIT_VIEW,
+                )
+            else:
+                ack()
+
+        if request_type not in ("block_suggestion", "view_submission"):
             ack()
 
         try:

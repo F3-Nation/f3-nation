@@ -1,0 +1,19 @@
+from __future__ import annotations
+
+from typing import Protocol
+
+from application.attendance import AttendanceData
+
+
+class AttendanceRepository(Protocol):
+    def get_planned_for_event_instance(self, event_instance_id: int) -> list[AttendanceData]: ...
+
+    def add_hc(self, event_instance_id: int, user_id: int) -> AttendanceData: ...
+
+    def remove_hc(self, event_instance_id: int, user_id: int) -> AttendanceData | None: ...
+
+    def take_q(self, event_instance_id: int, user_id: int) -> AttendanceData: ...
+
+    def remove_q(self, event_instance_id: int, user_id: int) -> AttendanceData | None: ...
+
+    def assign_qs(self, event_instance_id: int, q_user_id: int | None, co_q_user_ids: list[int]) -> None: ...
