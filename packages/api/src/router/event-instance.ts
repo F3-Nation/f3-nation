@@ -345,7 +345,7 @@ export const eventInstanceRouter = {
         meta: z.record(z.string(), z.unknown()).nullish(),
         isPrivate: z.boolean().optional().default(false),
         eventTypeId: z.coerce.number().optional(),
-        eventTagId: z.coerce.number().optional(),
+        eventTagId: z.coerce.number().nullish(),
         preblast: z.string().nullish(),
         preblastRich: z.record(z.string(), z.unknown()).nullish(),
         preblastTs: z.number().nullish(),
@@ -415,6 +415,7 @@ export const eventInstanceRouter = {
         }
       }
 
+      const shouldUpdateEventTag = "eventTagId" in input;
       const { eventTypeId, eventTagId, name: _inputName, ...eventData } = input;
 
       // Create or update the event instance
@@ -451,17 +452,19 @@ export const eventInstanceRouter = {
       }
 
       // Handle event tag in join table
-      if (eventTagId) {
+      if (shouldUpdateEventTag) {
         await ctx.db
           .delete(schema.eventTagsXEventInstances)
           .where(
             eq(schema.eventTagsXEventInstances.eventInstanceId, result.id),
           );
 
-        await ctx.db.insert(schema.eventTagsXEventInstances).values({
-          eventInstanceId: result.id,
-          eventTagId,
-        });
+        if (eventTagId != null) {
+          await ctx.db.insert(schema.eventTagsXEventInstances).values({
+            eventInstanceId: result.id,
+            eventTagId,
+          });
+        }
       }
 
       return result;

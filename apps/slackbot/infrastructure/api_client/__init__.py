@@ -1,4 +1,5 @@
 from infrastructure.api_client.ao_repository import ApiAoRepository, get_api_ao_repository
+from infrastructure.api_client.attendance_repository import ApiAttendanceRepository, get_api_attendance_repository
 from infrastructure.api_client.client import F3ApiClient, get_f3_api_client
 from infrastructure.api_client.event_instance_repository import (
     ApiEventInstanceRepository,
@@ -14,6 +15,8 @@ from infrastructure.api_client.series_repository import ApiSeriesRepository, get
 __all__ = [
     "F3ApiClient",
     "get_f3_api_client",
+    "ApiAttendanceRepository",
+    "get_api_attendance_repository",
     "ApiAoRepository",
     "get_api_ao_repository",
     "ApiEventInstanceRepository",
