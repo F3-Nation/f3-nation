@@ -64,6 +64,16 @@ const REQUEST_FORM_MAP: Record<
   delete_ao: DeleteAoRequestForm,
 };
 
+// Request types whose per-type Zod schema (packages/validators/src/request-schemas.ts)
+// actually extends EventFields and reads eventStartTime/eventEndTime server-side.
+// Every other type's handler ignores the event's own timing entirely, so this
+// shared form shouldn't manufacture/convert values for it.
+const EVENT_TIME_REQUEST_TYPES: ReadonlySet<string> = new Set([
+  "create_ao_and_location_and_event",
+  "create_event",
+  "edit_event",
+] satisfies ActiveRequestType[]);
+
 export default function AdminRequestsModal({
   data: requestData,
 }: {
@@ -152,10 +162,12 @@ export default function AdminRequestsModal({
 
         const submissionInput = {
           ...valuesToSubmit,
-          eventStartTime: convertHH_mmToHHmm(
-            valuesToSubmit.eventStartTime ?? "",
-          ),
-          eventEndTime: convertHH_mmToHHmm(valuesToSubmit.eventEndTime ?? ""),
+          ...(EVENT_TIME_REQUEST_TYPES.has(values.requestType) && {
+            eventStartTime: convertHH_mmToHHmm(
+              valuesToSubmit.eventStartTime ?? "",
+            ),
+            eventEndTime: convertHH_mmToHHmm(valuesToSubmit.eventEndTime ?? ""),
+          }),
         } as Parameters<typeof validateSubmissionByAdmin.mutateAsync>[0];
 
         await validateSubmissionByAdmin.mutateAsync(submissionInput);

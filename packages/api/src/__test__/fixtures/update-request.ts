@@ -200,13 +200,6 @@ export const createMoveEventToNewAORequest = (
   originalAoId: 1,
   originalLocationId: 1,
   newLocationId: null,
-  // Event fields (unchanged event carried along with the move)
-  eventName: "Morning Beatdown",
-  eventDayOfWeek: "monday",
-  eventStartTime: "0530",
-  eventEndTime: "0615",
-  eventTypeIds: [1],
-  eventDescription: "A great workout",
   // AO fields (the new AO to create)
   aoName: "New AO",
   aoLogo: null,

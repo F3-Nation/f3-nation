@@ -199,9 +199,7 @@ export const MoveAOToDifferentRegionSchema = BaseSchema.extend({
   requestType: z.literal("move_ao_to_different_region"),
   newRegionId: z.number().positive("Target region ID is required"),
   originalAoId: z.number().positive("Original AO ID is required"),
-})
-  .extend(AOFields.partial().shape)
-  .extend(LocationFields.partial().shape);
+});
 
 export type MoveAoToDifferentRegionType = z.infer<
   typeof MoveAOToDifferentRegionSchema
@@ -264,10 +262,8 @@ export const MoveEventToNewAOSchema = BaseSchema.extend({
     .nullable(),
   newRegionId: z.number().positive("Target region ID is required").optional(),
 })
-  .extend(EventFields.shape)
   .extend(AOFields.shape)
-  .extend(LocationFields.shape)
-  .superRefine(checkEventTimeOrder);
+  .extend(LocationFields.shape);
 
 export type MoveEventToNewAOType = z.infer<typeof MoveEventToNewAOSchema>;
 
