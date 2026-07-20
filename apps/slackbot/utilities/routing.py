@@ -16,7 +16,6 @@ from features import (
     special_events,
     strava,
     user,
-    weaselbot,
     welcome,
 )
 from features.calendar import (
@@ -60,6 +59,7 @@ COMMAND_MAPPER = {
 VIEW_MAPPER = {
     actions.BACKBLAST_CALLBACK_ID: (backblast.handle_backblast_post, False, False),
     actions.BACKBLAST_EDIT_CALLBACK_ID: (backblast.handle_backblast_post, False, False),
+    actions.KOTTER_REPORT_CONFIG_CALLBACK_ID: (config.handle_kotter_report_config_post, False, False),
     actions.WELCOME_MESSAGE_CONFIG_CALLBACK_ID: (welcome.handle_welcome_message_config_post, False, False),
     actions.CONFIG_GENERAL_CALLBACK_ID: (config.handle_config_general_post, False, False),
     actions.CONFIG_EMAIL_CALLBACK_ID: (config.handle_config_email_post, False, False),
@@ -70,7 +70,6 @@ VIEW_MAPPER = {
     actions.ACHIEVEMENT_TAG_CALLBACK_ID: (achievements.handle_tag_achievement, False, False),
     actions.ACHIEVEMENT_CONFIG_CALLBACK_ID: (achievements.handle_config_form, False, False),
     actions.ACHIEVEMENT_NEW_CALLBACK_ID: (achievements.handle_new_achievement_form, False, False),
-    actions.WEASELBOT_CONFIG_CALLBACK_ID: (weaselbot.handle_config_form, False, False),
     location.ADD_LOCATION_CALLBACK_ID: (location.handle_location_add, False, False),
     actions.ADD_AO_CALLBACK_ID: (ao.handle_ao_add, False, False),
     actions.ADD_SERIES_CALLBACK_ID: (series.handle_series_add, False, False),
@@ -102,6 +101,7 @@ ACTION_MAPPER = {
     actions.BACKBLAST_EDIT_BUTTON_LEGACY: (backblast.handle_legacy_edit_button, True, False),
     actions.BACKBLAST_NEW_BUTTON: (backblast.backblast_middleware, True, False),
     actions.BACKBLAST_STRAVA_BUTTON: (strava.build_strava_form, True, False),
+    actions.CONFIG_KOTTER_REPORTS: (config.build_kotter_report_config_form, False, False),
     actions.STRAVA_ACTIVITY_BUTTON: (strava.build_strava_modify_form, False, False),
     actions.STRAVA_CONNECT_BUTTON: (builders.ignore_event, False, False),
     actions.CONFIG_CUSTOM_FIELDS: (custom_fields.build_custom_field_menu, False, False),
@@ -109,7 +109,7 @@ ACTION_MAPPER = {
     actions.CUSTOM_FIELD_EDIT: (custom_fields.build_custom_field_add_edit, False, False),
     actions.CUSTOM_FIELD_DELETE: (custom_fields.delete_custom_field, False, False),
     actions.PREBLAST_NEW_BUTTON: (event_preblast.preblast_middleware, True, False),
-    actions.CONFIG_WEASELBOT: (weaselbot.build_config_form, False, False),
+    actions.CONFIG_KOTTER_REPORTS: (config.build_kotter_report_config_form, False, False),
     actions.CONFIG_ACHIEVEMENTS: (achievements.build_config_form, False, False),
     actions.ACHIEVEMENT_CONFIG_NEW_BTN: (achievements.build_new_achievement_form, False, False),
     actions.ACHIEVEMENT_CONFIG_MANAGE_BTN: (achievements.build_manage_achievements_form, False, False),
