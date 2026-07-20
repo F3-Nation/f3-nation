@@ -1,5 +1,7 @@
 import { useMemo } from "react";
 
+import { Case } from "@acme/shared/common/enums";
+import { convertCase } from "@acme/shared/common/functions";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 
 import { orpc, useQuery } from "~/orpc/react";
@@ -56,6 +58,28 @@ export const MoveEventToDifferentAoRequestForm = () => {
   const originalEventId = meta?.originalEventId;
   const originalAoId = meta?.originalAoId;
 
+  const { data: eventResponse } = useQuery(
+    orpc.event.byId.queryOptions({
+      input: { id: Number(originalEventId) },
+      enabled: originalEventId != null,
+    }),
+  );
+  const event = eventResponse?.event;
+
+  const dayOfWeek = event?.dayOfWeek
+    ? convertCase({
+        str: event.dayOfWeek,
+        fromCase: Case.LowerCase,
+        toCase: Case.TitleCase,
+      })
+    : null;
+  const time = event?.startTime
+    ? `${event.startTime}${event.endTime ? ` - ${event.endTime}` : ""}`
+    : null;
+  const eventTypes = event?.eventTypes
+    .map((type) => type.eventTypeName)
+    .join(", ");
+
   // Default to the synthetic "New AO" option unless the admin picks a different one.
   const destinationAoValue =
     isNewAo && (formAoId == null || formAoId === originalAoId)
@@ -75,6 +99,40 @@ export const MoveEventToDifferentAoRequestForm = () => {
           { label: "Current AO ID", value: originalAoId },
         ]}
       />
+
+      <h2 className="mt-4 mb-2 text-xl font-semibold text-muted-foreground">
+        Current Workout:
+      </h2>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="space-y-1">
+          <div className="text-sm font-medium text-muted-foreground">
+            Workout Name
+          </div>
+          <div className="text-sm">{event?.name ?? "—"}</div>
+        </div>
+        <div className="space-y-1">
+          <div className="text-sm font-medium text-muted-foreground">
+            Current AO
+          </div>
+          <div className="text-sm">{event?.location ?? "—"}</div>
+        </div>
+        <div className="space-y-1">
+          <div className="text-sm font-medium text-muted-foreground">
+            Day of Week
+          </div>
+          <div className="text-sm">{dayOfWeek ?? "—"}</div>
+        </div>
+        <div className="space-y-1">
+          <div className="text-sm font-medium text-muted-foreground">Time</div>
+          <div className="text-sm">{time ?? "—"}</div>
+        </div>
+        <div className="space-y-1 sm:col-span-2">
+          <div className="text-sm font-medium text-muted-foreground">
+            Event Types
+          </div>
+          <div className="text-sm">{eventTypes ?? "—"}</div>
+        </div>
+      </div>
 
       <h2 className="mt-4 mb-2 text-xl font-semibold text-muted-foreground">
         Destination AO:
