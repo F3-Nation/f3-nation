@@ -61,8 +61,10 @@ export const eventInstanceRouter = {
       const aoOrg = aliasedTable(schema.orgs, "ao_org");
       const limit = input?.pageSize ?? 40;
       const offset = (input?.pageIndex ?? 0) * limit;
-      const usePagination =
-        input?.pageIndex !== undefined && input?.pageSize !== undefined;
+      // pageIndex already defaults to 0 above, so pageSize alone is enough
+      // to opt into pagination — requiring both silently returned every row
+      // whenever a caller sent pageSize without also sending pageIndex.
+      const usePagination = input?.pageSize !== undefined;
 
       const where = and(
         // Active status filter

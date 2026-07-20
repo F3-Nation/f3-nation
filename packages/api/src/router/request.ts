@@ -230,8 +230,10 @@ export const requestRouter = {
 
       const limit = input?.pageSize ?? 10;
       const offset = (input?.pageIndex ?? 0) * limit;
-      const usePagination =
-        input?.pageIndex !== undefined && input?.pageSize !== undefined;
+      // pageIndex already defaults to 0 above, so pageSize alone is enough
+      // to opt into pagination — requiring both silently returned every row
+      // whenever a caller sent pageSize without also sending pageIndex.
+      const usePagination = input?.pageSize !== undefined;
 
       // Determine if filter by region IDs is needed
       let editableOrgs: { id: number; type: OrgType }[] = [];

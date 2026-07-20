@@ -267,8 +267,10 @@ export const buildUserListQuery = async ({
 }) => {
   const limit = input?.pageSize ?? 10;
   const offset = (input?.pageIndex ?? 0) * limit;
-  const usePagination =
-    input?.pageIndex !== undefined && input?.pageSize !== undefined;
+  // pageIndex already defaults to 0 above, so pageSize alone is enough to
+  // opt into pagination — requiring both silently returned every row
+  // whenever a caller sent pageSize without also sending pageIndex.
+  const usePagination = input?.pageSize !== undefined;
   const where = and(
     !input?.statuses?.length || input.statuses.length === UserStatus.length
       ? undefined

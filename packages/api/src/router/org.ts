@@ -256,8 +256,10 @@ export const orgRouter = {
     .handler(async ({ context: ctx, input }) => {
       const pageSize = input.pageSize ?? 10;
       const pageIndex = (input.pageIndex ?? 0) * pageSize;
-      const usePagination =
-        input.pageIndex !== undefined && input.pageSize !== undefined;
+      // pageIndex already defaults to 0 above, so pageSize alone is enough
+      // to opt into pagination — requiring both silently returned every row
+      // whenever a caller sent pageSize without also sending pageIndex.
+      const usePagination = input.pageSize !== undefined;
 
       // Resolve editable org IDs for "onlyMine" filter
       const editableResult = await resolveEditableOrgIds({
@@ -417,8 +419,10 @@ export const orgRouter = {
 
       const pageSize = input?.pageSize ?? 10;
       const pageIndex = (input?.pageIndex ?? 0) * pageSize;
-      const usePagination =
-        input?.pageIndex !== undefined && input?.pageSize !== undefined;
+      // pageIndex already defaults to 0 above, so pageSize alone is enough
+      // to opt into pagination — requiring both silently returned every row
+      // whenever a caller sent pageSize without also sending pageIndex.
+      const usePagination = input?.pageSize !== undefined;
 
       // Check if user has a role with orgId = 1 (F3 Nation)
       const [nationRole] = await ctx.db
