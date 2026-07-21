@@ -1183,6 +1183,12 @@ export const oauthRefreshTokens = authProviderSchema.table(
     createdAt: timestamp("created_at", { mode: "string" })
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
+    // Set (instead of deleting the row) when this token is consumed by a
+    // refresh-token rotation. Kept around, distinct from natural expiry via
+    // expiresAt, so a later presentation of this exact token can be told
+    // apart from a garbage/never-issued token — see exchangeRefreshToken's
+    // reuse-detection path (RFC 9700 §4.14.2).
+    rotatedAt: timestamp("rotated_at", { mode: "string" }),
   },
 );
 

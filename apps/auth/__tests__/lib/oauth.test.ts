@@ -31,6 +31,7 @@ function chain<T>(result: T) {
 const dbMock = {
   select: vi.fn(() => chain([])),
   delete: vi.fn(() => chain([])),
+  update: vi.fn(() => chain([])),
   insert: vi.fn(() => chain(undefined)),
   transaction: vi.fn(async (cb: (tx: typeof dbMock) => unknown) => cb(dbMock)),
 };
@@ -46,9 +47,8 @@ vi.mock("~/lib/jwt", () => ({
   getJWKS: vi.fn(async () => ({ keys: [] })),
 }));
 
-const { exchangeAuthorizationCode, exchangeRefreshToken } = await import(
-  "../../src/lib/oauth"
-);
+const { exchangeAuthorizationCode, exchangeRefreshToken } =
+  await import("../../src/lib/oauth");
 const { logWarn } = await import("~/lib/logging");
 
 const CONFIDENTIAL_CLIENT = {
@@ -79,6 +79,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   dbMock.select.mockImplementation(() => chain([]));
   dbMock.delete.mockImplementation(() => chain([]));
+  dbMock.update.mockImplementation(() => chain([]));
   dbMock.insert.mockImplementation(() => chain(undefined));
   dbMock.transaction.mockImplementation(async (cb) => cb(dbMock));
 });
@@ -256,12 +257,30 @@ describe("exchangeRefreshToken", () => {
     expect(result).toEqual({ error: "invalid_client" });
   });
 
-  it("rejects replay of an already-consumed refresh token", async () => {
+  it("rejects an unknown refresh token with no reuse signal", async () => {
     mockGetClientResult(PUBLIC_CLIENT);
-    // The DELETE ... RETURNING finds nothing because the token was already
-    // consumed by an earlier request — this is exactly what a replayed,
-    // rotated-away token looks like.
-    dbMock.delete.mockReturnValueOnce(chain([]));
+    // The UPDATE ... RETURNING (rotation) finds nothing, and the follow-up
+    // SELECT for a stale/rotated row also finds nothing (default mock) —
+    // this is a garbage token that was never issued, not a replay.
+    dbMock.update.mockReturnValueOnce(chain([]));
+
+    const result = await exchangeRefreshToken({
+      refreshToken: "never-issued-token",
+      clientId: PUBLIC_CLIENT.id,
+    });
+
+    expect(result).toEqual({ error: "invalid_grant" });
+    expect(dbMock.delete).not.toHaveBeenCalled();
+  });
+
+  it("detects replay of an already-rotated refresh token and revokes the family", async () => {
+    mockGetClientResult(PUBLIC_CLIENT);
+    // The UPDATE ... RETURNING (rotation) finds nothing — this exact token
+    // was already consumed by an earlier request. The follow-up SELECT
+    // finds the row (rotatedAt set from that earlier rotation), which is
+    // what marks this as a genuine replay rather than a garbage token.
+    dbMock.update.mockReturnValueOnce(chain([]));
+    dbMock.select.mockReturnValueOnce(chain([{ userId: 42 }]));
 
     const result = await exchangeRefreshToken({
       refreshToken: "already-used-token",
@@ -269,11 +288,18 @@ describe("exchangeRefreshToken", () => {
     });
 
     expect(result).toEqual({ error: "invalid_grant" });
+    expect(logWarn).toHaveBeenCalledWith(
+      "auth.oauth.refresh_token_reuse_detected",
+      { clientId: PUBLIC_CLIENT.id, userId: 42 },
+    );
+    // The whole token family for that user+client is revoked, not just the
+    // replayed token.
+    expect(dbMock.delete).toHaveBeenCalledTimes(1);
   });
 
   it("rotates a valid public-client refresh token and issues a new one", async () => {
     mockGetClientResult(PUBLIC_CLIENT);
-    dbMock.delete.mockReturnValueOnce(
+    dbMock.update.mockReturnValueOnce(
       chain([
         {
           token: "rt-1",
@@ -281,12 +307,11 @@ describe("exchangeRefreshToken", () => {
           userId: 42,
           expiresAt: new Date(Date.now() + 60_000).toISOString(),
           createdAt: "",
+          rotatedAt: new Date().toISOString(),
         },
       ]),
     );
-    dbMock.select.mockReturnValueOnce(
-      chain([{ email: "pax@example.com" }]),
-    );
+    dbMock.select.mockReturnValueOnce(chain([{ email: "pax@example.com" }]));
 
     const result = await exchangeRefreshToken({
       refreshToken: "rt-1",
@@ -300,7 +325,7 @@ describe("exchangeRefreshToken", () => {
 
   it("warns (but does not reject) when a public client sends a secret anyway", async () => {
     mockGetClientResult(PUBLIC_CLIENT);
-    dbMock.delete.mockReturnValueOnce(chain([]));
+    dbMock.update.mockReturnValueOnce(chain([]));
 
     await exchangeRefreshToken({
       refreshToken: "rt-1",
@@ -348,8 +373,6 @@ describe("isValidRedirectUri", () => {
   });
 
   it("rejects custom schemes entirely for confidential clients", () => {
-    expect(isValidRedirectUri("com.example.app:/callback", false)).toBe(
-      false,
-    );
+    expect(isValidRedirectUri("com.example.app:/callback", false)).toBe(false);
   });
 });

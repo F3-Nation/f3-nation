@@ -1,6 +1,6 @@
 import crypto from "crypto";
 
-import { and, eq, gt } from "@acme/db";
+import { and, eq, gt, isNotNull, isNull } from "@acme/db";
 import {
   oauthAuthorizationCodes,
   oauthClients,
@@ -113,10 +113,8 @@ export async function exchangeAuthorizationCode(params: {
     .returning();
 
   if (!authCode) return reject("code_not_found");
-  if (new Date(authCode.expiresAt) < new Date())
-    return reject("code_expired");
-  if (authCode.clientId !== params.clientId)
-    return reject("client_mismatch");
+  if (new Date(authCode.expiresAt) < new Date()) return reject("code_expired");
+  if (authCode.clientId !== params.clientId) return reject("client_mismatch");
   if (authCode.redirectUri !== params.redirectUri)
     return reject("redirect_uri_mismatch");
 
@@ -258,22 +256,68 @@ export async function exchangeRefreshToken(params: {
   // to show for it (this is the client's *only* credential for public
   // clients, so a half-completed rotation would strand them at re-login).
   return db.transaction(async (tx) => {
-    // Atomically consume + rotate the refresh token: DELETE ... RETURNING so
-    // two concurrent refreshes with the same token can't both succeed (only
-    // one DELETE removes a row and gets it back). Mirrors the
-    // authorization-code consumption above.
+    const nowIso = new Date().toISOString();
+
+    // Soft-consume: an UPDATE that stamps rotatedAt, instead of a DELETE,
+    // keeps the row around as evidence for the replay check below (RFC 9700
+    // §4.14.2) — a hard DELETE would erase it, making a replayed
+    // already-rotated token indistinguishable from one that never existed.
+    // isNull(rotatedAt) gives this the same single-use atomicity a
+    // DELETE...RETURNING would: only one concurrent UPDATE can flip a NULL
+    // rotatedAt to non-null and get the row back, mirroring the
+    // authorization-code consumption above. Rotated rows now accumulate
+    // instead of being deleted — worth a periodic cleanup job for rows past
+    // some retention window (e.g. rotatedAt older than 30 days), which
+    // doesn't exist yet.
     const [existing] = await tx
-      .delete(oauthRefreshTokens)
+      .update(oauthRefreshTokens)
+      .set({ rotatedAt: nowIso })
       .where(
         and(
           eq(oauthRefreshTokens.token, params.refreshToken),
           eq(oauthRefreshTokens.clientId, params.clientId),
-          gt(oauthRefreshTokens.expiresAt, new Date().toISOString()),
+          isNull(oauthRefreshTokens.rotatedAt),
+          gt(oauthRefreshTokens.expiresAt, nowIso),
         ),
       )
       .returning();
 
-    if (!existing) return reject("refresh_token_invalid_or_expired");
+    if (!existing) {
+      // Tell an unknown/garbage token apart from a REPLAY of one already
+      // rotated away — only the latter still has a row with rotatedAt set.
+      // A replay is treated as a compromise signal: revoke every refresh
+      // token for this user+client (including the legitimate rotated
+      // descendant) so a stolen-then-rotated token can't keep working, per
+      // RFC 9700 §4.14.2 — this matters most for public clients, where
+      // rotation is the *only* theft mitigation (no secret as a second
+      // factor).
+      const [reused] = await tx
+        .select({ userId: oauthRefreshTokens.userId })
+        .from(oauthRefreshTokens)
+        .where(
+          and(
+            eq(oauthRefreshTokens.token, params.refreshToken),
+            eq(oauthRefreshTokens.clientId, params.clientId),
+            isNotNull(oauthRefreshTokens.rotatedAt),
+          ),
+        )
+        .limit(1);
+      if (reused) {
+        logWarn("auth.oauth.refresh_token_reuse_detected", {
+          clientId: params.clientId,
+          userId: reused.userId,
+        });
+        await tx
+          .delete(oauthRefreshTokens)
+          .where(
+            and(
+              eq(oauthRefreshTokens.userId, reused.userId),
+              eq(oauthRefreshTokens.clientId, params.clientId),
+            ),
+          );
+      }
+      return reject("refresh_token_invalid_or_expired");
+    }
 
     // Look up user email for JWT claims
     const [user] = await tx
