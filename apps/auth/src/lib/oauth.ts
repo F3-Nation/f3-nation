@@ -1,6 +1,6 @@
 import crypto from "crypto";
 
-import { and, eq, gt, isNotNull, isNull } from "@acme/db";
+import { and, eq, gt, isNotNull, isNull, lt } from "@acme/db";
 import {
   oauthAuthorizationCodes,
   oauthClients,
@@ -266,9 +266,9 @@ export async function exchangeRefreshToken(params: {
     // DELETE...RETURNING would: only one concurrent UPDATE can flip a NULL
     // rotatedAt to non-null and get the row back, mirroring the
     // authorization-code consumption above. Rotated rows now accumulate
-    // instead of being deleted — worth a periodic cleanup job for rows past
-    // some retention window (e.g. rotatedAt older than 30 days), which
-    // doesn't exist yet.
+    // instead of being deleted — see cleanupRotatedRefreshTokens below,
+    // which needs a scheduler wired up to actually run periodically (none
+    // exists yet in this app).
     const [existing] = await tx
       .update(oauthRefreshTokens)
       .set({ rotatedAt: nowIso })
@@ -440,4 +440,28 @@ export async function revokeAllUserTokens(userId: number): Promise<void> {
   await db
     .delete(oauthRefreshTokens)
     .where(eq(oauthRefreshTokens.userId, userId));
+}
+
+// Rows only ever accumulate rotatedAt via the soft-consume in
+// exchangeRefreshToken (see above) — they're never deleted at rotation time
+// so a replayed token can still be recognized. Nothing calls this on a
+// schedule yet; this app has no cron/job runner today. Wire it up to
+// whatever gets adopted (Vercel Cron, a scheduled GitHub Actions workflow,
+// etc.) rather than leaving auth.oauth_refresh_tokens to grow unbounded.
+const ROTATED_TOKEN_RETENTION_DAYS = 30;
+
+export async function cleanupRotatedRefreshTokens(): Promise<number> {
+  const cutoff = new Date(
+    Date.now() - ROTATED_TOKEN_RETENTION_DAYS * 24 * 60 * 60 * 1000,
+  ).toISOString();
+  const deleted = await db
+    .delete(oauthRefreshTokens)
+    .where(
+      and(
+        isNotNull(oauthRefreshTokens.rotatedAt),
+        lt(oauthRefreshTokens.rotatedAt, cutoff),
+      ),
+    )
+    .returning({ token: oauthRefreshTokens.token });
+  return deleted.length;
 }
