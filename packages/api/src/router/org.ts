@@ -254,12 +254,12 @@ export const orgRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
-      const pageSize = input.pageSize ?? 10;
-      const pageIndex = (input.pageIndex ?? 0) * pageSize;
+      const pageSize = input?.pageSize ?? 10;
+      const pageIndex = (input?.pageIndex ?? 0) * pageSize;
       // pageIndex already defaults to 0 above, so pageSize alone is enough
       // to opt into pagination — requiring both silently returned every row
       // whenever a caller sent pageSize without also sending pageIndex.
-      const usePagination = input.pageSize !== undefined;
+      const usePagination = input?.pageSize !== undefined;
 
       // Resolve editable org IDs for "onlyMine" filter
       const editableResult = await resolveEditableOrgIds({
