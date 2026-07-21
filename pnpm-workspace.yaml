@@ -136,6 +136,12 @@ catalog:
 overrides:
   "form-data@>=2.0.0 <2.5.6": "^4.0.6"
   "@auth/core": "0.41.2"
+  # GHSA-3jxr-9vmj-r5cp (DoS via exponential-time brace expansion). Two
+  # independent transitive lines exist (via minimatch@3 in eslint plugins,
+  # and via minimatch@10 in @sentry/nextjs's build plugins), each needing a
+  # different patched target.
+  "brace-expansion@<1.1.16": "^1.1.16"
+  "brace-expansion@>=3.0.0 <5.0.7": "^5.0.7"
 peerDependencyRules:
   allowedVersions:
     eslint-plugin-react>eslint: "10"
