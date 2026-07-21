@@ -52,19 +52,24 @@ export const orpc = createTanstackQueryUtils(client);
 export { ORPCError } from "@orpc/client";
 export { useMutation, useQuery } from "@tanstack/react-query";
 
+/**
+ * Invalidate queries by router segment name or with custom options.
+ *
+ * oRPC's `createTanstackQueryUtils` always encodes the full router path as an
+ * array in `queryKey[0]` — e.g. `orpc.map.location.eventsAndLocations` produces
+ * `queryKey[0] === ["map", "location", "eventsAndLocations"]`, even for
+ * single-segment routers (`["location"]`). When passed a string, this matches
+ * any query whose path includes that segment anywhere, so a nested router like
+ * `map.location` is still reached by `invalidateQueries("location")`.
+ */
 export function invalidateQueries(
   keyOrOptions?: string | Parameters<QueryClient["invalidateQueries"]>[0],
 ) {
   if (typeof keyOrOptions === "string") {
     return getQueryClient().invalidateQueries({
       predicate: (query) => {
-        const queryKey = query.queryKey;
-        return (
-          Array.isArray(queryKey) &&
-          queryKey.length > 0 &&
-          (queryKey[0] === keyOrOptions ||
-            (Array.isArray(queryKey[0]) && queryKey[0][0] === keyOrOptions))
-        );
+        const path = query.queryKey[0];
+        return Array.isArray(path) && path.includes(keyOrOptions);
       },
     });
   }

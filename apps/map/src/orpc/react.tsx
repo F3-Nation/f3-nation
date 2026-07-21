@@ -60,18 +60,24 @@ export { ORPCError } from "@orpc/client";
 export { useMutation, useQuery } from "@tanstack/react-query";
 
 /**
- * Invalidate queries by key name or with custom options.
- * When passed a string, handles both flat (["event", ...]) and nested ([["event", "all"], ...]) query key formats.
+ * Invalidate queries by router segment name or with custom options.
+ *
+ * oRPC's `createTanstackQueryUtils` always encodes the full router path as an
+ * array in `queryKey[0]` — e.g. `orpc.map.location.eventsAndLocations` produces
+ * `queryKey[0] === ["map", "location", "eventsAndLocations"]`, even for
+ * single-segment routers (`["location"]`). When passed a string, this matches
+ * any query whose path includes that segment anywhere, so a nested router like
+ * `map.location` is still reached by `invalidateQueries("location")`.
  *
  * @example
- * // Simple key - handles nested keys automatically
- * await invalidateQueries("event");
+ * // Matches "location", "map.location", etc.
+ * await invalidateQueries("location");
  *
  * // Passing query options directly
  * void invalidateQueries(orpc.request.all.queryOptions());
  *
  * // Custom predicate when needed
- * await invalidateQueries({ predicate: (query) => query.queryKey[0] === "location" });
+ * await invalidateQueries({ predicate: (query) => query.queryKey[0]?.[0] === "location" });
  */
 export function invalidateQueries(
   keyOrOptions?: string | Parameters<QueryClient["invalidateQueries"]>[0],
@@ -79,13 +85,8 @@ export function invalidateQueries(
   if (typeof keyOrOptions === "string") {
     return getQueryClient().invalidateQueries({
       predicate: (query) => {
-        const queryKey = query.queryKey;
-        return (
-          Array.isArray(queryKey) &&
-          queryKey.length > 0 &&
-          (queryKey[0] === keyOrOptions ||
-            (Array.isArray(queryKey[0]) && queryKey[0][0] === keyOrOptions))
-        );
+        const path = query.queryKey[0];
+        return Array.isArray(path) && path.includes(keyOrOptions);
       },
     });
   }
