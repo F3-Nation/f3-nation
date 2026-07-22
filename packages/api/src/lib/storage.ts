@@ -1,3 +1,5 @@
+import { ORPCError } from "@orpc/server";
+
 import type { PublicImageStorage } from "@acme/storage";
 import { createPublicImageStorage, deriveStorageChannel } from "@acme/storage";
 
@@ -9,7 +11,9 @@ export function getPublicImageStorage(): PublicImageStorage {
   if (storage) return storage;
   const credentials = process.env.GCS_CREDENTIALS;
   if (!credentials) {
-    throw new Error("GCS_CREDENTIALS is not set");
+    throw new ORPCError("INTERNAL_SERVER_ERROR", {
+      message: "GCS_CREDENTIALS is not set",
+    });
   }
   storage = createPublicImageStorage({
     channel: deriveStorageChannel(process.env.F3_CHANNEL ?? ""),

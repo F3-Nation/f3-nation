@@ -129,6 +129,47 @@ credential.
 
 ---
 
+## Error handling
+
+Router handlers (`packages/api/src/router`) must throw a typed
+[`ORPCError`](https://orpc.unnoq.com/docs/error-handling), never a raw
+`Error`. oRPC only preserves the code, status, and message of an `ORPCError`
+— any other thrown value (including a plain `throw new Error("...")`) is
+masked as an opaque 500 `INTERNAL_SERVER_ERROR` and the original message is
+dropped before it reaches the client. Concretely, this means:
+
+- **Clients can't distinguish their own mistake from a server bug.** A
+  missing required field and a database outage both come back as the same
+  generic 500, so retry logic can't tell which errors are worth retrying.
+- **The HTTP status code is wrong.** A validation failure should be a 4xx,
+  not a 500 — 5xx rates are typically used as a server-health signal, and
+  masked client errors pollute that signal with noise that isn't actionable.
+
+```ts
+// WRONG — becomes an opaque 500, message is dropped.
+if (!input.regionId) throw new Error("Region is required");
+
+// Client error — pick the code that matches why the request failed.
+if (!input.regionId) {
+  throw new ORPCError("BAD_REQUEST", { message: "Region is required" });
+}
+```
+
+Pick the code by what actually went wrong, not by what's convenient:
+
+| Situation                                             | Code                    | Status |
+| ----------------------------------------------------- | ----------------------- | ------ |
+| Missing/invalid input                                 | `BAD_REQUEST`           | 400    |
+| Authenticated but lacks permission for the resource   | `FORBIDDEN`             | 403    |
+| A referenced resource doesn't exist                   | `NOT_FOUND`             | 404    |
+| An upstream/external call failed                      | `BAD_GATEWAY`           | 502    |
+| Truly unexpected server state (should be unreachable) | `INTERNAL_SERVER_ERROR` | 500    |
+
+`packages/api/eslint.config.js` scopes an ESLint `no-restricted-syntax` rule
+to `packages/api/src/router/**/*.ts` (excluding tests) that flags any bare
+`throw new Error(...)` and points at this guidance — treat a lint failure
+here as a sign the error needs a real `ORPCError` code, not a suppression.
+
 ## Authentication & tokens
 
 - **CSPRNG only** for OTPs, verification tokens, session tokens, nonces, API

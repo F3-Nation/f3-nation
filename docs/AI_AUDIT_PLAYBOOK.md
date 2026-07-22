@@ -200,6 +200,10 @@ file.arrayBuffer()` on untrusted input.
 - Duplicated logic that has drifted between apps (e.g. two copies of an auth
   helper where only one was fixed).
 - Dead code, commented-out prod branches, `TODO`/`FIXME` on security paths.
+- Raw `throw new Error(...)` in a `packages/api/src/router` handler instead of
+  a typed `ORPCError`. oRPC masks anything else as an opaque 500, dropping the
+  message and the correct 4xx/5xx status — see
+  [`docs/AI_DEVELOPMENT_GUIDE.md#error-handling`](AI_DEVELOPMENT_GUIDE.md#error-handling).
 
 ---
 

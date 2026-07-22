@@ -268,10 +268,15 @@ export const apiKeyRouter = {
 
           const roleMap = new Map(roleRecords.map((r) => [r.name, r.id]));
 
-          // Verify all roles exist
+          // Verify all roles exist. roleName is schema-constrained to
+          // "editor"/"admin", so this only fires if the roles table is
+          // missing its seeded rows — a server data-integrity problem, not
+          // something the client can trigger.
           for (const roleName of roleNames) {
             if (!roleMap.has(roleName)) {
-              throw new Error(`Role "${roleName}" not found`);
+              throw new ORPCError("INTERNAL_SERVER_ERROR", {
+                message: `Role "${roleName}" not found`,
+              });
             }
           }
 
@@ -280,7 +285,9 @@ export const apiKeyRouter = {
             roles.map((role) => {
               const roleId = roleMap.get(role.roleName);
               if (!roleId) {
-                throw new Error(`Role "${role.roleName}" not found`);
+                throw new ORPCError("INTERNAL_SERVER_ERROR", {
+                  message: `Role "${role.roleName}" not found`,
+                });
               }
               return {
                 roleId,
@@ -303,7 +310,9 @@ export const apiKeyRouter = {
         throw error;
       }
 
-      throw new Error("Unable to generate unique API key");
+      throw new ORPCError("INTERNAL_SERVER_ERROR", {
+        message: "Unable to generate unique API key",
+      });
     }),
   revoke: adminProcedure
     .input(revokeApiKeySchema)

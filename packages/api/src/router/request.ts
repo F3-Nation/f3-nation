@@ -579,7 +579,9 @@ export const requestRouter = {
     .handler(async ({ context: ctx, input }) => {
       const submittedBy = ctx.session?.user?.email ?? input.submittedBy;
       if (!submittedBy) {
-        throw new Error("Submitted by is required");
+        throw new ORPCError("BAD_REQUEST", {
+          message: "Submitted by is required",
+        });
       }
 
       const [existingEvent] = input.eventId
@@ -643,7 +645,9 @@ export const requestRouter = {
         .returning();
 
       if (!request) {
-        throw new Error("Unable to create a new request");
+        throw new ORPCError("INTERNAL_SERVER_ERROR", {
+          message: "Unable to create a new request",
+        });
       }
 
       // Notify admins and editors about the new delete request
@@ -713,12 +717,16 @@ export const requestRouter = {
     .handler(async ({ context: ctx, input }) => {
       const submittedBy = ctx.session?.user?.email ?? input.submittedBy;
       if (!submittedBy) {
-        throw new Error("Submitted by is required");
+        throw new ORPCError("BAD_REQUEST", {
+          message: "Submitted by is required",
+        });
       }
 
       if (input.eventStartTime && input.eventEndTime) {
         if (input.eventStartTime > input.eventEndTime) {
-          throw new Error("End time must be after start time");
+          throw new ORPCError("BAD_REQUEST", {
+            message: "End time must be after start time",
+          });
         }
       }
 
@@ -812,7 +820,9 @@ export const requestRouter = {
         .returning();
 
       if (!inserted) {
-        throw new Error("Failed to insert update request");
+        throw new ORPCError("INTERNAL_SERVER_ERROR", {
+          message: "Failed to insert update request",
+        });
       }
       const [region] = await ctx.db
         .select()
@@ -820,7 +830,9 @@ export const requestRouter = {
         .where(eq(schema.orgs.id, input.regionId));
 
       if (!region) {
-        throw new Error("Failed to find region");
+        throw new ORPCError("NOT_FOUND", {
+          message: "Failed to find region",
+        });
       }
 
       // Notify admins and editors about the new request
@@ -1039,7 +1051,9 @@ export const requestRouter = {
         .where(eq(schema.updateRequests.id, input.id));
 
       if (!updateRequest) {
-        throw new Error("Failed to find update request");
+        throw new ORPCError("NOT_FOUND", {
+          message: "Failed to find update request",
+        });
       }
 
       const { success: hasPermissionToEditThisRegion } =
@@ -1093,7 +1107,9 @@ const applyDeleteRequest = async (
       .set({ isActive: false })
       .where(eq(schema.locations.id, deleteRequest.locationId));
   } else {
-    throw new Error("Nothing to delete");
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Nothing to delete",
+    });
   }
 
   return {
@@ -1159,7 +1175,9 @@ const applyUpdateRequest = async (
       .returning();
 
     if (!location) {
-      throw new Error("Failed to find location");
+      throw new ORPCError("INTERNAL_SERVER_ERROR", {
+        message: "Failed to find location",
+      });
     }
     updateRequest.locationId = location.id;
   } else {
@@ -1181,7 +1199,9 @@ const applyUpdateRequest = async (
       .returning();
 
     if (!location) {
-      throw new Error("Failed to find location to update");
+      throw new ORPCError("NOT_FOUND", {
+        message: "Failed to find location to update",
+      });
     }
   }
 
@@ -1205,7 +1225,11 @@ const applyUpdateRequest = async (
       })
       .returning();
 
-    if (!ao) throw new Error("Failed to insert AO");
+    if (!ao) {
+      throw new ORPCError("INTERNAL_SERVER_ERROR", {
+        message: "Failed to insert AO",
+      });
+    }
     updateRequest.aoId = ao.id;
   } else {
     const [ao] = await ctx.db
@@ -1214,7 +1238,9 @@ const applyUpdateRequest = async (
       .where(eq(schema.orgs.id, updateRequest.aoId));
 
     if (ao?.orgType !== "ao") {
-      throw new Error("Failed to find ao to update. Does the AO exist?");
+      throw new ORPCError("NOT_FOUND", {
+        message: "Failed to find ao to update. Does the AO exist?",
+      });
     }
 
     // UPDATE AO
@@ -1259,7 +1285,9 @@ const applyUpdateRequest = async (
       .returning();
 
     if (!_updated) {
-      throw new Error("Failed to update event");
+      throw new ORPCError("NOT_FOUND", {
+        message: "Failed to update event",
+      });
     }
     eventId = _updated.id;
   } else {
@@ -1294,7 +1322,9 @@ const applyUpdateRequest = async (
       .returning();
 
     if (!_inserted) {
-      throw new Error("Failed to insert event");
+      throw new ORPCError("INTERNAL_SERVER_ERROR", {
+        message: "Failed to insert event",
+      });
     }
     eventId = _inserted.id;
   }
@@ -1317,7 +1347,9 @@ const applyUpdateRequest = async (
     .returning();
 
   if (!updated) {
-    throw new Error("Failed to update update request");
+    throw new ORPCError("INTERNAL_SERVER_ERROR", {
+      message: "Failed to update update request",
+    });
   }
 
   // Update event types

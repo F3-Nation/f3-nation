@@ -503,5 +503,126 @@ describe("Request Router", () => {
         }),
       ).rejects.toThrow();
     });
+
+    it("throws NOT_FOUND for a non-existent request", async () => {
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const session = createEditorSession({
+        orgId: region.id,
+        orgName: region.name,
+      });
+      await mockAuthWithSession(session);
+
+      const client = createTestClient();
+
+      await expect(
+        client.request.rejectSubmission({
+          id: "00000000-0000-0000-0000-000000000000",
+        }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+        message: "Failed to find update request",
+      });
+    });
+  });
+
+  describe("submitUpdateRequest", () => {
+    it("throws BAD_REQUEST when the end time is before the start time", async () => {
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const session = createEditorSession({
+        orgId: region.id,
+        orgName: region.name,
+      });
+      await mockAuthWithSession(session);
+
+      const client = createTestClient();
+
+      await expect(
+        client.request.submitUpdateRequest({
+          id: uniqueId(),
+          regionId: region.id,
+          requestType: "create_event",
+          eventName: `Bad Time Test ${uniqueId()}`,
+          eventDayOfWeek: "monday",
+          eventStartTime: "0800",
+          eventEndTime: "0700",
+          eventTypeIds: null,
+          aoName: "Test AO",
+          submittedBy: "submitter@example.com",
+        }),
+      ).rejects.toMatchObject({
+        code: "BAD_REQUEST",
+        message: "End time must be after start time",
+      });
+    });
+  });
+
+  describe("validateSubmissionByAdmin", () => {
+    it("throws BAD_REQUEST when a delete_event request has neither eventId nor locationId", async () => {
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const session = createEditorSession({
+        orgId: region.id,
+        orgName: region.name,
+      });
+      await mockAuthWithSession(session);
+
+      const client = createTestClient();
+
+      await expect(
+        client.request.validateSubmissionByAdmin({
+          id: uniqueId(),
+          regionId: region.id,
+          requestType: "delete_event",
+          eventName: `Nothing To Delete Test ${uniqueId()}`,
+          eventDayOfWeek: "monday",
+          eventStartTime: "0600",
+          eventEndTime: "0700",
+          eventTypeIds: null,
+          aoName: "Test AO",
+          submittedBy: "submitter@example.com",
+        }),
+      ).rejects.toMatchObject({
+        code: "BAD_REQUEST",
+        message: "Nothing to delete",
+      });
+    });
+
+    it("throws NOT_FOUND when locationId references a location that does not exist", async () => {
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const session = createEditorSession({
+        orgId: region.id,
+        orgName: region.name,
+      });
+      await mockAuthWithSession(session);
+
+      const client = createTestClient();
+
+      await expect(
+        client.request.validateSubmissionByAdmin({
+          id: uniqueId(),
+          regionId: region.id,
+          requestType: "create_event",
+          eventName: `Bad Location Test ${uniqueId()}`,
+          eventDayOfWeek: "monday",
+          eventStartTime: "0600",
+          eventEndTime: "0700",
+          eventTypeIds: null,
+          aoName: "Test AO",
+          submittedBy: "submitter@example.com",
+          locationId: 999999999,
+          locationDescription: "Updated description",
+        }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+        message: "Failed to find location to update",
+      });
+    });
   });
 });

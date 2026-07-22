@@ -96,6 +96,20 @@ natively by Cursor, Codex, Gemini CLI, and others. Claude Code only scans
   human-facing primer (why pino, how to use it, controlling `LOG_LEVEL`);
   [`packages/logger/README.md`](packages/logger/README.md) is the full API reference.
 
+## API Error Handling
+
+- Router handlers in `packages/api/src/router` must throw
+  `new ORPCError(code, { message })`, never a raw `Error`. oRPC masks any
+  non-`ORPCError` throw as an opaque 500 `INTERNAL_SERVER_ERROR` and drops the
+  message, so clients can't distinguish a bad request from a server fault.
+  Use `BAD_REQUEST`/`FORBIDDEN`/`NOT_FOUND`/etc. for client errors (4xx) and
+  reserve `INTERNAL_SERVER_ERROR`/`BAD_GATEWAY` for genuinely unexpected
+  server or upstream failures. This is enforced by an ESLint
+  `no-restricted-syntax` rule scoped to `packages/api/src/router` (see
+  `packages/api/eslint.config.js`); see
+  [`docs/AI_DEVELOPMENT_GUIDE.md`](docs/AI_DEVELOPMENT_GUIDE.md#error-handling)
+  for the full rationale and code-selection guidance.
+
 ## GitHub Actions Conventions
 
 - **Pin third-party actions to a full commit SHA with a version comment** (e.g. `actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2`). SHAs are immutable — a semver tag can be force-pushed, a SHA cannot. Renovate (`pinDigests: true`) keeps the SHAs up to date automatically.

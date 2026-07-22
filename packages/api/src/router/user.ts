@@ -467,7 +467,9 @@ export const userRouter = {
           .from(schema.users)
           .where(eq(schema.users.id, input.id));
         if (!existingUser) {
-          throw new Error("User not found");
+          throw new ORPCError("NOT_FOUND", {
+            message: "User not found",
+          });
         }
         user = existingUser;
       } else {
@@ -486,7 +488,9 @@ export const userRouter = {
 
           const insertedUser = result[0];
           if (!insertedUser) {
-            throw new Error("User not found");
+            throw new ORPCError("INTERNAL_SERVER_ERROR", {
+              message: "User not found",
+            });
           }
           user = insertedUser;
         } catch (error) {
@@ -582,7 +586,12 @@ export const userRouter = {
           newRolesToInsert.map((role) => {
             const roleId = roleNameToId[role.roleName];
             if (roleId === undefined) {
-              throw new Error(`Role ${role.roleName} not found`);
+              // roleName is schema-constrained to "user"/"editor"/"admin", so
+              // this only fires if the roles table is missing its seeded
+              // rows — a server data-integrity problem, not a client error.
+              throw new ORPCError("INTERNAL_SERVER_ERROR", {
+                message: `Role ${role.roleName} not found`,
+              });
             }
             return {
               userId: user.id,

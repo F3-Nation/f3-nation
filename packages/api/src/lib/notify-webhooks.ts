@@ -1,3 +1,5 @@
+import { ORPCError } from "@orpc/server";
+
 import { env } from "@acme/env";
 
 // You guys both wanted webhooks to let you know when the map data is updated, right? I now have that functional, but will need your hardcoded webhook urls. Can you share those with me? In the future I’ll allow them to be dynamic but for now was hoping to doing something light. It will just send a post or get (whichever you want) whenever the data changes. I will likely send a payload like this:
@@ -55,16 +57,16 @@ export const notifyWebhooks = async (mapData: WebhookPayload) => {
         body: JSON.stringify(data),
       });
       if (!response.ok) {
-        throw new Error(
-          `Webhook POST failed: ${response.status} ${response.statusText}`,
-        );
+        throw new ORPCError("BAD_GATEWAY", {
+          message: `Webhook POST failed: ${response.status} ${response.statusText}`,
+        });
       }
     } else if (webhook.method === "GET") {
       const response = await fetch(webhook.url);
       if (!response.ok) {
-        throw new Error(
-          `Webhook GET failed: ${response.status} ${response.statusText}`,
-        );
+        throw new ORPCError("BAD_GATEWAY", {
+          message: `Webhook GET failed: ${response.status} ${response.statusText}`,
+        });
       }
     }
   }
