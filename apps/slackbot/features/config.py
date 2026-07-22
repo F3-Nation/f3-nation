@@ -146,7 +146,11 @@ def build_config_general_form(
 def _kotter_enabled(region_record: SlackSettings) -> bool:
     if region_record.kotter_reports_enabled is not None:
         return bool(region_record.kotter_reports_enabled)
-    return bool(region_record.send_aoq_reports)
+    return False
+
+
+def _kotter_include_admins(region_record: SlackSettings) -> bool:
+    return region_record.kotter_report_include_admins is not False
 
 
 def _kotter_ao_reports_enabled(region_record: SlackSettings) -> bool:
@@ -171,7 +175,7 @@ def build_kotter_report_config_form(
             actions.KOTTER_REPORT_NO_Q_WEEKS: region_record.NO_Q_THRESHOLD_WEEKS,
             actions.KOTTER_REPORT_NO_Q_POSTS: region_record.NO_Q_THRESHOLD_POSTS,
             actions.KOTTER_REPORT_RECIPIENT_USERS: region_record.kotter_report_recipient_users or [],
-            actions.KOTTER_REPORT_INCLUDE_ADMINS: "yes" if region_record.kotter_report_include_admins else "no",
+            actions.KOTTER_REPORT_INCLUDE_ADMINS: "yes" if _kotter_include_admins(region_record) else "no",
             actions.KOTTER_REPORT_INCLUDE_SITE_QS: "yes" if _kotter_ao_reports_enabled(region_record) else "no",
             actions.KOTTER_REPORT_SEND_MODE: region_record.kotter_report_send_mode or "group",
             actions.KOTTER_REPORT_DAY: str(
