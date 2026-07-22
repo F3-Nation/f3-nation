@@ -38,9 +38,9 @@ interface UpcomingMapInstance {
   eventTypes: { id: number; name: string }[];
 }
 
-export function createSyntheticEventFromInstance(
+const createSyntheticEventFromInstance = (
   instance: UpcomingMapInstance,
-): SparseF3Marker["events"][number] {
+): SparseF3Marker["events"][number] => {
   const mapStatus: MapStatus =
     instance.seriesException === "closed"
       ? "closed"
@@ -62,7 +62,7 @@ export function createSyntheticEventFromInstance(
     aoLogo: instance.aoLogo,
     mapStatus,
   };
-}
+};
 
 export function mergeUpcomingInstancesIntoMarkers({
   locationMarkers,

@@ -24,11 +24,6 @@ export enum ModalType {
 
 export enum DeleteType {
   EVENT = "EVENT",
-  EVENT_TYPE = "EVENT_TYPE",
-  EVENT_INSTANCE = "EVENT_INSTANCE",
-  REGION = "REGION",
-  SECTOR = "SECTOR",
-  NATION = "NATION",
 }
 
 export const eventDefaults = {
