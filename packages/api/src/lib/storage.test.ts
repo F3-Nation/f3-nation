@@ -7,13 +7,27 @@
  */
 
 import { ORPCError } from "@orpc/server";
-import { describe, expect, it } from "vitest";
-
-import { getPublicImageStorage } from "./storage";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 describe("getPublicImageStorage", () => {
-  it("throws ORPCError INTERNAL_SERVER_ERROR when GCS_CREDENTIALS is not set", () => {
-    expect(process.env.GCS_CREDENTIALS).toBeUndefined();
+  const originalCredentials = process.env.GCS_CREDENTIALS;
+
+  afterEach(() => {
+    if (originalCredentials === undefined) {
+      delete process.env.GCS_CREDENTIALS;
+    } else {
+      process.env.GCS_CREDENTIALS = originalCredentials;
+    }
+    vi.resetModules();
+  });
+
+  it("throws ORPCError INTERNAL_SERVER_ERROR when GCS_CREDENTIALS is not set", async () => {
+    // Some environments (e.g. CI) set a placeholder GCS_CREDENTIALS for other
+    // tests, so this must explicitly unset it and re-import for a fresh
+    // module instance rather than relying on the ambient env.
+    delete process.env.GCS_CREDENTIALS;
+    vi.resetModules();
+    const { getPublicImageStorage } = await import("./storage");
 
     let thrown: unknown;
     try {
