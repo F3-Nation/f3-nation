@@ -243,12 +243,12 @@ export default function AdminEventInstancesModal({
 
       const trimmedName = formData.name?.trim();
       const descTrim = formData.description?.trim();
-      const endDate = formData.endDate?.trim() ?? null;
+      const endDateTrim = formData.endDate?.trim();
       await crupdateEventInstance.mutateAsync({
         ...(isEditing && data.id != null ? { id: data.id } : {}),
         orgId: formData.orgId,
         startDate: formData.startDate,
-        endDate: endDate,
+        endDate: endDateTrim == null || endDateTrim === "" ? null : endDateTrim,
         locationId: formData.locationId ?? null,
         name: trimmedName ?? undefined,
         description: descTrim == null || descTrim === "" ? null : descTrim,
