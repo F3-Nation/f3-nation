@@ -10,6 +10,21 @@ body:
     attributes:
       value: |
         Thank you for taking the time to file a feature request. Please fill out this form as completely as possible.
+  - type: dropdown
+    id: affected-app
+    attributes:
+      label: Affected app
+      description: Which app is this feature request for?
+      options:
+        - apps/admin
+        - apps/api
+        - apps/auth
+        - apps/homepage
+        - apps/map
+        - apps/me
+        - apps/slackbot
+    validations:
+      required: true
   - type: textarea
     attributes:
       label: Describe the feature you'd like to request
