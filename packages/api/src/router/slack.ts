@@ -220,7 +220,7 @@ const slackSettingsRegionInputSchema = z.object({
   regionOrgId: z.coerce.number().int().positive(),
 });
 
-export const updateSlackSettingsInputSchema = z
+const updateSlackSettingsInputSchema = z
   .object({
     regionOrgId: z.coerce.number().int().positive(),
     settings: slackSettingsPatchSchema,
