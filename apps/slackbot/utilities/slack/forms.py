@@ -97,7 +97,7 @@ BACKBLAST_FORM = orm.BlockView(
             label="Total PAX Count",
             action=actions.BACKBLAST_COUNT,
             optional=True,
-            element=orm.PlainTextInputElement(placeholder="Total PAX count including FNGs"),
+            element=orm.NumberInputElement(placeholder="Total PAX count including FNGs", is_decimal_allowed=False),
             hint="If left blank, this will be calculated automatically from the fields above.",
         ),
         orm.InputBlock(
@@ -216,44 +216,37 @@ PREBLAST_FORM = orm.BlockView(
 
 CONFIG_FORM = orm.BlockView(
     [
+        orm.HeaderBlock(label="Calendar Management"),
         orm.ActionsBlock(
             elements=[
                 orm.ButtonElement(
-                    label=":date: Calendar Settings",
+                    label=":date: Manage Schedules & Events",
                     action=actions.CONFIG_CALENDAR,
                 ),
+                orm.ButtonElement(
+                    label=":gear: General Calendar Settings",
+                    action=actions.CALENDAR_CONFIG_GENERAL,
+                ),
+            ],
+        ),
+        orm.DividerBlock(),
+        orm.HeaderBlock(label="Region Management"),
+        orm.ActionsBlock(
+            elements=[
                 orm.ButtonElement(
                     label=":world_map: Region Info",
                     action=actions.REGION_INFO_BUTTON,
                 ),
                 orm.ButtonElement(
-                    label=":bust_in_silhouette: User Settings",
-                    action=actions.CONFIG_USER_SETTINGS,
-                ),
-                orm.ButtonElement(
-                    label=":hospital: Emergency Info Access",
-                    action=actions.CONFIG_EMERGENCY_INFO,
-                ),
-                orm.ButtonElement(
-                    label=":grey_question: Help Menu",
-                    action=actions.CONFIG_HELP_MENU,
-                ),
-                orm.ButtonElement(
-                    label=":speech_balloon: Welcomebot Settings",
-                    action=actions.CONFIG_WELCOME_MESSAGE,
-                ),
-                orm.ButtonElement(
-                    label=":chart_with_upwards_trend: Reporting Settings",
-                    action=actions.CONFIG_REPORTING,
-                ),
-                # orm.ButtonElement(
-                #     label=":newspaper: Region Canvas Settings",
-                #     action=actions.CONFIG_SPECIAL_EVENTS,
-                # ),
-                orm.ButtonElement(
                     label=":classical_building: SLT Settings",
                     action=actions.CONFIG_SLT,
                 ),
+            ],
+        ),
+        orm.DividerBlock(),
+        orm.HeaderBlock(label="Blast Management"),
+        orm.ActionsBlock(
+            elements=[
                 orm.ButtonElement(
                     label=":gear: Backblast & Preblast Settings",
                     action=actions.CONFIG_GENERAL,
@@ -266,13 +259,45 @@ CONFIG_FORM = orm.BlockView(
                     label=":bar_chart: Custom Field Settings",
                     action=actions.CONFIG_CUSTOM_FIELDS,
                 ),
+            ],
+        ),
+        orm.DividerBlock(),
+        orm.HeaderBlock(label="Bot Management"),
+        orm.ActionsBlock(
+            elements=[
                 orm.ButtonElement(
-                    label=":computer: Paxminer Mapping",
-                    action=actions.PAXMINER_MAPPING,
+                    label=":speech_balloon: Welcomebot Settings",
+                    action=actions.CONFIG_WELCOME_MESSAGE,
+                ),
+                orm.ButtonElement(
+                    label=":chart_with_upwards_trend: Reporting Settings",
+                    action=actions.CONFIG_REPORTING,
                 ),
                 orm.ButtonElement(
                     label=":airplane: Downrange",
                     action=actions.CONFIG_DOWNRANGE,
+                ),
+                orm.ButtonElement(
+                    label=":computer: Paxminer Mapping",
+                    action=actions.PAXMINER_MAPPING,
+                ),
+            ],
+        ),
+        orm.DividerBlock(),
+        orm.HeaderBlock(label="User Settings"),
+        orm.ActionsBlock(
+            elements=[
+                orm.ButtonElement(
+                    label=":bust_in_silhouette: User Settings",
+                    action=actions.CONFIG_USER_SETTINGS,
+                ),
+                orm.ButtonElement(
+                    label=":hospital: Emergency Info Access",
+                    action=actions.CONFIG_EMERGENCY_INFO,
+                ),
+                orm.ButtonElement(
+                    label=":grey_question: Help Menu",
+                    action=actions.CONFIG_HELP_MENU,
                 ),
             ],
         ),
@@ -403,6 +428,7 @@ CONFIG_GENERAL_FORM = orm.BlockView(
                 initial_value="no",
                 options=orm.as_selector_options(names=["Yes", "No"], values=["yes", "no"]),
             ),
+            hint="If enabled, only Qs, CoQs, Site-Q, AOQs, or admins can edit backblasts.",  # noqa: E501
         ),
         orm.DividerBlock(),
         orm.InputBlock(
