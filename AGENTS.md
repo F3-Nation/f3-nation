@@ -110,6 +110,15 @@ natively by Cursor, Codex, Gemini CLI, and others. Claude Code only scans
 - Reset databases before any suite that mutates data (`pnpm reset-test-db` or `pnpm -C packages/db reset-test-db`).
 - Prefer fixtures in `apps/map/tests` or `packages/*/__mocks__` instead of live service calls.
 - How coverage is measured and why thresholds are set the way they are (Vitest 4's whole-`src` denominator, shared `coverageInclude`/`coverageExclude`): [`docs/testing.md`](docs/testing.md).
+- **Never set `test.coverage.thresholds.autoUpdate` to `false`, and never remove
+  the key** (its default is `false`, so deleting it has the same effect). Vitest
+  ratchets the threshold numbers in `vitest.config.ts` upward as coverage
+  improves — a config file modified by a test run is **expected**, and that
+  change should be committed, not reverted or suppressed. Lowering or freezing
+  thresholds to make a failing suite pass is not an acceptable fix; add the
+  missing tests instead. Enforced by
+  [`scripts/check-vitest-thresholds.mjs`](scripts/check-vitest-thresholds.mjs),
+  which runs in `pnpm lint` (and therefore CI) and as a `pre-commit` job.
 
 ### Driving auth-bounded flows in local dev
 
