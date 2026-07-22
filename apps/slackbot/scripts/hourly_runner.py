@@ -82,11 +82,11 @@ def run_all_hourly_scripts(force: bool = False, run_reporting: bool = True, repo
         except Exception as e:
             print(f"Error running monthly reporting: {e}")
 
-    print("Running Kotter reporting")
-    try:
-        kotter_reports.send_kotter_reports(force=force, run_org_id=reporting_org_id)
-    except Exception as e:
-        print(f"Error running Kotter reporting: {e}")
+        print("Running Kotter reporting")
+        try:
+            kotter_reports.send_kotter_reports(force=force, run_org_id=reporting_org_id)
+        except Exception as e:
+            print(f"Error running Kotter reporting: {e}")
 
     print("Running achievements update")
     try:

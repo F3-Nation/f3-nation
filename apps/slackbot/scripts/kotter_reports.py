@@ -576,7 +576,7 @@ def build_kotter_message(delivery: Delivery, stats_url: str | None = None) -> tu
             "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": f"*{delivery.title}*\n{len(rows)} PAX need attention.",
+                "text": text[:3000],
             },
         },
         {"type": "table", "rows": table_rows},
