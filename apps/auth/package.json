@@ -1,6 +1,6 @@
 {
   "name": "f3-auth",
-  "version": "2.0.2",
+  "version": "2.0.7",
   "private": true,
   "type": "module",
   "scripts": {
@@ -50,6 +50,7 @@
     "dotenv-cli": "catalog:",
     "eslint": "catalog:",
     "postcss": "catalog:",
+    "postcss-load-config": "catalog:",
     "prettier": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:",

@@ -1,6 +1,6 @@
 {
   "name": "f3-api",
-  "version": "6.0.2",
+  "version": "6.1.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -16,13 +16,9 @@
     "with-env": "dotenv -e .env --"
   },
   "dependencies": {
-    "@acme/api": "workspace:^0.2.0",
-    "@acme/auth": "workspace:^0.1.0",
-    "@acme/db": "workspace:^0.1.0",
+    "@acme/api": "workspace:*",
     "@acme/logger": "workspace:*",
-    "@acme/shared": "workspace:^0.1.0",
-    "@acme/ui": "workspace:^0.1.0",
-    "@acme/validators": "workspace:^0.1.0",
+    "@acme/shared": "workspace:*",
     "@orpc/openapi": "catalog:",
     "@orpc/server": "catalog:",
     "@orpc/zod": "catalog:",
@@ -37,10 +33,10 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@acme/eslint-config": "workspace:^0.2.0",
-    "@acme/prettier-config": "workspace:^0.1.0",
+    "@acme/eslint-config": "workspace:*",
+    "@acme/prettier-config": "workspace:*",
     "@acme/tsconfig": "workspace:*",
-    "@acme/vitest-config": "workspace:^0.1.0",
+    "@acme/vitest-config": "workspace:*",
     "@testing-library/jest-dom": "catalog:",
     "@testing-library/react": "catalog:",
     "@types/node": "catalog:",

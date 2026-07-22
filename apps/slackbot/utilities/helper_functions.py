@@ -13,7 +13,6 @@ import requests
 from f3_data_models.models import (
     Location,
     Org,
-    Org_Type,
     Org_x_SlackSpace,
     Role,
     Role_x_User_x_Org,
@@ -166,6 +165,11 @@ def safe_get(data, *keys):
         return result
     except (KeyError, IndexError, TypeError):
         return None
+
+
+def is_deactivated_slack_user(slack_user_info: dict) -> bool:
+    """Return True when a Slack user payload represents a deactivated account."""
+    return bool(safe_get(slack_user_info, "deleted"))
 
 
 def get_pax(pax):
@@ -411,7 +415,16 @@ def get_region_record(team_id: str, body, context, client, logger) -> SlackSetti
 
 
 def populate_users(client: WebClient, team_id: str, org_id: int = None) -> None:
-    users = client.users_list().get("members")
+    users = client.users_list().get("members") or []
+    active_users = []
+    for u in users:
+        user_id = safe_get(u, "id")
+        if not user_id:
+            continue
+        if is_deactivated_slack_user(u):
+            continue
+        active_users.append(u)
+
     user_list = [
         User(
             f3_name=u["profile"]["display_name"] or u["profile"]["real_name"],
@@ -419,7 +432,7 @@ def populate_users(client: WebClient, team_id: str, org_id: int = None) -> None:
             avatar_url=u["profile"].get("image_192"),
             home_region_id=org_id,
         )
-        for u in users
+        for u in active_users
     ]
     DbManager.create_or_ignore(User, user_list)
 
@@ -439,7 +452,7 @@ def populate_users(client: WebClient, team_id: str, org_id: int = None) -> None:
             is_bot=u.get("is_bot") or False,
             slack_updated=safe_convert(safe_get(u, "user", "updated"), int),
         )
-        for u in users
+        for u in active_users
     ]
     DbManager.create_or_ignore(SlackUser, slack_user_list)
     update_local_slack_users()
@@ -906,3 +919,50 @@ def sort_by_name(extractor):
         return folded
 
     return key
+
+def extract_state_values(body: dict) -> dict[str, Any]:
+    """Extracts the state values from a Slack view submission payload.
+
+    Args:
+        body (dict): The Slack view submission payload.
+
+    Returns:
+        dict: A dictionary containing the state values.
+    """
+
+    # Extract form values from body
+    state_values = safe_get(body, "view", "state", "values") or {}
+    form_data: dict[str, Any] = {}
+    for block_id, block_values in state_values.items():
+        for _, state in block_values.items():
+            element_type = state.get("type")
+            if element_type in (
+                "plain_text_input", "email_text_input", "url_text_input",
+                "number_input", "datepicker", "timepicker",
+            ):
+                form_data[block_id] = state.get("value")
+            elif element_type in ("users_select", "conversations_select", "channels_select"):
+                form_data[block_id] = (
+                    state.get("selected_user")
+                    or state.get("selected_conversation")
+                    or state.get("selected_channel")
+                )
+            elif element_type in ("multi_users_select", "multi_conversations_select", "multi_channels_select"):
+                form_data[block_id] = (
+                    state.get("selected_users")
+                    or state.get("selected_conversations")
+                    or state.get("selected_channels")
+                )
+            elif element_type in ("static_select", "external_select", "radio_buttons"):
+                form_data[block_id] = (
+                    (state.get("selected_option") or {}).get("value")
+                    if state.get("selected_option")
+                    else None
+                )
+            elif element_type in ("multi_static_select", "multi_external_select", "checkboxes"):
+                form_data[block_id] = [o.get("value") for o in state.get("selected_options", [])]
+            elif element_type == "rich_text_input":
+                form_data[block_id] = state.get("rich_text_value")
+            elif element_type == "file_input":
+                form_data[block_id] = state.get("files")
+    return form_data

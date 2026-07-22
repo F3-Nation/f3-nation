@@ -2,12 +2,7 @@ import { DEFAULT_CENTER, DEFAULT_ZOOM } from "@acme/shared/app/constants";
 import { ZustandStore } from "@acme/shared/common/classes";
 
 type NearbyLocationCenterType =
-  | "self"
-  | "search"
-  | "manual-update"
-  | "default"
-  | "click"
-  | "random";
+  "self" | "search" | "manual-update" | "default" | "click" | "random";
 
 const initialState = {
   // selectedItem: null as (GroupedMapData & WorkoutData) | null,

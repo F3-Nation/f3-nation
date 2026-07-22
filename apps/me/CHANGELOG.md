@@ -1,5 +1,84 @@
 # Changelog
 
+## [2.1.1](https://github.com/F3-Nation/f3-nation/compare/me@2.1.0...me@2.1.1) (2026-07-14)
+
+
+### Bug Fixes
+
+* **api,me:** require filters and cap results on me.users ([#662](https://github.com/F3-Nation/f3-nation/issues/662)) ([70375fc](https://github.com/F3-Nation/f3-nation/commit/70375fc0b396b9f8f0aefd74b407a4ba9aae3b7f))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.3.1
+    * @acme/shared bumped to 0.1.3
+    * @acme/sso bumped to 0.2.1
+    * @acme/ui bumped to 0.1.3
+  * devDependencies
+    * @acme/tailwind-config bumped to 0.1.3
+
+## [2.1.0](https://github.com/F3-Nation/f3-nation/compare/me@2.0.5...me@2.1.0) (2026-07-08)
+
+
+### Features
+
+* **sso,me,admin:** consolidating auth code ([#579](https://github.com/F3-Nation/f3-nation/issues/579)) ([bfae7a9](https://github.com/F3-Nation/f3-nation/commit/bfae7a9ed5e9ea06516edb996dd625252659d1b1))
+
+
+### Bug Fixes
+
+* **deps:** pin internal @acme/* refs to workspace:* to prevent release-please version drift ([#587](https://github.com/F3-Nation/f3-nation/issues/587)) ([21ded4b](https://github.com/F3-Nation/f3-nation/commit/21ded4bef25dbdd00b2e66e5d8abda516b7dd0b1))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.3.0
+    * @acme/shared bumped to 0.1.2
+    * @acme/sso bumped to 0.2.0
+    * @acme/storage bumped to 0.2.2
+    * @acme/ui bumped to 0.1.2
+  * devDependencies
+    * @acme/tailwind-config bumped to 0.1.2
+
+## [2.0.5](https://github.com/F3-Nation/f3-nation/compare/me@2.0.4...me@2.0.5) (2026-07-05)
+
+
+### Bug Fixes
+
+* **map,admin:** regions in region picker were grayed out ([37cec72](https://github.com/F3-Nation/f3-nation/commit/37cec722b933f6a121283403b3a5eb9fd8900f5e))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.2.1
+    * @acme/logger bumped to 0.1.1
+    * @acme/shared bumped to 0.1.1
+    * @acme/sso bumped to 0.1.1
+    * @acme/storage bumped to 0.2.1
+    * @acme/ui bumped to 0.1.1
+  * devDependencies
+    * @acme/tailwind-config bumped to 0.1.1
+
+## [2.0.4](https://github.com/F3-Nation/f3-nation/compare/me@2.0.3...me@2.0.4) (2026-07-03)
+
+
+### Bug Fixes
+
+* **repo:** trace libvips into standalone output instead of reinstalling sharp ([#560](https://github.com/F3-Nation/f3-nation/issues/560)) ([fe1dca6](https://github.com/F3-Nation/f3-nation/commit/fe1dca66dbf5f00758b4fef04522ec946d38115d))
+
+## [2.0.3](https://github.com/F3-Nation/f3-nation/compare/me@2.0.2...me@2.0.3) (2026-07-03)
+
+
+### Bug Fixes
+
+* **repo:** repoint Turbopack hashed sharp symlink after runner reinstall ([#558](https://github.com/F3-Nation/f3-nation/issues/558)) ([c8bec3a](https://github.com/F3-Nation/f3-nation/commit/c8bec3a9067d4620b4f64b25391cce0406e0e4a9))
+
 ## [2.0.2](https://github.com/F3-Nation/f3-nation/compare/me@2.0.1...me@2.0.2) (2026-07-03)
 
 

@@ -23,10 +23,6 @@ export enum ModalType {
 }
 
 export enum DeleteType {
-  USER = "USER",
-  AREA = "AREA",
-  LOCATION = "LOCATION",
-  AO = "AO",
   EVENT = "EVENT",
   EVENT_TYPE = "EVENT_TYPE",
   EVENT_INSTANCE = "EVENT_INSTANCE",

@@ -1,6 +1,6 @@
 {
   "name": "f3-admin",
-  "version": "2.0.2",
+  "version": "2.1.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,19 +10,20 @@
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
     "lint": "dotenv -v SKIP_ENV_VALIDATION=1 eslint .",
     "start": "pnpm with-env next start",
+    "test": "vitest --run --coverage",
     "typecheck": "tsc --noEmit",
     "with-env": "dotenv -e ../../.env --"
   },
   "dependencies": {
-    "@acme/api": "workspace:^0.2.0",
+    "@acme/api": "workspace:*",
     "@acme/logger": "workspace:*",
     "@acme/mail": "workspace:*",
-    "@acme/shared": "workspace:^0.1.0",
+    "@acme/shared": "workspace:*",
     "@acme/sso": "workspace:*",
     "@acme/storage": "workspace:*",
-    "@acme/tailwind-config": "workspace:^0.1.0",
-    "@acme/ui": "workspace:^0.1.0",
-    "@acme/validators": "workspace:^0.1.0",
+    "@acme/tailwind-config": "workspace:*",
+    "@acme/ui": "workspace:*",
+    "@acme/validators": "workspace:*",
     "@orpc/client": "catalog:",
     "@orpc/server": "catalog:",
     "@orpc/tanstack-query": "catalog:",
@@ -35,7 +36,6 @@
     "dayjs": "catalog:",
     "dotenv-cli": "catalog:",
     "geist": "catalog:",
-    "jose": "catalog:",
     "lodash": "catalog:",
     "lucide-react": "catalog:",
     "next": "catalog:",
@@ -47,20 +47,24 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@acme/eslint-config": "workspace:^0.2.0",
-    "@acme/prettier-config": "workspace:^0.1.0",
+    "@acme/eslint-config": "workspace:*",
+    "@acme/prettier-config": "workspace:*",
     "@acme/tsconfig": "workspace:*",
+    "@acme/vitest-config": "workspace:*",
     "@tailwindcss/postcss": "catalog:",
     "@types/google.maps": "catalog:",
     "@types/lodash": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
     "eslint": "catalog:",
     "jiti": "catalog:",
     "postcss": "catalog:",
+    "postcss-load-config": "catalog:",
     "prettier": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "prettier": "@acme/prettier-config"
 }

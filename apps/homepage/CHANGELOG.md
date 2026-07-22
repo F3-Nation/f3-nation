@@ -1,5 +1,42 @@
 # Changelog
 
+## [1.3.0](https://github.com/F3-Nation/f3-nation/compare/homepage@1.2.3...homepage@1.3.0) (2026-07-14)
+
+
+### Features
+
+* **homepage:** adding syncbot to the admin section ([#630](https://github.com/F3-Nation/f3-nation/issues/630)) ([755ebb9](https://github.com/F3-Nation/f3-nation/commit/755ebb9429659839c3ad6e869435a638247343bc))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @acme/tailwind-config bumped to 0.1.3
+
+## [1.2.3](https://github.com/F3-Nation/f3-nation/compare/homepage@1.2.2...homepage@1.2.3) (2026-07-08)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @acme/tailwind-config bumped to 0.1.2
+
+## [1.2.2](https://github.com/F3-Nation/f3-nation/compare/homepage@1.2.1...homepage@1.2.2) (2026-07-05)
+
+
+### Bug Fixes
+
+* **map,admin:** regions in region picker were grayed out ([37cec72](https://github.com/F3-Nation/f3-nation/commit/37cec722b933f6a121283403b3a5eb9fd8900f5e))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @acme/tailwind-config bumped to 0.1.1
+
 ## [1.2.1](https://github.com/F3-Nation/f3-nation/compare/homepage@1.2.0...homepage@1.2.1) (2026-06-18)
 
 

@@ -24,7 +24,7 @@ from infrastructure.api_client.exceptions import (
     F3ApiError,
     F3ApiNotFoundError,
 )
-from utilities.builders import add_debug_form, add_loading_form, send_error_response
+from utilities.builders import SUBMISSION_WAIT_VIEW, add_debug_form, add_loading_form, send_error_response
 from utilities.constants import ENABLE_DEBUGGING, LOCAL_DEVELOPMENT, SOCKET_MODE
 from utilities.database.orm import SlackSettings
 from utilities.helper_functions import (
@@ -89,7 +89,8 @@ try:
     )
 except Exception as exc:
     raise RuntimeError(
-        f"Error initializing Slackbot: you may need to set up your .env file with the appropriate Slack credentials. Exception: {exc}"
+        "Error initializing Slackbot: you may need to set up your .env file with the appropriate Slack credentials. "
+        f"Exception: {exc}"
     ) from exc
 
 # ----------------------------------------
@@ -134,14 +135,28 @@ def main_response(body: dict, logger: logging.Logger, client: WebClient, ack: Ac
     lookup: Tuple[Callable, bool] = safe_get(safe_get(MAIN_MAPPER, request_type), request_id)
 
     if lookup:
-        run_function, add_loading = lookup
+        run_function, add_loading, has_submission_ack = lookup
         if ENABLE_DEBUGGING and request_type != "view_submission":
             body[LOADING_ID] = add_debug_form(body=body, client=client)
             # NOTE: do not put debugging breakpoints above this line
         elif add_loading:
             body[LOADING_ID] = add_loading_form(body=body, client=client)
 
-        if request_type != "block_suggestion":
+        if request_type == "view_submission":
+            submission_view_id = safe_get(body, "view", "id")
+            if submission_view_id:
+                body["submission_view_id"] = submission_view_id
+
+            if has_submission_ack:
+                logger.info("View submission received, sending loading modal...")
+                ack(
+                    response_action="update",
+                    view=SUBMISSION_WAIT_VIEW,
+                )
+            else:
+                ack()
+
+        if request_type not in ("block_suggestion", "view_submission"):
             ack()
 
         try:
@@ -196,7 +211,7 @@ try:
     app.event(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
     app.options(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
     app.shortcut(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
-except Exception as exc:
+except Exception:
     pass
 
 
@@ -223,11 +238,13 @@ if __name__ == "__main__":
 
     if LOCAL_DEVELOPMENT and not SOCKET_MODE:
         raise RuntimeError("Local development requires SOCKET_MODE=true.")
-    
+
     # Ensure SLACK_APP_TOKEN is present
     app_token = os.environ.get("SLACK_APP_TOKEN")
     if not app_token:
-        logging.getLogger().error("SLACK_APP_TOKEN is required to run the Slackbot. Please set it in your .env file.")
+        logging.getLogger().error(
+            "SLACK_APP_TOKEN is required to run the Slackbot. Please set it in your .env file."
+        )
         exit(1)
 
     if not SOCKET_MODE:
@@ -241,7 +258,6 @@ if __name__ == "__main__":
         if LOCAL_DEVELOPMENT:
             start_local_health_server(local_http_port)
             logging.getLogger().info(f"Local HTTP health server listening on http://localhost:{local_http_port}")
-            
 
         logging.getLogger().info("Running in local Socket Mode.")
 

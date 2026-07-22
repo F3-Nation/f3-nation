@@ -2,6 +2,27 @@
 
 <!-- version list -->
 
+## [2.0.4](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.0.3...slackbot@2.0.4) (2026-07-14)
+
+
+### Bug Fixes
+
+* **slackbot,tailwind,sso:** fixing local lint issues ([#659](https://github.com/F3-Nation/f3-nation/issues/659)) ([030cb9b](https://github.com/F3-Nation/f3-nation/commit/030cb9becb28159e32f6340201dc5bf9149f0124))
+
+## [2.0.3](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.0.2...slackbot@2.0.3) (2026-07-08)
+
+
+### Bug Fixes
+
+* **slackbot:** skip deactivated Slack accounts during user sync/bootstrap ([#596](https://github.com/F3-Nation/f3-nation/issues/596)) ([7a198f7](https://github.com/F3-Nation/f3-nation/commit/7a198f75149138ffd3ce301b4bb5a0d5a4952cfa))
+
+## [2.0.2](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.0.1...slackbot@2.0.2) (2026-07-05)
+
+
+### Bug Fixes
+
+* **map,admin:** regions in region picker were grayed out ([37cec72](https://github.com/F3-Nation/f3-nation/commit/37cec722b933f6a121283403b3a5eb9fd8900f5e))
+
 ## [2.0.1](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.0.0...slackbot@2.0.1) (2026-07-02)
 
 

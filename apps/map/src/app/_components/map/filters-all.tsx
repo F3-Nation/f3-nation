@@ -141,7 +141,7 @@ export const FiltersAll = (props: ComponentProps<"div">) => {
                 })
               }
             >
-              <SelectTrigger data-vaul-no-drag className="w-40">
+              <SelectTrigger className="w-40">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -158,7 +158,6 @@ export const FiltersAll = (props: ComponentProps<"div">) => {
               }
             >
               <SelectTrigger
-                data-vaul-no-drag
                 className={cn(
                   "w-40",
                   filters.beforeAfterTime !== TimeSelection.none &&
@@ -180,7 +179,7 @@ export const FiltersAll = (props: ComponentProps<"div">) => {
         </div>
         <div>
           <h2 className="mb-2 text-lg font-semibold">Type of Workout</h2>
-          <div className="w-full max-w-sm" data-vaul-no-drag>
+          <div className="w-full max-w-sm">
             <VirtualizedCombobox
               disabled={isLoading}
               isMulti

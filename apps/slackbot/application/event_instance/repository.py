@@ -44,6 +44,7 @@ class EventInstanceRepository(Protocol):
         highlight: bool,
         preblast_rich: Any | None,
         preblast: str | None,
+        preblast_ts: int | float | None = None,
     ) -> EventInstanceData:
         """Create a new event instance and return the created record."""
         ...
@@ -66,6 +67,7 @@ class EventInstanceRepository(Protocol):
         highlight: bool,
         preblast_rich: Any | None,
         preblast: str | None,
+        preblast_ts: int | float | None = None,
     ) -> EventInstanceData:
         """Update an existing event instance and return the updated record."""
         ...
@@ -76,6 +78,36 @@ class EventInstanceRepository(Protocol):
 
     def reopen(self, instance: EventInstanceData) -> None:
         """Clear the seriesException field on an instance."""
+        ...
+
+    def update_preblast_fields(
+        self,
+        instance_id: int,
+        *,
+        name: str | None = None,
+        preblast_rich: Any | None = None,
+        preblast: str | None = None,
+        location_id: int | None = None,
+        clear_location_id: bool = False,
+        start_date: date | None = None,
+        start_time: str | None = None,
+        event_tag_ids: list[int] | None = None,
+        meta_updates: dict | None = None,
+        preblast_channel_id: str | None = None,
+        existing_instance: EventInstanceData | None = None,
+    ) -> EventInstanceData:
+        """Safely update preblast-related fields while preserving required crupdate fields."""
+        ...
+
+    def persist_posted_preblast(
+        self,
+        instance_id: int,
+        *,
+        preblast_ts: int | float,
+        preblast_post_channel_id: str,
+        existing_instance: EventInstanceData | None = None,
+    ) -> EventInstanceData:
+        """Persist posted Slack timestamp and actual post channel in meta."""
         ...
 
     def delete(self, instance_id: int) -> None:

@@ -6,6 +6,7 @@ import { Search, XCircle } from "lucide-react";
 
 import {
   DEFAULT_CENTER,
+  MIN_TEXT_LENGTH_FOR_SEARCH_RESULTS,
   SIDEBAR_WIDTH,
   Z_INDEX,
 } from "@acme/shared/app/constants";
@@ -152,7 +153,9 @@ export function MapSearchBox({
                   if (!value) {
                     searchStore.setState({ placesResults: [] });
                     setIsLoading(false);
-                  } else if (value.length > 2) {
+                  } else if (
+                    value.length >= MIN_TEXT_LENGTH_FOR_SEARCH_RESULTS
+                  ) {
                     setIsLoading(true);
                     // Use debounced autocomplete to reduce API calls
                     debouncedPlacesAutocomplete(

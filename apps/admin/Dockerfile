@@ -1,6 +1,6 @@
 # ---------- Stage 1: Prune monorepo ----------
 ARG TURBO_VERSION=2
-FROM node:24.18.0-alpine AS builder
+FROM node:24.18.0-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS builder
 ARG TURBO_VERSION
 
 ENV TURBO_TELEMETRY_DISABLED=1
@@ -17,7 +17,7 @@ COPY . .
 RUN turbo prune f3-admin --docker
 
 # ---------- Stage 2: Install + build ----------
-FROM node:24.18.0-alpine AS installer
+FROM node:24.18.0-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS installer
 ARG TURBO_VERSION
 
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -51,8 +51,11 @@ RUN printf '\nverifyDepsBeforeRun: false\n' >> pnpm-workspace.yaml
 
 RUN pnpm turbo build --filter=f3-admin
 
+# Assert the next.config libvips tracing include landed (a zero-match glob is a silent no-op).
+RUN test -n "$(find apps/admin/.next/standalone -name 'libvips-cpp*')"
+
 # ---------- Stage 3: Production runner ----------
-FROM node:24.18.0-alpine AS runner
+FROM node:24.18.0-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS runner
 
 RUN apk add --no-cache libc6-compat openssl && apk update
 WORKDIR /app
@@ -64,12 +67,6 @@ RUN addgroup --system --gid 1001 nodejs && \
 COPY --from=installer --chown=admin:nodejs /app/apps/admin/.next/standalone ./
 COPY --from=installer --chown=admin:nodejs /app/apps/admin/.next/static ./apps/admin/.next/static
 COPY --from=installer --chown=admin:nodejs /app/apps/admin/public ./apps/admin/public
-
-# Reinstall sharp: Turbopack drops libvips and leaves a pnpm-store shadow; purge both, then verify.
-RUN rm -rf ./node_modules/sharp ./node_modules/@img \
-      ./node_modules/.pnpm/sharp@* ./node_modules/.pnpm/@img+* && \
-    npm install --no-save --no-audit --no-fund sharp@0.35.2 && \
-    node -e "require('sharp'); console.log('sharp loaded OK')"
 
 USER admin
 

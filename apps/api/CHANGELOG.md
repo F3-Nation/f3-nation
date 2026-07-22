@@ -1,5 +1,74 @@
 # Changelog
 
+## [6.1.1](https://github.com/F3-Nation/f3-nation/compare/api@6.1.0...api@6.1.1) (2026-07-14)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.3.1
+    * @acme/shared bumped to 0.1.3
+
+## [6.1.0](https://github.com/F3-Nation/f3-nation/compare/api@6.0.5...api@6.1.0) (2026-07-08)
+
+
+### Features
+
+* **api:** adding slack messaging API routes ([#542](https://github.com/F3-Nation/f3-nation/issues/542)) ([951e126](https://github.com/F3-Nation/f3-nation/commit/951e12600a4a49d6c0cc87e30c9648a227f777f1))
+
+
+### Bug Fixes
+
+* **deps:** pin internal @acme/* refs to workspace:* to prevent release-please version drift ([#587](https://github.com/F3-Nation/f3-nation/issues/587)) ([21ded4b](https://github.com/F3-Nation/f3-nation/commit/21ded4bef25dbdd00b2e66e5d8abda516b7dd0b1))
+* **map:** mask session replay text and media ([#593](https://github.com/F3-Nation/f3-nation/issues/593)) ([a705d76](https://github.com/F3-Nation/f3-nation/commit/a705d767d4091566f8ed8224f968bc997694205e))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.3.0
+    * @acme/auth bumped to 0.1.3
+    * @acme/db bumped to 0.1.2
+    * @acme/shared bumped to 0.1.2
+    * @acme/ui bumped to 0.1.2
+    * @acme/validators bumped to 0.1.2
+
+## [6.0.5](https://github.com/F3-Nation/f3-nation/compare/api@6.0.4...api@6.0.5) (2026-07-05)
+
+
+### Bug Fixes
+
+* **map,admin:** regions in region picker were grayed out ([37cec72](https://github.com/F3-Nation/f3-nation/commit/37cec722b933f6a121283403b3a5eb9fd8900f5e))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.2.1
+    * @acme/auth bumped to 0.1.2
+    * @acme/db bumped to 0.1.1
+    * @acme/logger bumped to 0.1.1
+    * @acme/shared bumped to 0.1.1
+    * @acme/ui bumped to 0.1.1
+    * @acme/validators bumped to 0.1.1
+
+## [6.0.4](https://github.com/F3-Nation/f3-nation/compare/api@6.0.3...api@6.0.4) (2026-07-03)
+
+
+### Bug Fixes
+
+* **repo:** trace libvips into standalone output instead of reinstalling sharp ([#560](https://github.com/F3-Nation/f3-nation/issues/560)) ([fe1dca6](https://github.com/F3-Nation/f3-nation/commit/fe1dca66dbf5f00758b4fef04522ec946d38115d))
+
+## [6.0.3](https://github.com/F3-Nation/f3-nation/compare/api@6.0.2...api@6.0.3) (2026-07-03)
+
+
+### Bug Fixes
+
+* **repo:** repoint Turbopack hashed sharp symlink after runner reinstall ([#558](https://github.com/F3-Nation/f3-nation/issues/558)) ([c8bec3a](https://github.com/F3-Nation/f3-nation/commit/c8bec3a9067d4620b4f64b25391cce0406e0e4a9))
+
 ## [6.0.2](https://github.com/F3-Nation/f3-nation/compare/api@6.0.1...api@6.0.2) (2026-07-03)
 
 
