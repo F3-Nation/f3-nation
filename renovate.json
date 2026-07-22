@@ -44,6 +44,12 @@
       "enabled": false
     },
     {
+      "description": "Hold TypeScript at 6.x: 7.0 is the native (Go) port and is too new to adopt. Renovate rolls all 7.x into one \"to v7\" upgrade, so raise this to <7.2.0 (or drop the rule) when ready to migrate rather than closing the PR.",
+      "matchDatasources": ["npm"],
+      "matchPackageNames": ["typescript"],
+      "allowedVersions": "<7.0.0"
+    },
+    {
       "description": "Hold at <1.9.0: 1.9.0 rewired AdvancedMarker onClick to the gmp-click DOM event (upstream PR #997), dropping event.stop()/event.latLng. Shipped as a minor but breaks marker clicks at runtime. Remove this rule with the migration.",
       "matchDatasources": ["npm"],
       "matchPackageNames": ["@vis.gl/react-google-maps"],
