@@ -2,14 +2,14 @@ name: CI
 
 on:
   push:
-    branches: [dev]
+    branches: [main]
   pull_request:
     branches: ["**"]
     types: [opened, synchronize, reopened]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/dev' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
@@ -32,8 +32,6 @@ env:
   EMAIL_SERVER: smtp://user:pass@localhost:587
   EMAIL_FROM: ci@example.com
   EMAIL_ADMIN_DESTINATIONS: ci@example.com
-  # Google (mocks)
-  GCS_CREDENTIALS: eyJjbGllbnRfZW1haWwiOiJtb2NrQGV4YW1wbGUuaWFtLmdzZXJ2aWNlYWNjb3VudC5jb20iLCJwcml2YXRlX2tleSI6Ii0tLS0tQkVHSU4gUlNBIFBSSVZBVEUgS0VZLS0tLS1cbmZha2Vcbi0tLS0tRU5EIFJTQSBQUklWQVRFIEtFWS0tLS0tIn0=
   # API (mocks)
   API_KEY: ci-api-key-placeholder
   SUPER_ADMIN_API_KEY: ci-super-admin-key-placeholder
@@ -283,6 +281,7 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup
       - run: pnpm lint
+      - run: pnpm lint:unused
 
   typecheck:
     runs-on: ubuntu-latest
@@ -306,7 +305,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:18@sha256:29ee7bb30d804447dc9a91fd0d74322ae1dc3a4072cc6346f70a5ed6e783b565
+        image: postgres:18.4-trixie@sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -323,6 +322,11 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
+      # GCS_CREDENTIALS must exist with client_email/private_key fields, but
+      # nothing real is needed. Built here from plainly fake JSON — a committed
+      # base64 blob trips generic high-entropy secret scanners.
+      - name: Set mock GCS credentials
+        run: echo "GCS_CREDENTIALS=$(printf '{\"client_email\":\"fake-not-a-real-credential@ci.invalid\",\"private_key\":\"THIS-IS-A-FAKE-PLACEHOLDER-FOR-CI\"}' | base64 -w0)" >> "$GITHUB_ENV"
       - run: pnpm test
 
   # Builds each app's deploy image the same way the release pipeline does
@@ -343,10 +347,10 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           persist-credentials: false
-      - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
       - id: build
         continue-on-error: true
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           file: apps/${{ matrix.app }}/Dockerfile
@@ -362,7 +366,7 @@ jobs:
       # build still passes; cache-to rewrites a fresh index, re-warming the
       # cache for the next run.
       - if: steps.build.outcome == 'failure'
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           file: apps/${{ matrix.app }}/Dockerfile

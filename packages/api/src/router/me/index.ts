@@ -113,6 +113,9 @@ const meProfileSchema = z.object({
   positions: z.array(mePositionSchema),
 });
 
+/** Hard cap on rows returned by me.users; a dropdown never needs more. */
+export const MAX_USERS_RESULTS = 100;
+
 const meUsersListItemSchema = z.object({
   id: z.number().int().min(1),
   f3Name: z.string().nullable(),
@@ -242,11 +245,10 @@ export const meRouter = {
       // submit). Read-modify-write would let the second writer overwrite the
       // first writer's merge. Postgres `jsonb ||` is a single-statement
       // shallow merge that matches the JS `{ ...existing, ...input }`
-      // semantics the tests assert on. The `users.meta` column is `json`
-      // (not `jsonb`), so we cast both sides to jsonb for the merge — the
-      // resulting jsonb value is implicitly cast back to json on assignment.
+      // semantics the tests assert on. `users.meta` is `jsonb`, so the
+      // column needs no cast; the incoming text literal is cast to jsonb.
       if (metaInput !== undefined) {
-        updateSet.meta = sql`(COALESCE(${schema.users.meta}::jsonb, '{}'::jsonb) || ${JSON.stringify(metaInput)}::jsonb)`;
+        updateSet.meta = sql`(COALESCE(${schema.users.meta}, '{}'::jsonb) || ${JSON.stringify(metaInput)}::jsonb)`;
       }
 
       // Only update if there's something to set
@@ -412,7 +414,7 @@ export const meRouter = {
 
   /**
    * List users for the "Who Brought You?" dropdown.
-   * Requires either userId (to resolve a specific user) or searchTerm (≥2 chars) to filter results.
+   * Requires either userId (to resolve a specific user) or searchTerm (≥2 characters); results are capped at MAX_USERS_RESULTS rows.
    */
   users: protectedProcedure
     .input(
@@ -432,7 +434,9 @@ export const meRouter = {
               "Search term for filtering users by f3Name. Case-insensitive partial match.",
             ),
         })
-        .optional(),
+        .refine((v) => v.userId !== undefined || v.searchTerm !== undefined, {
+          message: "Provide userId or searchTerm",
+        }),
     )
     .route({
       method: "GET",
@@ -441,7 +445,8 @@ export const meRouter = {
       summary: "List users for dropdown",
       description:
         "Return a lightweight user list for the 'Who Brought You?' dropdown. " +
-        "Pass userId to resolve a specific user, or searchTerm (≥2 chars) to search all users.",
+        "Requires userId to resolve a specific user, or searchTerm (≥2 characters) to search all users. " +
+        `Results are capped at ${MAX_USERS_RESULTS} rows.`,
     })
     .output(
       z.object({
@@ -449,8 +454,7 @@ export const meRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
-      const userId = input?.userId;
-      const searchTerm = input?.searchTerm;
+      const { userId, searchTerm } = input;
 
       const conditions = [];
       if (userId) {
@@ -470,8 +474,9 @@ export const meRouter = {
         })
         .from(schema.users)
         .leftJoin(schema.orgs, eq(schema.orgs.id, schema.users.homeRegionId))
-        .where(conditions.length > 0 ? and(...conditions) : undefined)
-        .orderBy(asc(schema.users.f3Name), asc(schema.users.id));
+        .where(and(...conditions))
+        .orderBy(asc(schema.users.f3Name), asc(schema.users.id))
+        .limit(MAX_USERS_RESULTS);
 
       return { users: rows };
     }),

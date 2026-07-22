@@ -38,7 +38,7 @@ speculative ones. A wrong finding erodes trust in the whole batch.
 ### Confirm your tools and context
 
 - **GitHub CLI:** Confirm `gh auth status` and the target repo
-  (`F3-Nation/f3-nation`). The default branch is `dev`. The repo is **public** —
+  (`F3-Nation/f3-nation`). The default branch is `main`. The repo is **public** —
   do not paste secrets, tokens, or real user PII into issue bodies.
 - **Shell:** In bash, prefix commands with `set +H` so `!` characters don't
   trigger history expansion. If `pnpm` isn't on `PATH`, run

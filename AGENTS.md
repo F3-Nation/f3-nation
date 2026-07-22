@@ -12,15 +12,33 @@ file that routes back here so guidance never drifts:
 
 Deeper guidance lives in `docs/`:
 
+- [`docs/AI_GUARDRAILS.md`](docs/AI_GUARDRAILS.md) — operating boundaries
+  (Always / Never / Can) and the domains where humans always have final say
+  (security, availability/reliability, scalability).
 - [`docs/AI_DEVELOPMENT_GUIDE.md`](docs/AI_DEVELOPMENT_GUIDE.md) — secure patterns
   and pitfalls to avoid (API authorization, auth/tokens, secrets, web security,
   data layer, multi-instance reliability) with a pre-flight checklist.
 - [`docs/AI_AUDIT_PLAYBOOK.md`](docs/AI_AUDIT_PLAYBOOK.md) — how to run a
   repository audit and file high-quality issues.
+- [`specs/`](specs/) — feature specs: the source of truth for **what** a
+  feature does, who may do it, and how it's verified. Read the relevant spec
+  before doing feature work (the docs above cover conventions and security;
+  specs cover behavior).
 
 When adding durable guidance, put it in `AGENTS.md` (or `docs/` for deep topics
 and link it) and keep the tool pointer files thin. Per-app specifics belong in
 that app's `AGENTS.md`.
+
+### Agent skills
+
+Reusable agent skills (procedural runbooks in the
+[Agent Skills](https://agentskills.io) `SKILL.md` format) live in
+[`.agents/skills/`](.agents/skills/) — the cross-vendor convention scanned
+natively by Cursor, Codex, Gemini CLI, and others. Claude Code only scans
+`.claude/skills/`, so a `SessionStart` hook (`.claude/settings.json`) runs
+[`.claude/scripts/sync-agent-skills.mjs`](.claude/scripts/sync-agent-skills.mjs) to mirror
+`.agents/skills/` into the gitignored `.claude/skills/`. Add or edit skills in
+`.agents/skills/` only; never commit anything under `.claude/skills/`.
 
 ## Project Structure & Module Organization
 
@@ -84,7 +102,7 @@ that app's `AGENTS.md`.
 - Drive the Node version from `.nvmrc` via `actions/setup-node` (`node-version-file: .nvmrc`) — `.nvmrc` is the single source of truth. Never hardcode `node-version:` in a workflow.
 - **Set the Docker target platform at build time, not in the `Dockerfile`.** Cloud Run only runs `linux/amd64`. The app `Dockerfile` `FROM` lines must **not** pin `--platform` (BuildKit's `FromPlatformFlagConstDisallowed` lint, and it forces emulation on arm64 dev machines). Instead pass the platform at the build invocation: `platforms: linux/amd64` on `docker/build-push-action` (CI) and `--platform=linux/amd64` on `docker build` (deploy). Building a **deployable** image locally on Apple Silicon therefore requires an explicit `docker build --platform=linux/amd64 …`. Do **not** switch to `$BUILDPLATFORM` cross-builds — `sharp`'s native binaries are platform-specific and would break in the amd64 runtime.
 - Share toolchain setup through the composite action [`.github/actions/setup`](.github/actions/setup/action.yml) (pnpm + Node + pnpm-store cache + frozen install) instead of repeating setup steps per job.
-- The five CI check names (`format-check`, `lint`, `typecheck`, `build`, `test-coverage`) are referenced by the `dev` branch ruleset and by `check-regexp` in the deploy workflows — renaming a job requires updating both.
+- The five CI check names (`format-check`, `lint`, `typecheck`, `build`, `test-coverage`) are referenced by the `main` branch ruleset and by `check-regexp` in the deploy workflows — renaming a job requires updating both.
 
 ## Testing Guidelines
 
@@ -132,7 +150,7 @@ Scopes are defined in `commitlint.config.mjs` and map to monorepo packages:
 | Apps & Packages | `api`, `auth` (exist in both `apps/` and `packages/`)               |
 | Packages        | `db`, `env`, `mail`, `shared`, `sso`, `storage`, `ui`, `validators` |
 | Tooling         | `eslint`, `prettier`, `tsconfig`, `scripts`, `github`, `tailwind`   |
-| Cross-cutting   | `deps`, `ci`, `repo`, `release`, `dev` (used by Release Please)     |
+| Cross-cutting   | `deps`, `ci`, `repo`, `release`, `main` (used by Release Please)    |
 
 **Choosing a scope:**
 
