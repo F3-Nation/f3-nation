@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createRouterClient } from "@orpc/server";
 
 import type { Session } from "@acme/auth";
-import { eq, schema } from "@acme/db";
+import { eq, schema, sql } from "@acme/db";
 import { Client, Header } from "@acme/shared/common/enums";
 
 import {
@@ -16,12 +16,15 @@ import { router } from "../index";
 import {
   callSlackWebApi,
   postSlackMessageInputSchema,
+  slackSettingsPatchSchema,
   updateSlackMessageInputSchema,
 } from "./slack";
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
+
+const SLACKBOT_SERVICE_API_KEY_ENV = "SLACKBOT_SERVICE_API_KEY";
 
 describe("Slack router schemas", () => {
   const baseInput = {
@@ -123,6 +126,34 @@ describe("Slack router schemas", () => {
           event_payload: nested,
         },
       }).success,
+    ).toBe(false);
+  });
+
+  it("validates team_id, bot_token, and workspace_name types in the settings patch schema", () => {
+    expect(
+      slackSettingsPatchSchema.safeParse({ team_id: "T123" }).success,
+    ).toBe(true);
+    expect(slackSettingsPatchSchema.safeParse({ team_id: 123 }).success).toBe(
+      false,
+    );
+    expect(
+      slackSettingsPatchSchema.safeParse({ bot_token: "xoxb-1" }).success,
+    ).toBe(true);
+    expect(
+      slackSettingsPatchSchema.safeParse({ bot_token: null }).success,
+    ).toBe(true);
+    expect(
+      slackSettingsPatchSchema.safeParse({ bot_token: 123 }).success,
+    ).toBe(false);
+    expect(
+      slackSettingsPatchSchema.safeParse({ workspace_name: "Workspace" })
+        .success,
+    ).toBe(true);
+    expect(
+      slackSettingsPatchSchema.safeParse({ workspace_name: null }).success,
+    ).toBe(true);
+    expect(
+      slackSettingsPatchSchema.safeParse({ workspace_name: 123 }).success,
     ).toBe(false);
   });
 });
@@ -260,18 +291,28 @@ describe("mounted Slack router", () => {
     isActive = true,
     botToken = "xoxb-secret-token",
     duplicate = false,
+    settings = {},
+    parentId,
+    orgType = "region",
+  }: {
+    isActive?: boolean;
+    botToken?: string;
+    duplicate?: boolean;
+    settings?: Record<string, unknown>;
+    parentId?: number;
+    orgType?: "region" | "ao" | "nation";
   } = {}) => {
     const suffix = `${Date.now()}-${Math.random()}`;
     const [org] = await db
       .insert(schema.orgs)
-      .values({ name: `Slack Org ${suffix}`, orgType: "region", isActive })
+      .values({ name: `Slack Org ${suffix}`, orgType, isActive, parentId })
       .returning({ id: schema.orgs.id, name: schema.orgs.name });
     if (!org) throw new Error("org insert failed");
 
     const insertSpace = async (teamId: string) => {
       const [space] = await db
         .insert(schema.slackSpaces)
-        .values({ teamId, workspaceName: teamId, botToken })
+        .values({ teamId, workspaceName: teamId, botToken, settings })
         .returning({ id: schema.slackSpaces.id });
       if (!space) throw new Error("space insert failed");
       await db
@@ -302,6 +343,430 @@ describe("mounted Slack router", () => {
     user: { id: "1", email: "admin@example.com", roles: [], name: "Admin" },
     roles: [{ orgId: org.id, orgName: org.name, roleName: "admin" }],
     expires: new Date(Date.now() + 1000).toISOString(),
+  });
+
+  const serviceClient = (
+    key?: string,
+    extraHeaders: Record<string, string> = {},
+  ) =>
+    createRouterClient(router, {
+      context: () => ({
+        reqHeaders: new Headers({
+          ...(key ? { "x-slackbot-service-key": key } : {}),
+          ...extraHeaders,
+        }),
+      }),
+    });
+
+  describe("bot settings", () => {
+    it("returns raw Python-compatible cache records only with service auth", async () => {
+      const previous = process.env[SLACKBOT_SERVICE_API_KEY_ENV];
+      process.env[SLACKBOT_SERVICE_API_KEY_ENV] = "service-secret";
+      const { org, spaceIds } = await createOrgWithSlack({
+        botToken: "xoxb-raw-secret",
+        settings: {
+          bot_token: "legacy-secret",
+          email_password: "pw",
+          editing_locked: true,
+        },
+      });
+      let apiKeyId: number | undefined;
+      try {
+        const result =
+          await serviceClient("service-secret").slack.getBotSettingsCache();
+        const record = result.find((row) => row.org_id === org.id);
+        expect(record?.team_id).toEqual(expect.any(String) as string);
+        expect(record?.workspace_name).toEqual(expect.any(String) as string);
+        expect(record).toMatchObject({
+          org_id: org.id,
+          db_id: spaceIds[0],
+          bot_token: "xoxb-raw-secret",
+        });
+        expect(record?.settings).toMatchObject({
+          bot_token: "legacy-secret",
+          email_password: "pw",
+        });
+
+        await expect(
+          serviceClient().slack.getBotSettingsCache(),
+        ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+        await expect(
+          serviceClient("wrong").slack.getBotSettingsCache(),
+        ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+        process.env[SLACKBOT_SERVICE_API_KEY_ENV] = "";
+        await expect(
+          serviceClient("service-secret").slack.getBotSettingsCache(),
+        ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+        process.env[SLACKBOT_SERVICE_API_KEY_ENV] = "service-secret";
+
+        await mockAuthWithSession(null);
+        await expect(
+          serviceClient().slack.getBotSettingsCache(),
+        ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+        await mockAuthWithSession(adminSessionForOrg(org));
+        await expect(
+          serviceClient().slack.getBotSettingsCache(),
+        ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+        await mockAuthWithSession({
+          ...adminSessionForOrg({ id: 1, name: "F3 Nation" }),
+          roles: [{ orgId: 1, orgName: "F3 Nation", roleName: "admin" }],
+        });
+        await expect(
+          serviceClient().slack.getBotSettingsCache(),
+        ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+        await expect(
+          serviceClient(undefined, {
+            "x-api-key": "super-admin",
+          }).slack.getBotSettingsCache(),
+        ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+
+        await mockAuthWithSession(adminSessionForOrg(org));
+        const apiKey = await createTestClient().apiKey.create({
+          name: `Slack Cache API Key ${uniqueId()}`,
+          roles: [{ orgId: org.id, roleName: "admin" }],
+        });
+        apiKeyId = apiKey.id;
+        await mockAuthWithSession(null);
+        await expect(
+          serviceClient(undefined, {
+            [Header.Authorization]: `Bearer ${apiKey.secret}`,
+            [Header.Client]: Client.ORPC,
+          }).slack.getBotSettingsCache(),
+        ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+      } finally {
+        if (apiKeyId) await cleanup.apiKey(apiKeyId);
+        if (previous === undefined)
+          delete process.env[SLACKBOT_SERVICE_API_KEY_ENV];
+        else process.env[SLACKBOT_SERVICE_API_KEY_ENV] = previous;
+        await cleanupSlack(org.id, spaceIds);
+      }
+    });
+
+    it("admin GET returns full raw settings and enforces mapping semantics", async () => {
+      const { org, spaceIds } = await createOrgWithSlack({
+        settings: {
+          bot_token: "secret",
+          email_password: "pw",
+          editing_locked: 1,
+          strava_enabled: 0,
+          automated_preblast_option: "q_only",
+          hc_announce_option: "snarky",
+          hc_announce_targets: "both",
+          bot_log_channel: 123,
+        },
+      });
+      try {
+        await mockAuthWithSession(adminSessionForOrg(org));
+        const result = await createTestClient().slack.getBotSettings({
+          regionOrgId: org.id,
+        });
+        expect(result.settings).toMatchObject({
+          bot_token: "secret",
+          email_password: "pw",
+          editing_locked: 1,
+          strava_enabled: 0,
+          automated_preblast_option: "q_only",
+          hc_announce_option: "snarky",
+          hc_announce_targets: "both",
+          bot_log_channel: 123,
+        });
+
+        await db
+          .delete(schema.orgsXSlackSpaces)
+          .where(eq(schema.orgsXSlackSpaces.orgId, org.id));
+        await expect(
+          createTestClient().slack.getBotSettings({ regionOrgId: org.id }),
+        ).rejects.toMatchObject({ code: "NOT_FOUND" });
+      } finally {
+        await cleanupSlack(org.id, spaceIds);
+      }
+
+      const duplicate = await createOrgWithSlack({ duplicate: true });
+      try {
+        await mockAuthWithSession(adminSessionForOrg(duplicate.org));
+        await expect(
+          createTestClient().slack.getBotSettings({
+            regionOrgId: duplicate.org.id,
+          }),
+        ).rejects.toMatchObject({ code: "CONFLICT" });
+      } finally {
+        await cleanupSlack(duplicate.org.id, duplicate.spaceIds);
+      }
+
+      for (const options of [{ isActive: false }, { orgType: "ao" as const }]) {
+        const invalid = await createOrgWithSlack(options);
+        try {
+          await mockAuthWithSession(adminSessionForOrg(invalid.org));
+          await expect(
+            createTestClient().slack.getBotSettings({
+              regionOrgId: invalid.org.id,
+            }),
+          ).rejects.toMatchObject({ code: "NOT_FOUND" });
+        } finally {
+          await cleanupSlack(invalid.org.id, invalid.spaceIds);
+        }
+      }
+    });
+
+    it("PATCH accepts bounded raw JSON, syncs columns, preserves keys, and supports null clears", async () => {
+      let nested: Record<string, unknown> = { leaf: "value" };
+      for (let i = 0; i < 40; i++) nested = { nested };
+
+      expect(slackSettingsPatchSchema.safeParse({}).success).toBe(false);
+      expect(slackSettingsPatchSchema.safeParse([]).success).toBe(false);
+      expect(slackSettingsPatchSchema.safeParse(null).success).toBe(false);
+      expect(slackSettingsPatchSchema.safeParse("scalar").success).toBe(false);
+      expect(
+        slackSettingsPatchSchema.safeParse({ unknown_key: true }).success,
+      ).toBe(true);
+      expect(
+        slackSettingsPatchSchema.safeParse({ bot_token: "secret" }).success,
+      ).toBe(true);
+      expect(
+        slackSettingsPatchSchema.safeParse({ non_json: new Date() }).success,
+      ).toBe(false);
+      expect(
+        slackSettingsPatchSchema.safeParse({ huge: "x".repeat(129 * 1024) })
+          .success,
+      ).toBe(false);
+      expect(slackSettingsPatchSchema.safeParse({ nested }).success).toBe(
+        false,
+      );
+      expect(
+        slackSettingsPatchSchema.safeParse({ team_id: null }).success,
+      ).toBe(false);
+
+      const { org, spaceIds } = await createOrgWithSlack({
+        settings: {
+          bot_token: "secret",
+          unknown_legacy: "keep",
+          bot_log_channel: "CLOG",
+        },
+      });
+      try {
+        await mockAuthWithSession(adminSessionForOrg(org));
+        await db
+          .update(schema.slackSpaces)
+          .set({ updated: "2000-01-01 00:00:00" })
+          .where(eq(schema.slackSpaces.id, spaceIds[0]!));
+        const result = await createTestClient().slack.updateBotSettings({
+          regionOrgId: org.id,
+          settings: {
+            bot_token: "updated-secret",
+            team_id: `TUPDATED${uniqueId()}`,
+            workspace_name: "Updated Workspace",
+            email_password: "updated-pw",
+            unknown_internal: { ok: true },
+            bot_log_channel: null,
+            default_preblast_destination: "specified_channel",
+            preblast_destination_channel: "CPRE",
+            preblast_moleskin_template: [
+              { type: "section", text: { type: "mrkdwn", text: "hi" } },
+            ],
+          },
+        });
+        expect(result.settings).toMatchObject({
+          bot_token: "updated-secret",
+          email_password: "updated-pw",
+          unknown_legacy: "keep",
+          unknown_internal: { ok: true },
+          bot_log_channel: null,
+          preblast_destination_channel: "CPRE",
+        });
+
+        const [space] = await db
+          .select({
+            settings: schema.slackSpaces.settings,
+            botToken: schema.slackSpaces.botToken,
+            teamId: schema.slackSpaces.teamId,
+            workspaceName: schema.slackSpaces.workspaceName,
+            updated: schema.slackSpaces.updated,
+          })
+          .from(schema.slackSpaces)
+          .where(eq(schema.slackSpaces.id, spaceIds[0]!));
+        expect(space?.settings).toMatchObject({
+          bot_token: "updated-secret",
+          email_password: "updated-pw",
+          unknown_legacy: "keep",
+          bot_log_channel: null,
+        });
+        expect(space?.botToken).toBe("updated-secret");
+        expect(space?.teamId).toBe(result.settings.team_id);
+        expect(space?.workspaceName).toBe("Updated Workspace");
+        expect(space?.updated).not.toBe("2000-01-01 00:00:00");
+      } finally {
+        await cleanupSlack(org.id, spaceIds);
+      }
+
+      const duplicate = await createOrgWithSlack({ duplicate: true });
+      try {
+        await mockAuthWithSession(adminSessionForOrg(duplicate.org));
+        await expect(
+          createTestClient().slack.updateBotSettings({
+            regionOrgId: duplicate.org.id,
+            settings: { editing_locked: true },
+          }),
+        ).rejects.toMatchObject({ code: "CONFLICT" });
+      } finally {
+        await cleanupSlack(duplicate.org.id, duplicate.spaceIds);
+      }
+    });
+
+    it("allows inherited admin and rejects unauthorized settings updates", async () => {
+      const suffix = uniqueId();
+      const [parent] = await db
+        .insert(schema.orgs)
+        .values({ name: `Parent ${suffix}`, orgType: "nation", isActive: true })
+        .returning({ id: schema.orgs.id, name: schema.orgs.name });
+      if (!parent) throw new Error("parent insert failed");
+      const { org, spaceIds } = await createOrgWithSlack({
+        parentId: parent.id,
+      });
+      try {
+        await mockAuthWithSession(adminSessionForOrg(parent));
+        await expect(
+          createTestClient().slack.updateBotSettings({
+            regionOrgId: org.id,
+            settings: { editing_locked: true },
+          }),
+        ).resolves.toMatchObject({ settings: { editing_locked: true } });
+
+        await mockAuthWithSession({
+          ...adminSessionForOrg({ id: org.id + 9999, name: "Other" }),
+          roles: [
+            { orgId: org.id + 9999, orgName: "Other", roleName: "admin" },
+          ],
+        });
+        await expect(
+          createTestClient().slack.updateBotSettings({
+            regionOrgId: org.id,
+            settings: { editing_locked: false },
+          }),
+        ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+      } finally {
+        await cleanupSlack(org.id, spaceIds);
+        await db
+          .update(schema.orgs)
+          .set({ parentId: null })
+          .where(eq(schema.orgs.parentId, parent.id));
+        await db.delete(schema.orgs).where(eq(schema.orgs.id, parent.id));
+      }
+    });
+
+    it("getBotSettingsCache excludes inactive regions and non-region orgs", async () => {
+      const previous = process.env[SLACKBOT_SERVICE_API_KEY_ENV];
+      process.env[SLACKBOT_SERVICE_API_KEY_ENV] = "service-secret";
+      const active = await createOrgWithSlack();
+      const inactive = await createOrgWithSlack({ isActive: false });
+      const nonRegion = await createOrgWithSlack({ orgType: "ao" });
+      try {
+        const result =
+          await serviceClient("service-secret").slack.getBotSettingsCache();
+        const orgIds = result.map((row) => row.org_id);
+
+        expect(orgIds).toContain(active.org.id);
+        expect(orgIds).not.toContain(inactive.org.id);
+        expect(orgIds).not.toContain(nonRegion.org.id);
+      } finally {
+        if (previous === undefined)
+          delete process.env[SLACKBOT_SERVICE_API_KEY_ENV];
+        else process.env[SLACKBOT_SERVICE_API_KEY_ENV] = previous;
+        await cleanupSlack(active.org.id, active.spaceIds);
+        await cleanupSlack(inactive.org.id, inactive.spaceIds);
+        await cleanupSlack(nonRegion.org.id, nonRegion.spaceIds);
+      }
+    });
+
+    it("trims surrounding whitespace when comparing the slackbot service key", async () => {
+      const previous = process.env[SLACKBOT_SERVICE_API_KEY_ENV];
+      process.env[SLACKBOT_SERVICE_API_KEY_ENV] = "  service-secret  ";
+      try {
+        await expect(
+          serviceClient(" service-secret ").slack.getBotSettingsCache(),
+        ).resolves.toBeInstanceOf(Array);
+      } finally {
+        if (previous === undefined)
+          delete process.env[SLACKBOT_SERVICE_API_KEY_ENV];
+        else process.env[SLACKBOT_SERVICE_API_KEY_ENV] = previous;
+      }
+    });
+
+    it("PATCH preserves existing team_id, bot_token, and workspace_name when omitted", async () => {
+      const { org, spaceIds } = await createOrgWithSlack({
+        botToken: "xoxb-original",
+        settings: { bot_token: "xoxb-original" },
+      });
+      try {
+        await mockAuthWithSession(adminSessionForOrg(org));
+        const [before] = await db
+          .select({
+            teamId: schema.slackSpaces.teamId,
+            workspaceName: schema.slackSpaces.workspaceName,
+            botToken: schema.slackSpaces.botToken,
+          })
+          .from(schema.slackSpaces)
+          .where(eq(schema.slackSpaces.id, spaceIds[0]!));
+
+        await createTestClient().slack.updateBotSettings({
+          regionOrgId: org.id,
+          settings: { editing_locked: true },
+        });
+
+        const [after] = await db
+          .select({
+            teamId: schema.slackSpaces.teamId,
+            workspaceName: schema.slackSpaces.workspaceName,
+            botToken: schema.slackSpaces.botToken,
+          })
+          .from(schema.slackSpaces)
+          .where(eq(schema.slackSpaces.id, spaceIds[0]!));
+
+        expect(after?.teamId).toBe(before?.teamId);
+        expect(after?.workspaceName).toBe(before?.workspaceName);
+        expect(after?.botToken).toBe(before?.botToken);
+      } finally {
+        await cleanupSlack(org.id, spaceIds);
+      }
+    });
+
+    it("PATCH discards a non-object existing settings value before merging the patch", async () => {
+      const { org, spaceIds } = await createOrgWithSlack();
+      try {
+        await mockAuthWithSession(adminSessionForOrg(org));
+        await db
+          .update(schema.slackSpaces)
+          .set({ settings: sql`'["not", "an", "object"]'::jsonb` })
+          .where(eq(schema.slackSpaces.id, spaceIds[0]!));
+
+        const result = await createTestClient().slack.updateBotSettings({
+          regionOrgId: org.id,
+          settings: { editing_locked: true },
+        });
+
+        expect(result.settings).toEqual({ editing_locked: true });
+      } finally {
+        await cleanupSlack(org.id, spaceIds);
+      }
+    });
+
+    it("GET normalizes a null settings column to an empty object", async () => {
+      const { org, spaceIds } = await createOrgWithSlack();
+      try {
+        await db
+          .update(schema.slackSpaces)
+          .set({ settings: null })
+          .where(eq(schema.slackSpaces.id, spaceIds[0]!));
+        await mockAuthWithSession(adminSessionForOrg(org));
+
+        const result = await createTestClient().slack.getBotSettings({
+          regionOrgId: org.id,
+        });
+
+        expect(result.settings).toEqual({});
+      } finally {
+        await cleanupSlack(org.id, spaceIds);
+      }
+    });
   });
 
   it("posts with target-org admin, post-only fields, and normalized output", async () => {
