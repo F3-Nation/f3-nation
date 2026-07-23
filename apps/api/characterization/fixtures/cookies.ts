@@ -1,11 +1,14 @@
 import { encode } from "next-auth/jwt";
 
+import type { UserRole } from "@acme/shared/app/enums";
 import { COOKIE_NAME } from "@acme/shared/common/constants";
 
 interface RoleRow {
   orgId: number;
   orgName: string;
-  roleName: string;
+  // The decoder produces UserRole; a plain `string` would let a mis-cased or
+  // typo'd role compile, drive a 403, and pass a test for the wrong reason.
+  roleName: UserRole;
 }
 
 /**
@@ -21,7 +24,8 @@ export interface SessionCookieOptions {
   roles?: RoleRow[];
   /**
    * encode() ALWAYS sets exp = now + maxAge, clobbering any exp in the token
-   * payload, so expired fixtures must come from a negative maxAge here.
+   * payload. @auth/core's decode applies a 15s clockTolerance, so an expired
+   * fixture needs a maxAge more negative than that — use -60, not -1.
    */
   maxAge?: number;
 }

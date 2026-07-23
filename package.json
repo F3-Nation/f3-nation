@@ -46,6 +46,7 @@
     "python:install": "uv sync --all-packages",
     "reset-test-db": "turbo run reset-test-db",
     "test": "turbo test",
+    "test:characterization": "turbo test:characterization",
     "typecheck": "turbo typecheck",
     "with-env": "dotenv -e .env --"
   },

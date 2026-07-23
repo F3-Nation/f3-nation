@@ -13,17 +13,18 @@ export default defineConfig({
       // `vi.mock` cannot reach next-auth's own `next/headers` import, so the
       // shim is wired in by alias instead. Requires the deps.inline below.
       { find: /^next\/headers$/, replacement: nextHeadersShim },
-      // next-auth/lib/env.js imports the bare `next/server` specifier, which
-      // Vite cannot resolve. Point at the real file — NOT a mock — so genuine
-      // NextResponse stays in play.
-      { find: /^next\/server$/, replacement: "next/server.js" },
     ],
   },
   test: {
     globals: true,
     environment: "node",
-    // The rate limiter and the JWKS module cache are per-worker singletons.
+    // Serialized because every file shares one f3_test database; fixture inserts
+    // in parallel files would interleave. (isolate: true already gives each file
+    // a fresh module registry, so per-file module state is not the reason.)
     fileParallelism: false,
+    // Load-bearing: under NODE_ENV=development, getSession returns a full admin
+    // getDevMockSession() for any unauthenticated request (shared.ts), which
+    // would make every auth characterization vacuous.
     env: { NODE_ENV: "test" },
     include: ["characterization/**/*.char.test.ts"],
     globalSetup: ["./characterization/global-setup.ts"],

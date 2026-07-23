@@ -8,12 +8,21 @@ import { headerStore } from "./header-store";
  * the cookie -> @auth/core `Auth()`, so replacing this one module leaves the
  * real decode path, cookie names, and session callback executing unmocked.
  *
- * An alias rather than `vi.mock`: next-auth is an externalized dependency, so
- * the mock registry never intercepts its `next/headers` import and the real
- * Next `headers()` throws "called outside a request scope".
+ * An alias rather than `vi.mock`: verified empirically that removing the alias
+ * and hand-writing a `vi.mock` still lets next-auth pick up the real Next
+ * `headers()`, which throws "called outside a request scope".
  */
 export function headers(): Promise<Headers> {
-  return Promise.resolve(headerStore.getStore() ?? new Headers());
+  const store = headerStore.getStore();
+  if (!store) {
+    // An empty Headers is indistinguishable from an unauthenticated request, so
+    // every protected procedure would answer 401 instead of surfacing the bug.
+    throw new Error(
+      "next/headers headers() called outside a characterization request scope — " +
+        "the target must wrap dispatch in withRequestHeaders()",
+    );
+  }
+  return Promise.resolve(store);
 }
 
 export function cookies(): never {

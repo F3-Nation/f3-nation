@@ -85,7 +85,7 @@
       "outputs": ["coverage/**"]
     },
     "test:characterization": {
-      "dependsOn": ["^topo", "reset-test-db", "^reset-test-db"],
+      "dependsOn": ["^topo", "reset-test-db", "^reset-test-db", "test"],
       "cache": false
     },
     "clean": {

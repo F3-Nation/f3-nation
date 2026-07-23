@@ -2,20 +2,34 @@ import { makeLiveInvoke } from "./targets/live";
 import { invokeNext } from "./targets/next";
 
 export type Invoke = (request: Request) => Promise<Response>;
-export type TargetKind = "next" | "hono" | "live";
+
+const TARGET_KINDS = ["next", "hono", "live"] as const;
+type TargetKind = (typeof TARGET_KINDS)[number];
+
+function isTargetKind(value: string): value is TargetKind {
+  return (TARGET_KINDS as readonly string[]).includes(value);
+}
 
 /** Stable synthetic origin so goldens never encode a real host or port. */
 const CHAR_BASE = "http://api.characterization.test";
 
-function resolveTarget(): {
+interface ResolvedTarget {
   kind: TargetKind;
+  /** True when dispatch runs in this process (DB fixtures are reachable). */
+  inProcess: boolean;
   invoke: Invoke;
   baseUrl: string;
-} {
-  const kind = (process.env.CHAR_TEST_TARGET ?? "next") as TargetKind;
+}
+
+function resolveTarget(): ResolvedTarget {
+  const raw = process.env.CHAR_TEST_TARGET ?? "next";
+  if (!isTargetKind(raw)) {
+    throw new Error(`Unknown CHAR_TEST_TARGET: ${raw}`);
+  }
+  const kind = raw;
 
   if (kind === "next") {
-    return { kind, invoke: invokeNext, baseUrl: CHAR_BASE };
+    return { kind, inProcess: true, invoke: invokeNext, baseUrl: CHAR_BASE };
   }
 
   if (kind === "live") {
@@ -23,18 +37,14 @@ function resolveTarget(): {
     if (!baseUrl) {
       throw new Error("CHAR_TEST_TARGET=live requires CHAR_TEST_BASE_URL");
     }
-    return { kind, invoke: makeLiveInvoke(baseUrl), baseUrl };
+    return { kind, inProcess: false, invoke: makeLiveInvoke(baseUrl), baseUrl };
   }
 
-  if (kind === "hono") {
-    // Filled in by #649, which adds the Hono entry point. Kept as an explicit
-    // branch so the union and the runIf gates are already in place.
-    throw new Error(
-      "CHAR_TEST_TARGET=hono is not wired up until the Hono server lands (#649)",
-    );
-  }
-
-  throw new Error(`Unknown CHAR_TEST_TARGET: ${String(kind)}`);
+  // kind === "hono": filled in by #649, which adds the Hono entry point. Kept as
+  // an explicit branch so the union and the inProcess gates are already in place.
+  throw new Error(
+    "CHAR_TEST_TARGET=hono is not wired up until the Hono server lands (#649)",
+  );
 }
 
 export const target = resolveTarget();

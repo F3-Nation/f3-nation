@@ -14,14 +14,14 @@ import { db } from "@acme/db/client";
 /**
  * Generates a unique identifier for test data to avoid race conditions
  */
-export const uniqueId = () =>
+export const uniqueId = (): string =>
   `test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 /**
  * Ensures required roles (editor, admin) exist in the roles table.
  * Many tests depend on these roles being present for role assignment to work.
  */
-export const getOrCreateRoles = async () => {
+export const getOrCreateRoles = async (): Promise<void> => {
   const existing = await db.select().from(schema.roles);
   const existingNames = new Set(existing.map((r) => r.name));
 
@@ -34,11 +34,25 @@ export const getOrCreateRoles = async () => {
   }
 };
 
+export interface FixtureOrg {
+  id: number;
+  name: string | null;
+}
+
 /**
  * Gets or creates the F3 Nation org (required for admin operations)
  * This uses the same query pattern as the routers do to find the nation org.
+ *
+ * Constraint for auth fixtures: in the seeded test DB this returns the existing
+ * nation org `{ id: 1, name: "Test Nation" }`. isNationAdminFromSession
+ * (packages/shared/src/app/role-checks.ts) requires both orgId === 1 AND
+ * orgName?.toLowerCase().includes("f3 nation"). The id matches; the NAME does
+ * not — so a JWT or API-key fixture (orgName read from this row) structurally
+ * cannot produce a nation-admin session, while a cookie fixture (orgName passed
+ * as a literal) can. A nation-admin case needs an org seeded/renamed to satisfy
+ * that name check.
  */
-export const getOrCreateF3NationOrg = async () => {
+export const getOrCreateF3NationOrg = async (): Promise<FixtureOrg> => {
   // First check for any nation org (matching how routers find the nation)
   const [nationOrg] = await db
     .select({ id: schema.orgs.id, name: schema.orgs.name })
@@ -153,10 +167,21 @@ export const createNoPermissionSession = (): Session => {
   };
 };
 
+/** Cleanup helpers keyed by entity — each deletes a row and its FK dependents. */
+export interface Cleanup {
+  user(userId: number): Promise<void>;
+  event(eventId: number): Promise<void>;
+  eventType(eventTypeId: number): Promise<void>;
+  location(locationId: number): Promise<void>;
+  org(orgId: number): Promise<void>;
+  apiKey(apiKeyId: number): Promise<void>;
+  updateRequest(requestId: string): Promise<void>;
+}
+
 /**
  * Cleanup helpers - delete in the correct order to respect FK constraints
  */
-export const cleanup = {
+export const cleanup: Cleanup = {
   /**
    * Delete a user and all their roles
    */
