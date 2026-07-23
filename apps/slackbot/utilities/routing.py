@@ -109,7 +109,6 @@ ACTION_MAPPER = {
     actions.CUSTOM_FIELD_EDIT: (custom_fields.build_custom_field_add_edit, False, False),
     actions.CUSTOM_FIELD_DELETE: (custom_fields.delete_custom_field, False, False),
     actions.PREBLAST_NEW_BUTTON: (event_preblast.preblast_middleware, True, False),
-    actions.CONFIG_KOTTER_REPORTS: (config.build_kotter_report_config_form, False, False),
     actions.CONFIG_ACHIEVEMENTS: (achievements.build_config_form, False, False),
     actions.ACHIEVEMENT_CONFIG_NEW_BTN: (achievements.build_new_achievement_form, False, False),
     actions.ACHIEVEMENT_CONFIG_MANAGE_BTN: (achievements.build_manage_achievements_form, False, False),
