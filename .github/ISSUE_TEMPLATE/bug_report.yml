@@ -16,6 +16,9 @@ body:
         - apps/map
         - apps/me
         - apps/slackbot
+        - packages (shared code)
+        - repo / tooling / CI / deps
+        - Not sure / multiple
     validations:
       required: true
   - type: textarea

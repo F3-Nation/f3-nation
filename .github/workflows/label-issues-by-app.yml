@@ -4,13 +4,16 @@ on:
   issues:
     types: [opened, edited]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   issues: write
 
 jobs:
   label:
-    if: ${{ !github.event.issue.pull_request }}
     runs-on: ubuntu-latest
     steps:
       - name: Apply app label
@@ -29,10 +32,13 @@ jobs:
 
             const issue = context.payload.issue;
             const body = issue.body ?? '';
-            const match = body.match(/### Affected app\s+([^#\r\n]+)/i);
+            const match = body.match(/^### Affected app\s+([^#\r\n]+)/im);
 
             if (!match) {
-              core.info('No affected app field found in issue body.');
+              core.warning(
+                `Issue #${issue.number} has no "### Affected app" section; no app label applied. ` +
+                  'Issues filed outside the issue forms (blank issues, gh issue create, transfers) need a manual label.',
+              );
               return;
             }
 
@@ -40,7 +46,10 @@ jobs:
             const selectedLabel = appLabels.get(selectedApp);
 
             if (!selectedLabel) {
-              core.info(`Affected app is not labelable: ${selectedApp}`);
+              core.warning(
+                `Issue #${issue.number}: "${selectedApp}" has no entry in this workflow's appLabels map. ` +
+                  'Add it here, or remove the option from .github/ISSUE_TEMPLATE/{bug_report,feature_request}.yml.',
+              );
               return;
             }
 
@@ -52,20 +61,21 @@ jobs:
             );
             const allAppLabels = [...appLabels.values()];
 
-            for (const label of allAppLabels) {
-              try {
-                await github.rest.issues.getLabel({ owner, repo, name: label });
-              } catch (error) {
-                if (error.status !== 404) throw error;
-
-                await github.rest.issues.createLabel({
-                  owner,
-                  repo,
-                  name: label,
-                  color: '5319e7',
-                  description: `Issue affects ${label.replace('app: ', 'apps/')}`,
-                });
-              }
+            try {
+              await github.rest.issues.createLabel({
+                owner,
+                repo,
+                name: selectedLabel,
+                color: '5319e7',
+                description: `Issue affects ${selectedApp}`,
+              });
+            } catch (error) {
+              const alreadyExists =
+                error?.status === 422 &&
+                (error?.response?.data?.errors ?? []).some(
+                  (e) => e.code === 'already_exists',
+                );
+              if (!alreadyExists) throw error;
             }
 
             const labelsToRemove = allAppLabels.filter(
@@ -73,14 +83,18 @@ jobs:
             );
 
             for (const label of labelsToRemove) {
-              await github.rest.issues.removeLabel({ owner, repo, issue_number, name: label });
+              try {
+                await github.rest.issues.removeLabel({ owner, repo, issue_number, name: label });
+              } catch (error) {
+                // 404 => already removed by a concurrent run or a maintainer.
+                if (error?.status !== 404) throw error;
+              }
             }
 
-            if (!existingLabels.includes(selectedLabel)) {
-              await github.rest.issues.addLabels({
-                owner,
-                repo,
-                issue_number,
-                labels: [selectedLabel],
-              });
-            }
+            await github.rest.issues.addLabels({
+              owner,
+              repo,
+              issue_number,
+              labels: [selectedLabel],
+            });
+            core.info(`Applied "${selectedLabel}" to #${issue_number}.`);
