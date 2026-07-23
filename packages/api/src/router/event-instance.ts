@@ -915,8 +915,6 @@ export const eventInstanceRouter = {
             orgName: aoOrg.name,
             seriesId: schema.eventInstances.seriesId,
             seriesName: seriesEvent.name,
-            // preblastTs (not preblastRich, which most preblasts never set)
-            // is the "published" signal, matching notPostedOnly elsewhere.
             hasPreblast: sql<boolean>`${schema.eventInstances.preblastTs} IS NOT NULL`,
             eventTypes: sql<{ id: number; name: string }[]>`COALESCE(
               json_agg(
@@ -1005,8 +1003,6 @@ export const eventInstanceRouter = {
             orgName: aoOrg.name,
             seriesId: schema.eventInstances.seriesId,
             seriesName: seriesEvent.name,
-            // preblastTs (not preblastRich, which most preblasts never set)
-            // is the "published" signal, matching notPostedOnly elsewhere.
             hasPreblast: sql<boolean>`${schema.eventInstances.preblastTs} IS NOT NULL`,
             eventTypes: sql<{ id: number; name: string }[]>`COALESCE(
               json_agg(
