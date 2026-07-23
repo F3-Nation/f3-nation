@@ -248,10 +248,17 @@ const rawSlackSettingsCacheOutputSchema = z.array(
 
 const SLACKBOT_SERVICE_API_KEY_ENV = "SLACKBOT_SERVICE_API_KEY";
 
+import { timingSafeEqual } from "node:crypto";
+
 const assertSlackbotServiceAuth = (ctx: { reqHeaders?: Headers | null }) => {
   const configured = process.env[SLACKBOT_SERVICE_API_KEY_ENV]?.trim();
   const provided = ctx.reqHeaders?.get("x-slackbot-service-key")?.trim();
-  if (!configured || !provided || configured !== provided) {
+  if (!configured || !provided) {
+    throw new ORPCError("UNAUTHORIZED");
+  }
+  const a = Buffer.from(configured);
+  const b = Buffer.from(provided);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
     throw new ORPCError("UNAUTHORIZED");
   }
 };
