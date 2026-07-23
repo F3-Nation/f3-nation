@@ -2,6 +2,13 @@
 
 <!-- version list -->
 
+## [2.1.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.0.4...slackbot@2.1.0) (2026-07-23)
+
+
+### Features
+
+* **slackbot, api:** preblast feature refactor + some extras ([#599](https://github.com/F3-Nation/f3-nation/issues/599)) ([f5766df](https://github.com/F3-Nation/f3-nation/commit/f5766dfc3972759a3641221d8cadaca916a911b4))
+
 ## [2.0.4](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.0.3...slackbot@2.0.4) (2026-07-14)
 
 
