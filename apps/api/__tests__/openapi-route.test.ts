@@ -26,6 +26,7 @@ describe("docs openapi route", () => {
     }
 
     return firstCall[1] as {
+      filter: (options: { path: string[] }) => boolean;
       servers: { url: string }[];
     };
   };
@@ -72,6 +73,12 @@ describe("docs openapi route", () => {
     const generateOptions = getGenerateOptions();
     expect(generateOptions.servers).toHaveLength(1);
     expect(generateOptions.servers[0]!.url).toBe("https://api.f3nation.com");
+    expect(
+      generateOptions.filter({ path: ["slack", "getBotSettingsCache"] }),
+    ).toBe(false);
+    expect(generateOptions.filter({ path: ["slack", "getBotSettings"] })).toBe(
+      true,
+    );
 
     expect(response.headers.get("Content-Type")).toContain("application/json");
     const spec = (await response.json()) as {
