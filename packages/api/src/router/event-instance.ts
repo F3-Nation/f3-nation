@@ -34,8 +34,8 @@ export const eventInstanceRouter = {
     .input(
       z
         .object({
-          pageIndex: z.coerce.number().optional(),
-          pageSize: z.coerce.number().optional(),
+          pageIndex: z.coerce.number().int().min(0).optional(),
+          pageSize: z.coerce.number().int().optional(),
           searchTerm: z.string().optional(),
           statuses: arrayOrSingle(z.enum(["active", "inactive"])).optional(),
           sorting: z

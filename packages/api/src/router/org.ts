@@ -70,12 +70,15 @@ type OrgFilterInput = z.infer<typeof orgFilterSchema>;
 const orgAllInputSchema = orgFilterSchema.extend({
   pageIndex: z.coerce
     .number()
+    .int()
+    .min(0)
     .optional()
     .describe(
       "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns every matching organization.",
     ),
   pageSize: z.coerce
     .number()
+    .int()
     .optional()
     .describe(
       "Number of organizations per page. Defaults to 10. Supplying this (or pageIndex) opts into paginated results; omitting both returns every matching organization.",
@@ -88,8 +91,8 @@ const orgAllInputSchema = orgFilterSchema.extend({
 // Schema for the `accessible` endpoint with pagination and sorting
 const orgAccessibleInputSchema = z.object({
   orgTypes: arrayOrSingle(z.enum(OrgType)).optional(),
-  pageIndex: z.coerce.number().optional(),
-  pageSize: z.coerce.number().optional(),
+  pageIndex: z.coerce.number().int().min(0).optional(),
+  pageSize: z.coerce.number().int().optional(),
   sorting: parseSorting(),
 });
 

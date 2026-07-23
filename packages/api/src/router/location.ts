@@ -41,12 +41,15 @@ export const locationRouter = {
             ),
           pageIndex: z.coerce
             .number()
+            .int()
+            .min(0)
             .optional()
             .describe(
               "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns every matching location.",
             ),
           pageSize: z.coerce
             .number()
+            .int()
             .optional()
             .describe(
               "Number of locations per page. Defaults to 10. Supplying this (or pageIndex) opts into paginated results; omitting both returns every matching location.",

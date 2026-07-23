@@ -83,12 +83,15 @@ const eventAllInputSchema = eventFilterSchema
   .extend({
     pageIndex: z.coerce
       .number()
+      .int()
+      .min(0)
       .optional()
       .describe(
         "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns every matching event.",
       ),
     pageSize: z.coerce
       .number()
+      .int()
       .optional()
       .describe(
         "Number of events per page. Defaults to 10. Supplying this (or pageIndex) opts into paginated results; omitting both returns every matching event.",

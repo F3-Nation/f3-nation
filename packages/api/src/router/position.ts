@@ -85,6 +85,8 @@ export const positionRouter = {
           /** Zero-based page index for pagination */
           pageIndex: z.coerce
             .number()
+            .int()
+            .min(0)
             .optional()
             .describe(
               "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns every matching position.",
@@ -92,6 +94,7 @@ export const positionRouter = {
           /** Number of positions per page */
           pageSize: z.coerce
             .number()
+            .int()
             .optional()
             .describe(
               "Number of positions per page. Defaults to 20. Supplying this (or pageIndex) opts into paginated results; omitting both returns every matching position.",

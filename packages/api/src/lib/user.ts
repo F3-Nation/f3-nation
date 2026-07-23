@@ -151,12 +151,15 @@ export const userListInputSchema = z.object({
     ),
   pageIndex: z.coerce
     .number()
+    .int()
+    .min(0)
     .optional()
     .describe(
       "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns every matching user.",
     ),
   pageSize: z.coerce
     .number()
+    .int()
     .optional()
     .describe(
       "Number of users per page. Defaults to 10. Supplying this (or pageIndex) opts into paginated results; omitting both returns every matching user.",

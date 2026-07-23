@@ -46,12 +46,15 @@ export const eventTypeRouter = {
             ),
           pageIndex: z.coerce
             .number()
+            .int()
+            .min(0)
             .optional()
             .describe(
               "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns every matching event type.",
             ),
           pageSize: z.coerce
             .number()
+            .int()
             .optional()
             .describe(
               "Number of event types per page. Defaults to 10. Supplying this (or pageIndex) opts into paginated results; omitting both returns every matching event type.",

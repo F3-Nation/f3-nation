@@ -34,8 +34,8 @@ export const eventTagRouter = {
         .object({
           orgIds: arrayOrSingle(z.coerce.number()).optional(),
           statuses: arrayOrSingle(z.enum(IsActiveStatus)).optional(),
-          pageIndex: z.coerce.number().optional(),
-          pageSize: z.coerce.number().optional(),
+          pageIndex: z.coerce.number().int().min(0).optional(),
+          pageSize: z.coerce.number().int().optional(),
           searchTerm: z.string().optional(),
           sorting: parseSorting(),
           ignoreNationEventTags: z.coerce.boolean().optional(),

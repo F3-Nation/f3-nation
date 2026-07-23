@@ -53,8 +53,8 @@ type EventFilterInput = z.infer<typeof eventFilterSchema>;
 // Extended schema with pagination and sorting for the `all` endpoint
 const eventAllInputSchema = eventFilterSchema
   .extend({
-    pageIndex: z.coerce.number().optional(),
-    pageSize: z.coerce.number().optional(),
+    pageIndex: z.coerce.number().int().min(0).optional(),
+    pageSize: z.coerce.number().int().optional(),
     sorting: z
       .array(z.object({ id: z.string(), desc: z.coerce.boolean() }))
       .optional(),
