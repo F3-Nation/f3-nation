@@ -4,7 +4,7 @@ import {
   getOrCreateRoles,
   uniqueId,
 } from "@acme/api/testing";
-import { and, eq, schema } from "@acme/db";
+import { eq, schema } from "@acme/db";
 
 export interface FixtureUser {
   userId: number;
@@ -52,18 +52,4 @@ export async function createFixtureUser(
       await db.delete(schema.users).where(eq(schema.users.id, user.id));
     },
   };
-}
-
-/** Look up an existing role assignment; used by assertions, not setup. */
-export async function hasRole(userId: number, orgId: number): Promise<boolean> {
-  const rows = await db
-    .select({ userId: schema.rolesXUsersXOrg.userId })
-    .from(schema.rolesXUsersXOrg)
-    .where(
-      and(
-        eq(schema.rolesXUsersXOrg.userId, userId),
-        eq(schema.rolesXUsersXOrg.orgId, orgId),
-      ),
-    );
-  return rows.length > 0;
 }

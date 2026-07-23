@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { createApiKey } from "./fixtures/api-keys";
 import { sessionCookie } from "./fixtures/cookies";
+import { generateForeignKey, signFixtureJwt } from "./fixtures/jwt";
+import { createFixtureUser } from "./fixtures/users";
 import { req, target } from "./transport";
 
 describe("transport seam", () => {
@@ -57,6 +59,49 @@ describe.runIf(target.kind !== "live")("fixtures round-trip", () => {
       expect(res.status).toBe(200);
     } finally {
       await apiKey.cleanup();
+    }
+  });
+
+  // Also the only proof that global-setup's JWKS server is reachable and
+  // serving the key that shared.ts's createRemoteJWKSet fetches.
+  it("authenticates with an RS256 JWT verified through the fixture JWKS", async () => {
+    const user = await createFixtureUser({ roles: [{ roleName: "admin" }] });
+    try {
+      const token = await signFixtureJwt({ sub: user.userId });
+      const res = await target.invoke(
+        req("/v1/position/", {
+          headers: {
+            "x-forwarded-for": "10.60.0.3",
+            authorization: `Bearer ${token}`,
+            client: "characterization",
+          },
+        }),
+      );
+      expect(res.status).toBe(200);
+    } finally {
+      await user.cleanup();
+    }
+  });
+
+  it("rejects a JWT signed by a key the JWKS does not publish", async () => {
+    const user = await createFixtureUser({ roles: [{ roleName: "admin" }] });
+    try {
+      const token = await signFixtureJwt({
+        sub: user.userId,
+        key: await generateForeignKey(),
+      });
+      const res = await target.invoke(
+        req("/v1/position/", {
+          headers: {
+            "x-forwarded-for": "10.60.0.4",
+            authorization: `Bearer ${token}`,
+            client: "characterization",
+          },
+        }),
+      );
+      expect(res.status).toBe(401);
+    } finally {
+      await user.cleanup();
     }
   });
 });

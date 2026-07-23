@@ -654,9 +654,6 @@ importers:
       '@acme/vitest-config':
         specifier: workspace:*
         version: link:../../tooling/vitest
-      '@orpc/client':
-        specifier: 'catalog:'
-        version: 1.14.8(@opentelemetry/api@1.9.1)
       '@testing-library/jest-dom':
         specifier: 'catalog:'
         version: 6.9.1

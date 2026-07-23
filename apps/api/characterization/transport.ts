@@ -5,7 +5,7 @@ export type Invoke = (request: Request) => Promise<Response>;
 export type TargetKind = "next" | "hono" | "live";
 
 /** Stable synthetic origin so goldens never encode a real host or port. */
-export const CHAR_BASE = "http://api.characterization.test";
+const CHAR_BASE = "http://api.characterization.test";
 
 function resolveTarget(): {
   kind: TargetKind;

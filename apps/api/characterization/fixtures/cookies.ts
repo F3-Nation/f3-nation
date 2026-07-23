@@ -2,7 +2,7 @@ import { encode } from "next-auth/jwt";
 
 import { COOKIE_NAME } from "@acme/shared/common/constants";
 
-export interface RoleRow {
+interface RoleRow {
   orgId: number;
   orgName: string;
   roleName: string;
@@ -12,7 +12,7 @@ export interface RoleRow {
  * The non-prod cookie prefix is empty (packages/auth/src/config.ts), and in
  * @auth/core the salt IS the cookie name.
  */
-export const SESSION_COOKIE_NAME = `${COOKIE_NAME}.session-token`;
+const SESSION_COOKIE_NAME = `${COOKIE_NAME}.session-token`;
 
 export interface SessionCookieOptions {
   id?: string;
