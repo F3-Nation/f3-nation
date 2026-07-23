@@ -639,6 +639,9 @@ importers:
         specifier: 'catalog:'
         version: 4.4.3
     devDependencies:
+      '@acme/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@acme/eslint-config':
         specifier: workspace:*
         version: link:../../tooling/eslint
@@ -651,6 +654,9 @@ importers:
       '@acme/vitest-config':
         specifier: workspace:*
         version: link:../../tooling/vitest
+      '@orpc/client':
+        specifier: 'catalog:'
+        version: 1.14.8(@opentelemetry/api@1.9.1)
       '@testing-library/jest-dom':
         specifier: 'catalog:'
         version: 6.9.1
@@ -678,6 +684,9 @@ importers:
       jiti:
         specifier: 'catalog:'
         version: 2.7.0
+      jose:
+        specifier: 'catalog:'
+        version: 6.2.3
       jsdom:
         specifier: 'catalog:'
         version: 29.1.1

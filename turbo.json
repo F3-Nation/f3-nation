@@ -15,6 +15,8 @@
     "DATABASE_NAME",
     "TEST_DATABASE_URL",
     "SKIP_RESET_TEST_DB",
+    "CHAR_TEST_TARGET",
+    "CHAR_TEST_BASE_URL",
     "EMAIL_ADMIN_DESTINATIONS",
     "EMAIL_FROM",
     "EMAIL_SERVER",
@@ -80,6 +82,10 @@
     "test": {
       "dependsOn": ["^topo", "reset-test-db", "^reset-test-db"],
       "outputs": ["coverage/**"]
+    },
+    "test:characterization": {
+      "dependsOn": ["^topo", "reset-test-db", "^reset-test-db"],
+      "cache": false
     },
     "clean": {
       "cache": false
