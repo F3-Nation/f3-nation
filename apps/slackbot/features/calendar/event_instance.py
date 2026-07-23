@@ -49,6 +49,7 @@ CALENDAR_ADD_EVENT_INSTANCE_START_TIME = "calendar_add_event_instance_start_time
 CALENDAR_ADD_EVENT_INSTANCE_END_TIME = "calendar_add_event_instance_end_time"
 CALENDAR_ADD_EVENT_INSTANCE_NAME = "calendar_add_event_instance_name"
 CALENDAR_ADD_EVENT_INSTANCE_HIGHLIGHT = "calendar_add_event_instance_highlight"
+CALENDAR_ADD_EVENT_INSTANCE_PREBLAST_CHANNEL = "calendar_add_event_instance_preblast_channel"
 CALENDAR_ADD_EVENT_INSTANCE_DOW = "calendar_add_event_instance_dow"
 CALENDAR_ADD_EVENT_AO = "calendar_add_event_ao"
 CALENDAR_ADD_EVENT_INSTANCE_FREQUENCY = "calendar_add_event_instance_frequency"
@@ -64,6 +65,7 @@ EVENT_CLOSE_CALLBACK_ID = "event_close_callback_id"
 
 META_DO_NOT_SEND_AUTO_PREBLASTS = "do_not_send_auto_preblasts"
 META_EXCLUDE_FROM_PAX_VAULT = "exclude_from_pax_vault"
+META_PREBLAST_CHANNEL_ID = "preblast_channel_id"
 
 
 # ---------------------------------------------------------------------------
@@ -139,6 +141,16 @@ def build_event_instance_add_form(
                 optional=False,
             ),
         )
+        form.blocks.insert(
+            -1,
+            orm.InputBlock(
+                label="Preblast Destination Channel",
+                action=CALENDAR_ADD_EVENT_INSTANCE_PREBLAST_CHANNEL,
+                element=orm.ChannelsSelectElement(placeholder="Select a channel..."),
+                optional=True,
+                hint="If selected, this preblast will be posted to this channel instead of the default.",
+            ),
+        )
         parent_metadata.update({"is_preblast": "True"})
 
     ao_service = _build_ao_service()
@@ -209,6 +221,10 @@ def build_event_instance_add_form(
             initial_values[CALENDAR_ADD_EVENT_INSTANCE_TAG] = [
                 str(edit_event_instance.event_tag_ids[0])
             ]  # TODO: handle multiple event tags
+        if safe_get(edit_event_instance.meta, META_PREBLAST_CHANNEL_ID):
+            initial_values[CALENDAR_ADD_EVENT_INSTANCE_PREBLAST_CHANNEL] = str(
+                edit_event_instance.meta[META_PREBLAST_CHANNEL_ID]
+            )
 
     # This is triggered when the AO is selected — defaults are loaded for the location
     action_id = safe_get(body, "actions", 0, "action_id")
@@ -264,6 +280,16 @@ def handle_event_instance_add(
                 optional=False,
             ),
         )
+        form.blocks.insert(
+            -1,
+            orm.InputBlock(
+                label="Preblast Destination Channel",
+                action=CALENDAR_ADD_EVENT_INSTANCE_PREBLAST_CHANNEL,
+                element=orm.ChannelsSelectElement(placeholder="Select a channel..."),
+                optional=True,
+                hint="If selected, this preblast will be posted to this channel instead of the default.",
+            ),
+        )
     form_data = form.get_selected_values(body)
     slack_user_id = safe_get(body, "user", "id") or safe_get(body, "user_id")
 
@@ -289,6 +315,12 @@ def handle_event_instance_add(
         merged_meta[META_DO_NOT_SEND_AUTO_PREBLASTS] = True
     else:
         merged_meta.pop(META_DO_NOT_SEND_AUTO_PREBLASTS, None)
+    if CALENDAR_ADD_EVENT_INSTANCE_PREBLAST_CHANNEL in form_data:
+        preblast_channel_id = safe_get(form_data, CALENDAR_ADD_EVENT_INSTANCE_PREBLAST_CHANNEL)
+        if preblast_channel_id:
+            merged_meta[META_PREBLAST_CHANNEL_ID] = preblast_channel_id
+        else:
+            merged_meta.pop(META_PREBLAST_CHANNEL_ID, None)
 
     # Resolve end time
     if safe_get(form_data, CALENDAR_ADD_EVENT_INSTANCE_END_TIME):
