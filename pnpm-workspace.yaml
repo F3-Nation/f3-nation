@@ -95,7 +95,7 @@ catalog:
   lodash: ^4.18.1
   lottie-react: ^2.4.1
   lucide-react: ^1.24.0
-  next: ^16.2.10
+  next: ^16.2.11
   next-auth: 5.0.0-beta.31
   next-themes: ^0.4.6
   nodemailer: ^9.0.3
@@ -136,12 +136,14 @@ catalog:
 overrides:
   "form-data@>=2.0.0 <2.5.6": "^4.0.6"
   "@auth/core": "0.41.2"
-  # GHSA-3jxr-9vmj-r5cp (DoS via exponential-time brace expansion). Two
-  # independent transitive lines exist (via minimatch@3 in eslint plugins,
-  # and via minimatch@10 in @sentry/nextjs's build plugins), each needing a
-  # different patched target.
-  "brace-expansion@<1.1.16": "^1.1.16"
-  "brace-expansion@>=3.0.0 <5.0.7": "^5.0.7"
+  # Force patched versions of transitive deps flagged by `pnpm audit --prod
+  # --audit-level=high`. Scoped to the vulnerable ranges so unaffected
+  # consumers are untouched. Remove an entry once every dependent has upgraded.
+  "brace-expansion@<1.1.16": "1.1.16" # GHSA-3jxr-9vmj-r5cp (DoS)
+  "brace-expansion@>=3.0.0 <5.0.7": "5.0.7" # GHSA-3jxr-9vmj-r5cp (DoS)
+  "fast-uri@<3.1.4": "3.1.4" # host confusion via failed IDN canonicalization
+  "sharp@<0.35.0": "0.35.3" # inherited libvips vulnerabilities
+  "next@>=16.0.0 <16.2.11": "16.2.11" # GHSA-89xv-2m56-2m9x / GHSA-p9j2-gv94-2wf4 (SSRF in rewrites); covers transitive geist>next & @scalar>next
 peerDependencyRules:
   allowedVersions:
     eslint-plugin-react>eslint: "10"

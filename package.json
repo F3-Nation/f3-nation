@@ -6,7 +6,7 @@
   "engines": {
     "node": ">=24.18.0 <25"
   },
-  "packageManager": "pnpm@11.11.0+sha512.4463f65fd80ed80d69bc1d4bf163ee94f605c7380fc318bb5b2ebe15f8cd12d49c51a4d59e951b401e764d3b6ca751cbf51bc50ed7001a6bcb4935e684c34882",
+  "packageManager": "pnpm@11.15.1+sha512.81350b07e53c9538a02f1f2303b4290fa2d7be04e56e2a970c4cc4b417dc761de196edabd49d55c7dc9580db81007c44143e4e3d7e462b3000d23c255122d065",
   "scripts": {
     "build": "turbo build",
     "ci:local": "pnpm format && pnpm lint && pnpm lint:unused && pnpm typecheck && pnpm build && pnpm test",
