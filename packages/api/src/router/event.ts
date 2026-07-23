@@ -28,8 +28,9 @@ import { EventInsertSchema } from "@acme/validators";
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
-import { logError } from "../logger";
 import { notifyMapDataChange } from "../lib/webhook-events";
+import { resolvePagination } from "../lib/pagination";
+import { logError } from "../logger";
 import type { Context } from "../shared";
 import { editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
@@ -83,11 +84,15 @@ const eventAllInputSchema = eventFilterSchema
     pageIndex: z.coerce
       .number()
       .optional()
-      .describe("Zero-based page index for pagination. Defaults to 0."),
+      .describe(
+        "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns every matching event.",
+      ),
     pageSize: z.coerce
       .number()
       .optional()
-      .describe("Number of events per page. Defaults to 10."),
+      .describe(
+        "Number of events per page. Defaults to 10. Supplying this (or pageIndex) opts into paginated results; omitting both returns every matching event.",
+      ),
     sorting: z
       .array(z.object({ id: z.string(), desc: z.coerce.boolean() }))
       .optional()
@@ -307,12 +312,11 @@ export const eventRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
-      const limit = input?.pageSize ?? 10;
-      const offset = (input?.pageIndex ?? 0) * limit;
-      // pageIndex already defaults to 0 above, so pageSize alone is enough
-      // to opt into pagination — requiring both silently returned every row
-      // whenever a caller sent pageSize without also sending pageIndex.
-      const usePagination = input?.pageSize !== undefined;
+      const { limit, offset, usePagination } = resolvePagination({
+        pageSize: input?.pageSize,
+        pageIndex: input?.pageIndex,
+        defaultPageSize: 10,
+      });
 
       // Resolve editable org IDs for "onlyMine" filter
       const editableResult = await resolveEditableOrgIds({

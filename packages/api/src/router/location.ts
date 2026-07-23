@@ -24,6 +24,7 @@ import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
 import { notifyMapDataChange } from "../lib/webhook-events";
+import { resolvePagination } from "../lib/pagination";
 import { adminProcedure, editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
@@ -41,11 +42,15 @@ export const locationRouter = {
           pageIndex: z.coerce
             .number()
             .optional()
-            .describe("Zero-based page index for pagination. Defaults to 0."),
+            .describe(
+              "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns every matching location.",
+            ),
           pageSize: z.coerce
             .number()
             .optional()
-            .describe("Number of locations per page. Defaults to 10."),
+            .describe(
+              "Number of locations per page. Defaults to 10. Supplying this (or pageIndex) opts into paginated results; omitting both returns every matching location.",
+            ),
           sorting: parseSorting().describe(
             "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: id, locationName, regionName, isActive, latitude, longitude, addressStreet, addressCity, addressState, addressZip, created.",
           ),
@@ -122,12 +127,11 @@ export const locationRouter = {
     )
     .handler(async ({ context: ctx, input }) => {
       const regionOrg = aliasedTable(schema.orgs, "region_org");
-      const limit = input?.pageSize ?? 10;
-      const offset = (input?.pageIndex ?? 0) * limit;
-      // pageIndex already defaults to 0 above, so pageSize alone is enough
-      // to opt into pagination — requiring both silently returned every row
-      // whenever a caller sent pageSize without also sending pageIndex.
-      const usePagination = input?.pageSize !== undefined;
+      const { limit, offset, usePagination } = resolvePagination({
+        pageSize: input?.pageSize,
+        pageIndex: input?.pageIndex,
+        defaultPageSize: 10,
+      });
 
       // Determine if filter by editable org IDs is needed
       let editableOrgIds: number[] = [];

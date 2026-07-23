@@ -29,6 +29,7 @@ import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
 import { getPublicImageStorage } from "../lib/storage";
 import { notifyMapDataChange } from "../lib/webhook-events";
+import { resolvePagination } from "../lib/pagination";
 import { logError, logDebug } from "../logger";
 import { notifyMapChangeRequest } from "../services/map-request-notification";
 import type { Context } from "../shared";
@@ -43,11 +44,15 @@ export const requestRouter = {
           pageIndex: z.coerce
             .number()
             .optional()
-            .describe("Zero-based page index for pagination. Defaults to 0."),
+            .describe(
+              "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns every matching request.",
+            ),
           pageSize: z.coerce
             .number()
             .optional()
-            .describe("Number of requests per page. Defaults to 10."),
+            .describe(
+              "Number of requests per page. Defaults to 10. Supplying this (or pageIndex) opts into paginated results; omitting both returns every matching request.",
+            ),
           sorting: parseSorting().describe(
             "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: id, status, requestType, regionName, aoName, workoutName, dayOfWeek, startTime, endTime, description, locationAddress, submittedBy, created.",
           ),
@@ -228,12 +233,11 @@ export const requestRouter = {
       const oldLocation = aliasedTable(schema.locations, "old_location");
       const newRegionOrg = aliasedTable(schema.orgs, "new_region_org");
 
-      const limit = input?.pageSize ?? 10;
-      const offset = (input?.pageIndex ?? 0) * limit;
-      // pageIndex already defaults to 0 above, so pageSize alone is enough
-      // to opt into pagination — requiring both silently returned every row
-      // whenever a caller sent pageSize without also sending pageIndex.
-      const usePagination = input?.pageSize !== undefined;
+      const { limit, offset, usePagination } = resolvePagination({
+        pageSize: input?.pageSize,
+        pageIndex: input?.pageIndex,
+        defaultPageSize: 10,
+      });
 
       // Determine if filter by region IDs is needed
       let editableOrgs: { id: number; type: OrgType }[] = [];

@@ -107,7 +107,9 @@ export default function AdminPositionsModal({
       input: {
         orgTypes: selectedOrgType ? [selectedOrgType] : ["region"],
         onlyMine: true,
-        pageSize: 1000,
+        // Omitting both pageSize and pageIndex opts out of pagination
+        // entirely — this dropdown wants every editable org, and passing a
+        // large pageSize alone now triggers a hard LIMIT (see PR #696).
       },
       enabled: !!selectedOrgType,
     }),

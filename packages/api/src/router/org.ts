@@ -24,6 +24,7 @@ import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
 import { moveAOLocsToNewRegion } from "../lib/move-ao-locs-to-new-region";
+import { resolvePagination } from "../lib/pagination";
 import { notifyMapDataChange } from "../lib/webhook-events";
 import type { Context } from "../shared";
 import { adminProcedure, editorProcedure, protectedProcedure } from "../shared";
@@ -70,11 +71,15 @@ const orgAllInputSchema = orgFilterSchema.extend({
   pageIndex: z.coerce
     .number()
     .optional()
-    .describe("Zero-based page index for pagination. Defaults to 0."),
+    .describe(
+      "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns every matching organization.",
+    ),
   pageSize: z.coerce
     .number()
     .optional()
-    .describe("Number of organizations per page. Defaults to 10."),
+    .describe(
+      "Number of organizations per page. Defaults to 10. Supplying this (or pageIndex) opts into paginated results; omitting both returns every matching organization.",
+    ),
   sorting: parseSorting().describe(
     "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: id, name, orgType, isActive, created.",
   ),
@@ -254,12 +259,17 @@ export const orgRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
-      const pageSize = input?.pageSize ?? 10;
-      const pageIndex = (input?.pageIndex ?? 0) * pageSize;
-      // pageIndex already defaults to 0 above, so pageSize alone is enough
-      // to opt into pagination — requiring both silently returned every row
-      // whenever a caller sent pageSize without also sending pageIndex.
-      const usePagination = input?.pageSize !== undefined;
+      // orgAllInputSchema is a required object (not `.optional()`), same as
+      // the unguarded `input.onlyMine` below — no `?.` needed here.
+      const {
+        limit: pageSize,
+        offset: pageIndex,
+        usePagination,
+      } = resolvePagination({
+        pageSize: input.pageSize,
+        pageIndex: input.pageIndex,
+        defaultPageSize: 10,
+      });
 
       // Resolve editable org IDs for "onlyMine" filter
       const editableResult = await resolveEditableOrgIds({
@@ -417,12 +427,15 @@ export const orgRouter = {
         });
       }
 
-      const pageSize = input?.pageSize ?? 10;
-      const pageIndex = (input?.pageIndex ?? 0) * pageSize;
-      // pageIndex already defaults to 0 above, so pageSize alone is enough
-      // to opt into pagination — requiring both silently returned every row
-      // whenever a caller sent pageSize without also sending pageIndex.
-      const usePagination = input?.pageSize !== undefined;
+      const {
+        limit: pageSize,
+        offset: pageIndex,
+        usePagination,
+      } = resolvePagination({
+        pageSize: input?.pageSize,
+        pageIndex: input?.pageIndex,
+        defaultPageSize: 10,
+      });
 
       // Check if user has a role with orgId = 1 (F3 Nation)
       const [nationRole] = await ctx.db

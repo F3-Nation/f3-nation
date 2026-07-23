@@ -19,6 +19,7 @@ import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
 import { EventTagInsertSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
+import { resolvePagination } from "../lib/pagination";
 import { editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
@@ -50,12 +51,11 @@ export const eventTagRouter = {
         "Get a paginated list of event tags with optional filtering by organization",
     })
     .handler(async ({ context: ctx, input }) => {
-      const limit = input?.pageSize ?? 10;
-      const offset = (input?.pageIndex ?? 0) * limit;
-      // pageIndex already defaults to 0 above, so pageSize alone is enough
-      // to opt into pagination — requiring both silently returned every row
-      // whenever a caller sent pageSize without also sending pageIndex.
-      const usePagination = input?.pageSize !== undefined;
+      const { limit, offset, usePagination } = resolvePagination({
+        pageSize: input?.pageSize,
+        pageIndex: input?.pageIndex,
+        defaultPageSize: 10,
+      });
 
       const sortedColumns = input?.sorting?.map((sorting) => {
         const direction = sorting.desc ? desc : asc;

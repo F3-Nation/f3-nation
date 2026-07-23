@@ -24,6 +24,7 @@ import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getSortingColumns } from "../get-sorting-columns";
 import type { Context } from "../shared";
 import { withPagination } from "../with-pagination";
+import { resolvePagination } from "./pagination";
 
 interface HomeRegionSummary {
   homeRegionId: number;
@@ -151,11 +152,15 @@ export const userListInputSchema = z.object({
   pageIndex: z.coerce
     .number()
     .optional()
-    .describe("Zero-based page index for pagination. Defaults to 0."),
+    .describe(
+      "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns every matching user.",
+    ),
   pageSize: z.coerce
     .number()
     .optional()
-    .describe("Number of users per page. Defaults to 10."),
+    .describe(
+      "Number of users per page. Defaults to 10. Supplying this (or pageIndex) opts into paginated results; omitting both returns every matching user.",
+    ),
   sorting: parseSorting().describe(
     "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: id, f3Name, email, roles, status, created.",
   ),
@@ -265,12 +270,11 @@ export const buildUserListQuery = async ({
   input: z.infer<typeof userListInputSchema>;
   includePii: boolean;
 }) => {
-  const limit = input?.pageSize ?? 10;
-  const offset = (input?.pageIndex ?? 0) * limit;
-  // pageIndex already defaults to 0 above, so pageSize alone is enough to
-  // opt into pagination — requiring both silently returned every row
-  // whenever a caller sent pageSize without also sending pageIndex.
-  const usePagination = input?.pageSize !== undefined;
+  const { limit, offset, usePagination } = resolvePagination({
+    pageSize: input?.pageSize,
+    pageIndex: input?.pageIndex,
+    defaultPageSize: 10,
+  });
   const where = and(
     !input?.statuses?.length || input.statuses.length === UserStatus.length
       ? undefined

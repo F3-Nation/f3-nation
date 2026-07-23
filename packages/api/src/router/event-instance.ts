@@ -20,6 +20,7 @@ import { SeriesException } from "@acme/shared/app/enums";
 import { arrayOrSingle } from "@acme/shared/app/functions";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
+import { resolvePagination } from "../lib/pagination";
 import { editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
@@ -59,12 +60,11 @@ export const eventInstanceRouter = {
     .handler(async ({ context: ctx, input }) => {
       const regionOrg = aliasedTable(schema.orgs, "region_org");
       const aoOrg = aliasedTable(schema.orgs, "ao_org");
-      const limit = input?.pageSize ?? 40;
-      const offset = (input?.pageIndex ?? 0) * limit;
-      // pageIndex already defaults to 0 above, so pageSize alone is enough
-      // to opt into pagination — requiring both silently returned every row
-      // whenever a caller sent pageSize without also sending pageIndex.
-      const usePagination = input?.pageSize !== undefined;
+      const { limit, offset, usePagination } = resolvePagination({
+        pageSize: input?.pageSize,
+        pageIndex: input?.pageIndex,
+        defaultPageSize: 40,
+      });
 
       const where = and(
         // Active status filter

@@ -20,6 +20,7 @@ import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
 import { EventTypeInsertSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
+import { resolvePagination } from "../lib/pagination";
 import { editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
@@ -46,11 +47,15 @@ export const eventTypeRouter = {
           pageIndex: z.coerce
             .number()
             .optional()
-            .describe("Zero-based page index for pagination. Defaults to 0."),
+            .describe(
+              "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns every matching event type.",
+            ),
           pageSize: z.coerce
             .number()
             .optional()
-            .describe("Number of event types per page. Defaults to 10."),
+            .describe(
+              "Number of event types per page. Defaults to 10. Supplying this (or pageIndex) opts into paginated results; omitting both returns every matching event type.",
+            ),
           searchTerm: z
             .string()
             .optional()
@@ -122,12 +127,11 @@ export const eventTypeRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
-      const limit = input?.pageSize ?? 10;
-      const offset = (input?.pageIndex ?? 0) * limit;
-      // pageIndex already defaults to 0 above, so pageSize alone is enough
-      // to opt into pagination — requiring both silently returned every row
-      // whenever a caller sent pageSize without also sending pageIndex.
-      const usePagination = input?.pageSize !== undefined;
+      const { limit, offset, usePagination } = resolvePagination({
+        pageSize: input?.pageSize,
+        pageIndex: input?.pageIndex,
+        defaultPageSize: 10,
+      });
 
       const sortedColumns = input?.sorting?.map((sorting) => {
         const direction = sorting.desc ? desc : asc;

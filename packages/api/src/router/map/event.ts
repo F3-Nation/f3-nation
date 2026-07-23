@@ -24,6 +24,7 @@ import { arrayOrSingle, getFullAddress } from "@acme/shared/app/functions";
 
 import { getDescendantOrgIds } from "../../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../../get-editable-org-ids";
+import { resolvePagination } from "../../lib/pagination";
 import type { Context } from "../../shared";
 import { protectedProcedure } from "../../shared";
 import { withPagination } from "../../with-pagination";
@@ -268,12 +269,11 @@ export const mapEventRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
-      const limit = input?.pageSize ?? 10;
-      const offset = (input?.pageIndex ?? 0) * limit;
-      // pageIndex already defaults to 0 above, so pageSize alone is enough
-      // to opt into pagination — requiring both silently returned every row
-      // whenever a caller sent pageSize without also sending pageIndex.
-      const usePagination = input?.pageSize !== undefined;
+      const { limit, offset, usePagination } = resolvePagination({
+        pageSize: input?.pageSize,
+        pageIndex: input?.pageIndex,
+        defaultPageSize: 10,
+      });
 
       // Resolve editable org IDs for "onlyMine" filter
       const editableResult = await resolveEditableOrgIds({
