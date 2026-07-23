@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.3.1...pkg-api@0.4.0) (2026-07-23)
+
+
+### Features
+
+* **slackbot, api:** preblast feature refactor + some extras ([#599](https://github.com/F3-Nation/f3-nation/issues/599)) ([f5766df](https://github.com/F3-Nation/f3-nation/commit/f5766dfc3972759a3641221d8cadaca916a911b4))
+
 ## [0.3.1](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.3.0...pkg-api@0.3.1) (2026-07-14)
 
 
