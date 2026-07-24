@@ -80,6 +80,7 @@ export async function seedApiKeys(
   adminUserId: number,
   nationId: number,
   roleIds: RoleIds,
+  regionIds: Record<string, number>,
 ): Promise<void> {
   // 9. API keys
   for (const apiKey of LOCAL_API_KEYS) {
@@ -109,9 +110,20 @@ export async function seedApiKeys(
             ? roleIds.editorId
             : null;
       if (roleId !== null) {
+        // Roles attach to the nation by default; keys with a regionName are
+        // region-scoped (e.g. local-boone-editor-key) so e2e tests can
+        // exercise cross-region RBAC denials.
+        const orgId = apiKey.regionName
+          ? regionIds[apiKey.regionName]
+          : nationId;
+        if (orgId === undefined) {
+          throw new Error(
+            `API key ${apiKey.key} references unknown region "${apiKey.regionName}"`,
+          );
+        }
         await db
           .insert(schema.rolesXApiKeysXOrg)
-          .values({ apiKeyId: keyId, roleId, orgId: nationId })
+          .values({ apiKeyId: keyId, roleId, orgId })
           .onConflictDoNothing();
       }
     }

@@ -1,0 +1,43 @@
+import type { DeleteAOType } from "@acme/validators/request-schemas";
+import { Form, useForm } from "@acme/ui/form";
+import { DeleteAOSchema } from "@acme/validators/request-schemas";
+
+import type { DataType, ModalType } from "~/utils/store/modal";
+import { isProduction } from "@acme/shared/common/constants";
+import { client } from "~/orpc/client";
+import { FormDebugData } from "../../forms/dev-debug-component";
+import { ContactDetailsForm } from "../../forms/form-inputs/contact-details-form";
+import { DeleteAoForm } from "../../forms/form-inputs/delete-ao-form";
+import { SubmitSection } from "../../forms/submit-section";
+import { BaseModal } from "../../modal/base-modal";
+
+export const DeleteAoModal = ({
+  data,
+}: {
+  data: DataType[ModalType.DELETE_AO];
+}) => {
+  const form = useForm({
+    schema: DeleteAOSchema,
+    defaultValues: data,
+    mode: "onBlur",
+  });
+
+  return (
+    <BaseModal title="Delete AO">
+      <Form {...form}>
+        <form className="w-[inherit] overflow-x-hidden p-0.5">
+          {!isProduction && <FormDebugData />}
+          <DeleteAoForm />
+          <ContactDetailsForm<DeleteAOType> />
+          <SubmitSection<DeleteAOType>
+            mutationFn={(values) =>
+              client.request.submitDeleteAORequest(values)
+            }
+            text="Delete AO"
+            className="bg-destructive hover:bg-destructive/80"
+          />
+        </form>
+      </Form>
+    </BaseModal>
+  );
+};
