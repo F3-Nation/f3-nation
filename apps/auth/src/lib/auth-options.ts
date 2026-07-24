@@ -95,7 +95,7 @@ export const authOptions: NextAuthConfig = {
             status: users.status,
           })
           .from(users)
-          .where(eq(users.id, token.userId))
+          .where(eq(users.id, Number(token.userId)))
           .limit(1);
 
         if (dbUser) {

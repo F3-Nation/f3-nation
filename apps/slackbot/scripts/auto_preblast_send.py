@@ -1,3 +1,4 @@
+import logging
 import os
 import ssl
 import sys
@@ -30,6 +31,8 @@ from sqlalchemy.orm import aliased
 from features.calendar import event_preblast
 from utilities.database.orm import SlackSettings
 from utilities.helper_functions import current_date_cst, safe_get
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -163,9 +166,10 @@ def send_automated_preblasts(force: bool = False):
                 event_instance_id=preblast.event.id,
                 region_record=preblast.slack_settings,
                 client=slack_client,
+                logger=logger,
             )
-        except Exception as e:
-            print(f"Error sending preblast for event {preblast.event.id}: {e}")
+        except Exception:
+            logger.exception("Error sending preblast for event %s", preblast.event.id)
             continue
 
 

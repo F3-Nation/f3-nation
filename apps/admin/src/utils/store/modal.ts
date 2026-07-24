@@ -18,7 +18,6 @@ export enum ModalType {
   ADMIN_EVENT_TYPES = "ADMIN_EVENT_TYPES",
   ADMIN_DELETE_CONFIRMATION = "ADMIN_DELETE_CONFIRMATION",
   DELETE_CONFIRMATION = "DELETE_CONFIRMATION",
-  ADMIN_DELETE_REQUEST = "ADMIN_DELETE_REQUEST",
   QR_CODE = "QR_CODE",
   FULL_IMAGE = "FULL_IMAGE",
   SIGN_IN = "SIGN_IN",
@@ -82,9 +81,6 @@ export interface DataType {
     type: DeleteType;
     onConfirm: () => void;
   };
-  [ModalType.ADMIN_DELETE_REQUEST]: {
-    id: string;
-  };
   [ModalType.QR_CODE]: {
     url: string;
     fileName: string;
@@ -105,14 +101,14 @@ export interface DataType {
   };
 }
 
-export interface Modal<T extends ModalType> {
+interface Modal<T extends ModalType> {
   open: boolean;
   type: T | undefined;
   content?: ReactNode;
   data?: DataType[T];
 }
 
-export const modalStore = new ZustandStore<{
+const modalStore = new ZustandStore<{
   modals: Modal<ModalType>[];
 }>({
   initialState: {

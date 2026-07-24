@@ -1,6 +1,7 @@
 import { StandardRPCJsonSerializer } from "@orpc/client/standard";
 import {
   defaultShouldDehydrateQuery,
+  QueryCache,
   QueryClient,
 } from "@tanstack/react-query";
 
@@ -8,6 +9,15 @@ const serializer = new StandardRPCJsonSerializer();
 
 export const createQueryClient = () =>
   new QueryClient({
+    // Central place to observe query failures. Without this, a failed fetch is
+    // silent — e.g. a selector dropdown renders empty with no log. Fires once
+    // per failure (not per render), so components only own the user-facing
+    // error UI, not logging.
+    queryCache: new QueryCache({
+      onError: (error, query) => {
+        console.error("map.query_failed", { queryKey: query.queryKey }, error);
+      },
+    }),
     defaultOptions: {
       queries: {
         // With SSR, we usually want to set some default staleTime
