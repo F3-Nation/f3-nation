@@ -110,7 +110,7 @@ class PreblastViews:
                     placeholder="Select a location",
                     options=loc_options,
                 ),
-                optional=False,
+                optional=True,
                 block_id=actions.EVENT_PREBLAST_LOCATION,
             )
         )
@@ -332,10 +332,7 @@ class PreblastViews:
                 )
             )
 
-            event_lines = "\n".join(
-                f"• {r.start_date} {r.name or 'Untitled'}"
-                for r in upcoming_events[:max_buttons]
-            )
+            event_lines = "\n".join(f"• {r.start_date} {r.name or 'Untitled'}" for r in upcoming_events[:max_buttons])
             blocks.append(
                 SectionBlock(
                     text=PlainTextObject(text=event_lines),
