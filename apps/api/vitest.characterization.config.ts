@@ -22,9 +22,12 @@ export default defineConfig({
     // in parallel files would interleave. (isolate: true already gives each file
     // a fresh module registry, so per-file module state is not the reason.)
     fileParallelism: false,
-    // Load-bearing: under NODE_ENV=development, getSession returns a full admin
-    // getDevMockSession() for any unauthenticated request (shared.ts), which
-    // would make every auth characterization vacuous.
+    // Load-bearing: under NODE_ENV=development, getSession() (shared.ts) returns
+    // getDevMockSession() — an authenticated but role-LESS session — for any
+    // request with no session and no bearer token, instead of null. That makes
+    // every "unauthenticated -> 401" case on a protectedProcedure vacuous
+    // (admin/editor cases still reject the role-less session). NODE_ENV=test
+    // disables it.
     env: { NODE_ENV: "test" },
     include: ["characterization/**/*.char.test.ts"],
     globalSetup: ["./characterization/global-setup.ts"],

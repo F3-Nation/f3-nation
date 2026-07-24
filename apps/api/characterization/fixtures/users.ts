@@ -1,3 +1,4 @@
+import type { SeededRoleName } from "@acme/api/testing";
 import {
   db,
   getOrCreateF3NationOrg,
@@ -5,6 +6,8 @@ import {
   uniqueId,
 } from "@acme/api/testing";
 import { eq, schema } from "@acme/db";
+
+import { logWarn } from "../../src/lib/logging";
 
 export interface FixtureUser {
   userId: number;
@@ -18,7 +21,7 @@ export interface FixtureUser {
  */
 export interface FixtureRole {
   orgId?: number;
-  roleName: "editor" | "admin";
+  roleName: SeededRoleName;
 }
 
 /**
@@ -44,8 +47,11 @@ export async function createFixtureUser(
       await db.delete(schema.users).where(eq(schema.users.id, user.id));
     });
 
+    // Fetched at most once, and only when a role omits orgId.
+    let nationOrgId: number | undefined;
     for (const role of opts.roles ?? []) {
-      const orgId = role.orgId ?? (await getOrCreateF3NationOrg()).id;
+      const orgId =
+        role.orgId ?? (nationOrgId ??= (await getOrCreateF3NationOrg()).id);
       const [roleRow] = await db
         .select({ id: schema.roles.id })
         .from(schema.roles)
@@ -74,7 +80,12 @@ export async function createFixtureUser(
       },
     };
   } catch (err) {
-    for (const fn of undo.reverse()) await fn().catch(() => undefined);
+    // Best-effort rollback, but surface a failed compensating delete: a leaked
+    // row silently shifts later count/list goldens in the serialized run.
+    for (const fn of undo.reverse())
+      await fn().catch((err: unknown) =>
+        logWarn("characterization.fixture.rollback_failed", { err }),
+      );
     throw err;
   }
 }

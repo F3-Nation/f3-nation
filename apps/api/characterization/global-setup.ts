@@ -2,6 +2,8 @@ import { createServer } from "node:http";
 import type { Server } from "node:http";
 import { exportJWK, generateKeyPair } from "jose";
 
+import { logInfo } from "../src/lib/logging";
+
 /** Must match the kid apps/auth/src/lib/jwt.ts stamps on real tokens. */
 export const FIXTURE_KID = "f3-auth-1";
 
@@ -58,7 +60,7 @@ export async function setup(): Promise<void> {
   // can't be mistaken for a full run.
   const kind = process.env.CHAR_TEST_TARGET ?? "next";
   const base = process.env.CHAR_TEST_BASE_URL ?? CHAR_BASE;
-  console.info(`[characterization] target=${kind} baseUrl=${base}`);
+  logInfo("characterization.setup.target_selected", { kind, base });
 }
 
 export async function teardown(): Promise<void> {

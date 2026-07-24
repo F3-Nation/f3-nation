@@ -6,6 +6,7 @@ import {
 } from "@acme/api/testing";
 import { eq, schema } from "@acme/db";
 
+import { logWarn } from "../../src/lib/logging";
 import type { FixtureRole } from "./users";
 import { createFixtureUser } from "./users";
 
@@ -81,6 +82,7 @@ export async function createApiKey(
       key,
       apiKeyId: apiKey.id,
       ownerId: owner.userId,
+      // Default nation org only; does not reflect per-role opts.roles overrides.
       orgId: nationOrg.id,
       cleanup: async () => {
         await db
@@ -91,7 +93,12 @@ export async function createApiKey(
       },
     };
   } catch (err) {
-    for (const fn of undo.reverse()) await fn().catch(() => undefined);
+    // Best-effort rollback, but surface a failed compensating delete: a leaked
+    // row silently shifts later count/list goldens in the serialized run.
+    for (const fn of undo.reverse())
+      await fn().catch((err: unknown) =>
+        logWarn("characterization.fixture.rollback_failed", { err }),
+      );
     throw err;
   }
 }

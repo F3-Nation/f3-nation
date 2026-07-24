@@ -18,6 +18,13 @@ export const uniqueId = (): string =>
   `test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 /**
+ * The roles getOrCreateRoles() seeds. Single source of truth: fixture role
+ * unions derive from this, so widening the seed set is the only edit needed.
+ */
+export const SEEDED_ROLE_NAMES = ["editor", "admin"] as const;
+export type SeededRoleName = (typeof SEEDED_ROLE_NAMES)[number];
+
+/**
  * Ensures required roles (editor, admin) exist in the roles table.
  * Many tests depend on these roles being present for role assignment to work.
  */
@@ -25,7 +32,7 @@ export const getOrCreateRoles = async (): Promise<void> => {
   const existing = await db.select().from(schema.roles);
   const existingNames = new Set(existing.map((r) => r.name));
 
-  for (const roleName of ["editor", "admin"] as const) {
+  for (const roleName of SEEDED_ROLE_NAMES) {
     if (!existingNames.has(roleName)) {
       await db
         .insert(schema.roles)

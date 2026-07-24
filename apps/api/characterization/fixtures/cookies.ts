@@ -1,15 +1,7 @@
 import { encode } from "next-auth/jwt";
 
-import type { UserRole } from "@acme/shared/app/enums";
+import type { OrgRole } from "@acme/shared/app/types";
 import { COOKIE_NAME } from "@acme/shared/common/constants";
-
-interface RoleRow {
-  orgId: number;
-  orgName: string;
-  // The decoder produces UserRole; a plain `string` would let a mis-cased or
-  // typo'd role compile, drive a 403, and pass a test for the wrong reason.
-  roleName: UserRole;
-}
 
 /**
  * The non-prod cookie prefix is empty (packages/auth/src/config.ts), and in
@@ -21,7 +13,7 @@ export interface SessionCookieOptions {
   id?: string;
   email?: string;
   name?: string;
-  roles?: RoleRow[];
+  roles?: OrgRole[];
   /**
    * encode() ALWAYS sets exp = now + maxAge, clobbering any exp in the token
    * payload. @auth/core's decode applies a 15s clockTolerance, so an expired
