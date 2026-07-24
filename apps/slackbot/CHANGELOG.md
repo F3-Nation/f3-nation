@@ -2,6 +2,13 @@
 
 <!-- version list -->
 
+## [2.1.1](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.1.0...slackbot@2.1.1) (2026-07-24)
+
+
+### Bug Fixes
+
+* **slackbot:** preblast hotfixes ([#716](https://github.com/F3-Nation/f3-nation/issues/716)) ([1db0567](https://github.com/F3-Nation/f3-nation/commit/1db0567e0bd7811072a5a92d72b7a64cc05e426b))
+
 ## [2.1.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.0.4...slackbot@2.1.0) (2026-07-23)
 
 
