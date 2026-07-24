@@ -519,6 +519,7 @@ def _build_and_show_preblast_form(
         existing_preblast_ts=record.preblast_ts,
         preblast_moleskin_template=region_record.preblast_moleskin_template,
         initial_coq_slack_ids=initial_coq_slack_ids,
+        user_is_q=preblast_info.user_is_q,
     )
 
     metadata = {
