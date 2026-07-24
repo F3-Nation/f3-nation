@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 from application.attendance import CO_Q_TYPE_ID, HC_TYPE_ID, Q_TYPE_ID, AttendanceData
 from application.event_instance import EventInstanceData
 from application.preblast.service import PreblastService
+from features.calendar import get_preblast_action_blocks
 from features.calendar.event_preblast import build_preblast_info, handle_event_preblast_edit
 from features.calendar.preblast_views import PREBLAST_CHANNEL_SELECTOR, PreblastViews
 from utilities import constants
@@ -54,7 +55,7 @@ class PreblastViewsTest(unittest.TestCase):
     def setUp(self):
         self.service = PreblastService()
 
-    def _build_form(self, event, *, default_channel_id="CDEFAULT", existing_preblast_ts=None, **kw):
+    def _build_form(self, event, *, default_channel_id: str | None = "CDEFAULT", existing_preblast_ts=None, **kw):
         return PreblastViews.build_preblast_form(
             event,
             locations=_locations(),
@@ -156,8 +157,7 @@ class PreblastViewsTest(unittest.TestCase):
         self.assertIn(actions.EVENT_PREBLAST_MOLESKINE_EDIT, block_ids)
         # Check that the initial value was set
         rich_block = next(
-            b for b in result.blocks
-            if getattr(b, "block_id", None) == actions.EVENT_PREBLAST_MOLESKINE_EDIT
+            b for b in result.blocks if b.block_id == actions.EVENT_PREBLAST_MOLESKINE_EDIT
         )
         self.assertIsNotNone(rich_block.element.initial_value)
 
@@ -165,10 +165,7 @@ class PreblastViewsTest(unittest.TestCase):
         event = _event()
         result = self._build_form(event, initial_coq_slack_ids=["UCOQ1", "UCOQ2"])
 
-        coq_block = next(
-            b for b in result.blocks
-            if getattr(b, "block_id", None) == actions.EVENT_PREBLAST_COQS
-        )
+        coq_block = next(b for b in result.blocks if b.block_id == actions.EVENT_PREBLAST_COQS)
         self.assertEqual(coq_block.element.initial_users, ["UCOQ1", "UCOQ2"])
 
     def test_build_preblast_form_uses_moleskin_template_fallback(self):
@@ -180,8 +177,7 @@ class PreblastViewsTest(unittest.TestCase):
             preblast_moleskin_template={"type": "rich_text", "elements": [{"type": "text", "text": "template"}]},
         )
         rich_block = next(
-            b for b in result.blocks
-            if getattr(b, "block_id", None) == actions.EVENT_PREBLAST_MOLESKINE_EDIT
+            b for b in result.blocks if b.block_id == actions.EVENT_PREBLAST_MOLESKINE_EDIT
         )
         self.assertIsNotNone(rich_block.element.initial_value)
 
@@ -195,6 +191,30 @@ class PreblastViewsTest(unittest.TestCase):
         result = PreblastViews.build_select_form([])
         block_ids = [getattr(b, "block_id", None) for b in result.blocks]
         self.assertIn("preblast_select_empty", block_ids)
+
+    def test_preblast_action_blocks_do_not_show_remove_q(self):
+        blocks = [block.as_form_field() for block in get_preblast_action_blocks(has_q=True, event_instance_id=42)]
+        action_ids = [
+            element["action_id"]
+            for block in blocks
+            for element in block.get("elements", [])
+            if element.get("type") == "button"
+        ]
+
+        self.assertNotIn(actions.EVENT_PREBLAST_TAKE_Q, action_ids)
+        self.assertNotIn(actions.EVENT_PREBLAST_REMOVE_Q, action_ids)
+
+    def test_build_preblast_form_shows_remove_q_button_for_q(self):
+        event = _event()
+        result = self._build_form(event, user_is_q=True)
+
+        action_ids = [
+            getattr(element, "action_id", None)
+            for block in result.blocks
+            for element in getattr(block, "elements", [])
+        ]
+
+        self.assertIn(actions.EVENT_PREBLAST_REMOVE_Q, action_ids)
 
     @patch("f3_data_models.utils.DbManager.find_records")
     @patch("features.calendar.event_preblast._build_attendance_service")
