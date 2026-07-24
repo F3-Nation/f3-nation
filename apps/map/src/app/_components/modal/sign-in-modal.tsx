@@ -29,6 +29,11 @@ export default function SignInModal({
             Sign in to F3 Nation
           </DialogTitle>
         </DialogHeader>
+        {data.message ? (
+          <p className="text-center text-sm text-muted-foreground">
+            {data.message}
+          </p>
+        ) : null}
         <div className="flex flex-col px-6 py-2">
           <AuthContent callbackUrl={data.callbackUrl} withWrapper={false} />
         </div>

@@ -1,6 +1,6 @@
 {
   "name": "@acme/api",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -25,7 +25,6 @@
     "@acme/logger": "workspace:*",
     "@acme/mail": "workspace:*",
     "@acme/shared": "workspace:*",
-    "@acme/storage": "workspace:*",
     "@acme/validators": "workspace:*",
     "@orpc/experimental-ratelimit": "catalog:",
     "@orpc/server": "catalog:",
@@ -54,6 +53,15 @@
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"
+  },
+  "eslintConfig": {
+    "root": true,
+    "extends": [
+      "@acme/eslint-config/base"
+    ],
+    "ignorePatterns": [
+      "vitest.config.ts"
+    ]
   },
   "prettier": "@acme/prettier-config"
 }

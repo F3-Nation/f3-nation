@@ -13,6 +13,7 @@ Exported function names are preserved for routing compatibility with
 from __future__ import annotations
 
 import json
+import logging
 import random
 import time
 from dataclasses import dataclass
@@ -519,6 +520,7 @@ def _build_and_show_preblast_form(
         existing_preblast_ts=record.preblast_ts,
         preblast_moleskin_template=region_record.preblast_moleskin_template,
         initial_coq_slack_ids=initial_coq_slack_ids,
+        user_is_q=preblast_info.user_is_q,
     )
 
     metadata = {
@@ -783,6 +785,7 @@ def send_preblast(
     Uses ``PreblastService.decide_post_mode()`` and ``persist_posted_preblast()``
     to handle all post-mode scenarios.
     """
+    logger = logger or logging.getLogger(__name__)
     outcome = "success" # used for logging and user feedback
     slack_user_id = safe_get(body, "user", "id") or safe_get(body, "user_id")
     preblast_info = build_preblast_info(body, client, logger, context, region_record, event_instance_id)
@@ -942,14 +945,16 @@ def send_preblast(
         logger=logger,
     )
 
-    update_submission_wait_view(
-        client=client,
-        title="Complete!" if outcome == "success" else "Error",
-        text=user_msg,
-        level=constants.AlertLevel.SUCCESS if outcome == "success" else constants.AlertLevel.ERROR,
-        logger=logger,
-        view_id=safe_get(body, "submission_view_id") or safe_get(body, "view", "id"),
-    )
+    submission_view_id = safe_get(body, "submission_view_id") or safe_get(body, "view", "id")
+    if submission_view_id:
+        update_submission_wait_view(
+            client=client,
+            title="Complete!" if outcome == "success" else "Error",
+            text=user_msg,
+            level=constants.AlertLevel.SUCCESS if outcome == "success" else constants.AlertLevel.ERROR,
+            logger=logger,
+            view_id=submission_view_id,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -966,6 +971,7 @@ def build_preblast_info(
     event_instance_id: int = None,
 ) -> PreblastInfo:
     """Build preblast info using API services instead of DbManager."""
+    logger = logger or logging.getLogger(__name__)
     event_svc = _build_event_instance_service()
     att_svc = _build_attendance_service()
 

@@ -5,7 +5,9 @@ import dayjs from "dayjs";
 import { Check, Filter, X } from "lucide-react";
 import { useState } from "react";
 
+import type { RequestType } from "@acme/shared/app/enums";
 import { UpdateRequestStatus } from "@acme/shared/app/enums";
+import { getFullAddress, requestTypeToTitle } from "@acme/shared/app/functions";
 import { ZustandStore } from "@acme/shared/common/classes";
 import { cn } from "@acme/ui";
 import { Badge } from "@acme/ui/badge";
@@ -19,12 +21,24 @@ import {
 import { MDTable } from "@acme/ui/md-table";
 import { Popover, PopoverContent, PopoverTrigger } from "@acme/ui/popover";
 import { Cell, Header } from "@acme/ui/table";
+import { toast } from "@acme/ui/toast";
 
 import { MobileFilterSheet } from "../_components/mobile-filter-sheet";
 
 import { orpc, useQuery } from "~/orpc/react";
 import type { RouterOutputs } from "~/orpc/types";
+import { client } from "~/orpc/client";
 import { ModalType, openModal } from "~/utils/store/modal";
+
+const EVENT_REQUEST_TYPES: RequestType[] = [
+  "create_ao_and_location_and_event",
+  "create_event",
+  "edit_event",
+  "delete_event",
+  "move_event_to_different_ao",
+  "move_event_to_new_ao",
+  "move_event_to_new_location",
+];
 
 const initialState = {
   searchTerm: "",
@@ -79,6 +93,13 @@ export const RequestsTable = () => {
       requestTableStore.setState({ [key]: newValue });
     };
 
+  const getRequestTypeColor = (requestType: RequestType) => {
+    if (requestType === "delete_event" || requestType === "delete_ao") {
+      return "bg-red-100";
+    }
+    return "";
+  };
+
   return (
     <MDTable
       data={requests?.requests}
@@ -88,22 +109,23 @@ export const RequestsTable = () => {
       paginationOptions={{ pageSize: 20 }}
       totalCount={requests?.totalCount}
       columns={columns}
-      onRowClick={(row) => {
-        const requestId = String(row.original.id);
-        if (!requestId || requestId === "undefined" || requestId === "null") {
-          console.error("Request ID is missing or invalid:", row.original);
-          return;
-        }
-        if (row.original.requestType === "delete_event") {
-          openModal(ModalType.ADMIN_DELETE_REQUEST, { id: requestId });
-        } else {
-          openModal(ModalType.ADMIN_REQUESTS, { id: requestId });
+      onRowClick={async (row) => {
+        try {
+          const response = await client.request.byId({ id: row.original.id });
+          if (!response?.request) {
+            toast.error("Request not found");
+            return;
+          }
+          openModal(ModalType.ADMIN_REQUESTS, { id: response.request.id });
+        } catch (error) {
+          console.error("request.byId failed", error);
+          toast.error("Failed to load request details");
         }
       }}
       rowClassName={(row) =>
-        `${row.original.status !== "pending" ? "opacity-30" : ""} ${
-          row.original.requestType === "delete_event" ? "bg-red-100" : ""
-        }`
+        `${row.original.status !== "pending" ? "opacity-30" : ""} ${getRequestTypeColor(
+          row.original.requestType as RequestType,
+        )}`
       }
       searchTerm={searchTerm}
       setSearchTerm={setValue("searchTerm")}
@@ -150,19 +172,10 @@ const columns: TableOptions<
     meta: { name: "Request Type" },
     header: Header,
     cell: ({ row }) => {
-      const requestTypeText =
-        row.original.requestType === "delete_event"
-          ? "Delete Workout"
-          : row.original.requestType === "create_event"
-            ? "Create Workout"
-            : row.original.requestType === "create_location"
-              ? "Create Location"
-              : row.original.requestType === "edit"
-                ? "Edit"
-                : row.original.requestType;
+      const title = requestTypeToTitle(row.original.requestType as RequestType);
       return (
         <div className="flex items-center justify-start gap-1">
-          <p>{requestTypeText}</p>
+          <p>{title}</p>
         </div>
       );
     },
@@ -172,13 +185,21 @@ const columns: TableOptions<
     meta: { name: "Region" },
     header: Header,
     cell: ({ row }) => {
+      // An empty newRegionName means the region was not updated, so fall back
+      // to the existing region and treat it as unchanged.
+      const isUnchanged = !row.original.newRegionName;
       const isAnUpdate =
+        !isUnchanged &&
         row.original.oldRegionName !== row.original.newRegionName &&
         row.original.status === "pending";
       return (
         <div className="flex items-center justify-start gap-1">
           <div className="flex flex-col gap-1">
-            <p>{row.original.newRegionName}</p>
+            <p>
+              {isUnchanged
+                ? row.original.oldRegionName
+                : row.original.newRegionName}
+            </p>
             {isAnUpdate ? (
               <p className="line-through">{row.original.oldRegionName}</p>
             ) : null}
@@ -190,16 +211,22 @@ const columns: TableOptions<
   },
   {
     accessorKey: "aoName",
-    meta: { name: "Location / AO Name" },
+    meta: { name: "AO Name" },
     header: Header,
     cell: ({ row }) => {
+      // An empty newAoName means the AO was not updated, so fall back to the
+      // existing AO and treat it as unchanged.
+      const isUnchanged = !row.original.newAoName;
       const isAnUpdate =
+        !isUnchanged &&
         row.original.oldAoName !== row.original.newAoName &&
         row.original.status === "pending";
       return (
         <div className="flex items-center justify-start gap-1">
           <div className="flex flex-col gap-1">
-            <p>{row.original.newAoName}</p>
+            <p>
+              {isUnchanged ? row.original.oldAoName : row.original.newAoName}
+            </p>
             {isAnUpdate ? (
               <p className="line-through">{row.original.oldAoName}</p>
             ) : null}
@@ -214,13 +241,25 @@ const columns: TableOptions<
     meta: { name: "Workout" },
     header: Header,
     cell: ({ row }) => {
+      const rt = row.original.requestType as RequestType;
+      if (!EVENT_REQUEST_TYPES.includes(rt)) {
+        return null;
+      }
+      // An empty newWorkoutName means the workout was not updated, so fall
+      // back to the existing workout and treat it as unchanged.
+      const isUnchanged = !row.original.newWorkoutName;
       const isAnUpdate =
+        !isUnchanged &&
         row.original.oldWorkoutName !== row.original.newWorkoutName &&
         row.original.status === "pending";
       return (
         <div className="flex items-center justify-start gap-1">
           <div className="flex flex-col gap-1">
-            <p>{row.original.newWorkoutName}</p>
+            <p>
+              {isUnchanged
+                ? row.original.oldWorkoutName
+                : row.original.newWorkoutName}
+            </p>
             {isAnUpdate ? (
               <p className="line-through">{row.original.oldWorkoutName}</p>
             ) : null}
@@ -231,252 +270,71 @@ const columns: TableOptions<
     },
   },
   {
-    accessorKey: "dayOfWeek",
-    meta: { name: "Day of Week" },
+    accessorKey: "location",
+    meta: { name: "Location" },
     header: Header,
     cell: ({ row }) => {
-      const isAnUpdate =
-        row.original.oldDayOfWeek !== row.original.newDayOfWeek &&
-        row.original.status === "pending";
-      return (
-        <div className="flex items-center justify-start gap-1">
-          <div className="flex flex-col gap-1">
-            <p>{row.original.newDayOfWeek}</p>
-            {isAnUpdate ? (
-              <p className="line-through">{row.original.oldDayOfWeek}</p>
-            ) : null}
-          </div>
-          {isAnUpdate ? <CircleBadge /> : null}
-        </div>
-      );
-    },
-  },
-  {
-    accessorKey: "startTime",
-    meta: { name: "Start Time" },
-    header: Header,
-    cell: ({ row }) => {
-      const isAnUpdate =
-        row.original.oldStartTime !== row.original.newStartTime &&
-        row.original.status === "pending";
-      return (
-        <div className="flex items-center justify-start gap-1">
-          <div className="flex flex-col gap-1">
-            <p>{row.original.newStartTime}</p>
-            {isAnUpdate ? (
-              <p className="line-through">{row.original.oldStartTime}</p>
-            ) : null}
-          </div>
-          {isAnUpdate ? <CircleBadge /> : null}
-        </div>
-      );
-    },
-  },
+      const newLocation = getFullAddress({
+        locationAddress: row.original.newLocationAddress,
+        locationAddress2: row.original.newLocationAddress2,
+        locationCity: row.original.newLocationCity,
+        locationState: row.original.newLocationState,
+        locationCountry: row.original.newLocationCountry,
+      });
 
-  {
-    accessorKey: "endTime",
-    meta: { name: "End Time" },
-    header: Header,
-    cell: ({ row }) => {
-      const isAnUpdate =
-        row.original.oldEndTime !== row.original.newEndTime &&
-        row.original.status === "pending";
-      return (
-        <div className="flex items-center justify-start gap-1">
-          <div className="flex flex-col gap-1">
-            <p>{row.original.newEndTime}</p>
-            {isAnUpdate ? (
-              <p className="line-through">{row.original.oldEndTime}</p>
-            ) : null}
-          </div>
-          {isAnUpdate ? <CircleBadge /> : null}
-        </div>
-      );
-    },
-  },
-  {
-    accessorKey: "description",
-    meta: { name: "Description" },
-    header: Header,
-    cell: ({ row }) => {
-      const isAnUpdate =
-        row.original.oldDescription !== row.original.newDescription &&
-        row.original.status === "pending";
-      return (
-        <div className="flex items-center justify-start gap-1">
-          <div className="flex flex-col gap-1">
-            <p>{row.original.newDescription}</p>
-            {isAnUpdate ? (
-              <p className="line-through">{row.original.oldDescription}</p>
-            ) : null}
-          </div>
-          {isAnUpdate ? <CircleBadge /> : null}
-        </div>
-      );
-    },
-  },
-  {
-    accessorKey: "locationAddress",
-    meta: { name: "Street Address" },
-    header: Header,
-    cell: ({ row }) => {
-      const isAnUpdate =
-        row.original.oldLocationAddress !== row.original.newLocationAddress &&
-        row.original.status === "pending";
-      return (
-        <div className="flex items-center justify-start gap-1">
-          <div className="flex flex-col gap-1">
-            <p>{row.original.newLocationAddress}</p>
-            {isAnUpdate ? (
-              <p className="line-through">{row.original.oldLocationAddress}</p>
-            ) : null}
-          </div>
-          {isAnUpdate ? <CircleBadge /> : null}
-        </div>
-      );
-    },
-  },
-  {
-    accessorKey: "locationAddress2",
-    meta: { name: "Street Address 2" },
-    header: Header,
-    cell: ({ row }) => {
-      const isAnUpdate =
-        row.original.oldLocationAddress2 !== row.original.newLocationAddress2 &&
-        row.original.status === "pending";
-      return (
-        <div className="flex items-center justify-start gap-1">
-          <div className="flex flex-col gap-1">
-            <p>{row.original.newLocationAddress2}</p>
-            {isAnUpdate ? (
-              <p className="line-through">{row.original.oldLocationAddress2}</p>
-            ) : null}
-          </div>
-          {isAnUpdate ? <CircleBadge /> : null}
-        </div>
-      );
-    },
-  },
-  {
-    accessorKey: "locationCity",
-    meta: { name: "City" },
-    header: Header,
-    cell: ({ row }) => {
-      const isAnUpdate =
-        row.original.oldLocationCity !== row.original.newLocationCity &&
-        row.original.status === "pending";
-      return (
-        <div className="flex items-center justify-start gap-1">
-          <div className="flex flex-col gap-1">
-            <p>{row.original.newLocationCity}</p>
-            {isAnUpdate ? (
-              <p className="line-through">{row.original.oldLocationCity}</p>
-            ) : null}
-          </div>
-          {isAnUpdate ? <CircleBadge /> : null}
-        </div>
-      );
-    },
-  },
-  {
-    accessorKey: "locationState",
-    meta: { name: "State" },
-    header: Header,
-    cell: ({ row }) => {
-      const isAnUpdate =
-        row.original.oldLocationState !== row.original.newLocationState &&
-        row.original.status === "pending";
-      return (
-        <div className="flex items-center justify-start gap-1">
-          <div className="flex flex-col gap-1">
-            <p>{row.original.newLocationState}</p>
-            {isAnUpdate ? (
-              <p className="line-through">{row.original.oldLocationState}</p>
-            ) : null}
-          </div>
-          {isAnUpdate ? <CircleBadge /> : null}
-        </div>
-      );
-    },
-  },
-  {
-    accessorKey: "locationZip",
-    meta: { name: "ZipCode" },
-    header: Header,
-    cell: ({ row }) => {
-      const isAnUpdate =
-        row.original.oldLocationZipCode !== row.original.newLocationZipCode &&
-        row.original.status === "pending";
-      return (
-        <div className="flex items-center justify-start gap-1">
-          <div className="flex flex-col gap-1">
-            <p>{row.original.newLocationZipCode}</p>
-            {isAnUpdate ? (
-              <p className="line-through">{row.original.oldLocationZipCode}</p>
-            ) : null}
-          </div>
-          {isAnUpdate ? <CircleBadge /> : null}
-        </div>
-      );
-    },
-  },
+      const oldLocation = getFullAddress({
+        locationAddress: row.original.oldLocationAddress,
+        locationAddress2: row.original.oldLocationAddress2,
+        locationCity: row.original.oldLocationCity,
+        locationState: row.original.oldLocationState,
+        locationCountry: row.original.oldLocationCountry,
+      });
 
-  {
-    accessorKey: "locationCountry",
-    meta: { name: "City" },
-    header: Header,
-    cell: ({ row }) => {
+      const newCoordinates =
+        row.original.newLocationLat != null &&
+        row.original.newLocationLng != null
+          ? `${row.original.newLocationLat}, ${row.original.newLocationLng}`
+          : null;
+      const oldCoordinates =
+        row.original.oldLocationLat != null &&
+        row.original.oldLocationLng != null
+          ? `${row.original.oldLocationLat}, ${row.original.oldLocationLng}`
+          : null;
+
+      // Empty new values mean that part of the location was not updated, so
+      // fall back to the existing values and treat them as unchanged.
+      const locationUnchanged = !newLocation;
+      const coordinatesUnchanged = !newCoordinates;
+      const displayLocation = locationUnchanged ? oldLocation : newLocation;
+      const displayCoordinates = coordinatesUnchanged
+        ? oldCoordinates
+        : newCoordinates;
+
+      const coordinatesChanged =
+        !coordinatesUnchanged &&
+        (row.original.oldLocationLat !== row.original.newLocationLat ||
+          row.original.oldLocationLng !== row.original.newLocationLng);
       const isAnUpdate =
-        row.original.oldLocationCountry !== row.original.newLocationCountry &&
+        ((!locationUnchanged && oldLocation !== newLocation) ||
+          coordinatesChanged) &&
         row.original.status === "pending";
+
       return (
         <div className="flex items-center justify-start gap-1">
           <div className="flex flex-col gap-1">
-            <p>{row.original.newLocationCountry}</p>
-            {isAnUpdate ? (
-              <p className="line-through">{row.original.oldLocationCountry}</p>
+            <p>{displayLocation}</p>
+            {displayCoordinates ? (
+              <p className="text-xs text-muted-foreground">
+                {displayCoordinates}
+              </p>
             ) : null}
-          </div>
-          {isAnUpdate ? <CircleBadge /> : null}
-        </div>
-      );
-    },
-  },
-  {
-    accessorKey: "latitude",
-    meta: { name: "Latitude" },
-    header: Header,
-    cell: ({ row }) => {
-      const isAnUpdate =
-        row.original.oldLocationLat !== row.original.newLocationLat &&
-        row.original.status === "pending";
-      return (
-        <div className="flex items-center justify-start gap-1">
-          <div className="flex flex-col gap-1">
-            <p>{row.original.newLocationLat}</p>
-            {isAnUpdate ? (
-              <p className="line-through">{row.original.oldLocationLat}</p>
+            {isAnUpdate && oldLocation !== newLocation ? (
+              <p className="line-through">{oldLocation}</p>
             ) : null}
-          </div>
-          {isAnUpdate ? <CircleBadge /> : null}
-        </div>
-      );
-    },
-  },
-  {
-    accessorKey: "longitude",
-    meta: { name: "Longitude" },
-    header: Header,
-    cell: ({ row }) => {
-      const isAnUpdate =
-        row.original.oldLocationLng !== row.original.newLocationLng &&
-        row.original.status === "pending";
-      return (
-        <div className="flex items-center justify-start gap-1">
-          <div className="flex flex-col gap-1">
-            <p>{row.original.newLocationLng}</p>
-            {isAnUpdate ? (
-              <p className="line-through">{row.original.oldLocationLng}</p>
+            {isAnUpdate && coordinatesChanged && oldCoordinates ? (
+              <p className="text-xs text-muted-foreground line-through">
+                {oldCoordinates}
+              </p>
             ) : null}
           </div>
           {isAnUpdate ? <CircleBadge /> : null}
