@@ -73,11 +73,13 @@ describe.runIf(target.inProcess)("session and header rules", () => {
   // match a plain GET and returns 404 before auth runs. The skip-auth SEMANTICS
   // (cookie ignored, API key honored) require a real RPC frame and are pinned in
   // the wire matrix (Phase C); here we pin only the dispatch consequence.
+  // Deliberately unauthenticated: with a valid cookie a 404 would only show
+  // that dispatch failed after an authorized request. With no credentials at
+  // all, 404-rather-than-401 is what distinguishes dispatch-before-auth.
   it("routes an orpc-ssg REST request to the RPC handler (404 before auth)", async () => {
-    const cookie = await sessionCookie({ roles: ADMIN_COOKIE_ROLES });
     const res = await target.invoke(
       req("/v1/api-key", {
-        headers: { "x-forwarded-for": IP(5), cookie, client: "orpc-ssg" },
+        headers: { "x-forwarded-for": IP(5), client: "orpc-ssg" },
       }),
     );
     expect(res.status).toBe(404);

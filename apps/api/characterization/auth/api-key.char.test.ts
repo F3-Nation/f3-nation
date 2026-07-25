@@ -17,11 +17,12 @@ function keyReq(
   path: string,
   ip: number,
   key: string,
-  opts: { prefix?: string; headerName?: string; method?: "GET" | "POST" } = {},
+  opts: { prefix?: string; pad?: string; method?: "GET" | "POST" } = {},
 ): Request {
+  const pad = opts.pad ?? "";
   const headers: Record<string, string> = {
     "x-forwarded-for": IP(ip),
-    [opts.headerName ?? "authorization"]: `${opts.prefix ?? "Bearer"} ${key}`,
+    authorization: `${opts.prefix ?? "Bearer"} ${pad}${key}${pad}`,
     client: "characterization",
   };
   const method = opts.method ?? "GET";
@@ -47,10 +48,18 @@ describe.runIf(target.inProcess)("API key resolution", () => {
     });
   });
 
+  // Settled, not sequential: one rejected cleanup must not strand the others.
+  // All files share one f3_test under fileParallelism: false, so a leaked row
+  // resurfaces as a mystery golden diff in an unrelated suite — fail here.
   afterAll(async () => {
-    await adminKey.cleanup();
-    await noRoleKey.cleanup();
-    await expiredKey.cleanup();
+    const results = await Promise.allSettled(
+      [adminKey, noRoleKey, expiredKey].map((f) => f?.cleanup()),
+    );
+    const failed = results.filter((r) => r.status === "rejected");
+    expect(
+      failed,
+      `fixture cleanup leaked rows: ${JSON.stringify(failed)}`,
+    ).toHaveLength(0);
   });
 
   it("rejects an expired key (compared against the DB clock)", async () => {
@@ -92,10 +101,13 @@ describe.runIf(target.inProcess)("API key resolution", () => {
     );
   });
 
-  it("accepts a lowercase `authorization` header name", async () => {
+  it("trims whitespace around the bearer value", async () => {
+    // shared.ts slices past "Bearer " then .trim()s; a header-name casing case
+    // is not expressible here — the WHATWG Headers constructor lowercases every
+    // field name, so no casing survives to the Request layer.
     await expectAuthorized(
       await target.invoke(
-        keyReq("/v1/api-key", 6, adminKey.key, { headerName: "authorization" }),
+        keyReq("/v1/api-key", 6, adminKey.key, { pad: "  " }),
       ),
     );
   });

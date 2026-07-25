@@ -1,16 +1,25 @@
-import { describe, it } from "vitest";
-
-import { sessionCookie } from "../fixtures/cookies";
-import { req, target } from "../transport";
-import { expectAuthorized, expectUnauthorized } from "./verdict";
+import { vi } from "vitest";
 
 /**
  * revalidateAuthProcedure: POST /v1/map/revalidate. Authorized either by the
- * SUPER_ADMIN_API_KEY in an x-api-key header OR a nation-admin session. The
- * handler then calls next/cache + an outbound webhook, so an authorized request
- * surfaces as a non-401 (a 500 from those side effects), which expectAuthorized
- * accepts — the point here is the auth decision, not the handler's fate.
+ * SUPER_ADMIN_API_KEY in an x-api-key header OR a nation-admin session — two
+ * separate branches (packages/api/src/shared.ts), both pinned here.
+ *
+ * The handler's post-auth side effects are neutralized so an authorized request
+ * settles as a clean 200 rather than a 500 that expectAuthorized would have to
+ * be loosened to accept: revalidatePath() via the next/cache alias shim, and
+ * the outbound webhook here. Auth resolution stays entirely real — only what
+ * runs AFTER the guard is stubbed. The relative path is because @acme/api
+ * exports no lib/* subpath.
  */
+vi.mock("../../../../packages/api/src/lib/revalidate-map", () => ({
+  triggerMapAppRevalidation: vi.fn().mockResolvedValue(undefined),
+}));
+
+const { sessionCookie } = await import("../fixtures/cookies");
+const { req, target } = await import("../transport");
+const { expectAuthorized, expectUnauthorized } = await import("./verdict");
+const { describe, it } = await import("vitest");
 
 const IP = (n: number) => `10.69.0.${n}`;
 const PATH = "/v1/map/revalidate";
@@ -32,6 +41,12 @@ describe.runIf(target.inProcess)("super-admin revalidate", () => {
     const superKey = process.env.SUPER_ADMIN_API_KEY;
     if (!superKey)
       throw new Error("SUPER_ADMIN_API_KEY is required for this case");
+    // This request carries NO session, so it can only reach a 200 through the
+    // key comparison. SUPER_ADMIN_API_KEY is .optional() on the server-side
+    // t3-env the middleware actually reads; were it absent, the branch would
+    // short-circuit and fall through to the `!context.session?.user` throw and
+    // this would 401. So a green here proves the comparison ran — which only
+    // holds now that the handler's side effects no longer mask it as a 500.
     await expectAuthorized(
       await target.invoke(revalidateReq(1, { "x-api-key": superKey })),
     );
@@ -55,5 +70,15 @@ describe.runIf(target.inProcess)("super-admin revalidate", () => {
       await target.invoke(revalidateReq(3, { cookie })),
       "You are not authorized to revalidate this Nation",
     );
+  });
+
+  it("authorizes a nation-admin session without an x-api-key", async () => {
+    // shared.ts duplicates the nation-admin check rather than reusing
+    // nationAdminProcedure, so role-guards.char.test.ts does not cover it: a
+    // port implementing only the API-key branch would otherwise pass green.
+    const cookie = await sessionCookie({
+      roles: [{ orgId: 1, orgName: "F3 Nation", roleName: "admin" }],
+    });
+    await expectAuthorized(await target.invoke(revalidateReq(4, { cookie })));
   });
 });

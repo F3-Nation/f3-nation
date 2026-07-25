@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createApiKey } from "../fixtures/api-keys";
 import { sessionCookie } from "../fixtures/cookies";
@@ -21,7 +21,8 @@ import { expectAuthorized, expectUnauthorized } from "./verdict";
  */
 
 const IP = (n: number) => `10.64.0.${n}`;
-// orgId 1 + a name containing "f3 nation" is the ONLY shape that satisfies
+// roleName "admin" + orgId 1 + a name containing "f3 nation" — all three
+// conjuncts (role-checks.ts) — is the ONLY shape that satisfies
 // isNationAdminFromSession; see the nationAdmin cases below for why a DB-backed
 // role cannot reproduce it under the seeded data.
 const NATION_ADMIN_COOKIE = [
@@ -69,11 +70,17 @@ describe.runIf(target.inProcess)("role guards through real resolution", () => {
     jwtUser = await createFixtureUser({ roles: [{ roleName: "admin" }] });
   });
 
+  // Settled, not sequential — see api-key.char.test.ts for why a stranded
+  // cleanup surfaces as a golden diff in an unrelated file.
   afterAll(async () => {
-    await adminKey.cleanup();
-    await editorKey.cleanup();
-    await userKey.cleanup();
-    await jwtUser.cleanup();
+    const results = await Promise.allSettled(
+      [adminKey, editorKey, userKey, jwtUser].map((f) => f?.cleanup()),
+    );
+    const failed = results.filter((r) => r.status === "rejected");
+    expect(
+      failed,
+      `fixture cleanup leaked rows: ${JSON.stringify(failed)}`,
+    ).toHaveLength(0);
   });
 
   describe("protected GET /v1/position/assignments/all", () => {
@@ -165,9 +172,10 @@ describe.runIf(target.inProcess)("role guards through real resolution", () => {
     });
 
     it("rejects an admin JWT — a DB-backed nation admin is unreachable under the seed", async () => {
-      // getOrCreateF3NationOrg resolves org id 1 ("Test Nation"), and the only
-      // "F3 Nation" org is id 251; isNationAdminFromSession needs BOTH id===1
-      // AND name~"f3 nation", so no DB role satisfies it. This pins that reality.
+      // test-seed.ts creates exactly one nation org, { id: 1, "Test Nation" },
+      // and no "F3 Nation" org at all — while isNationAdminFromSession needs
+      // orgId===1 AND name~"f3 nation" AND roleName==="admin". So no DB-backed
+      // role can satisfy it under the seed. This pins that reality.
       const token = await signFixtureJwt({ sub: jwtUser.userId });
       await expectUnauthorized(
         await target.invoke(guardReq(PATH, { ip: 11, bearer: token })),
