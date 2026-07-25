@@ -658,6 +658,9 @@ importers:
         specifier: 'catalog:'
         version: 4.4.3
     devDependencies:
+      '@acme/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@acme/eslint-config':
         specifier: workspace:*
         version: link:../../tooling/eslint
@@ -697,6 +700,9 @@ importers:
       jiti:
         specifier: 'catalog:'
         version: 2.7.0
+      jose:
+        specifier: 'catalog:'
+        version: 6.2.3
       jsdom:
         specifier: 'catalog:'
         version: 29.1.1

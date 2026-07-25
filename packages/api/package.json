@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./testing": "./src/testing/index.ts",
     "./services/map-request-notification": "./src/services/map-request-notification.ts"
   },
   "license": "MIT",

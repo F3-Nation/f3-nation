@@ -25,6 +25,7 @@ export default defineConfig({
       },
     },
     exclude: [
+      "characterization/**", // Runs under vitest.characterization.config.ts
       "**/node_modules/**",
       "**/dist/**",
       "**/cypress/**",

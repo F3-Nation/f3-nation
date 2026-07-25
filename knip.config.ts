@@ -22,6 +22,19 @@ const config: KnipConfig = {
   ],
   ignoreBinaries: ["uv"],
   workspaces: {
+    ".": {
+      // scripts/lint-staged.mjs spawns the eslint binary by path, so the root
+      // devDependency is never a static import knip can follow.
+      ignoreDependencies: ["eslint"],
+    },
+    "apps/api": {
+      // The characterization suite runs under its own vitest config,
+      // which the vitest plugin does not discover from the default name.
+      vitest: ["vitest.config.ts", "vitest.characterization.config.ts"],
+      // Wired in by resolve.alias rather than an import, so it is not
+      // reachable through the module graph.
+      entry: ["characterization/next-headers-shim.ts"],
+    },
     "tooling/scripts": {
       entry: ["src/notify-outstanding-requests.ts", "src/script.ts"],
     },
