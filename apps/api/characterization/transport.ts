@@ -40,10 +40,10 @@ function resolveTarget(): ResolvedTarget {
     return { kind, inProcess: false, invoke: makeLiveInvoke(baseUrl), baseUrl };
   }
 
-  // kind === "hono": filled in by #649, which adds the Hono entry point. Kept as
-  // an explicit branch so the union and the inProcess gates are already in place.
+  // kind === "hono": filled in when the Hono entry point lands. Kept as an
+  // explicit branch so the union and the inProcess gates are already in place.
   throw new Error(
-    "CHAR_TEST_TARGET=hono is not wired up until the Hono server lands (#649)",
+    "CHAR_TEST_TARGET=hono is not wired up until the Hono server lands",
   );
 }
 

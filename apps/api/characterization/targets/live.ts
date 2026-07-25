@@ -1,7 +1,7 @@
 import type { Invoke } from "../transport";
 
 /**
- * Black-box target used by #650's staging gate. Only the read-only smoke
+ * Black-box target used by the staging gate. Only the read-only smoke
  * subset runs here — anything needing DB fixtures or in-process rate-limit
  * state is gated off with the `target.inProcess` check.
  */

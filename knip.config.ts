@@ -23,7 +23,7 @@ const config: KnipConfig = {
   ignoreBinaries: ["uv"],
   workspaces: {
     "apps/api": {
-      // The characterization suite (#660) runs under its own vitest config,
+      // The characterization suite runs under its own vitest config,
       // which the vitest plugin does not discover from the default name.
       vitest: ["vitest.config.ts", "vitest.characterization.config.ts"],
       // Wired in by resolve.alias rather than an import, so it is not
