@@ -141,8 +141,12 @@ overrides:
   # Force patched versions of transitive deps flagged by `pnpm audit --prod
   # --audit-level=high`. Scoped to the vulnerable ranges so unaffected
   # consumers are untouched. Remove an entry once every dependent has upgraded.
+  # 1.x cannot be forced to 5.x: minimatch@3 does `require('brace-expansion')()`
+  # and v5 exports only a named `expand`. No 1.x/2.x/3.x/4.x backport exists for
+  # GHSA-mh99-v99m-4gvg, so the two eslint-plugin paths on minimatch@3 are dev-only
+  # and excluded from the prod audit via tooling/eslint devDependencies instead.
   "brace-expansion@<1.1.16": "1.1.16" # GHSA-3jxr-9vmj-r5cp (DoS)
-  "brace-expansion@>=3.0.0 <5.0.7": "5.0.7" # GHSA-3jxr-9vmj-r5cp (DoS)
+  "brace-expansion@>=3.0.0 <5.0.8": "5.0.8" # GHSA-mh99-v99m-4gvg (DoS)
   "fast-uri@<3.1.4": "3.1.4" # host confusion via failed IDN canonicalization
   "sharp@<0.35.0": "0.35.3" # inherited libvips vulnerabilities
   "next@>=16.0.0 <16.2.11": "16.2.11" # GHSA-89xv-2m56-2m9x / GHSA-p9j2-gv94-2wf4 (SSRF in rewrites); covers transitive geist>next & @scalar>next
