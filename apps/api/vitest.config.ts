@@ -25,7 +25,6 @@ export default defineConfig({
       },
     },
     exclude: [
-      "**/tests/**/*.spec.ts", // Exclude Playwright tests
       "characterization/**", // Runs under vitest.characterization.config.ts
       "**/node_modules/**",
       "**/dist/**",

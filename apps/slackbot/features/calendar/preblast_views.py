@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
-from slack_sdk.models.blocks import InputBlock, SectionBlock
+from slack_sdk.models.blocks import ActionsBlock, ButtonElement, InputBlock, SectionBlock
 from slack_sdk.models.blocks.basic_components import MarkdownTextObject, PlainTextObject
 from slack_sdk.models.blocks.block_elements import (
     ChannelSelectElement,
@@ -62,6 +62,7 @@ class PreblastViews:
         existing_preblast_ts: int | float | None = None,
         preblast_moleskin_template: Any | None = None,
         initial_coq_slack_ids: list[str] | None = None,
+        user_is_q: bool = False,
     ) -> SdkBlockView:
         """Build the editable preblast form modal as an ``SdkBlockView``.
 
@@ -109,7 +110,7 @@ class PreblastViews:
                     placeholder="Select a location",
                     options=loc_options,
                 ),
-                optional=False,
+                optional=True,
                 block_id=actions.EVENT_PREBLAST_LOCATION,
             )
         )
@@ -137,6 +138,19 @@ class PreblastViews:
                 block_id=actions.EVENT_PREBLAST_COQS,
             )
         )
+
+        if user_is_q:
+            blocks.append(
+                ActionsBlock(
+                    elements=[
+                        ButtonElement(
+                            text=":no_entry_sign: Take myself off Q",
+                            action_id=actions.EVENT_PREBLAST_REMOVE_Q,
+                            value=str(event.id),
+                        )
+                    ]
+                )
+            )
 
         # ── Event Tag ────────────────────────────────────────────────────
         tag_options = as_selector_options(
@@ -318,10 +332,7 @@ class PreblastViews:
                 )
             )
 
-            event_lines = "\n".join(
-                f"• {r.start_date} {r.name or 'Untitled'}"
-                for r in upcoming_events[:max_buttons]
-            )
+            event_lines = "\n".join(f"• {r.start_date} {r.name or 'Untitled'}" for r in upcoming_events[:max_buttons])
             blocks.append(
                 SectionBlock(
                     text=PlainTextObject(text=event_lines),

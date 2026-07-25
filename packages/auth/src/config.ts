@@ -7,13 +7,13 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { db } from "@acme/db/client";
 import { orgs } from "@acme/db/schema/schema";
 import { env } from "@acme/env";
-import type { UserRole } from "@acme/shared/app/enums";
 import { COOKIE_NAME } from "@acme/shared/common/constants";
 import { ProviderId } from "@acme/shared/common/enums";
 
 import { emailProvider } from "./lib/email-provider";
 import { MDPGDrizzleAdapter } from "./lib/md-pg-drizzzle-adapter";
 import OtpProvider from "./lib/otp-provider";
+import type { UserRole } from "@acme/shared/app/enums";
 
 export type { Session } from "next-auth";
 

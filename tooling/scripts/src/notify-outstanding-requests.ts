@@ -107,7 +107,15 @@ async function main() {
   const requestsByRegion = new Map<number, RequestWithRegion[]>();
   for (const request of pendingRequests) {
     const existing = requestsByRegion.get(request.regionId) ?? [];
-    existing.push(request);
+    existing.push({
+      id: request.id,
+      regionId: request.regionId,
+      regionName: request.regionName,
+      eventName: request.eventName ?? "Unknown Event",
+      submittedBy: request.submittedBy,
+      requestType: request.requestType,
+      created: request.created,
+    });
     requestsByRegion.set(request.regionId, existing);
   }
 

@@ -47,7 +47,9 @@
     "NEXT_PUBLIC_CHANNEL",
     "GCS_CREDENTIALS",
     "GCS_EMULATOR_HOST",
-    "NODE_TLS_REJECT_UNAUTHORIZED"
+    "NODE_TLS_REJECT_UNAUTHORIZED",
+    "E2E_BASE_URL",
+    "E2E_API_URL"
   ],
   "tasks": {
     "topo": {
