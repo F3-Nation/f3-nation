@@ -40,7 +40,14 @@ describe.runIf(target.inProcess)("rate limiting", () => {
       elapsed,
       `warm-up took ${elapsed}ms; the ${WINDOW_MS}ms sliding window already evicted early requests`,
     ).toBeLessThan(WINDOW_MS / 2);
-  });
+    // Hook timeout is a full WINDOW_MS, deliberately ABOVE the WINDOW_MS / 2
+    // assertion above rather than equal to it: vitest's default hookTimeout is
+    // 10s, which would abort the warm-up — with a generic "Hook timed out" —
+    // across exactly the 10s-30s band the diagnostic exists to explain. Equal
+    // values would just move that race to the boundary. Past WINDOW_MS the
+    // window has fully elapsed and no diagnostic would be true, so aborting is
+    // the honest outcome.
+  }, WINDOW_MS);
 
   it("returns 429 with the retry message once the window limit is exceeded", async () => {
     const limited = await ping(EXHAUSTED);
