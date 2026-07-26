@@ -60,6 +60,11 @@ from utilities.helper_functions import (
 )
 from utilities.slack import actions, orm
 
+DEFAULT_PREBLAST = {
+    "type": "rich_text",
+    "elements": [{"type": "rich_text_section", "elements": [{"text": "No preblast text entered", "type": "text"}]}],
+}
+
 # ---------------------------------------------------------------------------
 # Composition roots
 # ---------------------------------------------------------------------------
@@ -114,6 +119,7 @@ class PreblastInfo:
        ``preblast_blocks`` and ``action_blocks`` contain plain dicts (Slack
        block payloads) rather than ORM objects for Phase 4 compatibility.
     """
+
     event_record: EventInstanceData
     attendance_records: list[dict[str, Any]]
     preblast_blocks: list[dict[str, Any]]
@@ -263,9 +269,7 @@ def build_event_preblast_select_form(
       2. A link to the calendar so the user can sign up to Q for an event.
       3. A button to create a preblast for an unscheduled event.
     """
-    user_id = get_user(
-        safe_get(body, "user", "id") or safe_get(body, "user_id"), region_record, client, logger
-    ).user_id
+    user_id = get_user(safe_get(body, "user", "id") or safe_get(body, "user_id"), region_record, client, logger).user_id
 
     # Query for upcoming events where this user is Q or Co-Q, no preblast yet
     event_records = event_attendance_query(
@@ -429,16 +433,20 @@ def build_event_preblast_form(
 ):
     """Build and show the preblast edit/view form."""
     if not update_view_id:
-        loading_view_id = add_loading_form(
-            body, client, new_or_add="add" if safe_get(body, "view", "id") else "new"
-        )
+        loading_view_id = add_loading_form(body, client, new_or_add="add" if safe_get(body, "view", "id") else "new")
     else:
         loading_view_id = update_view_id
 
     try:
         _build_and_show_preblast_form(
-            body, client, logger, context, region_record,
-            event_instance_id, loading_view_id, update_view_id,
+            body,
+            client,
+            logger,
+            context,
+            region_record,
+            event_instance_id,
+            loading_view_id,
+            update_view_id,
         )
     except Exception as e:
         logger.exception(f"Error building preblast form for event {event_instance_id}: {e}")
@@ -448,11 +456,11 @@ def build_event_preblast_form(
 
         from utilities.slack.sdk_orm import SdkBlockView
 
-        error_view = SdkBlockView(blocks=[
-            SectionBlock(text=MarkdownTextObject(
-                text=f":warning: Error loading preblast form: {e}"
-            )),
-        ])
+        error_view = SdkBlockView(
+            blocks=[
+                SectionBlock(text=MarkdownTextObject(text=f":warning: Error loading preblast form: {e}")),
+            ]
+        )
         error_view.update_modal(
             client=client,
             view_id=loading_view_id,
@@ -672,8 +680,7 @@ def handle_event_preblast_edit(
         except Exception as e:
             logger.error(f"Error assigning Co-Qs for event {event_instance_id}: {e}")
             coq_failure_detail = (
-                "These Co-Qs were not assigned: "
-                + ", ".join(f"<@{slack_id}>" for slack_id in coq_slack_ids)
+                "These Co-Qs were not assigned: " + ", ".join(f"<@{slack_id}>" for slack_id in coq_slack_ids)
                 if coq_slack_ids
                 else "Existing Co-Qs were not cleared."
             )
@@ -692,8 +699,7 @@ def handle_event_preblast_edit(
 
     # Determine if we should post/send the preblast now
     preblast_send = (
-        form_data.get(actions.EVENT_PREBLAST_SEND_OPTIONS) == "Send now"
-        or (existing_ts or "None") != "None"
+        form_data.get(actions.EVENT_PREBLAST_SEND_OPTIONS) == "Send now" or (existing_ts or "None") != "None"
     )
 
     if preblast_send:
@@ -786,7 +792,7 @@ def send_preblast(
     to handle all post-mode scenarios.
     """
     logger = logger or logging.getLogger(__name__)
-    outcome = "success" # used for logging and user feedback
+    outcome = "success"  # used for logging and user feedback
     slack_user_id = safe_get(body, "user", "id") or safe_get(body, "user_id")
     preblast_info = build_preblast_info(body, client, logger, context, region_record, event_instance_id)
     q_attendance = next(
@@ -797,15 +803,15 @@ def send_preblast(
     if q_attendance and preblast_info.attendance_slack_dict:
         q_slack_id = preblast_info.attendance_slack_dict.get(q_attendance["user_id"])
     q_list = [
-        r for r in preblast_info.attendance_records
+        r
+        for r in preblast_info.attendance_records
         if bool({Q_TYPE_ID, CO_Q_TYPE_ID}.intersection(r.get("attendance_type_ids", [])))
     ]
 
     blocks = list(preblast_info.preblast_blocks)
     blocks.extend(
-        b.as_form_field() for b in get_preblast_action_blocks(
-            has_q=len(q_list) > 0, event_instance_id=event_instance_id
-        )
+        b.as_form_field()
+        for b in get_preblast_action_blocks(has_q=len(q_list) > 0, event_instance_id=event_instance_id)
     )
 
     # Image block from meta
@@ -847,9 +853,7 @@ def send_preblast(
     default_channel = preblast_channel or ""
 
     # Desired channel: prefer form override saved in meta, else default
-    desired_channel = str(
-        (event.meta or {}).get("preblast_channel_id") or default_channel
-    )
+    desired_channel = str((event.meta or {}).get("preblast_channel_id") or default_channel)
 
     if not desired_channel:
         action_text = "saved (no channel)"
@@ -925,18 +929,12 @@ def send_preblast(
             action_text = "update failed"
             outcome = "error"
 
-    log_msg = (
-        f":mega: Preblast {action_text} for *{event.name}* "
-        f"on *{event.start_date}* by <@{slack_user_id or 'app'}>"
-    )
+    log_msg = f":mega: Preblast {action_text} for *{event.name}* on *{event.start_date}* by <@{slack_user_id or 'app'}>"
     user_msg = f"Preblast {action_text}"
     if outcome == "success":
         user_msg += " successfully!"
     if desired_channel and event.preblast_ts:
-        log_msg += (
-            f" <slack://channel?team={region_record.team_id}"
-            f"&id={desired_channel}&ts={event.preblast_ts}|Link>\n"
-        )
+        log_msg += f" <slack://channel?team={region_record.team_id}&id={desired_channel}&ts={event.preblast_ts}|Link>\n"
         user_msg += f" <slack://channel?team={region_record.team_id}&id={desired_channel}&ts={event.preblast_ts}| Link>"
     post_bot_log(
         client=client,
@@ -1010,9 +1008,7 @@ def build_preblast_info(
     user_id = None
     user_is_q = False
     if body:
-        user_obj = get_user(
-            safe_get(body, "user", "id") or safe_get(body, "user_id"), region_record, client, logger
-        )
+        user_obj = get_user(safe_get(body, "user", "id") or safe_get(body, "user_id"), region_record, client, logger)
         user_id = user_obj.user_id
         user_is_q = any(
             att.user_id == user_id
@@ -1022,8 +1018,7 @@ def build_preblast_info(
 
     # Build Q list with Slack mentions
     q_attendance = [
-        att for att in attendance_data
-        if bool({Q_TYPE_ID, CO_Q_TYPE_ID}.intersection(att.attendance_type_ids))
+        att for att in attendance_data if bool({Q_TYPE_ID, CO_Q_TYPE_ID}.intersection(att.attendance_type_ids))
     ]
     q_mentions = [_format_attendance_user(att, attendance_slack_dict) for att in q_attendance]
     q_list = " ".join(q_mentions) if q_mentions else "Open!"
@@ -1107,17 +1102,29 @@ def build_preblast_info(
         + f"\n*HCs:* {hc_list}"
     )
 
+    # Fallback sequence for preblast: rich text, plaintext, region default, global default
+    if event.preblast_rich and isinstance(event.preblast_rich, dict):
+        preblast_rich = event.preblast_rich
+    elif event.preblast and isinstance(event.preblast, str):
+        preblast_rich = {
+            "type": "rich_text",
+            "elements": [{"type": "rich_text_section", "elements": [{"text": event.preblast, "type": "text"}]}],
+        }
+    elif region_record.preblast_moleskin_template:
+        preblast_rich = region_record.preblast_moleskin_template
+    else:
+        preblast_rich = DEFAULT_PREBLAST
+
+    # Double check for valid preblast text (avoid "" text and misformed text)
+    if not safe_get(preblast_rich, 0, "elements", "text"):
+        preblast_rich = DEFAULT_PREBLAST
+
     preblast_blocks: list[dict[str, Any]] = [
         {
             "type": "section",
             "text": {"type": "mrkdwn", "text": event_details},
         },
-        {
-            "type": "rich_text",
-            "elements": event.preblast_rich.get("elements", []) if isinstance(event.preblast_rich, dict) else (
-                [{"type": "rich_text_section", "elements": [{"type": "text", "text": str(event.preblast_rich or "")}]}]
-            ),
-        },
+        preblast_rich,
     ]
 
     return PreblastInfo(
@@ -1231,7 +1238,8 @@ def handle_event_preblast_action(
         if metadata.get("preblast_ts") and metadata["preblast_ts"] != "None":
             preblast_info = build_preblast_info(body, client, logger, context, region_record, event_instance_id)
             blocks = list(preblast_info.preblast_blocks) + [
-                b.as_form_field() for b in get_preblast_action_blocks(
+                b.as_form_field()
+                for b in get_preblast_action_blocks(
                     has_q=any(
                         bool({Q_TYPE_ID, CO_Q_TYPE_ID}.intersection(r.get("attendance_type_ids", [])))
                         for r in preblast_info.attendance_records
@@ -1281,8 +1289,13 @@ def handle_event_preblast_action(
                 )
 
         build_event_preblast_form(
-            body, client, logger, context, region_record,
-            event_instance_id=event_instance_id, update_view_id=view_id,
+            body,
+            client,
+            logger,
+            context,
+            region_record,
+            event_instance_id=event_instance_id,
+            update_view_id=view_id,
         )
 
     else:
@@ -1329,14 +1342,9 @@ def handle_event_preblast_action(
                 "attendees": [r.get("user_id") for r in preblast_info.attendance_records],
                 "qs": q_id_list,
             }
-            button_blocks = get_preblast_action_blocks(
-                has_q=len(q_id_list) > 0, event_instance_id=event_instance_id
-            )
+            button_blocks = get_preblast_action_blocks(has_q=len(q_id_list) > 0, event_instance_id=event_instance_id)
             blocks = list(preblast_info.preblast_blocks) + [b.as_form_field() for b in button_blocks]
-            if (
-                preblast_info.event_record.meta
-                and preblast_info.event_record.meta.get("preblast_image_slack_file_id")
-            ):
+            if preblast_info.event_record.meta and preblast_info.event_record.meta.get("preblast_image_slack_file_id"):
                 blocks.insert(
                     -1,
                     {
@@ -1364,8 +1372,7 @@ def handle_event_preblast_action(
                 )
             except Exception as e:
                 logger.error(
-                    f"Error updating preblast message after action {action_id} "
-                    f"for event {event_instance_id}: {e}"
+                    f"Error updating preblast message after action {action_id} for event {event_instance_id}: {e}"
                 )
             post_hc_thread_reply(
                 client,
@@ -1397,9 +1404,7 @@ def handle_event_preblast_action(
 
         elif action_id == actions.MSG_EVENT_PREBLAST_BUTTON:
             event_instance_id = safe_convert(body["actions"][0]["value"], int)
-            build_event_preblast_form(
-                body, client, logger, context, region_record, event_instance_id=event_instance_id
-            )
+            build_event_preblast_form(body, client, logger, context, region_record, event_instance_id=event_instance_id)
 
         elif action_id == actions.EVENT_PREBLAST_TAKE_Q:
             event_instance_id = safe_convert(body["actions"][0]["value"], int)
@@ -1407,6 +1412,4 @@ def handle_event_preblast_action(
                 svc.take_q(event_instance_id, user_id)
             except Exception as e:
                 logger.error(f"Error taking Q for event {event_instance_id}: {e}")
-            build_event_preblast_form(
-                body, client, logger, context, region_record, event_instance_id=event_instance_id
-            )
+            build_event_preblast_form(body, client, logger, context, region_record, event_instance_id=event_instance_id)
