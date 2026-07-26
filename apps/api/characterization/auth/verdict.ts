@@ -13,7 +13,7 @@ import { expect } from "vitest";
  * Statuses that are never an auth pass. 404/405 mean the request never reached
  * the guard (route not registered, verb map diverged), 429 means the limiter
  * rejected it first, 403 is a role denial remapped to FORBIDDEN, and a 5xx
- * means middleware threw before auth resolved. As the #646 parity gate, this
+ * means middleware threw before auth resolved. As the Hono-port parity gate, this
  * suite must go red on all of them rather than read them as "authorized".
  */
 const NOT_AUTHORIZED = [401, 403, 404, 405, 429];

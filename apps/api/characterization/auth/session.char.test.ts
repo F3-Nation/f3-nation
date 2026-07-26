@@ -37,8 +37,8 @@ describe.runIf(target.inProcess)("session and header rules", () => {
   });
 
   it("prefers the cookie over a bearer token when both are present", async () => {
-    // #646 replaces auth() with getSessionFromHeaders and must preserve this
-    // ordering: a valid cookie wins even beside an invalid bearer.
+    // The Hono port replaces auth() with getSessionFromHeaders and must
+    // preserve this ordering: a valid cookie wins even beside an invalid bearer.
     const cookie = await sessionCookie({ roles: ADMIN_COOKIE_ROLES });
     await expectAuthorized(
       await target.invoke(

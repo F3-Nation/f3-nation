@@ -329,7 +329,7 @@ jobs:
         run: echo "GCS_CREDENTIALS=$(printf '{\"client_email\":\"fake-not-a-real-credential@ci.invalid\",\"private_key\":\"THIS-IS-A-FAKE-PLACEHOLDER-FOR-CI\"}' | base64 -w0)" >> "$GITHUB_ENV"
       - run: pnpm test
       # The apps/api characterization matrix — the parity gate for the Hono
-      # port (#646). Runs in this job, sequentially after pnpm test and never
+      # port. Runs in this job, sequentially after pnpm test and never
       # concurrent with it, because both suites mutate f3_test. Needs no extra
       # env: global-setup.ts stands up its own JWKS server and signing key, and
       # SUPER_ADMIN_API_KEY is already in the workflow env above.
