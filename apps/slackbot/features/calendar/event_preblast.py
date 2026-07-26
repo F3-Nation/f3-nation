@@ -1115,6 +1115,10 @@ def build_preblast_info(
     else:
         preblast_rich = DEFAULT_PREBLAST
 
+    # Double check for valid preblast text (avoid "" text and misformed text)
+    if not safe_get(preblast_rich, 0, "elements", "text"):
+        preblast_rich = DEFAULT_PREBLAST
+
     preblast_blocks: list[dict[str, Any]] = [
         {
             "type": "section",
