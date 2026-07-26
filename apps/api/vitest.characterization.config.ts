@@ -5,6 +5,9 @@ import { defineConfig } from "vitest/config";
 const nextHeadersShim = fileURLToPath(
   new URL("./characterization/next-headers-shim.ts", import.meta.url),
 );
+const nextCacheShim = fileURLToPath(
+  new URL("./characterization/next-cache-shim.ts", import.meta.url),
+);
 
 export default defineConfig({
   resolve: {
@@ -13,6 +16,9 @@ export default defineConfig({
       // `vi.mock` cannot reach next-auth's own `next/headers` import, so the
       // shim is wired in by alias instead. Requires the deps.inline below.
       { find: /^next\/headers$/, replacement: nextHeadersShim },
+      // Same reason: revalidatePath() is a post-auth side effect that throws
+      // outside a Next request scope, and vi.mock cannot reach it either.
+      { find: /^next\/cache$/, replacement: nextCacheShim },
     ],
   },
   test: {
