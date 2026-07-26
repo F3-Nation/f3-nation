@@ -20,6 +20,7 @@ import { SeriesException } from "@acme/shared/app/enums";
 import { arrayOrSingle } from "@acme/shared/app/functions";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
+import { logWarn } from "../logger";
 import { editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
@@ -28,7 +29,11 @@ const booleanStringSchema = z
   .transform((value) => value === true || value === "true");
 
 type SlackChannelSource =
-  "event_instance_meta" | "region_settings" | "ao_org_meta" | "none";
+  | "event_instance_meta"
+  | "region_settings"
+  | "region_settings_misconfigured"
+  | "ao_org_meta"
+  | "none";
 
 interface SlackChannelContext {
   channelId: string | null;
@@ -46,12 +51,17 @@ const getNonEmptySlackChannelId = (meta: unknown): string | null => {
     : null;
 };
 
+type SpecifiedDestinationChannelResolution =
+  | { status: "not_configured" }
+  | { status: "configured"; channelId: string }
+  | { status: "misconfigured" };
+
 const getSpecifiedDestinationChannelId = (
   settings: unknown,
   kind: "preblast" | "backblast",
-): string | null => {
+): SpecifiedDestinationChannelResolution => {
   if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
-    return null;
+    return { status: "not_configured" };
   }
 
   const settingsRecord = settings as Record<string, unknown>;
@@ -59,13 +69,15 @@ const getSpecifiedDestinationChannelId = (
   const channelKey = `${kind}_destination_channel`;
 
   if (settingsRecord[destinationKey] !== "specified_channel") {
-    return null;
+    return { status: "not_configured" };
   }
 
   const channelId = settingsRecord[channelKey];
-  return typeof channelId === "string" && channelId.trim().length > 0
-    ? channelId.trim()
-    : null;
+  if (typeof channelId === "string" && channelId.trim().length > 0) {
+    return { status: "configured", channelId: channelId.trim() };
+  }
+
+  return { status: "misconfigured" };
 };
 
 const resolveSlackChannel = ({
@@ -83,12 +95,13 @@ const resolveSlackChannel = ({
     return { channelId: eventInstanceChannelId, source: "event_instance_meta" };
   }
 
-  const regionChannelId = getSpecifiedDestinationChannelId(
-    regionSettings,
-    kind,
-  );
-  if (regionChannelId) {
-    return { channelId: regionChannelId, source: "region_settings" };
+  const regionChannel = getSpecifiedDestinationChannelId(regionSettings, kind);
+  if (regionChannel.status === "configured") {
+    return { channelId: regionChannel.channelId, source: "region_settings" };
+  }
+  if (regionChannel.status === "misconfigured") {
+    logWarn("api.event_instance.slack_channel_misconfigured", { kind });
+    return { channelId: null, source: "region_settings_misconfigured" };
   }
 
   if (aoChannelId) {

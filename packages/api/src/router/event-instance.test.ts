@@ -17,9 +17,15 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   }),
 }));
 
+vi.mock("../logger", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../logger")>()),
+  logWarn: vi.fn(),
+}));
+
 import { eq, schema } from "@acme/db";
 import type { SeriesException } from "@acme/shared/app/enums";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { logWarn } from "../logger";
 import {
   cleanup,
   createAdminSession,
@@ -759,7 +765,7 @@ describe("Event Instance Router", () => {
       });
     });
 
-    it("should fall through specified destinations with null or blank channels", async () => {
+    it("should report specified destinations with null or blank channels as misconfigured", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
 
@@ -786,9 +792,23 @@ describe("Event Instance Router", () => {
       });
 
       expect(getSlackChannels(result)).toEqual({
-        preblast: { channelId: "C_AO", source: "ao_org_meta" },
-        backblast: { channelId: "C_AO", source: "ao_org_meta" },
+        preblast: {
+          channelId: null,
+          source: "region_settings_misconfigured",
+        },
+        backblast: {
+          channelId: null,
+          source: "region_settings_misconfigured",
+        },
       });
+      expect(logWarn).toHaveBeenCalledWith(
+        "api.event_instance.slack_channel_misconfigured",
+        { kind: "preblast" },
+      );
+      expect(logWarn).toHaveBeenCalledWith(
+        "api.event_instance.slack_channel_misconfigured",
+        { kind: "backblast" },
+      );
     });
 
     it("should use AO org meta fallback", async () => {
