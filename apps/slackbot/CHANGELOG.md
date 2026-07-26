@@ -2,6 +2,13 @@
 
 <!-- version list -->
 
+## [2.1.2](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.1.1...slackbot@2.1.2) (2026-07-26)
+
+
+### Bug Fixes
+
+* **slackbot:** another hotfix for auto preblasts ([#722](https://github.com/F3-Nation/f3-nation/issues/722)) ([ee0581c](https://github.com/F3-Nation/f3-nation/commit/ee0581c97158102aa6a51d374b84267838423dea))
+
 ## [2.1.1](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.1.0...slackbot@2.1.1) (2026-07-24)
 
 
