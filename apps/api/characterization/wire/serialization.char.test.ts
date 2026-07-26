@@ -45,13 +45,13 @@ describe("serialization", () => {
 
   // Reads the database (eventTag.byOrgId), so keep it to the in-process
   // target only, same as the 429 warm-up in errors.char.test.ts. Org id
-  // 999999 is well outside the seed's range, so the empty/nullable branch is
-  // exercised without seeding anything.
-  describe.runIf(target.inProcess)("nullable field", () => {
-    it("carries a nullable field through both handlers", async () => {
+  // 999999 is well outside the seed's range, so the empty-collection branch
+  // is exercised without seeding anything.
+  describe.runIf(target.inProcess)("empty collection field", () => {
+    it("carries an empty collection through both handlers identically", async () => {
       // eventTag.byOrgId returns { eventTags: EventTag[] | null }. An org id
-      // with no tags exercises the empty/nullable branch without seeding
-      // anything.
+      // with no tags pins the empty-array case; neither handler has been
+      // observed to emit `null` here, so that branch is not covered.
       const cookie = await sessionCookie({
         roles: [{ orgId: 1, orgName: "F3 Nation", roleName: "user" }],
       });
@@ -68,7 +68,7 @@ describe("serialization", () => {
       );
       expect(rest.status).toBe(200);
       await expect(stableStringify(await normalize(rest))).toMatchFileSnapshot(
-        "../__snapshots__/serialization-nullable-openapi.golden.json",
+        "../__snapshots__/serialization-empty-collection-openapi.golden.json",
       );
 
       const rpc = await rpcResponse(
@@ -77,7 +77,7 @@ describe("serialization", () => {
       );
       expect(rpc.status).toBe(200);
       await expect(stableStringify(await normalize(rpc))).toMatchFileSnapshot(
-        "../__snapshots__/serialization-nullable-rpc.golden.json",
+        "../__snapshots__/serialization-empty-collection-rpc.golden.json",
       );
     });
   });

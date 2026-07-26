@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { Client, Header } from "@acme/shared/common/enums";
 
+import { expectUnauthorizedRpc } from "../auth/verdict";
 import { sessionCookie } from "../fixtures/cookies";
 import { normalize, stableStringify } from "../normalize";
 import { rpcResponse } from "../rpc-client";
@@ -100,15 +101,7 @@ describe.runIf(target.inProcess)("orpc-ssg skip-auth", () => {
     });
     // The cookie is not consulted on the SSG path, so an admin procedure that
     // succeeds WITH this cookie under Client: orpc must fail without it here.
-    // Asserted inline rather than via `expectUnauthorized` (../auth/verdict):
-    // that helper expects an unenveloped REST-shaped error body, but an
-    // RPC-handler response wraps the error in the codec's `{json: ...}`
-    // envelope too — the helper has never seen an RPC-originated 401 before
-    // this case, since every prior caller reached it through the OpenAPI
-    // handler.
-    expect(res.status).toBe(401);
-    const body = (await res.clone().json()) as { json?: { code?: string } };
-    expect(body.json?.code).toBe("UNAUTHORIZED");
+    await expectUnauthorizedRpc(res);
   });
 
   it("authorizes the same cookie under Client: orpc (non-SSG dispatch)", async () => {

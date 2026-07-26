@@ -119,6 +119,13 @@ things: a migration bug, or a deliberate behavior change that must be called out
 and signed off in that PR's description. Never regenerate goldens with `-u` to
 make a red build green.
 
+One narrow exception: `errors-validation-openapi.golden.json` and
+`errors-validation-rpc.golden.json` embed Zod's own issue-message text (e.g.
+`"Invalid input: expected number, received NaN"`), which is library wording,
+not application behavior. A Zod version bump is the one sanctioned reason to
+regenerate those two goldens outside of #645–#650, and the regeneration must
+still be called out in that PR's description.
+
 ### It has no coverage thresholds, by design
 
 The suite characterizes behavior; it does not chase a coverage number.

@@ -24,9 +24,19 @@ describe("OpenAPI document", () => {
     );
     expect(res.status).toBe(200);
 
-    const spec = (await res.json()) as { info: { version: string } };
+    const spec = (await res.json()) as {
+      info: { version: string };
+      servers: { url: string }[];
+    };
     // Release Please bumps this every release; the version is not behavior.
     spec.info.version = "0.0.0-characterization";
+    // Only the `next`/`hono` targets see global-setup.ts's
+    // NEXT_PUBLIC_API_URL; a remote `live` server derives this from its own
+    // host, so pin a placeholder rather than the synthetic test origin.
+    spec.servers = spec.servers.map((server) => ({
+      ...server,
+      url: "<API_URL>",
+    }));
 
     await expect(stableStringify(spec)).toMatchFileSnapshot(
       "../__snapshots__/openapi.golden.json",

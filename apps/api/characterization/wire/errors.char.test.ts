@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 
+import { expectUnauthorizedRpc } from "../auth/verdict";
 import { sessionCookie } from "../fixtures/cookies";
 import { normalize, stableStringify } from "../normalize";
 import { rpcResponse } from "../rpc-client";
@@ -36,12 +37,7 @@ describe("error envelopes", () => {
       (client) => client.eventTag.byOrgId({ orgId: 1 }),
       { "x-forwarded-for": "10.92.0.2" },
     );
-    expect(rpc.status).toBe(401);
-    // rpcResponse wraps the error body in the codec's `{ json: ... }` envelope,
-    // so expectUnauthorized (../auth/verdict) cannot parse it — it expects an
-    // unenveloped REST-shaped body. Assert the same strength inline instead.
-    const rpcBody = (await rpc.clone().json()) as { json?: { code?: string } };
-    expect(rpcBody.json?.code).toBe("UNAUTHORIZED");
+    await expectUnauthorizedRpc(rpc);
     await expect(stableStringify(await normalize(rpc))).toMatchFileSnapshot(
       "../__snapshots__/errors-401-rpc.golden.json",
     );
@@ -74,7 +70,15 @@ describe("error envelopes", () => {
       "../__snapshots__/errors-404-rpc.golden.json",
     );
   });
+});
 
+/**
+ * `sessionCookie()` signs with the LOCAL `AUTH_SECRET`, so this case only
+ * authorizes under `next`/`hono`: staging's secret differs, the cookie is
+ * rejected, and it 401s instead of 400 — a staging failure that would read
+ * as an error-envelope regression rather than a fixture-only limitation.
+ */
+describe.runIf(target.inProcess)("error envelopes (in-process only)", () => {
   it("goldens the input-validation envelope on both handlers", async () => {
     // Validation runs AFTER the auth middleware, so an unauthenticated request
     // 401s before it ever gets there. Authorize with a cookie (no DB needed),
