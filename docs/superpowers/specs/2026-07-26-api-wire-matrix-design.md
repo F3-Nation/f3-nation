@@ -115,7 +115,10 @@ rubber-stamping. A rule that stops matching is a signal, not a no-op.
 ## Component: `rpc-client.ts`
 
 ```ts
-createCharClient(extraHeaders?: Record<string, string>): RouterClient<typeof router>;
+rpcResponse(
+  call: (client: RouterClient<typeof router>) => Promise<unknown>,
+  extraHeaders?: Record<string, string>,
+): Promise<Response>;
 ```
 
 A real `RPCLink` whose `fetch` is bound to the seam
@@ -127,6 +130,12 @@ Client.ORPC`.
 Hand-rolled RPC wire frames are banned. The `orpc-ssg` skip-auth case is carried
 over from Phase B specifically because Phase B could not produce a valid frame
 without this client.
+
+The typed client throws an `ORPCError` on any non-2xx, which discards exactly
+the envelope the error goldens exist to pin. So the link's custom `fetch`
+captures the `Response` on its way through and `rpcResponse` returns it,
+swallowing the throw. That is the module's only export — a `createCharClient`
+returning the bare typed client would have no importer and would fail knip.
 
 ## The case matrix
 
