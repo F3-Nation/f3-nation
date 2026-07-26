@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.1](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.4.0...pkg-api@0.4.1) (2026-07-26)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/auth bumped to 0.1.5
+    * @acme/db bumped to 0.2.0
+    * @acme/validators bumped to 0.2.0
+
 ## [0.4.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.3.1...pkg-api@0.4.0) (2026-07-23)
 
 
