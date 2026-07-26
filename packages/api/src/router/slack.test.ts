@@ -342,6 +342,14 @@ describe("mounted Slack router", () => {
           editing_locked: true,
         },
       });
+      const inactive = await createOrgWithSlack({
+        isActive: false,
+        botToken: "xoxb-inactive-secret",
+      });
+      const nonRegion = await createOrgWithSlack({
+        orgType: "ao",
+        botToken: "xoxb-ao-secret",
+      });
       let apiKeyId: number | undefined;
       try {
         const result =
@@ -358,12 +366,21 @@ describe("mounted Slack router", () => {
           bot_token: "legacy-secret",
           email_password: "pw",
         });
+        expect(result).not.toContainEqual(
+          expect.objectContaining({ bot_token: "xoxb-inactive-secret" }),
+        );
+        expect(result).not.toContainEqual(
+          expect.objectContaining({ bot_token: "xoxb-ao-secret" }),
+        );
 
         await expect(
           serviceClient().slack.getBotSettingsCache(),
         ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
         await expect(
           serviceClient("wrong").slack.getBotSettingsCache(),
+        ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+        await expect(
+          serviceClient("wrong-secret!!").slack.getBotSettingsCache(),
         ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
         process.env[SLACKBOT_SERVICE_API_KEY_ENV] = "";
         await expect(
@@ -410,6 +427,8 @@ describe("mounted Slack router", () => {
         if (previous === undefined)
           delete process.env[SLACKBOT_SERVICE_API_KEY_ENV];
         else process.env[SLACKBOT_SERVICE_API_KEY_ENV] = previous;
+        await cleanupSlack(nonRegion.org.id, nonRegion.spaceIds);
+        await cleanupSlack(inactive.org.id, inactive.spaceIds);
         await cleanupSlack(org.id, spaceIds);
       }
     });

@@ -9,6 +9,8 @@ import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { protectedProcedure, publicProcedure } from "../shared";
 import type { Context } from "../shared";
 
+import { timingSafeEqual } from "node:crypto";
+
 type JsonValue =
   string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
@@ -247,8 +249,6 @@ const rawSlackSettingsCacheOutputSchema = z.array(
 );
 
 const SLACKBOT_SERVICE_API_KEY_ENV = "SLACKBOT_SERVICE_API_KEY";
-
-import { timingSafeEqual } from "node:crypto";
 
 const assertSlackbotServiceAuth = (ctx: { reqHeaders?: Headers | null }) => {
   const configured = process.env[SLACKBOT_SERVICE_API_KEY_ENV]?.trim();
