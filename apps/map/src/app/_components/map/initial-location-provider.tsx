@@ -49,6 +49,7 @@ const SuspendedInitialLocationProvider = (params: { children: ReactNode }) => {
   const didSetQueryParamLocation = useRef(false);
   const hasSyncedInitialMapState = useRef(false);
 
+  // Calculate initial values during render (reading is safe)
   if (center.current === null) {
     const locationLatLng = getQueryData(
       orpc.map.location.eventsAndLocations.queryKey({

@@ -12,6 +12,7 @@
     "start": "pnpm with-env next start",
     "typecheck": "tsc --noEmit",
     "test": "pnpm with-env vitest --run --coverage",
+    "test:characterization": "pnpm with-env vitest --run --config vitest.characterization.config.ts",
     "test:watch": "pnpm with-env vitest -w",
     "with-env": "dotenv -e .env --"
   },
@@ -33,6 +34,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@acme/db": "workspace:*",
     "@acme/eslint-config": "workspace:*",
     "@acme/prettier-config": "workspace:*",
     "@acme/tsconfig": "workspace:*",
@@ -46,6 +48,7 @@
     "@vitest/coverage-v8": "catalog:",
     "eslint": "catalog:",
     "jiti": "catalog:",
+    "jose": "catalog:",
     "jsdom": "catalog:",
     "prettier": "catalog:",
     "typescript": "catalog:",

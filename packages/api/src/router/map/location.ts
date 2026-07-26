@@ -650,4 +650,53 @@ export const mapLocationRouter = os.router({
 
       return { lookup };
     }),
+  getAOsInRegion: protectedProcedure
+    .input(z.object({ regionId: z.number() }))
+    .output(
+      z.object({
+        aos: z.array(
+          z.object({
+            id: z.number(),
+            name: z.string(),
+            workouts: z.array(z.string()),
+          }),
+        ),
+      }),
+    )
+    .route({
+      method: "GET",
+      path: "/aos-in-region",
+      tags: ["map.location"],
+      summary: "Get AOs in region",
+      description: "Get a list of AOs in a region",
+    })
+    .handler(async ({ context: ctx, input }) => {
+      const aos = await ctx.db
+        .select({
+          id: schema.orgs.id,
+          name: schema.orgs.name,
+          workouts: sql<string[]>`COALESCE(
+            ARRAY_AGG(DISTINCT ${schema.events.name})
+            FILTER (WHERE ${schema.events.name} IS NOT NULL),
+            ARRAY[]::text[]
+          )`,
+        })
+        .from(schema.orgs)
+        .leftJoin(
+          schema.events,
+          and(
+            eq(schema.events.orgId, schema.orgs.id),
+            eq(schema.events.isActive, true),
+          ),
+        )
+        .where(
+          and(
+            eq(schema.orgs.parentId, input.regionId),
+            eq(schema.orgs.orgType, "ao"),
+            eq(schema.orgs.isActive, true),
+          ),
+        )
+        .groupBy(schema.orgs.id);
+      return { aos };
+    }),
 });
