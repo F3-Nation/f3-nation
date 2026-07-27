@@ -17,6 +17,15 @@ describe("serialization", () => {
     const rpc = await rpcResponse((client) => client.ping(), {
       "x-forwarded-for": "10.93.0.1",
     });
+    const rpcBody = (await rpc.clone().json()) as {
+      json: { timestamp: unknown };
+    };
+    // Pin the FORMAT before scrubbing, exactly as the REST branch below does:
+    // the <TIMESTAMP> token would otherwise hide a null or an epoch number,
+    // since `meta` pins the Date TYPE MARKER, not the encoding.
+    expect(rpcBody.json.timestamp).toMatch(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+    );
     await expect(
       stableStringify(
         await normalize(rpc, { paths: { "json.timestamp": "<TIMESTAMP>" } }),

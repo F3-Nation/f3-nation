@@ -4,9 +4,10 @@ import { exhaustRateLimit, RATE_LIMIT_MESSAGE, WINDOW_MS } from "../rate-limit";
 import { req, target } from "../transport";
 
 /**
- * The rate limiter is a per-worker in-memory singleton keyed by client IP, and
- * the forks pool gives this file its own instance. NODE_ENV=test puts the limit
- * at 200/60s (isDevelopment would raise it to 10000). Driven against the public
+ * The rate limiter is a module-level in-memory singleton keyed by client IP,
+ * and `isolate: true` gives this file its own module registry, hence its own
+ * instance. NODE_ENV=test puts the limit at 200/60s (isDevelopment would raise
+ * it to 10000). Driven against the public
  * `ping` so no auth or DB is involved; excluded from the live target because it
  * depends on in-process counter state.
  */

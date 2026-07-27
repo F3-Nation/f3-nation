@@ -28,7 +28,9 @@ export async function rpcResponse(
   try {
     await call(client);
   } catch (err) {
-    // Expected for every non-2xx case; the response is already captured.
+    // Expected for every non-2xx case; the response is already captured. It is
+    // also set when the transport succeeded but the client rejected the payload
+    // — guarded below, because on a 2xx that is a wire regression.
     callError = err;
   }
   const response = captured.value;
@@ -36,6 +38,13 @@ export async function rpcResponse(
     throw new Error("rpcResponse: the link never returned a response", {
       cause: callError,
     });
+  }
+  if (response.ok && callError) {
+    throw new Error(
+      `rpcResponse: the oRPC client rejected a ${response.status} response — ` +
+        `the wire body did not decode. That is a wire-contract regression.`,
+      { cause: callError },
+    );
   }
   return response;
 }

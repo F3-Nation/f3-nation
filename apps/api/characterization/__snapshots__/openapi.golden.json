@@ -2497,67 +2497,6 @@
         ]
       }
     },
-    "/v1/attendance/{attendanceId}/types": {
-      "patch": {
-        "description": "Update the attendance types for an existing attendance record",
-        "operationId": "attendance.updateAttendanceTypes",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ClientHeader"
-          },
-          {
-            "in": "path",
-            "name": "attendanceId",
-            "required": true,
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "properties": {
-                  "attendanceTypeIds": {
-                    "items": {
-                      "type": "number"
-                    },
-                    "type": "array"
-                  }
-                },
-                "required": [
-                  "attendanceTypeIds"
-                ],
-                "type": "object"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {},
-                    {
-                      "not": {}
-                    }
-                  ]
-                }
-              }
-            },
-            "description": "OK"
-          }
-        },
-        "summary": "Update attendance types",
-        "tags": [
-          "attendance"
-        ]
-      }
-    },
     "/v1/attendance/actual": {
       "post": {
         "description": "Create a new actual attendance record (for backblast submissions)",
@@ -2927,6 +2866,67 @@
           }
         },
         "summary": "Take Q for event",
+        "tags": [
+          "attendance"
+        ]
+      }
+    },
+    "/v1/attendance/{attendanceId}/types": {
+      "patch": {
+        "description": "Update the attendance types for an existing attendance record",
+        "operationId": "attendance.updateAttendanceTypes",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "in": "path",
+            "name": "attendanceId",
+            "required": true,
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "attendanceTypeIds": {
+                    "items": {
+                      "type": "number"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "attendanceTypeIds"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {},
+                    {
+                      "not": {}
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Update attendance types",
         "tags": [
           "attendance"
         ]
@@ -12995,201 +12995,6 @@
         ]
       }
     },
-    "/v1/position/assignments/{orgId}": {
-      "get": {
-        "description": "Get all positions with their assigned users for a specific org",
-        "operationId": "position.getAssignments",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ClientHeader"
-          },
-          {
-            "in": "path",
-            "name": "orgId",
-            "required": true,
-            "schema": {
-              "description": "The org (AO or region) to get assignments for",
-              "type": "number"
-            }
-          },
-          {
-            "allowEmptyValue": true,
-            "allowReserved": true,
-            "in": "query",
-            "name": "regionOrgId",
-            "schema": {
-              "description": "The region org ID (to determine what positions to show). Defaults to orgId",
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "positions": {
-                      "description": "List of positions",
-                      "items": {
-                        "properties": {
-                          "created": {
-                            "description": "Date the position was created",
-                            "type": "string"
-                          },
-                          "description": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ],
-                            "description": "Position description"
-                          },
-                          "id": {
-                            "description": "Position ID",
-                            "type": "number"
-                          },
-                          "isActive": {
-                            "description": "Whether the position is active",
-                            "type": "boolean"
-                          },
-                          "name": {
-                            "description": "Position name",
-                            "type": "string"
-                          },
-                          "orgId": {
-                            "anyOf": [
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ],
-                            "description": "Organization ID"
-                          },
-                          "orgType": {
-                            "anyOf": [
-                              {
-                                "enum": [
-                                  "ao",
-                                  "region",
-                                  "area",
-                                  "sector",
-                                  "nation"
-                                ],
-                                "type": "string"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ],
-                            "description": "Organization type level"
-                          },
-                          "updated": {
-                            "description": "Date the position was last updated",
-                            "type": "string"
-                          },
-                          "users": {
-                            "description": "Users assigned to the position",
-                            "items": {
-                              "properties": {
-                                "avatarUrl": {
-                                  "anyOf": [
-                                    {
-                                      "type": "string"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ],
-                                  "description": "User's avatar URL"
-                                },
-                                "f3Name": {
-                                  "anyOf": [
-                                    {
-                                      "type": "string"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ],
-                                  "description": "User's F3 name"
-                                },
-                                "firstName": {
-                                  "anyOf": [
-                                    {
-                                      "type": "string"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ],
-                                  "description": "User's first name"
-                                },
-                                "id": {
-                                  "description": "User ID",
-                                  "type": "number"
-                                },
-                                "lastName": {
-                                  "anyOf": [
-                                    {
-                                      "type": "string"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ],
-                                  "description": "User's last name"
-                                }
-                              },
-                              "required": [
-                                "id",
-                                "f3Name",
-                                "firstName",
-                                "lastName",
-                                "avatarUrl"
-                              ],
-                              "type": "object"
-                            },
-                            "type": "array"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "name",
-                          "description",
-                          "orgId",
-                          "orgType",
-                          "isActive",
-                          "created",
-                          "updated",
-                          "users"
-                        ],
-                        "type": "object"
-                      },
-                      "type": "array"
-                    }
-                  },
-                  "required": [
-                    "positions"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "OK"
-          }
-        },
-        "summary": "Get position assignments for an org",
-        "tags": [
-          "position"
-        ]
-      }
-    },
     "/v1/position/assignments/all": {
       "get": {
         "description": "Get all position assignments with display data, scoped to the caller's editable orgs. Supports optional filters by orgId, positionId, userId, and includeInactive.",
@@ -13440,6 +13245,201 @@
           }
         },
         "summary": "Get position assignments by user",
+        "tags": [
+          "position"
+        ]
+      }
+    },
+    "/v1/position/assignments/{orgId}": {
+      "get": {
+        "description": "Get all positions with their assigned users for a specific org",
+        "operationId": "position.getAssignments",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "in": "path",
+            "name": "orgId",
+            "required": true,
+            "schema": {
+              "description": "The org (AO or region) to get assignments for",
+              "type": "number"
+            }
+          },
+          {
+            "allowEmptyValue": true,
+            "allowReserved": true,
+            "in": "query",
+            "name": "regionOrgId",
+            "schema": {
+              "description": "The region org ID (to determine what positions to show). Defaults to orgId",
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "positions": {
+                      "description": "List of positions",
+                      "items": {
+                        "properties": {
+                          "created": {
+                            "description": "Date the position was created",
+                            "type": "string"
+                          },
+                          "description": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Position description"
+                          },
+                          "id": {
+                            "description": "Position ID",
+                            "type": "number"
+                          },
+                          "isActive": {
+                            "description": "Whether the position is active",
+                            "type": "boolean"
+                          },
+                          "name": {
+                            "description": "Position name",
+                            "type": "string"
+                          },
+                          "orgId": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Organization ID"
+                          },
+                          "orgType": {
+                            "anyOf": [
+                              {
+                                "enum": [
+                                  "ao",
+                                  "region",
+                                  "area",
+                                  "sector",
+                                  "nation"
+                                ],
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Organization type level"
+                          },
+                          "updated": {
+                            "description": "Date the position was last updated",
+                            "type": "string"
+                          },
+                          "users": {
+                            "description": "Users assigned to the position",
+                            "items": {
+                              "properties": {
+                                "avatarUrl": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ],
+                                  "description": "User's avatar URL"
+                                },
+                                "f3Name": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ],
+                                  "description": "User's F3 name"
+                                },
+                                "firstName": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ],
+                                  "description": "User's first name"
+                                },
+                                "id": {
+                                  "description": "User ID",
+                                  "type": "number"
+                                },
+                                "lastName": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ],
+                                  "description": "User's last name"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "f3Name",
+                                "firstName",
+                                "lastName",
+                                "avatarUrl"
+                              ],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "description",
+                          "orgId",
+                          "orgType",
+                          "isActive",
+                          "created",
+                          "updated",
+                          "users"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "positions"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Get position assignments for an org",
         "tags": [
           "position"
         ]

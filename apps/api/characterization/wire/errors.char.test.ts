@@ -1,5 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 
+import { Client, Header } from "@acme/shared/common/enums";
+
 import { expectUnauthorizedRpc } from "../auth/verdict";
 import { sessionCookie } from "../fixtures/cookies";
 import { normalize, stableStringify } from "../normalize";
@@ -58,7 +60,10 @@ describe("error envelopes", () => {
       req("/v1/no-such-procedure", {
         method: "POST",
         headers: {
-          client: "orpc",
+          // Via the enums, not hand-written: the two 404 goldens are
+          // byte-identical, so a renamed enum would silently redispatch this
+          // to the OpenAPI handler and the test would still pass.
+          [Header.Client]: Client.ORPC,
           "content-type": "application/json",
           "x-forwarded-for": "10.92.1.2",
         },
@@ -115,8 +120,8 @@ describe.runIf(target.inProcess)("error envelopes (in-process only)", () => {
 
 /**
  * Separate describe with its own warm-up so no case above pays the ~4s cost or
- * risks inheriting an exhausted counter. The limiter is a per-worker singleton
- * and this file has its own instance (forks pool, fileParallelism: false), so
+ * risks inheriting an exhausted counter. The limiter is a module-level
+ * singleton and `isolate: true` gives every file a fresh module registry, so
  * exhausting one IP here cannot affect another file.
  */
 describe.runIf(target.inProcess)("429 envelope", () => {
@@ -138,6 +143,10 @@ describe.runIf(target.inProcess)("429 envelope", () => {
       "x-forwarded-for": EXHAUSTED_IP,
     });
     expect(rpc.status).toBe(429);
+    // Assert the wording BEFORE scrubbing: the companion wording test below
+    // sends no Client header, so it only ever covers the OpenAPI handler.
+    const rpcBody = (await rpc.clone().json()) as { json: { message: string } };
+    expect(rpcBody.json.message).toMatch(RATE_LIMIT_MESSAGE);
     await expect(
       stableStringify(
         await normalize(rpc, {

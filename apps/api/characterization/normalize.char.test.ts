@@ -60,6 +60,20 @@ describe("normalize", () => {
     ).rejects.toThrow(/scrub path "items\[\]\.id" matched nothing/);
   });
 
+  it("throws when a rule's shape no longer matches the body", async () => {
+    // items[] where items stopped being an array
+    await expect(
+      normalize(jsonResponse({ items: { id: 1 } }), {
+        paths: { "items[]": "<X>" },
+      }),
+    ).rejects.toThrow(/scrub path "items\[\]" matched nothing/);
+
+    // a plain segment walked into an array
+    await expect(
+      normalize(jsonResponse({ a: [{ b: 1 }] }), { paths: { "a.b": "<X>" } }),
+    ).rejects.toThrow(/scrub path "a\.b" matched nothing/);
+  });
+
   it("reports status and a body snippet when JSON-labeled content is not JSON", async () => {
     const res = new Response("<html>oops</html>", {
       status: 502,

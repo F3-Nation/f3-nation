@@ -80,8 +80,11 @@ backstop that `--no-verify` cannot skip.
 tests. It exists for one reason: the Hono migration (epic #644) replaces the
 framework underneath `apps/api`, and the code with the largest blast radius —
 auth resolution and the HTTP wire layer — had no end-to-end tests at all. The
-suite fires real HTTP requests through the real route handlers with nothing
-mocked, so a port can be proven behavior-identical instead of argued to be.
+suite dispatches real `Request` objects into the real route handlers with the
+auth, codec, and CORS stack unmocked — only `next/headers` and `next/cache` are
+shimmed, because both throw outside a Next request scope — so a port can be
+proven behavior-identical instead of argued to be. The `live` target issues
+real HTTP over a socket; `next` dispatches in-process.
 
 The framework decision itself is recorded in
 [ADR 0001](adr/0001-api-server-framework.md).
@@ -90,8 +93,12 @@ The framework decision itself is recorded in
 
 ```bash
 pnpm docker:up
-pnpm -C apps/api test:characterization
+pnpm test:characterization
 ```
+
+Run it from the repo root. `turbo.json` declares the task with
+`dependsOn: [… "reset-test-db" …]`; `pnpm -C apps/api test:characterization`
+skips that and reuses whatever the last suite left in the database.
 
 CI runs it in the `test-coverage` job, sequentially after `pnpm test` — both
 suites mutate the shared `f3_test` database and must never run concurrently.

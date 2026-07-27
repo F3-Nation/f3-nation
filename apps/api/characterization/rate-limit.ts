@@ -4,12 +4,17 @@ import { req, target } from "./transport";
 
 /**
  * Shared scaffolding for exhausting the in-memory rate limiter. The limiter is
- * a per-worker singleton, so each test file's fork still pays its own warm-up —
- * what lives here is the logic and the constants, so the two suites that pin
- * limiter behavior cannot drift apart.
+ * a module-level singleton and `isolate: true` gives every file a fresh module
+ * registry, so each test file still pays its own warm-up — what lives here is
+ * the logic and the constants, so the two suites that pin limiter behavior
+ * cannot drift apart.
  */
 
-/** Mirrors the private RATE_LIMIT_MAX_REQUESTS in packages/api/src/shared.ts. */
+/**
+ * Mirrors the non-development branch of the private RATE_LIMIT_MAX_REQUESTS
+ * (`isDevelopment ? 10000 : 200`) in packages/api/src/shared.ts; the suite
+ * pins NODE_ENV=test, so 200 is the effective limit.
+ */
 const RATE_LIMIT = 200;
 
 /** checkLimit evicts entries older than now - 60s, so the window slides. */

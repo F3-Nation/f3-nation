@@ -7,13 +7,14 @@ describe("OpenAPI document", () => {
   it("matches the committed golden", async () => {
     // The route (apps/api/src/app/docs/openapi.json/route.ts) prefers
     // `NEXT_PUBLIC_API_URL` over any derivation from the host header, and
-    // that env var is REQUIRED by packages/env's schema (z.string().min(1))
-    // — deleting it, as the plan predicted, throws in env validation instead
-    // of falling back to the host header. global-setup.ts already pins it to
-    // this same synthetic origin for the whole suite (so `servers[0].url` is
-    // identical across developers and targets), so no unset/restore dance is
-    // needed here; the host header below is inert but kept for documentation
-    // of intent.
+    // that env var is required by packages/env's schema (z.string().min(1)),
+    // so deleting it — as the plan predicted — throws in env validation
+    // locally rather than falling back to the host header. (In CI it would
+    // not: `skipValidation` is keyed off CI=true.) global-setup.ts already
+    // pins it to this same synthetic origin for the whole suite, so
+    // `servers[0].url` is identical across developers and no unset/restore
+    // dance is needed here; the host header below is inert but kept for
+    // documentation of intent.
     const res = await target.invoke(
       req("/docs/openapi.json", {
         headers: {

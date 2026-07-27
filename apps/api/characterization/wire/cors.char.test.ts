@@ -64,4 +64,36 @@ describe("CORS", () => {
       "https://example.invalid",
     );
   });
+
+  it("carries CORS headers on a handler-produced error response", async () => {
+    const res = await target.invoke(
+      req("/v1/event-tag/org/1", {
+        headers: {
+          origin: "https://map.f3nation.com",
+          "x-forwarded-for": "10.91.1.1",
+        },
+      }),
+    );
+    expect(res.status).toBe(401);
+    expect(res.headers.get("access-control-allow-origin")).toBe(
+      "https://map.f3nation.com",
+    );
+    expect(res.headers.get("access-control-allow-credentials")).toBe("true");
+  });
+
+  it("omits CORS headers on the out-of-handler 404 fall-through", async () => {
+    // route.ts builds this Response outside handler.handle(), so CORSPlugin
+    // never sees it — a browser gets an opaque CORS error, not a 404. Pinned
+    // as the current contract, quirk and all.
+    const res = await target.invoke(
+      req("/no-such-route", {
+        headers: {
+          origin: "https://map.f3nation.com",
+          "x-forwarded-for": "10.91.1.2",
+        },
+      }),
+    );
+    expect(res.status).toBe(404);
+    expect(res.headers.get("access-control-allow-origin")).toBeNull();
+  });
 });
