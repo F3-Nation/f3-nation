@@ -1116,7 +1116,7 @@ def build_preblast_info(
         preblast_rich = DEFAULT_PREBLAST
 
     # Double check for valid preblast text (avoid "" text and misformed text)
-    if not safe_get(preblast_rich, 0, "elements", "text"):
+    if not safe_get(preblast_rich, "elements", 0, "elements", 0, "text"):
         preblast_rich = DEFAULT_PREBLAST
 
     preblast_blocks: list[dict[str, Any]] = [
