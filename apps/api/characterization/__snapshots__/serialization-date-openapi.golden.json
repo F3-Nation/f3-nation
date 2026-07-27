@@ -1,0 +1,13 @@
+{
+  "body": {
+    "alive": true,
+    "timestamp": "<TIMESTAMP>"
+  },
+  "headers": {
+    "access-control-allow-credentials": "true",
+    "access-control-allow-origin": "",
+    "content-type": "application/json",
+    "vary": "Origin"
+  },
+  "status": 200
+}
