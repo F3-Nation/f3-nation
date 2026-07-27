@@ -46,6 +46,30 @@ describe("normalize", () => {
     ).rejects.toThrow(/scrub path "missing" matched nothing/);
   });
 
+  it("accepts a bare array rule on an empty array, but not a deeper segment", async () => {
+    // Zero elements mean a deeper segment was never evaluated: a renamed or
+    // deleted field would be indistinguishable from a correct rule.
+    await expect(
+      normalize(jsonResponse({ items: [] }), { paths: { "items[]": "<X>" } }),
+    ).resolves.toMatchObject({ body: { items: [] } });
+
+    await expect(
+      normalize(jsonResponse({ items: [] }), {
+        paths: { "items[].id": "<ID>" },
+      }),
+    ).rejects.toThrow(/scrub path "items\[\]\.id" matched nothing/);
+  });
+
+  it("reports status and a body snippet when JSON-labeled content is not JSON", async () => {
+    const res = new Response("<html>oops</html>", {
+      status: 502,
+      headers: { "content-type": "application/problem+json" },
+    });
+    await expect(normalize(res)).rejects.toThrow(
+      /502 claimed application\/problem\+json but the body is not JSON: <html>oops<\/html>/,
+    );
+  });
+
   it("replaces known values anywhere in the body", async () => {
     const golden = await normalize(
       jsonResponse({ nested: { key: "abc123" } }),
@@ -54,6 +78,26 @@ describe("normalize", () => {
       },
     );
     expect(golden.body).toEqual({ nested: { key: "<KEY>" } });
+  });
+
+  it("only matches string leaves — numbers, booleans and null pass through", async () => {
+    // A rule keyed by a small number must never swallow unrelated counts or
+    // ids that happen to share its digits.
+    const golden = await normalize(
+      jsonResponse({
+        fixtureId: "7",
+        unrelatedCount: 7,
+        flag: true,
+        gone: null,
+      }),
+      { values: { "7": "<FIXTURE_ID>", true: "<T>", null: "<N>" } },
+    );
+    expect(golden.body).toEqual({
+      fixtureId: "<FIXTURE_ID>",
+      unrelatedCount: 7,
+      flag: true,
+      gone: null,
+    });
   });
 
   it("does not throw for an unused value rule", async () => {

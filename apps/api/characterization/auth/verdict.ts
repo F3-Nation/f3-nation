@@ -58,8 +58,9 @@ export async function expectUnauthorized(
 
 /**
  * Same two assertions as `expectUnauthorized`, but for a response that went
- * through the RPC handler: the codec wraps the error body in `{ json: ...,
- * meta: [...] }`, which `expectUnauthorized` cannot parse.
+ * through the RPC handler: the codec wraps the error body in `{ json: ... }`
+ * (no `meta` — that carries type preservation, which errors have none of),
+ * which `expectUnauthorized` cannot parse.
  */
 export async function expectUnauthorizedRpc(
   res: Response,

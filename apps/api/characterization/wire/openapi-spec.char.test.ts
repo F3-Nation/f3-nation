@@ -43,14 +43,23 @@ describe("OpenAPI document", () => {
     );
   });
 
-  it("serves the document with no credentials", async () => {
+  it("ignores credentials entirely — even an invalid one is served", async () => {
     // #660's ADR follow-up: "the docs stay public" becomes CI-enforced on both
-    // transports rather than a promise.
+    // transports rather than a promise. A garbage credential discriminates a
+    // route that IGNORES auth from one that merely tolerates its absence: a
+    // port that mounts the docs behind the auth middleware would still 200 an
+    // anonymous request's sibling test above, but 401s this one.
     const res = await target.invoke(
       req("/docs/openapi.json", {
-        headers: { "x-forwarded-for": "10.94.0.2" },
+        headers: {
+          authorization: "Bearer not-a-real-token",
+          "x-forwarded-for": "10.94.0.2",
+        },
       }),
     );
     expect(res.status).toBe(200);
+    // The route neither demands nor establishes a session.
+    expect(res.headers.get("www-authenticate")).toBeNull();
+    expect(res.headers.get("set-cookie")).toBeNull();
   });
 });

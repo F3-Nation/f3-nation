@@ -59,9 +59,14 @@ describe("handler dispatch", () => {
       }),
     );
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { json?: unknown; meta?: unknown };
-    expect(body).toHaveProperty("json");
-    expect(body).toHaveProperty("meta");
+    // Asserted against the SAME golden the `orpc` case pins above: all three
+    // Client values must produce the byte-identical RPC envelope, `meta`
+    // type-preservation table included.
+    await expect(
+      stableStringify(
+        await normalize(res, { paths: { "json.timestamp": "<TIMESTAMP>" } }),
+      ),
+    ).toMatchFileSnapshot("../__snapshots__/dispatch-rpc-ping.golden.json");
   });
 
   it("falls through to the OpenAPI handler when no Client header is sent", async () => {

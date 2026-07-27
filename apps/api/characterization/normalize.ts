@@ -28,7 +28,11 @@ export interface NormalizeOptions {
    * into rubber stamps.
    */
   paths?: Record<string, string>;
-  /** Replace by exact value, anywhere. For fixture ids the test itself created. */
+  /**
+   * Replace by exact value, anywhere — string leaves only, so a rule keyed by
+   * a small number can never swallow unrelated counts or ids. For fixture ids
+   * the test itself created.
+   */
   values?: Record<string, string>;
 }
 
@@ -59,10 +63,19 @@ export async function normalize(
   }
 
   const text = await res.clone().text();
-  let body: unknown =
-    headers["content-type"]?.includes("json") && text.length > 0
-      ? (JSON.parse(text) as unknown)
-      : text;
+  let body: unknown = text;
+  if (headers["content-type"]?.includes("json") && text.length > 0) {
+    try {
+      body = JSON.parse(text) as unknown;
+    } catch (err) {
+      // A proxy can stamp an HTML error page with a JSON content-type; a bare
+      // SyntaxError would hide the status and which response produced it.
+      throw new Error(
+        `normalize: ${res.status} claimed ${headers["content-type"]} but the body is not JSON: ${text.slice(0, 400)}`,
+        { cause: err },
+      );
+    }
+  }
 
   if (opts.paths) body = applyPaths(body, opts.paths);
   if (opts.values) body = applyValues(body, opts.values);
@@ -113,9 +126,9 @@ function replaceAtPath(
 
   if (isArraySegment) {
     if (!Array.isArray(child)) return { value: node, matched: false };
-    // An empty array is a match with nothing to do: the field exists and the
-    // rule is still correct, so this must not throw.
-    let matched = true;
+    // An empty array satisfies a bare `foo[]` rule, but cannot validate any
+    // deeper segment — that is unverifiable, not satisfied.
+    let matched = rest.length === 0 || child.length > 0;
     const items = child.map((item) => {
       const outcome = replaceAtPath(item, rest, replacement);
       matched = matched && outcome.matched;
@@ -141,6 +154,8 @@ function applyValues(node: unknown, values: Record<string, string>): unknown {
       ]),
     );
   }
-  const key = String(node);
-  return Object.prototype.hasOwnProperty.call(values, key) ? values[key] : node;
+  if (typeof node !== "string") return node;
+  return Object.prototype.hasOwnProperty.call(values, node)
+    ? values[node]
+    : node;
 }

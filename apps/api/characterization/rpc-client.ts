@@ -24,14 +24,18 @@ export async function rpcResponse(
 ): Promise<Response> {
   const { link, captured } = buildLink(extraHeaders);
   const client: RouterClient<typeof router> = createORPCClient(link);
+  let callError: unknown;
   try {
     await call(client);
-  } catch {
+  } catch (err) {
     // Expected for every non-2xx case; the response is already captured.
+    callError = err;
   }
   const response = captured.value;
   if (!response) {
-    throw new Error("rpcResponse: the link never issued a request");
+    throw new Error("rpcResponse: the link never returned a response", {
+      cause: callError,
+    });
   }
   return response;
 }

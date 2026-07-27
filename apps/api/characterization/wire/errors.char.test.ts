@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { expectUnauthorizedRpc } from "../auth/verdict";
 import { sessionCookie } from "../fixtures/cookies";
 import { normalize, stableStringify } from "../normalize";
+import { exhaustRateLimit, RATE_LIMIT_MESSAGE, WINDOW_MS } from "../rate-limit";
 import { rpcResponse } from "../rpc-client";
 import { req, target } from "../transport";
 
@@ -14,7 +15,6 @@ import { req, target } from "../transport";
 
 /** Driven to its limit in beforeAll; only the 429 cases use it. */
 const EXHAUSTED_IP = "10.92.9.9";
-const LIMIT = 200;
 
 describe("error envelopes", () => {
   it("goldens the 401 envelope on both handlers", async () => {
@@ -120,23 +120,7 @@ describe.runIf(target.inProcess)("error envelopes (in-process only)", () => {
  * exhausting one IP here cannot affect another file.
  */
 describe.runIf(target.inProcess)("429 envelope", () => {
-  beforeAll(async () => {
-    const started = Date.now();
-    for (let i = 0; i < LIMIT; i++) {
-      const res = await target.invoke(
-        req("/v1/ping", { headers: { "x-forwarded-for": EXHAUSTED_IP } }),
-      );
-      expect(res.status).toBe(200);
-    }
-    const elapsed = Date.now() - started;
-    // The window slides: if the warm-up itself outran 30s, early requests are
-    // already evicted and the cases below would read as "expected 200 to be
-    // 429" — a slow runner masquerading as a limiter regression.
-    expect(
-      elapsed,
-      `warm-up took ${elapsed}ms; the 60s sliding window already evicted early requests`,
-    ).toBeLessThan(30_000);
-  }, 60_000);
+  beforeAll(() => exhaustRateLimit(EXHAUSTED_IP), WINDOW_MS);
 
   it("goldens the 429 envelope on both handlers", async () => {
     const rest = await target.invoke(
@@ -168,6 +152,6 @@ describe.runIf(target.inProcess)("429 envelope", () => {
       req("/v1/ping", { headers: { "x-forwarded-for": EXHAUSTED_IP } }),
     );
     const body = (await res.json()) as { message: string };
-    expect(body.message).toMatch(/^Rate limit exceeded\. Try again in \d+s$/);
+    expect(body.message).toMatch(RATE_LIMIT_MESSAGE);
   });
 });
