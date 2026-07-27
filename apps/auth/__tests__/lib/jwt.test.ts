@@ -98,3 +98,47 @@ describe("signAccessToken", () => {
     expect(payload.sub).toBe("90071992547");
   });
 });
+
+describe("getJWKS", () => {
+  it("publishes public key material only", async () => {
+    const jwks = await jwt.getJWKS();
+
+    expect(jwks.keys).toHaveLength(1);
+    // Exact key set: any private component (d, p, q, dp, dq, qi) leaking into
+    // the public /.well-known/jwks.json response fails here.
+    expect(Object.keys(jwks.keys[0]!).sort()).toEqual([
+      "alg",
+      "e",
+      "kid",
+      "kty",
+      "n",
+      "use",
+    ]);
+    expect(jwks.keys[0]).toMatchObject({
+      kty: "RSA",
+      alg: "RS256",
+      use: "sig",
+      kid: "f3-auth-1",
+    });
+  });
+
+  it("caches the document across calls", async () => {
+    expect(await jwt.getJWKS()).toBe(await jwt.getJWKS());
+  });
+});
+
+describe("private key loading", () => {
+  it("accepts the single-line escaped-newline PEM used in .env", async () => {
+    const escaped = pkcs8.trimEnd().replace(/\n/g, "\\n");
+
+    const fresh = await loadJwtModule(escaped);
+    const token = await signSample(fresh);
+    const { payload } = await jwtVerify(
+      token,
+      createLocalJWKSet(await fresh.getJWKS()),
+      { issuer: ISSUER },
+    );
+
+    expect(payload.sub).toBe("4242");
+  });
+});
