@@ -10,7 +10,7 @@ import { req, target } from "./transport";
  */
 
 /** Mirrors the private RATE_LIMIT_MAX_REQUESTS in packages/api/src/shared.ts. */
-export const RATE_LIMIT = 200;
+const RATE_LIMIT = 200;
 
 /** checkLimit evicts entries older than now - 60s, so the window slides. */
 export const WINDOW_MS = 60_000;
