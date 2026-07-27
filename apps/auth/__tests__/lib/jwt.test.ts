@@ -104,8 +104,7 @@ describe("getJWKS", () => {
     const jwks = await jwt.getJWKS();
 
     expect(jwks.keys).toHaveLength(1);
-    // Exact key set: any private component (d, p, q, dp, dq, qi) leaking into
-    // the public /.well-known/jwks.json response fails here.
+    // Exact key set guards against a private RSA component (d/p/q/dp/dq/qi) leaking into the public JWKS.
     expect(Object.keys(jwks.keys[0]!).sort()).toEqual([
       "alg",
       "e",
