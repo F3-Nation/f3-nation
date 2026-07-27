@@ -20,7 +20,7 @@ export async function generateForeignKey(): Promise<CryptoKey> {
   return privateKey;
 }
 
-/** Mirrors apps/auth/src/lib/jwt.ts signAccessToken's claim shape exactly. */
+/** Mirrors apps/auth/src/lib/jwt.ts signAccessToken; its claim set is pinned by apps/auth/__tests__/lib/jwt.test.ts. */
 export async function signFixtureJwt(opts: {
   sub: number;
   expiresInSeconds?: number;
