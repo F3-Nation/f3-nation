@@ -28,7 +28,7 @@ async function seed() {
   await seedEventTags(db);
   await seedAoLocationsAndEvents(db, aoIds, regionIds, allEventTypes);
   const { adminUserId, roleIds } = await seedDevUsers(db, nationId);
-  await seedApiKeys(db, adminUserId, nationId, roleIds);
+  await seedApiKeys(db, adminUserId, nationId, roleIds, regionIds);
   await seedOAuthClients(db);
   await seedPositions(db);
   await resetSequences(db);

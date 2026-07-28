@@ -378,7 +378,25 @@ export type OrgMeta = {
   region_location_short_description?: string;
 } & Record<string, unknown>;
 
-export type UpdateRequestMeta = Record<string, unknown>;
+// The original/new id fields an update request carries as `meta` when it
+// doesn't have a dedicated DB column. Both the writer (buildMeta in
+// packages/api/src/lib/update-request-handlers.ts) and the reader (the map's
+// MetaOverridesSchema in apps/map/src/utils/open-request-modal.ts) derive
+// from this single list so they can't drift apart again.
+export const PRESERVED_META_FIELDS = [
+  "originalRegionId",
+  "originalAoId",
+  "originalLocationId",
+  "originalEventId",
+  "newRegionId",
+  "newAoId",
+  "newLocationId",
+] as const;
+
+export type PreservedMetaField = (typeof PRESERVED_META_FIELDS)[number];
+
+export type UpdateRequestMeta = Partial<Record<PreservedMetaField, number>> &
+  Record<string, unknown>;
 
 export type AttendanceMeta = Record<string, unknown>;
 

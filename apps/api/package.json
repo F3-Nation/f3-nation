@@ -1,6 +1,6 @@
 {
   "name": "f3-api",
-  "version": "6.1.2",
+  "version": "6.1.3",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,6 +12,7 @@
     "start": "pnpm with-env next start",
     "typecheck": "tsc --noEmit",
     "test": "pnpm with-env vitest --run --coverage",
+    "test:characterization": "pnpm with-env vitest --run --config vitest.characterization.config.ts",
     "test:watch": "pnpm with-env vitest -w",
     "with-env": "dotenv -e .env --"
   },
@@ -33,10 +34,12 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@acme/db": "workspace:*",
     "@acme/eslint-config": "workspace:*",
     "@acme/prettier-config": "workspace:*",
     "@acme/tsconfig": "workspace:*",
     "@acme/vitest-config": "workspace:*",
+    "@orpc/client": "catalog:",
     "@testing-library/jest-dom": "catalog:",
     "@testing-library/react": "catalog:",
     "@types/node": "catalog:",
@@ -46,6 +49,7 @@
     "@vitest/coverage-v8": "catalog:",
     "eslint": "catalog:",
     "jiti": "catalog:",
+    "jose": "catalog:",
     "jsdom": "catalog:",
     "prettier": "catalog:",
     "typescript": "catalog:",

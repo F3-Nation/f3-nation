@@ -1,5 +1,16 @@
 # Changelog
 
+## [7.0.9](https://github.com/F3-Nation/f3-nation/compare/map@7.0.8...map@7.0.9) (2026-07-26)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.4.1
+    * @acme/auth bumped to 0.1.5
+    * @acme/validators bumped to 0.2.0
+
 ## [7.0.8](https://github.com/F3-Nation/f3-nation/compare/map@7.0.7...map@7.0.8) (2026-07-23)
 
 

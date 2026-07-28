@@ -71,8 +71,8 @@ pnpm test --filter f3-map
 
 # Run specific test suites
 cd apps/map
-pnpm test:e2e  # Playwright end-to-end tests
-pnpm test:unit # Vitest unit tests
+pnpm test    # Vitest unit tests
+pnpm test:e2e # Playwright e2e (blocking tier)
 ```
 
 ### Building for Production
@@ -96,6 +96,30 @@ pnpm lint --filter f3-map
 - Event scheduling and display
 - User authentication
 - Responsive design
+
+## Contributing Map Changes
+
+Signed-in users can contribute changes to the map directly. Supported change
+requests cover create, edit, move, and delete for AOs, locations, and workouts
+(events) — for example creating a new AO with its location and first workout,
+editing an AO's details (name, website, address, contact info) or a workout's
+times, moving an AO to a different region or location, moving a workout to a
+different AO, and deleting AOs or workouts.
+
+How a submission is applied depends on the submitter's role for the affected
+region(s):
+
+- **Editors and admins** of every org affected by the change have their
+  submission applied immediately — it appears on the live map right away and is
+  recorded as approved.
+- **Everyone else** has their submission queued as a pending change request.
+  The admins/editors of the affected region review it (escalating up the org
+  hierarchy if the region has none) before it appears on the live map.
+
+**AO logos are not editable from the map.** The map shows an AO's current logo
+as read-only. To add or change a logo, use Admin at
+[admin.f3nation.com](https://admin.f3nation.com). Logo uploads have been removed
+from the map entirely.
 
 ## Architecture
 

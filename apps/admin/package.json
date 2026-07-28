@@ -1,6 +1,6 @@
 {
   "name": "f3-admin",
-  "version": "2.1.2",
+  "version": "2.1.3",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,6 +11,7 @@
     "lint": "dotenv -v SKIP_ENV_VALIDATION=1 eslint .",
     "start": "pnpm with-env next start",
     "test": "vitest --run --coverage",
+    "test:watch": "vitest -w",
     "typecheck": "tsc --noEmit",
     "with-env": "dotenv -e ../../.env --"
   },
@@ -52,18 +53,22 @@
     "@acme/tsconfig": "workspace:*",
     "@acme/vitest-config": "workspace:*",
     "@tailwindcss/postcss": "catalog:",
+    "@testing-library/react": "catalog:",
     "@types/google.maps": "catalog:",
     "@types/lodash": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "eslint": "catalog:",
     "jiti": "catalog:",
+    "jsdom": "catalog:",
     "postcss": "catalog:",
     "postcss-load-config": "catalog:",
     "prettier": "catalog:",
     "typescript": "catalog:",
+    "vite": "catalog:",
     "vitest": "catalog:"
   },
   "prettier": "@acme/prettier-config"

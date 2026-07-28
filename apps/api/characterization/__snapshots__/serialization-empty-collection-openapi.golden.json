@@ -1,0 +1,12 @@
+{
+  "body": {
+    "eventTags": []
+  },
+  "headers": {
+    "access-control-allow-credentials": "true",
+    "access-control-allow-origin": "",
+    "content-type": "application/json",
+    "vary": "Origin"
+  },
+  "status": 200
+}
