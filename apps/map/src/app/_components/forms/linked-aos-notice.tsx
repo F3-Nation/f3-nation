@@ -29,7 +29,7 @@ export const LinkedAosNotice = ({
   onAcknowledgeChange: (ack: boolean) => void;
   onSharedChange?: (shared: boolean) => void;
 }) => {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     ...orpc.location.linkedAos.queryOptions({
       input: { locationId: locationId ?? 0 },
       enabled: locationId != null,
@@ -37,13 +37,36 @@ export const LinkedAosNotice = ({
     throwOnError: false,
   });
 
+  // Fail closed: only report a shared/not-shared verdict once the check has
+  // actually resolved. While loading or after an error we deliberately stay
+  // silent so the parent keeps submission gated rather than defaulting to
+  // "not shared" and letting an unacknowledged shared edit through.
+  const resolved = locationId == null || (!isLoading && !isError && !!data);
   const isShared = (data?.totalAoCount ?? 0) > 1;
 
   useEffect(() => {
-    onSharedChange?.(isShared);
-  }, [isShared, onSharedChange]);
+    if (resolved) onSharedChange?.(isShared);
+  }, [resolved, isShared, onSharedChange]);
 
-  if (locationId == null || isLoading || !data || data.aos.length === 0) {
+  if (locationId == null) return null;
+
+  if (isError) {
+    return (
+      <div className="mt-2 mb-4 rounded-md border border-destructive p-3 text-sm text-destructive">
+        Couldn’t check whether this location is shared, so saving is disabled to
+        avoid unintentionally changing other AOs.{" "}
+        <button
+          type="button"
+          className="underline"
+          onClick={() => void refetch()}
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (isLoading || !data || data.aos.length === 0) {
     return null;
   }
 

@@ -50,7 +50,12 @@ vi.mock("@acme/db", () => ({
     updateRequests: { id: "id" },
     locations: { id: "id" },
     orgs: { id: "id" },
-    events: { id: "id", orgId: "orgId" },
+    events: {
+      id: "id",
+      orgId: "orgId",
+      locationId: "locationId",
+      isActive: "isActive",
+    },
     eventsXEventTypes: { eventId: "eventId", eventTypeId: "eventTypeId" },
   },
 }));
@@ -539,6 +544,53 @@ describe("handleEditLocation - modifies only a location, never an AO", () => {
         locationCountry: "United States",
       }),
     );
+  });
+
+  it("rejects an unacknowledged edit when the location is shared by multiple active AOs", async () => {
+    const { ctx, mockDb } = createMockContext();
+    // Two active events from distinct AOs sharing location 1.
+    mockDb._database.set("e1", {
+      id: "e1",
+      orgId: 1,
+      locationId: 1,
+      isActive: true,
+    });
+    mockDb._database.set("e2", {
+      id: "e2",
+      orgId: 2,
+      locationId: 1,
+      isActive: true,
+    });
+
+    await expect(
+      handleEditLocation(ctx, createEditLocationRequest()),
+    ).rejects.toThrow(/shared by 2 AOs/);
+
+    // The shared row must be left untouched when the edit is not acknowledged.
+    expect(mockUpdateLocation).not.toHaveBeenCalled();
+  });
+
+  it("allows a shared-location edit once it is acknowledged", async () => {
+    const { ctx, mockDb } = createMockContext();
+    mockDb._database.set("e1", {
+      id: "e1",
+      orgId: 1,
+      locationId: 1,
+      isActive: true,
+    });
+    mockDb._database.set("e2", {
+      id: "e2",
+      orgId: 2,
+      locationId: 1,
+      isActive: true,
+    });
+
+    await handleEditLocation(
+      ctx,
+      createEditLocationRequest({ acknowledgeShared: true }),
+    );
+
+    expect(mockUpdateLocation).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -67,9 +67,25 @@ vi.mock("~/app/_components/forms/form-inputs/in-region-form", () => ({
 vi.mock("~/app/_components/forms/form-inputs/location-details-form", () => ({
   LocationDetailsForm: stub("location-details"),
 }));
-vi.mock("~/app/_components/forms/linked-aos-notice", () => ({
-  LinkedAosNotice: stub("linked-aos-notice"),
-}));
+// Resolve the shared-location check as "not shared" on mount so the modal's
+// fail-closed submit gate opens (mirrors a successful, non-shared lookup).
+vi.mock("~/app/_components/forms/linked-aos-notice", () => {
+  const { useEffect } =
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("react") as {
+      useEffect: (effect: () => void, deps?: readonly unknown[]) => void;
+    };
+  return {
+    LinkedAosNotice: ({
+      onSharedChange,
+    }: {
+      onSharedChange?: (shared: boolean) => void;
+    }) => {
+      useEffect(() => onSharedChange?.(false), [onSharedChange]);
+      return <div data-testid="linked-aos-notice" />;
+    },
+  };
+});
 vi.mock("~/app/_components/forms/form-inputs/region-and-ao-selector", () => ({
   RegionAndAOSelector: stub("region-and-ao"),
 }));

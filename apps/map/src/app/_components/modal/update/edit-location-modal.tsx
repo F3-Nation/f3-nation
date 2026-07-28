@@ -25,11 +25,21 @@ export const EditLocationModal = ({
     mode: "onBlur",
   });
 
+  // Fail closed: the shared-location check must resolve before submission is
+  // allowed. `onSharedChange` only fires once LinkedAosNotice has a successful
+  // result, so an unresolved (loading/errored) check keeps the button disabled.
+  const [sharedCheckResolved, setSharedCheckResolved] = useState(false);
   const [isShared, setIsShared] = useState(false);
   const [acknowledged, setAcknowledged] = useState(false);
 
   const handleSubmission = async (values: EditLocationType) => {
-    return await client.request.submitEditLocationRequest(values);
+    // Send the acknowledgment so the server-side shared-location guard
+    // (handleEditLocation) accepts an acknowledged edit; the client gate alone
+    // is bypassable.
+    return await client.request.submitEditLocationRequest({
+      ...values,
+      acknowledgeShared: acknowledged,
+    });
   };
 
   return (
@@ -41,14 +51,17 @@ export const EditLocationModal = ({
             locationId={data.originalLocationId}
             acknowledged={acknowledged}
             onAcknowledgeChange={setAcknowledged}
-            onSharedChange={setIsShared}
+            onSharedChange={(shared) => {
+              setIsShared(shared);
+              setSharedCheckResolved(true);
+            }}
           />
           <LocationDetailsForm<EditLocationType> />
           <ContactDetailsForm<EditLocationType> />
           <SubmitSection<EditLocationType>
             mutationFn={handleSubmission}
             text="Update Location"
-            disabled={isShared && !acknowledged}
+            disabled={!sharedCheckResolved || (isShared && !acknowledged)}
           />
         </form>
       </Form>

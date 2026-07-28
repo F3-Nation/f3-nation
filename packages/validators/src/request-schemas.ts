@@ -213,7 +213,13 @@ export const EditLocationSchema = BaseSchema.extend({
   originalLocationId: z.number().positive("Location ID is required"),
 })
   .extend(LocationFields.partial().shape)
-  .extend({ currentValues: makeSchemaLoose(LocationFields).optional() });
+  .extend({
+    // Set true once the submitter has acknowledged that this location is shared
+    // by multiple AOs. Enforced server-side (handleEditLocation) so the
+    // client-only disabled button can't be bypassed.
+    acknowledgeShared: z.boolean().optional(),
+    currentValues: makeSchemaLoose(LocationFields).optional(),
+  });
 
 export type EditLocationType = z.infer<typeof EditLocationSchema>;
 
