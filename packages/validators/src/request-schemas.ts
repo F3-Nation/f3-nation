@@ -194,6 +194,29 @@ export const EditAOAndLocationSchema = BaseSchema.extend({
 
 export type EditAOAndLocationType = z.infer<typeof EditAOAndLocationSchema>;
 
+// EDIT AO (edit_ao) — AO fields only; the location is edited separately.
+export const EditAOSchema = BaseSchema.extend({
+  requestType: z.literal("edit_ao"),
+  originalAoId: z.number().positive("AO ID is required"),
+})
+  .extend(AOFields.partial().shape)
+  .extend({ currentValues: makeSchemaLoose(AOFields).optional() });
+
+export type EditAOType = z.infer<typeof EditAOSchema>;
+
+// EDIT LOCATION (edit_location) — location fields only. The location row may
+// be shared by multiple AOs (several events.orgId at one events.locationId);
+// the client warns before submitting, but the write itself is a plain
+// single-row location update.
+export const EditLocationSchema = BaseSchema.extend({
+  requestType: z.literal("edit_location"),
+  originalLocationId: z.number().positive("Location ID is required"),
+})
+  .extend(LocationFields.partial().shape)
+  .extend({ currentValues: makeSchemaLoose(LocationFields).optional() });
+
+export type EditLocationType = z.infer<typeof EditLocationSchema>;
+
 // MOVE AO TO DIFFERENT REGION (move_ao_to_different_region)
 export const MoveAOToDifferentRegionSchema = BaseSchema.extend({
   requestType: z.literal("move_ao_to_different_region"),

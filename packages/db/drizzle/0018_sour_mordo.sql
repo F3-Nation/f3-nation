@@ -1,0 +1,2 @@
+ALTER TYPE "public"."request_type" ADD VALUE 'edit_ao' BEFORE 'move_ao_to_different_region';--> statement-breakpoint
+ALTER TYPE "public"."request_type" ADD VALUE 'edit_location' BEFORE 'move_ao_to_different_region';

@@ -32,6 +32,8 @@ interface SubmitSectionProps<T extends SubmitSectionFormValues> {
   mutationFn: (values: T) => Promise<MutationResult>;
   text: string;
   className?: string;
+  /** Extra gate on the submit button (e.g. an unacknowledged shared-location warning). */
+  disabled?: boolean;
 }
 
 interface SubmitButtonProps {
@@ -342,6 +344,7 @@ export function SubmitSection<T extends SubmitSectionFormValues>({
   mutationFn,
   text,
   className,
+  disabled = false,
 }: SubmitSectionProps<T>) {
   const form = useFormContext<SubmitSectionFormValues>();
   const originalRegionId = form.watch("originalRegionId");
@@ -373,7 +376,7 @@ export function SubmitSection<T extends SubmitSectionFormValues>({
         <SubmitButton
           text={text}
           isSubmitting={isSubmitting}
-          disabled={isSubmitting}
+          disabled={isSubmitting || disabled}
           variant="default"
           className={className}
           onClick={submitForm}

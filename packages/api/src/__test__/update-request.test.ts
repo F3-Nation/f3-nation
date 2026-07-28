@@ -11,8 +11,10 @@ import {
   handleCreateLocationAndEvent,
   handleDeleteAO,
   handleDeleteEvent,
+  handleEditAO,
   handleEditAOAndLocation,
   handleEditEvent,
+  handleEditLocation,
   handleMoveAOToDifferentLocation,
   handleMoveAOToDifferentRegion,
   handleMoveAOToNewLocation,
@@ -26,7 +28,9 @@ import {
   createDeleteAORequest,
   createDeleteEventRequest,
   createEditAOAndLocationRequest,
+  createEditAORequest,
   createEditEventRequest,
+  createEditLocationRequest,
   createEventRequest,
   createMoveAOToDifferentLocationRequest,
   createMoveAOToDifferentRegionRequest,
@@ -450,6 +454,88 @@ describe("handleEditAOAndLocation - modifies an existing AO and location", () =>
         locationCity: "Charlotte",
         locationState: "NC",
         locationZip: "28202",
+        locationCountry: "United States",
+      }),
+    );
+  });
+});
+
+describe("handleEditAO - modifies only an AO, never its location", () => {
+  it("updates the AO and leaves the location row untouched", async () => {
+    const { ctx } = createMockContext();
+
+    const editRequest = createEditAORequest();
+    await handleEditAO(ctx, editRequest);
+
+    expect(mockUpdateAO).toHaveBeenCalledTimes(1);
+    expect(mockUpdateAO).toHaveBeenCalledWith(ctx, {
+      id: 1,
+      name: "Updated AO Name",
+      logoUrl: null,
+      website: null,
+    });
+
+    // The whole point of edit_ao is that it does NOT touch the location.
+    expect(mockUpdateLocation).not.toHaveBeenCalled();
+
+    const editResult = await recordUpdateRequest({
+      ctx,
+      updateRequest: editRequest,
+      status: "approved",
+    });
+
+    expect(editResult).toEqual(
+      expect.objectContaining({
+        status: "approved",
+        requestType: "edit_ao",
+        aoName: "Updated AO Name",
+      }),
+    );
+  });
+});
+
+describe("handleEditLocation - modifies only a location, never an AO", () => {
+  it("updates the location and leaves the AO row untouched", async () => {
+    const { ctx } = createMockContext();
+
+    const editRequest = createEditLocationRequest();
+    await handleEditLocation(ctx, editRequest);
+
+    expect(mockUpdateLocation).toHaveBeenCalledTimes(1);
+    expect(mockUpdateLocation).toHaveBeenCalledWith(ctx, {
+      locationId: 1,
+      locationName: null,
+      locationLat: 36.1,
+      locationLng: -81.2,
+      locationAddress: "999 Updated Ave",
+      locationAddress2: undefined,
+      locationCity: "Boone",
+      locationState: "NC",
+      locationZip: "28607",
+      locationCountry: "United States",
+      locationDescription: undefined,
+    });
+
+    // The whole point of edit_location is that it does NOT touch any AO,
+    // even when the location is shared by several AOs.
+    expect(mockUpdateAO).not.toHaveBeenCalled();
+
+    const editResult = await recordUpdateRequest({
+      ctx,
+      updateRequest: editRequest,
+      status: "approved",
+    });
+
+    expect(editResult).toEqual(
+      expect.objectContaining({
+        status: "approved",
+        requestType: "edit_location",
+        locationLat: 36.1,
+        locationLng: -81.2,
+        locationAddress: "999 Updated Ave",
+        locationCity: "Boone",
+        locationState: "NC",
+        locationZip: "28607",
         locationCountry: "United States",
       }),
     );

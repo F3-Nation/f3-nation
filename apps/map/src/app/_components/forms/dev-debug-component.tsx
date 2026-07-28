@@ -33,6 +33,8 @@ const FIELD_GROUPS_BY_REQUEST_TYPE: Partial<Record<RequestType, FieldGroup[]>> =
     create_event: ["event"],
     edit_event: ["event"],
     edit_ao_and_location: ["ao", "location"],
+    edit_ao: ["ao"],
+    edit_location: ["location"],
     move_ao_to_new_location: ["location"],
     move_event_to_new_location: ["location"],
   };

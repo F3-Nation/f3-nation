@@ -46,6 +46,8 @@ export const ActiveRequestType = [
   "create_event", // at an existing ao
   "edit_event", // edits an event's own details (name, description, day, times, types)
   "edit_ao_and_location", // edits ao details (name, logo, website) and its location
+  "edit_ao", // edits ao details only (name, logo, website)
+  "edit_location", // edits a location directly (address, lat/lng, description); may be shared by multiple AOs
   "move_ao_to_different_region",
   "move_ao_to_new_location",
   "move_ao_to_different_location",

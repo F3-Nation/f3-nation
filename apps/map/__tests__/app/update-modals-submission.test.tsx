@@ -67,6 +67,9 @@ vi.mock("~/app/_components/forms/form-inputs/in-region-form", () => ({
 vi.mock("~/app/_components/forms/form-inputs/location-details-form", () => ({
   LocationDetailsForm: stub("location-details"),
 }));
+vi.mock("~/app/_components/forms/linked-aos-notice", () => ({
+  LinkedAosNotice: stub("linked-aos-notice"),
+}));
 vi.mock("~/app/_components/forms/form-inputs/region-and-ao-selector", () => ({
   RegionAndAOSelector: stub("region-and-ao"),
 }));
@@ -108,7 +111,9 @@ import { CreateEventModal } from "~/app/_components/modal/update/create-event-mo
 import { DeleteAoModal } from "~/app/_components/modal/update/delete-ao-modal";
 import { DeleteEventModal } from "~/app/_components/modal/update/delete-event-modal";
 import { EditAoAndLocationModal } from "~/app/_components/modal/update/edit-ao-and-location-modal";
+import { EditAoModal } from "~/app/_components/modal/update/edit-ao-modal";
 import { EditEventModal } from "~/app/_components/modal/update/edit-event-modal";
+import { EditLocationModal } from "~/app/_components/modal/update/edit-location-modal";
 import { MoveAOToDifferentLocationModal } from "~/app/_components/modal/update/move-ao-to-different-location-modal";
 import { MoveAOToDifferentRegionModal } from "~/app/_components/modal/update/move-ao-to-different-region-modal";
 import { MoveAOToNewLocationModal } from "~/app/_components/modal/update/move-ao-to-new-location-modal";
@@ -177,6 +182,32 @@ const cases: {
       ...locationFields,
       requestType: "edit_ao_and_location",
       originalAoId: 30,
+      originalLocationId: 10,
+      currentValues: {},
+    },
+  },
+  {
+    name: "EditAo",
+    Modal: EditAoModal,
+    buttonText: "Update AO",
+    clientMethod: "submitEditAORequest",
+    data: {
+      ...base,
+      ...aoFields,
+      requestType: "edit_ao",
+      originalAoId: 30,
+      currentValues: {},
+    },
+  },
+  {
+    name: "EditLocation",
+    Modal: EditLocationModal,
+    buttonText: "Update Location",
+    clientMethod: "submitEditLocationRequest",
+    data: {
+      ...base,
+      ...locationFields,
+      requestType: "edit_location",
       originalLocationId: 10,
       currentValues: {},
     },

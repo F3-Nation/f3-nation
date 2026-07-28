@@ -6,7 +6,9 @@ import type {
   DeleteAOType,
   DeleteEventType,
   EditAOAndLocationType,
+  EditAOType,
   EditEventType,
+  EditLocationType,
   MoveAOToDifferentLocationType,
   MoveAoToDifferentRegionType,
   MoveAOToNewLocationType,
@@ -455,6 +457,34 @@ export const handleEditAOAndLocation = async (
       locationCountry: request.locationCountry,
       locationDescription: request.locationDescription,
     });
+  });
+};
+
+export const handleEditAO = async (ctx: Context, request: EditAOType) => {
+  await updateAO(ctx, {
+    id: request.originalAoId,
+    name: request.aoName,
+    logoUrl: request.aoLogo,
+    website: request.aoWebsite,
+  });
+};
+
+export const handleEditLocation = async (
+  ctx: Context,
+  request: EditLocationType,
+) => {
+  await updateLocation(ctx, {
+    locationId: request.originalLocationId,
+    locationName: null,
+    locationLat: request.locationLat,
+    locationLng: request.locationLng,
+    locationAddress: request.locationAddress,
+    locationAddress2: request.locationAddress2,
+    locationCity: request.locationCity,
+    locationState: request.locationState,
+    locationZip: request.locationZip,
+    locationCountry: request.locationCountry,
+    locationDescription: request.locationDescription,
   });
 };
 

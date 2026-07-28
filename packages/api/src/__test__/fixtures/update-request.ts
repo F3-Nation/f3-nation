@@ -4,7 +4,9 @@ import type {
   DeleteAOType,
   DeleteEventType,
   EditAOAndLocationType,
+  EditAOType,
   EditEventType,
+  EditLocationType,
   MoveAOToDifferentLocationType,
   MoveAoToDifferentRegionType,
   MoveAOToNewLocationType,
@@ -107,6 +109,46 @@ export const createEditAOAndLocationRequest = (
   locationCity: "Charlotte",
   locationState: "NC",
   locationZip: "28202",
+  locationCountry: "United States",
+  currentValues: {},
+  ...overrides,
+});
+
+/**
+ * Creates a valid EditAO request for testing (AO fields only).
+ */
+export const createEditAORequest = (
+  overrides: Partial<EditAOType> = {},
+): EditAOType => ({
+  id: "test-request-id",
+  requestType: "edit_ao",
+  submittedBy: "test@example.com",
+  originalRegionId: 1,
+  originalAoId: 1,
+  aoName: "Updated AO Name",
+  aoLogo: null,
+  aoWebsite: null,
+  currentValues: {},
+  ...overrides,
+});
+
+/**
+ * Creates a valid EditLocation request for testing (location fields only).
+ */
+export const createEditLocationRequest = (
+  overrides: Partial<EditLocationType> = {},
+): EditLocationType => ({
+  id: "test-request-id",
+  requestType: "edit_location",
+  submittedBy: "test@example.com",
+  originalRegionId: 1,
+  originalLocationId: 1,
+  locationLat: 36.1,
+  locationLng: -81.2,
+  locationAddress: "999 Updated Ave",
+  locationCity: "Boone",
+  locationState: "NC",
+  locationZip: "28607",
   locationCountry: "United States",
   currentValues: {},
   ...overrides,

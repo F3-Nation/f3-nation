@@ -38,6 +38,8 @@ import type { AdminRequestFormProps } from "../forms/admin-request-form-props";
 import { CreateAoLocationEventRequestForm } from "../forms/create-ao-location-event-request-form";
 import { CreateEventRequestForm } from "../forms/create-event-request-form";
 import { EditAoAndLocationRequestForm } from "../forms/edit-ao-and-location-request-form";
+import { EditAoRequestForm } from "../forms/edit-ao-request-form";
+import { EditLocationRequestForm } from "../forms/edit-location-request-form";
 import { MoveAoToDifferentLocationRequestForm } from "../forms/move-ao-to-different-location-request-form";
 import { MoveAoToDifferentRegionRequestForm } from "../forms/move-ao-to-different-region-request-form";
 import { MoveAoToNewLocationRequestForm } from "../forms/move-ao-to-new-location-request-form";
@@ -54,6 +56,8 @@ const REQUEST_FORM_MAP: Record<
   create_event: CreateEventRequestForm,
   edit_event: CreateEventRequestForm,
   edit_ao_and_location: EditAoAndLocationRequestForm,
+  edit_ao: EditAoRequestForm,
+  edit_location: EditLocationRequestForm,
   move_ao_to_different_location: MoveAoToDifferentLocationRequestForm,
   move_ao_to_different_region: MoveAoToDifferentRegionRequestForm,
   move_ao_to_new_location: MoveAoToNewLocationRequestForm,

@@ -21,7 +21,9 @@ import { CreateEventModal } from "./update/create-event-modal";
 import { DeleteAoModal } from "./update/delete-ao-modal";
 import { DeleteEventModal } from "./update/delete-event-modal";
 import { EditAoAndLocationModal } from "./update/edit-ao-and-location-modal";
+import { EditAoModal } from "./update/edit-ao-modal";
 import { EditEventModal } from "./update/edit-event-modal";
+import { EditLocationModal } from "./update/edit-location-modal";
 import { MoveAOToDifferentLocationModal } from "./update/move-ao-to-different-location-modal";
 import { MoveAOToDifferentRegionModal } from "./update/move-ao-to-different-region-modal";
 import { MoveAOToNewLocationModal } from "./update/move-ao-to-new-location-modal";
@@ -48,6 +50,12 @@ export const ModalSwitcher = () => {
         <EditAoAndLocationModal
           data={data as DataType[ModalType.EDIT_AO_AND_LOCATION]}
         />
+      );
+    case ModalType.EDIT_AO:
+      return <EditAoModal data={data as DataType[ModalType.EDIT_AO]} />;
+    case ModalType.EDIT_LOCATION:
+      return (
+        <EditLocationModal data={data as DataType[ModalType.EDIT_LOCATION]} />
       );
     case ModalType.EDIT_EVENT:
       return <EditEventModal data={data as DataType[ModalType.EDIT_EVENT]} />;

@@ -141,6 +141,10 @@ export const requestTypeToTitle = (requestType: RequestType) => {
       return "Edit Workout";
     case "edit_ao_and_location":
       return "Edit AO and Location";
+    case "edit_ao":
+      return "Edit AO";
+    case "edit_location":
+      return "Edit Location";
 
     case "move_ao_to_different_region":
       return "Move AO to Different Region";

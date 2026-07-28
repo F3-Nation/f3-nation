@@ -92,7 +92,7 @@ export const FeatureMarker = ({
       });
 
       toast.success(
-        'Marker moved! Latitude and longitude updated in draft. Click "Edit AO" → "Edit AO details" and Save to persist these changes to the database.',
+        'Marker moved! Latitude and longitude updated in draft. Click "Edit AO" → "Edit location details" and Save to persist these changes to the database.',
         { duration: 10000 },
       );
     },

@@ -128,6 +128,8 @@ describe("openRequestModal – request type -> modal type mapping", () => {
     ["create_event", ModalType.CREATE_EVENT],
     ["edit_event", ModalType.EDIT_EVENT],
     ["edit_ao_and_location", ModalType.EDIT_AO_AND_LOCATION],
+    ["edit_ao", ModalType.EDIT_AO],
+    ["edit_location", ModalType.EDIT_LOCATION],
     ["move_ao_to_different_region", ModalType.MOVE_AO_TO_DIFFERENT_REGION],
     ["move_ao_to_different_location", ModalType.MOVE_AO_TO_DIFFERENT_LOCATION],
     ["move_event_to_different_ao", ModalType.MOVE_EVENT_TO_DIFFERENT_AO],
@@ -204,6 +206,26 @@ describe("openRequestModal – validation guards", () => {
     expect(h.toastError).toHaveBeenCalledTimes(1);
     expect(h.openModal).not.toHaveBeenCalledWith(
       ModalType.EDIT_AO_AND_LOCATION,
+      expect.anything(),
+    );
+  });
+
+  it("toasts when edit_location is missing the location id", async () => {
+    await run("edit_location", { locationId: null });
+
+    expect(h.toastError).toHaveBeenCalledTimes(1);
+    expect(h.openModal).not.toHaveBeenCalledWith(
+      ModalType.EDIT_LOCATION,
+      expect.anything(),
+    );
+  });
+
+  it("toasts when edit_ao is missing the ao id", async () => {
+    await run("edit_ao", { aoId: null });
+
+    expect(h.toastError).toHaveBeenCalledTimes(1);
+    expect(h.openModal).not.toHaveBeenCalledWith(
+      ModalType.EDIT_AO,
       expect.anything(),
     );
   });

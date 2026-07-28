@@ -319,6 +319,114 @@ export const locationRouter = {
 
       return { location: location ?? null };
     }),
+  linkedAos: protectedProcedure
+    .input(
+      z.object({
+        locationId: z.coerce
+          .number()
+          .describe("The location whose linked AOs/events to list"),
+      }),
+    )
+    .route({
+      method: "GET",
+      path: "/linked-aos",
+      tags: ["location"],
+      summary: "List AOs and events linked to a location",
+      description:
+        "Returns the distinct active AOs (and their active events) that share a location, so callers can warn before editing a location used by more than one AO. Private events are counted but their details are omitted.",
+    })
+    .output(
+      z.object({
+        aos: z
+          .array(
+            z.object({
+              aoId: z.number().describe("AO org ID"),
+              aoName: z.string().describe("AO name"),
+              aoLogo: z.string().nullable().describe("AO logo URL"),
+              eventCount: z
+                .number()
+                .describe("Count of active events (includes private)"),
+              events: z
+                .array(
+                  z.object({
+                    id: z.number(),
+                    name: z.string().nullable(),
+                    dayOfWeek: z.string().nullable(),
+                    startTime: z.string().nullable(),
+                  }),
+                )
+                .describe("Active, non-private events for this AO"),
+            }),
+          )
+          .describe("Distinct AOs with active events at this location"),
+        totalAoCount: z
+          .number()
+          .describe("Number of distinct AOs sharing this location"),
+      }),
+    )
+    .handler(async ({ context: ctx, input }) => {
+      const rows = await ctx.db
+        .select({
+          aoId: schema.orgs.id,
+          aoName: schema.orgs.name,
+          aoLogo: schema.orgs.logoUrl,
+          eventId: schema.events.id,
+          eventName: schema.events.name,
+          eventDayOfWeek: schema.events.dayOfWeek,
+          eventStartTime: schema.events.startTime,
+          eventIsPrivate: schema.events.isPrivate,
+        })
+        .from(schema.events)
+        .innerJoin(schema.orgs, eq(schema.events.orgId, schema.orgs.id))
+        .where(
+          and(
+            eq(schema.events.locationId, input.locationId),
+            eq(schema.events.isActive, true),
+          ),
+        );
+
+      const byAo = new Map<
+        number,
+        {
+          aoId: number;
+          aoName: string;
+          aoLogo: string | null;
+          eventCount: number;
+          events: {
+            id: number;
+            name: string | null;
+            dayOfWeek: string | null;
+            startTime: string | null;
+          }[];
+        }
+      >();
+
+      for (const row of rows) {
+        let ao = byAo.get(row.aoId);
+        if (!ao) {
+          ao = {
+            aoId: row.aoId,
+            aoName: row.aoName,
+            aoLogo: row.aoLogo,
+            eventCount: 0,
+            events: [],
+          };
+          byAo.set(row.aoId, ao);
+        }
+        ao.eventCount += 1;
+        if (!row.eventIsPrivate) {
+          ao.events.push({
+            id: row.eventId,
+            name: row.eventName,
+            dayOfWeek: row.eventDayOfWeek,
+            startTime: row.eventStartTime,
+          });
+        }
+      }
+
+      const aos = Array.from(byAo.values());
+      return { aos, totalAoCount: aos.length };
+    }),
   crupdate: editorProcedure
     .input(LocationInsertSchema.partial({ id: true }))
     .route({
