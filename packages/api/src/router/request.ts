@@ -39,6 +39,7 @@ import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
 import { checkUpdatePermissions } from "../lib/check-update-permissions";
+import { paginationFields, resolvePagination } from "../lib/pagination";
 import type { CreatedEntityIds } from "../lib/update-request-handlers";
 import {
   handleCreateEvent,
@@ -55,9 +56,8 @@ import {
   handleMoveEventToNewLocation,
   recordUpdateRequest,
 } from "../lib/update-request-handlers";
-import { resolvePagination } from "../lib/pagination";
-import { logError } from "../logger";
 import { notifyMapDataChange } from "../lib/webhook-events";
+import { logError } from "../logger";
 import { notifyMapChangeRequest } from "../services/map-request-notification";
 import { editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
@@ -197,21 +197,7 @@ export const requestRouter = {
     .input(
       z
         .object({
-          pageIndex: z.coerce
-            .number()
-            .int()
-            .min(0)
-            .optional()
-            .describe(
-              "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns every matching request.",
-            ),
-          pageSize: z.coerce
-            .number()
-            .int()
-            .optional()
-            .describe(
-              "Number of requests per page. Defaults to 10. Supplying this (or pageIndex) opts into paginated results; omitting both returns every matching request.",
-            ),
+          ...paginationFields("requests"),
           sorting: parseSorting().describe(
             "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: id, status, requestType, regionName, aoName, workoutName, dayOfWeek, startTime, endTime, description, locationAddress, submittedBy, created.",
           ),

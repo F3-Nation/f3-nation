@@ -1,20 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
-import { resolvePagination } from "./pagination";
-
-/**
- * Mirrors the pageIndex/pageSize schema fragment applied at every one of
- * the 11 resolvePagination call sites (event.ts, event-instance.ts,
- * event-tag.ts, event-type.ts, location.ts, map/event.ts, org.ts x2,
- * position.ts, request.ts, lib/user.ts). resolvePagination itself trusts
- * its inputs — rejecting negative/fractional values is the schema's job,
- * not this function's, so it's covered here rather than above.
- */
-const paginationInputSchema = z.object({
-  pageIndex: z.coerce.number().int().min(0).optional(),
-  pageSize: z.coerce.number().int().optional(),
-});
+import {
+  MAX_PAGE_INDEX,
+  MAX_PAGE_SIZE,
+  paginationFields,
+  resolvePagination,
+} from "./pagination";
 
 describe("resolvePagination", () => {
   it("does not paginate when neither pageSize nor pageIndex is supplied", () => {
@@ -31,9 +23,7 @@ describe("resolvePagination", () => {
     expect(result.offset).toBe(0);
   });
 
-  it("paginates when only pageIndex is supplied — the bug this fixes", () => {
-    // Before PR #696's fix, pageIndex alone silently returned every row
-    // instead of the requested page.
+  it("paginates when only pageIndex is supplied — either field is equally a request to paginate", () => {
     const result = resolvePagination({ pageIndex: 3, defaultPageSize: 10 });
     expect(result.usePagination).toBe(true);
     expect(result.limit).toBe(10);
@@ -77,32 +67,53 @@ describe("resolvePagination", () => {
   });
 });
 
-describe("pagination input schema", () => {
+// Imports the real fragment every one of the 11 call sites spreads into its
+// own input schema (event.ts, event-instance.ts, event-tag.ts, event-type.ts,
+// location.ts, map/event.ts, org.ts x2, position.ts, request.ts, lib/user.ts)
+// — not a hand-copied mirror, so a regression at any of those 11 sites (or
+// in this shared definition) actually fails this suite. user.byF3Name
+// (router/user.ts) intentionally differs — it defaults and lower-bounds both
+// fields, so it always paginates — and isn't covered by this fragment.
+const paginationSchema = z.object(paginationFields("things"));
+
+describe("pagination input schema (paginationFields)", () => {
   it("rejects a negative pageIndex — would otherwise produce a negative SQL OFFSET", () => {
-    const result = paginationInputSchema.safeParse({ pageIndex: -1 });
-    expect(result.success).toBe(false);
+    expect(paginationSchema.safeParse({ pageIndex: -1 }).success).toBe(false);
   });
 
   it("rejects a fractional pageIndex", () => {
-    const result = paginationInputSchema.safeParse({ pageIndex: 2.5 });
-    expect(result.success).toBe(false);
+    expect(paginationSchema.safeParse({ pageIndex: 2.5 }).success).toBe(false);
   });
 
   it("rejects a fractional pageSize", () => {
-    const result = paginationInputSchema.safeParse({ pageSize: 1.5 });
-    expect(result.success).toBe(false);
+    expect(paginationSchema.safeParse({ pageSize: 1.5 }).success).toBe(false);
   });
 
   it("still accepts a negative pageSize — resolvePagination clamps it to defaultPageSize", () => {
-    const result = paginationInputSchema.safeParse({ pageSize: -5 });
-    expect(result.success).toBe(true);
+    expect(paginationSchema.safeParse({ pageSize: -5 }).success).toBe(true);
   });
 
   it("accepts valid non-negative integers", () => {
-    const result = paginationInputSchema.safeParse({
-      pageIndex: 3,
-      pageSize: 20,
-    });
-    expect(result.success).toBe(true);
+    expect(
+      paginationSchema.safeParse({ pageIndex: 3, pageSize: 20 }).success,
+    ).toBe(true);
+  });
+
+  it("rejects a pageSize above MAX_PAGE_SIZE — an unbounded pageSize became reachable the moment pageSize-alone started opting into pagination", () => {
+    expect(
+      paginationSchema.safeParse({ pageSize: MAX_PAGE_SIZE }).success,
+    ).toBe(true);
+    expect(
+      paginationSchema.safeParse({ pageSize: MAX_PAGE_SIZE + 1 }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a pageIndex above MAX_PAGE_INDEX — guards offset from overflowing on an adversarial request", () => {
+    expect(
+      paginationSchema.safeParse({ pageIndex: MAX_PAGE_INDEX }).success,
+    ).toBe(true);
+    expect(
+      paginationSchema.safeParse({ pageIndex: MAX_PAGE_INDEX + 1 }).success,
+    ).toBe(false);
   });
 });

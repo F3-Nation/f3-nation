@@ -23,8 +23,8 @@ import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
+import { paginationFields, resolvePagination } from "../lib/pagination";
 import { notifyMapDataChange } from "../lib/webhook-events";
-import { resolvePagination } from "../lib/pagination";
 import { adminProcedure, editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
@@ -39,21 +39,7 @@ export const locationRouter = {
             .describe(
               "Search locations by name or description. Case-insensitive partial matching.",
             ),
-          pageIndex: z.coerce
-            .number()
-            .int()
-            .min(0)
-            .optional()
-            .describe(
-              "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns every matching location.",
-            ),
-          pageSize: z.coerce
-            .number()
-            .int()
-            .optional()
-            .describe(
-              "Number of locations per page. Defaults to 10. Supplying this (or pageIndex) opts into paginated results; omitting both returns every matching location.",
-            ),
+          ...paginationFields("locations"),
           sorting: parseSorting().describe(
             "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: id, locationName, regionName, isActive, latitude, longitude, addressStreet, addressCity, addressState, addressZip, created.",
           ),

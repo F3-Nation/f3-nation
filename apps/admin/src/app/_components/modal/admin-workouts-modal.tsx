@@ -117,10 +117,9 @@ export default function AdminWorkoutsModal({
   const { data: eventTypes } = useQuery(
     orpc.eventType.all.queryOptions({
       input: {
+        // Unpaginated on purpose: this dropdown needs every matching event type.
         // When region is selected: filter to that region's types + Nation types
         // When no region selected: show all event types (pass undefined to get all)
-        // No pageSize/pageIndex here — either one now opts into pagination
-        // (see PR #696), and this dropdown wants every matching event type.
         orgIds: formRegionId ? [formRegionId] : undefined,
       },
     }),

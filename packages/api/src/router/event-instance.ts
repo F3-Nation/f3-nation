@@ -20,7 +20,7 @@ import { SeriesException } from "@acme/shared/app/enums";
 import { arrayOrSingle } from "@acme/shared/app/functions";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
-import { resolvePagination } from "../lib/pagination";
+import { paginationFields, resolvePagination } from "../lib/pagination";
 import { editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
@@ -34,8 +34,7 @@ export const eventInstanceRouter = {
     .input(
       z
         .object({
-          pageIndex: z.coerce.number().int().min(0).optional(),
-          pageSize: z.coerce.number().int().optional(),
+          ...paginationFields("event instances"),
           searchTerm: z.string().optional(),
           statuses: arrayOrSingle(z.enum(["active", "inactive"])).optional(),
           sorting: z
@@ -173,7 +172,7 @@ export const eventInstanceRouter = {
 
       const instances = usePagination
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
-        : await query.orderBy(...sortedColumns).limit(limit);
+        : await query.orderBy(...sortedColumns);
 
       return {
         eventInstances: instances,

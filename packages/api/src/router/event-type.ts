@@ -20,7 +20,7 @@ import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
 import { EventTypeInsertSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
-import { resolvePagination } from "../lib/pagination";
+import { paginationFields, resolvePagination } from "../lib/pagination";
 import { editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
@@ -44,21 +44,7 @@ export const eventTypeRouter = {
             .describe(
               "Filter event types by status. Matches event types with ANY of the given statuses (active, inactive).",
             ),
-          pageIndex: z.coerce
-            .number()
-            .int()
-            .min(0)
-            .optional()
-            .describe(
-              "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns every matching event type.",
-            ),
-          pageSize: z.coerce
-            .number()
-            .int()
-            .optional()
-            .describe(
-              "Number of event types per page. Defaults to 10. Supplying this (or pageIndex) opts into paginated results; omitting both returns every matching event type.",
-            ),
+          ...paginationFields("event types"),
           searchTerm: z
             .string()
             .optional()

@@ -19,7 +19,7 @@ import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
 import { EventTagInsertSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
-import { resolvePagination } from "../lib/pagination";
+import { paginationFields, resolvePagination } from "../lib/pagination";
 import { editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
@@ -34,8 +34,7 @@ export const eventTagRouter = {
         .object({
           orgIds: arrayOrSingle(z.coerce.number()).optional(),
           statuses: arrayOrSingle(z.enum(IsActiveStatus)).optional(),
-          pageIndex: z.coerce.number().int().min(0).optional(),
-          pageSize: z.coerce.number().int().optional(),
+          ...paginationFields("event tags"),
           searchTerm: z.string().optional(),
           sorting: parseSorting(),
           ignoreNationEventTags: z.coerce.boolean().optional(),

@@ -28,8 +28,8 @@ import { EventInsertSchema } from "@acme/validators";
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
+import { paginationFields, resolvePagination } from "../lib/pagination";
 import { notifyMapDataChange } from "../lib/webhook-events";
-import { resolvePagination } from "../lib/pagination";
 import { logError } from "../logger";
 import type { Context } from "../shared";
 import { editorProcedure, protectedProcedure } from "../shared";
@@ -81,21 +81,7 @@ type EventFilterInput = z.infer<typeof eventFilterSchema>;
 // Extended schema with pagination and sorting for the `all` endpoint
 const eventAllInputSchema = eventFilterSchema
   .extend({
-    pageIndex: z.coerce
-      .number()
-      .int()
-      .min(0)
-      .optional()
-      .describe(
-        "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns every matching event.",
-      ),
-    pageSize: z.coerce
-      .number()
-      .int()
-      .optional()
-      .describe(
-        "Number of events per page. Defaults to 10. Supplying this (or pageIndex) opts into paginated results; omitting both returns every matching event.",
-      ),
+    ...paginationFields("events"),
     sorting: z
       .array(z.object({ id: z.string(), desc: z.coerce.boolean() }))
       .optional()

@@ -24,7 +24,7 @@ import { arrayOrSingle, getFullAddress } from "@acme/shared/app/functions";
 
 import { getDescendantOrgIds } from "../../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../../get-editable-org-ids";
-import { resolvePagination } from "../../lib/pagination";
+import { paginationFields, resolvePagination } from "../../lib/pagination";
 import type { Context } from "../../shared";
 import { protectedProcedure } from "../../shared";
 import { withPagination } from "../../with-pagination";
@@ -53,8 +53,7 @@ type EventFilterInput = z.infer<typeof eventFilterSchema>;
 // Extended schema with pagination and sorting for the `all` endpoint
 const eventAllInputSchema = eventFilterSchema
   .extend({
-    pageIndex: z.coerce.number().int().min(0).optional(),
-    pageSize: z.coerce.number().int().optional(),
+    ...paginationFields("events"),
     sorting: z
       .array(z.object({ id: z.string(), desc: z.coerce.boolean() }))
       .optional(),

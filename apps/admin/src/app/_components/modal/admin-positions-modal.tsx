@@ -105,11 +105,9 @@ export default function AdminPositionsModal({
   const { data: editableOrgsResponse } = useQuery(
     orpc.org.all.queryOptions({
       input: {
+        // Unpaginated on purpose: this dropdown needs every editable org.
         orgTypes: selectedOrgType ? [selectedOrgType] : ["region"],
         onlyMine: true,
-        // Omitting both pageSize and pageIndex opts out of pagination
-        // entirely — this dropdown wants every editable org, and passing a
-        // large pageSize alone now triggers a hard LIMIT (see PR #696).
       },
       enabled: !!selectedOrgType,
     }),

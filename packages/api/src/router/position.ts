@@ -23,7 +23,7 @@ import {
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
-import { resolvePagination } from "../lib/pagination";
+import { paginationFields, resolvePagination } from "../lib/pagination";
 import { editorProcedure, protectedProcedure } from "../shared";
 import { arrayOrSingle } from "@acme/shared/app/functions";
 
@@ -82,23 +82,7 @@ export const positionRouter = {
             .describe(
               "Filter positions by status. Matches positions with ANY of the given statuses.",
             ),
-          /** Zero-based page index for pagination */
-          pageIndex: z.coerce
-            .number()
-            .int()
-            .min(0)
-            .optional()
-            .describe(
-              "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns every matching position.",
-            ),
-          /** Number of positions per page */
-          pageSize: z.coerce
-            .number()
-            .int()
-            .optional()
-            .describe(
-              "Number of positions per page. Defaults to 20. Supplying this (or pageIndex) opts into paginated results; omitting both returns every matching position.",
-            ),
+          ...paginationFields("positions"),
         })
         .optional()
         .describe(

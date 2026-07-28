@@ -24,7 +24,7 @@ import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getSortingColumns } from "../get-sorting-columns";
 import type { Context } from "../shared";
 import { withPagination } from "../with-pagination";
-import { resolvePagination } from "./pagination";
+import { paginationFields, resolvePagination } from "./pagination";
 
 interface HomeRegionSummary {
   homeRegionId: number;
@@ -149,21 +149,7 @@ export const userListInputSchema = z.object({
     .describe(
       "Search users by name, email, phone, or emergency contact information. Case-insensitive partial matching.",
     ),
-  pageIndex: z.coerce
-    .number()
-    .int()
-    .min(0)
-    .optional()
-    .describe(
-      "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns every matching user.",
-    ),
-  pageSize: z.coerce
-    .number()
-    .int()
-    .optional()
-    .describe(
-      "Number of users per page. Defaults to 10. Supplying this (or pageIndex) opts into paginated results; omitting both returns every matching user.",
-    ),
+  ...paginationFields("users"),
   sorting: parseSorting().describe(
     "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: id, f3Name, email, roles, status, created.",
   ),
