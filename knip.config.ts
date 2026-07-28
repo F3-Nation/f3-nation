@@ -13,13 +13,7 @@ const config: KnipConfig = {
     "tooling/typescript/type-extensions.d.ts",
     "turbo/generators/config.ts",
   ],
-  ignoreDependencies: [
-    "@turbo/gen",
-    "dayjs",
-    "dotenv",
-    "esbuild-register",
-    "tsx",
-  ],
+  ignoreDependencies: ["@turbo/gen", "dotenv"],
   ignoreBinaries: ["uv"],
   workspaces: {
     ".": {
@@ -34,9 +28,6 @@ const config: KnipConfig = {
       // Wired in by resolve.alias rather than an import, so it is not
       // reachable through the module graph.
       entry: ["characterization/next-headers-shim.ts"],
-    },
-    "tooling/scripts": {
-      entry: ["src/notify-outstanding-requests.ts", "src/script.ts"],
     },
   },
 };

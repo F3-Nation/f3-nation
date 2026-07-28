@@ -1,3 +1,7 @@
 packages/db/drizzle/meta/*.json
 pnpm-lock.yaml
 CHANGELOG.md
+# Byte-for-byte output of normalize.ts's stableStringify; toMatchFileSnapshot
+# compares this file verbatim, and Prettier's JSON formatter (e.g. collapsing
+# short nested arrays) does not match that serializer's output.
+apps/api/characterization/__snapshots__/*.golden.json
