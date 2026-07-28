@@ -43,9 +43,7 @@ natively by Cursor, Codex, Gemini CLI, and others. Claude Code only scans
 ## Project Structure & Module Organization
 
 - Use Node >=24.18 (see `.nvmrc`), pnpm 11, and Turborepo for workspace orchestration.
-- `apps/` holds the deployable apps: Next.js apps `map` (port 3000), `admin`, `api`, `auth`, `homepage`, and `me`; plus the Python Slack app `slackbot` (port 3006).
-- Shared code is organized in `packages/`: `api` (oRPC routers), `auth` (auth helpers), `db` (Drizzle schema/migrations), `env` (environment validation), `mail` (transactional email), `shared` (utilities), `sso` (single sign-on helpers), `storage` (object storage), `ui` (shared components), and `validators` (Zod schemas).
-- Configuration files are in `tooling/`; Turbo generators live in `turbo/`.
+- Deployable apps live in `apps/`, shared code in `packages/`, config in `tooling/`, and Turbo generators in `turbo/`.
 
 ## Environment Setup
 
@@ -57,22 +55,15 @@ natively by Cursor, Codex, Gemini CLI, and others. Claude Code only scans
 
 - **First-time setup:** `pnpm local:setup` — copies per-directory `.env` files, starts Docker services, runs migrations, and seeds the database. See [docs/LOCAL_DEV_DOCKER.md](docs/LOCAL_DEV_DOCKER.md) for the full guide.
 - **Docker services:** `pnpm docker:up` to start (Postgres, Adminer, GCS emulator, Mailpit), `pnpm docker:down` to stop.
-- Install dependencies with `pnpm install`. You can scope installations with `--filter <workspace>`.
-- Start development: `pnpm dev --filter f3-map` for the map app, or `pnpm dev` to run all watch tasks.
 - Each app and `packages/env` has its own `.env` file (copied from `.env.example` by `pnpm local:setup`). Never commit `.env` files.
-- Build with `pnpm build` (or `pnpm build --filter apps/map`), and start production with `pnpm -C apps/map start`.
 - Code quality: always run `pnpm lint` (or `pnpm lint --filter apps/map`) and `pnpm format:fix` to ensure your code passes all lint and formatting checks. Also run `pnpm typecheck` to validate types.
-- Testing:
-  - Run all tests with `pnpm test` (via the Turbo pipeline).
-  - Run targeted tests: `pnpm -C apps/map test`.
-  - Database helpers: `pnpm db:pull`, `pnpm db:push`, and `pnpm reset-test-db`.
+- Database helpers: `pnpm db:pull`, `pnpm db:push`, and `pnpm reset-test-db`.
+- Every other build/dev/test command is a standard Turborepo invocation — see the root `package.json` scripts.
 
 ## Coding Style & Naming Conventions
 
 - Use Prettier (`@acme/prettier-config`) and ESLint (`@acme/eslint-config` base/next/react) as the source of truth.
 - Always autofix issues with `pnpm lint:fix` and confirm changes with `pnpm lint` and `pnpm format` before committing.
-- Code should use two-space indentation by default.
-- Prioritize TypeScript; use `.ts`/`.tsx` with explicit typings.
 - Name React components in PascalCase, prefix hooks with `use`, and use kebab-case for files/directories (e.g., `apps/map/src`).
 - Co-locate feature-specific assets and tests near their sources (e.g., `apps/map/src/app/(feature)/`).
 
@@ -122,18 +113,9 @@ natively by Cursor, Codex, Gemini CLI, and others. Claude Code only scans
 
 ### Driving auth-bounded flows in local dev
 
-Apps that require sign-in (e.g. `apps/map`, `apps/me`) authenticate via `apps/auth`, which uses email-based MFA. **No real inbox is involved.** In local development, outbound email is captured by one of two backends depending on your setup:
+Apps that require sign-in (e.g. `apps/map`, `apps/me`) authenticate via `apps/auth`, which uses email-based MFA. **No real inbox is involved** — outbound mail is captured locally, and agents drive the full sign-in flow headlessly by reading the 6-digit code from it.
 
-- **Docker setup (recommended):** Mailpit captures all mail at `http://localhost:8025`. Read MFA codes from the Mailpit web UI or its REST API.
-- **Non-Docker / GCP setup:** The auth server routes mail through [Ethereal](https://ethereal.email/) and emits a public preview URL to its stdout.
-
-AI agents and CI scripts drive the full sign-in flow by pulling the 6-digit code from the active mail backend and POSTing it to NextAuth's standard `/api/auth/callback/credentials` endpoint with a CSRF token (helper: `scripts/qa/extract-mfa-link.sh --code`). The `/api/verify-email` rate limit is bypassed in non-production environments to keep this viable for parallel agent QA.
-
-Start here:
-
-- [`apps/auth/AGENTS.md`](apps/auth/AGENTS.md) -- agent-focused recipe and error modes
-- [`docs/QA_LOCAL_AUTH.md`](docs/QA_LOCAL_AUTH.md) -- cookbook for headless and browser-driven flows
-- [`apps/auth/README.md` § Local QA / Email Preview](apps/auth/README.md#local-qa--email-preview) -- prose overview
+The full recipe lives in [`apps/auth/AGENTS.md`](apps/auth/AGENTS.md) (loaded automatically when working under `apps/auth`) and [`docs/QA_LOCAL_AUTH.md`](docs/QA_LOCAL_AUTH.md).
 
 ## Commit Message Convention
 
@@ -170,19 +152,6 @@ Scopes are defined in `commitlint.config.mjs` and map to monorepo packages:
 - For release-related changes: `chore(release): v3.10.0`
 
 **When adding a new workspace**, add its scope to the array in `commitlint.config.mjs`.
-
-### Examples
-
-```
-feat(map): add workout detail modal
-fix(auth): handle expired refresh tokens
-chore(deps): bump drizzle-orm to 0.35
-refactor(api): extract pagination into shared helper
-test(validators): add edge cases for date parsing
-docs(repo): update AGENTS.md with commit conventions
-ci(ci): add preview deploy for map app
-chore(repo): configure turborepo remote caching
-```
 
 ## Pull Request Guidelines
 
