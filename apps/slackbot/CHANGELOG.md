@@ -2,6 +2,27 @@
 
 <!-- version list -->
 
+## [2.1.3](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.1.2...slackbot@2.1.3) (2026-07-27)
+
+
+### Bug Fixes
+
+* **slackbot:** fixed the 'no preblast text entered' bug ([#724](https://github.com/F3-Nation/f3-nation/issues/724)) ([1ffdce7](https://github.com/F3-Nation/f3-nation/commit/1ffdce7825b1e31dbc215d141eb3cbc18f82c9f5))
+
+## [2.1.2](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.1.1...slackbot@2.1.2) (2026-07-26)
+
+
+### Bug Fixes
+
+* **slackbot:** another hotfix for auto preblasts ([#722](https://github.com/F3-Nation/f3-nation/issues/722)) ([ee0581c](https://github.com/F3-Nation/f3-nation/commit/ee0581c97158102aa6a51d374b84267838423dea))
+
+## [2.1.1](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.1.0...slackbot@2.1.1) (2026-07-24)
+
+
+### Bug Fixes
+
+* **slackbot:** preblast hotfixes ([#716](https://github.com/F3-Nation/f3-nation/issues/716)) ([1db0567](https://github.com/F3-Nation/f3-nation/commit/1db0567e0bd7811072a5a92d72b7a64cc05e426b))
+
 ## [2.1.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.0.4...slackbot@2.1.0) (2026-07-23)
 
 

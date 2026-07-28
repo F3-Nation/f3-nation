@@ -1,9 +1,6 @@
 import dayjs from "dayjs";
 import gte from "lodash/gte";
-import { Edit, PlusCircle, Trash } from "lucide-react";
-import { useSession } from "next-auth/react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useCallback, useMemo } from "react";
 
 import {
@@ -15,21 +12,13 @@ import { isTruthy } from "@acme/shared/common/functions";
 import { cn } from "@acme/ui";
 import { toast } from "@acme/ui/toast";
 
-import { invalidateQueries, orpc, useQuery } from "~/orpc/react";
+import { orpc, useQuery } from "~/orpc/react";
 import type { RouterOutputs } from "~/orpc/types";
 import { dateToDayOfWeek } from "~/utils/date-to-day-of-week";
 import { getWhenFromWorkout } from "~/utils/get-when-from-workout";
 import { useUpdateEventSearchParams } from "~/utils/hooks/use-update-event-search-params";
 import { getStatusSolidBg } from "~/utils/map-status-colors";
-import { appStore } from "~/utils/store/app";
-import {
-  DeleteType,
-  ModalType,
-  eventAndLocationToUpdateRequest,
-  eventDefaults,
-  modalStore,
-  openModal,
-} from "~/utils/store/modal";
+import { ModalType, openModal } from "~/utils/store/modal";
 import textLink from "~/utils/text-link";
 import { ContactLinks } from "../contact-links";
 import { ImageWithFallback } from "@acme/ui/image-with-fallback";
@@ -46,15 +35,17 @@ type WorkoutDetailsEvent = NonNullable<
 type UpcomingInstance =
   RouterOutputs["map"]["location"]["upcomingInstances"][number];
 
-function getUpdateStatusColor(instance: {
-  seriesException: string | null;
-  seriesId: number | null;
-}) {
-  if (instance.seriesException === "closed") return getStatusSolidBg("closed");
-  if (instance.seriesException === "different-time")
-    return getStatusSolidBg("different-time");
-  if (instance.seriesException) return getStatusSolidBg("miscellaneous");
-  return getStatusSolidBg("event-instance");
+function instanceMapStatus(
+  seriesException: string | null,
+): NonNullable<MapStatus> {
+  if (seriesException === "closed") return "closed";
+  if (seriesException === "different-time") return "different-time";
+  if (seriesException) return "miscellaneous";
+  return "event-instance";
+}
+
+function getUpdateStatusColor(instance: { seriesException: string | null }) {
+  return getStatusSolidBg(instanceMapStatus(instance.seriesException));
 }
 
 function formatUpdateText(instance: {
@@ -102,8 +93,6 @@ export const WorkoutDetailsContent = ({
   providedEventId,
   chipSize,
 }: WorkoutDetailsContentProps) => {
-  const router = useRouter();
-  const { data: session } = useSession();
   const { data: results, isLoading } = useQuery(
     orpc.map.location.locationWorkout.queryOptions({
       input: { locationId },
@@ -145,14 +134,6 @@ export const WorkoutDetailsContent = ({
     }),
   );
 
-  const { data: canDeleteEventResponse } = useQuery(
-    orpc.request.canDeleteEvent.queryOptions({
-      input: { eventId: selectedEventId ?? 0 },
-      enabled: !!selectedEventId && selectedEventId > 0,
-    }),
-  );
-  const canDeleteEvent = canDeleteEventResponse?.canDelete;
-
   const locationInstances = useMemo(() => {
     const currentLocation = results?.location;
     if (!upcomingInstancesData || !currentLocation) return [];
@@ -187,33 +168,20 @@ export const WorkoutDetailsContent = ({
     const map = new Map<number, MapStatus>();
     const nearestDate = new Map<number, string>();
     for (const instance of locationInstances) {
-      const isOrphan =
-        instance.seriesId == null || !baseEventIds.has(instance.seriesId);
+      const { seriesId } = instance;
+      // Test orphan-ness inline rather than via an `isOrphan` boolean:
+      // TypeScript can't carry a `seriesId != null` narrowing across an
+      // intermediate variable, so the non-orphan branch would still see
+      // `number | null` and every Map call below would fail to compile.
+      if (seriesId == null || !baseEventIds.has(seriesId)) {
+        map.set(-instance.id, instanceMapStatus(instance.seriesException));
+        continue;
+      }
 
-      if (isOrphan) {
-        const status: MapStatus =
-          instance.seriesException === "closed"
-            ? "closed"
-            : instance.seriesException === "different-time"
-              ? "different-time"
-              : instance.seriesException
-                ? "miscellaneous"
-                : "event-instance";
-        map.set(-instance.id, status);
-      } else {
-        const existing = nearestDate.get(instance.seriesId!);
-        if (!existing || instance.startDate < existing) {
-          nearestDate.set(instance.seriesId!, instance.startDate);
-          const status: MapStatus =
-            instance.seriesException === "closed"
-              ? "closed"
-              : instance.seriesException === "different-time"
-                ? "different-time"
-                : instance.seriesException
-                  ? "miscellaneous"
-                  : "event-instance";
-          map.set(instance.seriesId!, status);
-        }
+      const existing = nearestDate.get(seriesId);
+      if (!existing || instance.startDate < existing) {
+        nearestDate.set(seriesId, instance.startDate);
+        map.set(seriesId, instanceMapStatus(instance.seriesException));
       }
     }
     return map;
@@ -243,8 +211,6 @@ export const WorkoutDetailsContent = ({
 
     return combined;
   }, [results, instanceEvents]);
-
-  const mode = appStore.use.mode();
 
   const event = useMemo<WorkoutDetailsEvent | undefined>(() => {
     const displayedEvent = displayedEvents.find(
@@ -308,13 +274,10 @@ export const WorkoutDetailsContent = ({
 
   const hasAoContact = useMemo(
     () =>
-      aoContact &&
-      (aoContact.website ??
-        aoContact.email ??
-        aoContact.phone ??
-        aoContact.twitter ??
-        aoContact.facebook ??
-        aoContact.instagram),
+      // An empty string is a real "no value" case for these fields, so `??`
+      // (which only falls through on null/undefined) would wrongly hide the
+      // whole contact section whenever the first field happens to be "".
+      !!aoContact && Object.values(aoContact).some(Boolean),
     [aoContact],
   );
 
@@ -338,6 +301,7 @@ export const WorkoutDetailsContent = ({
                 key="fullAddress"
                 href={`https://www.google.com/maps/search/?api=1&query=${location.lat},${location.lon}`}
                 target="_blank"
+                rel="noopener noreferrer"
                 className="underline"
               >
                 {location.fullAddress ?? "Directions"}
@@ -361,6 +325,9 @@ export const WorkoutDetailsContent = ({
         : {},
     [event, location, aoContact, hasAoContact],
   );
+
+  const hasMultipleWorkouts = (results?.location?.events.length ?? 0) > 1;
+  const shouldShowAOSection = hasMultipleWorkouts && event?.aoName;
 
   const regionContact = useMemo(
     () =>
@@ -387,32 +354,6 @@ export const WorkoutDetailsContent = ({
         regionContact.facebook ??
         regionContact.instagram),
     [regionContact],
-  );
-
-  const regionFields = useMemo(
-    () =>
-      location
-        ? {
-            Name: location.regionName ? `F3 ${location.regionName}` : null,
-            Contact:
-              hasRegionContact && regionContact ? (
-                <ContactLinks contact={regionContact} iconSize="sm" />
-              ) : null,
-            Logo: location.regionLogo ? (
-              <ImageWithFallback
-                key={location.regionLogo}
-                src={location.regionLogo}
-                fallbackSrc="/f3_logo.png"
-                loading="lazy"
-                width={64}
-                height={64}
-                alt={location.regionName ?? "F3 logo"}
-                className="rounded-lg bg-black"
-              />
-            ) : null,
-          }
-        : {},
-    [location, regionContact, hasRegionContact],
   );
 
   if (isLoading) {
@@ -461,26 +402,6 @@ export const WorkoutDetailsContent = ({
           {event?.name ?? location.parentName ?? "Workout Information"}
         </div>
       </div>
-
-      {mode === "edit" && selectedEventId != null && selectedEventId > 0 ? (
-        <button
-          className={cn(
-            "-mt-2 flex w-fit flex-row items-center gap-2 rounded-sm bg-blue-600 px-2 text-white sm:mt-1",
-          )}
-          onClick={() => {
-            openModal(ModalType.UPDATE_LOCATION, {
-              requestType: "edit",
-              ...eventAndLocationToUpdateRequest({
-                event,
-                location,
-              }),
-            });
-          }}
-        >
-          <Edit className="h-4 w-4" />
-          <span>Edit Workout</span>
-        </button>
-      ) : null}
 
       {selectedEventUpdates.length > 0 && (
         <div className="mt-1">
@@ -536,31 +457,6 @@ export const WorkoutDetailsContent = ({
               hideName={displayedEvents.length === 1}
             />
           ))}
-          {mode === "edit" ? (
-            <button
-              className={cn(
-                "flex cursor-pointer flex-row items-center",
-                "rounded-sm",
-                "text-base text-white",
-                "px-2 shadow-sm",
-                { "pointer-events-auto bg-blue-600": true },
-                { "gap-2 py-0": true },
-              )}
-              onClick={() => {
-                openModal(ModalType.UPDATE_LOCATION, {
-                  requestType: "create_event",
-                  ...eventDefaults,
-                  ...eventAndLocationToUpdateRequest({
-                    event: undefined,
-                    location,
-                  }),
-                });
-              }}
-            >
-              <PlusCircle className="h-4 w-4" />
-              <span>Add Workout</span>
-            </button>
-          ) : null}
         </div>
       </div>
 
@@ -629,24 +525,136 @@ export const WorkoutDetailsContent = ({
         </div>
       )}
 
-      <div className="mt-4 text-xl font-bold">Region Information</div>
-      <div className="w-full [&_dd]:[overflow-wrap:anywhere]">
-        <dl className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2">
-          {Object.keys(regionFields)
-            .filter(
-              (field) => !!regionFields[field as keyof typeof regionFields],
-            )
-            .map((field) => (
-              <div key={field} className="sm:col-span-1">
-                <dt className="text-sm font-medium text-muted-foreground">
-                  {field}
-                </dt>
-                <dd className="mt-1 text-sm text-foreground">
-                  {regionFields[field as keyof typeof regionFields]}
-                </dd>
-              </div>
-            ))}
-        </dl>
+      {shouldShowAOSection && (
+        <div className="mt-6 rounded-lg border border-border bg-muted/30 p-4">
+          <div className="mb-3 flex items-start gap-3">
+            {event.aoLogo ? (
+              <button
+                className="cursor-pointer"
+                onClick={() =>
+                  openModal(ModalType.FULL_IMAGE, {
+                    title: event.aoName ?? "AO logo",
+                    src: event.aoLogo ?? "/f3_logo.png",
+                    fallbackSrc: "/f3_logo.png",
+                    alt: event.aoName ?? "AO logo",
+                  })
+                }
+              >
+                <ImageWithFallback
+                  key={event.aoLogo}
+                  src={event.aoLogo}
+                  fallbackSrc="/f3_logo.png"
+                  loading="lazy"
+                  width={48}
+                  height={48}
+                  alt={event.aoName ?? "AO logo"}
+                  className="rounded-lg bg-black"
+                />
+              </button>
+            ) : null}
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold">About {event.aoName}</h3>
+              <p className="text-sm text-muted-foreground">
+                This workout is part of the {event.aoName} AO (Area of
+                Operation)
+              </p>
+            </div>
+          </div>
+          {event.aoWebsite && (
+            <Link
+              href={event.aoWebsite}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-sm text-blue-600 underline hover:text-blue-800 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
+            >
+              Visit AO Website
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <line x1="10" y1="14" x2="21" y2="3"></line>
+              </svg>
+            </Link>
+          )}
+        </div>
+      )}
+
+      <div className="mt-6 rounded-lg border border-border bg-muted/30 p-4">
+        <div className="mb-3 flex items-start gap-3">
+          {location.regionLogo && (
+            <button
+              className="cursor-pointer"
+              onClick={() =>
+                openModal(ModalType.FULL_IMAGE, {
+                  title: location.regionName ?? "Region logo",
+                  src: location.regionLogo ?? "/f3_logo.png",
+                  fallbackSrc: "/f3_logo.png",
+                  alt: location.regionName ?? "Region logo",
+                })
+              }
+            >
+              <ImageWithFallback
+                key={location.regionLogo}
+                src={location.regionLogo}
+                fallbackSrc="/f3_logo.png"
+                loading="lazy"
+                width={48}
+                height={48}
+                alt={location.regionName ?? "Region logo"}
+                className="rounded-lg bg-black"
+              />
+            </button>
+          )}
+          <div className="flex-1">
+            <h3 className="text-lg font-semibold">
+              About F3 {location.regionName}
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              This workout is part of the F3 {location.regionName} region
+            </p>
+          </div>
+        </div>
+        {location.regionWebsite && (
+          <Link
+            href={location.regionWebsite}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-sm text-blue-600 underline hover:text-blue-800 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
+          >
+            Visit Region Website
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+              <polyline points="15 3 21 3 21 9"></polyline>
+              <line x1="10" y1="14" x2="21" y2="3"></line>
+            </svg>
+          </Link>
+        )}
+        {hasRegionContact && regionContact && (
+          <ContactLinks
+            contact={regionContact}
+            iconSize="sm"
+            className="mt-3"
+          />
+        )}
       </div>
 
       {event && (
@@ -674,83 +682,6 @@ export const WorkoutDetailsContent = ({
           </button>
         </div>
       )}
-
-      {mode === "edit" && selectedEventId != null && selectedEventId > 0 ? (
-        <div className="mt-4 flex flex-col gap-2">
-          <button
-            className="flex flex-row items-center justify-center gap-2 rounded-md bg-blue-600 px-2 py-1 text-white"
-            onClick={() => {
-              openModal(ModalType.UPDATE_LOCATION, {
-                requestType: "edit",
-                ...eventAndLocationToUpdateRequest({
-                  event,
-                  location,
-                }),
-              });
-            }}
-          >
-            <Edit className="h-4 w-4" />
-            <span>Edit Workout</span>
-          </button>
-
-          <button
-            className={cn(
-              "flex flex-row items-center justify-center gap-2 rounded-md px-2 py-1",
-              {
-                "text-red-600 hover:text-red-700": !canDeleteEvent,
-                "cursor-not-allowed text-gray-400": canDeleteEvent,
-              },
-            )}
-            disabled={!!canDeleteEvent}
-            onClick={() => {
-              openModal(ModalType.DELETE_CONFIRMATION, {
-                type: DeleteType.EVENT,
-                onConfirm: () => {
-                  if (location.regionId == null) {
-                    return;
-                  }
-                  if (!location.regionId || !selectedEventId) return;
-
-                  const event = location.events.find(
-                    (e) => e.id === selectedEventId,
-                  );
-                  if (!event) return;
-
-                  void orpc.request.submitDeleteRequest
-                    .call({
-                      regionId: location.regionId,
-                      eventId: event.id,
-                      eventName: event.name,
-                      submittedBy: session?.user?.email ?? "",
-                    })
-                    .then((result) => {
-                      void invalidateQueries("location");
-                      void invalidateQueries({
-                        queryKey: orpc.request.canDeleteEvent.queryKey({
-                          input: { eventId: event.id },
-                        }),
-                        exact: false,
-                      });
-                      router.refresh();
-                      toast.success(
-                        result.status === "pending"
-                          ? "Delete request submitted"
-                          : "Successfully deleted event",
-                      );
-                      // Close all modals
-                      modalStore.setState({ modals: [] });
-                    });
-                },
-              });
-            }}
-          >
-            <Trash className="h-4 w-4" />
-            <span>
-              {canDeleteEvent ? "Delete Request Submitted" : "Delete Workout"}
-            </span>
-          </button>
-        </div>
-      ) : null}
     </>
   );
 };
