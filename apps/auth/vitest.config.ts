@@ -1,3 +1,4 @@
+import { coverageExclude, coverageInclude } from "@acme/vitest-config";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
@@ -10,13 +11,14 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "json", "html"],
       reportsDirectory: "./coverage",
-      include: ["src/lib/phone.ts", "src/lib/jwt.ts"],
+      include: coverageInclude,
+      exclude: coverageExclude,
       thresholds: {
         autoUpdate: true,
-        statements: 96.29,
-        branches: 85.71,
-        functions: 100,
-        lines: 96.15,
+        statements: 5.21,
+        branches: 4.24,
+        functions: 12.72,
+        lines: 5.29,
       },
     },
   },

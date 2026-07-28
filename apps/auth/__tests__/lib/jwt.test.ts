@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   createLocalJWKSet,
   decodeProtectedHeader,
@@ -7,7 +7,28 @@ import {
   jwtVerify,
 } from "jose";
 
+import type * as JoseNs from "jose";
+
 import type * as JwtModuleNs from "../../src/lib/jwt";
+
+// Wrapped rather than stubbed: the module under test needs the real key import,
+// and the counts are what pin its memoization. Hoisted so they survive the
+// vi.resetModules() in loadJwtModule.
+const jose = vi.hoisted(() => ({
+  importPKCS8: vi.fn(),
+  exportJWK: vi.fn(),
+}));
+
+vi.mock("jose", async (importOriginal) => {
+  const actual = await importOriginal<typeof JoseNs>();
+  jose.importPKCS8.mockImplementation(actual.importPKCS8);
+  jose.exportJWK.mockImplementation(actual.exportJWK);
+  return {
+    ...actual,
+    importPKCS8: jose.importPKCS8,
+    exportJWK: jose.exportJWK,
+  };
+});
 
 const ISSUER = "https://auth.test.invalid";
 
@@ -20,9 +41,9 @@ let pkcs8: string;
 // place before the first import of ~/lib/jwt.
 async function loadJwtModule(pem: string): Promise<JwtModule> {
   vi.resetModules();
-  process.env.SKIP_ENV_VALIDATION = "true";
-  process.env.AUTH_JWT_PRIVATE_KEY = pem;
-  process.env.NEXT_PUBLIC_AUTH_URL = ISSUER;
+  vi.stubEnv("SKIP_ENV_VALIDATION", "true");
+  vi.stubEnv("AUTH_JWT_PRIVATE_KEY", pem);
+  vi.stubEnv("NEXT_PUBLIC_AUTH_URL", ISSUER);
   return import("../../src/lib/jwt");
 }
 
@@ -40,6 +61,10 @@ beforeAll(async () => {
   const { privateKey } = await generateKeyPair("RS256", { extractable: true });
   pkcs8 = await exportPKCS8(privateKey);
   jwt = await loadJwtModule(pkcs8);
+});
+
+afterAll(() => {
+  vi.unstubAllEnvs();
 });
 
 describe("signAccessToken", () => {
@@ -86,7 +111,7 @@ describe("signAccessToken", () => {
 
   it("serializes sub as a numeric string, not a number", async () => {
     const token = await jwt.signAccessToken({
-      sub: 90071992547,
+      sub: Number.MAX_SAFE_INTEGER,
       email: "big-id@example.com",
       scope: "openid",
       clientId: "f3-map",
@@ -96,8 +121,10 @@ describe("signAccessToken", () => {
 
     const { payload } = await jwtVerify(token, keySet, { issuer: ISSUER });
 
+    // packages/api/src/shared.ts does Number(payload.sub); this is the largest
+    // id that survives that round-trip.
     expect(typeof payload.sub).toBe("string");
-    expect(payload.sub).toBe("90071992547");
+    expect(payload.sub).toBe("9007199254740991");
   });
 });
 
@@ -125,6 +152,23 @@ describe("getJWKS", () => {
 
   it("caches the document across calls", async () => {
     expect(await jwt.getJWKS()).toBe(await jwt.getJWKS());
+  });
+});
+
+describe("key memoization", () => {
+  it("imports the private key and exports the JWK once per process", async () => {
+    const fresh = await loadJwtModule(pkcs8);
+    jose.importPKCS8.mockClear();
+    jose.exportJWK.mockClear();
+
+    await signSample(fresh);
+    await signSample(fresh);
+    await fresh.getJWKS();
+    await fresh.getJWKS();
+
+    // Without the memo, importPKCS8 would run an RSA key import per /token call.
+    expect(jose.importPKCS8).toHaveBeenCalledTimes(1);
+    expect(jose.exportJWK).toHaveBeenCalledTimes(1);
   });
 });
 
