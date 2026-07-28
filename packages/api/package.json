@@ -1,10 +1,11 @@
 {
   "name": "@acme/api",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./testing": "./src/testing/index.ts",
     "./services/map-request-notification": "./src/services/map-request-notification.ts"
   },
   "license": "MIT",
@@ -50,6 +51,7 @@
     "prettier": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"
