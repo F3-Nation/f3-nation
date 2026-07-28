@@ -3,7 +3,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { createQueryClient } from "~/orpc/query-client";
 
 let clientQueryClientSingleton: QueryClient | undefined = undefined;
-export const getQueryClient = () => {
+export const getQueryClient = (): QueryClient => {
   if (typeof window === "undefined") {
     return createQueryClient();
   } else {
@@ -18,7 +18,7 @@ export const getQueryClient = () => {
  */
 export function invalidateQueries(
   keyOrOptions?: string | Parameters<QueryClient["invalidateQueries"]>[0],
-) {
+): ReturnType<QueryClient["invalidateQueries"]> {
   if (typeof keyOrOptions === "string") {
     return getQueryClient().invalidateQueries({
       predicate: (query) => {
