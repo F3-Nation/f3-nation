@@ -10,6 +10,141 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: "7.0.9",
+    date: "2026-07-26",
+    title: "Streamlined map editing",
+    sections: [
+      {
+        title: "Map",
+        items: [
+          "Suggesting a change to a workout, AO, or location now follows one simple flow. If you have permission for that region, your edit shows up on the map right away; if you don't, it's sent to your region's admins to review.",
+          "Admins and editors can review pending change requests, then approve them (adjusting the details first if needed) or reject them.",
+        ],
+      },
+    ],
+  },
+  {
+    version: "7.0.8",
+    date: "2026-07-23",
+    title: "Preblast improvements",
+    sections: [
+      {
+        title: "Slack",
+        items: [
+          "You can now choose the channel destination separately for 2nd F, 3rd F, and one-time events.",
+          "The backblast count field is now numeric, Site Qs can edit all backblasts (just like admins), and you can set how many days out special events are listed.",
+          "Fixed the region label on automated downrange posts.",
+        ],
+      },
+    ],
+  },
+  {
+    version: "7.0.7",
+    date: "2026-07-14",
+    title: "Search & panel polish",
+    sections: [
+      {
+        title: "Map",
+        items: [
+          "Search now starts showing results once you've typed 3 characters.",
+          "Clearer close button on the info panel.",
+        ],
+      },
+    ],
+  },
+  {
+    version: "7.0.5",
+    date: "2026-07-05",
+    title: "Region picker fix",
+    sections: [
+      {
+        title: "Bug Fixes",
+        items: [
+          "Fixed regions showing as grayed out and unselectable in the region picker.",
+        ],
+      },
+    ],
+  },
+  {
+    version: "6.0.0",
+    date: "2026-07-01",
+    title: "Region editor & a faster map",
+    sections: [
+      {
+        title: "Admin Portal",
+        items: [
+          'Added an optional Short Location Description to the Region editor (e.g. "Denver, CO").',
+        ],
+      },
+      {
+        title: "Map",
+        items: ["The map now loads faster."],
+      },
+    ],
+  },
+  {
+    version: "5.1.0",
+    date: "2026-06-17",
+    title: "Contacts & profile safeguards",
+    sections: [
+      {
+        title: "Admin Portal",
+        items: ["Regions and AOs can now store a phone number."],
+      },
+      {
+        title: "Me",
+        items: [
+          "Added a confirmation prompt before removing a role or position, so you don't remove one by accident.",
+        ],
+      },
+    ],
+  },
+  {
+    version: "5.0.0",
+    date: "2026-06-11",
+    title: "New Homepage & sign-in improvements",
+    sections: [
+      {
+        title: "Homepage",
+        items: [
+          "Launched apps.f3nation.com — a single home page that shows the F3 apps available to you, with sign-in and your profile built in.",
+        ],
+      },
+      {
+        title: "Auth",
+        items: [
+          "Registration no longer makes you go through onboarding when it isn't needed, phone numbers are checked for you, and magic-link sign-in returns you to where you were headed.",
+          "Fixed a sign-in loop that could happen after certain errors.",
+        ],
+      },
+      {
+        title: "Map",
+        items: [
+          "Going to map.f3nation.com/admin now takes you straight to the admin portal at admin.f3nation.com, and map emails link to the right pages.",
+        ],
+      },
+      {
+        title: "Me",
+        items: [
+          "Profile photos now keep their correct orientation — no more sideways pictures from your phone.",
+        ],
+      },
+      {
+        title: "Admin Portal",
+        items: [
+          "User search and position assignment now page through results, so large regions load smoothly.",
+          "Inactive items no longer show a delete option, plus a handful of other portal fixes.",
+        ],
+      },
+      {
+        title: "New Regions",
+        items: [
+          '"Region in a Box": when a new region creates its first event, we automatically kick off sending them a shovel flag, books, and starter materials.',
+        ],
+      },
+    ],
+  },
+  {
     version: "4.3.2",
     date: "2026-05-24",
     title: "Streamlined dev environment",
