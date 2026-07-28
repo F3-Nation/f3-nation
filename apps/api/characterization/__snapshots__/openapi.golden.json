@@ -3548,9 +3548,16 @@
                   "locationId": {
                     "anyOf": [
                       {
-                        "maximum": 2147483647,
-                        "minimum": 1,
-                        "type": "integer"
+                        "anyOf": [
+                          {
+                            "maximum": 2147483647,
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       },
                       {
                         "type": "null"
@@ -4013,6 +4020,34 @@
             "schema": {
               "type": "number"
             }
+          },
+          {
+            "allowEmptyValue": true,
+            "allowReserved": true,
+            "explode": true,
+            "in": "query",
+            "name": "regionOrgIds",
+            "schema": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "style": "deepObject"
+          },
+          {
+            "allowEmptyValue": true,
+            "allowReserved": true,
+            "explode": true,
+            "in": "query",
+            "name": "aoOrgIds",
+            "schema": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "style": "deepObject"
           },
           {
             "allowEmptyValue": true,
@@ -8500,6 +8535,19 @@
                                   "type": "null"
                                 }
                               ]
+                            },
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
                             }
                           ],
                           "type": "array"
@@ -9343,6 +9391,38 @@
           }
         },
         "summary": "Get regions with coordinates",
+        "tags": [
+          "map.location"
+        ]
+      }
+    },
+    "/v1/map/location/upcoming-instances": {
+      "get": {
+        "description": "Returns event instances in the next 30 days that have a series exception (closed, different-time) or are standalone one-off events (no seriesId). Used for map pin status flagging.",
+        "operationId": "map.location.upcomingInstances",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {},
+                    {
+                      "not": {}
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Get upcoming event instance exceptions and one-off events",
         "tags": [
           "map.location"
         ]
