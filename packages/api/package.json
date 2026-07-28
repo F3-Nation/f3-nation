@@ -1,10 +1,11 @@
 {
   "name": "@acme/api",
-  "version": "0.3.1",
+  "version": "0.4.1",
   "private": true,
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./testing": "./src/testing/index.ts",
     "./services/map-request-notification": "./src/services/map-request-notification.ts"
   },
   "license": "MIT",
@@ -25,7 +26,6 @@
     "@acme/logger": "workspace:*",
     "@acme/mail": "workspace:*",
     "@acme/shared": "workspace:*",
-    "@acme/storage": "workspace:*",
     "@acme/validators": "workspace:*",
     "@orpc/experimental-ratelimit": "catalog:",
     "@orpc/server": "catalog:",
@@ -51,9 +51,19 @@
     "prettier": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"
+  },
+  "eslintConfig": {
+    "root": true,
+    "extends": [
+      "@acme/eslint-config/base"
+    ],
+    "ignorePatterns": [
+      "vitest.config.ts"
+    ]
   },
   "prettier": "@acme/prettier-config"
 }

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 
 import { ADMIN_PATHS, routes } from "@acme/shared/app/constants";
+import type { OrgRole } from "@acme/shared/app/types";
 import { COOKIE_NAME } from "@acme/shared/common/constants";
 
 import type { MiddlewareFactory } from "./types";
@@ -36,7 +37,8 @@ const withAdmin: MiddlewareFactory = (next: NextProxy) => {
       cookieName: cookieToken.name,
     });
 
-    const isAdmin = payload?.roles.some((role) => role.roleName === "admin");
+    const roles = (payload?.roles ?? []) as OrgRole[];
+    const isAdmin = roles.some((role) => role.roleName === "admin");
 
     if (!isAdmin) {
       return NextResponse.redirect(

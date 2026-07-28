@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.0](https://github.com/F3-Nation/f3-nation/compare/pkg-validators@0.1.3...pkg-validators@0.2.0) (2026-07-26)
+
+
+### Features
+
+* **map:** add validation to ensure event end time is after start time ([f62b213](https://github.com/F3-Nation/f3-nation/commit/f62b21340ac395b563ec5f44d97d3a165191da4c))
+* **validators:** enhance event time handling in AdminRequestsModal ([8d407de](https://github.com/F3-Nation/f3-nation/commit/8d407defc1e92a5b32b82c2aa1fe78bc8aa5a7b5))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.2.0
+
 ## [0.1.3](https://github.com/F3-Nation/f3-nation/compare/pkg-validators@0.1.2...pkg-validators@0.1.3) (2026-07-14)
 
 
