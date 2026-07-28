@@ -2,32 +2,42 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Next.js",
+      "name": "Map: Dev",
       "type": "node-terminal",
       "request": "launch",
       "command": "pnpm dev",
-      "cwd": "${workspaceFolder}/apps/nextjs/",
+      "cwd": "${workspaceFolder}/apps/map",
       "skipFiles": ["<node_internals>/**"]
     },
     {
-      "name": "Next.js: Debug App",
+      "name": "Map: Debug App",
       "type": "node",
       "request": "launch",
       "cwd": "${workspaceFolder}",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["-F", "nextjs", "dev"],
+      "runtimeArgs": ["-F", "f3-map", "dev"],
       "skipFiles": ["<node_internals>/**"],
       "outFiles": ["${workspaceFolder}/**/*.js"],
       "console": "integratedTerminal"
     },
     {
+      "name": "Map: Full Stack Debug",
       "type": "node",
       "request": "launch",
-      "name": "Debug Playwright Tests",
+      "cwd": "${workspaceFolder}/apps/map",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev"],
+      "serverReadyAction": {
+        "pattern": "- Local:.+(https?://.+)",
+        "uriFormat": "%s",
+        "action": "debugWithChrome"
+      },
+      "skipFiles": ["<node_internals>/**"],
+      "outFiles": ["${workspaceFolder}/**/*.js"],
       "console": "integratedTerminal",
-      "program": "${workspaceFolder}/node_modules/@playwright/test/cli.js",
-      "args": ["test", "${file}"],
-      "cwd": "${workspaceFolder}"
+      "env": {
+        "NODE_OPTIONS": "--inspect"
+      }
     }
   ]
 }

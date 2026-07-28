@@ -1,0 +1,298 @@
+import { useState } from "react";
+import { ArrowRight, CirclePlus, Edit, Trash } from "lucide-react";
+
+import type { DayOfWeek } from "@acme/shared/app/enums";
+import { dayOfWeekToShortDayOfWeek } from "@acme/shared/app/functions";
+import { Button } from "@acme/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@acme/ui/dropdown-menu";
+
+import { orpc, useQuery } from "~/orpc/react";
+import { openRequestModal } from "~/utils/open-request-modal";
+import { appStore } from "~/utils/store/app";
+
+interface LocationEditButtonsProps {
+  locationId: number;
+  eventId?: number | null;
+  aoId?: number | null;
+  aoName?: string;
+  eventName?: string;
+  timeDisplay?: string;
+  eventCount?: number;
+}
+
+export const LocationEditButtons = ({
+  locationId,
+  eventId,
+  aoId,
+  aoName = "AO",
+  eventName = "Workout",
+  timeDisplay = "",
+  eventCount = 0,
+}: LocationEditButtonsProps) => {
+  const mode = appStore.use.mode();
+  const [openMenu, setOpenMenu] = useState<"workout" | "ao" | null>(null);
+
+  const { data: workoutInfo } = useQuery(
+    orpc.map.location.locationWorkout.queryOptions({
+      input: { locationId },
+      enabled: mode === "edit" && !!locationId,
+    }),
+  );
+
+  return (
+    <div className="flex flex-col gap-2">
+      {/* Add Event Button */}
+      <Button
+        variant="outline"
+        className="w-full justify-start border-blue-500 bg-blue-500 text-white transition-colors hover:border-blue-600 hover:bg-blue-600 hover:text-white"
+        onClick={() => {
+          void openRequestModal({
+            type: "create_event",
+            locationId,
+            aoId,
+          });
+        }}
+      >
+        <span className="inline-flex flex-wrap items-center">
+          <CirclePlus className="mr-2 h-4 w-4 flex-shrink-0" />
+          <span className="leading-none break-words whitespace-normal">
+            Add Workout to AO
+          </span>
+        </span>
+      </Button>
+
+      {/* Event Edit Button - only show if an event is selected */}
+      {eventId && (
+        <DropdownMenu
+          open={openMenu === "workout"}
+          onOpenChange={(open) => setOpenMenu(open ? "workout" : null)}
+        >
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              className="w-full justify-between border-blue-500 bg-blue-500 text-white transition-colors hover:border-blue-600 hover:bg-blue-600 hover:text-white"
+            >
+              <span className="inline-flex items-center">
+                <Edit className="mr-2 h-4 w-4 flex-shrink-0" />
+                <span className="leading-none break-words whitespace-normal">
+                  Edit Workout: {eventName}{" "}
+                  {timeDisplay ? `(${timeDisplay})` : ""}
+                </span>
+              </span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="w-56 max-w-[calc(100vw-2rem)]">
+            <DropdownMenuItem
+              className="flex cursor-pointer items-center px-3 py-2 hover:bg-blue-50 dark:hover:bg-blue-900/30"
+              onClick={() => {
+                // Need locationId to query the event
+                void openRequestModal({
+                  type: "edit_event",
+                  eventId,
+                  locationId,
+                  aoId,
+                });
+              }}
+            >
+              <span className="inline-flex items-center">
+                <Edit className="mr-2 h-4 w-4 flex-shrink-0" />
+                <span className="leading-none break-words whitespace-normal">
+                  Edit workout details
+                </span>
+              </span>
+            </DropdownMenuItem>
+
+            <DropdownMenuItem
+              className="flex cursor-pointer items-center px-3 py-2 hover:bg-blue-50 dark:hover:bg-blue-900/30"
+              onClick={() => {
+                void openRequestModal({
+                  type: "move_event_to_different_ao",
+                  locationId,
+                  eventId,
+                  aoId,
+                  meta: {
+                    newRegionId: workoutInfo?.location?.regionId ?? undefined,
+                    newAoId:
+                      workoutInfo?.location?.events.find(
+                        (event) => event.id === eventId,
+                      )?.aoId ?? undefined,
+                  },
+                });
+              }}
+            >
+              <span className="inline-flex flex-wrap items-center">
+                <ArrowRight className="mr-2 h-4 w-4 flex-shrink-0" />
+                <span className="leading-none break-words whitespace-normal">
+                  Move to different AO
+                </span>
+              </span>
+            </DropdownMenuItem>
+
+            <DropdownMenuItem
+              className="flex cursor-pointer items-center px-3 py-2 hover:bg-blue-50 dark:hover:bg-blue-900/30"
+              onClick={() => {
+                void openRequestModal({
+                  type: "move_event_to_new_ao",
+                  locationId,
+                  eventId,
+                  aoId,
+                  meta: {
+                    newRegionId: workoutInfo?.location?.regionId ?? undefined,
+                  },
+                });
+              }}
+            >
+              <span className="inline-flex flex-wrap items-center">
+                <ArrowRight className="mr-2 h-4 w-4 flex-shrink-0" />
+                <span className="leading-none break-words whitespace-normal">
+                  Move to a new AO
+                </span>
+              </span>
+            </DropdownMenuItem>
+
+            <DropdownMenuSeparator className="my-1" />
+
+            <DropdownMenuItem
+              className="flex cursor-pointer items-center px-3 py-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+              onClick={() => {
+                void openRequestModal({
+                  type: "delete_event",
+                  locationId,
+                  eventId,
+                  aoId,
+                });
+              }}
+            >
+              <span className="inline-flex flex-wrap items-center">
+                <Trash className="mr-2 h-4 w-4 flex-shrink-0" />
+                <span className="leading-none break-words whitespace-normal">
+                  Delete this workout
+                </span>
+              </span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+
+      {/* AO Edit Button */}
+      <DropdownMenu
+        open={openMenu === "ao"}
+        onOpenChange={(open) => setOpenMenu(open ? "ao" : null)}
+      >
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="outline"
+            className="w-full justify-between border-blue-500 bg-blue-500 text-white transition-colors hover:border-blue-600 hover:bg-blue-600 hover:text-white"
+          >
+            <span className="inline-flex items-center">
+              <Edit className="mr-2 h-4 w-4 flex-shrink-0" />
+              <span className="leading-none break-words whitespace-normal">
+                Edit AO: {aoName} ({eventCount} workouts)
+              </span>
+            </span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="w-56 max-w-[calc(100vw-2rem)]">
+          <DropdownMenuItem
+            className="flex cursor-pointer items-center px-3 py-2 hover:bg-blue-50 dark:hover:bg-blue-900/30"
+            onClick={() => {
+              void openRequestModal({
+                type: "edit_ao_and_location",
+                locationId,
+                eventId,
+                aoId,
+              });
+            }}
+          >
+            <span className="inline-flex items-center">
+              <Edit className="mr-2 h-4 w-4 flex-shrink-0" />
+              <span className="leading-none break-words whitespace-normal">
+                Edit AO details
+              </span>
+            </span>
+          </DropdownMenuItem>
+
+          <DropdownMenuItem
+            className="flex cursor-pointer items-center px-3 py-2 hover:bg-blue-50 dark:hover:bg-blue-900/30"
+            onClick={() => {
+              void openRequestModal({
+                type: "move_ao_to_different_location",
+                locationId,
+                eventId,
+                aoId,
+              });
+            }}
+          >
+            <span className="inline-flex items-center">
+              <ArrowRight className="mr-2 h-4 w-4 flex-shrink-0" />
+              <span className="leading-none break-words whitespace-normal">
+                Move AO to different location
+              </span>
+            </span>
+          </DropdownMenuItem>
+
+          <DropdownMenuItem
+            className="flex cursor-pointer items-center px-3 py-2 hover:bg-blue-50 dark:hover:bg-blue-900/30"
+            onClick={() => {
+              void openRequestModal({
+                type: "move_ao_to_different_region",
+                locationId,
+                eventId,
+                aoId,
+                meta: {
+                  newRegionId: workoutInfo?.location?.regionId ?? undefined,
+                },
+              });
+            }}
+          >
+            <span className="inline-flex items-center">
+              <ArrowRight className="mr-2 h-4 w-4 flex-shrink-0" />
+              <span className="leading-none break-words whitespace-normal">
+                Move AO to different region
+              </span>
+            </span>
+          </DropdownMenuItem>
+
+          <DropdownMenuSeparator className="my-1" />
+
+          <DropdownMenuItem
+            className="flex cursor-pointer items-center px-3 py-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+            onClick={() => {
+              void openRequestModal({ type: "delete_ao", locationId, aoId });
+            }}
+          >
+            <span className="inline-flex items-center">
+              <Trash className="mr-2 h-4 w-4 flex-shrink-0" />
+              <span className="leading-none break-words whitespace-normal">
+                Delete this AO
+              </span>
+            </span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+};
+
+export const getShortDayOfWeek = (day: string | null | undefined) => {
+  if (!day) return "";
+
+  return dayOfWeekToShortDayOfWeek(day.toLowerCase() as DayOfWeek);
+};
+
+export const formatTime = (time: string | null | undefined) => {
+  if (time?.length !== 4) return "";
+
+  const hour = parseInt(time.substring(0, 2));
+  const minute = time.substring(2, 4);
+  const period = hour >= 12 ? "p" : "a";
+  const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+
+  return `${displayHour}:${minute}${period}`;
+};

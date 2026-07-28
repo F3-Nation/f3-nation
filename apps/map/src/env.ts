@@ -29,9 +29,6 @@ export const env = createEnv({
         { error: "Required in non-development environments" },
       ),
     F3_MAP_BASE_URL: z.url(),
-    GCS_EMULATOR_HOST: z.string().optional(),
-    // Base64-encoded service-account JSON for GCS public-image uploads.
-    GCS_CREDENTIALS: z.string().min(1),
     SUPER_ADMIN_API_KEY: z.string().min(1),
   },
   /**
