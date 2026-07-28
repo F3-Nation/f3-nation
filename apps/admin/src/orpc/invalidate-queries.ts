@@ -14,7 +14,10 @@ export const getQueryClient = (): QueryClient => {
 /**
  * Invalidate by router segment; oRPC stores the path array at `queryKey[0]`
  * (the `Array.isArray` guard below covers non-oRPC keys), so a segment
- * matches at any depth. See `./invalidate-queries.test.ts`.
+ * matches at any depth — including the leaf procedure name, so a procedure
+ * named `location` anywhere in the tree would also match
+ * `invalidateQueries("location")`. Bear that in mind when naming procedures.
+ * See `./invalidate-queries.test.ts`.
  */
 export function invalidateQueries(
   keyOrOptions?: string | Parameters<QueryClient["invalidateQueries"]>[0],
