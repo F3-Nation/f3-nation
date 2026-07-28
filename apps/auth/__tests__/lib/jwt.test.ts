@@ -7,9 +7,11 @@ import {
   jwtVerify,
 } from "jose";
 
+import type * as JwtModuleNs from "../../src/lib/jwt";
+
 const ISSUER = "https://auth.test.invalid";
 
-type JwtModule = typeof import("../../src/lib/jwt");
+type JwtModule = typeof JwtModuleNs;
 
 let jwt: JwtModule;
 let pkcs8: string;
