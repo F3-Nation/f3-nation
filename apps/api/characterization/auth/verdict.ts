@@ -55,3 +55,29 @@ export async function expectUnauthorized(
   expect(body.code).toBe("UNAUTHORIZED");
   if (message !== undefined) expect(body.message).toBe(message);
 }
+
+/**
+ * Same two assertions as `expectUnauthorized`, but for a response that went
+ * through the RPC handler: the codec wraps the error body in `{ json: ... }`
+ * (no `meta` — that carries type preservation, which errors have none of),
+ * which `expectUnauthorized` cannot parse.
+ */
+export async function expectUnauthorizedRpc(
+  res: Response,
+  message?: string,
+): Promise<void> {
+  expect(res.status).toBe(401);
+  // Not assumed to be JSON: the live and hono targets can surface a proxy's
+  // HTML or plain-text 401, and a bare SyntaxError would hide the status.
+  const raw = await res.clone().text();
+  let body: { json?: { code?: string; message?: string } };
+  try {
+    body = JSON.parse(raw) as typeof body;
+  } catch {
+    expect.fail(
+      `401 body was not JSON (${res.headers.get("content-type")}): ${raw.slice(0, 400)}`,
+    );
+  }
+  expect(body.json?.code).toBe("UNAUTHORIZED");
+  if (message !== undefined) expect(body.json?.message).toBe(message);
+}

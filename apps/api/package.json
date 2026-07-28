@@ -1,6 +1,6 @@
 {
   "name": "f3-api",
-  "version": "6.1.2",
+  "version": "6.1.3",
   "private": true,
   "type": "module",
   "scripts": {
@@ -39,6 +39,7 @@
     "@acme/prettier-config": "workspace:*",
     "@acme/tsconfig": "workspace:*",
     "@acme/vitest-config": "workspace:*",
+    "@orpc/client": "catalog:",
     "@testing-library/jest-dom": "catalog:",
     "@testing-library/react": "catalog:",
     "@types/node": "catalog:",

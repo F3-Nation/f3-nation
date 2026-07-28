@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.1.3](https://github.com/F3-Nation/f3-nation/compare/admin@2.1.2...admin@2.1.3) (2026-07-26)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.4.1
+    * @acme/validators bumped to 0.2.0
+
 ## [2.1.2](https://github.com/F3-Nation/f3-nation/compare/admin@2.1.1...admin@2.1.2) (2026-07-23)
 
 
