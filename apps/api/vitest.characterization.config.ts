@@ -28,6 +28,10 @@ export default defineConfig({
     // in parallel files would interleave. (isolate: true already gives each file
     // a fresh module registry, so per-file module state is not the reason.)
     fileParallelism: false,
+    // The first request through the seam pays the whole cold start (route module,
+    // next-auth, router, DB pool), which the 5s default charges to whichever test
+    // runs first. In CI that test shares 2 vCPUs with the packages/api suite.
+    testTimeout: 20_000,
     // Load-bearing: under NODE_ENV=development, getSession() (shared.ts) returns
     // getDevMockSession() — an authenticated but role-LESS session — for any
     // request with no session and no bearer token, instead of null. That makes
