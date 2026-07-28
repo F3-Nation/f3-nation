@@ -8,8 +8,12 @@ pre-commit:
 
     - name: eslint
       glob: "**/*.{ts,tsx,js,jsx,mjs,cjs}"
-      run: pnpm exec eslint --fix --no-warn-ignored {staged_files}
+      run: node scripts/lint-staged.mjs {staged_files}
       stage_fixed: true
+
+    - name: vitest-thresholds
+      glob: "**/vitest.config.{ts,mts}"
+      run: node scripts/check-vitest-thresholds.mjs {staged_files}
 
     - name: typecheck
       run: pnpm typecheck

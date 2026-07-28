@@ -1,6 +1,6 @@
 {
-  "id": "a0441044-8107-4df3-9726-f61c21b4447c",
-  "prevId": "55e0b33e-e1af-4795-863d-c627061455c2",
+  "id": "55e0b33e-e1af-4795-863d-c627061455c2",
+  "prevId": "72204992-f1c1-4a67-9fb9-9b5b193c8d4a",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2407,12 +2407,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "timezone('utc'::text, now())"
-        },
-        "rotated_at": {
-          "name": "rotated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {},

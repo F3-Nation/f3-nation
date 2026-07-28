@@ -124,15 +124,22 @@
     {
       "idx": 17,
       "version": "7",
-      "when": 1784170328845,
-      "tag": "0017_add_oauth_public_clients",
+      "when": 1783701196342,
+      "tag": "0017_even_thing",
       "breakpoints": true
     },
     {
       "idx": 18,
       "version": "7",
+      "when": 1784170328845,
+      "tag": "0018_add_oauth_public_clients",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
       "when": 1784606268765,
-      "tag": "0018_add_oauth_refresh_token_rotated_at",
+      "tag": "0019_add_oauth_refresh_token_rotated_at",
       "breakpoints": true
     }
   ]

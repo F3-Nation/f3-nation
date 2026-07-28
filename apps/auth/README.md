@@ -92,7 +92,7 @@ Preview email: https://ethereal.email/message/abc123...
 
 That URL is publicly fetchable with `curl` and contains the full email HTML -- both the **6-digit code** and a magic link. Headless QA pulls the **code** out of that HTML and POSTs it to NextAuth's standard `/api/auth/callback/credentials` endpoint to complete sign-in.
 
-> Note: a raw `curl` of the magic link does **not** complete sign-in. The verify page (`/login/email/verify`) is a client component that calls `signIn("email-mfa", ...)` from a `useEffect`. Hitting the URL with `curl -L` only returns HTML -- the cookie jar gets no session. Use the CSRF + callback recipe below for headless flows, or drive the magic link from a JS-capable browser (Playwright, CDP) for browser-based regression testing.
+> Note: a raw `curl` of the magic link does **not** complete sign-in. The verify page (`/login/email/verify`) is a client component that calls `signIn("email-mfa", ...)` from a `useEffect`. Hitting the URL with `curl -L` only returns HTML -- the cookie jar gets no session. Use the CSRF + callback recipe below for headless flows, or drive the magic link from a JS-capable browser (CDP) for browser-based regression testing.
 
 In dev (`NODE_ENV !== "production"`), `/api/verify-email`'s 10-requests-per-minute-per-IP rate limit is bypassed -- the email transport is Ethereal, so there is no real inbox to bomb. Production traffic remains capped.
 

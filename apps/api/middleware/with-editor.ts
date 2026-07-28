@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 
 import { EDITOR_PATHS, routes } from "@acme/shared/app/constants";
+import type { OrgRole } from "@acme/shared/app/types";
 
 import type { MiddlewareFactory } from "./types";
 import { env } from "~/env";
@@ -36,7 +37,8 @@ const withEditor: MiddlewareFactory = (next: NextProxy) => {
       cookieName: cookieToken.name,
     });
 
-    const isEditorOrAdmin = payload?.roles.some(
+    const roles = (payload?.roles ?? []) as OrgRole[];
+    const isEditorOrAdmin = roles.some(
       (role) => role.roleName === "editor" || role.roleName === "admin",
     );
 

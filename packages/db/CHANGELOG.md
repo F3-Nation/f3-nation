@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.1.3...pkg-db@0.2.0) (2026-07-26)
+
+
+### Features
+
+* **db:** integrate vitest for testing and coverage ([11033f8](https://github.com/F3-Nation/f3-nation/commit/11033f811c96e89df0a9f33103a0ffdfa9d2a263))
+
 ## [0.1.3](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.1.2...pkg-db@0.1.3) (2026-07-14)
 
 

@@ -2,6 +2,7 @@ import os
 import sys
 import unittest
 from datetime import date
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
@@ -9,8 +10,20 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 from application.event_instance import EventInstanceData
 from application.event_instance.service import EventInstanceService
 from features.calendar.event_instance import (
+    CALENDAR_ADD_EVENT_INSTANCE_AO,
+    CALENDAR_ADD_EVENT_INSTANCE_END_TIME,
+    CALENDAR_ADD_EVENT_INSTANCE_LOCATION,
+    CALENDAR_ADD_EVENT_INSTANCE_NAME,
+    CALENDAR_ADD_EVENT_INSTANCE_PREBLAST,
+    CALENDAR_ADD_EVENT_INSTANCE_PREBLAST_CHANNEL,
+    CALENDAR_ADD_EVENT_INSTANCE_START_DATE,
+    CALENDAR_ADD_EVENT_INSTANCE_START_TIME,
+    CALENDAR_ADD_EVENT_INSTANCE_TYPE,
+    META_PREBLAST_CHANNEL_ID,
     _build_event_instance_service,
+    build_event_instance_add_form,
     build_event_instance_list_form,
+    handle_event_instance_add,
     handle_event_instance_close,
     handle_event_instance_edit_delete,
     manage_event_instances,
@@ -670,6 +683,127 @@ class HandleEventInstanceEditDeleteTest(unittest.TestCase):
         # Close action opens the close-reason modal — views_update IS called, close_instance is NOT
         client.views_update.assert_called_once()
         mock_service.close_instance.assert_not_called()
+
+
+class EventInstancePreblastChannelTest(unittest.TestCase):
+    def _region_record(self):
+        r = MagicMock()
+        r.org_id = 10
+        return r
+
+    @patch("features.calendar.event_instance._build_event_tag_service")
+    @patch("features.calendar.event_instance._build_event_type_service")
+    @patch("features.calendar.event_instance._build_location_service")
+    @patch("features.calendar.event_instance._build_ao_service")
+    def test_unscheduled_preblast_form_includes_channel_selector(
+        self,
+        mock_build_ao,
+        mock_build_location,
+        mock_build_event_type,
+        mock_build_event_tag,
+    ):
+        mock_build_ao.return_value.get_region_aos.return_value = [SimpleNamespace(id=10, name="Alpha")]
+        mock_build_location.return_value.get_org_locations.return_value = []
+        mock_build_event_type.return_value.get_all_event_types_for_org.return_value = [
+            SimpleNamespace(id=5, name="Bootcamp")
+        ]
+        mock_build_event_tag.return_value.get_all_tags_for_org.return_value = []
+
+        client = MagicMock()
+        body = {"trigger_id": "T1", "view": {"private_metadata": "{}"}}
+        build_event_instance_add_form(body, client, MagicMock(), {}, self._region_record(), new_preblast=True)
+
+        view = client.views_push.call_args.kwargs["view"]
+        channel_block = next(
+            b for b in view["blocks"] if b.get("block_id") == CALENDAR_ADD_EVENT_INSTANCE_PREBLAST_CHANNEL
+        )
+        self.assertEqual(channel_block["element"]["type"], "channels_select")
+        self.assertTrue(channel_block["optional"])
+
+    @patch("features.calendar.event_instance.event_preblast.send_preblast")
+    @patch("features.calendar.event_instance.get_user")
+    @patch("features.calendar.event_instance.DbManager.create_record")
+    @patch("features.calendar.event_instance._build_event_instance_service")
+    def test_unscheduled_preblast_channel_saved_to_meta(
+        self,
+        mock_build_service,
+        mock_create_record,
+        mock_get_user,
+        mock_send_preblast,
+    ):
+        service = MagicMock()
+        service.create_instance.return_value = _make_instance(id=42)
+        mock_build_service.return_value = service
+        mock_get_user.return_value = SimpleNamespace(user_id=99)
+
+        body = {
+            "user": {"id": "U123"},
+            "view": {
+                "private_metadata": '{"is_preblast": "True"}',
+                "blocks": [
+                    {"block_id": CALENDAR_ADD_EVENT_INSTANCE_LOCATION, "element": {}},
+                    {"block_id": CALENDAR_ADD_EVENT_INSTANCE_TYPE, "element": {}},
+                ],
+                "state": {
+                    "values": {
+                        CALENDAR_ADD_EVENT_INSTANCE_AO: {
+                            CALENDAR_ADD_EVENT_INSTANCE_AO: {
+                                "type": "static_select",
+                                "selected_option": {"value": "10"},
+                            }
+                        },
+                        CALENDAR_ADD_EVENT_INSTANCE_LOCATION: {
+                            CALENDAR_ADD_EVENT_INSTANCE_LOCATION: {
+                                "type": "static_select",
+                                "selected_option": {"value": "20"},
+                            }
+                        },
+                        CALENDAR_ADD_EVENT_INSTANCE_TYPE: {
+                            CALENDAR_ADD_EVENT_INSTANCE_TYPE: {
+                                "type": "static_select",
+                                "selected_option": {"value": "5"},
+                            }
+                        },
+                        CALENDAR_ADD_EVENT_INSTANCE_START_DATE: {
+                            CALENDAR_ADD_EVENT_INSTANCE_START_DATE: {
+                                "type": "datepicker",
+                                "selected_date": "2026-07-25",
+                            }
+                        },
+                        CALENDAR_ADD_EVENT_INSTANCE_START_TIME: {
+                            CALENDAR_ADD_EVENT_INSTANCE_START_TIME: {"type": "timepicker", "selected_time": "06:00"}
+                        },
+                        CALENDAR_ADD_EVENT_INSTANCE_END_TIME: {
+                            CALENDAR_ADD_EVENT_INSTANCE_END_TIME: {"type": "timepicker", "selected_time": "07:00"}
+                        },
+                        CALENDAR_ADD_EVENT_INSTANCE_NAME: {
+                            CALENDAR_ADD_EVENT_INSTANCE_NAME: {"type": "plain_text_input", "value": "Pop Up"}
+                        },
+                        CALENDAR_ADD_EVENT_INSTANCE_PREBLAST: {
+                            CALENDAR_ADD_EVENT_INSTANCE_PREBLAST: {
+                                "type": "rich_text_input",
+                                "rich_text_value": {"elements": []},
+                            }
+                        },
+                        CALENDAR_ADD_EVENT_INSTANCE_PREBLAST_CHANNEL: {
+                            CALENDAR_ADD_EVENT_INSTANCE_PREBLAST_CHANNEL: {
+                                "type": "channels_select",
+                                "selected_channel": "CSELECTED",
+                            }
+                        },
+                    }
+                },
+            },
+        }
+
+        handle_event_instance_add(body, MagicMock(), MagicMock(), {}, self._region_record())
+
+        self.assertEqual(
+            service.create_instance.call_args.kwargs["meta"],
+            {META_PREBLAST_CHANNEL_ID: "CSELECTED"},
+        )
+        mock_create_record.assert_called_once()
+        mock_send_preblast.assert_called_once()
 
 
 class HandleEventInstanceCloseTest(unittest.TestCase):

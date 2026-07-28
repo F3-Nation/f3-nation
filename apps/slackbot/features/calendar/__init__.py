@@ -8,7 +8,7 @@ PREBLAST_MESSAGE_ACTION_ELEMENTS = [
 ]
 
 
-def get_preblast_action_buttons(has_q: bool = True, event_instance_id: int = None) -> List[orm.ButtonElement]:
+def get_preblast_action_buttons(has_q: bool = True, event_instance_id: int | None = None) -> List[orm.ButtonElement]:
     buttons = [
         orm.ButtonElement(label=":hc: HC/Un-HC", action=actions.EVENT_PREBLAST_HC_UN_HC),
         orm.ButtonElement(label=":pencil: Edit Preblast", action=actions.EVENT_PREBLAST_EDIT, value="Edit Preblast"),
@@ -31,7 +31,7 @@ def get_preblast_action_buttons(has_q: bool = True, event_instance_id: int = Non
     return buttons
 
 
-def get_preblast_action_blocks(has_q: bool = True, event_instance_id: int = None) -> List[orm.BaseBlock]:
+def get_preblast_action_blocks(has_q: bool = True, event_instance_id: int | None = None) -> List[orm.BaseBlock]:
     overflow_labels = [
         ":pencil: Edit Preblast",
         ":heavy_plus_sign: New Preblast",

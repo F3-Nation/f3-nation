@@ -38,8 +38,6 @@ export const moveAOLocsToNewRegion = async (
 
   logDebug("api.move_ao_locs.ao_events", { aoEventsCount: aoEvents.length });
 
-  const aoEventIds = aoEvents.map((e) => e.id);
-
   const aoEventsLocationIds = aoEvents
     .map((e) => e.locationId)
     .filter(isTruthy);
@@ -81,11 +79,17 @@ export const moveAOLocsToNewRegion = async (
     logDebug("api.move_ao_locs.created_location", {
       newLocationId: newLocation.id,
     });
-    // 1b. move the ao's events to the new location
+    // 1b. move only the events that were on THIS location to its copy. Using
+    // every one of the AO's events re-pointed them all on each iteration, so an
+    // AO with events at two locations ended with every event piled onto the
+    // last copied location and the earlier copies orphaned-but-active. (#14)
+    const eventIdsOnThisLocation = aoEvents
+      .filter((e) => e.locationId === aoEventLocation.id)
+      .map((e) => e.id);
     const updatedEvents = await ctx.db
       .update(schema.events)
       .set({ locationId: newLocation.id })
-      .where(inArray(schema.events.id, aoEventIds))
+      .where(inArray(schema.events.id, eventIdsOnThisLocation))
       .returning();
 
     logDebug("api.move_ao_locs.moved_events", {

@@ -177,3 +177,12 @@ Environment variables are application-specific in this monorepo. The `.env` file
 - For dev migrations use the `dev_generic` user
 - For staging migrations use the `dev_generic` user
 - For production migrations use the `f3slackbot` user
+
+# WIP
+
+- ensure we can't submit with no time and no events for new events
+- add tests for approvals in the admin portal
+- test image issues
+- better text of where we're moving aos and regions
+- decide which things you can change region and which you can't
+- TODO: Think through AO and location appearance

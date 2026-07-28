@@ -7,7 +7,6 @@ import AdminApiKeysModal from "./admin-api-keys-modal";
 import AdminPositionsModal from "./admin-positions-modal";
 import AdminAreasModal from "./admin-areas-modal";
 import AdminDeleteModal from "./admin-delete-modal";
-import AdminDeleteRequestModal from "./admin-delete-request-modal";
 import AdminEventTypesModal from "./admin-event-types-modal";
 import AdminLocationsModal from "./admin-locations-modal";
 import AdminManageAccessModal from "./admin-manage-access-modal";
@@ -106,12 +105,6 @@ export const ModalSwitcher = ({
     case ModalType.DELETE_CONFIRMATION:
       return (
         <DeleteModal data={data as DataType[ModalType.DELETE_CONFIRMATION]} />
-      );
-    case ModalType.ADMIN_DELETE_REQUEST:
-      return (
-        <AdminDeleteRequestModal
-          data={data as DataType[ModalType.ADMIN_DELETE_REQUEST]}
-        />
       );
     case ModalType.QR_CODE:
       return <QRCodeModal data={data as DataType[ModalType.QR_CODE]} />;

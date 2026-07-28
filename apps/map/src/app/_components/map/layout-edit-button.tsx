@@ -36,8 +36,8 @@ export const LayoutEditButton = ({
       >
         <div className={"flex flex-col lg:mx-2.5"}>
           <div
-            aria-label="My Location"
-            title="My Location"
+            aria-label="Edit map"
+            title="Edit map"
             className={cn(
               "cursor-pointer appearance-none overflow-hidden",
               "relative block",
@@ -71,7 +71,7 @@ export const LayoutEditButton = ({
             <p>• Click on a workout to see edit options</p>
             <p>• Drag markers to move workouts to new locations</p>
             <p>
-              • Click on the map (and then again on the new marker) to add a new
+              • Click on the map to place a pin and see options for adding a new
               location
             </p>
             <p>

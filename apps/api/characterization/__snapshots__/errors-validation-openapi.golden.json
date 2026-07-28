@@ -1,0 +1,28 @@
+{
+  "body": {
+    "code": "BAD_REQUEST",
+    "data": {
+      "issues": [
+        {
+          "code": "invalid_type",
+          "expected": "number",
+          "message": "Invalid input: expected number, received NaN",
+          "path": [
+            "orgId"
+          ],
+          "received": "NaN"
+        }
+      ]
+    },
+    "defined": false,
+    "message": "Input validation failed",
+    "status": 400
+  },
+  "headers": {
+    "access-control-allow-credentials": "true",
+    "access-control-allow-origin": "",
+    "content-type": "application/json",
+    "vary": "Origin"
+  },
+  "status": 400
+}
