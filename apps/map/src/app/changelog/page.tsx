@@ -94,5 +94,8 @@ function formatDate(dateString: string): string {
     year: "numeric",
     month: "long",
     day: "numeric",
+    // Entries are calendar dates (YYYY-MM-DD parsed as UTC midnight); format in
+    // UTC so a west-of-UTC runtime doesn't render the previous day.
+    timeZone: "UTC",
   });
 }
