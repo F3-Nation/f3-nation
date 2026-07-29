@@ -69,7 +69,15 @@ afterAll(() => {
 
 describe("signAccessToken", () => {
   it("signs a token that verifies against the published JWKS", async () => {
-    const token = await signSample();
+    // jose reads the clock separately for iat and exp, so a second boundary
+    // between the two calls would make the 900s delta land on 901.
+    let token: string;
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      token = await signSample();
+    } finally {
+      vi.useRealTimers();
+    }
     const keySet = createLocalJWKSet(await jwt.getJWKS());
 
     const { payload } = await jwtVerify(token, keySet, {

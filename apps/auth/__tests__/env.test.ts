@@ -20,15 +20,19 @@ describe("env skipValidation", () => {
     return mod.env;
   }
 
+  // API_KEY is a required non-empty string, so blanking it makes the import
+  // throw unless the bypass under test actually fired.
   it("skips validation when running in CI (operand 1)", async () => {
     vi.stubEnv("CI", "1");
     vi.stubEnv("SKIP_ENV_VALIDATION", "");
+    vi.stubEnv("API_KEY", "");
     expect(await importEnv()).toBeDefined();
   });
 
   it("skips validation when SKIP_ENV_VALIDATION is set (operand 2)", async () => {
     vi.stubEnv("CI", "");
     vi.stubEnv("SKIP_ENV_VALIDATION", "1");
+    vi.stubEnv("API_KEY", "");
     expect(await importEnv()).toBeDefined();
   });
 });
