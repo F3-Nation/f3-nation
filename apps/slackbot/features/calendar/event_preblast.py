@@ -22,6 +22,7 @@ from typing import Any
 
 from f3_data_models.models import Attendance, AttendanceType, EventInstance, Org
 from slack_sdk.errors import SlackApiError
+from slack_sdk.models import blocks as sdk_blocks
 from slack_sdk.web import WebClient
 from sqlalchemy import or_
 
@@ -59,6 +60,7 @@ from utilities.helper_functions import (
     safe_get,
 )
 from utilities.slack import actions, orm
+from utilities.slack.sdk_orm import SdkBlockView, as_selector_options
 
 DEFAULT_PREBLAST = {
     "type": "rich_text",
@@ -104,6 +106,96 @@ def _build_preblast_service() -> PreblastService:
             attendance_service=_build_attendance_service(),
         )
     return _pb_svc
+
+
+# ---------------------------------------------------------------------------
+# Custom fields (Custom Field Settings) on the preblast form
+# ---------------------------------------------------------------------------
+
+_PREBLAST_CUSTOM_FIELD_ELEMENT_BUILDERS = {
+    "Dropdown": lambda action_id: sdk_blocks.StaticSelectElement(
+        action_id=action_id, options=as_selector_options(names=["(no options set)"], values=[""])
+    ),
+    "Text": lambda action_id: sdk_blocks.PlainTextInputElement(action_id=action_id),
+    "Number": lambda action_id: sdk_blocks.NumberInputElement(action_id=action_id),
+    "PAX": lambda action_id: sdk_blocks.UserSelectElement(action_id=action_id),
+    "Location": lambda action_id: sdk_blocks.ChannelSelectElement(action_id=action_id),
+}
+
+
+def add_custom_field_blocks(form: SdkBlockView, region_record: SlackSettings, initial_values: dict | None = None):
+    """SdkBlockView equivalent of features.backblast.add_custom_field_blocks — same
+    fields/types/cross-region-search/sticky-auto-populate behavior, adapted for the
+    preblast form's newer blocks.*-based architecture. Mutates and returns ``form``."""
+    if initial_values is None:
+        initial_values = {}
+    for custom_field in (region_record.custom_fields or {}).values():
+        if not safe_get(custom_field, "enabled"):
+            continue
+        field_type = safe_get(custom_field, "type")
+        field_action_id = actions.CUSTOM_FIELD_PREFIX + custom_field["name"]
+        build_element = _PREBLAST_CUSTOM_FIELD_ELEMENT_BUILDERS.get(field_type)
+        if not build_element:
+            continue
+
+        form.add_block(
+            sdk_blocks.InputBlock(
+                label=custom_field["name"],
+                element=build_element(field_action_id),
+                optional=True,
+                block_id=field_action_id,
+            )
+        )
+        if field_type == "Dropdown":
+            form.set_options(
+                {field_action_id: as_selector_options(names=custom_field["options"], values=custom_field["options"])}
+            )
+
+        markup = backblast.CUSTOM_FIELD_MENTION_MARKUP.get(field_type)
+        if custom_field["name"] in initial_values:
+            # This event already has a value for this field (editing an existing preblast) —
+            # always respect it over the sticky auto-populate value.
+            raw_value = safe_convert(safe_get(initial_values, custom_field["name"]), str) or ""
+        elif custom_field.get("auto_populate") and custom_field.get("current_value"):
+            # New preblast, no value yet for this event — fall back to the region's sticky
+            # "last submitted value" for this field, if enabled.
+            raw_value = str(custom_field["current_value"])
+        else:
+            raw_value = ""
+        stored_value = backblast.local_picker_initial_value(raw_value, markup)
+        if stored_value:
+            form.set_initial_values({field_action_id: stored_value})
+
+        xregion_suffix = backblast.CUSTOM_FIELD_XREGION_SUFFIX.get(field_type)
+        if xregion_suffix:
+            xregion_action_id = field_action_id + xregion_suffix
+            form.add_block(
+                sdk_blocks.InputBlock(
+                    label=f"{custom_field['name']} (not in this Slack space)",
+                    element=sdk_blocks.ExternalDataSelectElement(
+                        action_id=xregion_action_id,
+                        placeholder="Type to search all regions...",
+                        min_query_length=2,
+                    ),
+                    optional=True,
+                    block_id=xregion_action_id,
+                    hint="To filter by region, include it in parentheses, e.g. 'money (wash)' -> Moneyball (WashMo).",
+                )
+            )
+            manual_action_id = field_action_id + actions.CUSTOM_FIELD_MANUAL_SUFFIX
+            form.add_block(
+                sdk_blocks.InputBlock(
+                    label=f"{custom_field['name']} (not on Slack / not in the system at all)",
+                    element=sdk_blocks.PlainTextInputElement(action_id=manual_action_id, placeholder="Type a name..."),
+                    optional=True,
+                    block_id=manual_action_id,
+                    hint="Only if they're not found by either search above.",
+                )
+            )
+            manual_value = backblast.manual_fallback_initial_value(raw_value, markup)
+            if manual_value:
+                form.set_initial_values({manual_action_id: manual_value})
+    return form
 
 
 # ---------------------------------------------------------------------------
@@ -530,6 +622,7 @@ def _build_and_show_preblast_form(
         initial_coq_slack_ids=initial_coq_slack_ids,
         user_is_q=preblast_info.user_is_q,
     )
+    add_custom_field_blocks(form, region_record, initial_values=record.meta or {})
 
     metadata = {
         "event_instance_id": event_instance_id,
@@ -562,6 +655,10 @@ def handle_event_preblast_edit(
     existing_ts = safe_get(metadata, "preblast_ts")
 
     form_data: dict[str, Any] = extract_state_values(body)
+    # Resolves PAX/Location custom fields (local picker vs. cross-region search) and syncs
+    # each auto-populate field's sticky current_value — same logic as the backblast form,
+    # reused as-is since it only depends on dict keys, not the legacy form framework.
+    form_data = backblast.resolve_cross_region_custom_fields(form_data, region_record)
 
     svc = _build_preblast_service()
     event_svc = _build_event_instance_service()
@@ -593,8 +690,13 @@ def handle_event_preblast_edit(
         preblast_rich = None
         preblast_plain = None
 
-    # Handle image upload
     meta_updates: dict[str, Any] = {}
+    for custom_field_name in region_record.custom_fields or {}:
+        field_key = actions.CUSTOM_FIELD_PREFIX + custom_field_name
+        if field_key in form_data and form_data[field_key]:
+            meta_updates[custom_field_name] = form_data[field_key]
+
+    # Handle image upload
     image_data = form_data.get(actions.EVENT_PREBLAST_IMAGE)
     if image_data:
         file_obj = safe_get(image_data, 0) if isinstance(image_data, list) else image_data

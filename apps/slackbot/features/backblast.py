@@ -53,12 +53,56 @@ from utilities.helper_functions import (
     replace_user_channel_ids,
     safe_convert,
     safe_get,
+    update_local_region_records,
     upload_files_to_storage,
 )
 from utilities.slack import actions, forms
 from utilities.slack import orm as slack_orm
 
 META_EXCLUDE_FROM_PAX_VAULT = "exclude_from_pax_vault"
+
+# Custom field types backed by a native Slack picker (PAX -> users_select, Location ->
+# channels_select) store/display their value as ready-to-render Slack mention markup.
+CUSTOM_FIELD_MENTION_MARKUP = {
+    "PAX": ("<@", ">"),
+    "Location": ("<#", ">"),
+}
+
+# PAX/Location field types get a secondary "not in this Slack space" search field, mirroring
+# the main backblast form's existing "The PAX" + "PAX not in this Slack space" pattern —
+# native pickers only see the current workspace, so this covers PAX/AOs from other regions.
+CUSTOM_FIELD_XREGION_SUFFIX = {
+    "PAX": actions.CUSTOM_FIELD_PAX_XREGION_SUFFIX,
+    "Location": actions.CUSTOM_FIELD_LOCATION_XREGION_SUFFIX,
+}
+
+
+def local_picker_initial_value(raw_value: str, markup: tuple | None) -> str:
+    """Converts a stored custom-field value into what a local-workspace picker's initial
+    value should be: strips Slack mention markup back to a raw id for PAX/Location fields
+    (a cross-region-sourced or manually-typed plain name, with no markup, can't be
+    represented by the local picker and is left blank instead — the Q can re-select via the
+    cross-region or manual field), or returns the value unchanged for other field types."""
+    if not markup:
+        return raw_value
+    prefix, suffix = markup
+    if raw_value.startswith(prefix) and raw_value.endswith(suffix):
+        return raw_value.removeprefix(prefix).removesuffix(suffix)
+    return ""
+
+
+def manual_fallback_initial_value(raw_value: str, markup: tuple | None) -> str:
+    """Converts a stored custom-field value into what the plain-text 'not on Slack at all'
+    fallback field's initial value should be: the stored value as-is, but only when it isn't
+    Slack mention markup (that's already covered by the local picker) — a value resolved via
+    the cross-region search is also plain text and gets offered here too, which is harmless
+    since the Q can simply leave or clear it."""
+    if not raw_value or not markup:
+        return ""
+    prefix, suffix = markup
+    if raw_value.startswith(prefix) and raw_value.endswith(suffix):
+        return ""
+    return raw_value
 
 
 def add_custom_field_blocks(
@@ -69,15 +113,16 @@ def add_custom_field_blocks(
     output_form = copy.deepcopy(form)
     for custom_field in (region_record.custom_fields or {}).values():
         if safe_get(custom_field, "enabled"):
+            field_type = safe_get(custom_field, "type")
             output_form.add_block(
                 slack_orm.InputBlock(
-                    element=forms.CUSTOM_FIELD_TYPE_MAP[custom_field["type"]],
+                    element=forms.CUSTOM_FIELD_TYPE_MAP[field_type],
                     action=actions.CUSTOM_FIELD_PREFIX + custom_field["name"],
                     label=custom_field["name"],
                     optional=True,
                 )
             )
-            if safe_get(custom_field, "type") == "Dropdown":
+            if field_type == "Dropdown":
                 output_form.set_options(
                     {
                         actions.CUSTOM_FIELD_PREFIX + custom_field["name"]: slack_orm.as_selector_options(
@@ -86,18 +131,112 @@ def add_custom_field_blocks(
                         )
                     }
                 )
+            markup = CUSTOM_FIELD_MENTION_MARKUP.get(field_type)
             if initial_values and custom_field["name"] in initial_values:
-                output_form.set_initial_values(
-                    {
-                        actions.CUSTOM_FIELD_PREFIX + custom_field["name"]: safe_convert(
-                            safe_get(initial_values, custom_field["name"]), str
-                        )
-                        or ""
-                    }
-                )
+                # This specific event already has a value for this field (editing an existing
+                # backblast/preblast) — always respect it over the sticky auto-populate value.
+                raw_value = safe_convert(safe_get(initial_values, custom_field["name"]), str) or ""
+            elif custom_field.get("auto_populate") and custom_field.get("current_value"):
+                # New backblast/preblast, no value yet for this event — fall back to the
+                # region's sticky "last submitted value" for this field, if enabled.
+                raw_value = str(custom_field["current_value"])
             else:
-                output_form.set_initial_values({actions.CUSTOM_FIELD_PREFIX + custom_field["name"]: None})
+                raw_value = ""
+            local_key = actions.CUSTOM_FIELD_PREFIX + custom_field["name"]
+            output_form.set_initial_values({local_key: local_picker_initial_value(raw_value, markup) or None})
+
+            xregion_suffix = CUSTOM_FIELD_XREGION_SUFFIX.get(field_type)
+            if xregion_suffix:
+                output_form.add_block(
+                    slack_orm.InputBlock(
+                        element=slack_orm.ExternalSelectElement(
+                            placeholder="Type to search all regions...",
+                            min_query_length=2,
+                        ),
+                        action=local_key + xregion_suffix,
+                        label=f"{custom_field['name']} (not in this Slack space)",
+                        optional=True,
+                        hint="To filter by region, include it in parentheses, e.g. 'money (wash)' -> "
+                        "Moneyball (WashMo).",
+                    )
+                )
+                manual_key = local_key + actions.CUSTOM_FIELD_MANUAL_SUFFIX
+                output_form.add_block(
+                    slack_orm.InputBlock(
+                        element=slack_orm.PlainTextInputElement(placeholder="Type a name..."),
+                        action=manual_key,
+                        label=f"{custom_field['name']} (not on Slack / not in the system at all)",
+                        optional=True,
+                        hint="Only if they're not found by either search above.",
+                    )
+                )
+                output_form.set_initial_values({manual_key: manual_fallback_initial_value(raw_value, markup) or None})
     return output_form
+
+
+def resolve_cross_region_custom_fields(backblast_data: dict, region_record: SlackSettings) -> dict:
+    """Resolves each PAX/Location custom field to its final display-ready value under the
+    field's own key, in priority order: (1) the local picker's raw Slack id, wrapped as a
+    mention (<@U0123..> / <#C0123..>); (2) the cross-region search's selection (a User/Org id
+    from another region — see _search_users / _search_locations in utilities/options.py),
+    resolved to a plain display name, since a Slack mention can't reference a person/channel
+    from a different workspace; (3) the plain-text "not on Slack at all" fallback, for a
+    PAX/AO that isn't in F3's database anywhere, used as typed. Downstream formatting (weekly
+    report, post text) renders a plain name as "@name" / "#name", same as a typed
+    Dropdown/Text value.
+
+    Also syncs each "auto-populate" field's sticky current_value (used to pre-fill future
+    backblasts/preblasts until a Q changes it — see add_custom_field_blocks) to whatever was
+    just submitted, for every field type, persisting the change immediately."""
+    backblast_data = dict(backblast_data)
+    custom_fields = region_record.custom_fields or {}
+    sticky_changed = False
+
+    for custom_field_name, custom_field in custom_fields.items():
+        field_type = safe_get(custom_field, "type")
+        markup = CUSTOM_FIELD_MENTION_MARKUP.get(field_type)
+        xregion_suffix = CUSTOM_FIELD_XREGION_SUFFIX.get(field_type)
+        local_key = actions.CUSTOM_FIELD_PREFIX + custom_field_name
+
+        if markup and xregion_suffix:
+            xregion_key = local_key + xregion_suffix
+            manual_key = local_key + actions.CUSTOM_FIELD_MANUAL_SUFFIX
+            local_value = backblast_data.get(local_key)
+            xregion_value = backblast_data.pop(xregion_key, None)
+            manual_value = backblast_data.pop(manual_key, None)
+            manual_value = manual_value.strip() if isinstance(manual_value, str) else manual_value
+
+            if local_value:
+                prefix, suffix = markup
+                backblast_data[local_key] = f"{prefix}{local_value}{suffix}"
+            elif xregion_value:
+                if field_type == "PAX":
+                    record = DbManager.get(User, safe_convert(xregion_value, int))
+                    backblast_data[local_key] = record.f3_name if record else None
+                else:
+                    record = DbManager.get(Org, safe_convert(xregion_value, int))
+                    backblast_data[local_key] = record.name if record else None
+            elif manual_value:
+                backblast_data[local_key] = manual_value
+
+        # Only sync from fields actually rendered on the submitted form (enabled ones —
+        # see add_custom_field_blocks) — a disabled field is simply absent from
+        # backblast_data, which must not be mistaken for "the Q cleared it."
+        if custom_field.get("auto_populate") and custom_field.get("enabled"):
+            submitted_value = backblast_data.get(local_key) or None
+            if submitted_value != custom_field.get("current_value"):
+                custom_field["current_value"] = submitted_value
+                sticky_changed = True
+
+    if sticky_changed:
+        region_record.custom_fields = custom_fields
+        DbManager.update_records(
+            cls=SlackSpace,
+            filters=[SlackSpace.team_id == region_record.team_id],
+            fields={SlackSpace.settings: region_record.__dict__},
+        )
+        update_local_region_records()
+    return backblast_data
 
 
 def backblast_middleware(
@@ -780,6 +919,7 @@ def handle_backblast_post(body: dict, client: WebClient, logger: Logger, context
         backblast_data: dict = backblast_form.get_selected_values(body)
         event_org = DbManager.get(Org, safe_convert(safe_get(backblast_data, actions.BACKBLAST_AO), int))
 
+    backblast_data = resolve_cross_region_custom_fields(backblast_data, region_record)
     logger.debug(f"Backblast data: {backblast_data}")
 
     title = safe_get(backblast_data, actions.BACKBLAST_TITLE)
@@ -917,8 +1057,11 @@ def handle_backblast_post(body: dict, client: WebClient, logger: Logger, context
     custom_fields = {}
     for field, value in backblast_data.items():
         if (field[: len(actions.CUSTOM_FIELD_PREFIX)] == actions.CUSTOM_FIELD_PREFIX) and value:
-            post_msg += f"\n*{field[len(actions.CUSTOM_FIELD_PREFIX) :]}*: {str(value)}"
-            custom_fields[field[len(actions.CUSTOM_FIELD_PREFIX) :]] = value
+            # PAX/Location fields are already resolved to their final display value by
+            # resolve_cross_region_custom_fields (mention markup or a plain cross-region name)
+            field_name = field[len(actions.CUSTOM_FIELD_PREFIX) :]
+            post_msg += f"\n*{field_name}*: {str(value)}"
+            custom_fields[field_name] = value
 
     if file_list:
         custom_fields["files"] = file_list

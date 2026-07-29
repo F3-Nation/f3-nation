@@ -79,3 +79,21 @@ class SlackSettings:
     open_event_color: Optional[str] = None
     bot_log_channel: Optional[str] = None
     calendar_config_special_days_out: Optional[int] = None
+    weekly_report_enabled: Optional[bool] = None
+    weekly_report_sections: Optional[list[str]] = None
+    weekly_report_day: Optional[int] = None  # 0 = Monday ... 6 = Sunday
+    weekly_report_hour_cst: Optional[int] = None
+    weekly_report_destination: Optional[str] = None  # conversation id: channel or user (DM)
+    weekly_report_intro_template: Optional[str] = None
+    weekly_report_summary_metrics: Optional[list[str]] = None
+    weekly_report_frequency: Optional[str] = None  # "weekly" (default) or "biweekly"
+    # {flag_key: {"name": str, "hashtag": str, "custom_field_name": str,
+    #              "holder_type": "location"|"pax", "enabled": bool}}
+    weekly_report_flags: Optional[dict[str, dict]] = None
+    # Optional per-section header text overrides — blank/unset falls back to the built-in
+    # default header for that section (see scripts/weekly_reporting.py).
+    weekly_report_fngs_header: Optional[str] = None
+    weekly_report_top_ao_posts_header: Optional[str] = None
+    weekly_report_top_posters_header: Optional[str] = None
+    weekly_report_top_qs_header: Optional[str] = None
+    weekly_report_flags_header: Optional[str] = None

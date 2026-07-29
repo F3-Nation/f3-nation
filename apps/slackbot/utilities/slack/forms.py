@@ -653,6 +653,8 @@ CUSTOM_FIELD_TYPE_MAP = {
     "Dropdown": orm.StaticSelectElement(),
     "Text": orm.PlainTextInputElement(),
     "Number": orm.NumberInputElement(),
+    "PAX": orm.UsersSelectElement(),
+    "Location": orm.ChannelsSelectElement(),
 }
 
 CUSTOM_FIELD_ADD_EDIT_FORM = orm.BlockView(
@@ -691,6 +693,18 @@ CUSTOM_FIELD_ADD_EDIT_FORM = orm.BlockView(
             label="Dropdown options (only required if 'Dropdown' is selected above)",
             optional=True,
             hint="Separate options with commas",
+        ),
+        orm.InputBlock(
+            element=orm.RadioButtonsElement(
+                options=orm.as_selector_options(names=["Yes", "No"], values=["yes", "no"]),
+                initial_value="no",
+            ),
+            action=actions.CUSTOM_FIELD_ADD_AUTO_POPULATE,
+            label="Auto-populate with last value",
+            optional=False,
+            hint="If Yes, this field pre-fills on every new backblast/preblast with whatever was last "
+            "submitted for it, until a Q changes it — useful for things like 'who currently holds the HIM "
+            "Belt' that don't change every post.",
         ),
     ]
 )

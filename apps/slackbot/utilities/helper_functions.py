@@ -477,7 +477,11 @@ def get_request_type(body: dict) -> Tuple[str]:
     elif request_type == "view_closed":
         return ("view_closed", safe_get(body, "view", "callback_id"))
     elif request_type == "block_suggestion":
-        return ("block_suggestion", safe_get(body, "action_id"))
+        suggestion_action = safe_get(body, "action_id")
+        for suffix in routing.OPTIONS_SUFFIXES:
+            if suggestion_action and suggestion_action.endswith(suffix):
+                return ("block_suggestion", suffix)
+        return ("block_suggestion", suggestion_action)
     elif request_type == "shortcut":
         return ("shortcut", safe_get(body, "callback_id"))
     else:
@@ -920,6 +924,7 @@ def sort_by_name(extractor):
 
     return key
 
+
 def extract_state_values(body: dict) -> dict[str, Any]:
     """Extracts the state values from a Slack view submission payload.
 
@@ -937,27 +942,25 @@ def extract_state_values(body: dict) -> dict[str, Any]:
         for _, state in block_values.items():
             element_type = state.get("type")
             if element_type in (
-                "plain_text_input", "email_text_input", "url_text_input",
-                "number_input", "datepicker", "timepicker",
+                "plain_text_input",
+                "email_text_input",
+                "url_text_input",
+                "number_input",
+                "datepicker",
+                "timepicker",
             ):
                 form_data[block_id] = state.get("value")
             elif element_type in ("users_select", "conversations_select", "channels_select"):
                 form_data[block_id] = (
-                    state.get("selected_user")
-                    or state.get("selected_conversation")
-                    or state.get("selected_channel")
+                    state.get("selected_user") or state.get("selected_conversation") or state.get("selected_channel")
                 )
             elif element_type in ("multi_users_select", "multi_conversations_select", "multi_channels_select"):
                 form_data[block_id] = (
-                    state.get("selected_users")
-                    or state.get("selected_conversations")
-                    or state.get("selected_channels")
+                    state.get("selected_users") or state.get("selected_conversations") or state.get("selected_channels")
                 )
             elif element_type in ("static_select", "external_select", "radio_buttons"):
                 form_data[block_id] = (
-                    (state.get("selected_option") or {}).get("value")
-                    if state.get("selected_option")
-                    else None
+                    (state.get("selected_option") or {}).get("value") if state.get("selected_option") else None
                 )
             elif element_type in ("multi_static_select", "multi_external_select", "checkboxes"):
                 form_data[block_id] = [o.get("value") for o in state.get("selected_options", [])]

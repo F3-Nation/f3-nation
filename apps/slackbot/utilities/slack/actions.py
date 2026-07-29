@@ -189,10 +189,18 @@ CUSTOM_FIELD_DELETE = "custom_field_delete"
 CUSTOM_FIELD_ADD_NAME = "custom_field_add_name"
 CUSTOM_FIELD_ADD_TYPE = "custom_field_add_type"
 CUSTOM_FIELD_ADD_OPTIONS = "custom_field_add_options"
+CUSTOM_FIELD_ADD_AUTO_POPULATE = "custom_field_add_auto_populate"
 CUSTOM_FIELD_ADD_CALLBACK_ID = "custom_field_add_id"
 CUSTOM_FIELD_MENU_CALLBACK_ID = "custom_field_menu_id"
 CUSTOM_FIELD_PREFIX = "custom_field_"
 CUSTOM_FIELD_ADD_FORM = "custom_field_add_id"
+# Suffixes for the secondary "not in this Slack space" cross-region search field rendered
+# alongside a PAX/Location-type custom field's primary (local workspace) picker.
+CUSTOM_FIELD_PAX_XREGION_SUFFIX = "__xregion_pax"
+CUSTOM_FIELD_LOCATION_XREGION_SUFFIX = "__xregion_location"
+# Third-tier plain-text fallback for PAX/Location custom fields: covers someone/somewhere not
+# found by either picker above because they're not in the F3 database at all.
+CUSTOM_FIELD_MANUAL_SUFFIX = "__manual"
 
 ERROR_FORM_MESSAGE = "error_form_message"
 LOADING_ID = "loading_id"

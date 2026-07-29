@@ -72,6 +72,27 @@ pnpm test
 pnpm lint
 ```
 
+### Testing reporting scripts locally
+
+Scripts like `scripts/weekly_reporting.py`, `scripts/monthly_reporting.py`, and
+`scripts/award_achievements.py` query the `event_instance_expanded` /
+`attendance_expanded` materialized views, which exist in the cloud databases but
+are not created by the local Drizzle migrations. To run them against local data:
+
+```bash
+# one-time: create local versions of the views (re-run to refresh after seeding)
+docker exec -i f3-postgres psql -U f3local -d f3nation < apps/slackbot/scripts/sql/local-expanded-views.sql
+
+# print a region's weekly report without sending anything to Slack
+cd apps/slackbot
+uv run python scripts/weekly_reporting.py --org-id <region_org_id> --dry-run
+```
+
+`--dry-run` prints the fully rendered report to stdout (it also works for a
+region that has no Slack workspace connected yet). Drop `--dry-run` to actually
+send using the region's saved reporting settings, or use the "Send Weekly Report
+Now" button in `/f3-nation-settings` → Reporting Settings.
+
 ## Codebase notes
 
 - `main.py`: app entrypoint and Slack event handling
