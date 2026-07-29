@@ -4190,7 +4190,14 @@
                     ]
                   },
                   "eventTypeId": {
-                    "type": "number"
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "fngCount": {
                     "anyOf": [
@@ -4210,7 +4217,6 @@
                     "type": "number"
                   },
                   "isActive": {
-                    "default": true,
                     "type": "boolean"
                   },
                   "isPrivate": {
@@ -9398,7 +9404,7 @@
     },
     "/v1/map/location/upcoming-instances": {
       "get": {
-        "description": "Returns event instances in the next 30 days that have a series exception (closed, different-time) or are standalone one-off events (no seriesId). Used for map pin status flagging.",
+        "description": "Returns event instances in the next 30 days that have a series exception (closed, different-time), are standalone one-off events (no seriesId), or belong to a series but sit at a different location than their parent event (including a parent with no fixed location). Used for map pin status flagging.",
         "operationId": "map.location.upcomingInstances",
         "parameters": [
           {

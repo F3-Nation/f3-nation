@@ -9,6 +9,7 @@ import {
   eq,
   isNotNull,
   isNull,
+  ne,
   or,
   schema,
   sql,
@@ -202,7 +203,7 @@ export const mapLocationRouter = os.router({
       tags: ["map.location"],
       summary: "Get upcoming event instance exceptions and one-off events",
       description:
-        "Returns event instances in the next 30 days that have a series exception (closed, different-time) or are standalone one-off events (no seriesId). Used for map pin status flagging.",
+        "Returns event instances in the next 30 days that have a series exception (closed, different-time), are standalone one-off events (no seriesId), or belong to a series but sit at a different location than their parent event (including a parent with no fixed location). Used for map pin status flagging.",
     })
     .handler(async ({ context: ctx }) => {
       const aoOrg = aliasedTable(schema.orgs, "ao_org");
@@ -242,12 +243,12 @@ export const mapLocationRouter = os.router({
           )`,
         })
         .from(schema.eventInstances)
-        .innerJoin(
+        // LEFT join so locationless exceptions (e.g. "closed") still reach the
+        // client to flag their parent series. The active-location check moves to
+        // the WHERE clause, applied only to rows that have a location.
+        .leftJoin(
           schema.locations,
-          and(
-            eq(schema.eventInstances.locationId, schema.locations.id),
-            eq(schema.locations.isActive, true),
-          ),
+          eq(schema.eventInstances.locationId, schema.locations.id),
         )
         .leftJoin(aoOrg, eq(schema.eventInstances.orgId, aoOrg.id))
         .leftJoin(
@@ -274,12 +275,24 @@ export const mapLocationRouter = os.router({
             eq(schema.eventInstances.isPrivate, false),
             sql`${schema.eventInstances.startDate} >= CURRENT_DATE`,
             sql`${schema.eventInstances.startDate} <= CURRENT_DATE + INTERVAL '30 days'`,
+            // Locationless rows pass through (client skips markers without coords);
+            // rows with a location must resolve to an active one.
+            or(
+              isNull(schema.eventInstances.locationId),
+              eq(schema.locations.isActive, true),
+            ),
             or(
               isNotNull(schema.eventInstances.seriesException),
               isNull(schema.eventInstances.seriesId),
               and(
                 isNotNull(schema.eventInstances.seriesId),
-                isNull(seriesEvent.locationId),
+                // Pin a series occurrence that isn't at its parent's location: the
+                // parent roves (null location) or this occurrence sits elsewhere.
+                // Keep isNull explicit — `ne` is NULL (not true) when a side is NULL.
+                or(
+                  isNull(seriesEvent.locationId),
+                  ne(schema.eventInstances.locationId, seriesEvent.locationId),
+                ),
               ),
             ),
           ),

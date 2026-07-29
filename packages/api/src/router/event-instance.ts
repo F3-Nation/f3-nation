@@ -353,7 +353,7 @@ export const eventInstanceRouter = {
         id: z.coerce.number().optional(),
         name: z.string().optional(),
         description: z.string().nullish(),
-        isActive: z.boolean().optional().default(true),
+        isActive: z.boolean().optional(),
         locationId: z.coerce.number().nullish(),
         orgId: z.coerce.number(),
         seriesId: z.coerce.number().nullish(), // Link to series if this is a series instance
@@ -365,7 +365,7 @@ export const eventInstanceRouter = {
         highlight: z.boolean().optional().default(false),
         meta: z.record(z.string(), z.unknown()).nullish(),
         isPrivate: z.boolean().optional().default(false),
-        eventTypeId: z.coerce.number().optional(),
+        eventTypeId: z.coerce.number().nullish(),
         eventTagId: z.coerce.number().nullish(),
         preblast: z.string().nullish(),
         preblastRich: z.record(z.string(), z.unknown()).nullish(),
@@ -386,31 +386,74 @@ export const eventInstanceRouter = {
       description: "Create a new event instance or update an existing one",
     })
     .handler(async ({ context: ctx, input }) => {
-      // Check permissions
-      const roleCheckResult = await checkHasRoleOnOrg({
-        orgId: input.orgId,
-        session: ctx.session,
-        db: ctx.db,
-        roleName: "editor",
-      });
-      if (!roleCheckResult.success) {
-        throw new ORPCError("UNAUTHORIZED", {
-          message: "You are not authorized to create/update event instances",
+      // When updating, load the persisted instance and authorize against
+      // its actual org — never trust the submitted orgId alone.
+      let existingName: string | null = null;
+      let existingIsActive: boolean | null = null;
+      if (input.id) {
+        const [existing] = await ctx.db
+          .select({
+            orgId: schema.eventInstances.orgId,
+            name: schema.eventInstances.name,
+            isActive: schema.eventInstances.isActive,
+          })
+          .from(schema.eventInstances)
+          .where(eq(schema.eventInstances.id, input.id));
+
+        if (!existing) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Event instance not found",
+          });
+        }
+
+        const sourceAuth = await checkHasRoleOnOrg({
+          orgId: existing.orgId,
+          session: ctx.session,
+          db: ctx.db,
+          roleName: "editor",
         });
+        if (!sourceAuth.success) {
+          throw new ORPCError("UNAUTHORIZED", {
+            message: "You are not authorized to update this event instance",
+          });
+        }
+
+        if (input.orgId !== existing.orgId) {
+          const destAuth = await checkHasRoleOnOrg({
+            orgId: input.orgId,
+            session: ctx.session,
+            db: ctx.db,
+            roleName: "editor",
+          });
+          if (!destAuth.success) {
+            throw new ORPCError("UNAUTHORIZED", {
+              message:
+                "You are not authorized to move this event instance to the destination organization",
+            });
+          }
+        }
+
+        existingName = existing.name;
+        existingIsActive = existing.isActive;
+      } else {
+        const createAuth = await checkHasRoleOnOrg({
+          orgId: input.orgId,
+          session: ctx.session,
+          db: ctx.db,
+          roleName: "editor",
+        });
+        if (!createAuth.success) {
+          throw new ORPCError("UNAUTHORIZED", {
+            message: "You are not authorized to create event instances",
+          });
+        }
       }
 
       // Generate a default name if not provided or empty
       let name = input.name;
       if (!name || name.trim() === "") {
-        // If updating an existing record, preserve the existing name
-        if (input.id) {
-          const [existing] = await ctx.db
-            .select({ name: schema.eventInstances.name })
-            .from(schema.eventInstances)
-            .where(eq(schema.eventInstances.id, input.id));
-          if (existing?.name) {
-            name = existing.name;
-          }
+        if (existingName) {
+          name = existingName;
         }
 
         // If still no name (new record or existing had no name), generate default
@@ -436,8 +479,23 @@ export const eventInstanceRouter = {
         }
       }
 
+      // On create, default isActive to true; on update, preserve the
+      // persisted value when the client omits the field so editing an
+      // inactive instance doesn't silently reactivate it.
+      const isActive = input.isActive ?? existingIsActive ?? true;
+
+      // Presence of the key — not truthiness of the value — decides whether the
+      // association is rewritten, so an explicit null can clear it. Must be read
+      // before destructuring, which would lose the distinction.
+      const shouldUpdateEventType = "eventTypeId" in input;
       const shouldUpdateEventTag = "eventTagId" in input;
-      const { eventTypeId, eventTagId, name: _inputName, ...eventData } = input;
+      const {
+        eventTypeId,
+        eventTagId,
+        name: _inputName,
+        isActive: _inputIsActive,
+        ...eventData
+      } = input;
 
       // Create or update the event instance
       const [result] = await ctx.db
@@ -445,10 +503,11 @@ export const eventInstanceRouter = {
         .values({
           ...eventData,
           name,
+          isActive,
         })
         .onConflictDoUpdate({
           target: [schema.eventInstances.id],
-          set: { ...eventData, name },
+          set: { ...eventData, name, isActive },
         })
         .returning();
 
@@ -459,17 +518,19 @@ export const eventInstanceRouter = {
       }
 
       // Handle event type in join table
-      if (eventTypeId) {
+      if (shouldUpdateEventType) {
         await ctx.db
           .delete(schema.eventInstancesXEventTypes)
           .where(
             eq(schema.eventInstancesXEventTypes.eventInstanceId, result.id),
           );
 
-        await ctx.db.insert(schema.eventInstancesXEventTypes).values({
-          eventInstanceId: result.id,
-          eventTypeId,
-        });
+        if (eventTypeId != null) {
+          await ctx.db.insert(schema.eventInstancesXEventTypes).values({
+            eventInstanceId: result.id,
+            eventTypeId,
+          });
+        }
       }
 
       // Handle event tag in join table

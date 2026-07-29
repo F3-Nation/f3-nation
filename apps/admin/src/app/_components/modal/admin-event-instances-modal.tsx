@@ -6,10 +6,7 @@ import { z } from "zod";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
 import { SeriesException } from "@acme/shared/app/enums";
-import {
-  convertHH_mmToHHmm,
-  convertHHmmToHH_mm,
-} from "@acme/shared/app/functions";
+import { convertHHmmToHH_mm } from "@acme/shared/app/functions";
 import { safeParseInt } from "@acme/shared/common/functions";
 import { cn } from "@acme/ui";
 import { Button } from "@acme/ui/button";
@@ -50,6 +47,7 @@ import {
   useQuery,
 } from "~/orpc/react";
 import type { DataType } from "~/utils/store/modal";
+import { toStoredTime } from "~/utils/form-values";
 import {
   closeModal,
   DeleteType,
@@ -87,7 +85,8 @@ const EventInstanceFormSchema = z
     description: z.string().nullish(),
     startTime: z.string().nullable().optional(),
     endTime: z.string().nullable().optional(),
-    eventTypeId: z.number().optional(),
+    // null is "None" (clear the association); undefined is "untouched".
+    eventTypeId: z.number().nullish(),
     seriesId: z.number().nullable().optional(),
     seriesException: z
       .enum(["closed", "different-time", "miscellaneous"])
@@ -219,12 +218,21 @@ export default function AdminEventInstancesModal({
         router.refresh();
       },
       onError: (err) => {
-        toast.error(
-          err instanceof ORPCError && err?.code === "UNAUTHORIZED"
-            ? (err.message ??
-                "You are not authorized to create or update event instances")
-            : "Failed to save event instance",
-        );
+        if (err instanceof ORPCError && err.code === "UNAUTHORIZED") {
+          // Surface the server's message verbatim: it distinguishes "you can't
+          // edit this instance" from "you can't move it to that organization",
+          // which are different problems with different fixes for the user.
+          toast.error(
+            err.message ??
+              "You are not authorized to create or update event instances",
+          );
+          return;
+        }
+        if (err instanceof ORPCError && err.code === "NOT_FOUND") {
+          toast.error(err.message ?? "This event instance no longer exists");
+          return;
+        }
+        toast.error("Failed to save event instance");
       },
     }),
   );
@@ -232,14 +240,11 @@ export default function AdminEventInstancesModal({
   const onSubmit = async (formData: EventInstanceFormValues) => {
     setIsSubmitting(true);
     try {
-      const startTime =
-        formData.startTime?.length === 5
-          ? convertHH_mmToHHmm(formData.startTime)
-          : undefined;
-      const endTime =
-        formData.endTime?.length === 5
-          ? convertHH_mmToHHmm(formData.endTime)
-          : undefined;
+      // Blank maps to null so clearing a time actually removes it; the form is
+      // always seeded from the instance, so there is no untouched case to
+      // preserve for these two fields. See `toStoredTime`.
+      const startTime = toStoredTime(formData.startTime);
+      const endTime = toStoredTime(formData.endTime);
 
       const trimmedName = formData.name?.trim();
       const descTrim = formData.description?.trim();
@@ -252,9 +257,15 @@ export default function AdminEventInstancesModal({
         locationId: formData.locationId ?? null,
         name: trimmedName ?? undefined,
         description: descTrim == null || descTrim === "" ? null : descTrim,
-        startTime: startTime ?? undefined,
-        endTime: endTime ?? undefined,
-        ...(formData.eventTypeId ? { eventTypeId: formData.eventTypeId } : {}),
+        startTime,
+        endTime,
+        // Send the key whenever the field holds a value the user chose —
+        // including null for "None", which clears the association. Only a
+        // genuinely untouched (undefined) field is omitted, so the server
+        // preserves what is already there.
+        ...(formData.eventTypeId !== undefined
+          ? { eventTypeId: formData.eventTypeId }
+          : {}),
         seriesId: formData.seriesId ?? null,
         seriesException: formData.seriesException ?? null,
         isPrivate: formData.isPrivate,
@@ -316,7 +327,7 @@ export default function AdminEventInstancesModal({
                           field.onChange(orgId);
                           form.setValue("orgId", 0);
                           form.setValue("locationId", null);
-                          form.setValue("eventTypeId", undefined);
+                          form.setValue("eventTypeId", null);
                           form.setValue("seriesId", null);
                         }}
                         isMulti={false}
@@ -511,9 +522,7 @@ export default function AdminEventInstancesModal({
                         field.value != null ? field.value.toString() : NONE
                       }
                       onValueChange={(value) => {
-                        field.onChange(
-                          value === NONE ? undefined : Number(value),
-                        );
+                        field.onChange(value === NONE ? null : Number(value));
                       }}
                     >
                       <FormControl>

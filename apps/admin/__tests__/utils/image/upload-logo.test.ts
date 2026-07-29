@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { uploadLogo } from "~/utils/image/upload-logo";
 
-const makeFile = () => new Blob(["image-bytes"], { type: "image/png" });
+const FILE_BYTES = "image-bytes";
+const FILE_TYPE = "image/png";
+const makeFile = () => new Blob([FILE_BYTES], { type: FILE_TYPE });
 
 describe("uploadLogo", () => {
   afterEach(() => {
@@ -25,6 +27,15 @@ describe("uploadLogo", () => {
     const body = init.body as FormData;
     expect(body.get("orgId")).toBe("7");
     expect(body.get("size")).toBeNull();
+
+    // Assert the payload itself, not just the metadata around it: without this
+    // the test passes even if the file is never appended. FormData wraps a Blob
+    // into a File, so compare the bytes and type rather than the reference.
+    const uploaded = body.get("file");
+    expect(uploaded).toBeInstanceOf(Blob);
+    const uploadedBlob = uploaded as Blob;
+    expect(await uploadedBlob.text()).toBe(FILE_BYTES);
+    expect(uploadedBlob.type).toBe(FILE_TYPE);
   });
 
   it("includes the size field when provided", async () => {
