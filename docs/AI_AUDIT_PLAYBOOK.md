@@ -201,9 +201,9 @@ file.arrayBuffer()` on untrusted input.
   helper where only one was fixed).
 - Dead code, commented-out prod branches, `TODO`/`FIXME` on security paths.
 - Raw `throw new Error(...)` in a `packages/api/src/router` handler instead of
-  a typed `ORPCError`. oRPC masks anything else as an opaque 500, dropping the
-  message and the correct 4xx/5xx status — see
-  [`docs/AI_DEVELOPMENT_GUIDE.md#error-handling`](AI_DEVELOPMENT_GUIDE.md#error-handling).
+  a typed `ORPCError`, or an inline ESLint disable suppressing the rule that
+  catches it. Policy and rationale:
+  [`AGENTS.md` § API Error Handling](../AGENTS.md#api-error-handling).
 
 ---
 

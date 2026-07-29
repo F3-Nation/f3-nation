@@ -1,5 +1,8 @@
 import baseConfig from "@acme/eslint-config/base";
 
+const ORPC_ERROR_MESSAGE =
+  "Throw `new ORPCError(code, { message })` instead of a raw Error — oRPC masks non-ORPCError throws as an opaque 500 and drops the message. Use BAD_REQUEST for invalid/missing input, FORBIDDEN for permission checks, NOT_FOUND for a missing referenced resource, and INTERNAL_SERVER_ERROR only for truly unexpected server state.";
+
 export default [
   ...baseConfig,
   { ignores: ["vitest.config.ts", "__tests__", "coverage"] },
@@ -20,9 +23,23 @@ export default [
             "Use the log* helpers (logDebug/logInfo/logError/…) instead of the raw pino logger. Reserve `logger` for `logger.child()`.",
         },
         {
-          selector: "ThrowStatement > NewExpression[callee.name='Error']",
-          message:
-            "Throw `new ORPCError(code, { message })` instead of a raw Error — oRPC masks non-ORPCError throws as an opaque 500 and drops the message. Use BAD_REQUEST for invalid/missing input, FORBIDDEN for permission checks, NOT_FOUND for a missing referenced resource, and INTERNAL_SERVER_ERROR only for truly unexpected server state.",
+          // Any constructed throw that isn't an ORPCError: `new Error`,
+          // `new TypeError`, a custom `new DomainError`, etc. Negating the name
+          // rather than listing constructors means a new error class is covered
+          // the day it's written. Bare `throw err` (a rethrow) is an Identifier,
+          // not a NewExpression, so it stays allowed.
+          selector: "ThrowStatement > NewExpression[callee.name!='ORPCError']",
+          message: ORPC_ERROR_MESSAGE,
+        },
+        {
+          // The no-`new` call form — `throw Error("...")` is valid JS and just
+          // as masked. Limited to the built-in error constructors on purpose:
+          // a blanket CallExpression selector would also flag factory helpers
+          // that return an ORPCError (e.g. `throw mapSlackError(...)` in
+          // src/router/slack.ts).
+          selector:
+            "ThrowStatement > CallExpression[callee.name=/^(Error|AggregateError|EvalError|RangeError|ReferenceError|SyntaxError|TypeError|URIError)$/]",
+          message: ORPC_ERROR_MESSAGE,
         },
       ],
     },

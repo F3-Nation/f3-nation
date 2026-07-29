@@ -131,12 +131,16 @@ credential.
 
 ## Error handling
 
-Router handlers (`packages/api/src/router`) must throw a typed
-[`ORPCError`](https://orpc.unnoq.com/docs/error-handling), never a raw
-`Error`. oRPC only preserves the code, status, and message of an `ORPCError`
-— any other thrown value (including a plain `throw new Error("...")`) is
-masked as an opaque 500 `INTERNAL_SERVER_ERROR` and the original message is
-dropped before it reaches the client. Concretely, this means:
+The rule lives in
+[`AGENTS.md` § API Error Handling](../AGENTS.md#api-error-handling), which is
+the canonical source and where any change to it belongs. This section is the
+rationale and code-selection guidance that rule points back at.
+
+Why it matters: oRPC only preserves the code, status, and message of a typed
+[`ORPCError`](https://orpc.unnoq.com/docs/error-handling). Any other thrown
+value (including a plain `throw new Error("...")`) is masked as an opaque 500
+`INTERNAL_SERVER_ERROR`, and the original message is dropped before it reaches
+the client. Concretely, this means:
 
 - **Clients can't distinguish their own mistake from a server bug.** A
   missing required field and a database outage both come back as the same
@@ -165,10 +169,8 @@ Pick the code by what actually went wrong, not by what's convenient:
 | An upstream/external call failed                      | `BAD_GATEWAY`           | 502    |
 | Truly unexpected server state (should be unreachable) | `INTERNAL_SERVER_ERROR` | 500    |
 
-`packages/api/eslint.config.js` scopes an ESLint `no-restricted-syntax` rule
-to `packages/api/src/router/**/*.ts` (excluding tests) that flags any bare
-`throw new Error(...)` and points at this guidance — treat a lint failure
-here as a sign the error needs a real `ORPCError` code, not a suppression.
+A lint failure from the enforcing rule means the error needs a real
+`ORPCError` code — not a suppression.
 
 ## Authentication & tokens
 
