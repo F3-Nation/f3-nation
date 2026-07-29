@@ -102,7 +102,13 @@ export const mapLocationRouter = os.router({
           schema.eventTypes,
           eq(schema.eventTypes.id, schema.eventsXEventTypes.eventTypeId),
         )
-        .where(eq(schema.locations.isActive, true))
+        // Exclude events whose AO org has been deactivated. events.orgId is a
+        // NOT NULL FK, so the aoOrg leftJoin always matches and this filter
+        // drops inactive-AO events without touching the join's result shape.
+        // (#606)
+        .where(
+          and(eq(schema.locations.isActive, true), eq(aoOrg.isActive, true)),
+        )
         .groupBy(
           schema.locations.id,
           aoOrg.name,
