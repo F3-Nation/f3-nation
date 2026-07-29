@@ -10,10 +10,11 @@ from features.weekly_report_flags import MANAGE_WEEKLY_FLAGS
 from scripts.weekly_reporting import (
     DEFAULT_WEEKLY_DAY,
     DEFAULT_WEEKLY_FREQUENCY,
-    DEFAULT_WEEKLY_HOUR_CST,
+    DEFAULT_WEEKLY_HOUR,
     DEFAULT_WEEKLY_INTRO_TEMPLATE,
     DEFAULT_WEEKLY_SECTIONS,
     DEFAULT_WEEKLY_SUMMARY_METRICS,
+    DEFAULT_WEEKLY_TIMEZONE,
     FLAGS_SECTION_HEADER,
     FNGS_SECTION_HEADER,
     TOP_AO_POSTS_SECTION_HEADER,
@@ -21,6 +22,7 @@ from scripts.weekly_reporting import (
     TOP_QS_SECTION_HEADER,
     WEEKLY_REPORT_FREQUENCY_OPTIONS,
     WEEKLY_REPORT_SECTION_OPTIONS,
+    WEEKLY_REPORT_TIMEZONE_OPTIONS,
     WEEKLY_SECTION_SUMMARY,
     WEEKLY_SUMMARY_METRIC_OPTIONS,
 )
@@ -44,6 +46,7 @@ WEEKLY_REPORT_SUMMARY_ENABLED = "weekly_report_summary_enabled"
 WEEKLY_REPORT_SUMMARY_METRICS = "weekly_report_summary_metrics"
 WEEKLY_REPORT_DAY = "weekly_report_day"
 WEEKLY_REPORT_HOUR = "weekly_report_hour"
+WEEKLY_REPORT_TIMEZONE = "weekly_report_timezone"
 WEEKLY_REPORT_DESTINATION = "weekly_report_destination"
 WEEKLY_REPORT_TEMPLATE = "weekly_report_template"
 WEEKLY_REPORT_FNGS_HEADER = "weekly_report_fngs_header"
@@ -91,7 +94,7 @@ def build_reporting_form(
     weekly_hour = (
         region_record.weekly_report_hour_cst
         if region_record.weekly_report_hour_cst is not None
-        else DEFAULT_WEEKLY_HOUR_CST
+        else DEFAULT_WEEKLY_HOUR
     )
 
     form.set_initial_values(
@@ -105,6 +108,7 @@ def build_reporting_form(
             WEEKLY_REPORT_SUMMARY_METRICS: weekly_summary_metrics,
             WEEKLY_REPORT_DAY: str(weekly_day),
             WEEKLY_REPORT_HOUR: str(weekly_hour),
+            WEEKLY_REPORT_TIMEZONE: region_record.weekly_report_timezone or DEFAULT_WEEKLY_TIMEZONE,
             WEEKLY_REPORT_DESTINATION: region_record.weekly_report_destination
             or region_record.reporting_region_channel,
             WEEKLY_REPORT_TEMPLATE: region_record.weekly_report_intro_template or DEFAULT_WEEKLY_INTRO_TEMPLATE,
@@ -144,8 +148,9 @@ def handle_reporting_edit(body: dict, client: WebClient, logger: Logger, context
     region_record.weekly_report_summary_metrics = form_data.get(WEEKLY_REPORT_SUMMARY_METRICS) or []
     region_record.weekly_report_day = safe_convert(form_data.get(WEEKLY_REPORT_DAY), int, default=DEFAULT_WEEKLY_DAY)
     region_record.weekly_report_hour_cst = safe_convert(
-        form_data.get(WEEKLY_REPORT_HOUR), int, default=DEFAULT_WEEKLY_HOUR_CST
+        form_data.get(WEEKLY_REPORT_HOUR), int, default=DEFAULT_WEEKLY_HOUR
     )
+    region_record.weekly_report_timezone = form_data.get(WEEKLY_REPORT_TIMEZONE) or DEFAULT_WEEKLY_TIMEZONE
     region_record.weekly_report_destination = form_data.get(WEEKLY_REPORT_DESTINATION)
     region_record.weekly_report_intro_template = form_data.get(WEEKLY_REPORT_TEMPLATE)
     region_record.weekly_report_fngs_header = form_data.get(WEEKLY_REPORT_FNGS_HEADER)
@@ -278,13 +283,26 @@ FORM = SdkBlockView(
             block_id=WEEKLY_REPORT_DAY,
         ),
         blocks.InputBlock(
-            label="Send Time (CST)",
+            label="Send Time",
             element=blocks.StaticSelectElement(
                 action_id=WEEKLY_REPORT_HOUR,
                 options=as_selector_options(names=[f"{h}:00" for h in range(24)], values=[str(h) for h in range(24)]),
             ),
             optional=False,
             block_id=WEEKLY_REPORT_HOUR,
+        ),
+        blocks.InputBlock(
+            label="Time Zone",
+            element=blocks.StaticSelectElement(
+                action_id=WEEKLY_REPORT_TIMEZONE,
+                options=as_selector_options(
+                    names=list(WEEKLY_REPORT_TIMEZONE_OPTIONS.values()),
+                    values=list(WEEKLY_REPORT_TIMEZONE_OPTIONS.keys()),
+                ),
+            ),
+            optional=False,
+            block_id=WEEKLY_REPORT_TIMEZONE,
+            hint="'Send Day'/'Send Time' above are interpreted in this time zone.",
         ),
         blocks.InputBlock(
             label="Send To",

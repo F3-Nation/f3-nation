@@ -92,7 +92,21 @@ WEEKLY_SUMMARY_METRIC_LINES = {
 }
 
 DEFAULT_WEEKLY_DAY = 0  # Monday
-DEFAULT_WEEKLY_HOUR_CST = 8
+DEFAULT_WEEKLY_HOUR = 8
+
+# Regions can be anywhere in the US (or beyond) — weekly_report_day/_hour are interpreted in
+# whichever of these the region picks (SlackSettings.weekly_report_timezone), not a fixed
+# server timezone. Defaults to Central to match this report's original fixed-CST behavior.
+DEFAULT_WEEKLY_TIMEZONE = "America/Chicago"
+WEEKLY_REPORT_TIMEZONE_OPTIONS = {
+    "America/New_York": "Eastern",
+    "America/Chicago": "Central",
+    "America/Denver": "Mountain",
+    "America/Phoenix": "Arizona (no DST)",
+    "America/Los_Angeles": "Pacific",
+    "America/Anchorage": "Alaska",
+    "Pacific/Honolulu": "Hawaii",
+}
 
 # "weekly" sends every week on weekly_report_day; "biweekly" sends every other week,
 # in sync across all regions (see is_biweekly_send_week)
@@ -654,12 +668,21 @@ def send_weekly_report(region_record: SlackSettings, text: str, channel: str):
             print(f"Error sending weekly report: {e.response['error']}")
 
 
+def region_timezone(region_record: SlackSettings) -> pytz.BaseTzInfo:
+    return pytz.timezone(region_record.weekly_report_timezone or DEFAULT_WEEKLY_TIMEZONE)
+
+
+def region_local_window_end(region_record: SlackSettings) -> date:
+    """Yesterday, in the region's own configured timezone (defaults to Central)."""
+    return datetime.now(region_timezone(region_record)).date() - timedelta(days=1)
+
+
 def run_weekly_report_for_region(
     region_record: SlackSettings, window_end: Optional[date] = None, dry_run: bool = False
 ):
-    # The report covers the N full days ending yesterday (CST): 7 for weekly, 14 for
-    # biweekly, so a Monday send covers the prior week(s) through Sunday
-    window_end = window_end or (datetime.now(pytz.timezone("US/Central")).date() - timedelta(days=1))
+    # The report covers the N full days ending yesterday, in the region's own timezone:
+    # 7 for weekly, 14 for biweekly, so a Monday send covers the prior week(s) through Sunday
+    window_end = window_end or region_local_window_end(region_record)
     window_start = window_end - timedelta(days=report_window_days(region_record.weekly_report_frequency) - 1)
     data = pull_weekly_data([region_record.org_id], window_start, window_end)
     records = pull_weekly_records([region_record.org_id], window_end)
@@ -685,19 +708,22 @@ def run_weekly_report_single_org(
 
 
 def cycle_weekly_reports(force_org_id: int = None, dry_run: bool = False):
-    current_time = datetime.now(pytz.timezone("US/Central"))
     slack_spaces = DbManager.find_records(SlackSpace, filters=[True])
     settings_list: List[SlackSettings] = [
         SlackSettings(**s.settings) for s in slack_spaces if safe_get(s.settings, "org_id")
     ]
 
     def is_due(s: SlackSettings) -> bool:
+        # weekly_report_day/_hour are in the region's own configured timezone, not a fixed
+        # server timezone — this cron runs hourly, so only the regions whose local clock
+        # currently matches their configured send day/hour are due on this particular tick.
+        local_now = datetime.now(region_timezone(s))
         day = s.weekly_report_day if s.weekly_report_day is not None else DEFAULT_WEEKLY_DAY
-        hour = s.weekly_report_hour_cst if s.weekly_report_hour_cst is not None else DEFAULT_WEEKLY_HOUR_CST
-        if not (bool(s.weekly_report_enabled) and day == current_time.weekday() and hour == current_time.hour):
+        hour = s.weekly_report_hour_cst if s.weekly_report_hour_cst is not None else DEFAULT_WEEKLY_HOUR
+        if not (bool(s.weekly_report_enabled) and day == local_now.weekday() and hour == local_now.hour):
             return False
         frequency = s.weekly_report_frequency or DEFAULT_WEEKLY_FREQUENCY
-        if frequency == FREQUENCY_BIWEEKLY and not is_biweekly_send_week(current_time.date()):
+        if frequency == FREQUENCY_BIWEEKLY and not is_biweekly_send_week(local_now.date()):
             return False
         return True
 
@@ -708,14 +734,16 @@ def cycle_weekly_reports(force_org_id: int = None, dry_run: bool = False):
     if not due_settings:
         return
 
-    window_end = current_time.date() - timedelta(days=1)
-
-    # group by window length (weekly vs biweekly) so each group's data is pulled in one batch
-    settings_by_window_days: Dict[int, List[SlackSettings]] = defaultdict(list)
+    # Group by (window length, window end) rather than just window length — due regions can
+    # span multiple timezones, and each one's "yesterday" is computed in its own timezone
+    # (see region_local_window_end), so window_end isn't necessarily the same across all of
+    # them even within a single cron tick.
+    settings_by_window: Dict[tuple, List[SlackSettings]] = defaultdict(list)
     for s in due_settings:
-        settings_by_window_days[report_window_days(s.weekly_report_frequency)].append(s)
+        window_key = (report_window_days(s.weekly_report_frequency), region_local_window_end(s))
+        settings_by_window[window_key].append(s)
 
-    for window_days, group in settings_by_window_days.items():
+    for (window_days, window_end), group in settings_by_window.items():
         window_start = window_end - timedelta(days=window_days - 1)
         org_ids = [s.org_id for s in group]
         data = pull_weekly_data(org_ids, window_start, window_end)

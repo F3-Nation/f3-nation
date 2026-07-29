@@ -1,7 +1,9 @@
 import os
 import sys
 import unittest
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+
+import pytz
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
@@ -9,6 +11,7 @@ from scripts.weekly_reporting import (
     BIWEEKLY_EPOCH_MONDAY,
     DEFAULT_WEEKLY_SECTIONS,
     DEFAULT_WEEKLY_SUMMARY_METRICS,
+    DEFAULT_WEEKLY_TIMEZONE,
     FLAG_HOLDER_FALLBACK,
     FLAG_HOLDER_LOCATION,
     FLAG_HOLDER_PAX,
@@ -28,6 +31,8 @@ from scripts.weekly_reporting import (
     compute_weekly_stats,
     extract_fng_names,
     is_biweekly_send_week,
+    region_local_window_end,
+    region_timezone,
     report_window_days,
     resolve_custom_field_holder,
     resolve_location_holder,
@@ -524,6 +529,21 @@ class TestBiweeklyScheduling(unittest.TestCase):
 
     def test_report_window_days_biweekly(self):
         self.assertEqual(report_window_days("biweekly"), 14)
+
+
+class TestRegionTimezone(unittest.TestCase):
+    def test_defaults_to_central_when_unset(self):
+        record = _make_region_record(weekly_report_timezone=None)
+        self.assertEqual(region_timezone(record), pytz.timezone(DEFAULT_WEEKLY_TIMEZONE))
+
+    def test_uses_configured_timezone(self):
+        record = _make_region_record(weekly_report_timezone="America/Los_Angeles")
+        self.assertEqual(region_timezone(record), pytz.timezone("America/Los_Angeles"))
+
+    def test_region_local_window_end_is_yesterday_in_that_timezone(self):
+        record = _make_region_record(weekly_report_timezone="Pacific/Honolulu")
+        expected = datetime.now(pytz.timezone("Pacific/Honolulu")).date() - timedelta(days=1)
+        self.assertEqual(region_local_window_end(record), expected)
 
 
 if __name__ == "__main__":

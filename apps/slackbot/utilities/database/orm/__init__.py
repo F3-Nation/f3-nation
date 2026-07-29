@@ -82,7 +82,12 @@ class SlackSettings:
     weekly_report_enabled: Optional[bool] = None
     weekly_report_sections: Optional[list[str]] = None
     weekly_report_day: Optional[int] = None  # 0 = Monday ... 6 = Sunday
+    # NOTE: keeps the "_cst" suffix from this field's original hardcoded-Central-time design
+    # (even though it's now interpreted per weekly_report_timezone below) — renaming this key
+    # would break loading for any region whose SlackSpace.settings JSON already has it saved,
+    # since SlackSettings(**settings) rejects unknown kwargs.
     weekly_report_hour_cst: Optional[int] = None
+    weekly_report_timezone: Optional[str] = None  # IANA tz name, e.g. "America/Chicago"
     weekly_report_destination: Optional[str] = None  # conversation id: channel or user (DM)
     weekly_report_intro_template: Optional[str] = None
     weekly_report_summary_metrics: Optional[list[str]] = None
