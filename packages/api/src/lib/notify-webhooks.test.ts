@@ -8,6 +8,12 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+// `src/__tests__/setup.ts` mocks this module globally so unrelated suites never
+// make real outbound calls. This suite is the one place that needs the real
+// implementation, so opt back out — without this every assertion below runs
+// against a stub that resolves undefined and can never throw.
+vi.unmock("./notify-webhooks");
+
 vi.mock("@acme/env", () => ({
   env: {
     NEXT_PUBLIC_API_URL: "https://api.example.test",

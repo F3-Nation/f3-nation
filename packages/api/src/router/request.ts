@@ -893,6 +893,25 @@ export const requestRouter = {
         });
       }
 
+      // A stored request can outlive the location it points at. Left to the FK
+      // constraint, applying it raises a raw DrizzleQueryError, which oRPC masks
+      // as an opaque 500 with the message dropped — the reviewer is told nothing
+      // actionable. Check up front so it reads as a 404 instead.
+      const referencedLocationId =
+        "originalLocationId" in input ? input.originalLocationId : undefined;
+      if (referencedLocationId != null) {
+        const [location] = await ctx.db
+          .select({ id: schema.locations.id })
+          .from(schema.locations)
+          .where(eq(schema.locations.id, referencedLocationId));
+
+        if (!location) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Failed to find location to update",
+          });
+        }
+      }
+
       switch (input.requestType) {
         case "create_ao_and_location_and_event":
           return await handleRequest({

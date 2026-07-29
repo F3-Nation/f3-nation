@@ -1187,10 +1187,26 @@ describe("Request Router", () => {
     });
   });
 
-  describe("submitUpdateRequest", () => {
+  describe("validateSubmissionByAdmin", () => {
     it("throws BAD_REQUEST when the end time is before the start time", async () => {
       const region = await createTestRegion();
       if (!region) return;
+
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      const location = await createTestLocation(ao.id);
+      if (!location) return;
+
+      const [eventType] = await db
+        .insert(schema.eventTypes)
+        .values({
+          name: `Test Event Type ${uniqueId()}`,
+          eventCategory: "first_f",
+        })
+        .returning();
+      if (!eventType) return;
+      createdEventTypeIds.push(eventType.id);
 
       const session = createEditorSession({
         orgId: region.id,
@@ -1200,27 +1216,45 @@ describe("Request Router", () => {
 
       const client = createTestClient();
 
-      await expect(
-        client.request.validateSubmissionByAdmin({
-          id: uniqueId(),
+      // Every other field is deliberately valid so the reversed times are the
+      // only thing left to reject. With an invalid id / missing ao / null
+      // eventTypeIds the union fails first and the time-order refinement never
+      // runs, which is what made this assertion unreachable.
+      const error: unknown = await client.request
+        .validateSubmissionByAdmin({
+          id: crypto.randomUUID(),
           regionId: region.id,
           requestType: "create_event",
           eventName: `Bad Time Test ${uniqueId()}`,
           eventDayOfWeek: "monday",
           eventStartTime: "0800",
           eventEndTime: "0700",
-          eventTypeIds: null,
+          eventTypeIds: [eventType.id],
+          aoId: ao.id,
+          locationId: location.id,
           aoName: "Test AO",
           submittedBy: "submitter@example.com",
-        }),
-      ).rejects.toMatchObject({
-        code: "BAD_REQUEST",
-        message: "End time must be after start time",
-      });
-    });
-  });
+        })
+        .then(
+          () => undefined,
+          (rejection: unknown) => rejection,
+        );
 
-  describe("validateSubmissionByAdmin", () => {
+      expect(error).toMatchObject({ code: "BAD_REQUEST" });
+      const issues =
+        (
+          error as {
+            data?: { issues?: { path?: unknown[]; message?: string }[] };
+          }
+        ).data?.issues ?? [];
+      expect(issues).toContainEqual(
+        expect.objectContaining({
+          path: ["eventEndTime"],
+          message: "End time must be after start time",
+        }),
+      );
+    });
+
     it("throws BAD_REQUEST when a delete_event request has neither eventId nor locationId", async () => {
       const region = await createTestRegion();
       if (!region) return;
@@ -1233,9 +1267,15 @@ describe("Request Router", () => {
 
       const client = createTestClient();
 
-      await expect(
-        client.request.validateSubmissionByAdmin({
-          id: uniqueId(),
+      // `DeleteEventSchema` requires a positive `originalEventId`, so a request
+      // that names no event is refused at the input boundary rather than by a
+      // handler-level guard — earlier, and with the offending field named. A
+      // valid UUID `id` is supplied deliberately so the missing event id is the
+      // only possible reason for rejection; otherwise this would pass on an
+      // unrelated validation error and stop testing anything.
+      const error: unknown = await client.request
+        .validateSubmissionByAdmin({
+          id: crypto.randomUUID(),
           regionId: region.id,
           requestType: "delete_event",
           eventName: `Nothing To Delete Test ${uniqueId()}`,
@@ -1245,16 +1285,37 @@ describe("Request Router", () => {
           eventTypeIds: null,
           aoName: "Test AO",
           submittedBy: "submitter@example.com",
-        }),
-      ).rejects.toMatchObject({
-        code: "BAD_REQUEST",
-        message: "Nothing to delete",
-      });
+        })
+        .then(
+          () => undefined,
+          (rejection: unknown) => rejection,
+        );
+
+      expect(error).toMatchObject({ code: "BAD_REQUEST" });
+      const issues =
+        (error as { data?: { issues?: { path?: unknown[] }[] } }).data
+          ?.issues ?? [];
+      expect(
+        issues.some((issue) => issue.path?.[0] === "originalEventId"),
+      ).toBe(true);
     });
 
     it("throws NOT_FOUND when locationId references a location that does not exist", async () => {
       const region = await createTestRegion();
       if (!region) return;
+
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      const [eventType] = await db
+        .insert(schema.eventTypes)
+        .values({
+          name: `Test Event Type ${uniqueId()}`,
+          eventCategory: "first_f",
+        })
+        .returning();
+      if (!eventType) return;
+      createdEventTypeIds.push(eventType.id);
 
       const session = createEditorSession({
         orgId: region.id,
@@ -1266,14 +1327,19 @@ describe("Request Router", () => {
 
       await expect(
         client.request.validateSubmissionByAdmin({
-          id: uniqueId(),
+          // The create_event branch of the union requires a UUID `id`, a
+          // positive `originalAoId` (backfilled from `aoId`), and at least one
+          // event type. Without all three the input boundary rejects with
+          // BAD_REQUEST and the location lookup under test never runs.
+          id: crypto.randomUUID(),
           regionId: region.id,
           requestType: "create_event",
           eventName: `Bad Location Test ${uniqueId()}`,
           eventDayOfWeek: "monday",
           eventStartTime: "0600",
           eventEndTime: "0700",
-          eventTypeIds: null,
+          eventTypeIds: [eventType.id],
+          aoId: ao.id,
           aoName: "Test AO",
           submittedBy: "submitter@example.com",
           locationId: 999999999,
