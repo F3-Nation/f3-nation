@@ -15,6 +15,10 @@ import { req, target } from "../transport";
  * silently break SSG and the map client, so pin the rule itself.
  */
 describe("handler dispatch", () => {
+  // First test in the file: it builds a real oRPC client and pays the suite's
+  // one-time cold-start cost (module init + transport wiring), which lands
+  // this case right at the 5s default and flakes on a loaded CI runner
+  // (observed ~5019ms). Give it headroom without masking a genuine hang.
   it("returns the RPC body shape for a real oRPC client", async () => {
     const res = await rpcResponse((client) => client.ping(), {
       "x-forwarded-for": "10.90.0.1",
@@ -25,7 +29,7 @@ describe("handler dispatch", () => {
         await normalize(res, { paths: { "json.timestamp": "<TIMESTAMP>" } }),
       ),
     ).toMatchFileSnapshot("../__snapshots__/dispatch-rpc-ping.golden.json");
-  });
+  }, 20_000);
 
   it("returns the OpenAPI body shape for the same procedure over REST", async () => {
     const res = await target.invoke(
