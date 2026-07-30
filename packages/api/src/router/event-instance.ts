@@ -915,7 +915,7 @@ export const eventInstanceRouter = {
             orgName: aoOrg.name,
             seriesId: schema.eventInstances.seriesId,
             seriesName: seriesEvent.name,
-            hasPreblast: sql<boolean>`${schema.eventInstances.preblastRich} IS NOT NULL`,
+            hasPreblast: sql<boolean>`${schema.eventInstances.preblastTs} IS NOT NULL`,
             eventTypes: sql<{ id: number; name: string }[]>`COALESCE(
               json_agg(
                 DISTINCT jsonb_build_object(
@@ -1003,7 +1003,7 @@ export const eventInstanceRouter = {
             orgName: aoOrg.name,
             seriesId: schema.eventInstances.seriesId,
             seriesName: seriesEvent.name,
-            hasPreblast: sql<boolean>`${schema.eventInstances.preblastRich} IS NOT NULL`,
+            hasPreblast: sql<boolean>`${schema.eventInstances.preblastTs} IS NOT NULL`,
             eventTypes: sql<{ id: number; name: string }[]>`COALESCE(
               json_agg(
                 DISTINCT jsonb_build_object(
