@@ -20,14 +20,25 @@ const generatedProcedures = [
   },
 ] as const;
 
+let omitGeneratedPaths = false;
+
 const generateMock = vi.fn(
   async (_router: unknown, options: GenerateOptions) => ({
     servers: options.servers,
-    paths: Object.fromEntries(
-      generatedProcedures
-        .filter(({ routerPath }) => options.filter({ path: [...routerPath] }))
-        .map(({ openApiPath, item }) => [openApiPath, structuredClone(item)]),
-    ),
+    ...(omitGeneratedPaths
+      ? {}
+      : {
+          paths: Object.fromEntries(
+            generatedProcedures
+              .filter(({ routerPath }) =>
+                options.filter({ path: [...routerPath] }),
+              )
+              .map(({ openApiPath, item }) => [
+                openApiPath,
+                structuredClone(item),
+              ]),
+          ),
+        }),
   }),
 );
 
@@ -53,6 +64,7 @@ describe("docs openapi route", () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    omitGeneratedPaths = false;
     process.env.NEXT_PUBLIC_API_URL = "";
   });
 
@@ -117,5 +129,22 @@ describe("docs openapi route", () => {
     const spec = (await response.json()) as { servers: { url: string }[] };
     expect(spec.servers).toHaveLength(1);
     expect(spec.servers[0]!.url).toBe("https://api.example.com");
+  });
+
+  it("handles generated specs without paths", async () => {
+    omitGeneratedPaths = true;
+
+    const { GET } = await import("../src/app/docs/openapi.json/route");
+
+    const response = await GET(
+      new Request("https://api.example.com/docs/openapi.json"),
+    );
+
+    const spec = (await response.json()) as {
+      components: { parameters: { ClientHeader: { required: boolean } } };
+      paths?: unknown;
+    };
+    expect(spec.components.parameters.ClientHeader.required).toBe(true);
+    expect(spec.paths).toBeUndefined();
   });
 });
