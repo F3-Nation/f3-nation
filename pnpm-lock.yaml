@@ -788,6 +788,9 @@ importers:
       '@acme/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/typescript
+      '@acme/vitest-config':
+        specifier: workspace:*
+        version: link:../../tooling/vitest
       '@tailwindcss/postcss':
         specifier: 'catalog:'
         version: 4.3.3
