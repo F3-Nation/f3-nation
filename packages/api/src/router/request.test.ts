@@ -1350,6 +1350,46 @@ describe("Request Router", () => {
         message: "Failed to find location to update",
       });
     });
+
+    it("throws NOT_FOUND when newLocationId references a location that does not exist", async () => {
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      const location = await createTestLocation(ao.id);
+      if (!location) return;
+
+      const session = createEditorSession({
+        orgId: region.id,
+        orgName: region.name,
+      });
+      await mockAuthWithSession(session);
+
+      const client = createTestClient();
+
+      // `handleMoveAOToDifferentLocation` writes a non-null `newLocationId`
+      // straight into `events.locationId` / `orgs.defaultLocationId`, so a
+      // dangling target must be caught by the preflight — otherwise the FK
+      // constraint fires and oRPC masks it as an opaque 500. The
+      // `originalLocationId` here is real, so the only broken reference is the
+      // target, and the message must say so.
+      await expect(
+        client.request.validateSubmissionByAdmin({
+          id: crypto.randomUUID(),
+          regionId: region.id,
+          requestType: "move_ao_to_different_location",
+          originalAoId: ao.id,
+          originalLocationId: location.id,
+          newLocationId: 999999999,
+          submittedBy: "submitter@example.com",
+        }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+        message: "Failed to find target location",
+      });
+    });
   });
 
   // Helper: insert a stored pending request row (the approve path requires a

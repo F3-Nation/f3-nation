@@ -893,22 +893,39 @@ export const requestRouter = {
         });
       }
 
-      // A stored request can outlive the location it points at. Left to the FK
-      // constraint, applying it raises a raw DrizzleQueryError, which oRPC masks
-      // as an opaque 500 with the message dropped — the reviewer is told nothing
-      // actionable. Check up front so it reads as a 404 instead.
-      const referencedLocationId =
-        "originalLocationId" in input ? input.originalLocationId : undefined;
-      if (referencedLocationId != null) {
-        const [location] = await ctx.db
+      // A request can outlive the locations it points at; hitting the FK
+      // constraint would surface as an opaque 500, so check up front and 404
+      // instead. Both ends matter: `originalLocationId` is read/edited and a
+      // non-null `newLocationId` is written; a null `newLocationId` means
+      // "create a fresh location", so there is nothing to look up.
+      const locationChecks: { id: number; message: string }[] = [];
+      if ("originalLocationId" in input && input.originalLocationId != null) {
+        locationChecks.push({
+          id: input.originalLocationId,
+          message: "Failed to find location to update",
+        });
+      }
+      if ("newLocationId" in input && input.newLocationId != null) {
+        locationChecks.push({
+          id: input.newLocationId,
+          message: "Failed to find target location",
+        });
+      }
+      if (locationChecks.length > 0) {
+        const found = await ctx.db
           .select({ id: schema.locations.id })
           .from(schema.locations)
-          .where(eq(schema.locations.id, referencedLocationId));
+          .where(
+            inArray(
+              schema.locations.id,
+              locationChecks.map((check) => check.id),
+            ),
+          );
+        const foundIds = new Set(found.map((location) => location.id));
+        const missing = locationChecks.find((check) => !foundIds.has(check.id));
 
-        if (!location) {
-          throw new ORPCError("NOT_FOUND", {
-            message: "Failed to find location to update",
-          });
+        if (missing) {
+          throw new ORPCError("NOT_FOUND", { message: missing.message });
         }
       }
 
