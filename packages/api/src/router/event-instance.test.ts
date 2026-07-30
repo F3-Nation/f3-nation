@@ -646,7 +646,7 @@ describe("Event Instance Router", () => {
         preblast_destination_channel: "C_REGION_PRE",
         default_backblast_destination: "specified_channel",
         backblast_destination_channel: "C_REGION_BACK",
-        bot_token: "xoxb-secret-should-not-leak",
+        bot_token: "bot-token-secret-should-not-leak",
       });
 
       const eventInstance = await createTestEventInstance(ao.id);
@@ -663,7 +663,7 @@ describe("Event Instance Router", () => {
         backblast: { channelId: "C_REGION_BACK", source: "region_settings" },
       });
       expect(JSON.stringify(result)).not.toContain(
-        "xoxb-secret-should-not-leak",
+        "bot-token-secret-should-not-leak",
       );
       expect(result).not.toHaveProperty("settings");
     });
