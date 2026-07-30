@@ -18,13 +18,6 @@ const generatedProcedures = [
       post: {},
     },
   },
-  {
-    routerPath: ["slack", "getBotSettingsCache"],
-    openApiPath: "/v1/slack/bot/settings/cache",
-    item: {
-      get: {},
-    },
-  },
 ] as const;
 
 const generateMock = vi.fn(
@@ -105,15 +98,6 @@ describe("docs openapi route", () => {
     expect(spec.paths["/v1/ping"].post.parameters[0]!.$ref).toBe(
       "#/components/parameters/ClientHeader",
     );
-
-    expect(Object.keys(spec.paths)).not.toContain(
-      "/v1/slack/bot/settings/cache",
-    );
-    expect(
-      Object.keys(spec.paths).filter((path) =>
-        path.endsWith("/bot/settings/cache"),
-      ),
-    ).toEqual([]);
   });
 
   it("derives base URL from forwarded headers when env base URL is missing", async () => {

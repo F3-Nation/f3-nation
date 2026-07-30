@@ -54,8 +54,7 @@ export async function GET(request: Request) {
   });
 
   const spec = (await generator.generate(router, {
-    filter: ({ path }) =>
-      !path.includes("slack") || !path.includes("getBotSettingsCache"),
+    filter: () => true,
     info: {
       title: "F3 Nation API",
       version: packageJson.version,
