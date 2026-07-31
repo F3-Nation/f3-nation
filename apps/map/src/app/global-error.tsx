@@ -3,7 +3,7 @@
 
 import { useEffect } from "react";
 import NextError from "next/error";
-import * as Sentry from "@sentry/nextjs";
+import posthog from "posthog-js";
 
 export default function GlobalError({
   error,
@@ -11,7 +11,10 @@ export default function GlobalError({
   error: Error & { digest?: string };
 }) {
   useEffect(() => {
-    Sentry.captureException(error);
+    // Only capture when PostHog was actually initialized (a key is set).
+    if (posthog.__loaded) {
+      posthog.captureException(error);
+    }
   }, [error]);
 
   return (

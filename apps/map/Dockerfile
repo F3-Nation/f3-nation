@@ -46,6 +46,13 @@ ENV SKIP_ENV_VALIDATION=true
 # regeneration fetches real map data against the live DB. See page.tsx.
 ENV SKIP_SSG=1
 
+# Next.js inlines NEXT_PUBLIC_* into the client bundle at `next build` time, so
+# the browser PostHog key must be present during the image build — deploy-time
+# env vars only reach server-side code. Defaults empty: keyless builds succeed
+# and client PostHog is simply disabled (see instrumentation-client.ts).
+ARG NEXT_PUBLIC_POSTHOG_KEY
+ENV NEXT_PUBLIC_POSTHOG_KEY=$NEXT_PUBLIC_POSTHOG_KEY
+
 # `turbo prune` copies the full catalog into pnpm-workspace.yaml but only this
 # app's subset into the pruned lockfile. pnpm's verify-deps-before-run check (run
 # by `pnpm run build`) flags that as catalog drift under strict catalogMode and

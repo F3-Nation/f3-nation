@@ -23,11 +23,11 @@ const levelToSeverity: Record<string, string> = {
 export type LogContext = Record<string, unknown>;
 
 /**
- * Optional process-global error sink. Apps with Sentry register a reporter here
- * at startup (see each app's instrumentation) so that everything logged via
- * `logError` anywhere in the process still reaches Sentry — replacing the
- * `console.error` path that `captureConsoleIntegration` used to catch before
- * logs moved to pino/stdout.
+ * Optional process-global error sink. Apps with an error tracker (PostHog)
+ * register a reporter here at startup (see each app's instrumentation) so
+ * that everything logged via `logError` anywhere in the process still reaches
+ * the tracker — replacing the `console.error` path that error-tracking SDKs
+ * used to catch before logs moved to pino/stdout.
  *
  * The reporter receives the full payload — the `event` name, structured `ctx`,
  * and the optional `err` — so it can preserve triage context and report
@@ -99,12 +99,12 @@ export function createLogger(
   }
 
   // error and fatal share the same shape: attach the optional `err` and fan
-  // out to the process-global error sink (Sentry) so nothing is lost.
+  // out to the process-global error sink (PostHog) so nothing is lost.
   const reportable =
     (level: "error" | "fatal") =>
     (event: string, ctx: LogContext = {}, err?: unknown) => {
       logger[level]({ ...ctx, ...(err !== undefined ? { err } : {}) }, event);
-      // Never let a failing reporter (e.g. the Sentry bridge) throw out of a
+      // Never let a failing reporter (e.g. the PostHog bridge) throw out of a
       // log call and break request flow. Report the failure via raw pino so we
       // don't re-enter the reporter.
       if (errorReporter) {

@@ -24,11 +24,12 @@
     "@orpc/server": "catalog:",
     "@orpc/zod": "catalog:",
     "@scalar/nextjs-api-reference": "catalog:",
-    "@sentry/nextjs": "catalog:",
     "@t3-oss/env-nextjs": "catalog:",
     "dotenv-cli": "catalog:",
     "next": "catalog:",
     "next-auth": "catalog:",
+    "posthog-js": "catalog:",
+    "posthog-node": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "zod": "catalog:"

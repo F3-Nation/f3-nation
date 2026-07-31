@@ -1,10 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import * as Sentry from "@sentry/nextjs";
 import GlobalError from "../src/app/global-error";
 
-vi.mock("@sentry/nextjs", () => ({
-  captureException: vi.fn(),
+const captureExceptionMock = vi.hoisted(() => vi.fn());
+const posthogMock = vi.hoisted(() => ({
+  __loaded: true,
+  captureException: captureExceptionMock,
+}));
+
+vi.mock("posthog-js", () => ({
+  default: posthogMock,
 }));
 
 describe("GlobalError", () => {
@@ -29,8 +34,18 @@ describe("GlobalError", () => {
     expect(mockReset).toHaveBeenCalledOnce();
   });
 
-  it("reports the error to Sentry on mount", () => {
+  it("reports the error to PostHog on mount", () => {
     render(<GlobalError error={mockError} reset={mockReset} />);
-    expect(Sentry.captureException).toHaveBeenCalledWith(mockError);
+    expect(captureExceptionMock).toHaveBeenCalledWith(mockError);
+  });
+
+  it("does not report when PostHog is not initialized", () => {
+    posthogMock.__loaded = false;
+    try {
+      render(<GlobalError error={mockError} reset={mockReset} />);
+      expect(captureExceptionMock).not.toHaveBeenCalled();
+    } finally {
+      posthogMock.__loaded = true;
+    }
   });
 });

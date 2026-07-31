@@ -16,7 +16,7 @@ means, why we do it, and how to use it day to day.
 - [Naming the `event`](#naming-the-event)
 - [Turning the volume up or down (`LOG_LEVEL`)](#turning-the-volume-up-or-down-log_level)
 - [What logs look like (dev vs. prod)](#what-logs-look-like-dev-vs-prod)
-- [Errors and Sentry](#errors-and-sentry)
+- [Errors and PostHog](#errors-and-posthog)
 - [The golden rule: never log secrets or PII](#the-golden-rule-never-log-secrets-or-pii)
 - [See also](#see-also)
 
@@ -57,8 +57,8 @@ logError("auth.register.f3_api_error", { userId }, err);
 - **`ctx`** — _the details of this one occurrence_, as a flat object
   (`{ userId, orgId, durationMs }`). This is where the variable data goes.
 - **`err`** — _the thrown value_, on `logError` / `logFatal` only. It's
-  serialized to name + message + stack, and forwarded to Sentry when a reporter
-  is registered (see [Errors and Sentry](#errors-and-sentry)).
+  serialized to name + message + stack, and forwarded to PostHog when a reporter
+  is registered (see [Errors and PostHog](#errors-and-posthog)).
 
 Keeping the label fixed and the data in `ctx` is the whole trick: it's what lets
 you count "this kind of thing" while still keeping the specifics of each one.
@@ -176,28 +176,29 @@ fast at startup rather than silently logging at the wrong level.
 You don't configure any of this per-call — write the same `log*` call
 everywhere and the package picks the right format.
 
-## Errors and Sentry
+## Errors and PostHog
 
-`logError` and `logFatal` write to **stdout** (pino), not `console.error`. That
-matters because Sentry's `captureConsoleIntegration` only watches `console.*` —
-it would never see our error logs.
+`logError` and `logFatal` write to **stdout** (pino), not `console.error` — an
+error tracker watching the console would never see our error logs.
 
-So apps that use Sentry register a process-global **error reporter** at startup
-(see [`apps/api/sentry.server.config.ts`](../apps/api/sentry.server.config.ts)).
+So apps that use PostHog register a process-global **error reporter** at
+startup (see [`apps/api/src/posthog-server.ts`](../apps/api/src/posthog-server.ts)).
 Whenever you call `logError`/`logFatal`, the helper fans the event out to that
-reporter, which forwards it to Sentry — with an `Error` it becomes a captured
-exception, and without one (a config/validation failure) it's captured as a
-message, keeping the `event` as a Sentry tag for triage.
+reporter, which forwards it to PostHog error tracking as a captured exception —
+with an `Error` it's captured as-is, and without one (a config/validation
+failure) a synthetic error named after the `event` is captured instead. The
+`event` name and `ctx` ride along as event properties for triage.
 
 The upshot for you: **just call `logError`** with the thrown value as the third
-argument. You don't call Sentry directly — error logging already reaches it.
+argument. You don't call PostHog directly — error logging already reaches it.
 
 ## The golden rule: never log secrets or PII
 
-Structured logs land in stdout and in Sentry, so treat them as if they're
-permanent and widely readable. **Never** put secrets, tokens, full request
-bodies, or personal data (emails, phone numbers, emergency contacts) into
-`event` or `ctx`.
+Structured logs land in stdout, and error-level logs (`logError`/`logFatal`)
+also reach PostHog error tracking via the reporter bridge — so treat them as if
+they're permanent and widely readable. **Never** put secrets, tokens, full
+request bodies, or personal data (emails, phone numbers, emergency contacts)
+into `event` or `ctx`.
 
 Log **identifiers, not personal data** — `{ userId }`, not `{ email }`;
 `Object.keys(updateSet)` (which fields changed), not the values themselves. When

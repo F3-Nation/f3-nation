@@ -43,7 +43,6 @@ catalog:
   "@radix-ui/react-tooltip": ^1.2.13
   "@react-hook/window-size": ^3.1.1
   "@scalar/nextjs-api-reference": ^0.11.11
-  "@sentry/nextjs": ^10.67.0
   "@t3-oss/env-nextjs": ^0.13.11
   "@tailwindcss/postcss": ^4.3.3
   "@tanstack/react-query": 5.101.3
@@ -107,6 +106,8 @@ catalog:
   postcss: ^8.5.20
   postcss-load-config: ^6.0.1
   postgres: ^3.4.9
+  posthog-js: ^1.396.6
+  posthog-node: ^5.39.4
   prettier: ^3.9.5
   prettier-plugin-tailwindcss: ^0.8.1
   react: ^19.2.7
@@ -171,7 +172,6 @@ packageExtensions:
       zod:
         optional: true
 allowBuilds:
-  "@sentry/cli": true
   core-js: true
   core-js-pure: true
   esbuild: true

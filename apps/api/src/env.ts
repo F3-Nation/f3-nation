@@ -33,7 +33,12 @@ export const env = createEnv({
    */
   client: {
     NEXT_PUBLIC_API_URL: z.string().min(1),
-    // NEXT_PUBLIC_CLIENTVAR: z.string(),
+    // PostHog error tracking + analytics. Optional: absence disables all
+    // PostHog capture (client and server) without crashing anything.
+    NEXT_PUBLIC_POSTHOG_KEY: z.string().optional(),
+    // Session recording is opt-in — only "true" turns it on (never in
+    // previews/sandbox).
+    NEXT_PUBLIC_POSTHOG_SESSION_RECORDING: z.enum(["true", "false"]).optional(),
   },
   /**
    * Destructure all variables from `process.env` to make sure they aren't tree-shaken away.
@@ -42,6 +47,9 @@ export const env = createEnv({
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
     NODE_ENV: process.env.NODE_ENV,
     NEXT_PUBLIC_CHANNEL: process.env.NEXT_PUBLIC_CHANNEL,
+    NEXT_PUBLIC_POSTHOG_KEY: process.env.NEXT_PUBLIC_POSTHOG_KEY,
+    NEXT_PUBLIC_POSTHOG_SESSION_RECORDING:
+      process.env.NEXT_PUBLIC_POSTHOG_SESSION_RECORDING,
   },
   skipValidation:
     !!process.env.CI ||

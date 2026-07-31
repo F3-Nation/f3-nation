@@ -12,7 +12,7 @@ a free-text message.
 - [`ctx` and `err`: where the variable data goes](#ctx-and-err-where-the-variable-data-goes)
 - [Log levels](#log-levels)
 - [Helpers vs. the raw `logger`](#helpers-vs-the-raw-logger)
-- [Sentry / error reporting](#sentry--error-reporting)
+- [PostHog / error reporting](#posthog--error-reporting)
 - [Environment behavior](#environment-behavior)
 - [API Reference](#api-reference)
 
@@ -78,8 +78,8 @@ Examples from the codebase:
 - **`ctx`** (second arg) — a flat object of structured key/values for this
   occurrence (`{ userId, orgId, durationMs }`). Merged into the log line.
 - **`err`** (third arg, `logError` / `logFatal` only) — the actual thrown value. It is
-  serialized via pino's `err` serializer (name, message, stack) and, when a
-  Sentry reporter is registered, sent as the captured exception.
+  serialized via pino's `err` serializer (name, message, stack) and, when an
+  error reporter is registered, sent to PostHog as the captured exception.
 
 > [!IMPORTANT]
 > Never put secrets or PII (emails, tokens, full request bodies) in `event` or
@@ -97,8 +97,8 @@ two failure levels also accept a trailing `err`.
 | `logDebug` | `debug` | Developer diagnostics; off in prod (default `info`), on locally. |
 | `logInfo`  | `info`  | Normal lifecycle events worth keeping.                           |
 | `logWarn`  | `warn`  | Recoverable / unexpected-but-handled conditions.                 |
-| `logError` | `error` | Failures. Also fans out to the Sentry reporter if registered.    |
-| `logFatal` | `fatal` | Unrecoverable failures. Also fans out to the Sentry reporter.    |
+| `logError` | `error` | Failures. Also fans out to the error reporter if registered.     |
+| `logFatal` | `fatal` | Unrecoverable failures. Also fans out to the error reporter.     |
 
 The active level is `LOG_LEVEL` (env) or `info` by default — anything below it is
 dropped. Local `.env` defaults to `debug`; Cloud Run to `info`.
@@ -126,28 +126,25 @@ reqLog.info({ path }, "api.request.received"); // pino order: (ctx, event)
 > string as the message and **silently drop `{ updateSet }`** as a printf arg.
 > If you're not creating a child logger, use `logDebug` instead.
 
-## Sentry / error reporting
+## PostHog / error reporting
 
-`logError` writes to stdout (pino), not `console.error`, so Sentry's
-`captureConsoleIntegration` would miss it. Apps that use Sentry register a
-process-global reporter at startup so error logs still reach Sentry — see
-[`apps/api/sentry.server.config.ts`](../../apps/api/sentry.server.config.ts):
+`logError` writes to stdout (pino), not `console.error`, so a console-watching
+error tracker would miss it. Apps that use PostHog register a process-global
+reporter at startup so error logs still reach PostHog error tracking — see
+[`apps/api/src/posthog-server.ts`](../../apps/api/src/posthog-server.ts):
 
 ```ts
 import { setErrorReporter } from "@acme/logger";
 
 setErrorReporter((event, ctx, err) => {
-  if (err !== undefined) {
-    Sentry.captureException(err, { tags: { event }, extra: ctx });
-  } else {
-    Sentry.captureMessage(event, { level: "error", extra: ctx });
-  }
+  captureServerException(err ?? new Error(event), { event, ...ctx });
 });
 ```
 
 The reporter receives the full payload, so error logs that carry no `Error`
-(config/validation failures) are still reported — preserving the `event` as a
-Sentry tag for triage.
+(config/validation failures) are still reported as a synthetic error named
+after the `event` — with the `event` and `ctx` attached as properties for
+triage.
 
 ## Environment behavior
 

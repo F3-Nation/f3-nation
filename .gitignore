@@ -60,8 +60,6 @@ yarn-error.log*
 # db exports
 .data
 
-# sentry
-.env.sentry-build-plugin 
 
 pr.md
 .eslintcache

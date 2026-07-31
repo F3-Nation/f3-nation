@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import * as Sentry from "@sentry/nextjs";
+import posthog from "posthog-js";
 
 interface GlobalErrorProps {
   error: Error & { digest?: string };
@@ -10,7 +10,10 @@ interface GlobalErrorProps {
 
 export default function GlobalError({ error, reset }: GlobalErrorProps) {
   useEffect(() => {
-    Sentry.captureException(error);
+    // Only capture when PostHog was actually initialized (a key is set).
+    if (posthog.__loaded) {
+      posthog.captureException(error);
+    }
   }, [error]);
 
   return (
