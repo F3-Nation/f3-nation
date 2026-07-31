@@ -11,7 +11,7 @@ import { importJWK, jwtVerify } from "jose";
 
 import { constantTimeEqual } from "~/lib/crypto-utils";
 import { db } from "~/lib/db";
-import { getJWKS, signAccessToken } from "~/lib/jwt";
+import { getJWKS, signAccessToken, signIdToken } from "~/lib/jwt";
 
 function generateOpaqueToken(): string {
   return crypto.randomBytes(32).toString("base64url");
@@ -128,9 +128,15 @@ export async function exchangeAuthorizationCode(params: {
   if (!constantTimeEqual(computedChallenge, authCode.codeChallenge))
     return { error: "invalid_grant" as const };
 
-  // Look up user email for JWT claims
+  // Look up user fields for JWT claims (id_token needs the same fields the
+  // userinfo endpoint exposes, not just email, so both surfaces agree)
   const [user] = await db
-    .select({ email: users.email })
+    .select({
+      email: users.email,
+      f3Name: users.f3Name,
+      emailVerified: users.emailVerified,
+      avatarUrl: users.avatarUrl,
+    })
     .from(users)
     .where(eq(users.id, authCode.userId))
     .limit(1);
@@ -138,13 +144,30 @@ export async function exchangeAuthorizationCode(params: {
 
   // Create tokens — access token is a JWT, refresh token is opaque
   const ACCESS_TOKEN_TTL = 3600; // 1 hour
+  const scopes = authCode.scopes ?? "openid profile email";
   const accessToken = await signAccessToken({
     sub: authCode.userId,
     email: user.email,
-    scope: authCode.scopes ?? "openid profile email",
+    scope: scopes,
     clientId: authCode.clientId,
     expiresInSeconds: ACCESS_TOKEN_TTL,
   });
+
+  // ID Token is only meaningful (and only spec'd) when "openid" was actually
+  // granted — omit it entirely otherwise rather than issuing an unrequested
+  // identity assertion.
+  const idToken = scopes.split(" ").includes("openid")
+    ? await signIdToken({
+        sub: authCode.userId,
+        clientId: authCode.clientId,
+        scope: scopes,
+        expiresInSeconds: ACCESS_TOKEN_TTL,
+        name: user.f3Name,
+        picture: user.avatarUrl,
+        email: user.email,
+        emailVerified: !!user.emailVerified,
+      })
+    : undefined;
 
   const refreshToken = generateOpaqueToken();
   const refreshExpiresAt = new Date(
@@ -164,6 +187,7 @@ export async function exchangeAuthorizationCode(params: {
     expires_in: ACCESS_TOKEN_TTL,
     refresh_token: refreshToken,
     scope: authCode.scopes,
+    ...(idToken ? { id_token: idToken } : {}),
   };
 }
 
@@ -204,9 +228,15 @@ export async function exchangeRefreshToken(params: {
     .delete(oauthRefreshTokens)
     .where(eq(oauthRefreshTokens.token, params.refreshToken));
 
-  // Look up user email for JWT claims
+  // Look up user fields for JWT claims (id_token needs the same fields the
+  // userinfo endpoint exposes, not just email, so both surfaces agree)
   const [user] = await db
-    .select({ email: users.email })
+    .select({
+      email: users.email,
+      f3Name: users.f3Name,
+      emailVerified: users.emailVerified,
+      avatarUrl: users.avatarUrl,
+    })
     .from(users)
     .where(eq(users.id, existing.userId))
     .limit(1);
@@ -222,6 +252,20 @@ export async function exchangeRefreshToken(params: {
     clientId: existing.clientId,
     expiresInSeconds: ACCESS_TOKEN_TTL,
   });
+
+  // Same "only if openid was granted" rule as the authorization_code path.
+  const idToken = scopes.split(" ").includes("openid")
+    ? await signIdToken({
+        sub: existing.userId,
+        clientId: existing.clientId,
+        scope: scopes,
+        expiresInSeconds: ACCESS_TOKEN_TTL,
+        name: user.f3Name,
+        picture: user.avatarUrl,
+        email: user.email,
+        emailVerified: !!user.emailVerified,
+      })
+    : undefined;
 
   const refreshToken = generateOpaqueToken();
   const refreshExpiresAt = new Date(
@@ -241,6 +285,7 @@ export async function exchangeRefreshToken(params: {
     expires_in: ACCESS_TOKEN_TTL,
     refresh_token: refreshToken,
     scope: scopes,
+    ...(idToken ? { id_token: idToken } : {}),
   };
 }
 

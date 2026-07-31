@@ -136,6 +136,95 @@ describe("signAccessToken", () => {
   });
 });
 
+describe("signIdToken", () => {
+  async function signSampleId(overrides: Partial<Parameters<JwtModule["signIdToken"]>[0]> = {}) {
+    return jwt.signIdToken({
+      sub: 4242,
+      clientId: "f3-map",
+      scope: "openid profile email",
+      expiresInSeconds: 900,
+      name: "PermVac",
+      picture: "https://example.com/avatar.jpg",
+      email: "producer@example.com",
+      emailVerified: true,
+      ...overrides,
+    });
+  }
+
+  it("signs a token that verifies against the published JWKS, audienced to the requesting client", async () => {
+    const token = await signSampleId();
+    const keySet = createLocalJWKSet(await jwt.getJWKS());
+
+    const { payload } = await jwtVerify(token, keySet, {
+      issuer: ISSUER,
+      audience: "f3-map",
+      algorithms: ["RS256"],
+    });
+
+    expect(payload.sub).toBe("4242");
+    expect(payload.aud).toBe("f3-map");
+    expect(payload.name).toBe("PermVac");
+    expect(payload.picture).toBe("https://example.com/avatar.jpg");
+    expect(payload.email).toBe("producer@example.com");
+    expect(payload.email_verified).toBe(true);
+  });
+
+  it("omits profile claims when profile scope wasn't granted", async () => {
+    const token = await signSampleId({ scope: "openid email" });
+    const keySet = createLocalJWKSet(await jwt.getJWKS());
+
+    const { payload } = await jwtVerify(token, keySet, {
+      issuer: ISSUER,
+      audience: "f3-map",
+    });
+
+    expect(payload.name).toBeUndefined();
+    expect(payload.picture).toBeUndefined();
+    expect(payload.email).toBe("producer@example.com");
+  });
+
+  it("omits email claims when email scope wasn't granted", async () => {
+    const token = await signSampleId({ scope: "openid profile" });
+    const keySet = createLocalJWKSet(await jwt.getJWKS());
+
+    const { payload } = await jwtVerify(token, keySet, {
+      issuer: ISSUER,
+      audience: "f3-map",
+    });
+
+    expect(payload.email).toBeUndefined();
+    expect(payload.email_verified).toBeUndefined();
+    expect(payload.name).toBe("PermVac");
+  });
+
+  it("emits only sub/iss/aud/exp/iat with a bare openid scope", async () => {
+    const token = await signSampleId({ scope: "openid" });
+    const keySet = createLocalJWKSet(await jwt.getJWKS());
+
+    const { payload } = await jwtVerify(token, keySet, {
+      issuer: ISSUER,
+      audience: "f3-map",
+    });
+
+    expect(Object.keys(payload).sort()).toEqual([
+      "aud",
+      "exp",
+      "iat",
+      "iss",
+      "sub",
+    ]);
+  });
+
+  it("stamps the RS256 header and kid the API resolves keys by", async () => {
+    const token = await signSampleId();
+
+    expect(decodeProtectedHeader(token)).toEqual({
+      alg: "RS256",
+      kid: "f3-auth-1",
+    });
+  });
+});
+
 describe("getJWKS", () => {
   it("publishes public key material only", async () => {
     const jwks = await jwt.getJWKS();

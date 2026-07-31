@@ -63,3 +63,45 @@ export async function signAccessToken(params: {
     .setExpirationTime(`${params.expiresInSeconds}s`)
     .sign(privateKey);
 }
+
+/**
+ * Sign an OIDC ID Token with RS256. Only call this when "openid" is in the
+ * granted scope — an ID Token asserts identity to the *client app itself*
+ * (aud = client_id), which is what RP-initiated logout's idTokenHint and
+ * any client-side "who is this" check rely on. Claim selection mirrors the
+ * userinfo endpoint's own scope gating (name/picture under "profile",
+ * email/email_verified under "email") so both surfaces agree.
+ */
+export async function signIdToken(params: {
+  sub: number;
+  clientId: string;
+  scope: string;
+  expiresInSeconds: number;
+  name?: string | null;
+  picture?: string | null;
+  email?: string | null;
+  emailVerified?: boolean;
+}): Promise<string> {
+  const privateKey = await getPrivateKey();
+  const issuer = env.NEXT_PUBLIC_AUTH_URL;
+  const scopes = new Set(params.scope.split(" "));
+
+  const claims: Record<string, unknown> = {};
+  if (scopes.has("profile")) {
+    claims.name = params.name ?? null;
+    claims.picture = params.picture ?? null;
+  }
+  if (scopes.has("email")) {
+    claims.email = params.email ?? null;
+    claims.email_verified = !!params.emailVerified;
+  }
+
+  return new SignJWT(claims)
+    .setProtectedHeader({ alg: "RS256", kid: "f3-auth-1" })
+    .setSubject(params.sub.toString())
+    .setIssuer(issuer)
+    .setAudience(params.clientId)
+    .setIssuedAt()
+    .setExpirationTime(`${params.expiresInSeconds}s`)
+    .sign(privateKey);
+}
