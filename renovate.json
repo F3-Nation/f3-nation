@@ -39,8 +39,9 @@
       "enabled": false
     },
     {
-      "description": "Group Python (uv/pyproject.toml) minor and patch updates into one PR, separate from the npm non-major group — different lockfile, different reviewers",
+      "description": "Group Python (uv/pyproject.toml) minor and patch updates into one PR, separate from the npm non-major group — different lockfile, keeps uv.lock churn reviewable on its own",
       "groupName": "Python dependencies (non-major)",
+      "groupSlug": "python-non-major",
       "matchManagers": ["pep621"],
       "matchUpdateTypes": ["minor", "patch"]
     },
