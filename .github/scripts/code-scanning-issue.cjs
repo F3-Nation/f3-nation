@@ -1,8 +1,7 @@
 "use strict";
 
 /**
- * Shared by .github/workflows/code-scanning-issue.yml and
- * code-scanning-backfill.yml so both render identical issues.
+ * Rendering and lookup helpers for .github/workflows/code-scanning-issue.yml.
  * CommonJS because actions/github-script loads it with require().
  */
 
@@ -124,7 +123,6 @@ async function findExistingIssue(github, owner, repo, alertNumber, issues) {
 /**
  * Creates the tracking issue, then rewrites the body with the concrete
  * "Fixes #N" line — the issue cannot know its own number until it exists.
- * Shared so both workflows file byte-identical issues.
  */
 async function createIssueForAlert(github, owner, repo, alert, core) {
   const created = await github.rest.issues.create({
