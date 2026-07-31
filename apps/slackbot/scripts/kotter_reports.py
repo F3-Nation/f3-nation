@@ -47,7 +47,6 @@ class KotterConfig:
     org_id: int | None
     team_id: str
     bot_token: str | None
-    fallback_conversation: str | None
     recipient_users: list[str]
     include_admins: bool
     include_site_qs: bool
@@ -127,7 +126,6 @@ def get_kotter_config(settings: SlackSettings) -> KotterConfig:
         and settings.kotter_report_split_site_qs is None
         and settings.send_aoq_reports == 1
     )
-    fallback_conversation = settings.kotter_report_fallback_conversation
     send_mode = settings.kotter_report_send_mode if settings.kotter_report_send_mode in VALID_SEND_MODES else "group"
     no_post_weeks = _positive_int(settings.NO_POST_THRESHOLD, DEFAULT_NO_POST_WEEKS)
     remove_weeks = _optional_positive_int(settings.REMINDER_WEEKS)
@@ -140,7 +138,6 @@ def get_kotter_config(settings: SlackSettings) -> KotterConfig:
         org_id=settings.org_id,
         team_id=settings.team_id,
         bot_token=settings.bot_token,
-        fallback_conversation=fallback_conversation,
         recipient_users=_unique_truthy_strings(settings.kotter_report_recipient_users),
         include_admins=bool(settings.kotter_report_include_admins),
         include_site_qs=bool(

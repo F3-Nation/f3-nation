@@ -21,7 +21,6 @@ def config(**overrides):
         "org_id": 1,
         "team_id": "T1",
         "bot_token": "xoxb-token",
-        "fallback_conversation": "C1",
         "recipient_users": [],
         "include_admins": False,
         "include_site_qs": False,
@@ -122,7 +121,7 @@ def test_resolve_group_and_individual_deliveries(monkeypatch):
         kotter_reports, "get_admin_users", lambda org_id, team_id: [(None, SimpleNamespace(slack_id="UADMIN"))]
     )
     deliveries = kotter_reports.resolve_kotter_deliveries(
-        config(send_mode="individual", fallback_conversation="C1", recipient_users=["U1", "U1"], include_admins=True),
+        config(send_mode="individual", recipient_users=["U1", "U1"], include_admins=True),
         rows,
     )
     assert [d.destination for d in deliveries] == ["U1", "UADMIN"]
@@ -145,16 +144,12 @@ def test_group_delivery_channel_opens_shared_dm():
 def test_resolve_ao_routing_has_no_fallback(monkeypatch):
     rows = [row(1, 10, "AO 10"), row(2, 20, "AO 20")]
     monkeypatch.setattr(kotter_reports, "get_site_q_slack_ids_by_ao", lambda ao_ids, team_id: {10: ["USITE"]})
-    deliveries = kotter_reports.resolve_kotter_deliveries(
-        config(include_site_qs=True, fallback_conversation="C1"), rows
-    )
+    deliveries = kotter_reports.resolve_kotter_deliveries(config(include_site_qs=True), rows)
     assert any(d.destination == "USITE" and [r.user_id for r in d.rows] == [1] for d in deliveries)
     assert all(d.destination != "C1" for d in deliveries)
 
     monkeypatch.setattr(kotter_reports, "get_site_q_slack_ids_by_ao", lambda ao_ids, team_id: {})
-    deliveries = kotter_reports.resolve_kotter_deliveries(
-        config(include_site_qs=True, fallback_conversation="C1"), rows
-    )
+    deliveries = kotter_reports.resolve_kotter_deliveries(config(include_site_qs=True), rows)
     assert deliveries == []
 
 
