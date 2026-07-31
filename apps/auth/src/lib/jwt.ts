@@ -86,13 +86,17 @@ export async function signIdToken(params: {
   const issuer = env.NEXT_PUBLIC_AUTH_URL;
   const scopes = new Set(params.scope.split(" "));
 
+  // Optional claims are omitted entirely when unavailable, not emitted as
+  // explicit null — relying parties commonly validate these as "string or
+  // absent," and a literal null on a claim they expect typed can break
+  // strict OIDC parsing.
   const claims: Record<string, unknown> = {};
   if (scopes.has("profile")) {
-    claims.name = params.name ?? null;
-    claims.picture = params.picture ?? null;
+    if (params.name != null) claims.name = params.name;
+    if (params.picture != null) claims.picture = params.picture;
   }
-  if (scopes.has("email")) {
-    claims.email = params.email ?? null;
+  if (scopes.has("email") && params.email != null) {
+    claims.email = params.email;
     claims.email_verified = !!params.emailVerified;
   }
 

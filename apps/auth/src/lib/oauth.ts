@@ -186,7 +186,7 @@ export async function exchangeAuthorizationCode(params: {
     token_type: "Bearer" as const,
     expires_in: ACCESS_TOKEN_TTL,
     refresh_token: refreshToken,
-    scope: authCode.scopes,
+    scope: scopes,
     ...(idToken ? { id_token: idToken } : {}),
   };
 }

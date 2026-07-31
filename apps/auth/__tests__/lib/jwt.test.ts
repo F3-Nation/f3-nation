@@ -137,7 +137,9 @@ describe("signAccessToken", () => {
 });
 
 describe("signIdToken", () => {
-  async function signSampleId(overrides: Partial<Parameters<JwtModule["signIdToken"]>[0]> = {}) {
+  async function signSampleId(
+    overrides: Partial<Parameters<JwtModule["signIdToken"]>[0]> = {},
+  ) {
     return jwt.signIdToken({
       sub: 4242,
       clientId: "f3-map",
@@ -213,6 +215,26 @@ describe("signIdToken", () => {
       "iss",
       "sub",
     ]);
+  });
+
+  it("omits (rather than nulls) optional claims the user has no value for", async () => {
+    const token = await signSampleId({
+      scope: "openid profile email",
+      name: null,
+      picture: null,
+      email: null,
+    });
+    const keySet = createLocalJWKSet(await jwt.getJWKS());
+
+    const { payload } = await jwtVerify(token, keySet, {
+      issuer: ISSUER,
+      audience: "f3-map",
+    });
+
+    expect("name" in payload).toBe(false);
+    expect("picture" in payload).toBe(false);
+    expect("email" in payload).toBe(false);
+    expect("email_verified" in payload).toBe(false);
   });
 
   it("stamps the RS256 header and kid the API resolves keys by", async () => {
