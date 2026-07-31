@@ -1,6 +1,7 @@
 import os
 import ssl
 import sys
+import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
@@ -24,6 +25,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from utilities.database.orm import SlackSettings
 from utilities.database.special_queries import get_admin_users, get_site_q_slack_ids_by_ao
+
+logger = logging.getLogger(__name__)
 
 Q_ATTENDANCE_TYPE_IDS = [2, 3]
 DEFAULT_NO_POST_WEEKS = 2
@@ -80,7 +83,6 @@ class Delivery:
     destination: str | None
     rows: list[KotterRow]
     title: str = "Weekly Kotter Report"
-    summary_only: bool = False
     destination_users: list[str] | None = None
 
 
@@ -416,7 +418,6 @@ def resolve_kotter_deliveries(config: KotterConfig, rows: list[KotterRow]) -> li
         destination: str | None,
         delivery_rows: list[KotterRow],
         title: str,
-        summary_only: bool = False,
         destination_users: list[str] | None = None,
     ):
         destination_users = _unique_truthy_strings(destination_users or [])
@@ -433,7 +434,6 @@ def resolve_kotter_deliveries(config: KotterConfig, rows: list[KotterRow]) -> li
                 destination=destination,
                 rows=delivery_rows,
                 title=title,
-                summary_only=summary_only,
                 destination_users=destination_users or None,
             )
         )
@@ -443,6 +443,14 @@ def resolve_kotter_deliveries(config: KotterConfig, rows: list[KotterRow]) -> li
     if config.include_site_qs:
         ao_ids = sorted({row.home_ao_org_id for row in rows if row.home_ao_org_id})
         site_qs_by_ao = get_site_q_slack_ids_by_ao(ao_ids, config.team_id) if ao_ids else {}
+        ao_names = {row.home_ao_org_id: row.home_ao_name for row in rows if row.home_ao_org_id}
+        for ao_id in ao_ids:
+            if not site_qs_by_ao.get(ao_id):
+                logger.warning(
+                    "Kotter Report home AO %s (%s) resolved to an empty Site Q list",
+                    ao_names.get(ao_id) or "unknown AO",
+                    ao_id,
+                )
         rows_by_ao: dict[int, list[KotterRow]] = {}
         for row in rows:
             if row.home_ao_org_id and site_qs_by_ao.get(row.home_ao_org_id):
@@ -511,33 +519,8 @@ def _reason_text(row: KotterRow) -> str:
     return ", ".join(_reason_label(reason) for reason in row.reasons)
 
 
-def _summary_text(title: str, rows: list[KotterRow]) -> str:
-    reason_counts: dict[str, int] = {}
-    ao_counts: dict[str, int] = {}
-    for row in rows:
-        for reason in row.reasons:
-            reason_counts[reason] = reason_counts.get(reason, 0) + 1
-        ao_name = row.home_ao_name or "unknown AO"
-        ao_counts[ao_name] = ao_counts.get(ao_name, 0) + 1
-
-    reason_text = ", ".join(f"{_reason_label(reason)}: {count}" for reason, count in sorted(reason_counts.items()))
-    top_aos = sorted(ao_counts.items(), key=lambda item: (-item[1], item[0]))[:5]
-    ao_text = ", ".join(f"{name}: {count}" for name, count in top_aos)
-    lines = [f"*{title}*", f"{len(rows)} PAX need attention."]
-    if reason_text:
-        lines.append(f"Reasons: {reason_text}")
-    if ao_text:
-        lines.append(f"Top AOs: {ao_text}")
-    lines.append("Detailed AO reports are sent separately to matching Site Qs when enabled.")
-    return "\n".join(lines)
-
-
 def build_kotter_message(delivery: Delivery, stats_url: str | None = None) -> tuple[str, list[dict]]:
     rows = delivery.rows
-    if delivery.summary_only:
-        text = _summary_text(delivery.title, rows)
-        return text, [{"type": "section", "text": {"type": "mrkdwn", "text": text[:3000]}}]
-
     shown_rows = rows[:TEXT_FALLBACK_MAX_ROWS]
     more_count = max(len(rows) - len(shown_rows), 0)
     lines = [f"*{delivery.title}*", f"{len(rows)} PAX need attention."]

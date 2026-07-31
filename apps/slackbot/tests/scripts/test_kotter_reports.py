@@ -1,7 +1,10 @@
 import os
 import sys
+from contextlib import contextmanager
 from datetime import date, datetime
 from types import SimpleNamespace
+
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -51,6 +54,81 @@ def row(user_id=1, ao_id=10, ao_name="The AO"):
         home_ao_name=ao_name,
         reasons=["inactive", "posting_not_qing"],
     )
+
+
+@pytest.fixture
+def mocked_kotter_session(monkeypatch):
+    today = date(2026, 7, 31)
+    candidate_rows = [
+        (1, "PAX 1", "U1", date(2026, 7, 3)),  # equal to no-post cutoff
+        (2, "PAX 2", "U2", date(2026, 7, 2)),  # just before no-post cutoff
+        (3, "PAX 3", "U3", date(2026, 6, 5)),  # equal to remove cutoff
+        (4, "PAX 4", "U4", date(2026, 6, 4)),  # just before remove cutoff
+        (5, "PAX 5", "U5", date(2026, 7, 20)),
+        (6, "PAX 6", "U6", date(2026, 7, 20)),
+        (7, "PAX 7", "U7", date(2026, 7, 20)),
+    ]
+    recent_post_rows = [(5, 4), (6, 3), (7, 4)]
+    recent_q_rows = [(7, 1)]
+    last_q_rows = [(7, date(2026, 7, 25))]
+    home_ao_rows = [
+        (2, 30, "AO 30", 2, date(2026, 6, 1)),
+        (2, 10, "AO 10", 1, date(2026, 7, 1)),
+        (3, 40, "AO 40", 1, date(2026, 6, 1)),
+        (3, 20, "AO 20", 1, date(2026, 7, 1)),
+        (5, 50, "AO 50", 1, date(2026, 7, 1)),
+        (5, 10, "AO 10", 1, date(2026, 7, 1)),
+    ]
+    results = [candidate_rows, recent_post_rows, recent_q_rows, last_q_rows, home_ao_rows]
+
+    class QueryChain:
+        def __init__(self):
+            self.calls = 0
+
+        def __getattr__(self, name):
+            if name in {"select_from", "join", "outerjoin", "filter", "group_by"}:
+                return lambda *args, **kwargs: self
+            raise AttributeError(name)
+
+        def all(self):
+            result = results[self.calls]
+            self.calls += 1
+            return result
+
+    query_chain = QueryChain()
+
+    class Session:
+        def query(self, *args):
+            return query_chain
+
+    @contextmanager
+    def get_session():
+        yield Session()
+
+    monkeypatch.setattr(kotter_reports, "get_session", get_session)
+    return today, query_chain, (candidate_rows, recent_post_rows, recent_q_rows, last_q_rows, home_ao_rows)
+
+
+def test_get_kotter_rows_cutoffs_counts_and_home_ao(mocked_kotter_session):
+    today, query_chain, expected_query_results = mocked_kotter_session
+
+    rows = kotter_reports.get_kotter_rows(
+        config(remove_weeks=8),
+        today=today,
+    )
+
+    assert query_chain.calls == 5
+    assert expected_query_results[0][0][3] == date(2026, 7, 3)
+    assert [result.user_id for result in rows] == [5, 3, 2]
+    assert {result.user_id: result.reasons for result in rows} == {
+        2: ["inactive"],
+        3: ["inactive"],
+        5: ["posting_not_qing"],
+    }
+    assert {
+        result.user_id: (result.home_ao_org_id, result.home_ao_name)
+        for result in rows
+    } == {2: (30, "AO 30"), 3: (20, "AO 20"), 5: (10, "AO 10")}
 
 
 def test_get_kotter_config_enablement_and_legacy_ao_flag():
@@ -153,6 +231,14 @@ def test_resolve_ao_routing_has_no_fallback(monkeypatch):
     assert deliveries == []
 
 
+def test_resolve_ao_routing_warns_when_home_ao_has_no_site_qs(monkeypatch, caplog):
+    monkeypatch.setattr(kotter_reports, "get_site_q_slack_ids_by_ao", lambda ao_ids, team_id: {10: []})
+
+    kotter_reports.resolve_kotter_deliveries(config(include_site_qs=True), [row(1, 10, "AO 10")])
+
+    assert "home AO AO 10 (10) resolved to an empty Site Q list" in caplog.text
+
+
 def test_build_kotter_message_table_summary_and_oversized():
     delivery = kotter_reports.Delivery(destination="C1", rows=[row(1)])
     text, blocks = kotter_reports.build_kotter_message(delivery)
@@ -174,13 +260,6 @@ def test_build_kotter_message_table_summary_and_oversized():
     pax_elements = table["rows"][1][0]["elements"][0]["elements"]
     assert pax_elements[0] == {"type": "user", "user_id": "U1"}
     assert pax_elements[2] == {"type": "link", "url": "https://example.test/stats/pax/1", "text": "stats"}
-
-    text, blocks = kotter_reports.build_kotter_message(
-        kotter_reports.Delivery(destination="C1", rows=[row(1)], summary_only=True)
-    )
-    assert "•" not in text
-    assert "Detailed AO reports" in text
-    assert all(block["type"] != "table" for block in blocks)
 
     many_rows = [row(i) for i in range(kotter_reports.SLACK_TABLE_MAX_DATA_ROWS + 2)]
     text, blocks = kotter_reports.build_kotter_message(kotter_reports.Delivery(destination="C1", rows=many_rows))
