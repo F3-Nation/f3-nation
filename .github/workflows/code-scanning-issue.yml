@@ -165,16 +165,19 @@ jobs:
               );
 
               for (const issue of tracked) {
-                const alertNumber = Number.parseInt(
-                  issue.title.slice(TITLE_PREFIX.length), 10,
-                );
-                if (!Number.isInteger(alertNumber)) {
+                // Must match findExistingIssue exactly, trailing colon included:
+                // an issue the create path would not recognise must not be closed here.
+                const matched = issue.title
+                  .slice(TITLE_PREFIX.length)
+                  .match(/^(\d+):/);
+                if (!matched) {
                   core.warning(
-                    `#${issue.number} matches the tracking title prefix but carries no ` +
-                      'alert number; leaving it alone.',
+                    `#${issue.number} starts with the tracking prefix but is not a ` +
+                      'tracking issue title; leaving it alone.',
                   );
                   continue;
                 }
+                const alertNumber = Number(matched[1]);
                 if (openAlertNumbers.has(alertNumber)) continue;
 
                 await reconcile(alertNumber, async (describe) => {
