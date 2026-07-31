@@ -1,0 +1,105 @@
+name: Code scanning alert issues
+
+on:
+  code_scanning_alert:
+    types: [created, reopened, reopened_by_user, fixed, closed_by_user]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.alert.number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the shared renderer
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Sync issue with alert state
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { renderIssue, findExistingIssue } = require(
+              './.github/scripts/code-scanning-issue.cjs',
+            );
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const alert = context.payload.alert;
+            const action = context.payload.action;
+
+            if (!alert) {
+              core.warning('No alert in the event payload; nothing to do.');
+              return;
+            }
+
+            const OPENING = new Set(['created', 'reopened', 'reopened_by_user']);
+            const CLOSING = new Set(['fixed', 'closed_by_user']);
+            const existing = await findExistingIssue(github, owner, repo, alert.number);
+
+            if (OPENING.has(action)) {
+              if (existing?.state === 'open') {
+                core.info(`Alert #${alert.number} already tracked by #${existing.number}.`);
+                return;
+              }
+
+              if (existing) {
+                await github.rest.issues.update({
+                  owner, repo, issue_number: existing.number, state: 'open',
+                });
+                await github.rest.issues.createComment({
+                  owner, repo, issue_number: existing.number,
+                  body: `Reopening: code scanning alert #${alert.number} is active again (\`${action}\`).\n\n${alert.html_url}`,
+                });
+                core.info(`Reopened #${existing.number} for alert #${alert.number}.`);
+                return;
+              }
+
+              const { title, body } = renderIssue(alert);
+              const created = await github.rest.issues.create({ owner, repo, title, body });
+
+              // The issue cannot know its own number until it exists, so the
+              // concrete "Fixes #N" line is written in a second pass.
+              await github.rest.issues.update({
+                owner, repo, issue_number: created.data.number,
+                body: renderIssue(alert, created.data.number).body,
+              });
+              core.info(`Created #${created.data.number} for alert #${alert.number}.`);
+              return;
+            }
+
+            if (CLOSING.has(action)) {
+              if (!existing) {
+                core.info(`No issue tracks alert #${alert.number}; nothing to close.`);
+                return;
+              }
+              if (existing.state === 'closed') {
+                core.info(`#${existing.number} is already closed.`);
+                return;
+              }
+
+              const reason =
+                action === 'fixed'
+                  ? `The scanner reports it fixed on \`${alert.most_recent_instance?.ref ?? 'the default branch'}\`.`
+                  : `It was dismissed by @${alert.dismissed_by?.login ?? 'a maintainer'} ` +
+                    `(reason: ${alert.dismissed_reason ?? 'none given'}` +
+                    `${alert.dismissed_comment ? ` — ${alert.dismissed_comment}` : ''}).`;
+
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: existing.number,
+                body: `Closing automatically: code scanning alert #${alert.number} is no longer open.\n\n${reason}\n\n${alert.html_url}`,
+              });
+              await github.rest.issues.update({
+                owner, repo, issue_number: existing.number,
+                state: 'closed',
+                state_reason: action === 'fixed' ? 'completed' : 'not_planned',
+              });
+              core.info(`Closed #${existing.number} for alert #${alert.number}.`);
+              return;
+            }
+
+            core.info(`Action "${action}" needs no issue change.`);
