@@ -1,7 +1,7 @@
+import logging
 import os
 import ssl
 import sys
-import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
@@ -581,25 +581,74 @@ def _delivery_channel(client: WebClient, delivery: Delivery) -> str:
     raise ValueError("Kotter Report delivery has no destination")
 
 
-def _send_delivery(client: WebClient, delivery: Delivery, stats_url: str | None):
+def _post_delivery_message(
+    client: WebClient,
+    channel: str,
+    text: str,
+    blocks: list[dict],
+    org_id: int | None,
+    destination_label: str,
+) -> bool:
+    try:
+        client.chat_postMessage(channel=channel, text=text, blocks=blocks)
+        return True
+    except SlackApiError as e:
+        error = e.response.get("error")
+        if error not in {"invalid_blocks", "msg_too_long"}:
+            raise
+        logger.error(
+            "Kotter Report rich payload failed (org_id=%s, destination=%s, error=%s)",
+            org_id,
+            destination_label,
+            error,
+        )
+        try:
+            client.chat_postMessage(channel=channel, text=text, blocks=None)
+            return True
+        except SlackApiError as retry_error:
+            logger.error(
+                "Kotter Report text-only retry failed (org_id=%s, destination=%s, error=%s)",
+                org_id,
+                destination_label,
+                retry_error.response.get("error"),
+            )
+            return False
+
+
+def _send_delivery(client: WebClient, delivery: Delivery, stats_url: str | None, org_id: int | None):
     text, blocks = build_kotter_message(delivery, stats_url=stats_url)
     destination_label = _delivery_destination_label(delivery)
     try:
         channel = _delivery_channel(client, delivery)
-        client.chat_postMessage(channel=channel, text=text, blocks=blocks)
-        print(f"Sent Kotter Report to {destination_label} ({len(delivery.rows)} rows)")
+        if _post_delivery_message(client, channel, text, blocks, org_id, destination_label):
+            print(f"Sent Kotter Report to {destination_label} ({len(delivery.rows)} rows)")
     except SlackApiError as e:
         if e.response.get("error") == "not_in_channel" and delivery.destination:
             try:
                 client.conversations_join(channel=delivery.destination)
-                client.chat_postMessage(channel=delivery.destination, text=text, blocks=blocks)
-                print(f"Joined and sent Kotter Report to {destination_label} ({len(delivery.rows)} rows)")
+                if _post_delivery_message(client, delivery.destination, text, blocks, org_id, destination_label):
+                    print(f"Joined and sent Kotter Report to {destination_label} ({len(delivery.rows)} rows)")
             except SlackApiError as e2:
-                print(f"Error joining/sending Kotter Report to {destination_label}: {e2.response.get('error')}")
+                logger.error(
+                    "Error joining/sending Kotter Report (org_id=%s, destination=%s, error=%s)",
+                    org_id,
+                    destination_label,
+                    e2.response.get("error"),
+                )
         else:
-            print(f"Error sending Kotter Report to {destination_label}: {e.response.get('error')}")
+            logger.error(
+                "Error sending Kotter Report (org_id=%s, destination=%s, error=%s)",
+                org_id,
+                destination_label,
+                e.response.get("error"),
+            )
     except ValueError as e:
-        print(f"Error sending Kotter Report to {destination_label}: {e}")
+        logger.error(
+            "Error sending Kotter Report (org_id=%s, destination=%s, error=%s)",
+            org_id,
+            destination_label,
+            e,
+        )
 
 
 def send_kotter_reports(
@@ -652,7 +701,15 @@ def send_kotter_reports(
                 continue
             client = WebClient(token=config.bot_token, ssl=ssl_context)
             for delivery in deliveries:
-                _send_delivery(client, delivery, stats_url=stats_url)
+                try:
+                    _send_delivery(client, delivery, stats_url=stats_url, org_id=config.org_id)
+                except Exception as e:
+                    logger.error(
+                        "Unexpected Kotter Report delivery failure (org_id=%s, destination=%s, error=%s)",
+                        config.org_id,
+                        _delivery_destination_label(delivery),
+                        type(e).__name__,
+                    )
         except Exception as e:
             print(f"Error processing Kotter Reports for org {org.name} ({org.id}): {e}")
 

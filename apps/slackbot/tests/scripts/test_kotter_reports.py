@@ -5,6 +5,7 @@ from datetime import date, datetime
 from types import SimpleNamespace
 
 import pytest
+from slack_sdk.errors import SlackApiError
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -125,10 +126,11 @@ def test_get_kotter_rows_cutoffs_counts_and_home_ao(mocked_kotter_session):
         3: ["inactive"],
         5: ["posting_not_qing"],
     }
-    assert {
-        result.user_id: (result.home_ao_org_id, result.home_ao_name)
-        for result in rows
-    } == {2: (30, "AO 30"), 3: (20, "AO 20"), 5: (10, "AO 10")}
+    assert {result.user_id: (result.home_ao_org_id, result.home_ao_name) for result in rows} == {
+        2: (30, "AO 30"),
+        3: (20, "AO 20"),
+        5: (10, "AO 10"),
+    }
 
 
 def test_get_kotter_config_enablement_and_legacy_ao_flag():
@@ -328,7 +330,7 @@ def test_send_kotter_reports_sample_report_uses_sample_rows(monkeypatch):
     monkeypatch.setattr(
         kotter_reports,
         "_send_delivery",
-        lambda client, delivery, stats_url: sent_titles.append(delivery.title),
+        lambda client, delivery, stats_url, org_id: sent_titles.append(delivery.title),
     )
     monkeypatch.setattr(kotter_reports, "WebClient", lambda *args, **kwargs: object())
 
@@ -336,6 +338,90 @@ def test_send_kotter_reports_sample_report_uses_sample_rows(monkeypatch):
 
     assert sample_calls == [{"today": date(2026, 7, 6), "row_count": kotter_reports.DEFAULT_SAMPLE_REPORT_ROWS}]
     assert sent_titles == ["Sample Weekly Kotter Report: full list"]
+
+
+def test_send_kotter_reports_continues_after_unexpected_delivery_failure(monkeypatch, caplog):
+    org = SimpleNamespace(id=1, name="Region")
+    slack = SimpleNamespace(settings=settings(kotter_reports_enabled=False).__dict__)
+    deliveries = [kotter_reports.Delivery("C1", [row(1)]), kotter_reports.Delivery("C2", [row(2)])]
+    attempted = []
+
+    monkeypatch.setattr(kotter_reports.DbManager, "find_join_records3", lambda *args, **kwargs: [(None, org, slack)])
+    monkeypatch.setattr(kotter_reports, "get_sample_kotter_rows", lambda *args, **kwargs: [row(1)])
+    monkeypatch.setattr(kotter_reports, "resolve_kotter_deliveries", lambda cfg, rows: deliveries)
+    monkeypatch.setattr(kotter_reports, "WebClient", lambda *args, **kwargs: object())
+
+    def send_delivery(client, delivery, stats_url, org_id):
+        attempted.append(delivery.destination)
+        if delivery.destination == "C1":
+            raise TimeoutError("connection failed")
+
+    monkeypatch.setattr(kotter_reports, "_send_delivery", send_delivery)
+
+    kotter_reports.send_kotter_reports(sample_report=True)
+
+    assert attempted == ["C1", "C2"]
+    assert any(record.levelname == "ERROR" for record in caplog.records)
+    assert "org_id=1" in caplog.text
+    assert "destination=C1" in caplog.text
+
+
+@pytest.mark.parametrize("error_code", ["invalid_blocks", "msg_too_long"])
+def test_send_delivery_falls_back_to_text_only(error_code, caplog):
+    calls = []
+
+    class Client:
+        def chat_postMessage(self, **kwargs):
+            calls.append(kwargs)
+            if len(calls) == 1:
+                raise SlackApiError("rich payload rejected", {"error": error_code})
+
+    delivery = kotter_reports.Delivery(destination="C1", rows=[row(1)])
+    kotter_reports._send_delivery(Client(), delivery, stats_url=None, org_id=42)
+
+    assert len(calls) == 2
+    assert calls[0]["blocks"]
+    assert calls[1]["blocks"] is None
+    assert any(record.levelname == "ERROR" for record in caplog.records)
+    assert "org_id=42" in caplog.text
+    assert "destination=C1" in caplog.text
+
+
+def test_send_delivery_text_only_retry_failure_is_logged_and_suppressed(caplog):
+    calls = []
+
+    class Client:
+        def chat_postMessage(self, **kwargs):
+            calls.append(kwargs)
+            raise SlackApiError("payload rejected", {"error": "invalid_blocks"})
+
+    delivery = kotter_reports.Delivery(destination="C1", rows=[row(1)])
+    kotter_reports._send_delivery(Client(), delivery, stats_url=None, org_id=42)
+
+    assert len(calls) == 2
+    assert calls[1]["blocks"] is None
+    assert any(record.levelname == "ERROR" for record in caplog.records)
+    assert "text-only retry failed" in caplog.text
+    assert "org_id=42" in caplog.text
+    assert "destination=C1" in caplog.text
+
+
+def test_send_delivery_rate_limited_does_not_fall_back(caplog):
+    calls = []
+
+    class Client:
+        def chat_postMessage(self, **kwargs):
+            calls.append(kwargs)
+            raise SlackApiError("rate limited", {"error": "rate_limited"})
+
+    delivery = kotter_reports.Delivery(destination="C1", rows=[row(1)])
+    kotter_reports._send_delivery(Client(), delivery, stats_url=None, org_id=42)
+
+    assert len(calls) == 1
+    assert any(record.levelname == "ERROR" for record in caplog.records)
+    assert "error=rate_limited" in caplog.text
+    assert "org_id=42" in caplog.text
+    assert "destination=C1" in caplog.text
 
 
 def test_hourly_runner_calls_kotter_only_when_reporting(monkeypatch):
