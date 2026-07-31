@@ -54,6 +54,7 @@ export async function GET(request: Request) {
   });
 
   const spec = (await generator.generate(router, {
+    filter: () => true,
     info: {
       title: "F3 Nation API",
       version: packageJson.version,
