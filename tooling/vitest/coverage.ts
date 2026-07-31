@@ -1,14 +1,14 @@
 import { coverageConfigDefaults } from "vitest/config";
 
 /**
- * Bootstrap/config/instrumentation files that aren't unit-testable (Sentry init,
+ * Bootstrap/config/instrumentation files that aren't unit-testable (PostHog init,
  * Next config, instrumentation, styling config, middleware). They otherwise sit in
  * the coverage denominator at 0%, so every edit to them breaks autoUpdate thresholds.
  * Generalized globs cover filename variants across apps (next.config.ts vs .js,
  * postcss.config.mjs vs .cjs).
  */
 export const bootstrapCoverageExclude = [
-  "**/sentry.*.config.ts",
+  "**/posthog-server.ts",
   "**/next.config.{js,ts,mjs}",
   "**/instrumentation.ts",
   "**/instrumentation-client.ts",
