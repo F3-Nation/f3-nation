@@ -10,6 +10,7 @@ const config: KnipConfig = {
     "packages/db/src/**",
     "packages/shared/src/app/constants.ts",
     ".claude/scripts/sync-agent-skills.mjs",
+    ".github/scripts/code-scanning-issue.cjs",
     "tooling/typescript/type-extensions.d.ts",
     "turbo/generators/config.ts",
   ],
