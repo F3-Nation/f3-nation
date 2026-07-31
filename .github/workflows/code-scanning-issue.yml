@@ -42,6 +42,22 @@ jobs:
             const existing = await findExistingIssue(github, owner, repo, alert.number);
 
             if (OPENING.has(action)) {
+              const ref = context.payload.ref ?? alert.most_recent_instance?.ref;
+              const defaultBranch = context.payload.repository?.default_branch ?? 'main';
+              const defaultRef = `refs/heads/${defaultBranch}`;
+
+              if (!ref) {
+                core.info(
+                  `Could not determine ref for alert #${alert.number}; treating as default branch.`,
+                );
+              } else if (ref !== defaultRef) {
+                core.info(
+                  `Alert #${alert.number} is on ref \`${ref}\`, not the default branch ` +
+                    `(\`${defaultRef}\`); alerts on non-default branches are not tracked as issues.`,
+                );
+                return;
+              }
+
               if (existing?.state === 'open') {
                 core.info(`Alert #${alert.number} already tracked by #${existing.number}.`);
                 return;
