@@ -155,12 +155,18 @@ export async function exchangeAuthorizationCode(params: {
 
   // ID Token is only meaningful (and only spec'd) when "openid" was actually
   // granted — omit it entirely otherwise rather than issuing an unrequested
-  // identity assertion.
-  const idToken = scopes.split(" ").includes("openid")
+  // identity assertion. Gated on authCode.scopes directly (the actual
+  // recorded grant), not the defaulted `scopes` variable above: /authorize
+  // always writes a real scopes string for every code it creates, so a null
+  // read-back here means something is anomalous, not "no scope requested."
+  // Falling back to the broad "openid profile email" default in that case
+  // would silently issue an identity assertion with real PII (name, avatar,
+  // email) nobody actually consented to — fail closed instead.
+  const idToken = authCode.scopes?.split(" ").includes("openid")
     ? await signIdToken({
         sub: authCode.userId,
         clientId: authCode.clientId,
-        scope: scopes,
+        scope: authCode.scopes,
         expiresInSeconds: ACCESS_TOKEN_TTL,
         name: user.f3Name,
         picture: user.avatarUrl,
