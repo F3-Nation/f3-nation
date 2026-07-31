@@ -22,12 +22,14 @@ Primary deployment now happens through GitHub Actions tag releases in [`.github/
 
    ```sh
    docker build \
+     --platform=linux/amd64 \
      --file apps/slackbot/scripts/Dockerfile \
      --tag us-central1-docker.pkg.dev/<PROJECT>/<REPO>/<IMAGE>:<TAG> \
      .
    ```
 
    - Replace `<PROJECT>`, `<REPO>`, `<IMAGE>`, and `<TAG>` with your GCP project, Artifact Registry repo, image name, and tag.
+   - `--platform=linux/amd64` is required: Cloud Run only runs amd64, and the Dockerfile no longer pins the platform on its `FROM` lines. Without it, an Apple Silicon machine builds an arm64 image that Cloud Run rejects at deploy time.
    - With the GitHub Actions flow, the scripts image is published as `us-central1-docker.pkg.dev/<PROJECT>/<REPO>/f3-slackbot-scripts:<TAG>`.
 
 ## How to Run Locally
