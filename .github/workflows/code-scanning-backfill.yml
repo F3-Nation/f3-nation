@@ -1,0 +1,100 @@
+name: Backfill code scanning alert issues
+
+# One-shot. Run it, then delete this file in a follow-up PR.
+# .github/scripts/code-scanning-issue.cjs stays — the reactive workflow needs it.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "List what would be filed without creating anything"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  issues: write
+  security-events: read
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the shared renderer
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: File issues for existing open alerts
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        with:
+          script: |
+            const { renderIssue, findExistingIssue } = require(
+              './.github/scripts/code-scanning-issue.cjs',
+            );
+
+            // Anything other than an explicit "false" stays a dry run.
+            const dryRun = process.env.DRY_RUN !== 'false';
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            const listed = await github.paginate(
+              github.rest.codeScanning.listAlertsForRepo,
+              { owner, repo, state: 'open', per_page: 100 },
+            );
+            core.info(`${listed.length} open alert(s); dry run: ${dryRun}`);
+
+            const rows = [
+              [
+                { data: 'Alert', header: true },
+                { data: 'Rule', header: true },
+                { data: 'Severity', header: true },
+                { data: 'Location', header: true },
+                { data: 'Result', header: true },
+              ],
+            ];
+
+            for (const summary of listed) {
+              // Re-fetch each alert: the list endpoint returns a trimmed rule
+              // object, and the body must match the reactive workflow's exactly.
+              const { data: alert } = await github.rest.codeScanning.getAlert({
+                owner, repo, alert_number: summary.number,
+              });
+
+              const location = alert.most_recent_instance?.location ?? {};
+              const where = location.path
+                ? `${location.path}:${location.start_line ?? '?'}`
+                : 'n/a';
+
+              const existing = await findExistingIssue(github, owner, repo, alert.number);
+              let result;
+
+              if (existing) {
+                result = `skipped — already #${existing.number}`;
+              } else if (dryRun) {
+                result = `would create — "${renderIssue(alert).title}"`;
+              } else {
+                const created = await github.rest.issues.create({
+                  owner, repo, ...renderIssue(alert),
+                });
+                await github.rest.issues.update({
+                  owner, repo, issue_number: created.data.number,
+                  body: renderIssue(alert, created.data.number).body,
+                });
+                result = `created #${created.data.number}`;
+              }
+
+              core.info(`Alert #${alert.number}: ${result}`);
+              rows.push([
+                `#${alert.number}`,
+                alert.rule?.id ?? 'unknown',
+                alert.rule?.security_severity_level ?? 'unclassified',
+                where,
+                result,
+              ]);
+            }
+
+            await core.summary
+              .addHeading(dryRun ? 'Backfill dry run' : 'Backfill results')
+              .addTable(rows)
+              .write();
