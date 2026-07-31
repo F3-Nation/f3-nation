@@ -52,22 +52,6 @@ jobs:
             const defaultBranch = context.payload.repository?.default_branch ?? 'main';
             const defaultRef = `refs/heads/${defaultBranch}`;
 
-            // Alerts open on the default branch are exactly the set that should
-            // have an open tracking issue; alerts on feature branches are not tracked.
-            const openAlerts = await github.paginate(
-              github.rest.codeScanning.listAlertsForRepo,
-              { owner, repo, state: 'open', ref: defaultRef, per_page: 100 },
-            );
-            const openAlertNumbers = new Set(openAlerts.map((alert) => alert.number));
-
-            // Paginated once and reused: findExistingIssue would otherwise
-            // re-list every issue in the repo on each iteration.
-            const issues = await listRepoIssues(github, owner, repo);
-
-            core.info(
-              `${openAlerts.length} alert(s) open on ${defaultBranch}; dry run: ${dryRun}`,
-            );
-
             const rows = [
               [
                 { data: 'Alert', header: true },
@@ -79,6 +63,9 @@ jobs:
             ];
 
             let failures = 0;
+
+            // Pause after each alert's writes to stay under the secondary rate limit.
+            const settle = () => new Promise((resolve) => setTimeout(resolve, 1000));
 
             // A throw must not cost the whole table: this job writes in bulk,
             // which is the canonical way to trip GitHub's secondary rate limit,
@@ -101,33 +88,77 @@ jobs:
                 failures += 1;
                 row[4] = `FAILED — ${error.status ?? 'no status'} ${error.message}`;
                 core.warning(`Alert #${alertNumber}: ${row[4]}`);
+              } finally {
+                // In `finally` so failures are paced too: the secondary rate limit is
+                // precisely the failure that would otherwise skip the pause.
+                await settle();
               }
               core.info(`Alert #${alertNumber}: ${row[4]}`);
               rows.push(row);
             };
 
-            // Pause between writes to stay under the secondary rate limit.
-            const settle = () => new Promise((resolve) => setTimeout(resolve, 1000));
+            // A comment and the state flip beside it are two calls, not one. When the
+            // flip fails the next run re-enters the same branch, so skip the comment
+            // if it is already the newest — newest rather than any, because a later
+            // reopen/close cycle has newer comments and must still speak.
+            const commentOnce = async (issueNumber, marker, body) => {
+              const { data: latest } = await github.rest.issues.listComments({
+                owner, repo, issue_number: issueNumber,
+                per_page: 1, sort: 'created', direction: 'desc',
+              });
+              if (latest[0]?.body?.startsWith(marker)) return;
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: issueNumber, body,
+              });
+            };
+
+            let aborted = null;
 
             try {
+              // Alerts open on the default branch are the set that should have an
+              // open tracking issue; alerts on feature branches are not tracked.
+              const openAlerts = await github.paginate(
+                github.rest.codeScanning.listAlertsForRepo,
+                { owner, repo, state: 'open', ref: defaultRef, per_page: 100 },
+              );
+              const openAlertNumbers = new Set(openAlerts.map((alert) => alert.number));
+
+              // Paginated once and reused: findExistingIssue would otherwise
+              // re-list every issue in the repo on each iteration.
+              const issues = await listRepoIssues(github, owner, repo);
+
+              core.info(
+                `${openAlerts.length} alert(s) open on ${defaultBranch}; dry run: ${dryRun}`,
+              );
+
               // Pass 1 — every alert open on the default branch needs an open issue.
-              for (const summary of openAlerts) {
-                await reconcile(summary.number, async (describe) => {
-                  // Re-fetch: the list endpoint returns a trimmed rule object,
-                  // and the rendered body depends on the full one.
-                  const { data: alert } = await github.rest.codeScanning.getAlert({
-                    owner, repo, alert_number: summary.number,
-                  });
-                  describe(alert);
+              for (const listed of openAlerts) {
+                await reconcile(listed.number, async (describe) => {
+                  // The listing fills the summary row on its own; only a rendered
+                  // body needs the full rule, so the re-fetch waits for the paths
+                  // that render one.
+                  describe(listed);
 
                   const existing = await findExistingIssue(
-                    github, owner, repo, alert.number, issues,
+                    github, owner, repo, listed.number, issues,
                   );
 
                   if (existing?.state === 'open') return `already #${existing.number}`;
                   if (existing && dryRun) return `would reopen — #${existing.number}`;
 
+                  const { data: alert } = await github.rest.codeScanning.getAlert({
+                    owner, repo, alert_number: listed.number,
+                  });
+                  describe(alert);
+
                   if (existing) {
+                    // Comment before the flip: the flip is what the `already #N`
+                    // short-circuit keys on, so a failed flip retries next run.
+                    await commentOnce(
+                      existing.number,
+                      `Reopening: code scanning alert #${alert.number}`,
+                      `Reopening: code scanning alert #${alert.number} is open again on \`${defaultBranch}\`.\n\n${alert.html_url}`,
+                    );
                     // Refresh the body too: the permalink is pinned to the alert's
                     // commit, and alerts reopen precisely because the code moved.
                     await github.rest.issues.update({
@@ -135,11 +166,6 @@ jobs:
                       state: 'open',
                       body: renderIssue(alert, existing.number).body,
                     });
-                    await github.rest.issues.createComment({
-                      owner, repo, issue_number: existing.number,
-                      body: `Reopening: code scanning alert #${alert.number} is open again on \`${defaultBranch}\`.\n\n${alert.html_url}`,
-                    });
-                    await settle();
                     return `reopened #${existing.number}`;
                   }
 
@@ -148,15 +174,20 @@ jobs:
                   const { number, injected } = await createIssueForAlert(
                     github, owner, repo, alert, core,
                   );
-                  await settle();
-                  return injected
-                    ? `created #${number}`
-                    : `created #${number} — body injection FAILED, see warning`;
+                  if (!injected) {
+                    throw new Error(
+                      `created #${number}, but injecting the "Fixes #N" line failed ` +
+                        '(see warning); it will not auto-close when the fix PR merges',
+                    );
+                  }
+                  return `created #${number}`;
                 });
               }
 
               // Pass 2 — an open tracking issue whose alert is no longer open on the
               // default branch is how a closure is detected without an event.
+              // Reads the same pre-write snapshot as Pass 1 — safe only because
+              // openAlertNumbers below skips anything Pass 1 touched.
               const tracked = issues.filter(
                 (issue) =>
                   !issue.pull_request &&
@@ -178,6 +209,16 @@ jobs:
                   continue;
                 }
                 const alertNumber = Number(matched[1]);
+                // findExistingIssue rebuilds the marker from the number, so a title
+                // that does not round-trip ("#007") is one it would never match.
+                if (String(alertNumber) !== matched[1]) {
+                  core.warning(
+                    `#${issue.number} carries a non-canonical alert number ` +
+                      `("${matched[1]}"); findExistingIssue would not match it, ` +
+                      'so leaving it alone.',
+                  );
+                  continue;
+                }
                 if (openAlertNumbers.has(alertNumber)) continue;
 
                 await reconcile(alertNumber, async (describe) => {
@@ -187,15 +228,15 @@ jobs:
                       owner, repo, alert_number: alertNumber,
                     }));
                   } catch (error) {
-                    if (error.status !== 404) throw error;
-                    // The alert record is gone — analyses deleted, or the tool was
-                    // removed. Failing would leave this job red on every future run,
-                    // so hand the issue to a maintainer instead.
+                    if (error.status !== 404 && error.status !== 403) throw error;
+                    // The alert record is no longer readable — analyses deleted, the
+                    // tool removed, or scanning switched off. Failing would leave this
+                    // job red on every future run, so hand the issue to a maintainer.
                     core.warning(
-                      `Alert #${alertNumber} no longer exists; #${issue.number} needs ` +
-                        'a maintainer to close it by hand.',
+                      `Alert #${alertNumber} is no longer readable (${error.status}); ` +
+                        `#${issue.number} needs a maintainer to close it by hand.`,
                     );
-                    return `left #${issue.number} open — alert no longer exists`;
+                    return `left #${issue.number} open — alert no longer readable`;
                   }
                   describe(alert);
 
@@ -217,22 +258,37 @@ jobs:
                         `(reason: ${alert.dismissed_reason ?? 'none given'}` +
                         `${alert.dismissed_comment ? ` — ${alert.dismissed_comment}` : ''}).`;
 
-                  await github.rest.issues.createComment({
-                    owner, repo, issue_number: issue.number,
-                    body: `Closing automatically: code scanning alert #${alertNumber} is no longer open.\n\n${reason}\n\n${alert.html_url}`,
-                  });
+                  // Comment before the flip: the open-state filter above is what
+                  // this loop re-enters on, so a failed flip retries next run.
+                  await commentOnce(
+                    issue.number,
+                    `Closing automatically: code scanning alert #${alertNumber}`,
+                    `Closing automatically: code scanning alert #${alertNumber} is no longer open.\n\n${reason}\n\n${alert.html_url}`,
+                  );
                   await github.rest.issues.update({
                     owner, repo, issue_number: issue.number,
                     state: 'closed',
                     state_reason: alert.state === 'fixed' ? 'completed' : 'not_planned',
                   });
-                  await settle();
                   return `closed #${issue.number} (alert ${alert.state})`;
                 });
               }
+            } catch (error) {
+              aborted = error;
+              throw error;
             } finally {
-              await core.summary
-                .addHeading(dryRun ? 'Reconcile dry run' : 'Reconcile results')
+              const report = core.summary.addHeading(
+                dryRun ? 'Reconcile dry run' : 'Reconcile results',
+              );
+              // The listing calls are inside the try, so an abort here would
+              // otherwise render a partial table under a heading that reads complete.
+              if (aborted) {
+                report.addRaw(
+                  '\n> **Run aborted before completion:** ' +
+                    `${aborted.status ?? 'no status'} ${aborted.message}\n`,
+                );
+              }
+              await report
                 .addTable(
                   rows.length > 1
                     ? rows
