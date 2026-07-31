@@ -118,11 +118,22 @@ if (!isProd) {
       async authorize(credentials) {
         if (isProd) return null;
 
-        const [f3Nation] = await db
-          .select()
-          .from(orgs)
-          .where(eq(orgs.orgType, "nation"));
-        if (!f3Nation) return null;
+        // Resolve the nation org for the mock admin role. Per-PR preview MAP
+        // services run WITHOUT a database (only api/auth get a seeded Postgres
+        // sidecar), so fall back to the deterministic seed's nation — id 1,
+        // "F3 Nation" — when the DB can't be reached. The preview api validates
+        // against that same seed, so the ids line up; envs with a real DB
+        // (local dev, api, auth) use the actual row.
+        let nation = { id: 1, name: "F3 Nation" };
+        try {
+          const [f3Nation] = await db
+            .select()
+            .from(orgs)
+            .where(eq(orgs.orgType, "nation"));
+          if (f3Nation) nation = { id: f3Nation.id, name: f3Nation.name };
+        } catch {
+          // No database reachable (e.g. a preview map) — keep the seed fallback.
+        }
 
         // Return a mock user for development
         return {
@@ -131,8 +142,8 @@ if (!isProd) {
           name: "Dev User",
           roles: [
             {
-              orgId: f3Nation.id,
-              orgName: f3Nation.name,
+              orgId: nation.id,
+              orgName: nation.name,
               roleName: "admin",
             },
           ],

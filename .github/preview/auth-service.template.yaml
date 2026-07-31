@@ -1,0 +1,93 @@
+# Cloud Run service template for per-PR auth previews.
+# Two containers: the auth app (apps/auth, the F3 SSO / OIDC server) + a
+# seeded Postgres sidecar sharing localhost — the same seeded image the api
+# service uses, so both copies contain the identical deterministic dataset
+# (dev users, API keys, OAuth clients, preview E2E auth fixtures).
+# NOTE: the auth and api services each run their OWN copy of the database.
+# That is fine for E2E against seeded data (ids match across copies) but
+# state created at runtime in one copy (e.g. a newly registered user's MFA
+# codes) does not exist in the other. See docs/PREVIEW_AUTH.md.
+# Rendered with envsubst by preview-env.yml; applied via
+# `gcloud run services replace`.
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: ${SERVICE_AUTH}
+  labels:
+    preview-env: "true"
+    pr-number: "${PR_NUMBER}"
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "1"
+        # Start the auth container only after the db sidecar passes its probe.
+        run.googleapis.com/container-dependencies: '{"auth": ["db"]}'
+    spec:
+      serviceAccountName: ${RUNTIME_SA}
+      containers:
+        - name: auth
+          image: ${AUTH_IMAGE}
+          ports:
+            - name: http1
+              containerPort: 8080
+          env:
+            - name: DATABASE_HOST
+              value: localhost
+            - name: DATABASE_PORT
+              value: "5432"
+            - name: DATABASE_USER
+              value: f3local
+            - name: DATABASE_PASSWORD
+              value: f3local
+            - name: DATABASE_NAME
+              value: f3nation
+            # Seeded api key (editor role) the auth app uses to call the api,
+            # e.g. to register new users. Matches LOCAL_API_KEYS in
+            # packages/db/src/local-seed-lib/data.ts.
+            - name: API_KEY
+              value: local-api-key
+            - name: AUTH_SECRET
+              value: preview-auth-secret-placeholder-32c
+            # Throwaway RS256 signing key generated fresh by the workflow at
+            # deploy time (single line, literal \n escapes — apps/auth's
+            # jwt.ts converts them back). Never a real credential; the
+            # matching public key is served at /.well-known/jwks.json.
+            - name: AUTH_JWT_PRIVATE_KEY
+              value: "${AUTH_JWT_PRIVATE_KEY}"
+            # Plainly fake — previews have no SMTP, so email sends fail by
+            # design. E2E signs in with the pre-seeded MFA fixture codes
+            # instead (docs/PREVIEW_AUTH.md).
+            - name: EMAIL_SERVER
+              value: smtp://user:pass@localhost:587
+            - name: EMAIL_FROM
+              value: preview@example.com
+            - name: NEXT_PUBLIC_API_URL
+              value: ${API_URL}
+            - name: NEXT_PUBLIC_AUTH_URL
+              value: ${AUTH_URL}
+          resources:
+            limits:
+              cpu: "1"
+              memory: 1Gi
+        - name: db
+          image: ${DB_IMAGE}
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/postgresql/data
+          startupProbe:
+            tcpSocket:
+              port: 5432
+            initialDelaySeconds: 2
+            periodSeconds: 2
+            failureThreshold: 60
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi
+      volumes:
+        - name: pgdata
+          emptyDir:
+            medium: Memory
+            sizeLimit: 256Mi
