@@ -128,7 +128,7 @@ const baseMessageInputSchema = z
   })
   .strict();
 
-export const postSlackMessageInputSchema = baseMessageInputSchema
+const postSlackMessageInputSchema = baseMessageInputSchema
   .extend({
     username: z
       .string()
@@ -161,7 +161,7 @@ export const postSlackMessageInputSchema = baseMessageInputSchema
   })
   .strict();
 
-export const updateSlackMessageInputSchema = baseMessageInputSchema
+const updateSlackMessageInputSchema = baseMessageInputSchema
   .extend({
     ts: slackTimestampSchema,
   })
@@ -313,7 +313,7 @@ const mapSlackError = (slackError: string) => {
   });
 };
 
-export const callSlackWebApi = async ({
+const callSlackWebApi = async ({
   url,
   botToken,
   payload,
