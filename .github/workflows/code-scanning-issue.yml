@@ -64,10 +64,19 @@ jobs:
 
               // The issue cannot know its own number until it exists, so the
               // concrete "Fixes #N" line is written in a second pass.
-              await github.rest.issues.update({
-                owner, repo, issue_number: created.data.number,
-                body: renderIssue(alert, created.data.number).body,
-              });
+              try {
+                await github.rest.issues.update({
+                  owner, repo, issue_number: created.data.number,
+                  body: renderIssue(alert, created.data.number).body,
+                });
+              } catch (error) {
+                core.warning(
+                  `#${created.data.number} was created successfully for alert #${alert.number}, ` +
+                    'but injecting the concrete "Fixes #N" line into its body failed; it keeps the ' +
+                    'generic fallback wording. A maintainer can edit the body, or simply reference ' +
+                    `#${created.data.number} manually in the fix PR. Error: ${error.message}`,
+                );
+              }
               core.info(`Created #${created.data.number} for alert #${alert.number}.`);
               return;
             }
