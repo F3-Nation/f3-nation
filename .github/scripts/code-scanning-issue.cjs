@@ -22,7 +22,9 @@ function permalink(alert) {
   const instance = alert.most_recent_instance ?? {};
   const path = instance.location?.path;
   const sha = instance.commit_sha;
-  const repoUrl = (alert.html_url ?? "").split("/security/code-scanning/")[0];
+  const marker = "/security/code-scanning/";
+  const markerAt = (alert.html_url ?? "").indexOf(marker);
+  const repoUrl = markerAt < 0 ? null : alert.html_url.slice(0, markerAt);
   if (!path || !sha || !repoUrl) return null;
   const start = instance.location.start_line;
   const end = instance.location.end_line ?? start;
@@ -69,7 +71,9 @@ function renderIssue(alert, issueNumber = null) {
           : "")
       : "_The tool did not report a file location._",
     "",
-    instance.message?.text ? `> ${instance.message.text}` : "",
+    instance.message?.text
+      ? `> ${instance.message.text.replace(/\r?\n/g, "\n> ")}`
+      : "",
     "",
     "## Recommendation",
     "",
@@ -92,23 +96,67 @@ function renderIssue(alert, issueNumber = null) {
   return { title: issueTitle(alert), body: lines.join("\n") };
 }
 
-/**
- * Lists issues and matches the title prefix exactly.
- * Deliberately not the search API: the search index is eventually consistent,
- * and its fuzzy matching would let "Alert #4:" match "Alert #42:".
- */
-async function findExistingIssue(github, owner, repo, alertNumber) {
-  const marker = `${TITLE_PREFIX}${alertNumber}:`;
-  const issues = await github.paginate(github.rest.issues.listForRepo, {
+async function listRepoIssues(github, owner, repo) {
+  return github.paginate(github.rest.issues.listForRepo, {
     owner,
     repo,
     state: "all",
     per_page: 100,
   });
-  const hit = issues.find(
+}
+
+/**
+ * Lists issues and matches the title prefix exactly.
+ * Deliberately not the search API: the search index is eventually consistent,
+ * and its fuzzy matching would let "Alert #4:" match "Alert #42:".
+ * Callers looking up many alerts in one run should pass a `listRepoIssues`
+ * result as `issues` so the repo is paginated once rather than once per alert.
+ */
+async function findExistingIssue(github, owner, repo, alertNumber, issues) {
+  const marker = `${TITLE_PREFIX}${alertNumber}:`;
+  const list = issues ?? (await listRepoIssues(github, owner, repo));
+  const hit = list.find(
     (issue) => !issue.pull_request && (issue.title ?? "").startsWith(marker),
   );
   return hit ? { number: hit.number, state: hit.state } : null;
 }
 
-module.exports = { renderIssue, findExistingIssue, TITLE_PREFIX };
+/**
+ * Creates the tracking issue, then rewrites the body with the concrete
+ * "Fixes #N" line — the issue cannot know its own number until it exists.
+ * Shared so both workflows file byte-identical issues.
+ */
+async function createIssueForAlert(github, owner, repo, alert, core) {
+  const created = await github.rest.issues.create({
+    owner,
+    repo,
+    ...renderIssue(alert),
+  });
+  const number = created.data.number;
+
+  try {
+    await github.rest.issues.update({
+      owner,
+      repo,
+      issue_number: number,
+      body: renderIssue(alert, number).body,
+    });
+    return { number, injected: true };
+  } catch (error) {
+    core.warning(
+      `#${number} was created successfully for alert #${alert.number}, ` +
+        'but injecting the concrete "Fixes #N" line into its body failed; it keeps the ' +
+        "generic fallback wording. A maintainer can edit the body, or simply reference " +
+        `#${number} manually in the fix PR. Error: ${error.status ?? "no status"} ${error.message}`,
+    );
+    return { number, injected: false };
+  }
+}
+
+module.exports = {
+  renderIssue,
+  findExistingIssue,
+  listRepoIssues,
+  createIssueForAlert,
+  TITLE_PREFIX,
+};

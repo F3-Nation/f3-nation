@@ -8,22 +8,25 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.alert.number }}
   cancel-in-progress: false
 
-permissions:
-  contents: read
-  issues: write
+permissions: {}
 
 jobs:
   sync:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read # check out the shared renderer
+      issues: write # file, reopen, comment on and close tracking issues
     steps:
       - name: Check out the shared renderer
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Sync issue with alert state
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
-            const { renderIssue, findExistingIssue } = require(
+            const { renderIssue, findExistingIssue, createIssueForAlert } = require(
               './.github/scripts/code-scanning-issue.cjs',
             );
 
@@ -41,16 +44,20 @@ jobs:
             const CLOSING = new Set(['fixed', 'closed_by_user']);
             const existing = await findExistingIssue(github, owner, repo, alert.number);
 
-            if (OPENING.has(action)) {
-              const ref = context.payload.ref ?? alert.most_recent_instance?.ref;
-              const defaultBranch = context.payload.repository?.default_branch ?? 'main';
-              const defaultRef = `refs/heads/${defaultBranch}`;
+            // `||` not `??`: ref is an empty string (not absent) on the
+            // *_by_user actions, which carry no ref of their own.
+            const ref = context.payload.ref || alert.most_recent_instance?.ref;
+            const defaultBranch = context.payload.repository?.default_branch ?? 'main';
+            const defaultRef = `refs/heads/${defaultBranch}`;
+            if (!ref) {
+              core.info(
+                `Could not determine ref for alert #${alert.number}; treating as default branch.`,
+              );
+            }
+            const onDefaultRef = !ref || ref === defaultRef;
 
-              if (!ref) {
-                core.info(
-                  `Could not determine ref for alert #${alert.number}; treating as default branch.`,
-                );
-              } else if (ref !== defaultRef) {
+            if (OPENING.has(action)) {
+              if (!onDefaultRef) {
                 core.info(
                   `Alert #${alert.number} is on ref \`${ref}\`, not the default branch ` +
                     `(\`${defaultRef}\`); alerts on non-default branches are not tracked as issues.`,
@@ -64,8 +71,12 @@ jobs:
               }
 
               if (existing) {
+                // Refresh the body too: the permalink is pinned to the alert's
+                // commit, and alerts reopen precisely because the code moved.
                 await github.rest.issues.update({
-                  owner, repo, issue_number: existing.number, state: 'open',
+                  owner, repo, issue_number: existing.number,
+                  state: 'open',
+                  body: renderIssue(alert, existing.number).body,
                 });
                 await github.rest.issues.createComment({
                   owner, repo, issue_number: existing.number,
@@ -75,25 +86,8 @@ jobs:
                 return;
               }
 
-              const { title, body } = renderIssue(alert);
-              const created = await github.rest.issues.create({ owner, repo, title, body });
-
-              // The issue cannot know its own number until it exists, so the
-              // concrete "Fixes #N" line is written in a second pass.
-              try {
-                await github.rest.issues.update({
-                  owner, repo, issue_number: created.data.number,
-                  body: renderIssue(alert, created.data.number).body,
-                });
-              } catch (error) {
-                core.warning(
-                  `#${created.data.number} was created successfully for alert #${alert.number}, ` +
-                    'but injecting the concrete "Fixes #N" line into its body failed; it keeps the ' +
-                    'generic fallback wording. A maintainer can edit the body, or simply reference ' +
-                    `#${created.data.number} manually in the fix PR. Error: ${error.message}`,
-                );
-              }
-              core.info(`Created #${created.data.number} for alert #${alert.number}.`);
+              const { number } = await createIssueForAlert(github, owner, repo, alert, core);
+              core.info(`Created #${number} for alert #${alert.number}.`);
               return;
             }
 
@@ -107,10 +101,27 @@ jobs:
                 return;
               }
 
+              // Closing on a non-default ref is unrecoverable: the alert never
+              // changed state on the default branch, so no further event fires.
+              if (!onDefaultRef) {
+                await github.rest.issues.createComment({
+                  owner, repo, issue_number: existing.number,
+                  body:
+                    `Code scanning alert #${alert.number} was \`${action}\` on \`${ref}\`, not the ` +
+                    `default branch (\`${defaultRef}\`), so this issue stays open — the alert is ` +
+                    `still open on \`${defaultBranch}\`.\n\n${alert.html_url}`,
+                });
+                core.info(
+                  `Alert #${alert.number} was ${action} on ref \`${ref}\`, not the default ` +
+                    `branch (\`${defaultRef}\`); left #${existing.number} open.`,
+                );
+                return;
+              }
+
               const reason =
                 action === 'fixed'
-                  ? `The scanner reports it fixed on \`${alert.most_recent_instance?.ref ?? 'the default branch'}\`.`
-                  : `It was dismissed by @${alert.dismissed_by?.login ?? 'a maintainer'} ` +
+                  ? `The scanner reports it fixed on \`${ref || defaultRef}\`.`
+                  : `It was dismissed by ${alert.dismissed_by?.login ? `@${alert.dismissed_by.login}` : 'a maintainer'} ` +
                     `(reason: ${alert.dismissed_reason ?? 'none given'}` +
                     `${alert.dismissed_comment ? ` — ${alert.dismissed_comment}` : ''}).`;
 

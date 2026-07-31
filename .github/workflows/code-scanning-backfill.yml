@@ -15,17 +15,20 @@ concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
 
-permissions:
-  contents: read
-  issues: write
-  security-events: read
+permissions: {}
 
 jobs:
   backfill:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read # check out the shared renderer
+      issues: write # file and reopen tracking issues
+      security-events: read # list the open code scanning alerts
     steps:
       - name: Check out the shared renderer
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: File issues for existing open alerts
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
@@ -33,20 +36,26 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run }}
         with:
           script: |
-            const { renderIssue, findExistingIssue } = require(
-              './.github/scripts/code-scanning-issue.cjs',
-            );
+            const {
+              renderIssue, findExistingIssue, listRepoIssues, createIssueForAlert,
+            } = require('./.github/scripts/code-scanning-issue.cjs');
 
             // Anything other than an explicit "false" stays a dry run.
             const dryRun = process.env.DRY_RUN !== 'false';
             const owner = context.repo.owner;
             const repo = context.repo.repo;
 
+            // Match the reactive workflow, which tracks default-branch alerts only.
+            const defaultBranch = context.payload.repository?.default_branch ?? 'main';
             const listed = await github.paginate(
               github.rest.codeScanning.listAlertsForRepo,
-              { owner, repo, state: 'open', per_page: 100 },
+              { owner, repo, state: 'open', ref: `refs/heads/${defaultBranch}`, per_page: 100 },
             );
             core.info(`${listed.length} open alert(s); dry run: ${dryRun}`);
+
+            // Paginated once and reused: findExistingIssue would otherwise
+            // re-list every issue in the repo on each of the N iterations.
+            const issues = await listRepoIssues(github, owner, repo);
 
             const rows = [
               [
@@ -58,60 +67,88 @@ jobs:
               ],
             ];
 
-            for (const summary of listed) {
-              // Re-fetch each alert: the list endpoint returns a trimmed rule
-              // object, and the body must match the reactive workflow's exactly.
-              const { data: alert } = await github.rest.codeScanning.getAlert({
-                owner, repo, alert_number: summary.number,
-              });
+            let failures = 0;
 
-              const location = alert.most_recent_instance?.location ?? {};
-              const where = location.path
-                ? `${location.path}:${location.start_line ?? '?'}`
-                : 'n/a';
+            try {
+              for (const summary of listed) {
+                let where = 'n/a';
+                let ruleId = 'unknown';
+                let severity = 'unclassified';
+                let result;
 
-              const existing = await findExistingIssue(github, owner, repo, alert.number);
-              let result;
-
-              if (existing) {
-                result = `skipped — already #${existing.number}`;
-              } else if (dryRun) {
-                result = `would create — "${renderIssue(alert).title}"`;
-              } else {
-                const created = await github.rest.issues.create({
-                  owner, repo, ...renderIssue(alert),
-                });
-
-                // The issue cannot know its own number until it exists, so the
-                // concrete "Fixes #N" line is written in a second pass.
+                // A throw here must not cost the whole table: this loop creates
+                // issues in bulk, which is the canonical way to trip GitHub's
+                // secondary rate limit, and the summary is the job's whole output.
                 try {
-                  await github.rest.issues.update({
-                    owner, repo, issue_number: created.data.number,
-                    body: renderIssue(alert, created.data.number).body,
+                  // Re-fetch each alert: the list endpoint returns a trimmed rule
+                  // object, and the body must match the reactive workflow's exactly.
+                  const { data: alert } = await github.rest.codeScanning.getAlert({
+                    owner, repo, alert_number: summary.number,
                   });
-                  result = `created #${created.data.number}`;
-                } catch (error) {
-                  core.warning(
-                    `#${created.data.number} was created successfully for alert #${alert.number}, ` +
-                      'but injecting the concrete "Fixes #N" line into its body failed; it keeps the ' +
-                      'generic fallback wording. A maintainer can edit the body, or simply reference ' +
-                      `#${created.data.number} manually in the fix PR. Error: ${error.message}`,
-                  );
-                  result = `created #${created.data.number} — body injection FAILED, see warning`;
-                }
-              }
 
-              core.info(`Alert #${alert.number}: ${result}`);
-              rows.push([
-                `#${alert.number}`,
-                alert.rule?.id ?? 'unknown',
-                alert.rule?.security_severity_level ?? 'unclassified',
-                where,
-                result,
-              ]);
+                  const location = alert.most_recent_instance?.location ?? {};
+                  where = location.path
+                    ? `${location.path}:${location.start_line ?? '?'}`
+                    : 'n/a';
+                  ruleId = alert.rule?.id ?? 'unknown';
+                  severity = alert.rule?.security_severity_level ?? 'unclassified';
+
+                  const existing = await findExistingIssue(
+                    github, owner, repo, alert.number, issues,
+                  );
+
+                  if (existing?.state === 'open') {
+                    result = `skipped — already #${existing.number}`;
+                  } else if (existing && dryRun) {
+                    result = `would reopen — #${existing.number} (closed)`;
+                  } else if (existing) {
+                    // Closed by hand, or by a `fixed` event on a feature branch,
+                    // while the alert is still open. Nothing else would reopen it.
+                    await github.rest.issues.update({
+                      owner, repo, issue_number: existing.number, state: 'open',
+                    });
+                    await github.rest.issues.createComment({
+                      owner, repo, issue_number: existing.number,
+                      body: `Reopening: code scanning alert #${alert.number} is still open.\n\n${alert.html_url}`,
+                    });
+                    result = `reopened #${existing.number}`;
+                  } else if (dryRun) {
+                    result = `would create — "${renderIssue(alert).title}"`;
+                  } else {
+                    const { number, injected } = await createIssueForAlert(
+                      github, owner, repo, alert, core,
+                    );
+                    result = injected
+                      ? `created #${number}`
+                      : `created #${number} — body injection FAILED, see warning`;
+                    // Stay under the secondary rate limit on bulk creation.
+                    await new Promise((resolve) => setTimeout(resolve, 1000));
+                  }
+                } catch (error) {
+                  failures += 1;
+                  result = `FAILED — ${error.status ?? 'no status'} ${error.message}`;
+                  core.warning(`Alert #${summary.number}: ${result}`);
+                }
+
+                core.info(`Alert #${summary.number}: ${result}`);
+                rows.push([
+                  `#${summary.number}`,
+                  ruleId,
+                  severity,
+                  where,
+                  result,
+                ]);
+              }
+            } finally {
+              await core.summary
+                .addHeading(dryRun ? 'Backfill dry run' : 'Backfill results')
+                .addTable(rows)
+                .write();
             }
 
-            await core.summary
-              .addHeading(dryRun ? 'Backfill dry run' : 'Backfill results')
-              .addTable(rows)
-              .write();
+            if (failures > 0) {
+              core.setFailed(
+                `${failures} of ${listed.length} alert(s) failed; see the job summary. ` +
+                  'Re-running is idempotent.',
+              );
+            }
