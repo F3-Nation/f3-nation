@@ -10,7 +10,7 @@ This directory contains the scripts and automation jobs for the F3 Nation Slack 
 
 ## How to Build the Scripts Image
 
-Primary deployment now happens through GitHub Actions tag releases in [`.github/workflows/deploy-slackbot.yml`](../../../.github/workflows/deploy-slackbot.yml). The Cloud Build config is retained only as a temporary migration path.
+Deployment happens through GitHub Actions tag releases in [`.github/workflows/deploy-slackbot.yml`](../../../.github/workflows/deploy-slackbot.yml) — pushing a `slackbot@*` tag builds and deploys both the bot service and this scripts job. The manual build below is for local testing or a one-off push.
 
 1. **Navigate to the repository root:**
 
