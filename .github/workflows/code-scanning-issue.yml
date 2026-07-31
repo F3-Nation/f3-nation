@@ -1,141 +1,305 @@
 name: Code scanning alert issues
 
+# Polls rather than reacts: `code_scanning_alert` is a webhook event, but it is
+# not one of the events GitHub Actions accepts under `on:`.
+
 on:
-  code_scanning_alert:
-    types: [created, reopened, reopened_by_user, fixed, closed_by_user]
+  schedule:
+    # Every 6 hours, off the hour to dodge the scheduler's peak.
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Report what would change without writing anything"
+        type: boolean
+        default: false
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.alert.number }}
+  group: ${{ github.workflow }}
   cancel-in-progress: false
 
 permissions: {}
 
 jobs:
-  sync:
+  reconcile:
     runs-on: ubuntu-latest
     permissions:
       contents: read # check out the shared renderer
       issues: write # file, reopen, comment on and close tracking issues
+      security-events: read # list the open code scanning alerts
     steps:
       - name: Check out the shared renderer
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
-      - name: Sync issue with alert state
+      - name: Reconcile issues with alert state
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
         with:
           script: |
-            const { renderIssue, findExistingIssue, createIssueForAlert } = require(
-              './.github/scripts/code-scanning-issue.cjs',
-            );
+            const {
+              renderIssue, findExistingIssue, listRepoIssues, createIssueForAlert,
+              TITLE_PREFIX,
+            } = require('./.github/scripts/code-scanning-issue.cjs');
 
+            // Absent on a schedule run, where it must mean "live".
+            const dryRun = process.env.DRY_RUN === 'true';
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const alert = context.payload.alert;
-            const action = context.payload.action;
 
-            if (!alert) {
-              core.warning('No alert in the event payload; nothing to do.');
-              return;
-            }
-
-            const OPENING = new Set(['created', 'reopened', 'reopened_by_user']);
-            const CLOSING = new Set(['fixed', 'closed_by_user']);
-            const existing = await findExistingIssue(github, owner, repo, alert.number);
-
-            // `||` not `??`: ref is an empty string (not absent) on the
-            // *_by_user actions, which carry no ref of their own.
-            const ref = context.payload.ref || alert.most_recent_instance?.ref;
             const defaultBranch = context.payload.repository?.default_branch ?? 'main';
             const defaultRef = `refs/heads/${defaultBranch}`;
-            if (!ref) {
+
+            const rows = [
+              [
+                { data: 'Alert', header: true },
+                { data: 'Rule', header: true },
+                { data: 'Severity', header: true },
+                { data: 'Location', header: true },
+                { data: 'Result', header: true },
+              ],
+            ];
+
+            let failures = 0;
+
+            // Pause after each alert's writes to stay under the secondary rate limit.
+            const settle = () => new Promise((resolve) => setTimeout(resolve, 1000));
+
+            // A throw must not cost the whole table: this job writes in bulk,
+            // which is the canonical way to trip GitHub's secondary rate limit,
+            // and the summary is the job's whole output. The row is pre-shaped so a
+            // throw before `describe` still lands the result in the last column.
+            const reconcile = async (alertNumber, work) => {
+              const row = [`#${alertNumber}`, 'unknown', 'unclassified', 'n/a', ''];
+              const describe = (alert) => {
+                const location = alert.most_recent_instance?.location ?? {};
+                row[1] = alert.rule?.id ?? 'unknown';
+                row[2] = alert.rule?.security_severity_level ?? 'unclassified';
+                row[3] = location.path
+                  ? `${location.path}:${location.start_line ?? '?'}`
+                  : 'n/a';
+              };
+
+              try {
+                row[4] = await work(describe);
+              } catch (error) {
+                failures += 1;
+                row[4] = `FAILED — ${error.status ?? 'no status'} ${error.message}`;
+                core.warning(`Alert #${alertNumber}: ${row[4]}`);
+              } finally {
+                // In `finally` so failures are paced too: the secondary rate limit is
+                // precisely the failure that would otherwise skip the pause.
+                await settle();
+              }
+              core.info(`Alert #${alertNumber}: ${row[4]}`);
+              rows.push(row);
+            };
+
+            // A comment and the state flip beside it are two calls, not one. When the
+            // flip fails the next run re-enters the same branch, so skip the comment
+            // if it is already the newest — newest rather than any, because a later
+            // reopen/close cycle has newer comments and must still speak.
+            const commentOnce = async (issueNumber, marker, body) => {
+              const { data: latest } = await github.rest.issues.listComments({
+                owner, repo, issue_number: issueNumber,
+                per_page: 1, sort: 'created', direction: 'desc',
+              });
+              if (latest[0]?.body?.startsWith(marker)) return;
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: issueNumber, body,
+              });
+            };
+
+            let aborted = null;
+
+            try {
+              // Alerts open on the default branch are the set that should have an
+              // open tracking issue; alerts on feature branches are not tracked.
+              const openAlerts = await github.paginate(
+                github.rest.codeScanning.listAlertsForRepo,
+                { owner, repo, state: 'open', ref: defaultRef, per_page: 100 },
+              );
+              const openAlertNumbers = new Set(openAlerts.map((alert) => alert.number));
+
+              // Paginated once and reused: findExistingIssue would otherwise
+              // re-list every issue in the repo on each iteration.
+              const issues = await listRepoIssues(github, owner, repo);
+
               core.info(
-                `Could not determine ref for alert #${alert.number}; treating as default branch.`,
+                `${openAlerts.length} alert(s) open on ${defaultBranch}; dry run: ${dryRun}`,
+              );
+
+              // Pass 1 — every alert open on the default branch needs an open issue.
+              for (const listed of openAlerts) {
+                await reconcile(listed.number, async (describe) => {
+                  // The listing fills the summary row on its own; only a rendered
+                  // body needs the full rule, so the re-fetch waits for the paths
+                  // that render one.
+                  describe(listed);
+
+                  const existing = await findExistingIssue(
+                    github, owner, repo, listed.number, issues,
+                  );
+
+                  if (existing?.state === 'open') return `already #${existing.number}`;
+                  if (existing && dryRun) return `would reopen — #${existing.number}`;
+
+                  const { data: alert } = await github.rest.codeScanning.getAlert({
+                    owner, repo, alert_number: listed.number,
+                  });
+                  describe(alert);
+
+                  if (existing) {
+                    // Comment before the flip: the flip is what the `already #N`
+                    // short-circuit keys on, so a failed flip retries next run.
+                    await commentOnce(
+                      existing.number,
+                      `Reopening: code scanning alert #${alert.number}`,
+                      `Reopening: code scanning alert #${alert.number} is open again on \`${defaultBranch}\`.\n\n${alert.html_url}`,
+                    );
+                    // Refresh the body too: the permalink is pinned to the alert's
+                    // commit, and alerts reopen precisely because the code moved.
+                    await github.rest.issues.update({
+                      owner, repo, issue_number: existing.number,
+                      state: 'open',
+                      body: renderIssue(alert, existing.number).body,
+                    });
+                    return `reopened #${existing.number}`;
+                  }
+
+                  if (dryRun) return `would create — "${renderIssue(alert).title}"`;
+
+                  const { number, injected } = await createIssueForAlert(
+                    github, owner, repo, alert, core,
+                  );
+                  if (!injected) {
+                    throw new Error(
+                      `created #${number}, but injecting the "Fixes #N" line failed ` +
+                        '(see warning); it will not auto-close when the fix PR merges',
+                    );
+                  }
+                  return `created #${number}`;
+                });
+              }
+
+              // Pass 2 — an open tracking issue whose alert is no longer open on the
+              // default branch is how a closure is detected without an event.
+              // Reads the same pre-write snapshot as Pass 1 — safe only because
+              // openAlertNumbers below skips anything Pass 1 touched.
+              const tracked = issues.filter(
+                (issue) =>
+                  !issue.pull_request &&
+                  issue.state === 'open' &&
+                  (issue.title ?? '').startsWith(TITLE_PREFIX),
+              );
+
+              for (const issue of tracked) {
+                // Must match findExistingIssue exactly, trailing colon included:
+                // an issue the create path would not recognise must not be closed here.
+                const matched = issue.title
+                  .slice(TITLE_PREFIX.length)
+                  .match(/^(\d+):/);
+                if (!matched) {
+                  core.warning(
+                    `#${issue.number} starts with the tracking prefix but is not a ` +
+                      'tracking issue title; leaving it alone.',
+                  );
+                  continue;
+                }
+                const alertNumber = Number(matched[1]);
+                // findExistingIssue rebuilds the marker from the number, so a title
+                // that does not round-trip ("#007") is one it would never match.
+                if (String(alertNumber) !== matched[1]) {
+                  core.warning(
+                    `#${issue.number} carries a non-canonical alert number ` +
+                      `("${matched[1]}"); findExistingIssue would not match it, ` +
+                      'so leaving it alone.',
+                  );
+                  continue;
+                }
+                if (openAlertNumbers.has(alertNumber)) continue;
+
+                await reconcile(alertNumber, async (describe) => {
+                  let alert;
+                  try {
+                    ({ data: alert } = await github.rest.codeScanning.getAlert({
+                      owner, repo, alert_number: alertNumber,
+                    }));
+                  } catch (error) {
+                    if (error.status !== 404 && error.status !== 403) throw error;
+                    // The alert record is no longer readable — analyses deleted, the
+                    // tool removed, or scanning switched off. Failing would leave this
+                    // job red on every future run, so hand the issue to a maintainer.
+                    core.warning(
+                      `Alert #${alertNumber} is no longer readable (${error.status}); ` +
+                        `#${issue.number} needs a maintainer to close it by hand.`,
+                    );
+                    return `left #${issue.number} open — alert no longer readable`;
+                  }
+                  describe(alert);
+
+                  // Absence from the list is only a hypothesis; this re-fetch is the
+                  // confirmation. Still open means it is tracked on another branch, or
+                  // the listing was short — either way, closing would be wrong.
+                  if (alert.state === 'open') {
+                    return `left #${issue.number} open — alert still open, not listed on \`${defaultBranch}\``;
+                  }
+
+                  if (dryRun) {
+                    return `would close — #${issue.number} (alert ${alert.state})`;
+                  }
+
+                  const reason =
+                    alert.state === 'fixed'
+                      ? `The scanner reports it fixed on \`${defaultBranch}\`.`
+                      : `It was dismissed by ${alert.dismissed_by?.login ? `@${alert.dismissed_by.login}` : 'a maintainer'} ` +
+                        `(reason: ${alert.dismissed_reason ?? 'none given'}` +
+                        `${alert.dismissed_comment ? ` — ${alert.dismissed_comment}` : ''}).`;
+
+                  // Comment before the flip: the open-state filter above is what
+                  // this loop re-enters on, so a failed flip retries next run.
+                  await commentOnce(
+                    issue.number,
+                    `Closing automatically: code scanning alert #${alertNumber}`,
+                    `Closing automatically: code scanning alert #${alertNumber} is no longer open.\n\n${reason}\n\n${alert.html_url}`,
+                  );
+                  await github.rest.issues.update({
+                    owner, repo, issue_number: issue.number,
+                    state: 'closed',
+                    state_reason: alert.state === 'fixed' ? 'completed' : 'not_planned',
+                  });
+                  return `closed #${issue.number} (alert ${alert.state})`;
+                });
+              }
+            } catch (error) {
+              aborted = error;
+              throw error;
+            } finally {
+              const report = core.summary.addHeading(
+                dryRun ? 'Reconcile dry run' : 'Reconcile results',
+              );
+              // The listing calls are inside the try, so an abort here would
+              // otherwise render a partial table under a heading that reads complete.
+              if (aborted) {
+                report.addRaw(
+                  '\n> **Run aborted before completion:** ' +
+                    `${aborted.status ?? 'no status'} ${aborted.message}\n`,
+                );
+              }
+              await report
+                .addTable(
+                  rows.length > 1
+                    ? rows
+                    : [...rows, ['—', '—', '—', '—', 'nothing to do']],
+                )
+                .write();
+            }
+
+            if (failures > 0) {
+              core.setFailed(
+                `${failures} alert(s) failed to reconcile; see the job summary. ` +
+                  'Re-running is idempotent.',
               );
             }
-            const onDefaultRef = !ref || ref === defaultRef;
-
-            if (OPENING.has(action)) {
-              if (!onDefaultRef) {
-                core.info(
-                  `Alert #${alert.number} is on ref \`${ref}\`, not the default branch ` +
-                    `(\`${defaultRef}\`); alerts on non-default branches are not tracked as issues.`,
-                );
-                return;
-              }
-
-              if (existing?.state === 'open') {
-                core.info(`Alert #${alert.number} already tracked by #${existing.number}.`);
-                return;
-              }
-
-              if (existing) {
-                // Refresh the body too: the permalink is pinned to the alert's
-                // commit, and alerts reopen precisely because the code moved.
-                await github.rest.issues.update({
-                  owner, repo, issue_number: existing.number,
-                  state: 'open',
-                  body: renderIssue(alert, existing.number).body,
-                });
-                await github.rest.issues.createComment({
-                  owner, repo, issue_number: existing.number,
-                  body: `Reopening: code scanning alert #${alert.number} is active again (\`${action}\`).\n\n${alert.html_url}`,
-                });
-                core.info(`Reopened #${existing.number} for alert #${alert.number}.`);
-                return;
-              }
-
-              const { number } = await createIssueForAlert(github, owner, repo, alert, core);
-              core.info(`Created #${number} for alert #${alert.number}.`);
-              return;
-            }
-
-            if (CLOSING.has(action)) {
-              if (!existing) {
-                core.info(`No issue tracks alert #${alert.number}; nothing to close.`);
-                return;
-              }
-              if (existing.state === 'closed') {
-                core.info(`#${existing.number} is already closed.`);
-                return;
-              }
-
-              // Closing on a non-default ref is unrecoverable: the alert never
-              // changed state on the default branch, so no further event fires.
-              if (!onDefaultRef) {
-                await github.rest.issues.createComment({
-                  owner, repo, issue_number: existing.number,
-                  body:
-                    `Code scanning alert #${alert.number} was \`${action}\` on \`${ref}\`, not the ` +
-                    `default branch (\`${defaultRef}\`), so this issue stays open — the alert is ` +
-                    `still open on \`${defaultBranch}\`.\n\n${alert.html_url}`,
-                });
-                core.info(
-                  `Alert #${alert.number} was ${action} on ref \`${ref}\`, not the default ` +
-                    `branch (\`${defaultRef}\`); left #${existing.number} open.`,
-                );
-                return;
-              }
-
-              const reason =
-                action === 'fixed'
-                  ? `The scanner reports it fixed on \`${ref || defaultRef}\`.`
-                  : `It was dismissed by ${alert.dismissed_by?.login ? `@${alert.dismissed_by.login}` : 'a maintainer'} ` +
-                    `(reason: ${alert.dismissed_reason ?? 'none given'}` +
-                    `${alert.dismissed_comment ? ` — ${alert.dismissed_comment}` : ''}).`;
-
-              await github.rest.issues.createComment({
-                owner, repo, issue_number: existing.number,
-                body: `Closing automatically: code scanning alert #${alert.number} is no longer open.\n\n${reason}\n\n${alert.html_url}`,
-              });
-              await github.rest.issues.update({
-                owner, repo, issue_number: existing.number,
-                state: 'closed',
-                state_reason: action === 'fixed' ? 'completed' : 'not_planned',
-              });
-              core.info(`Closed #${existing.number} for alert #${alert.number}.`);
-              return;
-            }
-
-            core.info(`Action "${action}" needs no issue change.`);
