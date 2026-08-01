@@ -116,9 +116,17 @@ function escapeTableCell(text: string): string {
   // sanitizeForComment neutralizes @mentions and #issue autolinks and
   // HTML-encodes angle brackets — which also defuses the `<!-- … -->` dedup
   // marker (REVIEW_COMMENT_MARKER) model-derived text could otherwise forge.
-  // The remaining replacements keep the Markdown table cell intact.
+  // The remaining replacements keep the Markdown table cell intact. Backslash
+  // must be escaped before the pipe escape below, or a model-emitted trailing
+  // "\" turns "\|" into an escaped backslash followed by a live, column-
+  // breaking "|". Backtick is HTML-entity-encoded (not backslash-escaped —
+  // Markdown doesn't support that) because file/line_hint render inside
+  // `` `...` `` code spans elsewhere in this file, and a model-emitted
+  // backtick would otherwise close the span early.
   return sanitizeForComment(text)
+    .replace(/\\/g, "\\\\")
     .replace(/\|/g, "\\|")
+    .replace(/`/g, "&#96;")
     .replace(/\r?\n/g, "<br>");
 }
 
