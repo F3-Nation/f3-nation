@@ -146,11 +146,11 @@ def build_config_general_form(
 def _kotter_enabled(region_record: SlackSettings) -> bool:
     if region_record.kotter_reports_enabled is not None:
         return bool(region_record.kotter_reports_enabled)
-    return False
+    return bool(region_record.send_aoq_reports)
 
 
 def _kotter_include_admins(region_record: SlackSettings) -> bool:
-    return region_record.kotter_report_include_admins is not False
+    return region_record.kotter_report_include_admins is not None and bool(region_record.kotter_report_include_admins)
 
 
 def _kotter_ao_reports_enabled(region_record: SlackSettings) -> bool:
