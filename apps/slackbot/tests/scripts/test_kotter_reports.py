@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 from slack_sdk.errors import SlackApiError
+from slack_sdk.http_retry import RateLimitErrorRetryHandler
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -297,6 +298,33 @@ def test_send_kotter_reports_schedule_guard(monkeypatch):
 
     kotter_reports.send_kotter_reports(force=True, now_cst=datetime(2026, 7, 6, 9))
     assert calls == {"rows": 2, "sent": 2}
+
+
+def test_send_kotter_reports_configures_rate_limit_retry_handler(monkeypatch):
+    org = SimpleNamespace(id=1, name="Region")
+    slack = SimpleNamespace(settings=settings(kotter_reports_enabled=False).__dict__)
+    clients = []
+
+    monkeypatch.setattr(kotter_reports.DbManager, "find_join_records3", lambda *args, **kwargs: [(None, org, slack)])
+    monkeypatch.setattr(kotter_reports, "get_sample_kotter_rows", lambda *args, **kwargs: [row(1)])
+    monkeypatch.setattr(
+        kotter_reports,
+        "resolve_kotter_deliveries",
+        lambda cfg, rows: [kotter_reports.Delivery("C1", rows)],
+    )
+    monkeypatch.setattr(kotter_reports, "_send_delivery", lambda *args, **kwargs: None)
+
+    def capture_web_client(**kwargs):
+        client = SimpleNamespace(retry_handlers=kwargs["retry_handlers"])
+        clients.append(client)
+        return client
+
+    monkeypatch.setattr(kotter_reports, "WebClient", capture_web_client)
+
+    kotter_reports.send_kotter_reports(sample_report=True)
+
+    assert len(clients) == 1
+    assert any(isinstance(handler, RateLimitErrorRetryHandler) for handler in clients[0].retry_handlers)
 
 
 def test_send_kotter_reports_sample_report_uses_sample_rows(monkeypatch):

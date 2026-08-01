@@ -19,6 +19,7 @@ from f3_data_models.models import (
 from f3_data_models.utils import DbManager, get_session
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
+from slack_sdk.http_retry import RateLimitErrorRetryHandler, default_retry_handlers
 from sqlalchemy import and_, func, or_
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
@@ -699,7 +700,9 @@ def send_kotter_reports(
             if not deliveries:
                 print(f"No Kotter Report deliveries for org {org.name} ({org.id})")
                 continue
-            client = WebClient(token=config.bot_token, ssl=ssl_context)
+            retry_handlers = default_retry_handlers()
+            retry_handlers.append(RateLimitErrorRetryHandler())
+            client = WebClient(token=config.bot_token, ssl=ssl_context, retry_handlers=retry_handlers)
             for delivery in deliveries:
                 try:
                     _send_delivery(client, delivery, stats_url=stats_url, org_id=config.org_id)
