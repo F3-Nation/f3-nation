@@ -7,7 +7,7 @@ import { join } from "path";
 // build time (the route is statically generated) into the structure the page
 // renders. Because it reads apps/map/CHANGELOG.md, it is inherently map-only.
 
-export interface ChangelogSection {
+interface ChangelogSection {
   title: string;
   items: string[];
 }
@@ -65,7 +65,7 @@ function cleanItem(raw: string): string {
     .trim();
 }
 
-export function parseChangelog(markdown: string): ChangelogEntry[] {
+function parseChangelog(markdown: string): ChangelogEntry[] {
   const entries: ChangelogEntry[] = [];
   let entry: ChangelogEntry | null = null;
   let section: ChangelogSection | null = null;
