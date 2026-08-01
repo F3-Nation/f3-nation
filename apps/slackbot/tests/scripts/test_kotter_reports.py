@@ -15,7 +15,12 @@ from utilities.database.orm import SlackSettings
 
 
 def settings(**overrides):
-    values = {"team_id": "T1", "org_id": 1, "bot_token": "xoxb-token"}
+    values = {
+        "team_id": "T1",
+        "org_id": 1,
+        "bot_token": "xoxb-token",
+        "kotter_report_recipient_users": ["UDEST"],
+    }
     values.update(overrides)
     return SlackSettings(**values)
 
@@ -298,6 +303,23 @@ def test_send_kotter_reports_schedule_guard(monkeypatch):
 
     kotter_reports.send_kotter_reports(force=True, now_cst=datetime(2026, 7, 6, 9))
     assert calls == {"rows": 2, "sent": 2}
+
+
+def test_send_kotter_reports_skips_enabled_config_without_destinations(monkeypatch, caplog):
+    org = SimpleNamespace(id=1, name="Region")
+    slack = SimpleNamespace(settings=settings(kotter_reports_enabled=True, kotter_report_recipient_users=[]).__dict__)
+    calls = {"rows": 0}
+    monkeypatch.setattr(kotter_reports.DbManager, "find_join_records3", lambda *args, **kwargs: [(None, org, slack)])
+    monkeypatch.setattr(
+        kotter_reports,
+        "get_kotter_rows",
+        lambda *args, **kwargs: calls.__setitem__("rows", calls["rows"] + 1),
+    )
+
+    kotter_reports.send_kotter_reports(force=True)
+
+    assert calls["rows"] == 0
+    assert "has no delivery destination" in caplog.text
 
 
 def test_send_kotter_reports_configures_rate_limit_retry_handler(monkeypatch):

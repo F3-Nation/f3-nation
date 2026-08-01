@@ -59,7 +59,7 @@ COMMAND_MAPPER = {
 VIEW_MAPPER = {
     actions.BACKBLAST_CALLBACK_ID: (backblast.handle_backblast_post, False, False),
     actions.BACKBLAST_EDIT_CALLBACK_ID: (backblast.handle_backblast_post, False, False),
-    actions.KOTTER_REPORT_CONFIG_CALLBACK_ID: (config.handle_kotter_report_config_post, False, False),
+    actions.KOTTER_REPORT_CONFIG_CALLBACK_ID: (config.handle_kotter_report_config_post, False, True),
     actions.WELCOME_MESSAGE_CONFIG_CALLBACK_ID: (welcome.handle_welcome_message_config_post, False, False),
     actions.CONFIG_GENERAL_CALLBACK_ID: (config.handle_config_general_post, False, False),
     actions.CONFIG_EMAIL_CALLBACK_ID: (config.handle_config_email_post, False, False),

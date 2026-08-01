@@ -677,6 +677,12 @@ def send_kotter_reports(
                 config.enabled = True
             if not config.enabled:
                 continue
+            if not config.include_site_qs and not config.include_admins and not config.recipient_users:
+                logger.warning(
+                    "Skipping Kotter Reports for org_id=%s: enabled configuration has no delivery destination",
+                    config.org_id,
+                )
+                continue
             if (
                 not sample_report
                 and not force

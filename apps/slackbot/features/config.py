@@ -9,6 +9,7 @@ from slack_sdk.web import WebClient
 
 from features import db_admin
 from utilities import constants
+from utilities.builders import update_submission_wait_view
 from utilities.constants import ALL_USERS_ARE_ADMINS
 from utilities.database.orm import SlackSettings
 from utilities.database.special_queries import get_admin_users, make_user_admin
@@ -200,14 +201,29 @@ def handle_kotter_report_config_post(
     body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings
 ):
     config_data = forms.KOTTER_REPORT_CONFIG_FORM.get_selected_values(body)
+    submission_view_id = safe_get(body, "submission_view_id") or safe_get(body, "view", "id")
 
     enabled = safe_get(config_data, actions.KOTTER_REPORT_ENABLE) == "enable"
+    recipient_users = safe_get(config_data, actions.KOTTER_REPORT_RECIPIENT_USERS) or []
+    include_admins = safe_get(config_data, actions.KOTTER_REPORT_INCLUDE_ADMINS) == "yes"
+    include_site_qs = safe_get(config_data, actions.KOTTER_REPORT_INCLUDE_SITE_QS) == "yes"
+
+    if enabled and not include_site_qs and not include_admins and not recipient_users:
+        update_submission_wait_view(
+            client=client,
+            title="Destination required",
+            text="Select at least one delivery destination before enabling Kotter Reports.",
+            level=constants.AlertLevel.ERROR,
+            logger=logger,
+            view_id=submission_view_id,
+        )
+        return
 
     region_record.kotter_reports_enabled = enabled
     region_record.send_aoq_reports = 1 if enabled else 0
-    region_record.kotter_report_recipient_users = safe_get(config_data, actions.KOTTER_REPORT_RECIPIENT_USERS) or []
-    region_record.kotter_report_include_admins = safe_get(config_data, actions.KOTTER_REPORT_INCLUDE_ADMINS) == "yes"
-    region_record.kotter_report_include_site_qs = safe_get(config_data, actions.KOTTER_REPORT_INCLUDE_SITE_QS) == "yes"
+    region_record.kotter_report_recipient_users = recipient_users
+    region_record.kotter_report_include_admins = include_admins
+    region_record.kotter_report_include_site_qs = include_site_qs
     region_record.kotter_report_send_mode = safe_get(config_data, actions.KOTTER_REPORT_SEND_MODE) or "group"
     region_record.kotter_report_split_site_qs = False
     region_record.kotter_report_day = safe_convert(safe_get(config_data, actions.KOTTER_REPORT_DAY), int)
@@ -225,6 +241,14 @@ def handle_kotter_report_config_post(
     )
 
     update_local_region_records()
+    update_submission_wait_view(
+        client=client,
+        title="Complete!",
+        text="Kotter Reports settings saved successfully!",
+        level=constants.AlertLevel.SUCCESS,
+        logger=logger,
+        view_id=submission_view_id,
+    )
 
 
 def handle_config_email_post(
