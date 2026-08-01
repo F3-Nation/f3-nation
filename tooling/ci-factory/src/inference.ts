@@ -1,5 +1,3 @@
-import { redactSecret } from "./redact";
-
 export interface ChatCompletionRequest {
   systemPrompt: string;
   userPrompt: string;
@@ -32,15 +30,16 @@ export function getInferenceConfigFromEnv(
   const model = env.CI_FACTORY_INFERENCE_MODEL;
 
   if (!apiKey || !baseUrl || !model) {
-    // Redact at the read site, not just at display time — a masked value
-    // (never the secret itself) is all that ever exists in this array, so
-    // there's no raw-key data flow into the thrown Error below to worry about.
+    // Presence-only, not the value — CodeQL's dataflow conservatively treats
+    // anything *derived* from apiKey (even a masked/redacted form) as still
+    // tainted, so the fix is to never let apiKey (in any form) enter this
+    // array at all, not just to keep it from reaching the final message.
     const missing = [
-      ["CI_FACTORY_INFERENCE_API_KEY", redactSecret(apiKey)],
-      ["CI_FACTORY_INFERENCE_BASE_URL", baseUrl],
-      ["CI_FACTORY_INFERENCE_MODEL", model],
+      ["CI_FACTORY_INFERENCE_API_KEY", Boolean(apiKey)],
+      ["CI_FACTORY_INFERENCE_BASE_URL", Boolean(baseUrl)],
+      ["CI_FACTORY_INFERENCE_MODEL", Boolean(model)],
     ]
-      .filter(([, value]) => !value || value === "(unset)")
+      .filter(([, present]) => !present)
       .map(([name]) => name)
       .join(", ");
     throw new Error(

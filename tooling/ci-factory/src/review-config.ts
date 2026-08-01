@@ -1,5 +1,4 @@
 import type { InferenceConfig } from "./inference";
-import { redactSecret } from "./redact";
 
 /**
  * Per-role inference config for the F3-62 adversarial review chain.
@@ -49,15 +48,16 @@ export function getReviewInferenceConfigFromEnv(
   const model = env[names.model];
 
   if (!apiKey || !baseUrl || !model) {
-    // Redact at the read site, not just at display time — a masked value
-    // (never the secret itself) is all that ever exists in this array, so
-    // there's no raw-key data flow into the thrown Error below to worry about.
+    // Presence-only, not the value — CodeQL's dataflow conservatively treats
+    // anything *derived* from apiKey (even a masked/redacted form) as still
+    // tainted, so the fix is to never let apiKey (in any form) enter this
+    // array at all, not just to keep it from reaching the final message.
     const missing = [
-      [names.apiKey, redactSecret(apiKey)],
-      [names.baseUrl, baseUrl],
-      [names.model, model],
+      [names.apiKey, Boolean(apiKey)],
+      [names.baseUrl, Boolean(baseUrl)],
+      [names.model, Boolean(model)],
     ]
-      .filter(([, value]) => !value || value === "(unset)")
+      .filter(([, present]) => !present)
       .map(([name]) => name)
       .join(", ");
     throw new Error(
