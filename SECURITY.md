@@ -4,8 +4,6 @@
 
 Security support applies only to the latest released version of each app and shared package in this repository (as built and deployed from `main`).
 
-If you discover a vulnerability in any code in this repository, whether released or unreleased, report it only through GitHub's private vulnerability reporting process described below.
-
 ## Reporting a Vulnerability
 
 Use GitHub's private vulnerability reporting from the repository's Security tab.
@@ -43,7 +41,7 @@ The repository is designed around a few baseline protections:
 - User input should be validated at the boundary before it reaches internal logic.
 - Logs, fixtures, and test data should not contain real secrets or real personal data.
 - Anything exposed to the browser should be treated as public.
-
+- Sensitive cookies should use `HttpOnly`, `Secure`, and an appropriate `SameSite` value. Tokens should remain server-controlled and should not be stored in browser-readable storage unless required by the flow.
 Reports that show a break in one of those protections are especially helpful, even if the impact is not fully proven yet.
 
 ## Response Expectations
