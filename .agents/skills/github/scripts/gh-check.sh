@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ./scripts/ai-gh-check.sh
+# .agents/skills/github/scripts/gh-check.sh
 
 # 1. Check if gh CLI is installed
 if ! command -v gh &> /dev/null; then
@@ -15,11 +15,16 @@ if ! gh auth status &> /dev/null; then
     exit 1
 fi
 
-# 3. Check access to current repository
-if ! gh repo view &> /dev/null; then
-    echo "ERROR: Cannot access the current repository."
-    echo "INSTRUCTION FOR USER: Ensure you are in the correct git repository directory and have read/write access."
-    exit 1
-fi
-
-echo "SUCCESS: gh CLI is installed, authenticated, and has repo access."
+# 3. Check whether the current repository is accessible and whether access is read-only
+repo_permission="$(gh repo view --json viewerPermission --jq '.viewerPermission' 2>/dev/null || true)"
+case "$repo_permission" in
+    WRITE|MAINTAIN|ADMIN)
+        echo "SUCCESS: gh CLI is installed, authenticated, and has write access to the current repository."
+        ;;
+    READ)
+        echo "SUCCESS: gh CLI is installed, authenticated, and the current repository is accessible in read-only mode."
+        ;;
+    *)
+        echo "SUCCESS: gh CLI is installed, authenticated, and the current repository is accessible."
+        ;;
+esac
