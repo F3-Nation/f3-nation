@@ -55,4 +55,4 @@ Deployment happens through GitHub Actions tag releases in [`.github/workflows/de
 ## Notes
 
 - This image is intended for Cloud Run Jobs and includes heavy dependencies not needed by the main app.
-- The main app image uses the default dependency set only; this scripts image adds the `dev` group for Playwright, pandas, and reporting tools.
+- The main app image uses the default dependency set only; this scripts image adds the `scripts` group for Playwright, pandas, and reporting tools.
