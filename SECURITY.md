@@ -34,8 +34,6 @@ The most common in-scope classes for this repo are:
 - XSS, SSRF, and injection issues in user-controlled input paths
 - Multi-instance race conditions that undermine security decisions
 
-If a report touches production behavior, please say which app is affected and whether it is `admin`, `api`, `auth`, `homepage`, `map`, `me`, or `slackbot`.
-
 ## Security Expectations
 
 The repository is designed around a few baseline protections:
@@ -51,8 +49,6 @@ Reports that show a break in one of those protections are especially helpful, ev
 ## Response Expectations
 
 Severity, scope, and disclosure timing are handled case by case. If you are unsure whether something is security-sensitive, report it anyway.
-
-We aim to acknowledge reports within 2 business days and to provide a remediation plan or follow-up within 5 business days when possible.
 
 ## Out of Scope
 
