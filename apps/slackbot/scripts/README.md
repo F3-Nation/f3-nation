@@ -4,7 +4,7 @@ This directory contains the scripts and automation jobs for the F3 Nation Slack 
 
 ## Structure
 
-- `Dockerfile` — Dockerfile for building the scripts container image with uv and the Slackbot `dev` dependency group
+- `Dockerfile` — builds the scripts container image with uv and the Slackbot `scripts` dependency group (matplotlib, pandas, playwright + Chromium); dev tooling is excluded via `--no-dev`
 - `hourly_runner.py` — Entrypoint for running all hourly scripts
 - Other Python scripts for specific automation tasks
 
