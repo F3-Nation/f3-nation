@@ -7,6 +7,10 @@ require_write=false
 for arg in "$@"; do
     if [[ "$arg" == "--require-write" ]]; then
         require_write=true
+    else
+        echo "ERROR: Unknown argument: $arg"
+        echo "Usage: $0 [--require-write]"
+        exit 1
     fi
 done
 
@@ -25,10 +29,7 @@ if ! gh auth status &> /dev/null; then
 fi
 
 # 3. Check whether the current repository is accessible and whether access is read-only
-repo_permission="$(gh repo view --json viewerPermission --jq '.viewerPermission' 2>/dev/null)"
-repo_status=$?
-
-if [[ $repo_status -ne 0 ]]; then
+if ! repo_permission="$(gh repo view --json viewerPermission --jq '.viewerPermission' 2>/dev/null)"; then
     echo "ERROR: The current repository is not accessible."
     exit 1
 fi
@@ -44,11 +45,12 @@ case "$repo_permission" in
         fi
         echo "SUCCESS: gh CLI is installed, authenticated, and the current repository is accessible in read-only mode."
         ;;
-    NONE|"")
-        echo "ERROR: The current repository is not accessible."
+    NONE|NULL|TRIAGE|"")
+        echo "ERROR: The current repository is not accessible or has insufficient permissions."
         exit 1
         ;;
     *)
-        echo "SUCCESS: gh CLI is installed, authenticated, and the current repository is accessible."
+        echo "ERROR: Unknown repository permission: $repo_permission"
+        exit 1
         ;;
 esac

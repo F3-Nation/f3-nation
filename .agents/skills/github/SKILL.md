@@ -81,9 +81,8 @@ gh api repos/{owner}/{repo}/issues/<issue_number> \
 ### Fetch Issue Comments (Truncated for Context Efficiency)
 
 ```bash
-gh api repos/{owner}/{repo}/issues/<issue_number>/comments \
-  -f per_page=100 \
-  --jq '[.[] | {
+gh api --paginate --slurp repos/{owner}/{repo}/issues/<issue_number>/comments \
+  --jq '[.[][] | {
     id,
     user: .user.login,
     body: (.body // "" | if length > 600 then .[0:600] + "…" else . end)
@@ -127,15 +126,14 @@ gh pr create --draft \
   --title "<Title>" \
   --head "<branch_name>" \
   --base "main" \
-  --body "<Description_of_Changes>\n\n_written by <model_name>_"
+  --body $'<Description_of_Changes>\n\n_written by <model_name>_'
 ```
 
 ### Fetch Inline Diff Review Comments (Filtered for Actionable Code Feedback)
 
 ```bash
-gh api repos/{owner}/{repo}/pulls/<pr_number>/comments \
-  -f per_page=100 \
-  --jq '[.[] | {
+gh api --paginate --slurp repos/{owner}/{repo}/pulls/<pr_number>/comments \
+  --jq '[.[][] | select(.in_reply_to_id == null) | {
     comment_id: .id,
     path,
     line,
@@ -151,7 +149,7 @@ gh api repos/{owner}/{repo}/pulls/<pr_number>/comments \
 ```bash
 gh api -X POST \
   repos/{owner}/{repo}/pulls/<pr_number>/comments/<comment_id>/replies \
-  -f body="<Explanation changes made of>\n\n_written by <model_name>_" \
+  -f body=$'<Explanation changes made of>\n\n_written by <model_name>_' \
   --jq '{id, path, line}'
 ```
 
