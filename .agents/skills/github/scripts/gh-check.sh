@@ -16,13 +16,24 @@ if ! gh auth status &> /dev/null; then
 fi
 
 # 3. Check whether the current repository is accessible and whether access is read-only
-repo_permission="$(gh repo view --json viewerPermission --jq '.viewerPermission' 2>/dev/null || true)"
+repo_permission="$(gh repo view --json viewerPermission --jq '.viewerPermission' 2>/dev/null)"
+repo_status=$?
+
+if [[ $repo_status -ne 0 ]]; then
+    echo "ERROR: The current repository is not accessible."
+    exit 1
+fi
+
 case "$repo_permission" in
     WRITE|MAINTAIN|ADMIN)
         echo "SUCCESS: gh CLI is installed, authenticated, and has write access to the current repository."
         ;;
     READ)
         echo "SUCCESS: gh CLI is installed, authenticated, and the current repository is accessible in read-only mode."
+        ;;
+    NONE|"")
+        echo "ERROR: The current repository is not accessible."
+        exit 1
         ;;
     *)
         echo "SUCCESS: gh CLI is installed, authenticated, and the current repository is accessible."
