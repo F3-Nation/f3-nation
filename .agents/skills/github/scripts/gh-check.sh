@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 # .agents/skills/github/scripts/gh-check.sh
 
+set -euo pipefail
+
+require_write=false
+for arg in "$@"; do
+    if [[ "$arg" == "--require-write" ]]; then
+        require_write=true
+    fi
+done
+
 # 1. Check if gh CLI is installed
 if ! command -v gh &> /dev/null; then
     echo "ERROR: GitHub CLI ('gh') is not installed."
@@ -29,6 +38,10 @@ case "$repo_permission" in
         echo "SUCCESS: gh CLI is installed, authenticated, and has write access to the current repository."
         ;;
     READ)
+        if [[ "$require_write" == true ]]; then
+            echo "ERROR: The current repository is accessible only in read-only mode. Write operations are not permitted."
+            exit 1
+        fi
         echo "SUCCESS: gh CLI is installed, authenticated, and the current repository is accessible in read-only mode."
         ;;
     NONE|"")

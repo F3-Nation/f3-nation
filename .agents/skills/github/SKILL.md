@@ -1,4 +1,9 @@
-# SKILL: Token-Efficient GitHub Operations via `gh api`
+---
+name: github
+description: Safe, token-efficient GitHub CLI operations using gh api and related GitHub workflows.
+---
+
+# Token-Efficient GitHub Operations via `gh api`
 
 > **PURPOSE:** Provides safe, AI-agnostic rules for interacting with
 > GitHub. Designed specifically to minimize LLM token consumption while
@@ -15,12 +20,16 @@
 bash .agents/skills/github/scripts/gh-check.sh
 ```
 
+Use `bash .agents/skills/github/scripts/gh-check.sh --require-write`
+before any write operation (create, update, comment, PR creation, or
+reply).
+
 _If it fails, output the instructions provided by the script and STOP._
 
 1. **Mandatory Attribution Signature:**
    EVERY payload written to GitHub (Issue body, PR body, or Comment)
    MUST append this exact signature as the final line, exactly once.
-   Replace `<modelName>` with the exact model or agent name that produced
+   Replace `<model_name>` with the exact model or agent name that produced
    the content. Do not use a generic label such as `AI`; examples include
    `Copilot`, `Claude`, or `GPT-4.1`.
 
@@ -72,13 +81,13 @@ gh api repos/{owner}/{repo}/issues/<issue_number> \
 ### Fetch Issue Comments (Truncated for Context Efficiency)
 
 ```bash
-gh api --paginate --slurp repos/{owner}/{repo}/issues/<issue_number>/comments \
+gh api repos/{owner}/{repo}/issues/<issue_number>/comments \
   -f per_page=100 \
-  --jq '[.[].[] | {
+  --jq '[.[] | {
     id,
     user: .user.login,
     body: (.body // "" | if length > 600 then .[0:600] + "…" else . end)
-  }] | .[0:100]'
+  }]'
 ```
 
 ### Create Issue
@@ -86,7 +95,7 @@ gh api --paginate --slurp repos/{owner}/{repo}/issues/<issue_number>/comments \
 ```bash
 gh api -X POST repos/{owner}/{repo}/issues \
   -f title="<Title>" \
-  -f body="<Body_Content>\n\n> _written by <model_name>_" \
+  -f body="<Body_Content>\n\n_written by <model_name>_" \
   --jq '{number, html_url}'
 ```
 
@@ -94,7 +103,7 @@ gh api -X POST repos/{owner}/{repo}/issues \
 
 ```bash
 gh api -X PATCH repos/{owner}/{repo}/issues/<issue_number> \
-  -f body="<Updated_Body>\n\n> _written by <model_name>_" \
+  -f body="<Updated_Body>\n\n_written by <model_name>_" \
   --jq '{number, updated_at}'
 ```
 
@@ -102,7 +111,7 @@ gh api -X PATCH repos/{owner}/{repo}/issues/<issue_number> \
 
 ```bash
 gh api -X POST repos/{owner}/{repo}/issues/<issue_number>/comments \
-  -f body="<Comment_Content>\n\n> _written by <model_name>_" \
+  -f body="<Comment_Content>\n\n_written by <model_name>_" \
   --jq '{id, html_url}'
 ```
 
@@ -118,21 +127,21 @@ gh pr create --draft \
   --title "<Title>" \
   --head "<branch_name>" \
   --base "main" \
-  --body "<Description_of_Changes>\n\n> _written by <model_name>_"
+  --body "<Description_of_Changes>\n\n_written by <model_name>_"
 ```
 
 ### Fetch Inline Diff Review Comments (Filtered for Actionable Code Feedback)
 
 ```bash
-gh api --paginate --slurp repos/{owner}/{repo}/pulls/<pr_number>/comments \
+gh api repos/{owner}/{repo}/pulls/<pr_number>/comments \
   -f per_page=100 \
-  --jq '[.[].[] | {
+  --jq '[.[] | {
     comment_id: .id,
     path,
     line,
     user: .user.login,
     body: (.body // "" | if length > 600 then .[0:600] + "…" else . end)
-  }] | .[0:100]'
+  }]'
 ```
 
 ### Reply to an Inline Review Comment
@@ -142,7 +151,7 @@ gh api --paginate --slurp repos/{owner}/{repo}/pulls/<pr_number>/comments \
 ```bash
 gh api -X POST \
   repos/{owner}/{repo}/pulls/<pr_number>/comments/<comment_id>/replies \
-  -f body="<Explanation changes made of>\n\n> _written by <model_name>_" \
+  -f body="<Explanation changes made of>\n\n_written by <model_name>_" \
   --jq '{id, path, line}'
 ```
 
@@ -201,13 +210,9 @@ payload_body='### Summary of Fixes
 - Updated auth flow.
 - Added error handling.
 
-> _written by <model_name>_'
+_written by <model_name>_'
 
-cat <<EOF > "$payload"
-{
-  "body": "$payload_body"
-}
-EOF
+jq -n --arg body "$payload_body" '{body: $body}' > "$payload"
 
 gh api -X POST \
   repos/{owner}/{repo}/issues/<issue_number>/comments \
