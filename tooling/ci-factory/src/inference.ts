@@ -1,3 +1,5 @@
+import { redactSecret } from "./redact";
+
 export interface ChatCompletionRequest {
   systemPrompt: string;
   userPrompt: string;
@@ -30,12 +32,15 @@ export function getInferenceConfigFromEnv(
   const model = env.CI_FACTORY_INFERENCE_MODEL;
 
   if (!apiKey || !baseUrl || !model) {
+    // Redact at the read site, not just at display time — a masked value
+    // (never the secret itself) is all that ever exists in this array, so
+    // there's no raw-key data flow into the thrown Error below to worry about.
     const missing = [
-      ["CI_FACTORY_INFERENCE_API_KEY", apiKey],
+      ["CI_FACTORY_INFERENCE_API_KEY", redactSecret(apiKey)],
       ["CI_FACTORY_INFERENCE_BASE_URL", baseUrl],
       ["CI_FACTORY_INFERENCE_MODEL", model],
     ]
-      .filter(([, value]) => !value)
+      .filter(([, value]) => !value || value === "(unset)")
       .map(([name]) => name)
       .join(", ");
     throw new Error(

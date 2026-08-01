@@ -1,4 +1,5 @@
 import type { InferenceConfig } from "./inference";
+import { redactSecret } from "./redact";
 
 /**
  * Per-role inference config for the F3-62 adversarial review chain.
@@ -48,12 +49,15 @@ export function getReviewInferenceConfigFromEnv(
   const model = env[names.model];
 
   if (!apiKey || !baseUrl || !model) {
+    // Redact at the read site, not just at display time — a masked value
+    // (never the secret itself) is all that ever exists in this array, so
+    // there's no raw-key data flow into the thrown Error below to worry about.
     const missing = [
-      [names.apiKey, apiKey],
+      [names.apiKey, redactSecret(apiKey)],
       [names.baseUrl, baseUrl],
       [names.model, model],
     ]
-      .filter(([, value]) => !value)
+      .filter(([, value]) => !value || value === "(unset)")
       .map(([name]) => name)
       .join(", ");
     throw new Error(
