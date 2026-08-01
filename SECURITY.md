@@ -6,8 +6,6 @@ Security support applies only to the latest released version of each app and sha
 
 ## Reporting a Vulnerability
 
-Use GitHub's private vulnerability reporting from the repository's Security tab.
-
 **All vulnerability reports MUST be submitted through GitHub's private vulnerability reporting process.** This allows the maintainers to assess the report, collaborate on remediation, and coordinate disclosure in a responsible manner.
 
 Please do not include secrets, tokens, or personal data unless they are essential to demonstrate the vulnerability.
