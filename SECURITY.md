@@ -2,15 +2,15 @@
 
 ## Supported Versions
 
-This repository's current security support covers the actively maintained code on `main` and the apps and shared packages that are deployed from it.
+Security support applies only to the latest released version of each app and shared package in this repository (as built and deployed from `main`).
 
-If a vulnerability affects code that has already shipped to production, please report it through the private disclosure process below instead of opening a public issue.
+If you discover a vulnerability in any code in this repository, whether released or unreleased, report it only through GitHub's private vulnerability reporting process described below.
 
 ## Reporting a Vulnerability
 
 Use GitHub's private vulnerability reporting from the repository's Security tab.
 
-**All vulnerability reports MUST be submitted through the channel listed above.** This allows the maintainers to assess the report, collaborate on remediation, and coordinate disclosure in a responsible manner.
+**All vulnerability reports MUST be submitted through GitHub's private vulnerability reporting process.** This allows the maintainers to assess the report, collaborate on remediation, and coordinate disclosure in a responsible manner.
 
 Please do not include secrets, tokens, or personal data unless they are essential to demonstrate the vulnerability.
 
