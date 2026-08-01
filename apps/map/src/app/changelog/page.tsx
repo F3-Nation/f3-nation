@@ -1,8 +1,13 @@
 import Link from "next/link";
 
-import { changelog } from "@acme/shared/app/changelog";
+import { getChangelog } from "./changelog-data";
+
+// Sourced from apps/map/CHANGELOG.md at build time; render statically.
+export const dynamic = "force-static";
 
 export default function ChangelogPage() {
+  const changelog = getChangelog();
+
   return (
     <main className="pointer-events-auto relative max-h-dvh gap-4 overflow-y-auto">
       <div className="mx-auto flex max-w-3xl flex-col gap-8 px-[3%] py-8">
@@ -38,14 +43,7 @@ export default function ChangelogPage() {
             >
               <header className="mb-4 flex flex-col gap-1 border-b pb-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h2 className="text-xl font-semibold">
-                    v{entry.version}
-                    {entry.title && (
-                      <span className="ml-2 font-normal text-muted-foreground">
-                        — {entry.title}
-                      </span>
-                    )}
-                  </h2>
+                  <h2 className="text-xl font-semibold">v{entry.version}</h2>
                 </div>
                 <time className="text-sm text-muted-foreground">
                   {formatDate(entry.date)}
@@ -94,5 +92,8 @@ function formatDate(dateString: string): string {
     year: "numeric",
     month: "long",
     day: "numeric",
+    // Entries are calendar dates (YYYY-MM-DD parsed as UTC midnight); format in
+    // UTC so a west-of-UTC runtime doesn't render the previous day.
+    timeZone: "UTC",
   });
 }
