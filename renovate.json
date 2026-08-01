@@ -5,7 +5,8 @@
     "github-actions",
     "npm",
     "docker-compose",
-    "dockerfile"
+    "dockerfile",
+    "pep621"
   ],
   "timezone": "America/New_York",
   "schedule": ["before 9am on Monday"],
@@ -36,6 +37,13 @@
       "description": "Disable noisy peerDependency update PRs",
       "matchDepTypes": ["peerDependencies"],
       "enabled": false
+    },
+    {
+      "description": "Group Python (uv/pyproject.toml) minor and patch updates into one PR, separate from the npm non-major group — different lockfile, keeps uv.lock churn reviewable on its own",
+      "groupName": "Python dependencies (non-major)",
+      "groupSlug": "python-non-major",
+      "matchManagers": ["pep621"],
+      "matchUpdateTypes": ["minor", "patch"]
     },
     {
       "description": "Do not auto-update the Python base image; adopt interpreter upgrades manually",
