@@ -35,7 +35,6 @@ The most common in-scope classes for this repo are:
 The repository is designed around a few baseline protections:
 
 - Authentication is handled with explicit server-side validation; access should never rely on client-visible state alone.
-- Sensitive cookies and tokens should remain `httpOnly` and server-controlled.
 - User input should be validated at the boundary before it reaches internal logic.
 - Logs, fixtures, and test data should not contain real secrets or real personal data.
 - Anything exposed to the browser should be treated as public.
