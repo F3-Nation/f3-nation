@@ -1,0 +1,196 @@
+name: Adversarial Review
+
+# Phase 1 of the AI factory (F3-62, docs/AI_FACTORY_DESIGN.md): opt-in
+# two-reviewer + judge adversarial review, behind the `ai-review` label.
+#
+# - Reviewer A (Anthropic, top tier, spec-anchored) and Reviewer B (OpenAI,
+#   top tier, code-anchored) review the diff independently — neither sees the
+#   other's output. A cheap-tier judge merges A+B findings, dedupes against
+#   existing CodeRabbit comments, drops style nits, ranks by severity, caps
+#   at 8, and tags each finding [A]/[B]/[A+B]. Findings touching the
+#   human-owned domains (security/availability/scalability) are flagged
+#   `human_review_required` with NO suggested patch — guardrails ride along
+#   in every prompt via @acme/ci-factory's shared.guardrails.md.
+# - ONE comment per PR (marker `<!-- ai-adversarial-review -->`), upserted in
+#   place on synchronize like preview-env's comment. The comment body carries
+#   the reviewed head SHA; a rerun for an already-reviewed SHA is skipped
+#   (never re-bills, never re-comments).
+# - Advisory and comment-only: no labels written, no checks failed, no merges.
+
+# SECURITY MODEL (finding from this workflow's own first review run):
+# pull_request_target runs the BASE branch's workflow file and we check out
+# the BASE (trusted) code — the ci-factory CLI, prompts, and setup action all
+# come from main. The PR is consumed strictly as DATA (diff text via the API,
+# CodeRabbit comment bodies). NEVER add a checkout of the PR head or execute
+# anything from it here — that would hand GH_TOKEN + inference secrets to
+# PR-controlled code. The ai-review label (collaborator-only) is the trigger
+# gate.
+on:
+  pull_request_target:
+    types: [labeled, synchronize]
+
+permissions: {}
+
+# Serialize per PR so the read-comment → decide → upsert-comment sequence can't
+# race with itself. Cancel superseded runs: a newer push makes an in-flight
+# review of the older SHA stale, and the upsert is idempotent per PR.
+concurrency:
+  group: adversarial-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # Opt-in via the `ai-review` label; same-repo head only (fork PRs never
+    # get the inference secrets).
+    if: >-
+      contains(github.event.pull_request.labels.*.name, 'ai-review') &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ github.event.pull_request.number }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      REVIEW_DIR: /tmp/ai-review
+    steps:
+      - name: Dedupe by head SHA and find existing comment
+        id: dedupe
+        run: |
+          mkdir -p "${REVIEW_DIR}"
+          # Issue comments carry the marker; the body includes the reviewed
+          # head SHA. If this SHA was already reviewed, do nothing (a
+          # `labeled` event for an unrelated label lands here too).
+          gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments?per_page=100" \
+            --paginate --jq '[.[] | {id, body}]' | jq -s 'add' \
+            > "${REVIEW_DIR}/comments.json"
+
+          MARKER="<!-- ai-adversarial-review -->"
+          EXISTING_ID=$(jq -r --arg m "${MARKER}" \
+            '[.[] | select(.body | contains($m))][0].id // empty' \
+            "${REVIEW_DIR}/comments.json")
+          echo "comment_id=${EXISTING_ID}" >> "$GITHUB_OUTPUT"
+
+          if jq -e --arg m "${MARKER}" --arg sha "${HEAD_SHA}" \
+              '[.[] | select((.body | contains($m)) and (.body | contains($sha)))] | length > 0' \
+              "${REVIEW_DIR}/comments.json" > /dev/null; then
+            echo "Head ${HEAD_SHA} already reviewed on PR #${PR}; skipping (dedupe)."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        if: steps.dedupe.outputs.proceed == 'true'
+        with:
+          # Trusted BASE checkout — the ci-factory CLI, prompts, and setup
+          # action all run from base (never PR head). See the security model
+          # above. The PR is consumed as data: the diff comes from `gh pr diff`,
+          # not a local git range, so no PR history is fetched here.
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+
+      - name: Collect inputs (diff, specs, CodeRabbit comments)
+        if: steps.dedupe.outputs.proceed == 'true'
+        run: |
+          # Diff against the merge base with main, capped at ~512KB. The
+          # top-tier reviewers (opus / gpt-5.5) have large context windows and
+          # comfortably fit this; the previous ~120KB cap silently truncated
+          # big pipeline PRs, hiding already-fixed code and yielding stale
+          # findings (observed dogfooding F3-50 on a 442KB diff).
+          gh pr diff "${PR}" -R "${GITHUB_REPOSITORY}" > "${REVIEW_DIR}/full.diff"
+          head -c 524288 "${REVIEW_DIR}/full.diff" > "${REVIEW_DIR}/diff.txt"
+          TRUNC_NOTE=""
+          if [ "$(wc -c < "${REVIEW_DIR}/full.diff")" -gt 524288 ]; then
+            TRUNC_NOTE="Diff truncated at 512KB — findings cover the truncated portion only."
+            echo "Diff truncated at 512KB."
+          fi
+          echo "trunc_note=${TRUNC_NOTE}" >> "$GITHUB_ENV"
+
+          # Specs feed reviewer A only when the diff touches spec-covered
+          # surfaces; otherwise reviewer A runs spec-less (empty file).
+          : > "${REVIEW_DIR}/specs.md"
+          if gh pr diff "${PR}" -R "${GITHUB_REPOSITORY}" --name-only \
+              | grep -qE '^(apps/map|apps/admin|packages/api)/'; then
+            for SPEC in specs/*.md; do
+              [ -e "$SPEC" ] || continue
+              {
+                echo "=== ${SPEC} ==="
+                cat "$SPEC"
+                echo
+              } >> "${REVIEW_DIR}/specs.md"
+            done
+            [ -s "${REVIEW_DIR}/specs.md" ] || echo "No specs/*.md present at this commit."
+          fi
+
+          # Existing CodeRabbit review comments (bodies only, may be empty) —
+          # judge input for dedupe, capped to keep the cheap call cheap.
+          gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR}/comments?per_page=100" \
+            --paginate \
+            --jq '.[] | select(.user.login | test("^coderabbit"; "i")) | .body' \
+            | head -c 30720 > "${REVIEW_DIR}/coderabbit.txt" || : > "${REVIEW_DIR}/coderabbit.txt"
+
+      - uses: ./.github/actions/setup
+        if: steps.dedupe.outputs.proceed == 'true'
+
+      - name: Run adversarial review via @acme/ci-factory
+        if: steps.dedupe.outputs.proceed == 'true'
+        id: review
+        env:
+          # Reviewer A: Anthropic top tier (spec-anchored).
+          CI_FACTORY_REVIEW_A_API_KEY: ${{ secrets.F3_AI_SDLC_CLAUDE_API_KEY }}
+          CI_FACTORY_REVIEW_A_BASE_URL: https://api.anthropic.com/v1
+          CI_FACTORY_REVIEW_A_MODEL: claude-opus-4-8
+          # Reviewer B: OpenAI top tier (code-anchored). Model is config, not
+          # code — bump here as flagships move.
+          CI_FACTORY_REVIEW_B_API_KEY: ${{ secrets.F3_AI_SDLC_OPENAI_API_KEY }}
+          CI_FACTORY_REVIEW_B_BASE_URL: https://api.openai.com/v1
+          CI_FACTORY_REVIEW_B_MODEL: gpt-5.5
+          # Judge: cheap tier on the Anthropic credentials.
+          CI_FACTORY_JUDGE_MODEL: claude-haiku-4-5-20251001
+        run: |
+          # A nonzero exit (API error, out-of-schema output) must not crash
+          # the workflow — the comment step posts a fallback note instead.
+          REVIEW_OK=true
+          pnpm -F @acme/ci-factory review \
+            --diff "${REVIEW_DIR}/diff.txt" \
+            --specs "${REVIEW_DIR}/specs.md" \
+            --coderabbit "${REVIEW_DIR}/coderabbit.txt" \
+            --head-sha "${HEAD_SHA}" \
+            ${trunc_note:+--truncation-note "${trunc_note}"} \
+            --output "${REVIEW_DIR}/review-comment.md" \
+            || REVIEW_OK=false
+          echo "review_ok=${REVIEW_OK}" >> "$GITHUB_OUTPUT"
+
+      - name: Upsert review comment on PR
+        if: steps.dedupe.outputs.proceed == 'true'
+        env:
+          COMMENT_ID: ${{ steps.dedupe.outputs.comment_id }}
+          REVIEW_OK: ${{ steps.review.outputs.review_ok }}
+        run: |
+          if [ "${REVIEW_OK}" = "true" ] && [ -s "${REVIEW_DIR}/review-comment.md" ]; then
+            cp "${REVIEW_DIR}/review-comment.md" "${REVIEW_DIR}/comment.md"
+          else
+            # Fallback: the chain failed (API or parse error) — post a
+            # human-readable note; the SHA still lands so we don't re-bill.
+            cat > "${REVIEW_DIR}/comment.md" <<EOF
+          <!-- ai-adversarial-review -->
+          ### 🤖 Adversarial review (phase 1)
+
+          The review chain failed for this commit (API or parse error) — no findings are available. Re-add the \`ai-review\` label after a push to retry.
+
+          _Reviewed head: \`${HEAD_SHA}\`_
+          EOF
+          fi
+
+          if [ -n "${COMMENT_ID}" ]; then
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${COMMENT_ID}" \
+              -F "body=@${REVIEW_DIR}/comment.md" > /dev/null
+            echo "Updated review comment ${COMMENT_ID} on PR #${PR} (head ${HEAD_SHA})."
+          else
+            gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" \
+              -F "body=@${REVIEW_DIR}/comment.md" > /dev/null
+            echo "Posted review comment on PR #${PR} (head ${HEAD_SHA})."
+          fi
