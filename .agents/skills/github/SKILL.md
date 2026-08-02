@@ -94,10 +94,18 @@ gh api --paginate --slurp repos/{owner}/{repo}/issues/<issue_number>/comments \
 ### Create Issue
 
 ```bash
-issue_title="<Title>"
-issue_body=$'<Body_Content>\n\n_written by <model_name>_'
+title="$(cat <<'EOF'
+<Title>
+EOF
+)"
+body="$(cat <<'EOF'
+<Body_Content>
 
-jq -n --arg title "$issue_title" --arg body "$issue_body" '{title: $title, body: $body}' \
+_written by <model_name>_
+EOF
+)"
+
+jq -n --arg title "$title" --arg body "$body" '{title: $title, body: $body}' \
   | gh api -X POST repos/{owner}/{repo}/issues --input - \
   --jq '{number, html_url}'
 ```
@@ -105,9 +113,14 @@ jq -n --arg title "$issue_title" --arg body "$issue_body" '{title: $title, body:
 ### Update Issue Description
 
 ```bash
-issue_body=$'<Updated_Body>\n\n_written by <model_name>_'
+body="$(cat <<'EOF'
+<Updated_Body>
 
-jq -n --arg body "$issue_body" '{body: $body}' \
+_written by <model_name>_
+EOF
+)"
+
+jq -n --arg body "$body" '{body: $body}' \
   | gh api -X PATCH repos/{owner}/{repo}/issues/<issue_number> --input - \
   --jq '{number, updated_at}'
 ```
@@ -115,9 +128,14 @@ jq -n --arg body "$issue_body" '{body: $body}' \
 ### Comment on Issue
 
 ```bash
-comment_body=$'<Comment_Content>\n\n_written by <model_name>_'
+body="$(cat <<'EOF'
+<Comment_Content>
 
-jq -n --arg body "$comment_body" '{body: $body}' \
+_written by <model_name>_
+EOF
+)"
+
+jq -n --arg body "$body" '{body: $body}' \
   | gh api -X POST repos/{owner}/{repo}/issues/<issue_number>/comments --input - \
   --jq '{id, html_url}'
 ```
@@ -129,12 +147,23 @@ jq -n --arg body "$comment_body" '{body: $body}' \
 ### Create Pull Request
 
 ```bash
+title="$(cat <<'EOF'
+<Title>
+EOF
+)"
+body="$(cat <<'EOF'
+<Description_of_Changes>
+
+_written by <model_name>_
+EOF
+)"
+
 gh pr create \
   --repo "{owner}/{repo}" \
-  --title "<Title>" \
+  --title "$title" \
   --head "<branch_name>" \
   --base "main" \
-  --body $'<Description_of_Changes>\n\n_written by <model_name>_'
+  --body "$body"
 ```
 
 ### Fetch Inline Diff Review Comments (Filtered for Actionable Code Feedback)
@@ -155,9 +184,14 @@ gh api --paginate --slurp repos/{owner}/{repo}/pulls/<pr_number>/comments \
 > Use the `comment_id` retrieved from the thread to reply in-line.
 
 ```bash
-reply_body=$'<Explanation changes made of>\n\n_written by <model_name>_'
+body="$(cat <<'EOF'
+<Explanation changes made of>
 
-jq -n --arg body "$reply_body" '{body: $body}' \
+_written by <model_name>_
+EOF
+)"
+
+jq -n --arg body "$body" '{body: $body}' \
   | gh api -X POST repos/{owner}/{repo}/pulls/<pr_number>/comments/<comment_id>/replies --input - \
   --jq '{id, path, line}'
 ```
