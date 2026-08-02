@@ -39,6 +39,8 @@ _If it fails, output the instructions provided by the script and STOP._
 
 1. **Draft PR Rule:** All Pull Requests MUST be created as
    `gh pr create --draft`. Never create a non-draft PR.
+   This allows AI PR reviewers to run and provide feedback ahead
+   of asking humans to review.
 1. **No-Resolve Rule for Comments:** AI models MUST NOT attempt to
    resolve code review threads or inline comments. Human developers must
    resolve comments manually after code review.
@@ -94,7 +96,7 @@ gh api --paginate --slurp repos/{owner}/{repo}/issues/<issue_number>/comments \
 ```bash
 gh api -X POST repos/{owner}/{repo}/issues \
   -f title="<Title>" \
-  -f body="<Body_Content>\n\n_written by <model_name>_" \
+  -f body=$'<Body_Content>\n\n_written by <model_name>_' \
   --jq '{number, html_url}'
 ```
 
@@ -102,7 +104,7 @@ gh api -X POST repos/{owner}/{repo}/issues \
 
 ```bash
 gh api -X PATCH repos/{owner}/{repo}/issues/<issue_number> \
-  -f body="<Updated_Body>\n\n_written by <model_name>_" \
+  -f body=$'<Updated_Body>\n\n_written by <model_name>_' \
   --jq '{number, updated_at}'
 ```
 
@@ -110,7 +112,7 @@ gh api -X PATCH repos/{owner}/{repo}/issues/<issue_number> \
 
 ```bash
 gh api -X POST repos/{owner}/{repo}/issues/<issue_number>/comments \
-  -f body="<Comment_Content>\n\n_written by <model_name>_" \
+  -f body=$'<Comment_Content>\n\n_written by <model_name>_' \
   --jq '{id, html_url}'
 ```
 
@@ -118,10 +120,10 @@ gh api -X POST repos/{owner}/{repo}/issues/<issue_number>/comments \
 
 ## 2. PULL REQUESTS (Create, Fetch, Review)
 
-### Create Draft Pull Request
+### Create Pull Request
 
 ```bash
-gh pr create --draft \
+gh pr create \
   --repo "{owner}/{repo}" \
   --title "<Title>" \
   --head "<branch_name>" \

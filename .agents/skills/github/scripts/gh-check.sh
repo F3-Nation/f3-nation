@@ -31,6 +31,7 @@ fi
 # 3. Check whether the current repository is accessible and whether access is read-only
 if ! repo_permission="$(gh repo view --json viewerPermission --jq '.viewerPermission' 2>/dev/null)"; then
     echo "ERROR: The current repository is not accessible."
+    echo "INSTRUCTION FOR USER: Run this from a cloned repository directory or set GH_REPO to a repository you can access."
     exit 1
 fi
 
