@@ -220,6 +220,44 @@ describe("formatReviewComment", () => {
     });
 
     expect(comment).toContain("a \\| b<br>c");
-    expect(comment).toContain("use `x \\|\\| y`");
+    expect(comment).toContain("use &#96;x \\|\\| y&#96;");
+  });
+
+  it("escapes a trailing backslash before pipe-escaping, so it can't turn \\| into a live column break", () => {
+    const comment = formatReviewComment({
+      findings: [
+        {
+          ...judgeFinding,
+          human_review_required: false,
+          suggestion_or_flag: "ends in a backslash\\",
+        },
+      ],
+      headSha: "abc1234def",
+      promptRevision: "local",
+      models,
+    });
+
+    // "\|" (escaped backslash + live pipe) would break out of the cell;
+    // "\\\\|" (escaped backslash, still-escaped pipe) keeps the table intact.
+    expect(comment).toContain("ends in a backslash\\\\");
+    expect(comment).not.toMatch(/backslash\\\|/);
+  });
+
+  it("HTML-entity-encodes backticks so a finding can't close the file/line_hint code span early", () => {
+    const comment = formatReviewComment({
+      findings: [
+        {
+          ...judgeFinding,
+          human_review_required: false,
+          file: "src/foo.ts` | 999 | critical | injected",
+        },
+      ],
+      headSha: "abc1234def",
+      promptRevision: "local",
+      models,
+    });
+
+    expect(comment).not.toContain("`src/foo.ts` | 999 | critical | injected`");
+    expect(comment).toContain("&#96;");
   });
 });

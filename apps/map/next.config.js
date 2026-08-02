@@ -31,6 +31,8 @@ const config = {
   // glob is a silent no-op, so the Dockerfile asserts libvips landed in standalone.
   outputFileTracingIncludes: {
     "/*": ["../../node_modules/.pnpm/@img+sharp-libvips-*/**/*"],
+    // The /changelog page is generated from this file at build time.
+    "/changelog": ["./CHANGELOG.md"],
   },
 
   images: {

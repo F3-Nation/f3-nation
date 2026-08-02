@@ -186,6 +186,32 @@ deterministic.
   map/api (the auth↔api trust is asymmetric RS256, not shared-secret); map
   and api _do_ share it, as before, for the forwarded-cookie path.
 
+## Threat model
+
+Three facts, combined, have one consequence worth stating explicitly rather
+than leaving implicit across three files:
+
+- Preview services are made **publicly invokable** —
+  `--member=allUsers --role=roles/run.invoker` (`preview-env.yml`, three call
+  sites).
+- Preview URLs are **deterministic and posted in a PR comment**, so they're
+  discoverable, not secret.
+- The dev-mode provider (Recipe 2 above) **signs in any email as a
+  nation-admin mock user**, with no verification.
+
+**Net effect: every preview URL is an open, unauthenticated admin console.**
+That is fine — but _only_ because the data behind it is a synthetic seed on a
+tmpfs sidecar, never real data. That's the one load-bearing assumption:
+
+- A preview may **only ever** be pointed at the deterministic synthetic seed.
+  Never a production, staging, or restored-from-real-data database — the
+  public auto-admin surface makes any real data in a preview immediately
+  world-readable and world-writable.
+- Previews carry no real secrets: `AUTH_SECRET`, `API_KEY`,
+  `SUPER_ADMIN_API_KEY`, etc. are placeholders in the service templates. The
+  only live credential in the whole stack is the referrer-locked browser Maps
+  key.
+
 ## Known constraints
 
 - **Two database copies.** `pr-<n>-api` and `pr-<n>-auth` each run their own

@@ -172,7 +172,10 @@ jobs:
           fi
 
           # Failing spec source: match test-results dir names back to spec
-          # files (dir name is prefixed with the spec file stem). The specs are
+          # files. Playwright's default outputDir prefix is the spec path
+          # relative to testDir (apps/map/, unset in playwright.config.ts) with
+          # "/" -> "-", not the bare basename — e.g. tests/e2e/browse.spec.ts
+          # becomes "tests-e2e-browse-<title>-<project>". The specs are
           # PR-authored, so we pull them from head_sha as DATA via the contents
           # API into TRIAGE_DIR (which nothing executes) — never from a checkout
           # of the untrusted commit. See the security note on the checkout step.
@@ -183,7 +186,7 @@ jobs:
             > "${TRIAGE_DIR}/spec-paths.txt" 2>/dev/null || true
           while read -r SPEC; do
             [ -n "$SPEC" ] || continue
-            STEM=$(basename "$SPEC" .spec.ts)
+            STEM=$(echo "${SPEC#apps/map/}" | sed -e 's/\.spec\.ts$//' -e 's#/#-#g')
             if [ ! -s "${TRIAGE_DIR}/test-dirs.txt" ] || grep -q "^${STEM}-" "${TRIAGE_DIR}/test-dirs.txt"; then
               {
                 echo "=== ${SPEC} ==="

@@ -30,12 +30,16 @@ export function getInferenceConfigFromEnv(
   const model = env.CI_FACTORY_INFERENCE_MODEL;
 
   if (!apiKey || !baseUrl || !model) {
+    // Presence-only, not the value — CodeQL's dataflow conservatively treats
+    // anything *derived* from apiKey (even a masked/redacted form) as still
+    // tainted, so the fix is to never let apiKey (in any form) enter this
+    // array at all, not just to keep it from reaching the final message.
     const missing = [
-      ["CI_FACTORY_INFERENCE_API_KEY", apiKey],
-      ["CI_FACTORY_INFERENCE_BASE_URL", baseUrl],
-      ["CI_FACTORY_INFERENCE_MODEL", model],
+      ["CI_FACTORY_INFERENCE_API_KEY", Boolean(apiKey)],
+      ["CI_FACTORY_INFERENCE_BASE_URL", Boolean(baseUrl)],
+      ["CI_FACTORY_INFERENCE_MODEL", Boolean(model)],
     ]
-      .filter(([, value]) => !value)
+      .filter(([, present]) => !present)
       .map(([name]) => name)
       .join(", ");
     throw new Error(
