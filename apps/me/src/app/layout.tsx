@@ -7,6 +7,10 @@ import { AuthProvider } from "@/lib/auth/AuthProvider";
 import { Navbar } from "@/components/navbar";
 import { SaveProvider } from "@/lib/save-context";
 import { GoogleAnalytics } from "@/components/google-analytics";
+import { VersionInfo } from "@/components/version-info";
+import { getChangelog } from "@/lib/changelog";
+import { env } from "@/env";
+import packageJson from "../../package.json";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -24,6 +28,9 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const channel = env.F3_CHANNEL;
+  const changelog = getChangelog();
+
   return (
     <html lang="en" suppressHydrationWarning>
       <body
@@ -37,6 +44,11 @@ export default function RootLayout({
           </SaveProvider>
         </AuthProvider>
         <Toaster />
+        <VersionInfo
+          version={packageJson.version}
+          channel={channel}
+          changelog={changelog}
+        />
       </body>
     </html>
   );
