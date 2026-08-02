@@ -1,0 +1,306 @@
+name: E2E Triage
+
+# Phase 1 of the AI factory (F3-61, docs/AI_FACTORY_DESIGN.md): comment-only
+# auto-triage for e2e failures on preview runs.
+#
+# - Fires after every "Preview Environment" run and inspects the run's JOB
+#   conclusions (not the run conclusion — a future advisory-tier job may be
+#   continue-on-error, leaving the run green while the job failed).
+# - Collects the Playwright error-context.md aria snapshots + the failing
+#   spec source, fingerprints the normalized error text, and asks a cheap
+#   model (claude-haiku-4-5, via @acme/ci-factory's versioned prompts in
+#   tooling/ci-factory) for a classification in
+#   {app-bug, test-bug, spec-mismatch, flake, infra}.
+# - Posts ONE comment per fingerprint on the PR (marker
+#   `<!-- ai-triage:<fp> -->`); a repeat of the same failure never re-bills
+#   and never re-comments. Hard cap: max 5 ai-triage comments per PR.
+# - Comment-only by design: no fix PRs, no label writes, no merges. The
+#   guardrail essentials (never weaken assertions/auth; human-owned domains
+#   are flag-only) are embedded in the classifier's system prompt.
+
+on:
+  workflow_run:
+    workflows: ["Preview Environment"]
+    types: [completed]
+
+permissions: {}
+
+# Serialize per branch: the read-comments → decide-dedupe → post-comment
+# sequence below is a check-then-act race if two runs for the same branch
+# interleave (both could miss each other's marker and double-post). Never
+# cancel — a superseded run may still hold the only comment for its failure.
+concurrency:
+  group: e2e-triage-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  collect-and-classify:
+    # Preview Environment also runs on schedule/workflow_dispatch (the
+    # reaper); only PR-triggered runs can have e2e failures worth triaging.
+    if: github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RUN_ID: ${{ github.event.workflow_run.id }}
+      RUN_URL: ${{ github.event.workflow_run.html_url }}
+      HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+      TRIAGE_DIR: /tmp/e2e-triage
+    steps:
+      - name: Detect failed e2e jobs and PR number
+        id: detect
+        env:
+          # Empty when the payload carries no PR association; fall back to
+          # resolving by head branch below.
+          EVENT_PR: ${{ github.event.workflow_run.pull_requests[0].number }}
+        run: |
+          mkdir -p "${TRIAGE_DIR}"
+          # A job-level `continue-on-error` (the advisory tier) reports the
+          # job `conclusion` as "success" even when its suite fails, so we
+          # cannot key on job conclusion alone or advisory failures would be
+          # invisible to triage. The failed *step* still carries conclusion
+          # "failure", so we also match any e2e job with a failed step.
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/jobs?per_page=100" \
+            --paginate \
+            --jq '[.jobs[] | select(.name | startswith("e2e")) | select(.conclusion == "failure" or any(.steps[]?; .conclusion == "failure")) | {name, id, html_url}]' \
+            > "${TRIAGE_DIR}/failed-jobs.json"
+
+          FAILED_COUNT=$(jq 'length' "${TRIAGE_DIR}/failed-jobs.json")
+          if [ "${FAILED_COUNT}" = "0" ]; then
+            echo "No failed e2e jobs in run ${RUN_ID}; nothing to triage."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          PR="${EVENT_PR}"
+          if [ -z "${PR}" ]; then
+            # workflow_run.pull_requests can be empty; resolve via head branch.
+            PR=$(gh pr list -R "${GITHUB_REPOSITORY}" --head "${HEAD_BRANCH}" \
+              --state open --json number --jq '.[0].number // empty')
+          fi
+          if [ -z "${PR}" ]; then
+            echo "Could not resolve a PR for run ${RUN_ID} (branch ${HEAD_BRANCH}); skipping."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Tier: the advisory suite job carries "advisory" in its name; any
+          # other failed e2e job is the blocking tier. Any non-advisory
+          # failure makes the whole event blocking.
+          TIER=blocking
+          if jq -e '(length > 0) and all(.[]; .name | test("advisory"))' \
+              "${TRIAGE_DIR}/failed-jobs.json" > /dev/null; then
+            TIER=advisory
+          fi
+
+          JOB_NAMES=$(jq -r '[.[].name] | join(", ")' "${TRIAGE_DIR}/failed-jobs.json")
+          echo "Failed e2e job(s): ${JOB_NAMES} (tier: ${TIER}, PR #${PR})"
+          {
+            echo "proceed=true"
+            echo "pr=${PR}"
+            echo "tier=${TIER}"
+            echo "job_names=${JOB_NAMES}"
+          } >> "$GITHUB_OUTPUT"
+
+      # SECURITY: this privileged workflow_run job holds the inference API key
+      # and a pull-requests:write token, and the triggering "Preview Environment"
+      # runs on pull_request (incl. forks). We therefore check out and EXECUTE
+      # only trusted default-branch code (the setup action, package scripts, the
+      # ci-factory CLI, and prompts). The PR-authored failing spec is pulled in
+      # as DATA (never executed) from head_sha via the contents API below — the
+      # textbook pwn-request avoidance, matching adversarial-review.yml.
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        if: steps.detect.outputs.proceed == 'true'
+        with:
+          persist-credentials: false
+
+      - name: Collect error context and failing spec source
+        if: steps.detect.outputs.proceed == 'true'
+        env:
+          PR: ${{ steps.detect.outputs.pr }}
+        run: |
+          # Artifact is only uploaded on failure and with
+          # if-no-files-found: ignore, so tolerate a missing artifact.
+          gh run download "${RUN_ID}" -R "${GITHUB_REPOSITORY}" \
+            --pattern "playwright-*artifacts-pr-${PR}" \
+            --dir "${TRIAGE_DIR}/artifacts" \
+            || echo "No playwright artifact for run ${RUN_ID}; falling back to job logs."
+
+          # Primary error text: every error-context.md (Playwright's aria
+          # snapshot + error summary per failed test), newest layout:
+          # test-results/<spec-stem>-<test-title>-<project>/error-context.md
+          : > "${TRIAGE_DIR}/error-context.txt"
+          : > "${TRIAGE_DIR}/test-dirs.txt"
+          if [ -d "${TRIAGE_DIR}/artifacts" ]; then
+            find "${TRIAGE_DIR}/artifacts" -name 'error-context.md' | sort | while read -r F; do
+              DIR=$(basename "$(dirname "$F")")
+              echo "$DIR" >> "${TRIAGE_DIR}/test-dirs.txt"
+              {
+                echo "=== ${DIR}/error-context.md ==="
+                cat "$F"
+                echo
+              } >> "${TRIAGE_DIR}/error-context.txt"
+            done
+          fi
+
+          if [ ! -s "${TRIAGE_DIR}/error-context.txt" ]; then
+            # Fallback: tail of the first failed job's log.
+            JOB_ID=$(jq -r '.[0].id' "${TRIAGE_DIR}/failed-jobs.json")
+            {
+              echo "=== no error-context.md artifact; tail of failed job log ==="
+              gh api "repos/${GITHUB_REPOSITORY}/actions/jobs/${JOB_ID}/logs" | tail -c 6144 || true
+            } > "${TRIAGE_DIR}/error-context.txt"
+          fi
+
+          # Fingerprint source: rich context when present; otherwise a stable
+          # core of the failure (job names + error lines). Raw log tails carry
+          # per-run noise (artifact sizes, upload logs) that made the same
+          # failure hash differently across reruns (live-trial finding,
+          # PR #55 rounds 1-3).
+          if [ -s "${TRIAGE_DIR}/test-dirs.txt" ]; then
+            cp "${TRIAGE_DIR}/error-context.txt" "${TRIAGE_DIR}/fingerprint-source.txt"
+          else
+            {
+              jq -r '.[].name' "${TRIAGE_DIR}/failed-jobs.json"
+              grep -E 'ERR_PNPM|Exit status|Error:' "${TRIAGE_DIR}/error-context.txt" || true
+            } > "${TRIAGE_DIR}/fingerprint-source.txt"
+          fi
+
+          # Failing spec source: match test-results dir names back to spec
+          # files. Playwright's default outputDir prefix is the spec path
+          # relative to testDir (apps/map/, unset in playwright.config.ts) with
+          # "/" -> "-", not the bare basename — e.g. tests/e2e/browse.spec.ts
+          # becomes "tests-e2e-browse-<title>-<project>". The specs are
+          # PR-authored, so we pull them from head_sha as DATA via the contents
+          # API into TRIAGE_DIR (which nothing executes) — never from a checkout
+          # of the untrusted commit. See the security note on the checkout step.
+          : > "${TRIAGE_DIR}/spec-source.txt"
+          gh api "repos/${GITHUB_REPOSITORY}/git/trees/${HEAD_SHA}?recursive=1" \
+            --jq '.tree[] | select(.type == "blob") | .path
+                  | select(test("^apps/map/tests/e2e(-advisory)?/[^/]+\\.spec\\.ts$"))' \
+            > "${TRIAGE_DIR}/spec-paths.txt" 2>/dev/null || true
+          while read -r SPEC; do
+            [ -n "$SPEC" ] || continue
+            STEM=$(echo "${SPEC#apps/map/}" | sed -e 's/\.spec\.ts$//' -e 's#/#-#g')
+            if [ ! -s "${TRIAGE_DIR}/test-dirs.txt" ] || grep -q "^${STEM}-" "${TRIAGE_DIR}/test-dirs.txt"; then
+              {
+                echo "=== ${SPEC} ==="
+                gh api "repos/${GITHUB_REPOSITORY}/contents/${SPEC}?ref=${HEAD_SHA}" \
+                  --jq '.content' | base64 -d || true
+                echo
+              } >> "${TRIAGE_DIR}/spec-source.txt"
+            fi
+          done < "${TRIAGE_DIR}/spec-paths.txt"
+
+      - name: Fingerprint and dedupe
+        if: steps.detect.outputs.proceed == 'true'
+        id: fingerprint
+        env:
+          PR: ${{ steps.detect.outputs.pr }}
+        run: |
+          # Normalize volatile substrings so the same failure always hashes
+          # identically across runs (dedupe = never re-bill, never re-spam).
+          sed -E \
+            -e 's#https?://[^[:space:])"]+#<url>#g' \
+            -e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z?/<ts>/g' \
+            -e 's/\b[0-9a-f]{7,40}\b/<hash>/g' \
+            -e 's/\b[0-9]+(\.[0-9]+)?m?s\b/<t>/g' \
+            -e 's/pr-[0-9]+-/pr-N-/g' \
+            "${TRIAGE_DIR}/fingerprint-source.txt" > "${TRIAGE_DIR}/normalized.txt"
+          FP=$(sha256sum "${TRIAGE_DIR}/normalized.txt" | cut -c1-16)
+          echo "fingerprint=${FP}" >> "$GITHUB_OUTPUT"
+          echo "Error fingerprint: ${FP}"
+
+          gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments?per_page=100" \
+            --paginate --jq '[.[].body]' | jq -s 'add' > "${TRIAGE_DIR}/comments.json"
+
+          if jq -e --arg m "<!-- ai-triage:${FP} -->" '[.[] | select(contains($m))] | length > 0' \
+              "${TRIAGE_DIR}/comments.json" > /dev/null; then
+            echo "Fingerprint ${FP} already triaged on PR #${PR}; skipping (dedupe)."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Hard cap — the factory never floods a PR.
+          TRIAGE_COUNT=$(jq '[.[] | select(contains("<!-- ai-triage:"))] | length' "${TRIAGE_DIR}/comments.json")
+          if [ "${TRIAGE_COUNT}" -ge 5 ]; then
+            echo "PR #${PR} already has ${TRIAGE_COUNT} ai-triage comments (cap 5); posting nothing."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "proceed=true" >> "$GITHUB_OUTPUT"
+
+      # Toolchain for @acme/ci-factory. The checkout above is the trusted
+      # default branch, so the setup action, package, prompts, and lockfile all
+      # come from trusted code — never the PR under triage.
+      - uses: ./.github/actions/setup
+        if: steps.detect.outputs.proceed == 'true' && steps.fingerprint.outputs.proceed == 'true'
+
+      - name: Classify failure via @acme/ci-factory
+        if: steps.detect.outputs.proceed == 'true' && steps.fingerprint.outputs.proceed == 'true'
+        id: classify
+        env:
+          CI_FACTORY_INFERENCE_API_KEY: ${{ secrets.F3_AI_SDLC_CLAUDE_API_KEY }}
+          CI_FACTORY_INFERENCE_BASE_URL: https://api.anthropic.com/v1
+          CI_FACTORY_INFERENCE_MODEL: claude-haiku-4-5-20251001
+        run: |
+          # ~6KB each of error context + spec source keeps the call cheap.
+          head -c 6144 "${TRIAGE_DIR}/error-context.txt" > "${TRIAGE_DIR}/err-trunc.txt"
+          head -c 6144 "${TRIAGE_DIR}/spec-source.txt" > "${TRIAGE_DIR}/spec-trunc.txt"
+
+          # Versioned prompts + JSON-shape validation live in the package
+          # (tooling/ci-factory). A nonzero exit (API error, out-of-schema
+          # model output, missing package at this head_sha) must not crash
+          # the workflow — the comment step posts a fallback note instead.
+          CLASSIFY_OK=true
+          pnpm -F @acme/ci-factory triage \
+            --error-context "${TRIAGE_DIR}/err-trunc.txt" \
+            --test-source "${TRIAGE_DIR}/spec-trunc.txt" \
+            --output "${TRIAGE_DIR}/triage-comment.md" \
+            || CLASSIFY_OK=false
+          echo "classify_ok=${CLASSIFY_OK}" >> "$GITHUB_OUTPUT"
+
+      - name: Comment triage result on PR
+        if: steps.detect.outputs.proceed == 'true' && steps.fingerprint.outputs.proceed == 'true'
+        env:
+          PR: ${{ steps.detect.outputs.pr }}
+          TIER: ${{ steps.detect.outputs.tier }}
+          JOB_NAMES: ${{ steps.detect.outputs.job_names }}
+          FP: ${{ steps.fingerprint.outputs.fingerprint }}
+          CLASSIFY_OK: ${{ steps.classify.outputs.classify_ok }}
+        run: |
+          if [ "${CLASSIFY_OK}" = "true" ] && [ -s "${TRIAGE_DIR}/triage-comment.md" ]; then
+            # Marker line (dedupe key) + the package's rendered comment body.
+            {
+              echo "<!-- ai-triage:${FP} -->"
+              cat "${TRIAGE_DIR}/triage-comment.md"
+            } > "${TRIAGE_DIR}/comment.md"
+          else
+            # Fallback: the classifier failed (API or parse error) — post a
+            # human-readable note instead of crashing the workflow.
+            # shellcheck disable=SC2016  # literal markdown backticks in sed
+            FAILED_TESTS=$(sort -u "${TRIAGE_DIR}/test-dirs.txt" 2>/dev/null | sed 's/^/- `/; s/$/`/')
+            [ -n "${FAILED_TESTS}" ] || FAILED_TESTS="- (no per-test artifact; see job log)"
+
+            cat > "${TRIAGE_DIR}/comment.md" <<EOF
+          <!-- ai-triage:${FP} -->
+          ### 🤖 AI triage — e2e failure (${TIER} tier)
+
+          **Failed job(s):** ${JOB_NAMES}
+          **Failed test(s):**
+          ${FAILED_TESTS}
+
+          **Classification:** triage failed to classify this failure (API or parse error). A human should look at the run directly.
+
+          [Failing run](${RUN_URL}) · fingerprint \`${FP}\` · comment-only phase-1 triage (F3-61) — classifications are advisory; a human owns every merge decision.
+          EOF
+          fi
+
+          gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" \
+            -F "body=@${TRIAGE_DIR}/comment.md" > /dev/null
+          echo "Posted triage comment on PR #${PR} (fingerprint ${FP})."
