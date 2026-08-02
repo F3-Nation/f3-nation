@@ -12,7 +12,7 @@
  * !! (docs/STAGING_REFRESH.md) and a supervised run.
  *
  * Usage:
- *   pnpm -F @acme/scripts obfuscate-db -- \
+ *   OBFUSCATION_SALT=<secret> DATABASE_URL=... pnpm -F @acme/scripts obfuscate-db -- \
  *     --allow-db <database-name> \
  *     --i-understand-this-rewrites-data \
  *     [--dry-run] [--preserve-local-seed]
@@ -28,7 +28,14 @@
  *                                        intact: users @f3local.dev, api_keys
  *                                        local-*, oauth clients *-local.
  *
- * Databases whose name contains "prod" are always refused.
+ * OBFUSCATION_SALT (required env var) must be a long random secret stored
+ * outside source control (prod secret manager) — never a compile-time
+ * constant. The repo is public, so a committed salt lets anyone rebuild a
+ * rainbow table over candidate emails/phones/names and reverse the "fake"
+ * values back to real ones.
+ *
+ * The exact production database name ("f3data") and any name containing
+ * "prod" are always refused.
  */
 import { createHash } from "node:crypto";
 
@@ -59,12 +66,22 @@ const PRESERVE_LOCAL_SEED = argv.includes("--preserve-local-seed");
 // Deterministic fakes (seeded hash — same input, same output, every run)
 // ---------------------------------------------------------------------------
 
-// Fixed salt keeps the mapping stable across runs so repeated refreshes are
-// diff-friendly. Bump the version suffix to rotate the whole pseudonym space.
-const SALT = "f3-nation-staging-refresh-v1";
+// The salt keeps the mapping stable across runs so repeated refreshes are
+// diff-friendly, but it must never be a compile-time constant: this repo is
+// public, and a committed salt lets anyone reproduce the forward hash over a
+// candidate list and reverse a "fake" value back to the real input. Read from
+// a required env var instead (rotate it to rotate the whole pseudonym space).
+// Assigned in main() before any hashing happens.
+let SALT: string;
 
 const LOCAL_SEED_EMAIL_SUFFIX = "@f3local.dev";
 const OBFUSCATED_EMAIL_DOMAIN = "obfuscated.f3nation.dev";
+
+// Exact-match, not substring: docs/STAGING_REFRESH.md names the production
+// database "f3data", which the /prod/i heuristic below does not catch. Exact
+// match (rather than e.g. a "f3data" substring test) matters here because
+// staging itself is "f3data-nonprod", which legitimately contains "f3data".
+const FORBIDDEN_DB_NAMES = new Set(["f3data"]);
 
 function hashHex(input: string, length: number): string {
   return createHash("sha256")
@@ -105,12 +122,35 @@ function fakeName(original: string): string {
   return `F3 User ${hashHex(original.trim().toLowerCase(), 6)}`;
 }
 
+// "555" as the area code is the conventional non-working US fake-number
+// marker; the exchange + subscriber number are independent hash digits (not
+// two mod-reductions of the same value, which structurally collapsed to
+// ~10,000 possible outputs and guaranteed mass collisions at F3's scale) —
+// and 10 digits total, a valid-shaped NANP number instead of 11.
 function fakePhone(original: string): string {
-  return `555-01${hashDigits(original, 2)}-${hashDigits(original, 4)}`;
+  const digits = hashDigits(original, 7);
+  return `555-${digits.slice(0, 3)}-${digits.slice(3)}`;
 }
 
+// Memoized like fakeEmail: slack_id has no unique constraint in the schema,
+// but it's a join key in the slackbot integration path, so a birthday-bound
+// collision (expected around ~100k distinct Slack users at 8 hex chars) would
+// make staging lookups ambiguous. Lengthen on collision the same way.
+const slackIdFakes = new Map<string, string>();
+const slackIdFakesInUse = new Set<string>();
+
 function fakeSlackId(original: string): string {
-  return `U${hashHex(original, 8).toUpperCase()}`;
+  const existing = slackIdFakes.get(original);
+  if (existing) return existing;
+  let length = 8;
+  let fake = `U${hashHex(original, length).toUpperCase()}`;
+  while (slackIdFakesInUse.has(fake)) {
+    length += 4;
+    fake = `U${hashHex(original, length).toUpperCase()}`;
+  }
+  slackIdFakes.set(original, fake);
+  slackIdFakesInUse.add(fake);
+  return fake;
 }
 
 // Emails hiding in free text / JSON get the same deterministic fake as the
@@ -210,6 +250,17 @@ async function transformTable(
   },
 ): Promise<void> {
   const { table, pk, columns, actions, transform } = opts;
+  // Same contract as runSetBased/truncateTable: the secret/session/token and
+  // better-auth tables carry both a plural (repo schema) and singular
+  // (better-auth) name, and only one family exists in any given target — an
+  // absent table must be skipped, not crash the whole run (which would abort
+  // before later jobs, e.g. the secrets truncation, ever ran).
+  if (!(await tableExists(sql, table))) {
+    for (const [col, action] of Object.entries(actions)) {
+      addSummary(table, col, `${action} (table absent — skipped)`, 0);
+    }
+    return;
+  }
   const where = opts.where ?? sql`true`;
   const counts: Record<string, number> = {};
   const BATCH = 1000;
@@ -409,6 +460,14 @@ const TOUCHED_TABLES = new Set([
   "auth.user_profiles",
 ]);
 
+// Known, human-reviewed scope limit (same shape as "new columns default to
+// leaks" in docs/STAGING_REFRESH.md): this only enumerates BASE TABLEs in the
+// `public` and `auth` schemas. A future schema (e.g. a proposed `audit`
+// schema for pre-obfuscation row snapshots) or a materialized view over PII
+// columns would not be caught here or by either verify harness's leak sweep,
+// which use the same filter. Not an active gap today — no matviews or extra
+// schemas exist — but broaden this enumeration (pg_class/pg_namespace across
+// all non-system schemas, including matviews) before either is introduced.
 async function assertFullCoverage(sql: Sql): Promise<void> {
   const rows = await sql<{ qualified: string }[]>`
     SELECT table_schema || '.' || table_name AS qualified
@@ -431,6 +490,79 @@ async function obfuscate(sql: Sql): Promise<void> {
   const likeEmail = "%@%";
 
   await assertFullCoverage(sql);
+
+  // ---- secrets: sessions, tokens, OAuth artifacts — truncate FIRST ----------
+  // Deliberately runs before the PII transforms below (not after, as an
+  // earlier version of this script did): none of these truncates/deletes
+  // depend on the transforms having run, and a mid-run failure (network blip,
+  // an unclassified table) then leaves every live session token, OAuth token,
+  // and API key destroyed already — the safest state a partial run can be in
+  // — rather than leaving them intact for the longest possible window.
+  //
+  // Both naming generations: the plural tables from the repo schema and the
+  // singular better-auth ones that exist on prod.
+  for (const table of [
+    "auth_sessions",
+    "auth_verification_tokens",
+    "auth_accounts",
+    "auth.oauth_authorization_codes",
+    "auth.oauth_access_tokens",
+    "auth.oauth_refresh_tokens",
+    "auth.email_mfa_codes",
+    "auth.sessions",
+    "auth.verification_tokens",
+  ]) {
+    await truncateTable(sql, table);
+  }
+  // The singular family has FKs among its members (oauth_refresh_token ->
+  // oauth_access_token), so it truncates as one grouped statement.
+  await truncateTables(sql, [
+    "auth.oauth_authorization_code",
+    "auth.oauth_access_token",
+    "auth.oauth_refresh_token",
+    "auth.email_mfa_code",
+    "auth.session",
+    "auth.verificationToken",
+  ]);
+
+  // ---- api_keys: delete (cascades roles_x_api_keys_x_org) -------------------
+  // With --preserve-local-seed the committed local-* dev keys survive.
+  await runSetBased(sql, {
+    table: "api_keys",
+    column: "*",
+    action: PRESERVE_LOCAL_SEED ? "delete (except local-*)" : "delete",
+    countWhere: PRESERVE_LOCAL_SEED ? sql`key NOT LIKE 'local-%'` : sql`true`,
+    update: PRESERVE_LOCAL_SEED
+      ? sql`DELETE FROM api_keys WHERE key NOT LIKE 'local-%'`
+      : sql`DELETE FROM api_keys`,
+  });
+
+  // ---- auth.oauth_clients: invalidate secrets --------------------------------
+  // Overwrite the secret hash with one derived from a non-secret string, so no
+  // plaintext secret can authenticate against staging. Local dev clients
+  // (*-local, committed plaintext) survive only with --preserve-local-seed.
+  await runSetBased(sql, {
+    table: "auth.oauth_clients",
+    column: "client_secret_hash",
+    action: PRESERVE_LOCAL_SEED ? "invalidate (except *-local)" : "invalidate",
+    countWhere: PRESERVE_LOCAL_SEED ? sql`id NOT LIKE '%-local'` : sql`true`,
+    update: PRESERVE_LOCAL_SEED
+      ? sql`UPDATE auth.oauth_clients
+          SET client_secret_hash = encode(sha256(('revoked:' || id)::bytea), 'hex')
+          WHERE id NOT LIKE '%-local'`
+      : sql`UPDATE auth.oauth_clients
+          SET client_secret_hash = encode(sha256(('revoked:' || id)::bytea), 'hex')`,
+  });
+
+  // ---- auth.oauth_client (singular, better-auth): plaintext secret ----------
+  await runSetBased(sql, {
+    table: "auth.oauth_client",
+    column: "client_secret",
+    action: "invalidate",
+    countWhere: sql`true`,
+    update: sql`UPDATE auth.oauth_client
+        SET client_secret = 'revoked-' || encode(sha256(('revoked:' || id)::bytea), 'hex')`,
+  });
 
   // ---- users ----------------------------------------------------------------
   await transformTable(sql, {
@@ -924,50 +1056,34 @@ async function obfuscate(sql: Sql): Promise<void> {
     },
   });
 
-  // ---- secrets: sessions, tokens, OAuth artifacts — truncate ----------------
-  // Both naming generations: the plural tables from the repo schema and the
-  // singular better-auth ones that exist on prod.
-  for (const table of [
-    "auth_sessions",
-    "auth_verification_tokens",
-    "auth_accounts",
-    "auth.oauth_authorization_codes",
-    "auth.oauth_access_tokens",
-    "auth.oauth_refresh_tokens",
-    "auth.email_mfa_codes",
-    "auth.sessions",
-    "auth.verification_tokens",
-  ]) {
-    await truncateTable(sql, table);
-  }
-  // The singular family has FKs among its members (oauth_refresh_token ->
-  // oauth_access_token), so it truncates as one grouped statement.
-  await truncateTables(sql, [
-    "auth.oauth_authorization_code",
-    "auth.oauth_access_token",
-    "auth.oauth_refresh_token",
-    "auth.email_mfa_code",
-    "auth.session",
-    "auth.verificationToken",
-  ]);
-
   // ---- auth.user.id: better-auth keys users by EMAIL ADDRESS ----------------
   // The primary key itself is PII (real-data finding, 2026-07-10). Rewrite ids
   // through the same memoized fakeEmail as the email columns, so id === email
-  // consistency and cross-table determinism hold. Snapshot ids first (a keyset
-  // cursor over a mutating pk would skip/revisit rows), and run after the
-  // token-table truncates so no FK rows reference the old ids.
-  {
+  // consistency holds. Snapshot ids first (a keyset cursor over a mutating pk
+  // would skip/revisit rows); the secrets truncation above already ran, so no
+  // FK rows reference the old ids by the time this runs.
+  if (await tableExists(sql, "auth.user")) {
     const all = await sql<{ id: string }[]>`
       SELECT id FROM ${sql("auth.user")} ORDER BY id`;
     // fakeEmail dedups by case-NORMALIZED input, but auth.user carries
-    // case-variant duplicates of the same email as distinct rows — those get
-    // the same fake and collide on the pk. Track ids in use and lengthen the
+    // case-variant duplicates of the same email as distinct rows (e.g.
+    // "John@Example.com" / "john@example.com") — those get the SAME fake
+    // email (fakeEmail already ran as part of this table's own transform,
+    // above) and so collide on id too. Track ids in use and lengthen the
     // (case-sensitive) hash until unique. ORDER BY id keeps it deterministic.
+    //
+    // Whichever duplicate needs a disambiguated id also gets its `email`
+    // column overwritten to match: id === email must hold per-row, and the
+    // disambiguated value is guaranteed unique across restrictions where the
+    // plain fakeEmail() output collides with an id still in use.
     const used = new Set(all.map((r) => r.id));
     let n = 0;
+    let skipped = 0;
     for (const { id } of all) {
-      if (!id.includes("@") || isAllowlistedEmail(id)) continue;
+      if (!id.includes("@") || isAllowlistedEmail(id)) {
+        skipped += 1;
+        continue;
+      }
       let fake = fakeEmail(id);
       for (let length = 12; used.has(fake); length += 4) {
         fake = `user-${hashHex(id, length)}@${OBFUSCATED_EMAIL_DOMAIN}`;
@@ -975,52 +1091,30 @@ async function obfuscate(sql: Sql): Promise<void> {
       n += 1;
       if (!DRY_RUN) {
         await sql`
-          UPDATE ${sql("auth.user")} SET id = ${fake} WHERE id = ${id}`;
+          UPDATE ${sql("auth.user")}
+          SET id = ${fake}, email = ${fake}
+          WHERE id = ${id}`;
       }
       used.delete(id);
       used.add(fake);
     }
     addSummary("auth.user", "id", "obfuscate (email-as-id)", n);
+    if (skipped > 0) {
+      addSummary(
+        "auth.user",
+        "id",
+        "skip (non-email-shaped or allowlisted)",
+        skipped,
+      );
+    }
+  } else {
+    addSummary(
+      "auth.user",
+      "id",
+      "obfuscate (email-as-id) (table absent — skipped)",
+      0,
+    );
   }
-
-  // ---- api_keys: delete (cascades roles_x_api_keys_x_org) -------------------
-  // With --preserve-local-seed the committed local-* dev keys survive.
-  await runSetBased(sql, {
-    table: "api_keys",
-    column: "*",
-    action: PRESERVE_LOCAL_SEED ? "delete (except local-*)" : "delete",
-    countWhere: PRESERVE_LOCAL_SEED ? sql`key NOT LIKE 'local-%'` : sql`true`,
-    update: PRESERVE_LOCAL_SEED
-      ? sql`DELETE FROM api_keys WHERE key NOT LIKE 'local-%'`
-      : sql`DELETE FROM api_keys`,
-  });
-
-  // ---- auth.oauth_clients: invalidate secrets --------------------------------
-  // Overwrite the secret hash with one derived from a non-secret string, so no
-  // plaintext secret can authenticate against staging. Local dev clients
-  // (*-local, committed plaintext) survive only with --preserve-local-seed.
-  await runSetBased(sql, {
-    table: "auth.oauth_clients",
-    column: "client_secret_hash",
-    action: PRESERVE_LOCAL_SEED ? "invalidate (except *-local)" : "invalidate",
-    countWhere: PRESERVE_LOCAL_SEED ? sql`id NOT LIKE '%-local'` : sql`true`,
-    update: PRESERVE_LOCAL_SEED
-      ? sql`UPDATE auth.oauth_clients
-          SET client_secret_hash = encode(sha256(('revoked:' || id)::bytea), 'hex')
-          WHERE id NOT LIKE '%-local'`
-      : sql`UPDATE auth.oauth_clients
-          SET client_secret_hash = encode(sha256(('revoked:' || id)::bytea), 'hex')`,
-  });
-
-  // ---- auth.oauth_client (singular, better-auth): plaintext secret ----------
-  await runSetBased(sql, {
-    table: "auth.oauth_client",
-    column: "client_secret",
-    action: "invalidate",
-    countWhere: sql`true`,
-    update: sql`UPDATE auth.oauth_client
-        SET client_secret = 'revoked-' || encode(sha256(('revoked:' || id)::bytea), 'hex')`,
-  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1051,6 +1145,17 @@ function printSummary(): void {
 }
 
 async function main(): Promise<void> {
+  const salt = process.env.OBFUSCATION_SALT;
+  if (!salt) {
+    throw new Error(
+      "Refusing to run: OBFUSCATION_SALT is not set. This must be a long, " +
+        "random secret stored outside source control (e.g. the prod secret " +
+        "manager), not a value committed to this (public) repo — see " +
+        "docs/STAGING_REFRESH.md.",
+    );
+  }
+  SALT = salt;
+
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
     throw new Error("DATABASE_URL is not set");
@@ -1072,9 +1177,9 @@ async function main(): Promise<void> {
       `Refusing to run: DATABASE_URL points at database "${urlDbName}" but --allow-db is "${ALLOW_DB}".`,
     );
   }
-  if (/prod/i.test(ALLOW_DB)) {
+  if (FORBIDDEN_DB_NAMES.has(ALLOW_DB) || /prod/i.test(ALLOW_DB)) {
     throw new Error(
-      `Refusing to run: database name "${ALLOW_DB}" looks like production. Obfuscate a copy, never the source.`,
+      `Refusing to run: database name "${ALLOW_DB}" is (or looks like) production. Obfuscate a copy, never the source.`,
     );
   }
 

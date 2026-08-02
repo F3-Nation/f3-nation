@@ -369,6 +369,12 @@ async function main(): Promise<void> {
       CI: "",
       SKIP_ENV_VALIDATION: "1",
       DATABASE_URL,
+      // obfuscate-db.ts now requires this (a committed salt let anyone
+      // rebuild a rainbow table against the public repo). This harness only
+      // ever touches a throwaway sandbox database, so a fixed test value is
+      // fine here — real runs must use a real secret from the prod secret
+      // manager, never this one.
+      OBFUSCATION_SALT: "sandbox-verify-harness-test-salt-not-for-real-use",
     };
     run("pnpm", ["db:migrate"], childEnv);
     run("pnpm", ["db:seed:local"], childEnv);
@@ -496,7 +502,14 @@ async function main(): Promise<void> {
     );
     if (failed.length > 0) process.exitCode = 1;
   } finally {
-    await sql.end();
+    try {
+      await sql.end({ timeout: 5 });
+    } catch {
+      // best effort — cleanup below must still run even if the backend
+      // already went away (restoreEnv/stopPostgres would otherwise never
+      // run, leaving the developer's packages/env/.env overwritten and the
+      // container/temp cluster still running on port 5434)
+    }
     restoreEnv();
     stopPostgres();
     console.log("Cleaned up throwaway postgres and packages/env/.env.");

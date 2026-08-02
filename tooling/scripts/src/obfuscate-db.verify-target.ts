@@ -27,6 +27,11 @@ import postgres from "postgres";
 
 import { databaseNameFromUrl } from "./db-url";
 
+// Exact-match, not substring: prod is named "f3data" (docs/STAGING_REFRESH.md),
+// which /prod/i does not catch, but staging ("f3data-nonprod") legitimately
+// contains "f3data" as a substring, so a substring test would misfire there.
+const FORBIDDEN_DB_NAMES = new Set(["f3data"]);
+
 const OBFUSCATED_EMAIL_DOMAIN = "obfuscated.f3nation.dev";
 const EMAIL_REGEX = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g;
 // Retina-image filenames (logo@2x.png) are email-shaped; not PII.
@@ -138,8 +143,11 @@ async function sweepForEmails(sql: Sql): Promise<void> {
             if (match.toLowerCase().endsWith(`@${OBFUSCATED_EMAIL_DOMAIN}`)) {
               continue;
             }
+            // Never print the matched value itself: this script exists to
+            // detect leaked PII, and printing the leaked value would create a
+            // new exposure (terminal scrollback, CI logs) — location only.
             violations.push(
-              `${col.table_schema}.${col.table_name}.${col.column_name}: ${match}`,
+              `${col.table_schema}.${col.table_name}.${col.column_name}`,
             );
             if (violations.length >= LIMIT) break scan;
           }
@@ -171,9 +179,9 @@ async function main(): Promise<void> {
         "cannot verify the target is not production.",
     );
   }
-  if (/prod/i.test(dbName)) {
+  if (FORBIDDEN_DB_NAMES.has(dbName) || /prod/i.test(dbName)) {
     throw new Error(
-      `Refusing to run: database name "${dbName}" looks like production — ` +
+      `Refusing to run: database name "${dbName}" is (or looks like) production — ` +
         `sweeping an un-obfuscated database would print raw PII.`,
     );
   }
@@ -206,41 +214,64 @@ async function main(): Promise<void> {
       `${usersBad?.n} nonconforming`,
     );
 
-    const [authUserBad] = await sql<{ n: number }[]>`
-      SELECT count(*)::int AS n FROM auth."user"
-      WHERE (email IS NOT NULL AND email NOT LIKE '%@' || ${OBFUSCATED_EMAIL_DOMAIN})
-         OR (id LIKE '%@%' AND id NOT LIKE '%@' || ${OBFUSCATED_EMAIL_DOMAIN})
-         OR image IS NOT NULL`;
-    check(
-      "auth.user obfuscated (incl. email-as-id)",
-      authUserBad?.n === 0,
-      `${authUserBad?.n} rows with raw email/id/image`,
-    );
+    // Both better-auth naming generations are optional — only one family
+    // exists in any given target (same contract as EMPTY_TABLES above) — so
+    // each of these must be guarded rather than run unconditionally: against
+    // a target with only the plural family, an unguarded query against the
+    // singular auth."user"/auth.oauth_client tables throws and aborts every
+    // remaining check instead of reporting them PASS/FAIL.
+    if (await tableExists(sql, "auth.user")) {
+      const [authUserBad] = await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM auth."user"
+        WHERE (email IS NOT NULL AND email NOT LIKE '%@' || ${OBFUSCATED_EMAIL_DOMAIN})
+           OR (id LIKE '%@%' AND id NOT LIKE '%@' || ${OBFUSCATED_EMAIL_DOMAIN})
+           OR image IS NOT NULL`;
+      check(
+        "auth.user obfuscated (incl. email-as-id)",
+        authUserBad?.n === 0,
+        `${authUserBad?.n} rows with raw email/id/image`,
+      );
+    } else {
+      check(
+        "auth.user obfuscated (incl. email-as-id)",
+        true,
+        "absent (not in this schema — skipped)",
+      );
+    }
 
     const [joined] = await sql<{ n: number }[]>`
       SELECT count(*)::int AS n FROM update_requests ur
-      JOIN users u ON u.email = ur.submitted_by`;
+      WHERE ur.submitted_by IS NOT NULL
+        AND EXISTS (SELECT 1 FROM users u WHERE u.email = ur.submitted_by)`;
     const [submitted] = await sql<{ n: number }[]>`
       SELECT count(*)::int AS n FROM update_requests
       WHERE submitted_by IS NOT NULL`;
     check(
       "deterministic cross-table email mapping",
-      (joined?.n ?? 0) > 0,
+      (submitted?.n ?? 0) === 0 || (joined?.n ?? 0) > 0,
       `${joined?.n}/${submitted?.n} submitted_by values join users.email`,
     );
 
-    const [pluralSecrets] = await sql<{ n: number }[]>`
-      SELECT count(*)::int AS n FROM auth.oauth_clients
-      WHERE client_secret_hash IS NOT NULL
-        AND client_secret_hash != encode(sha256(('revoked:' || id)::bytea), 'hex')
-        AND id NOT LIKE '%-local'`;
-    const [singularSecrets] = await sql<{ n: number }[]>`
-      SELECT count(*)::int AS n FROM auth.oauth_client
-      WHERE client_secret IS NOT NULL AND client_secret NOT LIKE 'revoked-%'`;
+    let pluralSecretsLive = 0;
+    if (await tableExists(sql, "auth.oauth_clients")) {
+      const [pluralSecrets] = await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM auth.oauth_clients
+        WHERE client_secret_hash IS NOT NULL
+          AND client_secret_hash != encode(sha256(('revoked:' || id)::bytea), 'hex')
+          AND id NOT LIKE '%-local'`;
+      pluralSecretsLive = pluralSecrets?.n ?? 0;
+    }
+    let singularSecretsLive = 0;
+    if (await tableExists(sql, "auth.oauth_client")) {
+      const [singularSecrets] = await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM auth.oauth_client
+        WHERE client_secret IS NOT NULL AND client_secret NOT LIKE 'revoked-%'`;
+      singularSecretsLive = singularSecrets?.n ?? 0;
+    }
     check(
       "oauth client secrets invalidated",
-      (pluralSecrets?.n ?? 0) === 0 && (singularSecrets?.n ?? 0) === 0,
-      `${pluralSecrets?.n} plural / ${singularSecrets?.n} singular live secrets`,
+      pluralSecretsLive === 0 && singularSecretsLive === 0,
+      `${pluralSecretsLive} plural / ${singularSecretsLive} singular live secrets`,
     );
 
     const [orphans] = await sql<{ n: number }[]>`

@@ -47,13 +47,18 @@ production-shaped data with zero PII.
 
 ```bash
 # Dry run — reports what would change, writes nothing
-DATABASE_URL=postgresql://... pnpm -F @acme/scripts obfuscate-db -- \
+OBFUSCATION_SALT=... DATABASE_URL=postgresql://... pnpm -F @acme/scripts obfuscate-db -- \
   --allow-db f3data_copy --i-understand-this-rewrites-data --dry-run
 
 # Real run
-DATABASE_URL=postgresql://... pnpm -F @acme/scripts obfuscate-db -- \
+OBFUSCATION_SALT=... DATABASE_URL=postgresql://... pnpm -F @acme/scripts obfuscate-db -- \
   --allow-db f3data_copy --i-understand-this-rewrites-data
 ```
+
+`OBFUSCATION_SALT` is required and must be a long, random secret stored in the
+prod secret manager — never committed to source. This repo is public; a
+committed salt would let anyone rebuild a rainbow table over candidate
+emails/phones/names and reverse a "fake" value back to the real input.
 
 ### Double-flag safety design (belt and suspenders)
 
@@ -63,7 +68,7 @@ The script refuses to write anything unless **both** flags are present:
 | --------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `--allow-db <name>` must exactly match the database name in `DATABASE_URL` **and** the server-reported `current_database()` | Pointing the script at the wrong database (e.g. a stale `DATABASE_URL` in a shell or `.env` aimed at prod). The operator has to name the intended target explicitly. |
 | `--i-understand-this-rewrites-data`                                                                                         | Muscle-memory / copy-paste runs. There is no way to run destructively without typing an explicit acknowledgement.                                                    |
-| Database names containing `prod` are **always refused**                                                                     | Even a fully-flagged run cannot execute against anything named like production. Obfuscate a copy, never the source.                                                  |
+| The exact production database name (`f3data`) or any name containing `prod` is **always refused**                           | Even a fully-flagged run cannot execute against anything named like production. Obfuscate a copy, never the source.                                                  |
 | `--dry-run`                                                                                                                 | Full report of tables/columns/row counts with zero writes — run this first, always.                                                                                  |
 
 `--preserve-local-seed` additionally keeps the committed local dev fixtures
@@ -73,20 +78,21 @@ a sandbox database stays usable for local login after obfuscation. It is
 
 ### Determinism
 
-All fakes are derived from `sha256(salt + input)` with a fixed salt, so:
+All fakes are derived from `sha256(salt + input)` with the required
+`OBFUSCATION_SALT` secret, so:
 
 - the same input value maps to the same fake **everywhere** — a user's email
   in `users.email`, `update_requests.submitted_by`, and inside a JSON `meta`
   blob all become the same `user-<hash8>@obfuscated.f3nation.dev`, preserving
   relational/analytical consistency;
 - repeated refreshes are diff-friendly (same prod value → same staging value
-  across runs).
+  across runs, as long as the salt doesn't change).
 
 Formats: emails → `user-<hash8>@obfuscated.f3nation.dev`, names →
-`F3 User <hash6>`, phones → `555-01<hash2>-<hash4>`, Slack IDs →
-`U<HASH8>`. Free-text contact/emergency fields are nulled. JSON/meta and
-free-text columns are scrubbed of email-shaped strings by regex, replaced
-with the same deterministic fakes.
+`F3 User <hash6>`, phones → `555-<hash3>-<hash4>`, Slack IDs →
+`U<HASH8>` (lengthened on collision). Free-text contact/emergency fields are
+nulled. JSON/meta and free-text columns are scrubbed of email-shaped strings
+by regex, replaced with the same deterministic fakes.
 
 ## PII inventory
 
@@ -191,6 +197,18 @@ staging); **KEEP**: non-PII, left untouched.
    - free-text scrubbing rewrote the planted backblast email;
    - attendance FKs still resolve.
 4. Tears the container down and restores `packages/env/.env`.
+
+### Verifying an obfuscated copy
+
+`tooling/scripts/src/obfuscate-db.verify-target.ts`
+(`DATABASE_URL=… pnpm -F @acme/scripts obfuscate-db:verify-target`) is a
+read-only assertion suite for a database the obfuscator has already run
+against. Run it on the intermediate instance after step 2 and before the
+load in step 3. It sweeps every text/json column of `public` and `auth` for
+non-obfuscated emails, asserts the secret/session/token tables are empty,
+checks the deterministic cross-table mapping, confirms OAuth client secrets
+are invalidated, and checks attendance FK integrity. It refuses any database
+whose name is (or looks like) production.
 
 ## Hard human gate
 
