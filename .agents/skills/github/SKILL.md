@@ -94,25 +94,31 @@ gh api --paginate --slurp repos/{owner}/{repo}/issues/<issue_number>/comments \
 ### Create Issue
 
 ```bash
-gh api -X POST repos/{owner}/{repo}/issues \
-  -f title="<Title>" \
-  -f body=$'<Body_Content>\n\n_written by <model_name>_' \
+issue_title="<Title>"
+issue_body=$'<Body_Content>\n\n_written by <model_name>_'
+
+jq -n --arg title "$issue_title" --arg body "$issue_body" '{title: $title, body: $body}' \
+  | gh api -X POST repos/{owner}/{repo}/issues --input - \
   --jq '{number, html_url}'
 ```
 
 ### Update Issue Description
 
 ```bash
-gh api -X PATCH repos/{owner}/{repo}/issues/<issue_number> \
-  -f body=$'<Updated_Body>\n\n_written by <model_name>_' \
+issue_body=$'<Updated_Body>\n\n_written by <model_name>_'
+
+jq -n --arg body "$issue_body" '{body: $body}' \
+  | gh api -X PATCH repos/{owner}/{repo}/issues/<issue_number> --input - \
   --jq '{number, updated_at}'
 ```
 
 ### Comment on Issue
 
 ```bash
-gh api -X POST repos/{owner}/{repo}/issues/<issue_number>/comments \
-  -f body=$'<Comment_Content>\n\n_written by <model_name>_' \
+comment_body=$'<Comment_Content>\n\n_written by <model_name>_'
+
+jq -n --arg body "$comment_body" '{body: $body}' \
+  | gh api -X POST repos/{owner}/{repo}/issues/<issue_number>/comments --input - \
   --jq '{id, html_url}'
 ```
 
@@ -149,9 +155,10 @@ gh api --paginate --slurp repos/{owner}/{repo}/pulls/<pr_number>/comments \
 > Use the `comment_id` retrieved from the thread to reply in-line.
 
 ```bash
-gh api -X POST \
-  repos/{owner}/{repo}/pulls/<pr_number>/comments/<comment_id>/replies \
-  -f body=$'<Explanation changes made of>\n\n_written by <model_name>_' \
+reply_body=$'<Explanation changes made of>\n\n_written by <model_name>_'
+
+jq -n --arg body "$reply_body" '{body: $body}' \
+  | gh api -X POST repos/{owner}/{repo}/pulls/<pr_number>/comments/<comment_id>/replies --input - \
   --jq '{id, path, line}'
 ```
 
@@ -206,11 +213,7 @@ umask 077
 payload="$(mktemp)"
 trap 'rm -f "$payload"' EXIT
 
-payload_body='### Summary of Fixes
-- Updated auth flow.
-- Added error handling.
-
-_written by <model_name>_'
+payload_body=$'### Summary of Fixes\n- Updated auth flow.\n- Added error handling.\n\n_written by <model_name>_'
 
 jq -n --arg body "$payload_body" '{body: $body}' > "$payload"
 
