@@ -185,7 +185,7 @@ gh api --paginate --slurp repos/{owner}/{repo}/pulls/<pr_number>/comments \
 
 ```bash
 body="$(cat <<'EOF'
-<Explanation changes made of>
+<Explanation_of_changes>
 
 _written by <model_name>_
 EOF
