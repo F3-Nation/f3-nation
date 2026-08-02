@@ -190,7 +190,9 @@ failure) a synthetic error named after the `event` is captured instead. The
 `event` name and `ctx` ride along as event properties for triage.
 
 The upshot for you: **just call `logError`** with the thrown value as the third
-argument. You don't call PostHog directly — error logging already reaches it.
+argument. You don't call PostHog directly — error logging reaches it on a
+best-effort basis (the reporter call is synchronous/fire-and-forget, and a
+PostHog outage is logged, not thrown).
 
 ## The golden rule: never log secrets or PII
 
@@ -198,7 +200,11 @@ Structured logs land in stdout, and error-level logs (`logError`/`logFatal`)
 also reach PostHog error tracking via the reporter bridge — so treat them as if
 they're permanent and widely readable. **Never** put secrets, tokens, full
 request bodies, or personal data (emails, phone numbers, emergency contacts)
-into `event` or `ctx`.
+into `event` or `ctx` — **or into a thrown `Error`'s message**. `err` is
+serialized (name, message, stack) and forwarded just like `ctx`; the logger
+has no way to tell a PII-carrying error message from a safe one, so the same
+discipline applies at the point you construct or rethrow an error as applies
+to `ctx`.
 
 Log **identifiers, not personal data** — `{ userId }`, not `{ email }`;
 `Object.keys(updateSet)` (which fields changed), not the values themselves. When

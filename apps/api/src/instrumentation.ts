@@ -23,5 +23,15 @@ export const onRequestError: Instrumentation.onRequestError = async (
       routerKind: context.routerKind,
       method: request.method,
     });
+  } else {
+    // The edge runtime can't import posthog-node (it needs Node APIs), so
+    // errors there — notably proxy.ts's admin-route JWT auth chain, which
+    // always runs on the edge — would otherwise vanish with zero signal. At
+    // minimum, log the drop so it's a known, monitored gap instead of a
+    // silent one.
+    console.error("instrumentation.request_error_uncaptured", {
+      runtime: process.env.NEXT_RUNTIME,
+      route: context.routePath,
+    });
   }
 };

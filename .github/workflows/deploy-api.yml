@@ -31,3 +31,6 @@ jobs:
       prod_environment: api-production
       staging_url: https://staging.api.f3nation.com
       prod_url: https://api.f3nation.com
+      posthog_session_recording: ${{ vars.POSTHOG_SESSION_RECORDING }}
+    secrets:
+      posthog_key: ${{ secrets.POSTHOG_KEY }}

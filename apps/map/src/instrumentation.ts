@@ -24,5 +24,14 @@ export const onRequestError: Instrumentation.onRequestError = async (
       routerKind: context.routerKind,
       method: request.method,
     });
+  } else {
+    // proxy.ts's matcher is empty today, so this is inert for map right now,
+    // but the moment it's populated the same silent-drop gap reappears with
+    // no code change needed to trigger it — log the drop so it's a known,
+    // monitored gap instead of a silent one.
+    console.error("instrumentation.request_error_uncaptured", {
+      runtime: process.env.NEXT_RUNTIME,
+      route: context.routePath,
+    });
   }
 };

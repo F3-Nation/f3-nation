@@ -201,9 +201,11 @@ deliberate later decision, not baseline.
 | 9   | HTTP server spans (all routes)                                                      | auto-instrumented spans                | api + map                                        |
 | 10  | `pg` query spans                                                                    | auto-instrumented spans (sampled)      | api                                              |
 
-Search-to-selection funnel counts (browse spec §9) are deliberately **deferred
-to the PostHog decision** (§3) — they are client-side product analytics, not
-server observability.
+Search-to-selection funnel counts (browse spec §9) are deliberately **out of
+scope for this plan** — they are client-side product analytics, not server
+observability. Now that the PostHog migration itself has shipped (this PR),
+funnel instrumentation is a separate, not-yet-scheduled follow-up; needs an
+owner and milestone before it's picked up.
 
 ### Multi-instance guardrail
 
@@ -346,8 +348,12 @@ plan must not resolve them unilaterally.
    procedures we are instrumenting. Rule: **span attributes, metric labels,
    and log ctx carry request IDs, never emails** — same as the existing
    "never log secrets or PII" rule ([`LOGGING.md`](LOGGING.md) golden rule;
-   [`AI_DEVELOPMENT_GUIDE.md`](AI_DEVELOPMENT_GUIDE.md) rule 4). Needs an
-   explicit review pass on every new attribute in phases 1–2.
+   [`AI_DEVELOPMENT_GUIDE.md`](AI_DEVELOPMENT_GUIDE.md) rule 4). This extends
+   to thrown `Error` messages/stacks too — `err` is serialized and forwarded
+   to PostHog exception tracking the same as `ctx` is, so a PII-carrying error
+   message reaches it just as directly as a `ctx` field would. Needs an
+   explicit review pass on every new attribute (and every new thrown error)
+   in phases 1–2.
 2. **Session replay is currently unmasked.** `maskAllText: false,
 blockAllMedia: false` in `apps/map/src/instrumentation-client.ts` means
    replays can capture whatever users type — including the update-request form
@@ -355,7 +361,11 @@ blockAllMedia: false` in `apps/map/src/instrumentation-client.ts` means
    replay. Do this **before** any PostHog replay conversation.
    _(**RESOLVED**: masked upstream in F3-Nation#593; Sentry replay then
    removed entirely in PR #54 — PostHog session recording ships off by
-   default and masked when enabled.)_
+   default; when enabled, `instrumentation-client.ts` sets
+   `session_recording: { maskAllInputs: true }`, which masks `<input>` element
+   values — not arbitrary on-page text. Plain DOM text rendered outside a
+   form input (e.g. a name shown as text rather than typed) is not masked
+   under the current config.)_
 3. **Cost exposure / quota cliffs.** _(Sentry sampling point moot since
    PR #54 removed it; the Cloud Trace allotment caveat stands.)_ Server
    `tracesSampleRate: 1` in Sentry
@@ -368,9 +378,9 @@ blockAllMedia: false` in `apps/map/src/instrumentation-client.ts` means
    fixed rate (suggest 10 % for HTTP spans, 100 % for the named request-flow
    spans, which are low-volume). The actual numbers are a human call after
    seeing phase 1 volume — encode them in env vars, not code.
-5. **Shared Sentry DSN split.** Splitting map/api onto separate DSNs changes
-   where alerts fire and orphans issue history in the shared project. A human
-   confirms the Sentry org layout and alert routing before the switch.
+5. ~~**Shared Sentry DSN split.**~~ _(**HISTORICAL / CLOSED**: moot — Sentry
+   was removed entirely in PR #54, replaced by PostHog error tracking. No DSN
+   split decision remains to make.)_
 6. **Multi-instance rule is a review gate.** Any PR in this workstream that
    introduces an in-process counter, queue, or cache used as a source of truth
    is an automatic reject

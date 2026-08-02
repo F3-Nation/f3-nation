@@ -13,9 +13,14 @@ let client: PostHog | undefined;
 
 function getPostHogServer(): PostHog | undefined {
   if (!env.NEXT_PUBLIC_POSTHOG_KEY) return undefined;
-  // Error volume is tiny and Cloud Run scales to zero between requests —
-  // flush every event immediately instead of batching so nothing is lost
-  // when an instance is reaped.
+  // Error volume is tiny and Cloud Run scales to zero between requests. Note
+  // flushAt/flushInterval only govern posthog-node's batched capture()/
+  // captureException() path — the only method this file calls is
+  // captureExceptionImmediate below, which sends over HTTP directly and
+  // never consults these two options. The actual "nothing is lost when an
+  // instance is reaped" guarantee comes entirely from using
+  // captureExceptionImmediate; these are left as a defensive fallback in
+  // case a future edit adds a non-immediate capture() call here.
   client ??= new PostHog(env.NEXT_PUBLIC_POSTHOG_KEY, {
     host: "https://us.i.posthog.com",
     flushAt: 1,
@@ -44,8 +49,14 @@ export async function captureServerException(
       environment: env.NEXT_PUBLIC_CHANNEL,
       ...properties,
     });
-  } catch {
-    // best effort — a failed report is not worth propagating
+  } catch (reportErr) {
+    // Never propagate — but always leave a trace so a PostHog outage (bad
+    // key, network failure, rate limit, TLS error) doesn't look identical to
+    // "no errors occurred." This bridge runs decoupled from @acme/logger's
+    // own errorReporter try/catch (registerPostHogErrorReporter's callback
+    // is synchronous and returns before this awaited call can fail), so
+    // without this, nothing records that a report was attempted and failed.
+    console.error("posthog.capture_exception_failed", reportErr);
   }
 }
 
@@ -61,9 +72,11 @@ export function registerPostHogErrorReporter() {
     // logError/logFatal are synchronous, so this bridge can't await; fire and
     // forget. captureServerException swallows its own failures, so there is no
     // rejection to handle here.
+    // ctx spread AFTER event: a ctx key named "event" must not be able to
+    // overwrite the canonical event identifier used for PostHog triage.
     void captureServerException(err ?? new Error(event), {
-      event,
       ...ctx,
+      event,
     });
   });
 }

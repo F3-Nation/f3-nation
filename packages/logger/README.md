@@ -79,11 +79,15 @@ Examples from the codebase:
   occurrence (`{ userId, orgId, durationMs }`). Merged into the log line.
 - **`err`** (third arg, `logError` / `logFatal` only) — the actual thrown value. It is
   serialized via pino's `err` serializer (name, message, stack) and, when an
-  error reporter is registered, sent to PostHog as the captured exception.
+  error reporter is registered (via `setErrorReporter`), forwarded to it as
+  the captured exception. This package doesn't require or assume PostHog —
+  it's simply the reporter every current app happens to register. See
+  [PostHog / error reporting](#posthog--error-reporting) below.
 
 > [!IMPORTANT]
-> Never put secrets or PII (emails, tokens, full request bodies) in `event` or
-> `ctx`. Log identifiers, not personal data. See
+> Never put secrets or PII (emails, tokens, full request bodies) in `event`,
+> `ctx`, **or a thrown `Error`'s message** — `err` is serialized and forwarded
+> just like `ctx`. Log identifiers, not personal data. See
 > [Secrets & sensitive data](../../docs/AI_DEVELOPMENT_GUIDE.md#secrets--sensitive-data).
 
 ## Log levels
@@ -130,21 +134,27 @@ reqLog.info({ path }, "api.request.received"); // pino order: (ctx, event)
 
 `logError` writes to stdout (pino), not `console.error`, so a console-watching
 error tracker would miss it. Apps that use PostHog register a process-global
-reporter at startup so error logs still reach PostHog error tracking — see
+reporter at startup so error logs also reach PostHog error tracking, on a
+best-effort basis — see
 [`apps/api/src/posthog-server.ts`](../../apps/api/src/posthog-server.ts):
 
 ```ts
 import { setErrorReporter } from "@acme/logger";
 
 setErrorReporter((event, ctx, err) => {
-  captureServerException(err ?? new Error(event), { event, ...ctx });
+  // ctx spread BEFORE event: a ctx key named "event" must not be able to
+  // overwrite the canonical event identifier used for triage.
+  captureServerException(err ?? new Error(event), { ...ctx, event });
 });
 ```
 
 The reporter receives the full payload, so error logs that carry no `Error`
 (config/validation failures) are still reported as a synthetic error named
 after the `event` — with the `event` and `ctx` attached as properties for
-triage.
+triage. `logError`/`logFatal` call the reporter synchronously and don't await
+it, and `captureServerException` swallows its own transport failures (logging
+them, never throwing) — so "reaches PostHog" here means "an attempt was made
+and logged if it failed," not a delivery guarantee.
 
 ## Environment behavior
 

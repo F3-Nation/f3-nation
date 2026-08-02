@@ -11,6 +11,14 @@ if (env.NEXT_PUBLIC_POSTHOG_KEY) {
   posthog.init(env.NEXT_PUBLIC_POSTHOG_KEY, {
     api_host: "https://us.i.posthog.com",
 
+    // PostHog's current recommended Next.js setup. Without this, capture_pageview
+    // falls back to its legacy default (true), which only fires a pageview on
+    // the initial page load — for the map's heavily-navigated in-app routing,
+    // every subsequent client-side transition would produce no pageview event
+    // at all. "2025-05-24" switches capture_pageview to "history_change",
+    // which correctly fires on client-side navigations too.
+    defaults: "2025-05-24",
+
     // Error tracking: autocapture unhandled exceptions / unhandled promise
     // rejections as $exception events.
     capture_exceptions: true,

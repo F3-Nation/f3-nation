@@ -3,6 +3,8 @@
 import { useEffect } from "react";
 import posthog from "posthog-js";
 
+import { env } from "~/env";
+
 interface GlobalErrorProps {
   error: Error & { digest?: string };
   reset: () => void;
@@ -10,8 +12,11 @@ interface GlobalErrorProps {
 
 export default function GlobalError({ error, reset }: GlobalErrorProps) {
   useEffect(() => {
-    // Only capture when PostHog was actually initialized (a key is set).
-    if (posthog.__loaded) {
+    // Gate on the env flag (the same stable signal instrumentation-client.ts
+    // uses to decide whether to init), not posthog.__loaded — that's an
+    // internal SDK flag, not a documented readiness contract, and can be
+    // false/undefined during early app startup, dropping early error reports.
+    if (env.NEXT_PUBLIC_POSTHOG_KEY) {
       posthog.captureException(error);
     }
   }, [error]);
