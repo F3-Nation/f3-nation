@@ -55,6 +55,9 @@ def build_custom_field_menu(
         label = f"Name: {custom_field['name']}\nType: {custom_field['type']}"
         if custom_field["type"] == "Dropdown":
             label += f"\nOptions: {', '.join(custom_field['options'])}"
+        if custom_field.get("auto_populate"):
+            current_value = custom_field.get("current_value")
+            label += f"\nAuto-populate: Yes (current value: {current_value or '(none set yet)'})"
 
         blocks.extend(
             [
@@ -145,6 +148,7 @@ def build_custom_field_add_edit(
                 actions.CUSTOM_FIELD_ADD_OPTIONS: (
                     ",".join(custom_field["options"]) if custom_field["type"] == "Dropdown" else " "
                 ),
+                actions.CUSTOM_FIELD_ADD_AUTO_POPULATE: "yes" if custom_field.get("auto_populate") else "no",
             }
         )
         action_text = "Edit"
@@ -204,15 +208,20 @@ def handle_custom_field_add(body: dict, client: WebClient, logger: Logger, conte
     custom_field_name = safe_get(config_data, actions.CUSTOM_FIELD_ADD_NAME)
     custom_field_type = safe_get(config_data, actions.CUSTOM_FIELD_ADD_TYPE)
     custom_field_options: str = safe_get(config_data, actions.CUSTOM_FIELD_ADD_OPTIONS)
+    auto_populate = safe_get(config_data, actions.CUSTOM_FIELD_ADD_AUTO_POPULATE) == "yes"
     # trim whitespace from options
     custom_field_options = custom_field_options.strip() if custom_field_options else ""
 
     custom_fields = region_record.custom_fields or {}
+    # Preserve the sticky current_value across edits (rename/retype) of the same field
+    existing_current_value = safe_get(custom_fields, custom_field_name, "current_value")
     custom_fields[custom_field_name] = {
         "name": custom_field_name,
         "type": custom_field_type,
         "options": custom_field_options.split(",") if custom_field_options else [],
         "enabled": True,
+        "auto_populate": auto_populate,
+        "current_value": existing_current_value if auto_populate else None,
     }
 
     if custom_field_type == "Dropdown" and not custom_field_options:

@@ -75,6 +75,42 @@ def _search_users(value: str, limit: int = USER_SEARCH_LIMIT) -> list[dict]:
     return options
 
 
+def _search_locations(value: str, limit: int = USER_SEARCH_LIMIT) -> list[dict]:
+    """Search AOs by name with optional region filter via '(' syntax, across all regions.
+
+    Supports search terms like 'the hub (wash)' to filter by both AO name and region.
+    Results are sorted by relevance (exact > starts-with > contains), then alphabetically.
+    """
+    name_query, region_query = _parse_search_value(value)
+    if not name_query:
+        return []
+
+    org_records = DbManager.find_records(
+        cls=Org,
+        filters=[and_(Org.name.ilike(f"%{name_query}%"), Org.org_type == Org_Type.ao)],
+        joinedloads=[Org.parent_org],
+    )
+
+    if region_query:
+        region_lower = region_query.lower()
+        org_records = [o for o in org_records if o.parent_org and region_lower in o.parent_org.name.lower()]
+
+    org_records.sort(key=lambda o: _relevance_score(o.name or "", name_query))
+
+    options = []
+    for org in org_records[:limit]:
+        display_name = org.name
+        if org.parent_org:
+            display_name += f" ({org.parent_org.name})"
+        options.append(
+            {
+                "text": {"type": "plain_text", "text": display_name},
+                "value": str(org.id),
+            }
+        )
+    return options
+
+
 def handle_request(
     body: dict,
     client: WebClient,
@@ -89,6 +125,14 @@ def handle_request(
         return _search_users(value)
     elif action_id == user_form.USER_FORM_BROUGHT_BY:
         return _search_users(value)
+    elif action_id.endswith(actions.CUSTOM_FIELD_PAX_XREGION_SUFFIX):
+        # Cross-region search for a PAX-type custom field's secondary
+        # "not in this Slack space" picker (action id is per-field, dynamically named)
+        return _search_users(value)
+    elif action_id.endswith(actions.CUSTOM_FIELD_LOCATION_XREGION_SUFFIX):
+        # Cross-region search for a Location-type custom field's secondary
+        # "not in this Slack space" picker
+        return _search_locations(value)
     elif action_id in [
         user_form.USER_FORM_HOME_REGION,
         connect_form.SELECT_REGION,

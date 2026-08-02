@@ -18,6 +18,7 @@ from scripts import (
     preblast_reminders,
     q_lineups,
     update_slack_users,
+    weekly_reporting,
 )
 
 APP_URL = os.getenv("APP_URL", "http://localhost:8080")
@@ -80,6 +81,12 @@ def run_all_hourly_scripts(force: bool = False, run_reporting: bool = True, repo
             monthly_reporting.cycle_all_orgs(run_org_id=reporting_org_id)
         except Exception as e:
             print(f"Error running monthly reporting: {e}")
+
+        print("Running weekly reporting")
+        try:
+            weekly_reporting.cycle_weekly_reports(force_org_id=reporting_org_id)
+        except Exception as e:
+            print(f"Error running weekly reporting: {e}")
 
     print("Running achievements update")
     try:

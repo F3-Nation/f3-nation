@@ -17,6 +17,7 @@ from features import (
     strava,
     user,
     weaselbot,
+    weekly_report_flags,
     welcome,
 )
 from features.calendar import (
@@ -35,6 +36,7 @@ from scripts.backblast_reminders import handle_backblast_reminder_dismiss
 from scripts.home_region_nudge import handle_home_region_dismiss, handle_home_region_opt_out, handle_home_region_switch
 from scripts.monthly_reporting import run_reporting_single_org
 from scripts.q_lineups import handle_lineup_signup
+from scripts.weekly_reporting import run_weekly_report_single_org
 from utilities import builders, options
 from utilities.slack import actions
 
@@ -90,6 +92,8 @@ VIEW_MAPPER = {
     actions.HOME_ASSIGN_Q_CALLBACK_ID: (home.handle_assign_q_form, False, False),
     actions.DB_ADMIN_CALLBACK_ID: (db_admin.handle_send_admin_announcement, False, False),
     reporting.REPORTING_CALLBACK_ID: (reporting.handle_reporting_edit, False, False),
+    weekly_report_flags.WEEKLY_FLAGS_MENU_CALLBACK_ID: (weekly_report_flags.handle_weekly_flags_menu, False, False),
+    weekly_report_flags.WEEKLY_FLAG_ADD_CALLBACK_ID: (weekly_report_flags.handle_weekly_flag_add, False, False),
     actions.DB_ADMIN_LONG_RUN_CALLBACK_ID: (db_admin.handle_long_run_task, False, False),
     paxminer_mapping.PAXMINER_MAPPING_ID: (paxminer_mapping.handle_paxminer_mapping_post, False, False),
     event_instance.EVENT_CLOSE_CALLBACK_ID: (event_instance.handle_event_instance_close, False, False),
@@ -187,6 +191,12 @@ ACTION_MAPPER = {
     user.IGNORE_EVENT: (builders.ignore_event, False, False),
     actions.CONFIG_REPORTING: (reporting.build_reporting_form, False, False),
     reporting.RUN_MONTHLY_REPORTS_NOW: (run_reporting_single_org, False, False),
+    reporting.RUN_WEEKLY_REPORT_NOW: (run_weekly_report_single_org, False, False),
+    weekly_report_flags.MANAGE_WEEKLY_FLAGS: (weekly_report_flags.build_weekly_flags_menu, False, False),
+    weekly_report_flags.WEEKLY_FLAG_ADD: (weekly_report_flags.build_weekly_flag_add_edit, False, False),
+    weekly_report_flags.WEEKLY_FLAG_EDIT: (weekly_report_flags.build_weekly_flag_add_edit, False, False),
+    weekly_report_flags.WEEKLY_FLAG_NAME: (weekly_report_flags.build_weekly_flag_add_edit, False, False),
+    weekly_report_flags.WEEKLY_FLAG_DELETE: (weekly_report_flags.handle_weekly_flag_delete, False, False),
     actions.CONFIG_HELP_MENU: (help.build_help_menu, False, False),
     actions.CALENDAR_MANAGE_SERIES_AO: (series.build_series_list_form, False, False),
     actions.SETTINGS_BUTTON: (config.build_config_form, True, False),
@@ -261,7 +271,17 @@ OPTIONS_MAPPER = {
     connect.SELECT_REGION: (options.handle_request, False, False),
     actions.EMERGENCY_DR_USER_SELECT: (options.handle_request, False, False),
     actions.DOWNRANGE_REGION_SELECT: (options.handle_request, False, False),
+    actions.CUSTOM_FIELD_PAX_XREGION_SUFFIX: (options.handle_request, False, False),
+    actions.CUSTOM_FIELD_LOCATION_XREGION_SUFFIX: (options.handle_request, False, False),
 }
+
+# Per-field custom field cross-region search action ids are dynamically named
+# (custom_field_<admin-defined name><suffix>), so they're matched by suffix here —
+# mirrors ACTION_PREFIXES' prefix-matching for the same reason (see get_request_type).
+OPTIONS_SUFFIXES = [
+    actions.CUSTOM_FIELD_PAX_XREGION_SUFFIX,
+    actions.CUSTOM_FIELD_LOCATION_XREGION_SUFFIX,
+]
 
 SHORTCUT_MAPPER = {
     actions.BACKBLAST_SHORTCUT: (backblast.backblast_middleware, True, False),

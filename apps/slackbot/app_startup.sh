@@ -86,7 +86,7 @@ echo "SOCKET_MODE=true; localtunnel is disabled."
 
 while true; do
   start_app
-  if ! wait -n "${APP_PID}"; then
+  if ! wait "${APP_PID}"; then
     :
   fi
 
