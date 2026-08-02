@@ -13,6 +13,7 @@ import { ProviderId } from "@acme/shared/common/enums";
 import { emailProvider } from "./lib/email-provider";
 import { MDPGDrizzleAdapter } from "./lib/md-pg-drizzzle-adapter";
 import OtpProvider from "./lib/otp-provider";
+import { logWarn } from "./logger";
 import type { UserRole } from "@acme/shared/app/enums";
 
 export type { Session } from "next-auth";
@@ -131,8 +132,14 @@ if (!isProd) {
             .from(orgs)
             .where(eq(orgs.orgType, "nation"));
           if (f3Nation) nation = { id: f3Nation.id, name: f3Nation.name };
-        } catch {
-          // No database reachable (e.g. a preview map) — keep the seed fallback.
+        } catch (err) {
+          // No database reachable (e.g. a preview map) — keep the seed
+          // fallback, but never swallow the reason silently. logWarn has no
+          // err param (only logError/logFatal fan out to the error
+          // reporter), so fold it into ctx.
+          logWarn("auth.dev_mode.nation_lookup_failed", {
+            err: err instanceof Error ? err.message : String(err),
+          });
         }
 
         // Return a mock user for development

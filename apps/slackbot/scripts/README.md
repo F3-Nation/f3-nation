@@ -4,13 +4,13 @@ This directory contains the scripts and automation jobs for the F3 Nation Slack 
 
 ## Structure
 
-- `Dockerfile` — Dockerfile for building the scripts container image with uv and the Slackbot `dev` dependency group
+- `Dockerfile` — builds the scripts container image with uv and the Slackbot `scripts` dependency group (matplotlib, pandas, playwright + Chromium); dev tooling is excluded via `--no-dev`
 - `hourly_runner.py` — Entrypoint for running all hourly scripts
 - Other Python scripts for specific automation tasks
 
 ## How to Build the Scripts Image
 
-Primary deployment now happens through GitHub Actions tag releases in [`.github/workflows/deploy-slackbot.yml`](../../../.github/workflows/deploy-slackbot.yml). The Cloud Build config is retained only as a temporary migration path.
+Deployment happens through GitHub Actions tag releases in [`.github/workflows/deploy-slackbot.yml`](../../../.github/workflows/deploy-slackbot.yml) — pushing a `slackbot@*` tag builds and deploys both the bot service and this scripts job. The manual build below is for local testing or a one-off push.
 
 1. **Navigate to the repository root:**
 
@@ -22,12 +22,14 @@ Primary deployment now happens through GitHub Actions tag releases in [`.github/
 
    ```sh
    docker build \
+     --platform=linux/amd64 \
      --file apps/slackbot/scripts/Dockerfile \
      --tag us-central1-docker.pkg.dev/<PROJECT>/<REPO>/<IMAGE>:<TAG> \
      .
    ```
 
    - Replace `<PROJECT>`, `<REPO>`, `<IMAGE>`, and `<TAG>` with your GCP project, Artifact Registry repo, image name, and tag.
+   - `--platform=linux/amd64` is required: Cloud Run only runs amd64, and the Dockerfile no longer pins the platform on its `FROM` lines. Without it, an Apple Silicon machine builds an arm64 image that Cloud Run rejects at deploy time.
    - With the GitHub Actions flow, the scripts image is published as `us-central1-docker.pkg.dev/<PROJECT>/<REPO>/f3-slackbot-scripts:<TAG>`.
 
 ## How to Run Locally
@@ -53,4 +55,4 @@ Primary deployment now happens through GitHub Actions tag releases in [`.github/
 ## Notes
 
 - This image is intended for Cloud Run Jobs and includes heavy dependencies not needed by the main app.
-- The main app image uses the default dependency set only; this scripts image adds the `dev` group for Playwright, pandas, and reporting tools.
+- The main app image uses the default dependency set only; this scripts image adds the `scripts` group for Playwright, pandas, and reporting tools.
