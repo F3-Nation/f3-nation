@@ -41,10 +41,6 @@ export const attendanceRouter = {
   /**
    * Get all attendance records for an event instance.
    * Includes user info (f3Name) and attendance types.
-   *
-   * Any authenticated user may read planned HC/Q lists (f3Name, types) for
-   * preblast visibility. Actual attendance requires editor role on the event's
-   * org.
    */
   getForEventInstance: protectedProcedure
     .input(
