@@ -58,14 +58,19 @@ import { expect, test } from "@playwright/test";
  * that resolves to no session in every environment.
  */
 
-const E2E_API_URL = process.env.E2E_API_URL;
-if (!E2E_API_URL) {
-  throw new Error(
-    "E2E_API_URL is required but not set. Point it at the API app under " +
-      "test, e.g. E2E_API_URL=http://localhost:3001",
-  );
-}
-const API = E2E_API_URL.replace(/\/$/, "");
+// Validated in a file-scoped beforeAll (below), not thrown at module scope:
+// a module-scope throw fails Playwright's *collection* for the entire run,
+// taking down unrelated specs; a beforeAll scopes the failure to this file.
+const API = (process.env.E2E_API_URL ?? "").replace(/\/$/, "");
+
+test.beforeAll(() => {
+  if (!process.env.E2E_API_URL) {
+    throw new Error(
+      "E2E_API_URL is required but not set. Point it at the API app under " +
+        "test, e.g. E2E_API_URL=http://localhost:3001",
+    );
+  }
+});
 
 const KEYS = {
   nationAdmin: "local-slackbot-key",

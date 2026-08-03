@@ -4561,6 +4561,27 @@
             "schema": {
               "type": "number"
             }
+          },
+          {
+            "allowEmptyValue": true,
+            "allowReserved": true,
+            "in": "query",
+            "name": "includeSlackChannelId",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "enum": [
+                    "true",
+                    "false"
+                  ],
+                  "type": "string"
+                }
+              ],
+              "default": false
+            }
           }
         ],
         "responses": {

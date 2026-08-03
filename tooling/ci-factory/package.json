@@ -1,0 +1,29 @@
+{
+  "name": "@acme/ci-factory",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "clean": "rm -rf .turbo node_modules",
+    "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
+    "lint": "eslint .",
+    "lint:fix": "pnpm lint --fix",
+    "review": "tsx ./src/review-pr.ts",
+    "test": "vitest run",
+    "triage": "tsx ./src/triage-e2e-failure.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@acme/eslint-config": "workspace:*",
+    "@acme/prettier-config": "workspace:*",
+    "@acme/tsconfig": "workspace:*",
+    "@acme/vitest-config": "workspace:*",
+    "eslint": "catalog:",
+    "prettier": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "prettier": "@acme/prettier-config"
+}
