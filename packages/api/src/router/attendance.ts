@@ -72,14 +72,6 @@ export const attendanceRouter = {
         "Get all attendance records for an event instance with user info and types",
     })
     .handler(async ({ context: ctx, input }) => {
-      if (!input.isPlanned) {
-        await assertEditorOnEventOrg({
-          ctx,
-          eventInstanceId: input.eventInstanceId,
-          message: "You are not authorized to view actual attendance",
-        });
-      }
-
       // Get attendance records with user info
       const attendanceRecords = await ctx.db
         .select({
