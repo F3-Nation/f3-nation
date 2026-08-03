@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // server-only is mocked globally in vitest.setup.ts
 import { parseChangelog } from "@/lib/changelog";
@@ -68,5 +68,39 @@ describe("parseChangelog", () => {
 
   it("returns empty array for empty input", () => {
     expect(parseChangelog("")).toEqual([]);
+  });
+});
+
+describe("getChangelog", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("returns parsed entries when CHANGELOG.md is readable", async () => {
+    const { getChangelog } = await import("@/lib/changelog");
+    const result = getChangelog();
+    expect(result.length).toBeGreaterThan(0);
+    expect(typeof result[0]?.version).toBe("string");
+    expect(typeof result[0]?.date).toBe("string");
+  });
+
+  it("caches result and does not re-read the file on subsequent calls", async () => {
+    const { getChangelog } = await import("@/lib/changelog");
+    const first = getChangelog();
+    const second = getChangelog();
+    expect(first).toBe(second);
+  });
+
+  it("returns empty array and caches it when CHANGELOG.md is missing", async () => {
+    vi.spyOn(process, "cwd").mockReturnValue("/nonexistent-path-xyz");
+    const { getChangelog } = await import("@/lib/changelog");
+    const first = getChangelog();
+    const second = getChangelog();
+    expect(first).toEqual([]);
+    expect(second).toBe(first);
   });
 });

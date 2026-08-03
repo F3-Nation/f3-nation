@@ -29,7 +29,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   const channel = env.F3_CHANNEL;
-  const changelog = getChangelog();
+  const changelog = getChangelog().slice(0, 10);
 
   return (
     <html lang="en" suppressHydrationWarning>

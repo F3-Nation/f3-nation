@@ -89,7 +89,6 @@ export function parseChangelog(markdown: string): ChangelogEntry[] {
 
 let cachedChangelog: ChangelogEntry[] | null = null;
 
-/* v8 ignore start */
 export function getChangelog(): ChangelogEntry[] {
   if (cachedChangelog !== null) {
     return cachedChangelog;
@@ -98,9 +97,8 @@ export function getChangelog(): ChangelogEntry[] {
   try {
     const file = join(process.cwd(), "CHANGELOG.md");
     cachedChangelog = parseChangelog(readFileSync(file, "utf8"));
-    return cachedChangelog;
   } catch {
-    return [];
+    cachedChangelog = [];
   }
+  return cachedChangelog;
 }
-/* v8 ignore stop */
