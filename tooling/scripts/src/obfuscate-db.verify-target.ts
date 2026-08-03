@@ -10,8 +10,9 @@
  *   1. Email sweep — no email-shaped string anywhere in public+auth outside
  *      @obfuscated.f3nation.dev (json columns are walked structurally; the
  *      serialized form false-positives on escape-adjacent Slack handles).
- *   2. Secret/session/token tables are empty — both the repo schema's plural
- *      names and better-auth's singular ones (2026-07-10 schema-drift catch).
+ *   2. Secret/session/token tables are empty — both the repo's own NextAuth
+ *      adapter's plural names and the legacy singular ones (2026-07-10
+ *      schema-drift catch).
  *   3. users.email / auth.user (email, email-as-id, image) fully obfuscated.
  *   4. Deterministic cross-table mapping still joins.
  *   5. auth.oauth_client(s) secrets invalidated.
@@ -25,12 +26,7 @@
  */
 import postgres from "postgres";
 
-import { databaseNameFromUrl } from "./db-url";
-
-// Exact-match, not substring: prod is named "f3data" (docs/STAGING_REFRESH.md),
-// which /prod/i does not catch, but staging ("f3data-nonprod") legitimately
-// contains "f3data" as a substring, so a substring test would misfire there.
-const FORBIDDEN_DB_NAMES = new Set(["f3data"]);
+import { databaseNameFromUrl, looksLikeProdDbName } from "./db-url";
 
 const OBFUSCATED_EMAIL_DOMAIN = "obfuscated.f3nation.dev";
 const EMAIL_REGEX = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g;
@@ -80,9 +76,9 @@ function quoteQualified(table: string): string {
 
 /**
  * Whether a (schema-qualified) table exists. The EMPTY_TABLES list carries both
- * the repo schema's plural names and better-auth's singular ones; only one
- * family exists in any given target, so absent members are expected, not
- * failures.
+ * the repo's own NextAuth adapter's plural names and the legacy singular
+ * ones; only one family exists in any given target, so absent members are
+ * expected, not failures.
  */
 async function tableExists(sql: Sql, table: string): Promise<boolean> {
   const [row] = await sql<{ present: boolean }[]>`
@@ -179,7 +175,7 @@ async function main(): Promise<void> {
         "cannot verify the target is not production.",
     );
   }
-  if (FORBIDDEN_DB_NAMES.has(dbName) || /prod/i.test(dbName)) {
+  if (looksLikeProdDbName(dbName)) {
     throw new Error(
       `Refusing to run: database name "${dbName}" is (or looks like) production — ` +
         `sweeping an un-obfuscated database would print raw PII.`,
@@ -188,6 +184,20 @@ async function main(): Promise<void> {
 
   const sql = postgres(databaseUrl, { max: 2, onnotice: () => undefined });
   try {
+    // Re-check against the server-reported name, not just the URL-parsed
+    // one: a misconfigured or aliased DATABASE_URL (e.g. a connection pooler
+    // or DNS alias) could resolve to a different database than its string
+    // suggests. Same defense-in-depth obfuscate-db.ts already applies.
+    const [current] = await sql`SELECT current_database() AS db`;
+    const serverDbName = (current as { db: string }).db;
+    if (looksLikeProdDbName(serverDbName)) {
+      throw new Error(
+        `Refusing to run: connected database is "${serverDbName}", which is ` +
+          `(or looks like) production — sweeping an un-obfuscated database ` +
+          `would print raw PII.`,
+      );
+    }
+
     console.log(`=== obfuscation target verification: "${dbName}" ===`);
 
     await sweepForEmails(sql);
@@ -214,8 +224,8 @@ async function main(): Promise<void> {
       `${usersBad?.n} nonconforming`,
     );
 
-    // Both better-auth naming generations are optional — only one family
-    // exists in any given target (same contract as EMPTY_TABLES above) — so
+    // Both naming generations are optional — only one family exists in any
+    // given target (same contract as EMPTY_TABLES above) — so
     // each of these must be guarded rather than run unconditionally: against
     // a target with only the plural family, an unguarded query against the
     // singular auth."user"/auth.oauth_client tables throws and aborts every
@@ -252,17 +262,24 @@ async function main(): Promise<void> {
       `${joined?.n}/${submitted?.n} submitted_by values join users.email`,
     );
 
+    // No '-local' exclusion here: --preserve-local-seed is a sandbox-only
+    // flag never used for a real staging refresh (see STAGING_REFRESH.md),
+    // and this script has no way to know whether the run it's verifying used
+    // it — checking every client is the only way this stays a real check
+    // rather than one with a blind spot an operator can't see.
+    let checkedAny = false;
     let pluralSecretsLive = 0;
     if (await tableExists(sql, "auth.oauth_clients")) {
+      checkedAny = true;
       const [pluralSecrets] = await sql<{ n: number }[]>`
         SELECT count(*)::int AS n FROM auth.oauth_clients
         WHERE client_secret_hash IS NOT NULL
-          AND client_secret_hash != encode(sha256(('revoked:' || id)::bytea), 'hex')
-          AND id NOT LIKE '%-local'`;
+          AND client_secret_hash != encode(sha256(('revoked:' || id)::bytea), 'hex')`;
       pluralSecretsLive = pluralSecrets?.n ?? 0;
     }
     let singularSecretsLive = 0;
     if (await tableExists(sql, "auth.oauth_client")) {
+      checkedAny = true;
       const [singularSecrets] = await sql<{ n: number }[]>`
         SELECT count(*)::int AS n FROM auth.oauth_client
         WHERE client_secret IS NOT NULL AND client_secret NOT LIKE 'revoked-%'`;
@@ -271,7 +288,9 @@ async function main(): Promise<void> {
     check(
       "oauth client secrets invalidated",
       pluralSecretsLive === 0 && singularSecretsLive === 0,
-      `${pluralSecretsLive} plural / ${singularSecretsLive} singular live secrets`,
+      checkedAny
+        ? `${pluralSecretsLive} plural / ${singularSecretsLive} singular live secrets`
+        : "absent (neither oauth client table in this schema — skipped)",
     );
 
     const [orphans] = await sql<{ n: number }[]>`

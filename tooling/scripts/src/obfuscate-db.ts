@@ -41,7 +41,7 @@ import { createHash } from "node:crypto";
 
 import postgres from "postgres";
 
-import { databaseNameFromUrl } from "./db-url";
+import { databaseNameFromUrl, looksLikeProdDbName } from "./db-url";
 
 // ---------------------------------------------------------------------------
 // CLI args
@@ -76,12 +76,6 @@ let SALT: string;
 
 const LOCAL_SEED_EMAIL_SUFFIX = "@f3local.dev";
 const OBFUSCATED_EMAIL_DOMAIN = "obfuscated.f3nation.dev";
-
-// Exact-match, not substring: docs/STAGING_REFRESH.md names the production
-// database "f3data", which the /prod/i heuristic below does not catch. Exact
-// match (rather than e.g. a "f3data" substring test) matters here because
-// staging itself is "f3data-nonprod", which legitimately contains "f3data".
-const FORBIDDEN_DB_NAMES = new Set(["f3data"]);
 
 function hashHex(input: string, length: number): string {
   return createHash("sha256")
@@ -250,11 +244,13 @@ async function transformTable(
   },
 ): Promise<void> {
   const { table, pk, columns, actions, transform } = opts;
-  // Same contract as runSetBased/truncateTable: the secret/session/token and
-  // better-auth tables carry both a plural (repo schema) and singular
-  // (better-auth) name, and only one family exists in any given target — an
-  // absent table must be skipped, not crash the whole run (which would abort
-  // before later jobs, e.g. the secrets truncation, ever ran).
+  // Same contract as runSetBased/truncateTable: the secret/session/token
+  // tables carry both a plural name (the repo's own NextAuth adapter schema)
+  // and a singular one (legacy — pre-dates the current adapter, not written
+  // to by any active code path, but still physically present on prod), and
+  // only one family exists in any given target — an absent table must be
+  // skipped, not crash the whole run (which would abort before later jobs,
+  // e.g. the secrets truncation, ever ran).
   if (!(await tableExists(sql, table))) {
     for (const [col, action] of Object.entries(actions)) {
       addSummary(table, col, `${action} (table absent — skipped)`, 0);
@@ -310,10 +306,11 @@ async function runSetBased(
     update: postgres.PendingQuery<postgres.Row[]>;
   },
 ): Promise<void> {
-  // The secret/session/token lists carry both plural (repo schema) and
-  // singular (better-auth) table names; only one family exists in any given
-  // target, so an absent member must be skipped rather than crash the run
-  // with an undefined-table error — same contract as truncateTable().
+  // The secret/session/token lists carry both a plural (the repo's own
+  // NextAuth adapter schema) and a singular (legacy, pre-dating the current
+  // adapter) table name; only one family exists in any given target, so an
+  // absent member must be skipped rather than crash the run with an
+  // undefined-table error — same contract as truncateTable().
   if (!(await tableExists(sql, opts.table))) {
     addSummary(opts.table, opts.column, `${opts.action} (absent — skipped)`, 0);
     return;
@@ -330,9 +327,10 @@ async function runSetBased(
 
 /**
  * Whether a (schema-qualified) table exists. The secret/session/token lists
- * carry both the repo schema's plural names and better-auth's singular ones;
- * only one family exists in any given target, so absent members must be skipped
- * rather than crash the run with an undefined-table error.
+ * carry both the repo's own NextAuth adapter's plural names and a legacy
+ * singular family (pre-dating the current adapter); only one family exists
+ * in any given target, so absent members must be skipped rather than crash
+ * the run with an undefined-table error.
  */
 async function tableExists(sql: Sql, table: string): Promise<boolean> {
   const quoted = table
@@ -359,7 +357,8 @@ async function truncateTable(sql: Sql, table: string): Promise<void> {
 
 /** Truncate a set of tables in one statement — required when they hold
  * foreign keys to each other (single-table order would fail). Absent tables are
- * dropped from the set so a missing better-auth family doesn't abort the run. */
+ * dropped from the set so a missing legacy-singular-family table doesn't abort
+ * the run. */
 async function truncateTables(sql: Sql, tables: string[]): Promise<void> {
   const present: string[] = [];
   for (const table of tables) {
@@ -397,10 +396,15 @@ const str = (v: unknown): string | null =>
  * Every base table in public+auth must be listed here (touched below) or in
  * KEPT_TABLES (reviewed as non-PII). Any table the script doesn't know is a
  * hard error BEFORE any writes: on 2026-07-10 the first real-data run found
- * prod carries singular-named better-auth tables (auth.user,
- * auth.oauth_access_token, …) alongside the plural ones the repo schema
- * defines — 4.9k raw emails and 37k tokens would have sailed through
- * silently. Schema drift must stop the run, not leak.
+ * prod carries singular-named legacy auth tables (auth.user,
+ * auth.oauth_access_token, …) — leftovers from an earlier auth setup that
+ * pre-dates the repo's current NextAuth adapter (packages/auth's
+ * MDPGDrizzleAdapter, which reads/writes the repo's own plural
+ * users/auth_accounts/auth_sessions/auth_verification_tokens tables). Not
+ * written to by any active code path, but still physically present —
+ * alongside the plural ones the repo schema defines — 4.9k raw emails and
+ * 37k tokens would have sailed through silently. Schema drift must stop the
+ * run, not leak.
  */
 const KEPT_TABLES = new Set([
   "public.achievements_x_users",
@@ -499,8 +503,8 @@ async function obfuscate(sql: Sql): Promise<void> {
   // and API key destroyed already — the safest state a partial run can be in
   // — rather than leaving them intact for the longest possible window.
   //
-  // Both naming generations: the plural tables from the repo schema and the
-  // singular better-auth ones that exist on prod.
+  // Both naming generations: the plural tables the repo's own NextAuth
+  // adapter uses, and the singular legacy ones that still exist on prod.
   for (const table of [
     "auth_sessions",
     "auth_verification_tokens",
@@ -554,7 +558,7 @@ async function obfuscate(sql: Sql): Promise<void> {
           SET client_secret_hash = encode(sha256(('revoked:' || id)::bytea), 'hex')`,
   });
 
-  // ---- auth.oauth_client (singular, better-auth): plaintext secret ----------
+  // ---- auth.oauth_client (singular, legacy): plaintext secret ---------------
   await runSetBased(sql, {
     table: "auth.oauth_client",
     column: "client_secret",
@@ -1017,9 +1021,10 @@ async function obfuscate(sql: Sql): Promise<void> {
     });
   }
 
-  // ---- auth.user (better-auth's own user table, singular) -------------------
-  // Prod carries better-auth's singular-named tables alongside the repo
-  // schema's plural ones; this one holds live emails and real names.
+  // ---- auth.user (legacy, singular) ------------------------------------------
+  // Prod carries these legacy singular-named tables (pre-dating the repo's
+  // current NextAuth adapter) alongside the plural ones the adapter actually
+  // uses; this one holds live emails and real names.
   await transformTable(sql, {
     table: "auth.user",
     pk: "id",
@@ -1056,7 +1061,7 @@ async function obfuscate(sql: Sql): Promise<void> {
     },
   });
 
-  // ---- auth.user.id: better-auth keys users by EMAIL ADDRESS ----------------
+  // ---- auth.user.id: this legacy table keys users by EMAIL ADDRESS ----------
   // The primary key itself is PII (real-data finding, 2026-07-10). Rewrite ids
   // through the same memoized fakeEmail as the email columns, so id === email
   // consistency holds. Snapshot ids first (a keyset cursor over a mutating pk
@@ -1088,6 +1093,10 @@ async function obfuscate(sql: Sql): Promise<void> {
       for (let length = 12; used.has(fake); length += 4) {
         fake = `user-${hashHex(id, length)}@${OBFUSCATED_EMAIL_DOMAIN}`;
       }
+      // Register the (possibly disambiguated) fake in the same map fakeEmail()
+      // itself uses, so a later fakeEmail() call can't independently generate
+      // and reissue this exact value for a different input.
+      emailFakesInUse.set(fake, id.trim().toLowerCase());
       n += 1;
       if (!DRY_RUN) {
         await sql`
@@ -1144,6 +1153,12 @@ function printSummary(): void {
   console.log("");
 }
 
+// Below this, brute-forcing the salt itself (rather than just rebuilding a
+// rainbow table over candidate PII with a known salt) becomes the cheaper
+// attack — 32 chars of a typical secret-manager-generated token is ~192 bits
+// of entropy, comfortably out of reach.
+const MIN_SALT_LENGTH = 32;
+
 async function main(): Promise<void> {
   const salt = process.env.OBFUSCATION_SALT;
   if (!salt) {
@@ -1152,6 +1167,13 @@ async function main(): Promise<void> {
         "random secret stored outside source control (e.g. the prod secret " +
         "manager), not a value committed to this (public) repo — see " +
         "docs/STAGING_REFRESH.md.",
+    );
+  }
+  if (salt.length < MIN_SALT_LENGTH) {
+    throw new Error(
+      `Refusing to run: OBFUSCATION_SALT is ${salt.length} chars, below the ` +
+        `${MIN_SALT_LENGTH}-char minimum. A short salt is guessable and ` +
+        `defeats the point — generate one from the prod secret manager.`,
     );
   }
   SALT = salt;
@@ -1177,7 +1199,7 @@ async function main(): Promise<void> {
       `Refusing to run: DATABASE_URL points at database "${urlDbName}" but --allow-db is "${ALLOW_DB}".`,
     );
   }
-  if (FORBIDDEN_DB_NAMES.has(ALLOW_DB) || /prod/i.test(ALLOW_DB)) {
+  if (looksLikeProdDbName(ALLOW_DB)) {
     throw new Error(
       `Refusing to run: database name "${ALLOW_DB}" is (or looks like) production. Obfuscate a copy, never the source.`,
     );
