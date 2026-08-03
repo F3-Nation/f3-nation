@@ -52,7 +52,7 @@ function cleanItem(raw: string): string {
     .trim();
 }
 
-function parseChangelog(markdown: string): ChangelogEntry[] {
+export function parseChangelog(markdown: string): ChangelogEntry[] {
   const entries: ChangelogEntry[] = [];
   let entry: ChangelogEntry | null = null;
   let section: ChangelogSection | null = null;

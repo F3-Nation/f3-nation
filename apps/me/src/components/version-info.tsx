@@ -27,10 +27,10 @@ function formatDate(iso: string): string {
 
 export function VersionInfo({ version, channel, changelog }: VersionInfoProps) {
   return (
-    <div className="fixed bottom-3 left-3 z-50">
+    <div className="mx-auto max-w-5xl px-4 pt-0 pb-2">
       <Dialog>
         <DialogTrigger asChild>
-          <button className="inline-flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground/60 transition-colors hover:bg-muted hover:text-muted-foreground">
+          <button className="inline-flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium text-primary underline underline-offset-2 transition-colors hover:text-primary/80">
             <span>v{version}</span>
             <span>({channel})</span>
           </button>

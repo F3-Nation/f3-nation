@@ -41,14 +41,14 @@ export default function RootLayout({
           <SaveProvider>
             <Navbar />
             <main className="min-h-[calc(100vh-3.5rem)]">{children}</main>
+            <VersionInfo
+              version={packageJson.version}
+              channel={channel}
+              changelog={changelog}
+            />
           </SaveProvider>
         </AuthProvider>
         <Toaster />
-        <VersionInfo
-          version={packageJson.version}
-          channel={channel}
-          changelog={changelog}
-        />
       </body>
     </html>
   );
