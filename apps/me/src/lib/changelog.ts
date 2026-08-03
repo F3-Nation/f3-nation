@@ -87,7 +87,18 @@ export function parseChangelog(markdown: string): ChangelogEntry[] {
   return entries.filter((e) => e.sections.length > 0);
 }
 
+let cachedChangelog: ChangelogEntry[] | null = null;
+
 export function getChangelog(): ChangelogEntry[] {
-  const file = join(process.cwd(), "CHANGELOG.md");
-  return parseChangelog(readFileSync(file, "utf8"));
+  if (cachedChangelog !== null) {
+    return cachedChangelog;
+  }
+
+  try {
+    const file = join(process.cwd(), "CHANGELOG.md");
+    cachedChangelog = parseChangelog(readFileSync(file, "utf8"));
+    return cachedChangelog;
+  } catch {
+    return [];
+  }
 }
