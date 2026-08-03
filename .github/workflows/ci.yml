@@ -348,7 +348,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [admin, api, auth, map, me, slackbot]
+        app: [admin, analytics, api, auth, map, me, slackbot]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:

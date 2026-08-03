@@ -1,0 +1,9 @@
+{
+  "name": "f3-analytics",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "test": "uv run pytest",
+    "lint": "bash ./scripts/lint.sh"
+  }
+}

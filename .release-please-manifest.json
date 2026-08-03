@@ -6,6 +6,7 @@
   "apps/map": "7.0.9",
   "apps/me": "2.1.3",
   "apps/slackbot": "2.1.3",
+  "apps/analytics": "0.1.0",
   "packages/api": "0.4.1",
   "packages/auth": "0.1.5",
   "packages/db": "0.2.0",
