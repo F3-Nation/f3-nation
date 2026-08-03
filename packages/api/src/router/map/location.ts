@@ -286,11 +286,13 @@ export const mapLocationRouter = os.router({
               isNull(schema.eventInstances.seriesId),
               and(
                 isNotNull(schema.eventInstances.seriesId),
-                // Pin a series occurrence that isn't at its parent's location: the
-                // parent roves (null location) or this occurrence sits elsewhere.
-                // Keep isNull explicit — `ne` is NULL (not true) when a side is NULL.
+                // Include a series occurrence not at its parent's location:
+                // either side null, or the two differ. Both isNull arms are
+                // required — `ne` yields NULL (not true) when a side is NULL,
+                // which would silently drop those rows.
                 or(
                   isNull(seriesEvent.locationId),
+                  isNull(schema.eventInstances.locationId),
                   ne(schema.eventInstances.locationId, seriesEvent.locationId),
                 ),
               ),

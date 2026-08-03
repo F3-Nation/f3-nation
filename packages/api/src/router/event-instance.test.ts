@@ -1290,6 +1290,115 @@ describe("Event Instance Router", () => {
       expect(result.endTime).toBe("0615");
     });
 
+    // The join-table branches of crupdate: presence of the key decides whether
+    // the association is rewritten, mirroring the startTime/endTime cases above.
+    it("should clear the event type association when eventTypeId is null, and preserve it when omitted", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create region");
+
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create AO");
+
+      const eventType = await createTestEventType();
+      if (!eventType) throw new Error("Failed to create event type");
+
+      const instance = await createTestEventInstance(ao.id);
+      if (!instance) throw new Error("Failed to create event instance");
+
+      const client = createTestClient();
+
+      const readAssociations = async () =>
+        db
+          .select({
+            eventTypeId: schema.eventInstancesXEventTypes.eventTypeId,
+          })
+          .from(schema.eventInstancesXEventTypes)
+          .where(
+            eq(schema.eventInstancesXEventTypes.eventInstanceId, instance.id),
+          );
+
+      // Set the association.
+      await client.eventInstance.crupdate({
+        id: instance.id,
+        orgId: ao.id,
+        startDate: instance.startDate,
+        eventTypeId: eventType.id,
+      });
+      expect(await readAssociations()).toEqual([{ eventTypeId: eventType.id }]);
+
+      // Key omitted entirely — the association must survive untouched.
+      await client.eventInstance.crupdate({
+        id: instance.id,
+        orgId: ao.id,
+        startDate: instance.startDate,
+      });
+      expect(await readAssociations()).toEqual([{ eventTypeId: eventType.id }]);
+
+      // Explicit null clears it.
+      await client.eventInstance.crupdate({
+        id: instance.id,
+        orgId: ao.id,
+        startDate: instance.startDate,
+        eventTypeId: null,
+      });
+      expect(await readAssociations()).toEqual([]);
+    });
+
+    // Regression: the association is rewritten as DELETE-then-INSERT. A bogus
+    // eventTypeId violates event_instances_x_event_types_event_type_id_fkey on
+    // the INSERT — i.e. after the DELETE has already run. Without a surrounding
+    // transaction the delete commits on its own and the caller silently loses
+    // the association they never asked to remove.
+    it("should roll back the event type association when the rewrite fails mid-flow", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create region");
+
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create AO");
+
+      const eventType = await createTestEventType();
+      if (!eventType) throw new Error("Failed to create event type");
+
+      const instance = await createTestEventInstance(ao.id);
+      if (!instance) throw new Error("Failed to create event instance");
+
+      const client = createTestClient();
+
+      await client.eventInstance.crupdate({
+        id: instance.id,
+        orgId: ao.id,
+        startDate: instance.startDate,
+        eventTypeId: eventType.id,
+      });
+
+      await expect(
+        client.eventInstance.crupdate({
+          id: instance.id,
+          orgId: ao.id,
+          startDate: instance.startDate,
+          eventTypeId: 999999999,
+        }),
+      ).rejects.toThrow();
+
+      const associations = await db
+        .select({
+          eventTypeId: schema.eventInstancesXEventTypes.eventTypeId,
+        })
+        .from(schema.eventInstancesXEventTypes)
+        .where(
+          eq(schema.eventInstancesXEventTypes.eventInstanceId, instance.id),
+        );
+
+      // Still the original association, not an empty set.
+      expect(associations).toEqual([{ eventTypeId: eventType.id }]);
+    });
+
     it("should create event instance with seriesException", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);

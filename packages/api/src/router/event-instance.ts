@@ -661,57 +661,61 @@ export const eventInstanceRouter = {
         ...eventData
       } = input;
 
-      // Create or update the event instance
-      const [result] = await ctx.db
-        .insert(schema.eventInstances)
-        .values({
-          ...eventData,
-          name,
-          isActive,
-        })
-        .onConflictDoUpdate({
-          target: [schema.eventInstances.id],
-          set: { ...eventData, name, isActive },
-        })
-        .returning();
+      const result = await ctx.db.transaction(async (tx) => {
+        // Create or update the event instance
+        const [upserted] = await tx
+          .insert(schema.eventInstances)
+          .values({
+            ...eventData,
+            name,
+            isActive,
+          })
+          .onConflictDoUpdate({
+            target: [schema.eventInstances.id],
+            set: { ...eventData, name, isActive },
+          })
+          .returning();
 
-      if (!result) {
-        throw new ORPCError("INTERNAL_SERVER_ERROR", {
-          message: "Failed to create/update event instance",
-        });
-      }
-
-      // Handle event type in join table
-      if (shouldUpdateEventType) {
-        await ctx.db
-          .delete(schema.eventInstancesXEventTypes)
-          .where(
-            eq(schema.eventInstancesXEventTypes.eventInstanceId, result.id),
-          );
-
-        if (eventTypeId != null) {
-          await ctx.db.insert(schema.eventInstancesXEventTypes).values({
-            eventInstanceId: result.id,
-            eventTypeId,
+        if (!upserted) {
+          throw new ORPCError("INTERNAL_SERVER_ERROR", {
+            message: "Failed to create/update event instance",
           });
         }
-      }
 
-      // Handle event tag in join table
-      if (shouldUpdateEventTag) {
-        await ctx.db
-          .delete(schema.eventTagsXEventInstances)
-          .where(
-            eq(schema.eventTagsXEventInstances.eventInstanceId, result.id),
-          );
+        // Handle event type in join table
+        if (shouldUpdateEventType) {
+          await tx
+            .delete(schema.eventInstancesXEventTypes)
+            .where(
+              eq(schema.eventInstancesXEventTypes.eventInstanceId, upserted.id),
+            );
 
-        if (eventTagId != null) {
-          await ctx.db.insert(schema.eventTagsXEventInstances).values({
-            eventInstanceId: result.id,
-            eventTagId,
-          });
+          if (eventTypeId != null) {
+            await tx.insert(schema.eventInstancesXEventTypes).values({
+              eventInstanceId: upserted.id,
+              eventTypeId,
+            });
+          }
         }
-      }
+
+        // Handle event tag in join table
+        if (shouldUpdateEventTag) {
+          await tx
+            .delete(schema.eventTagsXEventInstances)
+            .where(
+              eq(schema.eventTagsXEventInstances.eventInstanceId, upserted.id),
+            );
+
+          if (eventTagId != null) {
+            await tx.insert(schema.eventTagsXEventInstances).values({
+              eventInstanceId: upserted.id,
+              eventTagId,
+            });
+          }
+        }
+
+        return upserted;
+      });
 
       return result;
     }),

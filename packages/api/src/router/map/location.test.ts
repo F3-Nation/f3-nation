@@ -867,6 +867,83 @@ describe("Map Location Router", () => {
       );
     });
 
+    // Regression: the sibling "locationless series exception" test above passes
+    // on the seriesException arm of the predicate and never reaches the location
+    // comparison. This case has NO exception and a *located* parent, so it lands
+    // squarely on that comparison — where `ne(NULL, parentLocationId)` yields SQL
+    // NULL rather than true, silently dropping the row until an explicit
+    // isNull(eventInstances.locationId) arm was added.
+    it("should include a locationless instance of a located series when no exception applies", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create test AO");
+
+      const parentLocation = await createTestLocation(region.id);
+      if (!parentLocation) throw new Error("Failed to create test location");
+
+      const [event] = await db
+        .insert(schema.events)
+        .values({
+          name: `Located Series ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: parentLocation.id,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          isActive: true,
+          highlight: false,
+          startDate: "2026-01-01",
+          isPrivate: false,
+        })
+        .returning();
+
+      if (!event) throw new Error("Failed to create located series event");
+      createdEventIds.push(event.id);
+
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const startDate = tomorrow.toISOString().slice(0, 10);
+
+      await db.insert(schema.eventInstances).values({
+        name: `Locationless Instance ${uniqueId()}`,
+        orgId: ao.id,
+        seriesId: event.id,
+        // The occurrence itself has no location — this is the NULL side that
+        // made the parent-location comparison unknown.
+        locationId: null,
+        startDate,
+        startTime: "0600",
+        endTime: "0700",
+        isActive: true,
+        highlight: false,
+        isPrivate: false,
+        seriesException: null,
+      });
+
+      const client = createTestClient();
+      const result = await client.map.location.upcomingInstances();
+
+      const locationless = result.find(
+        (instance) => instance.seriesId === event.id,
+      );
+
+      expect(locationless).toEqual(
+        expect.objectContaining({
+          seriesId: event.id,
+          locationId: null,
+          seriesException: null,
+          // No coordinates, so the client's merge step skips marker creation —
+          // same contract as the locationless exception case above.
+          lat: null,
+          lon: null,
+        }),
+      );
+    });
+
     it("should exclude an instance whose location is inactive", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
