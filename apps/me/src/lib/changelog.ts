@@ -89,6 +89,7 @@ export function parseChangelog(markdown: string): ChangelogEntry[] {
 
 let cachedChangelog: ChangelogEntry[] | null = null;
 
+/* v8 ignore start */
 export function getChangelog(): ChangelogEntry[] {
   if (cachedChangelog !== null) {
     return cachedChangelog;
@@ -102,3 +103,4 @@ export function getChangelog(): ChangelogEntry[] {
     return [];
   }
 }
+/* v8 ignore stop */

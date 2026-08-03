@@ -30,7 +30,10 @@ export function VersionInfo({ version, channel, changelog }: VersionInfoProps) {
     <div className="mx-auto max-w-5xl px-4 pt-0 pb-2">
       <Dialog>
         <DialogTrigger asChild>
-          <button className="inline-flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium text-primary underline underline-offset-2 transition-colors hover:text-primary/80">
+          <button
+            type="button"
+            className="inline-flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium text-primary underline underline-offset-2 transition-colors hover:text-primary/80"
+          >
             <span>v{version}</span>
             <span>({channel})</span>
           </button>
