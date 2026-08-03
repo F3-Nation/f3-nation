@@ -23,20 +23,10 @@ export default [
             "Use the log* helpers (logDebug/logInfo/logError/…) instead of the raw pino logger. Reserve `logger` for `logger.child()`.",
         },
         {
-          // Any constructed throw that isn't an ORPCError: `new Error`,
-          // `new TypeError`, a custom `new DomainError`, etc. Negating the name
-          // rather than listing constructors means a new error class is covered
-          // the day it's written. Bare `throw err` (a rethrow) is an Identifier,
-          // not a NewExpression, so it stays allowed.
           selector: "ThrowStatement > NewExpression[callee.name!='ORPCError']",
           message: ORPC_ERROR_MESSAGE,
         },
         {
-          // The no-`new` call form — `throw Error("...")` is valid JS and just
-          // as masked. Limited to the built-in error constructors on purpose:
-          // a blanket CallExpression selector would also flag factory helpers
-          // that return an ORPCError (e.g. `throw mapSlackError(...)` in
-          // src/router/slack.ts).
           selector:
             "ThrowStatement > CallExpression[callee.name=/^(Error|AggregateError|EvalError|RangeError|ReferenceError|SyntaxError|TypeError|URIError)$/]",
           message: ORPC_ERROR_MESSAGE,
