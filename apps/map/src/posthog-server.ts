@@ -25,6 +25,14 @@ function getPostHogServer(): PostHog | undefined {
     host: "https://us.i.posthog.com",
     flushAt: 1,
     flushInterval: 0,
+    // This is awaited synchronously from request-error instrumentation — a
+    // PostHog outage or slow network must not degrade error handling. The
+    // SDK's defaults (10s timeout, 3 retries) could otherwise block for
+    // 30+s; bound it tightly and skip retries (this is a fire-once error
+    // report, not data that must land — a failure is already logged by the
+    // catch below).
+    requestTimeout: 3000,
+    fetchRetryCount: 0,
   });
   return client;
 }
@@ -45,9 +53,11 @@ export async function captureServerException(
   // Swallow transport failures — this is awaited from the request-error
   // instrumentation, and error reporting must never break error handling.
   try {
+    // properties spread AFTER environment: a caller-supplied "environment"
+    // key must not be able to overwrite the canonical one.
     await posthog.captureExceptionImmediate(error, undefined, {
-      environment: env.F3_CHANNEL,
       ...properties,
+      environment: env.F3_CHANNEL,
     });
   } catch (reportErr) {
     // Never propagate — but always leave a trace so a PostHog outage (bad
