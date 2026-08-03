@@ -6,6 +6,7 @@ import { and, desc, eq, gt, inArray, isNull, or, schema, sql } from "@acme/db";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
+import { logError } from "../logger";
 import { adminProcedure } from "../shared";
 
 const createApiKeySchema = z.object({
@@ -307,7 +308,16 @@ export const apiKeyRouter = {
             message: "Unable to generate unique API key. Please try again.",
           });
         }
-        throw error;
+        // An ORPCError raised inside the try (e.g. the missing-role lookup) is
+        // already typed and client-safe, so it passes through untouched.
+        if (error instanceof ORPCError) throw error;
+        // Anything else is an unexpected DB/driver fault. Rethrowing it raw
+        // lets oRPC mask it as an opaque 500 and lose the cause, so log the
+        // original and surface a generic message that leaks no internals.
+        logError("api.api_key.create_failed", { name: input.name }, error);
+        throw new ORPCError("INTERNAL_SERVER_ERROR", {
+          message: "Unable to create API key",
+        });
       }
 
       throw new ORPCError("INTERNAL_SERVER_ERROR", {

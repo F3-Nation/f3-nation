@@ -164,10 +164,26 @@ Pick the code by what actually went wrong, not by what's convenient:
 | Situation                                             | Code                    | Status |
 | ----------------------------------------------------- | ----------------------- | ------ |
 | Missing/invalid input                                 | `BAD_REQUEST`           | 400    |
-| Authenticated but lacks permission for the resource   | `FORBIDDEN`             | 403    |
+| Not signed in, or signed in without the required role | `UNAUTHORIZED`          | 401    |
 | A referenced resource doesn't exist                   | `NOT_FOUND`             | 404    |
 | An upstream/external call failed                      | `BAD_GATEWAY`           | 502    |
 | Truly unexpected server state (should be unreachable) | `INTERNAL_SERVER_ERROR` | 500    |
+
+**On `UNAUTHORIZED` vs `FORBIDDEN`.** Strict HTTP semantics reserve 401 for
+"unauthenticated" and 403 for "authenticated but not permitted". This codebase
+does not split them that way: `UNAUTHORIZED` covers both. Every procedure
+wrapper in [`packages/api/src/shared.ts`](../packages/api/src/shared.ts)
+(`protectedProcedure`, `editorProcedure`, `adminProcedure`,
+`nationAdminProcedure`, `revalidateAuthProcedure`) throws `UNAUTHORIZED` on a
+role failure, and handler-level permission checks match — e.g. the region and
+approval gates in `packages/api/src/router/request.ts`. Raw `UNAUTHORIZED`
+throws outnumber `FORBIDDEN` by more than an order of magnitude.
+
+Follow that convention in new code so clients need only one branch for "you
+can't do this". **Matching the surrounding code here is not a finding** — do not
+file or "fix" an `UNAUTHORIZED` permission check as a miscoded error. If the
+split is ever worth adopting, it is a deliberate repo-wide migration (every
+wrapper, plus the clients that branch on the code), not a per-PR cleanup.
 
 A lint failure from the enforcing rule means the error needs a real
 `ORPCError` code — not a suppression.

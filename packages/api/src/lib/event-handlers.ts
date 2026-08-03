@@ -1,3 +1,4 @@
+import { ORPCError } from "@orpc/server";
 import dayjs from "dayjs";
 import { eq } from "drizzle-orm";
 
@@ -56,7 +57,9 @@ export const updateEvent = async (
   logDebug("api.event.updated", { eventId: updated?.id });
 
   if (!updated) {
-    throw new Error("Failed to update event");
+    throw new ORPCError("NOT_FOUND", {
+      message: "Failed to update event",
+    });
   }
 
   return updated;
@@ -110,7 +113,9 @@ export const insertEvent = async (
     .returning();
 
   if (!event) {
-    throw new Error("Failed to insert event");
+    throw new ORPCError("INTERNAL_SERVER_ERROR", {
+      message: "Failed to insert event",
+    });
   }
 
   return event;

@@ -13,7 +13,7 @@ interface RoleInput {
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
-import { logDebug } from "../logger";
+import { logDebug, logError } from "../logger";
 import {
   buildSingleUserQuery,
   buildUserListQuery,
@@ -499,7 +499,17 @@ export const userRouter = {
               message: `A user with the email address "${_email ?? ""}" already exists. Please use a different email address.`,
             });
           }
-          throw error;
+          // The empty-result ORPCError thrown just above is already typed and
+          // client-safe, so it passes through untouched.
+          if (error instanceof ORPCError) throw error;
+          // Anything else is an unexpected DB/driver fault. Rethrowing it raw
+          // lets oRPC mask it as an opaque 500 and lose the cause, so log the
+          // original and surface a generic message that leaks no internals.
+          // No email in the log context — it is PII.
+          logError("api.user.insert_failed", { userId: input.id }, error);
+          throw new ORPCError("INTERNAL_SERVER_ERROR", {
+            message: "Unable to save user",
+          });
         }
       }
 

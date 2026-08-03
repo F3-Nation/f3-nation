@@ -1,3 +1,4 @@
+import { ORPCError } from "@orpc/server";
 import { eq } from "drizzle-orm";
 
 import { schema } from "@acme/db";
@@ -28,7 +29,9 @@ export const createAO = async (
   const normalizedAoName = aoName?.trim();
 
   if (!normalizedAoName || normalizedAoName.length < 2) {
-    throw new Error("AO name must be at least 2 characters");
+    throw new ORPCError("BAD_REQUEST", {
+      message: "AO name must be at least 2 characters",
+    });
   }
 
   const [ao] = await ctx.db
@@ -44,7 +47,10 @@ export const createAO = async (
     })
     .returning();
 
-  if (!ao) throw new Error("Failed to insert AO");
+  if (!ao)
+    throw new ORPCError("INTERNAL_SERVER_ERROR", {
+      message: "Failed to insert AO",
+    });
   return ao.id;
 };
 
@@ -61,11 +67,15 @@ export const updateAO = async (
     .where(eq(schema.orgs.id, id));
 
   if (!ao) {
-    throw new Error("Failed to find ao to update. Does the AO exist?");
+    throw new ORPCError("NOT_FOUND", {
+      message: "Failed to find ao to update. Does the AO exist?",
+    });
   }
 
   if (ao?.orgType !== "ao") {
-    throw new Error("Organization is not an AO");
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Organization is not an AO",
+    });
   }
 
   const set: Partial<typeof schema.orgs.$inferInsert> = {
@@ -95,7 +105,9 @@ export const updateAO = async (
       .returning();
 
     if (!updatedAO) {
-      throw new Error("Failed to update AO");
+      throw new ORPCError("INTERNAL_SERVER_ERROR", {
+        message: "Failed to update AO",
+      });
     }
 
     return { ...updatedAO, newLocationIds };

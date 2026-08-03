@@ -80,4 +80,49 @@ describe("notifyWebhooks", () => {
       message: "Webhook POST failed: 503 Service Unavailable",
     });
   });
+
+  // A refused connection / DNS failure rejects `fetch` with a TypeError rather
+  // than resolving a non-2xx Response. Untranslated, oRPC masks it as an opaque
+  // 500 — the same masking the non-2xx cases above exist to prevent.
+  it("throws ORPCError BAD_GATEWAY when the GET ping fetch rejects", async () => {
+    const cause = new TypeError("fetch failed");
+    vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(cause);
+
+    let thrown: unknown;
+    try {
+      await notifyWebhooks({ action: "map.deleted" });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(ORPCError);
+    expect(thrown).toMatchObject({
+      code: "BAD_GATEWAY",
+      message: "Webhook GET failed: request could not be completed",
+    });
+    // The original rejection stays reachable for the caller's logError, but the
+    // client-facing message never interpolates it — it can name internal hosts.
+    expect((thrown as ORPCError<never, never>).cause).toBe(cause);
+  });
+
+  it("throws ORPCError BAD_GATEWAY when a POST webhook fetch rejects", async () => {
+    const cause = new TypeError("fetch failed");
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response("", { status: 200 })) // GET ping succeeds
+      .mockRejectedValueOnce(cause);
+
+    let thrown: unknown;
+    try {
+      await notifyWebhooks({ action: "map.updated", orgId: 1 });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(ORPCError);
+    expect(thrown).toMatchObject({
+      code: "BAD_GATEWAY",
+      message: "Webhook POST failed: request could not be completed",
+    });
+    expect((thrown as ORPCError<never, never>).cause).toBe(cause);
+  });
 });

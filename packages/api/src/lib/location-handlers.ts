@@ -1,3 +1,4 @@
+import { ORPCError } from "@orpc/server";
 import { eq } from "drizzle-orm";
 
 import { schema } from "@acme/db";
@@ -46,7 +47,9 @@ export const insertLocation = async (
     .returning();
 
   if (!location) {
-    throw new Error("Failed to insert location");
+    throw new ORPCError("INTERNAL_SERVER_ERROR", {
+      message: "Failed to insert location",
+    });
   }
   return location;
 };
@@ -90,7 +93,9 @@ export const updateLocation = async (
     .returning();
 
   if (!location) {
-    throw new Error("Failed to update location");
+    throw new ORPCError("NOT_FOUND", {
+      message: "Failed to update location",
+    });
   }
 
   return location;
