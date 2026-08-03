@@ -93,6 +93,11 @@ export default function AdminRequestsModal({
   const [selectedAoLogoPreviewUrl, setSelectedAoLogoPreviewUrl] = useState<
     string | null
   >(null);
+  // Set by the active FormComponent (currently only EditLocationRequestForm)
+  // when it needs to block Approve — e.g. the shared-location check hasn't
+  // resolved yet, or is shared and not yet acknowledged. Forms that never
+  // call onApprovalGateChange leave this false (not blocking).
+  const [approvalGateBlocked, setApprovalGateBlocked] = useState(false);
   const {
     data: requestResponse,
     isError,
@@ -287,6 +292,10 @@ export default function AdminRequestsModal({
 
   useEffect(() => {
     if (!request) return;
+    // Reset for the new request — a previous request's block (or lack of
+    // one) must not carry over, especially since a different requestType
+    // may not mount a form that ever calls onApprovalGateChange again.
+    setApprovalGateBlocked(false);
     const requestMeta: Record<string, unknown> | null =
       request.meta && typeof request.meta === "object"
         ? (request.meta as Record<string, unknown>)
@@ -371,6 +380,7 @@ export default function AdminRequestsModal({
                 <FormComponent
                   selectedAoLogoPreviewUrl={selectedAoLogoPreviewUrl}
                   onAoLogoFileChange={handleAoLogoFileChange}
+                  onApprovalGateChange={setApprovalGateBlocked}
                 />
               ) : (
                 <div className="mt-4 rounded-md border border-dashed border-muted-foreground/40 p-4 text-sm text-muted-foreground">
@@ -403,7 +413,7 @@ export default function AdminRequestsModal({
                   <Button
                     type="button"
                     className="bg-primary text-white hover:bg-primary/80"
-                    disabled={!FormComponent}
+                    disabled={!FormComponent || approvalGateBlocked}
                     onClick={() => onSubmit()}
                   >
                     {status === "approving" ? (

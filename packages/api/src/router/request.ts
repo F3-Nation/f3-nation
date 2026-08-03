@@ -107,14 +107,6 @@ const normalizeAdminRequestInput = (input: unknown) => {
     normalized.originalEventId ??= normalized.eventId;
   }
 
-  if (normalized.requestType === "edit_location") {
-    // Reaching the admin-approval path means a reviewer is approving via the
-    // EditLocation review form, which surfaces the shared-location warning.
-    // That review IS the acknowledgment, so the server-side shared-location
-    // guard in handleEditLocation should not block an approved request.
-    normalized.acknowledgeShared ??= true;
-  }
-
   if (normalized.requestType === "create_ao_and_location_and_event") {
     normalized.originalRegionId ??=
       meta.originalRegionId ?? normalized.regionId;

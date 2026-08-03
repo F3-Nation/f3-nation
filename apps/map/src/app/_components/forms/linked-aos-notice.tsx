@@ -92,15 +92,23 @@ export const LinkedAosNotice = ({
                 <span className="font-medium">{ao.aoName}</span>
               </div>
               <div className="mt-1 flex flex-wrap gap-1">
-                {ao.events.map((ev) => (
-                  <span
-                    key={ev.id}
-                    className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
-                  >
-                    {ev.name ?? "Workout"} ({getShortDayOfWeek(ev.dayOfWeek)}{" "}
-                    {formatTime(ev.startTime)})
-                  </span>
-                ))}
+                {ao.events.map((ev) => {
+                  const schedule = [
+                    getShortDayOfWeek(ev.dayOfWeek),
+                    formatTime(ev.startTime),
+                  ]
+                    .filter(Boolean)
+                    .join(" ");
+                  return (
+                    <span
+                      key={ev.id}
+                      className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
+                    >
+                      {ev.name ?? "Workout"}
+                      {schedule ? ` (${schedule})` : ""}
+                    </span>
+                  );
+                })}
                 {privateCount > 0 ? (
                   <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                     +{privateCount} private

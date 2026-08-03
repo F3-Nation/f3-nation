@@ -21,6 +21,10 @@ export const {
     eventName: z.string().optional().or(z.literal("")),
     aoName: z.string().optional().or(z.literal("")),
     eventTypeIds: z.array(z.number()).optional(),
+    // edit_location only: the reviewer's explicit acknowledgment that this
+    // location is shared by multiple AOs (see EditLocationRequestForm). Set
+    // via form.setValue, not a visible field on any other request type.
+    acknowledgeShared: z.boolean().optional(),
   }).superRefine((data, ctx) => {
     // "HH:mm" strings compare correctly lexicographically, so a plain string
     // comparison is enough here without parsing to minutes.

@@ -18,7 +18,7 @@ import type {
 } from "@acme/validators/request-schemas";
 import { ORPCError } from "@orpc/server";
 
-import { eq, schema } from "@acme/db";
+import { and, countDistinct, eq, schema } from "@acme/db";
 import { PRESERVED_META_FIELDS } from "@acme/shared/app/types";
 import { RequestInsertSchema } from "@acme/validators";
 
@@ -481,19 +481,19 @@ export const handleEditLocation = async (
   // shares this location, the edit affects all of them, so require an explicit
   // acknowledgment before mutating the shared row.
   if (!request.acknowledgeShared) {
-    const rows = await ctx.db
-      .select({
-        orgId: schema.events.orgId,
-        isActive: schema.events.isActive,
-      })
+    const [row] = await ctx.db
+      .select({ activeAoCount: countDistinct(schema.events.orgId) })
       .from(schema.events)
-      .where(eq(schema.events.locationId, request.originalLocationId));
-    const activeAoIds = new Set(
-      rows.filter((r) => r.isActive).map((r) => r.orgId),
-    );
-    if (activeAoIds.size > 1) {
+      .where(
+        and(
+          eq(schema.events.locationId, request.originalLocationId),
+          eq(schema.events.isActive, true),
+        ),
+      );
+    const activeAoCount = row?.activeAoCount ?? 0;
+    if (activeAoCount > 1) {
       throw new ORPCError("CONFLICT", {
-        message: `This location is shared by ${activeAoIds.size} AOs; the edit must be acknowledged before saving because it affects all of them.`,
+        message: `This location is shared by ${activeAoCount} AOs; the edit must be acknowledged before saving because it affects all of them.`,
       });
     }
   }

@@ -365,6 +365,11 @@ export const locationRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
+      // A defensive cap, not a real limit: any genuine F3 location shares
+      // among a handful of AOs with a handful of events each. This only
+      // guards against a corrupted-data or pathological location — nothing
+      // realistic should ever come close to it.
+      const ROW_LIMIT = 2000;
       const rows = await ctx.db
         .select({
           aoId: schema.orgs.id,
@@ -383,7 +388,8 @@ export const locationRouter = {
             eq(schema.events.locationId, input.locationId),
             eq(schema.events.isActive, true),
           ),
-        );
+        )
+        .limit(ROW_LIMIT);
 
       const byAo = new Map<
         number,
