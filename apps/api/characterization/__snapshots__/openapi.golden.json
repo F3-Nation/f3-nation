@@ -9437,12 +9437,242 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {},
-                    {
-                      "not": {}
-                    }
-                  ]
+                  "description": "Upcoming event instances for map pin status flagging",
+                  "items": {
+                    "properties": {
+                      "aoLogo": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "AO logo URL"
+                      },
+                      "aoName": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "AO name"
+                      },
+                      "endTime": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "Instance end time"
+                      },
+                      "eventTypes": {
+                        "description": "Event types, empty array when none are linked",
+                        "items": {
+                          "properties": {
+                            "id": {
+                              "description": "Event type ID",
+                              "type": "number"
+                            },
+                            "name": {
+                              "description": "Event type name",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name"
+                          ],
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "fullAddress": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "Address assembled from the location columns"
+                      },
+                      "highlight": {
+                        "description": "Whether the instance is highlighted",
+                        "type": "boolean"
+                      },
+                      "id": {
+                        "description": "Event instance ID",
+                        "type": "number"
+                      },
+                      "lat": {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "Location latitude"
+                      },
+                      "locationAddress": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "Street address"
+                      },
+                      "locationAddress2": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "Street address line 2"
+                      },
+                      "locationCity": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "City"
+                      },
+                      "locationCountry": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "Country"
+                      },
+                      "locationId": {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "Location ID, null when the instance has no location"
+                      },
+                      "locationState": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "State"
+                      },
+                      "lon": {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "Location longitude"
+                      },
+                      "name": {
+                        "description": "Instance name",
+                        "type": "string"
+                      },
+                      "seriesException": {
+                        "anyOf": [
+                          {
+                            "enum": [
+                              "closed",
+                              "different-time",
+                              "miscellaneous"
+                            ],
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "Series exception type, null when not an exception"
+                      },
+                      "seriesId": {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "Parent series event ID, null for one-off instances"
+                      },
+                      "startDate": {
+                        "description": "Instance start date (YYYY-MM-DD)",
+                        "type": "string"
+                      },
+                      "startTime": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "Instance start time"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "seriesId",
+                      "locationId",
+                      "startDate",
+                      "startTime",
+                      "endTime",
+                      "seriesException",
+                      "highlight",
+                      "name",
+                      "lat",
+                      "lon",
+                      "aoName",
+                      "aoLogo",
+                      "locationAddress",
+                      "locationAddress2",
+                      "locationCity",
+                      "locationState",
+                      "locationCountry",
+                      "eventTypes",
+                      "fullAddress"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
                 }
               }
             },
