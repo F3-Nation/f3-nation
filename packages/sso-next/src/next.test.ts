@@ -240,6 +240,20 @@ describe("handleCallbackRoute", () => {
     refreshTokenMaxAge: 2592000,
   };
 
+  it("uses the configured state lifetime and rejects an expired state", async () => {
+    const adapter = makeMockAdapter();
+    const { request } = await makeValidCallbackRequest();
+
+    // stateMaxAgeMs: 0 means any state is immediately expired.
+    const response = await handleCallbackRoute(request, {
+      ...BASE_CONFIG,
+      adapter,
+      stateMaxAgeMs: 0,
+    });
+
+    expect(response.headers.get("location")).toContain("error=expired_state");
+  });
+
   it("redirects to returnTo on success and sets auth cookies", async () => {
     const adapter = makeMockAdapter();
     const { request } = await makeValidCallbackRequest();

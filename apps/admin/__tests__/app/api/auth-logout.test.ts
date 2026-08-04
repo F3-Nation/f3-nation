@@ -98,12 +98,16 @@ describe("Auth /logout route (admin)", () => {
   });
 
   describe("GET", () => {
-    it("redirects to the auth-server logout URL for browser navigations", async () => {
+    it("redirects to the auth-server logout URL and clears all auth cookies", async () => {
       const { GET } = await import("~/app/api/auth/logout/route");
       const response = await GET();
 
       expect(response.status).toBe(302);
       expect(response.headers.get("location")).toContain("api/oauth/logout");
+
+      const setCookie = response.headers.getSetCookie();
+      const cleared = setCookie.filter((c) => c.includes("Max-Age=0"));
+      expect(cleared.length).toBeGreaterThanOrEqual(4);
     });
   });
 });
