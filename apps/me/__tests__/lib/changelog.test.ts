@@ -66,6 +66,19 @@ describe("parseChangelog", () => {
     expect(fixes.items[0]).toBe("fix avatar crop on mobile");
   });
 
+  it("strips PR and commit reference links from Release-Please items", () => {
+    const md = `
+## [1.0.0](https://example.com) (2024-01-01)
+
+### Bug Fixes
+
+- **me:** fix avatar crop on mobile ([#662](https://github.com/F3-Nation/f3-nation/issues/662)) ([70375fc](https://github.com/F3-Nation/f3-nation/commit/70375fc0b396b9f8f0aefd74b407a4ba9aae3b7f))
+`;
+    const entries = parseChangelog(md);
+    const fixes = entries[0]!.sections.find((s) => s.title === "Bug Fixes")!;
+    expect(fixes.items[0]).toBe("fix avatar crop on mobile");
+  });
+
   it("returns empty array for empty input", () => {
     expect(parseChangelog("")).toEqual([]);
   });

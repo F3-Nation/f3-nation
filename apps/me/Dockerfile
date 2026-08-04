@@ -65,7 +65,7 @@ RUN addgroup --system --gid 1001 nodejs && \
 COPY --from=installer --chown=me:nodejs /app/apps/me/.next/standalone ./
 COPY --from=installer --chown=me:nodejs /app/apps/me/.next/static ./apps/me/.next/static
 COPY --from=installer --chown=me:nodejs /app/apps/me/public ./apps/me/public
-COPY --from=installer --chown=me:nodejs /app/apps/me/CHANGELOG.md ./
+COPY --from=installer --chown=me:nodejs /app/apps/me/CHANGELOG.md ./apps/me/CHANGELOG.md
 
 USER me
 

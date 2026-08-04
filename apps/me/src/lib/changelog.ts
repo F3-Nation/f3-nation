@@ -2,6 +2,8 @@ import "server-only";
 import { readFileSync } from "fs";
 import { join } from "path";
 
+import { logWarn } from "@/lib/logging";
+
 interface ChangelogSection {
   title: string;
   items: string[];
@@ -97,7 +99,8 @@ export function getChangelog(): ChangelogEntry[] {
   try {
     const file = join(process.cwd(), "CHANGELOG.md");
     cachedChangelog = parseChangelog(readFileSync(file, "utf8"));
-  } catch {
+  } catch (err) {
+    logWarn("me.changelog.read_failed", { cwd: process.cwd(), err });
     cachedChangelog = [];
   }
   return cachedChangelog;

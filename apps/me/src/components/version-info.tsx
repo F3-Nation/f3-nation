@@ -7,6 +7,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@acme/ui/dialog";
+import { VersionInfo as VersionInfoBase } from "@acme/ui/version-info";
 
 import type { ChangelogEntry } from "@/lib/changelog";
 
@@ -17,8 +18,9 @@ interface VersionInfoProps {
 }
 
 function formatDate(iso: string): string {
-  const [year, month, day] = iso.split("-").map(Number);
-  return new Date(year!, month! - 1, day).toLocaleDateString("en-US", {
+  const d = new Date(`${iso}T00:00:00`);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-US", {
     year: "numeric",
     month: "long",
     day: "numeric",
@@ -32,10 +34,13 @@ export function VersionInfo({ version, channel, changelog }: VersionInfoProps) {
         <DialogTrigger asChild>
           <button
             type="button"
-            className="inline-flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium text-primary underline underline-offset-2 transition-colors hover:text-primary/80"
+            className="rounded transition-colors hover:bg-muted"
           >
-            <span>v{version}</span>
-            <span>({channel})</span>
+            <VersionInfoBase
+              versionLabel={<span>v{version}</span>}
+              channel={channel}
+              className="cursor-pointer px-1.5 py-0.5 text-xs font-medium text-muted-foreground/60 hover:text-muted-foreground"
+            />
           </button>
         </DialogTrigger>
         <DialogContent className="max-h-[80vh] overflow-y-auto">
