@@ -14,15 +14,5 @@ export const sso = createSsoAdapter(() => {
   };
 });
 
-// Re-export individual helpers for files that import them by name.
-const getOAuthConfig = () => sso.getOAuthConfig();
-const getAuthorizationUrl = (
-  p: Parameters<typeof sso.getAuthorizationUrl>[0],
-) => sso.getAuthorizationUrl(p);
-const exchangeCodeForToken = (
-  p: Parameters<typeof sso.exchangeCodeForToken>[0],
-) => sso.exchangeCodeForToken(p);
-const getUserInfo = (token: string) => sso.getUserInfo(token);
 export const refreshToken = (p: Parameters<typeof sso.refreshToken>[0]) =>
   sso.refreshToken(p);
-const revokeToken = (token: string) => sso.revokeToken(token);

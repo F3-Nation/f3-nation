@@ -349,7 +349,7 @@ describe("handleCallbackRoute", () => {
 describe("handleLogoutRoute", () => {
   it("returns JSON with ok and redirectTo", async () => {
     const adapter = makeMockAdapter();
-    const response = await handleLogoutRoute(async () => "rt_old", {
+    const response = await handleLogoutRoute(() => Promise.resolve("rt_old"), {
       adapter,
       cookieNames: TEST_COOKIE_NAMES,
       postLogoutRedirectUri: "https://app.test?logged_out=true",
@@ -364,28 +364,30 @@ describe("handleLogoutRoute", () => {
   });
 
   it("calls revokeToken with the refresh token", async () => {
-    const adapter = makeMockAdapter();
-    await handleLogoutRoute(async () => "my_refresh_token", {
+    const revokeToken = vi.fn().mockResolvedValue(undefined);
+    const adapter = makeMockAdapter({ revokeToken });
+    await handleLogoutRoute(() => Promise.resolve("my_refresh_token"), {
       adapter,
       cookieNames: TEST_COOKIE_NAMES,
       postLogoutRedirectUri: "https://app.test?logged_out=true",
     });
-    expect(adapter.revokeToken).toHaveBeenCalledWith("my_refresh_token");
+    expect(revokeToken).toHaveBeenCalledWith("my_refresh_token");
   });
 
   it("skips revokeToken when there is no refresh token", async () => {
-    const adapter = makeMockAdapter();
-    await handleLogoutRoute(async () => undefined, {
+    const revokeToken = vi.fn().mockResolvedValue(undefined);
+    const adapter = makeMockAdapter({ revokeToken });
+    await handleLogoutRoute(() => Promise.resolve(undefined), {
       adapter,
       cookieNames: TEST_COOKIE_NAMES,
       postLogoutRedirectUri: "https://app.test?logged_out=true",
     });
-    expect(adapter.revokeToken).not.toHaveBeenCalled();
+    expect(revokeToken).not.toHaveBeenCalled();
   });
 
   it("clears all auth cookies", async () => {
     const adapter = makeMockAdapter();
-    const response = await handleLogoutRoute(async () => undefined, {
+    const response = await handleLogoutRoute(() => Promise.resolve(undefined), {
       adapter,
       cookieNames: TEST_COOKIE_NAMES,
       postLogoutRedirectUri: "https://app.test?logged_out=true",
@@ -399,7 +401,7 @@ describe("handleLogoutRoute", () => {
     const adapter = makeMockAdapter({
       revokeToken: vi.fn().mockRejectedValue(new Error("revoke failed")),
     });
-    const response = await handleLogoutRoute(async () => "rt", {
+    const response = await handleLogoutRoute(() => Promise.resolve("rt"), {
       adapter,
       cookieNames: TEST_COOKIE_NAMES,
       postLogoutRedirectUri: "https://app.test?logged_out=true",

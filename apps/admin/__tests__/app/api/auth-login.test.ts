@@ -11,7 +11,7 @@ vi.mock("@f3nation/sso", async (importOriginal) => ({
   createOAuthLoginFlowArtifacts: vi.fn(),
 }));
 
-vi.mock("@/lib/auth/oauth", () => ({
+vi.mock("~/lib/auth/oauth", () => ({
   sso: ssoMock,
 }));
 
@@ -20,13 +20,11 @@ import { createOAuthLoginFlowArtifacts } from "@f3nation/sso";
 function makeRequest(url: string) {
   return {
     nextUrl: new URL(url),
-    cookies: {
-      get: () => undefined,
-    },
+    cookies: { get: () => undefined },
   } as unknown as NextRequest;
 }
 
-describe("Auth /login route", () => {
+describe("Auth /login route (admin)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(createOAuthLoginFlowArtifacts).mockResolvedValue({
@@ -40,16 +38,18 @@ describe("Auth /login route", () => {
     );
   });
 
-  it("redirects to provider and sets short-lived oauth cookies", async () => {
-    const { GET } = await import("@/app/api/auth/login/route");
+  it("redirects to the auth server and sets short-lived oauth cookies", async () => {
+    const { GET } = await import("~/app/api/auth/login/route");
     const response = await GET(
-      makeRequest("https://me.f3nation.test/api/auth/login?returnTo=/profile"),
+      makeRequest(
+        "https://admin.f3nation.test/api/auth/login?returnTo=/workouts",
+      ),
     );
 
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toContain("oauth-state");
     expect(createOAuthLoginFlowArtifacts).toHaveBeenCalledWith(
-      expect.objectContaining({ returnTo: "/profile" }),
+      expect.objectContaining({ returnTo: "/workouts" }),
     );
     expect(ssoMock.getAuthorizationUrl).toHaveBeenCalledWith({
       state: "oauth-state",
@@ -64,20 +64,36 @@ describe("Auth /login route", () => {
     expect(setCookieHeader).toContain("SameSite=lax");
   });
 
-  it("falls back returnTo and marks cookies secure in prod", async () => {
-    vi.stubEnv("NODE_ENV", "production");
+  it("falls back to '/' when no returnTo is supplied", async () => {
+    const { GET } = await import("~/app/api/auth/login/route");
+    await GET(makeRequest("https://admin.f3nation.test/api/auth/login"));
 
-    const { GET } = await import("@/app/api/auth/login/route");
-    const response = await GET(
+    expect(createOAuthLoginFlowArtifacts).toHaveBeenCalledWith(
+      expect.objectContaining({ returnTo: "/" }),
+    );
+  });
+
+  it("sanitizes unsafe returnTo to the default '/'", async () => {
+    const { GET } = await import("~/app/api/auth/login/route");
+    await GET(
       makeRequest(
-        "https://me.f3nation.test/api/auth/login?returnTo=https://evil.test",
+        "https://admin.f3nation.test/api/auth/login?returnTo=https://evil.test",
       ),
     );
 
-    // Unsafe absolute URL is sanitized to the default fallback.
     expect(createOAuthLoginFlowArtifacts).toHaveBeenCalledWith(
-      expect.objectContaining({ returnTo: "/profile" }),
+      expect.objectContaining({ returnTo: "/" }),
     );
+  });
+
+  it("marks cookies Secure in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+
+    const { GET } = await import("~/app/api/auth/login/route");
+    const response = await GET(
+      makeRequest("https://admin.f3nation.test/api/auth/login"),
+    );
+
     const setCookieHeader = response.headers.get("set-cookie");
     expect(setCookieHeader).toContain("Secure");
 
