@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
 import { handleLogoutRoute } from "@f3nation/sso-next";
 
 import {
@@ -7,6 +8,7 @@ import {
   OAUTH_CSRF_COOKIE_NAME,
   OAUTH_CODE_VERIFIER_COOKIE_NAME,
 } from "~/lib/auth/constants";
+import { env } from "~/env";
 import { sso } from "~/lib/auth/oauth";
 
 const COOKIE_NAMES = {
@@ -17,7 +19,7 @@ const COOKIE_NAMES = {
 };
 
 function buildPostLogoutUri(): string {
-  const siteUrl = process.env.F3_ADMIN_BASE_URL ?? "http://localhost:3002";
+  const siteUrl = env.F3_ADMIN_BASE_URL;
   return `${siteUrl.replace(/\/+$/, "")}/auth/sign-in?logged_out=true`;
 }
 
@@ -34,10 +36,18 @@ export async function POST() {
   });
 }
 
+// GET is used by navigateToSsoLogout() (browser navigation) — redirect
+// directly to the auth-server logout URL instead of returning JSON.
 export async function GET() {
-  return handleLogoutRoute(getRefreshToken, {
+  const result = await handleLogoutRoute(getRefreshToken, {
     adapter: sso,
     cookieNames: COOKIE_NAMES,
     postLogoutRedirectUri: buildPostLogoutUri(),
   });
+  const { redirectTo } = (await result.json()) as { redirectTo: string };
+  const redirect = NextResponse.redirect(redirectTo, 302);
+  for (const cookie of result.headers.getSetCookie()) {
+    redirect.headers.append("set-cookie", cookie);
+  }
+  return redirect;
 }

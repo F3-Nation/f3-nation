@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mockCookieStore = {
+const mockCookieStore = vi.hoisted(() => ({
   get: vi.fn().mockReturnValue({ value: "refresh-token-value" }),
-};
+}));
 
 const ssoMock = vi.hoisted(() => ({
   getOAuthConfig: vi.fn(() => ({
@@ -98,16 +98,12 @@ describe("Auth /logout route (admin)", () => {
   });
 
   describe("GET", () => {
-    it("behaves identically to POST (same handler)", async () => {
+    it("redirects to the auth-server logout URL for browser navigations", async () => {
       const { GET } = await import("~/app/api/auth/logout/route");
       const response = await GET();
-      const data = (await response.json()) as {
-        ok: boolean;
-        redirectTo: string;
-      };
 
-      expect(data.ok).toBe(true);
-      expect(data.redirectTo).toContain("api/oauth/logout");
+      expect(response.status).toBe(302);
+      expect(response.headers.get("location")).toContain("api/oauth/logout");
     });
   });
 });

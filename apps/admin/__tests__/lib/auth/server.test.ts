@@ -1,13 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const cookiesMock = vi.fn();
-const verifyAccessTokenMock = vi.fn();
-const logDebugMock = vi.fn();
-const logWarnMock = vi.fn();
-const getMyProfileMock = vi.fn();
-const redirectMock = vi.fn((path: string) => {
-  throw new Error(`redirect:${path}`);
-});
+const {
+  cookiesMock,
+  verifyAccessTokenMock,
+  logDebugMock,
+  logWarnMock,
+  getMyProfileMock,
+  redirectMock,
+} = vi.hoisted(() => ({
+  cookiesMock: vi.fn(),
+  verifyAccessTokenMock: vi.fn(),
+  logDebugMock: vi.fn(),
+  logWarnMock: vi.fn(),
+  getMyProfileMock: vi.fn(),
+  redirectMock: vi.fn((path: string) => {
+    throw new Error(`redirect:${path}`);
+  }),
+}));
 
 vi.mock("next/headers", () => ({
   cookies: cookiesMock,

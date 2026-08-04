@@ -211,6 +211,8 @@ export interface SsoCallbackRouteConfig {
     user: AuthUser,
     returnTo: string,
   ) => boolean | Promise<boolean>;
+  /** Maximum accepted OAuth state age in milliseconds. @default 600_000 */
+  stateMaxAgeMs?: number;
 }
 
 /**
@@ -229,7 +231,9 @@ export async function handleCallbackRoute(
   const code = searchParams.get("code");
   const stateParam = searchParams.get("state");
   const errorParam = searchParams.get("error");
-  const baseUrl = config.publicOrigin.replace(/\/+$/, "");
+  // Trim trailing slashes without a polynomial regex (CodeQL safe).
+  let baseUrl = config.publicOrigin;
+  while (baseUrl.endsWith("/")) baseUrl = baseUrl.slice(0, -1);
   const returnToParam = config.errorReturnToParam ?? "returnTo";
 
   function errorRedirect(error: string, returnTo?: string): NextResponse {
@@ -244,7 +248,7 @@ export async function handleCallbackRoute(
 
   const state = parseOAuthState(stateParam);
   if (!state) return errorRedirect("invalid_state");
-  if (isOAuthStateExpired(state, 600_000))
+  if (isOAuthStateExpired(state, config.stateMaxAgeMs ?? 600_000))
     return errorRedirect("expired_state");
 
   const csrfCookie = request.cookies.get(config.cookieNames.oauthCsrf)?.value;
@@ -354,9 +358,12 @@ export async function handleLogoutRoute(
   }
 
   const { authServerUrl } = config.adapter.getOAuthConfig();
-  const redirectTo = `${authServerUrl}/api/oauth/logout?post_logout_redirect_uri=${encodeURIComponent(
+  const logoutUrl = new URL("/api/oauth/logout", authServerUrl);
+  logoutUrl.searchParams.set(
+    "post_logout_redirect_uri",
     config.postLogoutRedirectUri,
-  )}`;
+  );
+  const redirectTo = logoutUrl.toString();
 
   const response = NextResponse.json({ ok: true, redirectTo });
   const clearOpts = buildSsoCookieOptions(0);

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NextRequest } from "next/server";
 import type * as SsoModule from "@f3nation/sso";
 
@@ -36,6 +36,10 @@ describe("Auth /login route (admin)", () => {
     ssoMock.getAuthorizationUrl.mockReturnValue(
       "https://auth.f3nation.test/api/oauth/authorize?state=oauth-state",
     );
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it("redirects to the auth server and sets short-lived oauth cookies", async () => {
@@ -96,7 +100,5 @@ describe("Auth /login route (admin)", () => {
 
     const setCookieHeader = response.headers.get("set-cookie");
     expect(setCookieHeader).toContain("Secure");
-
-    vi.unstubAllEnvs();
   });
 });

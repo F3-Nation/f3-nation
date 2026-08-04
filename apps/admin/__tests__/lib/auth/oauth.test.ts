@@ -1,12 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const refreshTokenMock = vi
+  .fn()
+  .mockResolvedValue({ accessToken: "new-token" });
+
 const AuthClientMock = vi.fn(
   class {
     getOAuthConfig = vi.fn();
     getAuthorizationUrl = vi.fn();
     exchangeCodeForToken = vi.fn();
     getUserInfo = vi.fn();
-    refreshToken = vi.fn();
+    refreshToken = refreshTokenMock;
     revokeToken = vi.fn();
   },
 );
@@ -107,8 +111,7 @@ describe("admin lib/auth/oauth", () => {
       AUTH_PROVIDER_URL: "https://auth.f3nation.test",
     });
 
-    // The refreshToken helper is a thin wrapper — just verify it exists and
-    // is callable (deep call-through is tested by sso-next's own test suite).
-    expect(typeof oauth.refreshToken).toBe("function");
+    await oauth.refreshToken({ refreshToken: "rt-1" });
+    expect(refreshTokenMock).toHaveBeenCalledWith({ refreshToken: "rt-1" });
   });
 });

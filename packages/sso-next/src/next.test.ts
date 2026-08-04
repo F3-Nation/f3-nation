@@ -9,7 +9,7 @@ import {
   handleLogoutRoute,
 } from "./next";
 import type { SsoAdapter } from "./next";
-import { createOAuthLoginFlowArtifacts } from "@f3nation/sso";
+import { createOAuthLoginFlowArtifacts, parseOAuthState } from "@f3nation/sso";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -190,9 +190,11 @@ describe("handleLoginRoute", () => {
       defaultReturnTo: "/dashboard",
     });
 
-    // State param is base64url-encoded JSON; just check it was passed.
+    // Decode and assert the resolved returnTo so a regression in the fallback
+    // path would fail this test rather than silently passing.
     expect(capturedStates.length).toBe(1);
-    expect(capturedStates[0]).toBeTruthy();
+    const parsed = parseOAuthState(capturedStates[0] ?? "");
+    expect(parsed?.returnTo).toBe("/dashboard");
   });
 });
 
