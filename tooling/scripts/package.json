@@ -13,6 +13,9 @@
     "lint:fix": "pnpm lint --fix",
     "format": "prettier --check . --ignore-path .gitignore --ignore-path .prettierignore",
     "notify-outstanding-requests": "pnpm with-env tsx ./src/notify-outstanding-requests.ts",
+    "obfuscate-db": "pnpm with-env tsx ./src/obfuscate-db.ts",
+    "obfuscate-db:verify": "tsx ./src/obfuscate-db.verify.ts",
+    "obfuscate-db:verify-target": "pnpm with-env tsx ./src/obfuscate-db.verify-target.ts",
     "script": "pnpm with-env tsx ./src/script.ts",
     "typecheck": "tsc --noEmit",
     "with-env": "dotenv -e ../../.env --"
@@ -29,6 +32,7 @@
     "dotenv-cli": "catalog:",
     "drizzle-orm": "catalog:",
     "eslint": "catalog:",
+    "postgres": "catalog:",
     "prettier": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:"

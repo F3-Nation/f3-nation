@@ -1954,6 +1954,9 @@ importers:
       eslint:
         specifier: 'catalog:'
         version: 10.7.0(jiti@2.7.0)(supports-color@8.1.1)
+      postgres:
+        specifier: 'catalog:'
+        version: 3.4.9
       prettier:
         specifier: 'catalog:'
         version: 3.9.5
