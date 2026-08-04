@@ -16,7 +16,7 @@ export default [
     // the *-handlers modules there (via handleRequest), so a raw throw one hop
     // down the call stack reaches oRPC and gets masked exactly the same way.
     files: ["src/router/**/*.ts", "src/lib/**/*.ts"],
-    ignores: ["src/router/**/*.test.ts", "src/lib/**/*.test.ts"],
+    ignores: ["src/**/*.test.ts"],
     rules: {
       "no-restricted-syntax": [
         "error",

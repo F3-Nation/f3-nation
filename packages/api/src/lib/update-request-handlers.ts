@@ -299,7 +299,10 @@ export const recordUpdateRequest = async (params: {
     return updated;
   } catch (error) {
     logError("api.update_request.db_error", { requestId }, error);
-    throw error;
+    if (error instanceof ORPCError) throw error;
+    throw new ORPCError("INTERNAL_SERVER_ERROR", {
+      message: "Failed to record update request",
+    });
   }
 };
 

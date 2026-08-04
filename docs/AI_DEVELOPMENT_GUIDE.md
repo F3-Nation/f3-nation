@@ -129,9 +129,6 @@ credential.
 
 ---
 
-<<<<<<< Updated upstream
-=======
-
 ## Error handling
 
 The rule lives in
@@ -172,6 +169,9 @@ Pick the code by what actually went wrong, not by what's convenient:
 | An upstream/external call failed                      | `BAD_GATEWAY`           | 502    |
 | Truly unexpected server state (should be unreachable) | `INTERNAL_SERVER_ERROR` | 500    |
 
+Full list of codes and status mappings:
+[oRPC error handling](https://orpc.dev/docs/openapi/error-handling).
+
 **A missing row is only `NOT_FOUND` if the caller could have caused it.** Ask
 where the lookup key came from. A caller-supplied id that matches nothing is
 `NOT_FOUND` (e.g. `updateAO` in `packages/api/src/lib/ao-handlers.ts`). But when
@@ -203,7 +203,26 @@ wrapper, plus the clients that branch on the code), not a per-PR cleanup.
 A lint failure from the enforcing rule means the error needs a real
 `ORPCError` code — not a suppression.
 
-> > > > > > > Stashed changes
+### Never bare-rethrow in a `catch`
+
+`throw error` is an `Identifier`, so no AST rule can see whether the value is an
+`ORPCError` — the lint rule cannot catch this one. A raw DB or driver fault
+rethrown that way reaches oRPC untyped and is masked as an opaque 500 with its
+cause lost. Guard, log, then wrap:
+
+```ts
+} catch (error) {
+  if (error instanceof ORPCError) throw error; // already typed and client-safe
+  logError("api.<area>.<outcome>", { ...safeCtx }, error);
+  throw new ORPCError("INTERNAL_SERVER_ERROR", { message: "Generic message" });
+}
+```
+
+The `instanceof` guard is load-bearing wherever the same `try` block throws its
+own `ORPCError`s — without it, wrapping downgrades a typed 4xx into a generic 500. Keep the wrapped message generic (never interpolate the caught error, which
+can carry table names, constraint names, or PII) and keep PII out of the log
+context. Where classifiable, map the specific cause first: a duplicate-email
+violation is a `BAD_REQUEST`, not a 500.
 
 ## Authentication & tokens
 
