@@ -70,39 +70,6 @@ Reusable agent skills (procedural runbooks in the
   human-facing primer (why pino, how to use it, controlling `LOG_LEVEL`);
   [`packages/logger/README.md`](packages/logger/README.md) is the full API reference.
 
-## API Error Handling
-
-- Router handlers in `packages/api/src/router` must throw
-  `new ORPCError(code, { message })`, never a raw `Error`. oRPC masks any
-  non-`ORPCError` throw as an opaque 500 `INTERNAL_SERVER_ERROR` and drops the
-  message, so clients can't distinguish a bad request from a server fault.
-  Use `BAD_REQUEST`/`UNAUTHORIZED`/`NOT_FOUND`/etc. for client errors (4xx) and
-  reserve `INTERNAL_SERVER_ERROR`/`BAD_GATEWAY` for genuinely unexpected
-  server or upstream failures. Note this codebase uses `UNAUTHORIZED` for both
-  unauthenticated and insufficient-role failures rather than splitting out
-  `FORBIDDEN` — match that, and don't file it as a finding. This is enforced by
-  an ESLint `no-restricted-syntax` rule scoped to `packages/api/src/router` and
-  `packages/api/src/lib` — the router delegates its apply path to the latter, so
-  a raw throw there is masked the same way (see
-  `packages/api/eslint.config.js`); see
-  [`docs/AI_DEVELOPMENT_GUIDE.md`](docs/AI_DEVELOPMENT_GUIDE.md#error-handling)
-  for the full rationale and code-selection guidance.
-- **Never bare-rethrow in a router `catch`.** `throw error` is an Identifier, so
-  the lint rule cannot see whether the value is an `ORPCError` — and a raw DB or
-  driver fault gets masked as an opaque 500 with its cause lost. Guard, log, then
-  wrap:
-
-  ```ts
-  } catch (error) {
-    if (error instanceof ORPCError) throw error; // already typed and client-safe
-    logError("api.<area>.<outcome>", { ...safeCtx }, error);
-    throw new ORPCError("INTERNAL_SERVER_ERROR", { message: "Generic message" });
-  }
-  ```
-
-  Keep the wrapped message generic — never interpolate the caught error into it,
-  and keep PII out of the log context.
-
 ## GitHub Actions Conventions
 
 - **Pin third-party actions to a full commit SHA with a version comment** (e.g. `actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2`). SHAs are immutable — a semver tag can be force-pushed, a SHA cannot. Renovate (`pinDigests: true`) keeps the SHAs up to date automatically.
