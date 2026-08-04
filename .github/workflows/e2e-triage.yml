@@ -114,7 +114,7 @@ jobs:
       # ci-factory CLI, and prompts). The PR-authored failing spec is pulled in
       # as DATA (never executed) from head_sha via the contents API below — the
       # textbook pwn-request avoidance, matching adversarial-review.yml.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: steps.detect.outputs.proceed == 'true'
         with:
           persist-credentials: false
