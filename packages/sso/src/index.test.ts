@@ -75,11 +75,11 @@ describe("return path validation", () => {
 });
 
 describe("OAuth state expiration", () => {
-  it("uses a strict greater-than boundary at maxAgeMs", () => {
+  it("uses an inclusive boundary at maxAgeMs", () => {
     const state = { timestamp: 1_000 };
 
-    expect(isOAuthStateExpired(state, 100, 1_100)).toBe(false);
-    expect(isOAuthStateExpired(state, 100, 1_101)).toBe(true);
+    expect(isOAuthStateExpired(state, 100, 1_099)).toBe(false);
+    expect(isOAuthStateExpired(state, 100, 1_100)).toBe(true);
   });
 });
 

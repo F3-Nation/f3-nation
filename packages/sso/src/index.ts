@@ -357,7 +357,7 @@ export function isOAuthStateExpired(
   maxAgeMs = 600_000,
   nowMs = Date.now(),
 ): boolean {
-  return nowMs - state.timestamp > maxAgeMs;
+  return nowMs - state.timestamp >= maxAgeMs;
 }
 
 export async function createOAuthLoginFlowArtifacts(params: {
