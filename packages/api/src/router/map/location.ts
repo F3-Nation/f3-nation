@@ -14,7 +14,7 @@ import {
   schema,
   sql,
 } from "@acme/db";
-import { DayOfWeek } from "@acme/shared/app/enums";
+import { DayOfWeek, SeriesException } from "@acme/shared/app/enums";
 import { getFullAddress } from "@acme/shared/app/functions";
 import { isTruthy } from "@acme/shared/common/functions";
 import type { LowBandwidthF3Marker } from "@acme/validators";
@@ -205,6 +205,60 @@ export const mapLocationRouter = os.router({
       description:
         "Returns event instances in the next 30 days that have a series exception (closed, different-time), are standalone one-off events (no seriesId), or belong to a series but sit at a different location than their parent event (including a parent with no fixed location). Used for map pin status flagging.",
     })
+    .output(
+      z
+        .array(
+          z.object({
+            id: z.number().describe("Event instance ID"),
+            seriesId: z
+              .number()
+              .nullable()
+              .describe("Parent series event ID, null for one-off instances"),
+            locationId: z
+              .number()
+              .nullable()
+              .describe("Location ID, null when the instance has no location"),
+            startDate: z.string().describe("Instance start date (YYYY-MM-DD)"),
+            startTime: z.string().nullable().describe("Instance start time"),
+            endTime: z.string().nullable().describe("Instance end time"),
+            seriesException: z
+              .enum(SeriesException)
+              .nullable()
+              .describe("Series exception type, null when not an exception"),
+            highlight: z
+              .boolean()
+              .describe("Whether the instance is highlighted"),
+            name: z.string().describe("Instance name"),
+            // Location and AO columns come from LEFT JOINs, so every one of
+            // them is null for a locationless instance.
+            lat: z.number().nullable().describe("Location latitude"),
+            lon: z.number().nullable().describe("Location longitude"),
+            aoName: z.string().nullable().describe("AO name"),
+            aoLogo: z.string().nullable().describe("AO logo URL"),
+            locationAddress: z.string().nullable().describe("Street address"),
+            locationAddress2: z
+              .string()
+              .nullable()
+              .describe("Street address line 2"),
+            locationCity: z.string().nullable().describe("City"),
+            locationState: z.string().nullable().describe("State"),
+            locationCountry: z.string().nullable().describe("Country"),
+            eventTypes: z
+              .array(
+                z.object({
+                  id: z.number().describe("Event type ID"),
+                  name: z.string().describe("Event type name"),
+                }),
+              )
+              .describe("Event types, empty array when none are linked"),
+            fullAddress: z
+              .string()
+              .nullable()
+              .describe("Address assembled from the location columns"),
+          }),
+        )
+        .describe("Upcoming event instances for map pin status flagging"),
+    )
     .handler(async ({ context: ctx }) => {
       const aoOrg = aliasedTable(schema.orgs, "ao_org");
       const seriesEvent = aliasedTable(schema.events, "series_event");
