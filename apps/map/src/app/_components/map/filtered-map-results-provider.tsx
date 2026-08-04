@@ -10,6 +10,7 @@ import { groupMarkersByAo } from "~/utils/group-markers-by-ao";
 import type { MapStatus, SparseF3Marker } from "~/utils/types";
 import { orpc, useQuery } from "~/orpc/react";
 import { dateToDayOfWeek } from "~/utils/date-to-day-of-week";
+import { getMapEventStatus, instanceMapStatus } from "~/utils/event-status-map";
 import { filterData } from "~/utils/filtered-data";
 import { filterStore } from "~/utils/store/filter";
 import { mapStore } from "~/utils/store/map";
@@ -41,14 +42,9 @@ interface UpcomingMapInstance {
 const createSyntheticEventFromInstance = (
   instance: UpcomingMapInstance,
 ): SparseF3Marker["events"][number] => {
-  const mapStatus: MapStatus =
-    instance.seriesException === "closed"
-      ? "closed"
-      : instance.seriesException === "different-time"
-        ? "different-time"
-        : instance.seriesException
-          ? "miscellaneous"
-          : "event-instance";
+  // Shared with the chip and "Updates" colorings so all three stay in step —
+  // this was an inline copy of the same ladder.
+  const mapStatus: MapStatus = instanceMapStatus(instance.seriesException);
 
   return {
     id: -instance.id,
@@ -140,46 +136,6 @@ const FilteredMapResultsContext = createContext<{
   aoGroupedLocationMarkers: undefined,
   allLocationMarkersWithLatLngAndFilterData: undefined,
 });
-
-function getMapEventStatus(
-  event: { startDate: string | null; endDate: string | null; id: number },
-  instanceLookup: Map<
-    number,
-    { seriesException: string | null; startDate: string }[]
-  >,
-): MapStatus {
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  const thirtyDaysOut = new Date(now);
-  thirtyDaysOut.setDate(thirtyDaysOut.getDate() + 30);
-
-  if (event.endDate) {
-    const end = new Date(event.endDate + "T00:00:00");
-    const started = event.startDate
-      ? new Date(event.startDate + "T00:00:00") <= now
-      : true;
-    if (started && end >= now && end <= thirtyDaysOut) return "closed";
-  }
-
-  if (event.startDate) {
-    const start = new Date(event.startDate + "T00:00:00");
-    if (start > now && start <= thirtyDaysOut) return "different-time";
-  }
-
-  const instances = instanceLookup.get(event.id) ?? [];
-  const nearest = instances.reduce<
-    { seriesException: string | null; startDate: string } | undefined
-  >((best, i) => (!best || i.startDate < best.startDate ? i : best), undefined);
-
-  if (nearest) {
-    if (nearest.seriesException === "closed") return "closed";
-    if (nearest.seriesException === "different-time") return "different-time";
-    if (nearest.seriesException) return "miscellaneous";
-    return "event-instance";
-  }
-
-  return null;
-}
 
 export const FilteredMapResultsProvider = (params: { children: ReactNode }) => {
   RERENDER_LOGS && console.log("FilteredMapResultsProvider rerender");

@@ -61,6 +61,7 @@ const STATUS_STYLES: Record<NonNullable<MapStatus>, StatusStyle> = {
 export const STATUS_BASE_DEFAULT =
   "border-foreground bg-foreground text-background";
 
+const SOLID_BG_DEFAULT = "bg-foreground";
 const SELECTED_BORDER_DEFAULT = "!border-red-600 dark:!border-red-400";
 const SELECTED_BG_DEFAULT = "!border-red-600 !bg-red-600 dark:!bg-red-400";
 const SELECTED_CHIP_BG_DEFAULT = "bg-red-600";
@@ -71,8 +72,8 @@ const getStatusStyle = (status: MapStatus) =>
 export const getStatusBase = (status: MapStatus) =>
   getStatusStyle(status)?.base ?? STATUS_BASE_DEFAULT;
 
-export const getStatusSolidBg = (status: NonNullable<MapStatus>) =>
-  STATUS_STYLES[status]?.solidBg ?? "missing-bg";
+export const getStatusSolidBg = (status: MapStatus) =>
+  getStatusStyle(status)?.solidBg ?? SOLID_BG_DEFAULT;
 
 export const getSelectedBorder = (status: MapStatus) =>
   getStatusStyle(status)?.selectedBorder ?? SELECTED_BORDER_DEFAULT;

@@ -15,9 +15,16 @@ import { toast } from "@acme/ui/toast";
 import { orpc, useQuery } from "~/orpc/react";
 import type { RouterOutputs } from "~/orpc/types";
 import { dateToDayOfWeek } from "~/utils/date-to-day-of-week";
+import {
+  buildEventStatusMap,
+  instanceMapStatus,
+  selectStatusInstances,
+  statusLabel,
+} from "~/utils/event-status-map";
 import { getWhenFromWorkout } from "~/utils/get-when-from-workout";
 import { useUpdateEventSearchParams } from "~/utils/hooks/use-update-event-search-params";
 import { getStatusSolidBg } from "~/utils/map-status-colors";
+import { sortUpcomingInstancesByDate } from "~/utils/sort-upcoming-instances";
 import { ModalType, openModal } from "~/utils/store/modal";
 import textLink from "~/utils/text-link";
 import { ContactLinks } from "../contact-links";
@@ -34,15 +41,6 @@ type WorkoutDetailsEvent = NonNullable<
 >;
 type UpcomingInstance =
   RouterOutputs["map"]["location"]["upcomingInstances"][number];
-
-function instanceMapStatus(
-  seriesException: string | null,
-): NonNullable<MapStatus> {
-  if (seriesException === "closed") return "closed";
-  if (seriesException === "different-time") return "different-time";
-  if (seriesException) return "miscellaneous";
-  return "event-instance";
-}
 
 function getUpdateStatusColor(instance: { seriesException: string | null }) {
   return getStatusSolidBg(instanceMapStatus(instance.seriesException));
@@ -150,13 +148,16 @@ export const WorkoutDetailsContent = ({
         ? selectedEventId
         : (selectedInstance?.seriesId ?? null);
 
-    if (seriesId != null) {
-      return upcomingInstancesData.filter((i) => i.seriesId === seriesId);
-    }
+    const matches =
+      seriesId != null
+        ? upcomingInstancesData.filter((i) => i.seriesId === seriesId)
+        : selectedInstance
+          ? upcomingInstancesData.filter((i) => i.id === selectedInstance.id)
+          : [];
 
-    return selectedInstance
-      ? upcomingInstancesData.filter((i) => i.id === selectedInstance.id)
-      : [];
+    // The API returns these unordered, so sort for display — the list reads as
+    // a timeline, and the soonest change is the one that matters most.
+    return sortUpcomingInstancesByDate(matches);
   }, [selectedEventId, upcomingInstancesData, selectedInstance]);
 
   const baseEventIds = useMemo(
@@ -165,27 +166,19 @@ export const WorkoutDetailsContent = ({
   );
 
   const eventStatusMap = useMemo(() => {
-    const map = new Map<number, MapStatus>();
-    const nearestDate = new Map<number, string>();
-    for (const instance of locationInstances) {
-      const { seriesId } = instance;
-      // Test orphan-ness inline rather than via an `isOrphan` boolean:
-      // TypeScript can't carry a `seriesId != null` narrowing across an
-      // intermediate variable, so the non-orphan branch would still see
-      // `number | null` and every Map call below would fail to compile.
-      if (seriesId == null || !baseEventIds.has(seriesId)) {
-        map.set(-instance.id, instanceMapStatus(instance.seriesException));
-        continue;
-      }
-
-      const existing = nearestDate.get(seriesId);
-      if (!existing || instance.startDate < existing) {
-        nearestDate.set(seriesId, instance.startDate);
-        map.set(seriesId, instanceMapStatus(instance.seriesException));
-      }
+    const currentLocationId = results?.location?.id;
+    if (currentLocationId == null || !upcomingInstancesData) {
+      return new Map<number, MapStatus>();
     }
-    return map;
-  }, [locationInstances, baseEventIds]);
+    return buildEventStatusMap(
+      selectStatusInstances(
+        upcomingInstancesData,
+        currentLocationId,
+        baseEventIds,
+      ),
+      baseEventIds,
+    );
+  }, [upcomingInstancesData, results?.location?.id, baseEventIds]);
 
   const instanceEvents = useMemo(
     () =>
@@ -413,6 +406,13 @@ export const WorkoutDetailsContent = ({
                 className="flex items-center gap-2 text-sm"
               >
                 <div
+                  role="img"
+                  aria-label={statusLabel(
+                    instanceMapStatus(instance.seriesException),
+                  )}
+                  title={statusLabel(
+                    instanceMapStatus(instance.seriesException),
+                  )}
                   className={cn(
                     "h-3 w-3 flex-shrink-0 rounded-sm",
                     getUpdateStatusColor(instance),
