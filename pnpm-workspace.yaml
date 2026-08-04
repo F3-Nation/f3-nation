@@ -150,7 +150,7 @@ overrides:
   "fast-uri@<3.1.5": "3.1.5" # host confusion via failed backslash authority introducer
   "sharp@<0.35.0": "0.35.3" # inherited libvips vulnerabilities
   "next@>=16.0.0 <16.2.11": "16.2.11" # GHSA-89xv-2m56-2m9x / GHSA-p9j2-gv94-2wf4 (SSRF in rewrites); covers transitive geist>next & @scalar>next
-  "postcss@<8.5.12": "^8.5.20" # GHSA-6g55-p6wh-862q (sourceMappingURL arbitrary file read)
+  "postcss@<8.5.12": "^8.5.23" # GHSA-6g55-p6wh-862q (sourceMappingURL arbitrary file read)
 peerDependencyRules:
   allowedVersions:
     eslint-plugin-react>eslint: "10"
