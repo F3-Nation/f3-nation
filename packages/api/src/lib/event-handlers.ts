@@ -7,7 +7,7 @@ import type { EventMeta } from "@acme/shared/app/types";
 import { schema } from "@acme/db";
 
 import type { Context } from "../shared";
-import { logDebug } from "../logger";
+import { logDebug, logError } from "../logger";
 
 export const updateEvent = async (
   ctx: Context,
@@ -31,36 +31,48 @@ export const updateEvent = async (
   },
 ) => {
   logDebug("api.event.update", { eventId: updateRequest.eventId });
-  // Update existing event
-  const [updated] = await ctx.db
-    .update(schema.events)
-    .set({
-      name: updateRequest.eventName ?? undefined,
-      locationId: updateRequest.locationId ?? undefined,
-      description: updateRequest.eventDescription ?? undefined,
-      startDate: updateRequest.eventStartDate ?? undefined,
-      endDate: updateRequest.eventEndDate ?? undefined,
-      startTime: updateRequest.eventStartTime ?? undefined,
-      endTime: updateRequest.eventEndTime ?? undefined,
-      dayOfWeek: updateRequest.eventDayOfWeek ?? undefined,
-      seriesId: updateRequest.eventSeriesId ?? undefined,
-      orgId: updateRequest.aoId ?? undefined,
-      recurrencePattern: updateRequest.eventRecurrencePattern ?? undefined,
-      recurrenceInterval: updateRequest.eventRecurrenceInterval ?? undefined,
-      indexWithinInterval: updateRequest.eventIndexWithinInterval ?? undefined,
-      meta: updateRequest.eventMeta ?? undefined,
-      email: updateRequest.eventContactEmail ?? undefined,
-    })
-    .where(eq(schema.events.id, updateRequest.eventId))
-    .returning();
-
-  logDebug("api.event.updated", { eventId: updated?.id });
-
-  if (!updated) {
-    throw new ORPCError("NOT_FOUND", {
+  let updated: typeof schema.events.$inferSelect | undefined;
+  try {
+    [updated] = await ctx.db
+      .update(schema.events)
+      .set({
+        name: updateRequest.eventName ?? undefined,
+        locationId: updateRequest.locationId ?? undefined,
+        description: updateRequest.eventDescription ?? undefined,
+        startDate: updateRequest.eventStartDate ?? undefined,
+        endDate: updateRequest.eventEndDate ?? undefined,
+        startTime: updateRequest.eventStartTime ?? undefined,
+        endTime: updateRequest.eventEndTime ?? undefined,
+        dayOfWeek: updateRequest.eventDayOfWeek ?? undefined,
+        seriesId: updateRequest.eventSeriesId ?? undefined,
+        orgId: updateRequest.aoId ?? undefined,
+        recurrencePattern: updateRequest.eventRecurrencePattern ?? undefined,
+        recurrenceInterval: updateRequest.eventRecurrenceInterval ?? undefined,
+        indexWithinInterval:
+          updateRequest.eventIndexWithinInterval ?? undefined,
+        meta: updateRequest.eventMeta ?? undefined,
+        email: updateRequest.eventContactEmail ?? undefined,
+      })
+      .where(eq(schema.events.id, updateRequest.eventId))
+      .returning();
+  } catch (err) {
+    logError(
+      "api.event.update_failed",
+      { eventId: updateRequest.eventId },
+      err,
+    );
+    throw new ORPCError("INTERNAL_SERVER_ERROR", {
       message: "Failed to update event",
     });
   }
+
+  if (!updated) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "Event not found",
+    });
+  }
+
+  logDebug("api.event.updated", { eventId: updated.id });
 
   return updated;
 };

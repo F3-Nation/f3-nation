@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { schema } from "@acme/db";
 
 import type { Context } from "../shared";
+import { logError } from "../logger";
 
 /**
  * Insert a new location into the database
@@ -74,27 +75,39 @@ export const updateLocation = async (
     locationContactEmail?: string | null;
   },
 ) => {
-  const [location] = await ctx.db
-    .update(schema.locations)
-    .set({
-      name: updateRequest.locationName ?? undefined,
-      description: updateRequest.locationDescription ?? undefined,
-      addressStreet: updateRequest.locationAddress ?? undefined,
-      addressStreet2: updateRequest.locationAddress2 ?? undefined,
-      addressCity: updateRequest.locationCity ?? undefined,
-      addressState: updateRequest.locationState ?? undefined,
-      addressZip: updateRequest.locationZip ?? undefined,
-      addressCountry: updateRequest.locationCountry ?? undefined,
-      latitude: updateRequest.locationLat ?? undefined,
-      longitude: updateRequest.locationLng ?? undefined,
-      email: updateRequest.locationContactEmail ?? undefined,
-    })
-    .where(eq(schema.locations.id, updateRequest.locationId))
-    .returning();
+  let location: typeof schema.locations.$inferSelect | undefined;
+  try {
+    [location] = await ctx.db
+      .update(schema.locations)
+      .set({
+        name: updateRequest.locationName ?? undefined,
+        description: updateRequest.locationDescription ?? undefined,
+        addressStreet: updateRequest.locationAddress ?? undefined,
+        addressStreet2: updateRequest.locationAddress2 ?? undefined,
+        addressCity: updateRequest.locationCity ?? undefined,
+        addressState: updateRequest.locationState ?? undefined,
+        addressZip: updateRequest.locationZip ?? undefined,
+        addressCountry: updateRequest.locationCountry ?? undefined,
+        latitude: updateRequest.locationLat ?? undefined,
+        longitude: updateRequest.locationLng ?? undefined,
+        email: updateRequest.locationContactEmail ?? undefined,
+      })
+      .where(eq(schema.locations.id, updateRequest.locationId))
+      .returning();
+  } catch (err) {
+    logError(
+      "api.location.update_failed",
+      { locationId: updateRequest.locationId },
+      err,
+    );
+    throw new ORPCError("INTERNAL_SERVER_ERROR", {
+      message: "Failed to update location",
+    });
+  }
 
   if (!location) {
     throw new ORPCError("NOT_FOUND", {
-      message: "Failed to update location",
+      message: "Location not found",
     });
   }
 

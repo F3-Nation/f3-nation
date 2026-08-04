@@ -489,7 +489,7 @@ export const userRouter = {
           const insertedUser = result[0];
           if (!insertedUser) {
             throw new ORPCError("INTERNAL_SERVER_ERROR", {
-              message: "User not found",
+              message: "Failed to save user",
             });
           }
           user = insertedUser;
@@ -662,7 +662,7 @@ export const userRouter = {
         .limit(1);
 
       if (!f3nationOrg) {
-        throw new ORPCError("UNAUTHORIZED", {
+        throw new ORPCError("NOT_FOUND", {
           message: "No F3 Nation record is found.",
         });
       }

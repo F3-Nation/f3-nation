@@ -105,8 +105,13 @@ export const updateAO = async (
       .returning();
 
     if (!updatedAO) {
-      throw new ORPCError("INTERNAL_SERVER_ERROR", {
-        message: "Failed to update AO",
+      // The existence check above runs outside this transaction, so the AO can
+      // be deleted in between — reachable under multiple instances, not
+      // "unexpected server state". Same underlying condition as the NOT_FOUND
+      // above, so it gets the same code rather than a 500 the client can't act
+      // on by refreshing.
+      throw new ORPCError("NOT_FOUND", {
+        message: "Failed to find ao to update. Does the AO exist?",
       });
     }
 

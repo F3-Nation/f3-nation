@@ -259,7 +259,13 @@ export const apiKeyRouter = {
           })
           .returning();
 
-        if (apiKey && roles.length > 0) {
+        if (!apiKey) {
+          throw new ORPCError("INTERNAL_SERVER_ERROR", {
+            message: "Unable to generate unique API key",
+          });
+        }
+
+        if (roles.length > 0) {
           // Get role IDs for all unique role names
           const roleNames = [...new Set(roles.map((r) => r.roleName))];
           const roleRecords = await ctx.db
@@ -269,23 +275,11 @@ export const apiKeyRouter = {
 
           const roleMap = new Map(roleRecords.map((r) => [r.name, r.id]));
 
-          // Verify all roles exist. roleName is schema-constrained to
-          // "editor"/"admin", so this only fires if the roles table is
-          // missing its seeded rows — a server data-integrity problem, not
-          // something the client can trigger.
-          for (const roleName of roleNames) {
-            if (!roleMap.has(roleName)) {
-              throw new ORPCError("INTERNAL_SERVER_ERROR", {
-                message: `Role "${roleName}" not found`,
-              });
-            }
-          }
-
           // Insert org associations with roles
           await ctx.db.insert(schema.rolesXApiKeysXOrg).values(
             roles.map((role) => {
               const roleId = roleMap.get(role.roleName);
-              if (!roleId) {
+              if (roleId == null) {
                 throw new ORPCError("INTERNAL_SERVER_ERROR", {
                   message: `Role "${role.roleName}" not found`,
                 });
@@ -299,9 +293,7 @@ export const apiKeyRouter = {
           );
         }
 
-        if (apiKey) {
-          return { ...apiKey, secret: generatedKey };
-        }
+        return { ...apiKey, secret: generatedKey };
       } catch (error) {
         if (isUniqueError(error)) {
           throw new ORPCError("INTERNAL_SERVER_ERROR", {
@@ -319,10 +311,6 @@ export const apiKeyRouter = {
           message: "Unable to create API key",
         });
       }
-
-      throw new ORPCError("INTERNAL_SERVER_ERROR", {
-        message: "Unable to generate unique API key",
-      });
     }),
   revoke: adminProcedure
     .input(revokeApiKeySchema)
