@@ -1,21 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NextRequest } from "next/server";
-import type * as SsoModule from "@f3nation/sso";
 
 const ssoMock = vi.hoisted(() => ({
   getAuthorizationUrl: vi.fn(),
 }));
+const createOAuthLoginFlowArtifacts = vi.hoisted(() => vi.fn());
 
 vi.mock("@f3nation/sso", async (importOriginal) => ({
-  ...(await importOriginal<typeof SsoModule>()),
-  createOAuthLoginFlowArtifacts: vi.fn(),
+  ...(await importOriginal<Record<string, unknown>>()),
+  createOAuthLoginFlowArtifacts,
 }));
 
 vi.mock("@/lib/auth/oauth", () => ({
   sso: ssoMock,
 }));
-
-import { createOAuthLoginFlowArtifacts } from "@f3nation/sso";
 
 function makeRequest(url: string) {
   return {

@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { verifyAccessToken } from "@f3nation/sso";
+import { verifyAccessToken } from "@f3nation/sso-next";
 import {
   ACCESS_TOKEN_COOKIE_NAME,
   ACCESS_TOKEN_DEFAULT_MAX_AGE,

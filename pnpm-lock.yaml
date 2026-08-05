@@ -476,9 +476,6 @@ importers:
       '@acme/validators':
         specifier: workspace:*
         version: link:../../packages/validators
-      '@f3nation/sso':
-        specifier: workspace:*
-        version: link:../../packages/sso
       '@f3nation/sso-next':
         specifier: workspace:*
         version: link:../../packages/sso-next
@@ -558,6 +555,9 @@ importers:
       '@acme/vitest-config':
         specifier: workspace:*
         version: link:../../tooling/vitest
+      '@f3nation/sso':
+        specifier: workspace:*
+        version: link:../../packages/sso
       '@tailwindcss/postcss':
         specifier: 'catalog:'
         version: 4.3.3
@@ -1117,9 +1117,6 @@ importers:
       '@acme/ui':
         specifier: workspace:*
         version: link:../../packages/ui
-      '@f3nation/sso':
-        specifier: workspace:*
-        version: link:../../packages/sso
       '@f3nation/sso-next':
         specifier: workspace:*
         version: link:../../packages/sso-next
@@ -1166,6 +1163,9 @@ importers:
       '@acme/vitest-config':
         specifier: workspace:*
         version: link:../../tooling/vitest
+      '@f3nation/sso':
+        specifier: workspace:*
+        version: link:../../packages/sso
       '@tailwindcss/postcss':
         specifier: 'catalog:'
         version: 4.3.3

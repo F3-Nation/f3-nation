@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { verifyAccessToken } from "@f3nation/sso";
+import { verifyAccessToken } from "@f3nation/sso-next";
 
 import { routes } from "@acme/shared/app/constants";
 

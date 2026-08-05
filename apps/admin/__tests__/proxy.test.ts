@@ -33,7 +33,7 @@ const {
   };
 });
 
-vi.mock("@f3nation/sso", () => ({
+vi.mock("@f3nation/sso-next", () => ({
   verifyAccessToken: verifyAccessTokenMock,
   AuthError,
 }));

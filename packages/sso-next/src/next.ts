@@ -31,6 +31,13 @@ import type {
 // Re-export for consumer convenience
 // ---------------------------------------------------------------------------
 export type { AuthClientConfig, AuthTokens, AuthUser, OAuthClient };
+export {
+  AuthError,
+  createOAuthLoginFlowArtifacts,
+  isSafeReturnPath,
+  sanitizeReturnPath,
+  verifyAccessToken,
+} from "@f3nation/sso";
 
 // ---------------------------------------------------------------------------
 // Cookie helpers

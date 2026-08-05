@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NextRequest } from "next/server";
-import { createOAuthLoginFlowArtifacts } from "@f3nation/sso";
+import { createOAuthLoginFlowArtifacts } from "@f3nation/sso-next";
 
 // ---------------------------------------------------------------------------
 // Mocks
