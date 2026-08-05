@@ -310,6 +310,18 @@ describe("getMapEventStatus", () => {
     ).toBeNull();
   });
 
+  it("reports a series closing today", () => {
+    expect(getMapEventStatus(event({ endDate: TODAY }), new Map(), TODAY)).toBe(
+      "closed",
+    );
+  });
+
+  it("reports a series closing on the final horizon day", () => {
+    expect(
+      getMapEventStatus(event({ endDate: "2026-09-04" }), new Map(), TODAY),
+    ).toBe("closed");
+  });
+
   it("does not call a not-yet-started series closed", () => {
     const status = getMapEventStatus(
       event({ startDate: "2026-08-10", endDate: "2026-08-12" }),

@@ -203,7 +203,7 @@ export const mapLocationRouter = os.router({
       tags: ["map.location"],
       summary: "Get upcoming event instance exceptions and one-off events",
       description:
-        "Returns event instances in the next 30 days that have a series exception (closed, different-time), are standalone one-off events (no seriesId), or belong to a series but sit at a different location than their parent event (including a parent with no fixed location). Used for map pin status flagging.",
+        "Returns event instances in the next 30 days that have a series exception (closed, different-time, miscellaneous), are standalone one-off events (no seriesId), or belong to a series but sit at a different location than their parent event (including a parent with no fixed location). Used for map pin status flagging.",
     })
     .output(
       z
