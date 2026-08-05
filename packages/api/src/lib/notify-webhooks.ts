@@ -1,3 +1,5 @@
+import { ORPCError } from "@orpc/server";
+
 import { env } from "@acme/env";
 
 // You guys both wanted webhooks to let you know when the map data is updated, right? I now have that functional, but will need your hardcoded webhook urls. Can you share those with me? In the future I’ll allow them to be dynamic but for now was hoping to doing something light. It will just send a post or get (whichever you want) whenever the data changes. I will likely send a payload like this:
@@ -37,6 +39,38 @@ if (env.NOTIFY_WEBHOOK_URLS_COMMA_SEPARATED) {
   );
 }
 
+/**
+ * Issues one webhook request and normalizes both failure modes to
+ * ORPCError("BAD_GATEWAY").
+ *
+ * A rejected `fetch` (DNS failure, refused connection, abort) throws a
+ * `TypeError`, which oRPC masks as an opaque 500 with the message dropped —
+ * indistinguishable to the client from a bug in our own handler. The rejection
+ * message can also carry the internal webhook host, so the client-facing text
+ * stays generic and the original is attached as `cause` for the caller's log
+ * (see `notifyMapDataChange` in ./webhook-events).
+ */
+const requestWebhook = async (
+  method: Webhook["method"],
+  url: string,
+  init?: RequestInit,
+) => {
+  let response: Response;
+  try {
+    response = await fetch(url, init);
+  } catch (error) {
+    throw new ORPCError("BAD_GATEWAY", {
+      message: `Webhook ${method} failed: request could not be completed`,
+      cause: error,
+    });
+  }
+  if (!response.ok) {
+    throw new ORPCError("BAD_GATEWAY", {
+      message: `Webhook ${method} failed: ${response.status} ${response.statusText}`,
+    });
+  }
+};
+
 export const notifyWebhooks = async (mapData: WebhookPayload) => {
   const { eventId, locationId, orgId, action, source } = mapData;
   const data = {
@@ -49,23 +83,13 @@ export const notifyWebhooks = async (mapData: WebhookPayload) => {
   };
   for (const webhook of webhooks) {
     if (webhook.method === "POST") {
-      const response = await fetch(webhook.url, {
+      await requestWebhook("POST", webhook.url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
-      if (!response.ok) {
-        throw new Error(
-          `Webhook POST failed: ${response.status} ${response.statusText}`,
-        );
-      }
     } else if (webhook.method === "GET") {
-      const response = await fetch(webhook.url);
-      if (!response.ok) {
-        throw new Error(
-          `Webhook GET failed: ${response.status} ${response.statusText}`,
-        );
-      }
+      await requestWebhook("GET", webhook.url);
     }
   }
 };
