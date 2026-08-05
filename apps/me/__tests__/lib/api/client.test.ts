@@ -136,12 +136,37 @@ describe("API client (oRPC)", () => {
     expect(users[0]?.f3Name).toBe("Pax");
   });
 
-  it("getUsers passes undefined when homeRegionId is not provided", async () => {
-    mockMe.users.mockResolvedValueOnce({ users: [] });
+  it("getUsers passes userId when provided", async () => {
+    mockMe.users.mockResolvedValueOnce({
+      users: [{ id: 42, f3Name: "Dredd" }],
+    });
 
     const { getUsers } = await import("@/lib/api/client");
-    await getUsers();
+    const users = await getUsers({ userId: 42 });
 
-    expect(mockMe.users).toHaveBeenCalledWith(undefined);
+    expect(mockMe.users).toHaveBeenCalledWith({ userId: 42 });
+    expect(users[0]?.id).toBe(42);
+  });
+
+  it("isNotFoundApiError returns true for code-based NOT_FOUND errors", async () => {
+    const { isNotFoundApiError } = await import("@/lib/api/client");
+    expect(isNotFoundApiError({ code: "NOT_FOUND" })).toBe(true);
+  });
+
+  it("isNotFoundApiError returns true for status-based 404 errors", async () => {
+    const { isNotFoundApiError } = await import("@/lib/api/client");
+    expect(isNotFoundApiError({ status: 404 })).toBe(true);
+  });
+
+  it("isNotFoundApiError returns false for non-api-like errors", async () => {
+    const { isNotFoundApiError } = await import("@/lib/api/client");
+    expect(isNotFoundApiError("not-an-object")).toBe(false);
+  });
+
+  it("isNotFoundApiError returns false for api-like errors that are not 404", async () => {
+    const { isNotFoundApiError } = await import("@/lib/api/client");
+    expect(isNotFoundApiError({ code: "BAD_REQUEST", status: 400 })).toBe(
+      false,
+    );
   });
 });

@@ -1,0 +1,328 @@
+import copy
+import os
+from logging import Logger
+
+from cryptography.fernet import Fernet
+from f3_data_models.models import SlackSpace
+from f3_data_models.utils import DbManager
+from slack_sdk.web import WebClient
+
+from features import db_admin
+from utilities import constants
+from utilities.builders import update_submission_wait_view
+from utilities.constants import ALL_USERS_ARE_ADMINS
+from utilities.database.orm import SlackSettings
+from utilities.database.special_queries import get_admin_users, make_user_admin
+from utilities.helper_functions import (
+    get_user,
+    safe_convert,
+    safe_get,
+    update_local_region_records,
+)
+from utilities.slack import actions, forms
+
+
+def build_config_form(body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings):
+    user_id = safe_get(body, "user_id") or safe_get(body, "user", "id")
+    update_view_id = safe_get(body, actions.LOADING_ID)
+    if body.get("text") == os.environ.get("SECRET_ADMIN_PASSWORD"):
+        db_admin.build_db_admin_form(body, client, logger, context, region_record, update_view_id)
+    else:
+        if ALL_USERS_ARE_ADMINS:
+            user_is_admin = True
+        else:
+            slack_user = get_user(user_id, region_record, client, logger)
+            # user_permissions = [p.name for p in get_user_permission_list(slack_user.user_id, region_record.org_id)]
+            # user_is_admin = constants.PERMISSIONS[constants.ALL_PERMISSIONS] in user_permissions
+            admin_users = get_admin_users(region_record.org_id, region_record.team_id)
+            user_is_admin = any(u[0].id == slack_user.user_id for u in admin_users)
+
+        if user_is_admin:
+            config_form = copy.deepcopy(forms.CONFIG_FORM)
+            if region_record.org_id in constants.ACHIEVEMENTS_ALPHA_TESTING_ORG_IDS:
+                config_form.blocks[0].elements.append(copy.deepcopy(forms.ACHIEVEMENT_BUTTON))
+        else:
+            if region_record.org_id is None:
+                config_form = copy.deepcopy(forms.CONFIG_NO_ORG_FORM)
+            elif len(admin_users) == 0:
+                make_user_admin(region_record.org_id, slack_user.user_id)
+                config_form = copy.deepcopy(forms.CONFIG_FORM)
+            else:
+                config_form = copy.deepcopy(forms.CONFIG_NO_PERMISSIONS_FORM)
+                config_form.blocks[1].label += " Your region's admin users are: "
+                user_labels = []
+                for admin_user in admin_users:
+                    if admin_user[1]:
+                        user_labels.append(f" <@{admin_user[1].slack_id}>")
+                    else:
+                        user_labels.append(admin_user[0].f3_name or "")
+                config_form.blocks[1].label += ", ".join(user_labels)
+
+        config_form.update_modal(
+            client=client,
+            view_id=update_view_id,
+            callback_id=actions.CONFIG_CALLBACK_ID,
+            title_text="F3 Nation Settings",
+            submit_button_text="None",
+        )
+
+
+def build_config_email_form(body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings):
+    config_form = copy.deepcopy(forms.CONFIG_EMAIL_FORM)
+
+    if region_record.email_password:
+        fernet = Fernet(os.environ[constants.PASSWORD_ENCRYPT_KEY].encode())
+        email_password_decrypted = fernet.decrypt(region_record.email_password.encode()).decode()
+    else:
+        email_password_decrypted = "SamplePassword123!"
+
+    config_form.set_initial_values(
+        {
+            actions.CONFIG_EMAIL_ENABLE: "enable" if region_record.email_enabled == 1 else "disable",
+            actions.CONFIG_EMAIL_SHOW_OPTION: "yes" if region_record.email_option_show == 1 else "no",
+            actions.CONFIG_EMAIL_FROM: region_record.email_user or "example_sender@gmail.com",
+            actions.CONFIG_EMAIL_TO: region_record.email_to or "example_destination@gmail.com",
+            actions.CONFIG_EMAIL_SERVER: region_record.email_server or "smtp.gmail.com",
+            actions.CONFIG_EMAIL_PORT: str(region_record.email_server_port or 587),
+            actions.CONFIG_EMAIL_PASSWORD: email_password_decrypted,
+            actions.CONFIG_POSTIE_ENABLE: "yes" if region_record.postie_format == 1 else "no",
+        }
+    )
+
+    config_form.post_modal(
+        client=client,
+        trigger_id=safe_get(body, "trigger_id"),
+        callback_id=actions.CONFIG_EMAIL_CALLBACK_ID,
+        title_text="Email Settings",
+        new_or_add="add",
+    )
+
+
+def build_config_general_form(
+    body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings
+):
+    config_form = copy.deepcopy(forms.CONFIG_GENERAL_FORM)
+
+    config_form.set_initial_values(
+        {
+            actions.CONFIG_EDITING_LOCKED: "yes" if region_record.editing_locked == 1 else "no",
+            actions.CONFIG_DEFAULT_DESTINATION: region_record.default_backblast_destination
+            or constants.CONFIG_DESTINATION_AO["value"],
+            actions.CONFIG_DESTINATION_CHANNEL: region_record.backblast_destination_channel,
+            actions.CONFIG_DEFAULT_PREBLAST_DESTINATION: region_record.default_preblast_destination
+            or constants.CONFIG_DESTINATION_AO["value"],
+            actions.CONFIG_PREBLAST_DESTINATION_CHANNEL: region_record.preblast_destination_channel,
+            actions.CONFIG_BACKBLAST_MOLESKINE_TEMPLATE: region_record.backblast_moleskin_template
+            or constants.DEFAULT_BACKBLAST_MOLESKINE_TEMPLATE,
+            actions.CONFIG_PREBLAST_MOLESKINE_TEMPLATE: region_record.preblast_moleskin_template
+            or constants.DEFAULT_PREBLAST_MOLESKINE_TEMPLATE,
+            actions.CONFIG_ENABLE_STRAVA: "enable" if region_record.strava_enabled == 1 else "disable",
+            actions.CONFIG_PREBLAST_REMINDER_DAYS: region_record.preblast_reminder_days,
+            actions.CONFIG_BACKBLAST_REMINDER_DAYS: region_record.backblast_reminder_days,
+            actions.CONFIG_AUTOMATED_PREBLAST: region_record.automated_preblast_option or "q_only",
+            actions.CONFIG_AUTOMATED_PREBLAST_TIME: f"{str(region_record.automated_preblast_hour_cst).zfill(2)}:00"
+            if region_record.automated_preblast_hour_cst is not None
+            else "12:00",
+            actions.CONFIG_SCHEDULED_PREBLAST_TIME: f"{str(region_record.scheduled_preblast_hour_cst).zfill(2)}:00"
+            if region_record.scheduled_preblast_hour_cst is not None
+            else "12:00",
+            actions.CONFIG_PREBLAST_REMINDER_TIME: f"{str(region_record.preblast_reminder_hour_cst).zfill(2)}:00"
+            if region_record.preblast_reminder_hour_cst is not None
+            else "10:00",
+            actions.CONFIG_HC_ANNOUNCE_OPTION: region_record.hc_announce_option or "off",
+            actions.CONFIG_HC_ANNOUNCE_TARGETS: region_record.hc_announce_targets or "both",
+            actions.CONFIG_BOT_LOG_CHANNEL: region_record.bot_log_channel,
+        }
+    )
+
+    config_form.post_modal(
+        client=client,
+        trigger_id=safe_get(body, "trigger_id"),
+        callback_id=actions.CONFIG_GENERAL_CALLBACK_ID,
+        title_text="General Settings",
+        new_or_add="add",
+    )
+
+
+def _kotter_enabled(region_record: SlackSettings) -> bool:
+    if region_record.kotter_reports_enabled is not None:
+        return bool(region_record.kotter_reports_enabled)
+    return bool(region_record.send_aoq_reports)
+
+
+def _kotter_include_admins(region_record: SlackSettings) -> bool:
+    return region_record.kotter_report_include_admins is not None and bool(region_record.kotter_report_include_admins)
+
+
+def _kotter_ao_reports_enabled(region_record: SlackSettings) -> bool:
+    if region_record.kotter_report_include_site_qs is not None:
+        return bool(region_record.kotter_report_include_site_qs)
+    if region_record.kotter_report_split_site_qs is not None:
+        return bool(region_record.kotter_report_split_site_qs)
+    return bool(region_record.kotter_reports_enabled is None and region_record.send_aoq_reports)
+
+
+def build_kotter_report_config_form(
+    body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings
+):
+    config_form = copy.deepcopy(forms.KOTTER_REPORT_CONFIG_FORM)
+
+    config_form.set_initial_values(
+        {
+            actions.KOTTER_REPORT_ENABLE: "enable" if _kotter_enabled(region_record) else "disable",
+            actions.KOTTER_REPORT_NO_POST_WEEKS: region_record.NO_POST_THRESHOLD,
+            actions.KOTTER_REPORT_REMOVE_WEEKS: region_record.REMINDER_WEEKS,
+            actions.KOTTER_REPORT_HOME_AO_WEEKS: region_record.HOME_AO_CAPTURE,
+            actions.KOTTER_REPORT_NO_Q_WEEKS: region_record.NO_Q_THRESHOLD_WEEKS,
+            actions.KOTTER_REPORT_NO_Q_POSTS: region_record.NO_Q_THRESHOLD_POSTS,
+            actions.KOTTER_REPORT_RECIPIENT_USERS: region_record.kotter_report_recipient_users or [],
+            actions.KOTTER_REPORT_INCLUDE_ADMINS: "yes" if _kotter_include_admins(region_record) else "no",
+            actions.KOTTER_REPORT_INCLUDE_SITE_QS: "yes" if _kotter_ao_reports_enabled(region_record) else "no",
+            actions.KOTTER_REPORT_SEND_MODE: region_record.kotter_report_send_mode or "group",
+            actions.KOTTER_REPORT_DAY: str(
+                region_record.kotter_report_day if region_record.kotter_report_day is not None else 0
+            ),
+            actions.KOTTER_REPORT_HOUR_CST: region_record.kotter_report_hour_cst
+            if region_record.kotter_report_hour_cst is not None
+            else 8,
+        }
+    )
+
+    config_form.post_modal(
+        client=client,
+        trigger_id=safe_get(body, "trigger_id"),
+        callback_id=actions.KOTTER_REPORT_CONFIG_CALLBACK_ID,
+        title_text="Kotter Reports",
+        new_or_add="add",
+    )
+
+
+def handle_kotter_report_config_post(
+    body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings
+):
+    config_data = forms.KOTTER_REPORT_CONFIG_FORM.get_selected_values(body)
+    submission_view_id = safe_get(body, "submission_view_id") or safe_get(body, "view", "id")
+
+    enabled = safe_get(config_data, actions.KOTTER_REPORT_ENABLE) == "enable"
+    recipient_users = safe_get(config_data, actions.KOTTER_REPORT_RECIPIENT_USERS) or []
+    include_admins = safe_get(config_data, actions.KOTTER_REPORT_INCLUDE_ADMINS) == "yes"
+    include_site_qs = safe_get(config_data, actions.KOTTER_REPORT_INCLUDE_SITE_QS) == "yes"
+
+    if enabled and not include_site_qs and not include_admins and not recipient_users:
+        update_submission_wait_view(
+            client=client,
+            title="Destination required",
+            text="Select at least one delivery destination before enabling Kotter Reports.",
+            level=constants.AlertLevel.ERROR,
+            logger=logger,
+            view_id=submission_view_id,
+        )
+        return
+
+    region_record.kotter_reports_enabled = enabled
+    region_record.send_aoq_reports = 1 if enabled else 0
+    region_record.kotter_report_recipient_users = recipient_users
+    region_record.kotter_report_include_admins = include_admins
+    region_record.kotter_report_include_site_qs = include_site_qs
+    region_record.kotter_report_send_mode = safe_get(config_data, actions.KOTTER_REPORT_SEND_MODE) or "group"
+    region_record.kotter_report_split_site_qs = False
+    region_record.kotter_report_day = safe_convert(safe_get(config_data, actions.KOTTER_REPORT_DAY), int)
+    region_record.kotter_report_hour_cst = safe_convert(safe_get(config_data, actions.KOTTER_REPORT_HOUR_CST), int)
+    region_record.NO_POST_THRESHOLD = safe_convert(safe_get(config_data, actions.KOTTER_REPORT_NO_POST_WEEKS), int)
+    region_record.REMINDER_WEEKS = safe_convert(safe_get(config_data, actions.KOTTER_REPORT_REMOVE_WEEKS), int)
+    region_record.HOME_AO_CAPTURE = safe_convert(safe_get(config_data, actions.KOTTER_REPORT_HOME_AO_WEEKS), int)
+    region_record.NO_Q_THRESHOLD_WEEKS = safe_convert(safe_get(config_data, actions.KOTTER_REPORT_NO_Q_WEEKS), int)
+    region_record.NO_Q_THRESHOLD_POSTS = safe_convert(safe_get(config_data, actions.KOTTER_REPORT_NO_Q_POSTS), int)
+
+    DbManager.update_records(
+        cls=SlackSpace,
+        filters=[SlackSpace.team_id == region_record.team_id],
+        fields={SlackSpace.settings: region_record.__dict__},
+    )
+
+    update_local_region_records()
+    update_submission_wait_view(
+        client=client,
+        title="Complete!",
+        text="Kotter Reports settings saved successfully!",
+        level=constants.AlertLevel.SUCCESS,
+        logger=logger,
+        view_id=submission_view_id,
+    )
+
+
+def handle_config_email_post(
+    body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings
+):
+    config_data = forms.CONFIG_EMAIL_FORM.get_selected_values(body)
+
+    if safe_get(config_data, actions.CONFIG_EMAIL_ENABLE) == "enable":
+        fernet = Fernet(os.environ[constants.PASSWORD_ENCRYPT_KEY].encode())
+        email_password_decrypted = safe_get(config_data, actions.CONFIG_EMAIL_PASSWORD)
+        if email_password_decrypted:
+            email_password_encrypted = fernet.encrypt(
+                safe_get(config_data, actions.CONFIG_EMAIL_PASSWORD).encode()
+            ).decode()
+        else:
+            email_password_encrypted = None
+    else:
+        email_password_encrypted = None
+
+    region_record.email_enabled = 1 if safe_get(config_data, actions.CONFIG_EMAIL_ENABLE) == "enable" else 0
+    region_record.email_option_show = 1 if safe_get(config_data, actions.CONFIG_EMAIL_SHOW_OPTION) == "yes" else 0
+    region_record.email_server = safe_get(config_data, actions.CONFIG_EMAIL_SERVER)
+    region_record.email_server_port = safe_convert(safe_get(config_data, actions.CONFIG_EMAIL_PORT), int)
+    region_record.email_user = safe_get(config_data, actions.CONFIG_EMAIL_FROM)
+    region_record.email_to = safe_get(config_data, actions.CONFIG_EMAIL_TO)
+    region_record.email_password = email_password_encrypted
+    region_record.postie_format = 1 if safe_get(config_data, actions.CONFIG_POSTIE_ENABLE) == "yes" else 0
+
+    DbManager.update_records(
+        cls=SlackSpace,
+        filters=[SlackSpace.team_id == region_record.team_id],
+        fields={SlackSpace.settings: region_record.__dict__},
+    )
+
+    update_local_region_records()
+
+
+def handle_config_general_post(
+    body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings
+):
+    config_data = forms.CONFIG_GENERAL_FORM.get_selected_values(body)
+
+    region_record.editing_locked = 1 if safe_get(config_data, actions.CONFIG_EDITING_LOCKED) == "yes" else 0
+    region_record.default_backblast_destination = safe_get(config_data, actions.CONFIG_DEFAULT_DESTINATION)
+    region_record.backblast_destination_channel = safe_get(config_data, actions.CONFIG_DESTINATION_CHANNEL)
+    region_record.default_preblast_destination = safe_get(config_data, actions.CONFIG_DEFAULT_PREBLAST_DESTINATION)
+    region_record.preblast_destination_channel = safe_get(config_data, actions.CONFIG_PREBLAST_DESTINATION_CHANNEL)
+    region_record.backblast_moleskin_template = safe_get(config_data, actions.CONFIG_BACKBLAST_MOLESKINE_TEMPLATE)
+    region_record.preblast_moleskin_template = safe_get(config_data, actions.CONFIG_PREBLAST_MOLESKINE_TEMPLATE)
+    region_record.strava_enabled = 1 if safe_get(config_data, actions.CONFIG_ENABLE_STRAVA) == "enable" else 0
+    region_record.preblast_reminder_days = safe_convert(
+        safe_get(config_data, actions.CONFIG_PREBLAST_REMINDER_DAYS), int
+    )
+    region_record.backblast_reminder_days = safe_convert(
+        safe_get(config_data, actions.CONFIG_BACKBLAST_REMINDER_DAYS), int
+    )
+    region_record.automated_preblast_option = safe_get(config_data, actions.CONFIG_AUTOMATED_PREBLAST) or "q_only"
+    region_record.automated_preblast_hour_cst = safe_convert(
+        (safe_get(config_data, actions.CONFIG_AUTOMATED_PREBLAST_TIME) or "12:00").split(":")[0], int
+    )
+    region_record.scheduled_preblast_hour_cst = safe_convert(
+        (safe_get(config_data, actions.CONFIG_SCHEDULED_PREBLAST_TIME) or "12:00").split(":")[0], int
+    )
+    region_record.preblast_reminder_hour_cst = safe_convert(
+        (safe_get(config_data, actions.CONFIG_PREBLAST_REMINDER_TIME) or "10:00").split(":")[0], int
+    )
+    region_record.hc_announce_option = safe_get(config_data, actions.CONFIG_HC_ANNOUNCE_OPTION) or "off"
+    region_record.hc_announce_targets = safe_get(config_data, actions.CONFIG_HC_ANNOUNCE_TARGETS) or "both"
+    region_record.bot_log_channel = safe_get(config_data, actions.CONFIG_BOT_LOG_CHANNEL)
+
+    DbManager.update_records(
+        cls=SlackSpace,
+        filters=[SlackSpace.team_id == region_record.team_id],
+        fields={SlackSpace.settings: region_record.__dict__},
+    )
+
+    update_local_region_records()

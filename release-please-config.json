@@ -4,6 +4,8 @@
   "include-v-in-tag": false,
   "tag-separator": "@",
   "include-component-in-tag": true,
+  "bootstrap-sha": "7bd372dda0d73246b319c5851a98ab5b808424ce",
+  "plugins": ["node-workspace"],
   "changelog-sections": [
     { "type": "feat", "section": "Features" },
     { "type": "fix", "section": "Bug Fixes" },
@@ -47,6 +49,72 @@
       "component": "api",
       "changelog-path": "CHANGELOG.md",
       "path": "apps/api"
+    },
+    "apps/slackbot": {
+      "component": "slackbot",
+      "changelog-path": "CHANGELOG.md",
+      "path": "apps/slackbot",
+      "release-type": "python"
+    },
+    "packages/api": {
+      "component": "pkg-api",
+      "changelog-path": "CHANGELOG.md",
+      "path": "packages/api"
+    },
+    "packages/auth": {
+      "component": "pkg-auth",
+      "changelog-path": "CHANGELOG.md",
+      "path": "packages/auth"
+    },
+    "packages/db": {
+      "component": "pkg-db",
+      "changelog-path": "CHANGELOG.md",
+      "path": "packages/db"
+    },
+    "packages/env": {
+      "component": "pkg-env",
+      "changelog-path": "CHANGELOG.md",
+      "path": "packages/env"
+    },
+    "packages/logger": {
+      "component": "pkg-logger",
+      "changelog-path": "CHANGELOG.md",
+      "path": "packages/logger"
+    },
+    "packages/mail": {
+      "component": "pkg-mail",
+      "changelog-path": "CHANGELOG.md",
+      "path": "packages/mail"
+    },
+    "packages/shared": {
+      "component": "pkg-shared",
+      "changelog-path": "CHANGELOG.md",
+      "path": "packages/shared"
+    },
+    "packages/sso": {
+      "component": "pkg-sso",
+      "changelog-path": "CHANGELOG.md",
+      "path": "packages/sso"
+    },
+    "packages/storage": {
+      "component": "pkg-storage",
+      "changelog-path": "CHANGELOG.md",
+      "path": "packages/storage"
+    },
+    "packages/ui": {
+      "component": "pkg-ui",
+      "changelog-path": "CHANGELOG.md",
+      "path": "packages/ui"
+    },
+    "packages/validators": {
+      "component": "pkg-validators",
+      "changelog-path": "CHANGELOG.md",
+      "path": "packages/validators"
+    },
+    "tooling/tailwind": {
+      "component": "tailwind-config",
+      "changelog-path": "CHANGELOG.md",
+      "path": "tooling/tailwind"
     }
   }
 }

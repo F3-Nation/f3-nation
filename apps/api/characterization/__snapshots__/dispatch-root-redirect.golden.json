@@ -1,0 +1,7 @@
+{
+  "body": "",
+  "headers": {
+    "location": "http://api.characterization.test/docs"
+  },
+  "status": 302
+}

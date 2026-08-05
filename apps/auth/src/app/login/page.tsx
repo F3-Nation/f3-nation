@@ -4,7 +4,7 @@ import Link from "next/link";
 export default function LoginPage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center">
-      <div className="w-full max-w-lg space-y-8 rounded-lg border bg-card p-10 shadow-sm">
+      <div className="w-full max-w-lg space-y-8 rounded-lg border bg-card p-10 shadow-xs">
         <div className="flex flex-col items-center space-y-4">
           <Image
             src="/f3nation.svg"

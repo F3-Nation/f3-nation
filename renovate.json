@@ -1,7 +1,13 @@
 {
   "$schema": "https://json.schemastore.org/renovate.json",
-  "extends": ["config:recommended"],
-  "enabledManagers": ["github-actions", "npm"],
+  "extends": ["config:recommended", "group:allNonMajor"],
+  "enabledManagers": [
+    "github-actions",
+    "npm",
+    "docker-compose",
+    "dockerfile",
+    "pep621"
+  ],
   "timezone": "America/New_York",
   "schedule": ["before 9am on Monday"],
   "dependencyDashboard": true,
@@ -11,6 +17,7 @@
   "rangeStrategy": "bump",
   "pinDigests": true,
   "prConcurrentLimit": 10,
+  "vulnerabilityAlerts": { "groupName": null, "schedule": [] },
   "packageRules": [
     {
       "description": "Group first-party GitHub Actions (actions/*); auto-merge minor and patch — low supply-chain risk",
@@ -32,101 +39,29 @@
       "enabled": false
     },
     {
-      "description": "Group Next.js ecosystem packages",
-      "groupName": "Next.js",
-      "matchDepTypes": ["pnpm.catalog.default"],
-      "matchPackageNames": [
-        "next",
-        "next-auth",
-        "next-themes",
-        "@sentry/nextjs",
-        "@scalar/nextjs-api-reference",
-        "@t3-oss/env-nextjs"
-      ]
+      "description": "Group Python (uv/pyproject.toml) minor and patch updates into one PR, separate from the npm non-major group — different lockfile, keeps uv.lock churn reviewable on its own",
+      "groupName": "Python dependencies (non-major)",
+      "groupSlug": "python-non-major",
+      "matchManagers": ["pep621"],
+      "matchUpdateTypes": ["minor", "patch"]
     },
     {
-      "description": "Group React core packages",
-      "groupName": "React",
-      "matchDepTypes": ["pnpm.catalog.default"],
-      "matchPackageNames": [
-        "react",
-        "react-dom",
-        "@types/react",
-        "@types/react-dom"
-      ]
+      "description": "Do not auto-update the Python base image; adopt interpreter upgrades manually",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["python"],
+      "enabled": false
     },
     {
-      "description": "Group all @radix-ui/* packages",
-      "groupName": "Radix UI",
-      "matchDepTypes": ["pnpm.catalog.default"],
-      "matchPackageNames": ["@radix-ui/*"]
+      "description": "Hold TypeScript at 6.x: 7.0 is the native (Go) port and is too new to adopt. Renovate rolls all 7.x into one \"to v7\" upgrade, so raise this to <7.2.0 (or drop the rule) when ready to migrate rather than closing the PR.",
+      "matchDatasources": ["npm"],
+      "matchPackageNames": ["typescript"],
+      "allowedVersions": "<7.0.0"
     },
     {
-      "description": "Group TanStack packages",
-      "groupName": "TanStack",
-      "matchDepTypes": ["pnpm.catalog.default"],
-      "matchPackageNames": ["@tanstack/*"]
-    },
-    {
-      "description": "Group oRPC packages",
-      "groupName": "oRPC",
-      "matchDepTypes": ["pnpm.catalog.default"],
-      "matchPackageNames": ["@orpc/*"]
-    },
-    {
-      "description": "Group Drizzle ORM packages",
-      "groupName": "Drizzle ORM",
-      "matchDepTypes": ["pnpm.catalog.default"],
-      "matchPackageNames": ["drizzle-orm", "drizzle-kit", "drizzle-zod"]
-    },
-    {
-      "description": "Group testing packages",
-      "groupName": "Testing",
-      "matchDepTypes": ["pnpm.catalog.default"],
-      "matchPackageNames": [
-        "vitest",
-        "@vitest/*",
-        "@testing-library/*",
-        "jsdom",
-        "vitest-canvas-mock"
-      ]
-    },
-    {
-      "description": "Group ESLint packages",
-      "groupName": "ESLint",
-      "matchDepTypes": ["pnpm.catalog.default"],
-      "matchPackageNames": [
-        "eslint",
-        "typescript-eslint",
-        "eslint-config-turbo",
-        "eslint-plugin-import-x",
-        "eslint-plugin-jsx-a11y",
-        "eslint-plugin-react",
-        "eslint-plugin-react-hooks",
-        "@next/eslint-plugin-next"
-      ]
-    },
-    {
-      "description": "Group Prettier and formatting packages",
-      "groupName": "Prettier",
-      "matchDepTypes": ["pnpm.catalog.default"],
-      "matchPackageNames": [
-        "prettier",
-        "prettier-plugin-tailwindcss",
-        "@ianvs/prettier-plugin-sort-imports"
-      ]
-    },
-    {
-      "description": "Group Tailwind CSS packages",
-      "groupName": "Tailwind CSS",
-      "matchDepTypes": ["pnpm.catalog.default"],
-      "matchPackageNames": [
-        "tailwindcss",
-        "tailwind-merge",
-        "tailwindcss-animate",
-        "autoprefixer",
-        "postcss"
-      ]
+      "description": "Hold at <1.9.0: 1.9.0 rewired AdvancedMarker onClick to the gmp-click DOM event (upstream PR #997), dropping event.stop()/event.latLng. Shipped as a minor but breaks marker clicks at runtime. Remove this rule with the migration.",
+      "matchDatasources": ["npm"],
+      "matchPackageNames": ["@vis.gl/react-google-maps"],
+      "allowedVersions": "<1.9.0"
     }
   ]
 }

@@ -38,7 +38,7 @@ speculative ones. A wrong finding erodes trust in the whole batch.
 ### Confirm your tools and context
 
 - **GitHub CLI:** Confirm `gh auth status` and the target repo
-  (`F3-Nation/f3-nation`). The default branch is `dev`. The repo is **public** —
+  (`F3-Nation/f3-nation`). The default branch is `main`. The repo is **public** —
   do not paste secrets, tokens, or real user PII into issue bodies.
 - **Shell:** In bash, prefix commands with `set +H` so `!` characters don't
   trigger history expansion. If `pnpm` isn't on `PATH`, run
@@ -200,6 +200,10 @@ file.arrayBuffer()` on untrusted input.
 - Duplicated logic that has drifted between apps (e.g. two copies of an auth
   helper where only one was fixed).
 - Dead code, commented-out prod branches, `TODO`/`FIXME` on security paths.
+- Raw `throw new Error(...)` in a `packages/api/src/router` handler instead of
+  a typed `ORPCError`, or an inline ESLint disable suppressing the rule that
+  catches it. Policy and rationale:
+  [`AGENTS.md` § API Error Handling](../AGENTS.md#api-error-handling).
 
 ---
 

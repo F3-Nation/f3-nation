@@ -1,0 +1,26 @@
+name: Setup Node, pnpm, Python, and uv
+description: >-
+  Install Python and uv, then pnpm and Node (pinned via .nvmrc), restore the
+  pnpm store cache, and install workspace dependencies from the frozen
+  lockfile. Shared by every CI job so the toolchain setup can never drift
+  between jobs.
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      with:
+        python-version: "3.12"
+
+    - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+
+    - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      with:
+        node-version-file: .nvmrc
+        cache: pnpm
+
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile

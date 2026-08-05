@@ -96,7 +96,7 @@ export const FiltersAll = (props: ComponentProps<"div">) => {
       )}
       {...rest}
     >
-      <div className="mt-4 flex h-full flex-col gap-4 overflow-auto px-6 pb-20 ">
+      <div className="mt-4 flex h-full flex-col gap-4 overflow-auto px-6 pb-20">
         <div className="flex flex-row justify-between">
           <h2 className="text-center text-xl font-bold">Map Filters</h2>
           <button
@@ -109,7 +109,7 @@ export const FiltersAll = (props: ComponentProps<"div">) => {
           </button>
         </div>
         <div>
-          <h3 className="mb-2 mt-2 text-lg font-semibold">Day of Workout</h3>
+          <h3 className="mt-2 mb-2 text-lg font-semibold">Day of Workout</h3>
           <div className="grid grid-cols-7 gap-2">
             {SHORT_DAY_ORDER.map((day, index) => (
               <button
@@ -141,7 +141,7 @@ export const FiltersAll = (props: ComponentProps<"div">) => {
                 })
               }
             >
-              <SelectTrigger data-vaul-no-drag className="w-40">
+              <SelectTrigger className="w-40">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -158,7 +158,6 @@ export const FiltersAll = (props: ComponentProps<"div">) => {
               }
             >
               <SelectTrigger
-                data-vaul-no-drag
                 className={cn(
                   "w-40",
                   filters.beforeAfterTime !== TimeSelection.none &&
@@ -180,7 +179,7 @@ export const FiltersAll = (props: ComponentProps<"div">) => {
         </div>
         <div>
           <h2 className="mb-2 text-lg font-semibold">Type of Workout</h2>
-          <div className="w-full max-w-sm" data-vaul-no-drag>
+          <div className="w-full max-w-sm">
             <VirtualizedCombobox
               disabled={isLoading}
               isMulti

@@ -12,13 +12,6 @@ const config = {
   output: "standalone",
   reactStrictMode: true,
 
-  webpack: (config, { webpack }) => {
-    // https://github.com/handlebars-lang/handlebars.js/issues/1174#issuecomment-229918935
-    config.resolve.alias.handlebars = "handlebars/dist/handlebars.min.js";
-    return config;
-  },
-  reactStrictMode: true,
-
   /** Enables hot reloading for local packages without a build step */
   transpilePackages: [
     "@acme/api",
@@ -33,6 +26,15 @@ const config = {
   // Next.js does not try to bundle it.
   serverExternalPackages: ["pino", "pino-pretty", "thread-stream"],
 
+  // Turbopack's standalone trace drops the dlopen'd libvips shared library from
+  // @img/sharp-libvips-*; force the complete packages into the trace. A zero-match
+  // glob is a silent no-op, so the Dockerfile asserts libvips landed in standalone.
+  outputFileTracingIncludes: {
+    "/*": ["../../node_modules/.pnpm/@img+sharp-libvips-*/**/*"],
+    // The /changelog page is generated from this file at build time.
+    "/changelog": ["./CHANGELOG.md"],
+  },
+
   images: {
     remotePatterns: [
       {
@@ -43,8 +45,7 @@ const config = {
     ],
   },
 
-  /** We already do linting and typechecking as separate tasks in CI */
-  eslint: { ignoreDuringBuilds: true },
+  /** We already do typechecking as a separate task in CI */
   typescript: { ignoreBuildErrors: true },
   redirects: async () => {
     const adminUrl = (
@@ -91,7 +92,4 @@ export default withSentryConfig(config, {
   // Note: Check that the configured route will not match with your Next.js middleware, otherwise reporting of client-
   // side errors will fail.
   tunnelRoute: "/monitoring",
-
-  // Automatically tree-shake Sentry logger statements to reduce bundle size
-  disableLogger: true,
 });

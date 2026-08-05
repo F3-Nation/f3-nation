@@ -1,8 +1,5 @@
 import gte from "lodash/gte";
-import { Edit, PlusCircle, Trash } from "lucide-react";
-import { useSession } from "next-auth/react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useCallback, useMemo } from "react";
 
 import { isProd } from "@acme/shared/common/constants";
@@ -10,18 +7,10 @@ import { isTruthy } from "@acme/shared/common/functions";
 import { cn } from "@acme/ui";
 import { toast } from "@acme/ui/toast";
 
-import { invalidateQueries, orpc, useQuery } from "~/orpc/react";
+import { orpc, useQuery } from "~/orpc/react";
 import { getWhenFromWorkout } from "~/utils/get-when-from-workout";
 import { useUpdateEventSearchParams } from "~/utils/hooks/use-update-event-search-params";
-import { appStore } from "~/utils/store/app";
-import {
-  DeleteType,
-  ModalType,
-  eventAndLocationToUpdateRequest,
-  eventDefaults,
-  modalStore,
-  openModal,
-} from "~/utils/store/modal";
+import { ModalType, openModal } from "~/utils/store/modal";
 import textLink from "~/utils/text-link";
 import { ContactLinks } from "../contact-links";
 import { ImageWithFallback } from "@acme/ui/image-with-fallback";
@@ -40,8 +29,6 @@ export const WorkoutDetailsContent = ({
   providedEventId,
   chipSize,
 }: WorkoutDetailsContentProps) => {
-  const router = useRouter();
-  const { data: session } = useSession();
   const { data: results, isLoading } = useQuery(
     orpc.map.location.locationWorkout.queryOptions({
       input: { locationId },
@@ -53,16 +40,6 @@ export const WorkoutDetailsContent = ({
     if (providedEventId) return providedEventId;
     return results?.location?.events?.[0]?.id ?? null;
   }, [providedEventId, results]);
-
-  const { data: canDeleteEventResponse } = useQuery(
-    orpc.request.canDeleteEvent.queryOptions({
-      input: { eventId: selectedEventId ?? 0 },
-      enabled: !!selectedEventId,
-    }),
-  );
-  const canDeleteEvent = canDeleteEventResponse?.canDelete;
-
-  const mode = appStore.use.mode();
 
   const event = useMemo(
     () =>
@@ -105,13 +82,10 @@ export const WorkoutDetailsContent = ({
 
   const hasAoContact = useMemo(
     () =>
-      aoContact &&
-      (aoContact.website ??
-        aoContact.email ??
-        aoContact.phone ??
-        aoContact.twitter ??
-        aoContact.facebook ??
-        aoContact.instagram),
+      // An empty string is a real "no value" case for these fields, so `??`
+      // (which only falls through on null/undefined) would wrongly hide the
+      // whole contact section whenever the first field happens to be "".
+      !!aoContact && Object.values(aoContact).some(Boolean),
     [aoContact],
   );
 
@@ -135,6 +109,7 @@ export const WorkoutDetailsContent = ({
                 key="fullAddress"
                 href={`https://www.google.com/maps/search/?api=1&query=${location.lat},${location.lon}`}
                 target="_blank"
+                rel="noopener noreferrer"
                 className="underline"
               >
                 {location.fullAddress ?? "Directions"}
@@ -158,6 +133,9 @@ export const WorkoutDetailsContent = ({
         : {},
     [event, location, aoContact, hasAoContact],
   );
+
+  const hasMultipleWorkouts = (results?.location?.events.length ?? 0) > 1;
+  const shouldShowAOSection = hasMultipleWorkouts && event?.aoName;
 
   const regionContact = useMemo(
     () =>
@@ -186,32 +164,6 @@ export const WorkoutDetailsContent = ({
     [regionContact],
   );
 
-  const regionFields = useMemo(
-    () =>
-      location
-        ? {
-            Name: location.regionName ? `F3 ${location.regionName}` : null,
-            Contact:
-              hasRegionContact && regionContact ? (
-                <ContactLinks contact={regionContact} iconSize="sm" />
-              ) : null,
-            Logo: location.regionLogo ? (
-              <ImageWithFallback
-                key={location.regionLogo}
-                src={location.regionLogo}
-                fallbackSrc="/f3_logo.png"
-                loading="lazy"
-                width={64}
-                height={64}
-                alt={location.regionName ?? "F3 logo"}
-                className="rounded-lg bg-black"
-              />
-            ) : null,
-          }
-        : {},
-    [location, regionContact, hasRegionContact],
-  );
-
   if (isLoading) {
     return <WorkoutDetailsSkeleton />;
   }
@@ -229,7 +181,7 @@ export const WorkoutDetailsContent = ({
   return (
     <>
       <div className="flex flex-row flex-wrap items-center justify-start gap-x-2">
-        <div className="flex flex-shrink-0 flex-col items-center">
+        <div className="flex shrink-0 flex-col items-center">
           <button
             className="cursor-pointer"
             onClick={() =>
@@ -254,33 +206,13 @@ export const WorkoutDetailsContent = ({
             />
           </button>
         </div>
-        <div className="line-clamp-2 flex-1 text-left text-2xl font-bold leading-6 sm:text-4xl">
+        <div className="line-clamp-2 flex-1 text-left text-2xl leading-tight font-bold sm:text-4xl">
           {event?.name ?? "Workout Information"}
         </div>
       </div>
 
-      {mode === "edit" ? (
-        <button
-          className={cn(
-            "-mt-2 flex w-fit flex-row items-center gap-2 rounded-sm bg-blue-600 px-2 text-white sm:mt-1",
-          )}
-          onClick={() => {
-            openModal(ModalType.UPDATE_LOCATION, {
-              requestType: "edit",
-              ...eventAndLocationToUpdateRequest({
-                event,
-                location,
-              }),
-            });
-          }}
-        >
-          <Edit className="h-4 w-4" />
-          <span>Edit Workout</span>
-        </button>
-      ) : null}
-
       <div>
-        {(location?.events.length ?? 0) > 1 ? (
+        {hasMultipleWorkouts ? (
           <span className="text-sm">
             There are {location?.events.length} workouts at this location
           </span>
@@ -310,31 +242,6 @@ export const WorkoutDetailsContent = ({
               hideName={(location?.events.length ?? 0) === 1}
             />
           ))}
-          {mode === "edit" ? (
-            <button
-              className={cn(
-                "flex cursor-pointer flex-row items-center",
-                "rounded-sm",
-                "text-base text-white",
-                "px-2 shadow",
-                { "pointer-events-auto bg-blue-600": true },
-                { "gap-2 py-0": true },
-              )}
-              onClick={() => {
-                openModal(ModalType.UPDATE_LOCATION, {
-                  requestType: "create_event",
-                  ...eventDefaults,
-                  ...eventAndLocationToUpdateRequest({
-                    event: undefined,
-                    location,
-                  }),
-                });
-              }}
-            >
-              <PlusCircle className="h-4 w-4" />
-              <span>Add Workout</span>
-            </button>
-          ) : null}
         </div>
       </div>
 
@@ -357,7 +264,7 @@ export const WorkoutDetailsContent = ({
                   <dt className="text-sm font-medium text-muted-foreground">
                     {field}
                   </dt>
-                  <dd className="mt-1 whitespace-pre-line text-sm text-foreground">
+                  <dd className="mt-1 text-sm whitespace-pre-line text-foreground">
                     {workoutFields[field as keyof typeof workoutFields]}
                   </dd>
                 </div>
@@ -374,6 +281,7 @@ export const WorkoutDetailsContent = ({
                 <Link
                   href="https://f3nation.com/about-f3"
                   target="_blank"
+                  rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 text-blue-600 underline hover:text-blue-800 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
                 >
                   FAQs and more about F3 Nation
@@ -400,30 +308,142 @@ export const WorkoutDetailsContent = ({
         </dl>
       </div>
 
-      <div className="mt-4 text-xl font-bold">Region Information</div>
-      <div className="w-full [&_dd]:[overflow-wrap:anywhere]">
-        <dl className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2">
-          {Object.keys(regionFields)
-            .filter(
-              (field) => !!regionFields[field as keyof typeof regionFields],
-            )
-            .map((field) => (
-              <div key={field} className="sm:col-span-1">
-                <dt className="text-sm font-medium text-muted-foreground">
-                  {field}
-                </dt>
-                <dd className="mt-1 text-sm text-foreground">
-                  {regionFields[field as keyof typeof regionFields]}
-                </dd>
-              </div>
-            ))}
-        </dl>
+      {shouldShowAOSection && (
+        <div className="mt-6 rounded-lg border border-border bg-muted/30 p-4">
+          <div className="mb-3 flex items-start gap-3">
+            {event.aoLogo ? (
+              <button
+                className="cursor-pointer"
+                onClick={() =>
+                  openModal(ModalType.FULL_IMAGE, {
+                    title: event.aoName ?? "AO logo",
+                    src: event.aoLogo ?? "/f3_logo.png",
+                    fallbackSrc: "/f3_logo.png",
+                    alt: event.aoName ?? "AO logo",
+                  })
+                }
+              >
+                <ImageWithFallback
+                  key={event.aoLogo}
+                  src={event.aoLogo}
+                  fallbackSrc="/f3_logo.png"
+                  loading="lazy"
+                  width={48}
+                  height={48}
+                  alt={event.aoName ?? "AO logo"}
+                  className="rounded-lg bg-black"
+                />
+              </button>
+            ) : null}
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold">About {event.aoName}</h3>
+              <p className="text-sm text-muted-foreground">
+                This workout is part of the {event.aoName} AO (Area of
+                Operation)
+              </p>
+            </div>
+          </div>
+          {event.aoWebsite && (
+            <Link
+              href={event.aoWebsite}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-sm text-blue-600 underline hover:text-blue-800 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
+            >
+              Visit AO Website
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <line x1="10" y1="14" x2="21" y2="3"></line>
+              </svg>
+            </Link>
+          )}
+        </div>
+      )}
+
+      <div className="mt-6 rounded-lg border border-border bg-muted/30 p-4">
+        <div className="mb-3 flex items-start gap-3">
+          {location.regionLogo && (
+            <button
+              className="cursor-pointer"
+              onClick={() =>
+                openModal(ModalType.FULL_IMAGE, {
+                  title: location.regionName ?? "Region logo",
+                  src: location.regionLogo ?? "/f3_logo.png",
+                  fallbackSrc: "/f3_logo.png",
+                  alt: location.regionName ?? "Region logo",
+                })
+              }
+            >
+              <ImageWithFallback
+                key={location.regionLogo}
+                src={location.regionLogo}
+                fallbackSrc="/f3_logo.png"
+                loading="lazy"
+                width={48}
+                height={48}
+                alt={location.regionName ?? "Region logo"}
+                className="rounded-lg bg-black"
+              />
+            </button>
+          )}
+          <div className="flex-1">
+            <h3 className="text-lg font-semibold">
+              About F3 {location.regionName}
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              This workout is part of the F3 {location.regionName} region
+            </p>
+          </div>
+        </div>
+        {location.regionWebsite && (
+          <Link
+            href={location.regionWebsite}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-sm text-blue-600 underline hover:text-blue-800 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
+          >
+            Visit Region Website
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+              <polyline points="15 3 21 3 21 9"></polyline>
+              <line x1="10" y1="14" x2="21" y2="3"></line>
+            </svg>
+          </Link>
+        )}
+        {hasRegionContact && regionContact && (
+          <ContactLinks
+            contact={regionContact}
+            iconSize="sm"
+            className="mt-3"
+          />
+        )}
       </div>
 
       <div className="mt-6 flex justify-end">
         <button
           onClick={onCopyLink}
-          className="flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+          className="flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-xs transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -443,83 +463,6 @@ export const WorkoutDetailsContent = ({
           <span>Copy Link to Event</span>
         </button>
       </div>
-
-      {mode === "edit" ? (
-        <div className="mt-4 flex flex-col gap-2">
-          <button
-            className="flex flex-row items-center justify-center gap-2 rounded-md bg-blue-600 px-2 py-1 text-white"
-            onClick={() => {
-              openModal(ModalType.UPDATE_LOCATION, {
-                requestType: "edit",
-                ...eventAndLocationToUpdateRequest({
-                  event,
-                  location,
-                }),
-              });
-            }}
-          >
-            <Edit className="h-4 w-4" />
-            <span>Edit Workout</span>
-          </button>
-
-          <button
-            className={cn(
-              "flex flex-row items-center justify-center gap-2 rounded-md px-2 py-1",
-              {
-                "text-red-600 hover:text-red-700": !canDeleteEvent,
-                "cursor-not-allowed text-gray-400": canDeleteEvent,
-              },
-            )}
-            disabled={!!canDeleteEvent}
-            onClick={() => {
-              openModal(ModalType.DELETE_CONFIRMATION, {
-                type: DeleteType.EVENT,
-                onConfirm: () => {
-                  if (location.regionId == null) {
-                    return;
-                  }
-                  if (!location.regionId || !selectedEventId) return;
-
-                  const event = location.events.find(
-                    (e) => e.id === selectedEventId,
-                  );
-                  if (!event) return;
-
-                  void orpc.request.submitDeleteRequest
-                    .call({
-                      regionId: location.regionId,
-                      eventId: event.id,
-                      eventName: event.name,
-                      submittedBy: session?.user?.email ?? "",
-                    })
-                    .then((result) => {
-                      void invalidateQueries("location");
-                      void invalidateQueries({
-                        queryKey: orpc.request.canDeleteEvent.queryKey({
-                          input: { eventId: event.id },
-                        }),
-                        exact: false,
-                      });
-                      router.refresh();
-                      toast.success(
-                        result.status === "pending"
-                          ? "Delete request submitted"
-                          : "Successfully deleted event",
-                      );
-                      // Close all modals
-                      modalStore.setState({ modals: [] });
-                    });
-                },
-              });
-            }}
-          >
-            <Trash className="h-4 w-4" />
-            <span>
-              {canDeleteEvent ? "Delete Request Submitted" : "Delete Workout"}
-            </span>
-          </button>
-        </div>
-      ) : null}
     </>
   );
 };

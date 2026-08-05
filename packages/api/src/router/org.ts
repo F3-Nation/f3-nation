@@ -232,7 +232,7 @@ export const orgRouter = {
               .nullable()
               .describe("Last annual review date"),
             meta: z
-              .record(z.unknown())
+              .record(z.string(), z.unknown())
               .nullable()
               .describe("Organization metadata"),
             created: z.string().describe("Organization creation date"),
@@ -676,7 +676,7 @@ export const orgRouter = {
               .nullable()
               .describe("Last annual review date"),
             meta: z
-              .record(z.unknown())
+              .record(z.string(), z.unknown())
               .nullable()
               .describe("Organization metadata"),
             created: z.string().describe("Organization creation date"),
@@ -753,7 +753,7 @@ export const orgRouter = {
               .nullable()
               .describe("Last annual review date"),
             meta: z
-              .record(z.unknown())
+              .record(z.string(), z.unknown())
               .nullable()
               .describe("Organization metadata"),
             created: z.string().describe("Organization creation date"),
@@ -1039,8 +1039,8 @@ export const orgRouter = {
         .returning();
 
       if (!deletedOrg) {
-        throw new ORPCError("CONFLICT", {
-          message: "Failed to delete organization",
+        throw new ORPCError("NOT_FOUND", {
+          message: "Organization not found",
         });
       }
 

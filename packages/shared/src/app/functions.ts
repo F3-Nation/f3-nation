@@ -57,7 +57,7 @@ const isISODate = (str: string): boolean => {
 
 export const dateOrIso = z.union([
   z.date(),
-  z.string().refine(isISODate, { message: "Not a valid ISO string date " }),
+  z.string().refine(isISODate, { error: "Not a valid ISO string date " }),
 ]);
 
 export const dayOfWeekToShortDayOfWeek = (dayOfWeek: DayOfWeek): string => {
@@ -132,38 +132,41 @@ export const requestTypeToTitle = (requestType: RequestType) => {
   switch (requestType) {
     case "create_event":
       return "New Workout";
-    // case "create_location_and_event":
-    //   return "New Location and Workout";
+    case "create_ao_and_location_and_event":
+      return "New AO, Location, and Workout";
 
     case "edit":
       return "Edit Request";
-    // case "edit_event":
-    //   return "Edit Workout";
-    // case "edit_ao_and_location":
-    //   return "Edit AO and Location";
+    case "edit_event":
+      return "Edit Workout";
+    case "edit_ao_and_location":
+      return "Edit AO and Location";
 
-    // case "move_ao_to_different_region":
-    //   return "Move AO to Different Region";
-    // case "move_ao_to_new_location":
-    //   return "Move AO to New Location";
-    // case "move_ao_to_different_location":
-    //   return "Move AO to Different Location";
-    // case "move_event_to_different_ao":
-    //   return "Move Workout to Different AO";
-    // case "move_event_to_new_location":
-    //   return "Move Workout to New Location";
+    case "move_ao_to_different_region":
+      return "Move AO to Different Region";
+    case "move_ao_to_new_location":
+      return "Move AO to New Location";
+    case "move_ao_to_different_location":
+      return "Move AO to Different Location";
+    case "move_event_to_different_ao":
+      return "Move Event to Different AO";
+    case "move_event_to_new_ao":
+      return "Move Event to New AO";
+    case "move_event_to_new_location":
+      return "Move Event to New Location";
 
     case "delete_event":
       return "Delete Workout";
-    // case "delete_ao":
-    //   return "Delete AO";
+    case "delete_ao":
+      return "Delete AO";
     default:
-      return "Update";
+      // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
+      return `Update (${requestType})`;
   }
 };
 
 // Helper to normalize query params that can be single value or array
-export const arrayOrSingle = <T extends z.ZodTypeAny>(schema: T) =>
+export const arrayOrSingle = <T extends z.ZodType>(schema: T) =>
   z.preprocess(
     (val) => (val === undefined ? undefined : Array.isArray(val) ? val : [val]),
     z.array(schema),
@@ -179,6 +182,7 @@ export const parseSorting = () =>
       // Try to join them and parse as JSON
       if (Array.isArray(val) && val.every((v) => typeof v === "string")) {
         try {
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-return
           return JSON.parse(val.join(","));
         } catch {
           // If joining fails, try parsing each string individually
@@ -195,6 +199,7 @@ export const parseSorting = () =>
       if (typeof val === "string") {
         console.log("val is string");
         try {
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-return
           return JSON.parse(val);
         } catch {
           return undefined;
@@ -222,7 +227,7 @@ export function isValidEmail(email: string | null | undefined): boolean {
   if (typeof email !== "string") return false;
   const trimmed = email.trim();
   if (!trimmed) return false;
-  return z.string().email().safeParse(trimmed).success;
+  return z.email().safeParse(trimmed).success;
 }
 
 /**

@@ -109,11 +109,13 @@ export const Z_INDEX = {
 
   // Default station button
   HOVER_CARD: 9000,
+
+  LOADING_MODAL: 9001,
 } as const;
 
 export const MOBILE_SEARCH_RESULT_ITEM_HEIGHT = 128;
 
-export const MIN_TEXT_LENGTH_FOR_SEARCH_RESULTS = 2;
+export const MIN_TEXT_LENGTH_FOR_SEARCH_RESULTS = 3;
 
 export const feedbackSchema = z.object({
   type: z.enum(["bug", "feature request", "feedback", "other"]),
@@ -125,7 +127,7 @@ export const feedbackSchema = z.object({
 export type FeedbackSchema = z.infer<typeof feedbackSchema>;
 
 export const filterButtonClassName =
-  "text-sm w-full whitespace-nowrap font-semibold pointer-events-auto flex items-center justify-center gap-2 rounded-md bg-card px-2 py-1 shadow text-foreground";
+  "text-sm w-full whitespace-nowrap font-semibold pointer-events-auto flex items-center justify-center gap-2 rounded-md bg-card px-2 py-1 shadow-sm text-foreground";
 
 // Basic is just signed in
 // Editor can change data for their region
@@ -481,6 +483,8 @@ export const TEST_SECTOR_ORG_ID = 5;
 export const TEST_AREA_ORG_ID = 6;
 export const TEST_AO_1_ORG_ID = 7;
 export const TEST_AO_2_ORG_ID = 8;
+export const TEST_REGION_1_LOCATION_ID = 21;
+export const TEST_REGION_1_AO_ID = 22;
 export const TEST_EDITOR_USER_ID = 1;
 export const TEST_ADMIN_USER_ID = 2;
 export const TEST_EDITOR_ROLE_ID = 1;

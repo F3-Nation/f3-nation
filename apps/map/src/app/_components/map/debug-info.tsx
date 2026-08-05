@@ -19,7 +19,7 @@ export const DebugInfo = () => {
     <div
       style={{ zIndex: Z_INDEX.DEBUG_INFO }}
       className={cn(
-        `absolute right-0 top-48 h-min bg-foreground/10 p-2 lg:bottom-0 lg:right-0`,
+        `absolute top-48 right-0 h-min bg-foreground/10 p-2 lg:right-0 lg:bottom-0`,
       )}
     >
       <div className="m-0 p-0">Zoom: {zoom?.toFixed(1)}</div>

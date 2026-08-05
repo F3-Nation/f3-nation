@@ -1,7 +1,11 @@
-import { Facebook, Globe, Instagram, Mail, Phone, Twitter } from "lucide-react";
+import { Globe, Mail, Phone } from "lucide-react";
 import Link from "next/link";
 
 import { cn } from "@acme/ui";
+
+import FacebookSvgComponent from "./SVGs/facebook";
+import InstagramSvgComponent from "./SVGs/instagram";
+import XSvgComponent from "./SVGs/x";
 
 interface ContactInfo {
   website?: string | null;
@@ -41,8 +45,16 @@ export const ContactLinks = ({
 }: ContactLinksProps) => {
   const { website, email, phone, twitter, facebook, instagram } = contact;
 
-  const hasAnyContact =
-    website ?? email ?? phone ?? twitter ?? facebook ?? instagram;
+  // An empty string is a real "no value" case for these fields, so `??`
+  // (which only falls through on null/undefined) would wrongly treat it as set.
+  const hasAnyContact = [
+    website,
+    email,
+    phone,
+    twitter,
+    facebook,
+    instagram,
+  ].some(Boolean);
   if (!hasAnyContact) return null;
 
   const iconClass = iconSizes[iconSize];
@@ -99,17 +111,17 @@ export const ContactLinks = ({
     },
     {
       url: normalizeTwitterUrl(twitter),
-      icon: Twitter,
+      icon: XSvgComponent,
       label: "X (Twitter)",
     },
     {
       url: normalizeFacebookUrl(facebook),
-      icon: Facebook,
+      icon: FacebookSvgComponent,
       label: "Facebook",
     },
     {
       url: normalizeInstagramUrl(instagram),
-      icon: Instagram,
+      icon: InstagramSvgComponent,
       label: "Instagram",
     },
   ].filter((link) => link.url);

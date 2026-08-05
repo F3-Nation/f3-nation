@@ -20,8 +20,96 @@ import { SeriesException } from "@acme/shared/app/enums";
 import { arrayOrSingle } from "@acme/shared/app/functions";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
+import { logWarn } from "../logger";
 import { editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
+
+const booleanStringSchema = z
+  .union([z.boolean(), z.enum(["true", "false"])])
+  .transform((value) => value === true || value === "true");
+
+type SlackChannelSource =
+  | "event_instance_meta"
+  | "region_settings"
+  | "region_settings_misconfigured"
+  | "ao_org_meta"
+  | "none";
+
+interface SlackChannelContext {
+  channelId: string | null;
+  source: SlackChannelSource;
+}
+
+const getNonEmptySlackChannelId = (meta: unknown): string | null => {
+  if (!meta || typeof meta !== "object" || Array.isArray(meta)) {
+    return null;
+  }
+
+  const channelId = (meta as Record<string, unknown>).slack_channel_id;
+  return typeof channelId === "string" && channelId.trim().length > 0
+    ? channelId.trim()
+    : null;
+};
+
+type SpecifiedDestinationChannelResolution =
+  | { status: "not_configured" }
+  | { status: "configured"; channelId: string }
+  | { status: "misconfigured" };
+
+const getSpecifiedDestinationChannelId = (
+  settings: unknown,
+  kind: "preblast" | "backblast",
+): SpecifiedDestinationChannelResolution => {
+  if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
+    return { status: "not_configured" };
+  }
+
+  const settingsRecord = settings as Record<string, unknown>;
+  const destinationKey = `default_${kind}_destination`;
+  const channelKey = `${kind}_destination_channel`;
+
+  if (settingsRecord[destinationKey] !== "specified_channel") {
+    return { status: "not_configured" };
+  }
+
+  const channelId = settingsRecord[channelKey];
+  if (typeof channelId === "string" && channelId.trim().length > 0) {
+    return { status: "configured", channelId: channelId.trim() };
+  }
+
+  return { status: "misconfigured" };
+};
+
+const resolveSlackChannel = ({
+  eventInstanceChannelId,
+  regionSettings,
+  aoChannelId,
+  kind,
+}: {
+  eventInstanceChannelId: string | null;
+  regionSettings: unknown;
+  aoChannelId: string | null;
+  kind: "preblast" | "backblast";
+}): SlackChannelContext => {
+  if (eventInstanceChannelId) {
+    return { channelId: eventInstanceChannelId, source: "event_instance_meta" };
+  }
+
+  const regionChannel = getSpecifiedDestinationChannelId(regionSettings, kind);
+  if (regionChannel.status === "configured") {
+    return { channelId: regionChannel.channelId, source: "region_settings" };
+  }
+  if (regionChannel.status === "misconfigured") {
+    logWarn("api.event_instance.slack_channel_misconfigured", { kind });
+    return { channelId: null, source: "region_settings_misconfigured" };
+  }
+
+  if (aoChannelId) {
+    return { channelId: aoChannelId, source: "ao_org_meta" };
+  }
+
+  return { channelId: null, source: "none" };
+};
 
 /**
  * Event Instance Router
@@ -180,7 +268,12 @@ export const eventInstanceRouter = {
     }),
 
   byId: protectedProcedure
-    .input(z.object({ id: z.coerce.number() }))
+    .input(
+      z.object({
+        id: z.coerce.number(),
+        includeSlackChannelId: booleanStringSchema.optional().default(false),
+      }),
+    )
     .route({
       method: "GET",
       path: "/id/{id}",
@@ -323,7 +416,78 @@ export const eventInstanceRouter = {
           schema.locations.longitude,
         );
 
-      return instance ?? null;
+      if (!instance || !input.includeSlackChannelId) {
+        return instance ?? null;
+      }
+
+      const [eventOrg] = await ctx.db
+        .select({
+          id: schema.orgs.id,
+          parentId: schema.orgs.parentId,
+          orgType: schema.orgs.orgType,
+          meta: schema.orgs.meta,
+        })
+        .from(schema.orgs)
+        .where(eq(schema.orgs.id, instance.orgId));
+
+      const regionOrgId =
+        eventOrg?.orgType === "ao"
+          ? eventOrg.parentId
+          : eventOrg?.orgType === "region"
+            ? eventOrg.id
+            : null;
+      const aoChannelId =
+        eventOrg?.orgType === "ao"
+          ? getNonEmptySlackChannelId(eventOrg.meta)
+          : null;
+
+      const regionOrg = aliasedTable(schema.orgs, "context_region_org");
+      const regionSlackSpaces = regionOrgId
+        ? await ctx.db
+            .select({ settings: schema.slackSpaces.settings })
+            .from(schema.orgsXSlackSpaces)
+            .innerJoin(
+              schema.slackSpaces,
+              eq(schema.slackSpaces.id, schema.orgsXSlackSpaces.slackSpaceId),
+            )
+            .innerJoin(
+              regionOrg,
+              and(
+                eq(regionOrg.id, schema.orgsXSlackSpaces.orgId),
+                eq(regionOrg.orgType, "region"),
+                eq(regionOrg.isActive, true),
+              ),
+            )
+            .where(eq(schema.orgsXSlackSpaces.orgId, regionOrgId))
+            .limit(2)
+        : [];
+
+      if (regionSlackSpaces.length > 1) {
+        throw new ORPCError("CONFLICT", {
+          message: "Multiple Slack spaces are linked to this region",
+        });
+      }
+
+      const eventInstanceChannelId = getNonEmptySlackChannelId(instance.meta);
+      const regionSettings = regionSlackSpaces[0]?.settings ?? null;
+
+      return {
+        ...instance,
+        slackChannels: {
+          preblast: resolveSlackChannel({
+            eventInstanceChannelId,
+            regionSettings,
+            aoChannelId,
+            kind: "preblast",
+          }),
+          backblast: resolveSlackChannel({
+            eventInstanceChannelId,
+            regionSettings,
+            aoChannelId,
+            kind: "backblast",
+          }),
+        },
+      };
     }),
 
   crupdate: editorProcedure
@@ -342,16 +506,16 @@ export const eventInstanceRouter = {
         startTime: z.string().nullish(),
         endTime: z.string().nullish(),
         highlight: z.boolean().optional().default(false),
-        meta: z.record(z.unknown()).nullish(),
+        meta: z.record(z.string(), z.unknown()).nullish(),
         isPrivate: z.boolean().optional().default(false),
         eventTypeId: z.coerce.number().optional(),
-        eventTagId: z.coerce.number().optional(),
+        eventTagId: z.coerce.number().nullish(),
         preblast: z.string().nullish(),
-        preblastRich: z.record(z.unknown()).nullish(),
+        preblastRich: z.record(z.string(), z.unknown()).nullish(),
         preblastTs: z.number().nullish(),
         // Backblast fields
         backblast: z.string().nullish(),
-        backblastRich: z.array(z.record(z.unknown())).nullish(),
+        backblastRich: z.array(z.record(z.string(), z.unknown())).nullish(),
         backblastTs: z.number().nullish(),
         paxCount: z.number().nullish(),
         fngCount: z.number().nullish(),
@@ -415,6 +579,7 @@ export const eventInstanceRouter = {
         }
       }
 
+      const shouldUpdateEventTag = "eventTagId" in input;
       const { eventTypeId, eventTagId, name: _inputName, ...eventData } = input;
 
       // Create or update the event instance
@@ -451,17 +616,19 @@ export const eventInstanceRouter = {
       }
 
       // Handle event tag in join table
-      if (eventTagId) {
+      if (shouldUpdateEventTag) {
         await ctx.db
           .delete(schema.eventTagsXEventInstances)
           .where(
             eq(schema.eventTagsXEventInstances.eventInstanceId, result.id),
           );
 
-        await ctx.db.insert(schema.eventTagsXEventInstances).values({
-          eventInstanceId: result.id,
-          eventTagId,
-        });
+        if (eventTagId != null) {
+          await ctx.db.insert(schema.eventTagsXEventInstances).values({
+            eventInstanceId: result.id,
+            eventTagId,
+          });
+        }
       }
 
       return result;
@@ -521,9 +688,9 @@ export const eventInstanceRouter = {
         /** Only return events without a posted preblast (preblast_ts IS NULL) */
         notPostedOnly: z
           .enum(["true", "false"])
-          .transform((v) => v === "true")
           .optional()
-          .default("true"),
+          .default("true")
+          .transform((v) => v === "true"),
       }),
     )
     .route({
@@ -615,9 +782,9 @@ export const eventInstanceRouter = {
         /** Only return events without a posted backblast (backblast_ts IS NULL) */
         notPostedOnly: z
           .enum(["true", "false"])
-          .transform((v) => v === "true")
           .optional()
-          .default("true"),
+          .default("true")
+          .transform((v) => v === "true"),
       }),
     )
     .route({
@@ -708,9 +875,9 @@ export const eventInstanceRouter = {
         /** Only return events without a posted backblast (backblast_ts IS NULL) */
         notPostedOnly: z
           .enum(["true", "false"])
-          .transform((v) => v === "true")
           .optional()
-          .default("true"),
+          .default("true")
+          .transform((v) => v === "true"),
         /** Maximum number of events to return */
         limit: z.coerce.number().optional().default(20),
       }),
@@ -912,7 +1079,7 @@ export const eventInstanceRouter = {
             orgName: aoOrg.name,
             seriesId: schema.eventInstances.seriesId,
             seriesName: seriesEvent.name,
-            hasPreblast: sql<boolean>`${schema.eventInstances.preblastRich} IS NOT NULL`,
+            hasPreblast: sql<boolean>`${schema.eventInstances.preblastTs} IS NOT NULL`,
             eventTypes: sql<{ id: number; name: string }[]>`COALESCE(
               json_agg(
                 DISTINCT jsonb_build_object(
@@ -1000,7 +1167,7 @@ export const eventInstanceRouter = {
             orgName: aoOrg.name,
             seriesId: schema.eventInstances.seriesId,
             seriesName: seriesEvent.name,
-            hasPreblast: sql<boolean>`${schema.eventInstances.preblastRich} IS NOT NULL`,
+            hasPreblast: sql<boolean>`${schema.eventInstances.preblastTs} IS NOT NULL`,
             eventTypes: sql<{ id: number; name: string }[]>`COALESCE(
               json_agg(
                 DISTINCT jsonb_build_object(

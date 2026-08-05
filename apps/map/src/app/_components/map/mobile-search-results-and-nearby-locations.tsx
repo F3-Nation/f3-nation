@@ -40,10 +40,10 @@ export const MobileSearchResultsAndNearbyLocations = () => {
     <div
       style={{ zIndex: Z_INDEX.MOBILE_SEARCH_RESULTS }}
       className={cn(
-        "absolute bottom-0 left-0 right-0 flex h-full flex-col-reverse divide-y overflow-y-auto bg-background",
+        "absolute right-0 bottom-0 left-0 flex h-full flex-col-reverse divide-y overflow-y-auto bg-background",
       )}
     >
-      <div className="h-14 w-full flex-shrink-0 bg-background" />
+      <div className="h-14 w-full shrink-0 bg-background" />
       {text ? (
         <>
           <div

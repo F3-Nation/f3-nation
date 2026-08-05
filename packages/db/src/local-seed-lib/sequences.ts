@@ -44,4 +44,24 @@ export async function resetSequences(db: AppDb): Promise<void> {
       sql`SELECT setval('positions_id_seq', ${maxPositionId.max + 1})`,
     );
   }
+
+  const [maxAttendanceTypeId] = await db
+    .select({
+      max: sql<number>`coalesce(max(${schema.attendanceTypes.id}), 0)`,
+    })
+    .from(schema.attendanceTypes);
+  if (maxAttendanceTypeId?.max !== undefined && maxAttendanceTypeId.max > 0) {
+    await db.execute(
+      sql`SELECT setval('attendance_types_id_seq', ${maxAttendanceTypeId.max + 1})`,
+    );
+  }
+
+  const [maxEventTagId] = await db
+    .select({ max: sql<number>`coalesce(max(${schema.eventTags.id}), 0)` })
+    .from(schema.eventTags);
+  if (maxEventTagId?.max !== undefined && maxEventTagId.max > 0) {
+    await db.execute(
+      sql`SELECT setval('event_tags_id_seq', ${maxEventTagId.max + 1})`,
+    );
+  }
 }

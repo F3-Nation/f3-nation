@@ -1,11 +1,16 @@
 import nodemailer from "nodemailer";
 import type Mail from "nodemailer/lib/mailer";
-import type SMTPTransport from "nodemailer/lib/smtp-transport";
 
 import { env } from "@acme/env";
 
 import type { TemplateType } from "./templates";
 import { DefaultSubject, renderTemplate, Templates } from "./templates";
+
+// Derive the transporter and result types from createTransport so they track
+// whichever SentMessageInfo variant @types/nodemailer infers for our config,
+// rather than pinning SMTPTransport (which mismatches under nodemailer 9).
+type AppTransporter = ReturnType<typeof nodemailer.createTransport>;
+type SentMessageInfo = Awaited<ReturnType<AppTransporter["sendMail"]>>;
 
 /**
  * Default recipients for each template
@@ -22,12 +27,10 @@ type TemplateMessage<T extends Templates> = TemplateType[T] & {
 };
 
 type TemplateMessageParams<T extends Templates> =
-  | TemplateMessage<T>[]
-  | TemplateMessage<T>;
+  TemplateMessage<T>[] | TemplateMessage<T>;
 
 export class MailService {
-  private transporter: nodemailer.Transporter<SMTPTransport.SentMessageInfo> | null =
-    null;
+  private transporter: AppTransporter | null = null;
   templates = Templates;
   adminDestinations: string[] = env.EMAIL_ADMIN_DESTINATIONS?.split(",") ?? [];
 
@@ -69,7 +72,7 @@ export class MailService {
     }
 
     const batchSize = 100;
-    const sent: (Error | SMTPTransport.SentMessageInfo)[] = [];
+    const sent: (Error | SentMessageInfo)[] = [];
 
     // Create batches
     for (let i = 0; i < paramsArray.length; i += batchSize) {
@@ -116,7 +119,7 @@ export class MailService {
       return acc;
     }, [] as Mail.Options[][]);
 
-    const sentInfo: (SMTPTransport.SentMessageInfo | Error)[] = [];
+    const sentInfo: (SentMessageInfo | Error)[] = [];
 
     for (const batch of batches) {
       await Promise.all(

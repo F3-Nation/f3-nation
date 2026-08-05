@@ -1,5 +1,5 @@
 import { OpenAPIGenerator } from "@orpc/openapi";
-import { ZodToJsonSchemaConverter } from "@orpc/zod";
+import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
 
 import { router } from "@acme/api";
 import { Client, Header } from "@acme/shared/common/enums";
@@ -54,6 +54,7 @@ export async function GET(request: Request) {
   });
 
   const spec = (await generator.generate(router, {
+    filter: () => true,
     info: {
       title: "F3 Nation API",
       version: packageJson.version,
@@ -157,6 +158,10 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
         name: "Me",
         tags: ["Me"],
       },
+      {
+        name: "Slack",
+        tags: ["slack"],
+      },
     ],
     tags: [
       {
@@ -203,6 +208,11 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
         description: "Map event/workout endpoints for filtering and querying",
       },
       { name: "revalidate", description: "Cache revalidation for map data" },
+      {
+        name: "slack",
+        description:
+          "Slack and F3 Nation Slack app integration endpoints for managing content",
+      },
     ],
 
     components: {

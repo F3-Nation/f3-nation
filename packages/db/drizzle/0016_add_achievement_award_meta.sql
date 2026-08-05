@@ -1,0 +1,1 @@
+ALTER TABLE "achievements_x_users" ADD COLUMN "meta" jsonb;

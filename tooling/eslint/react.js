@@ -24,6 +24,15 @@ export default [
       "react/prop-types": "off",
       // React 17+ JSX transform doesn't require importing React
       "react/react-in-jsx-scope": "off",
+      // eslint-plugin-react-hooks v7 enables these React Compiler rules in
+      // `recommended`. They flag real anti-patterns but adopting them is a
+      // refactor tracked separately — see https://github.com/F3-Nation/f3-nation/issues/507.
+      // Opt out for now (must be "off", not "warn": lint runs --max-warnings 0).
+      "react-hooks/set-state-in-effect": "off",
+      "react-hooks/refs": "off",
+      "react-hooks/immutability": "off",
+      "react-hooks/preserve-manual-memoization": "off",
+      "react-hooks/globals": "off",
     },
   },
 ];

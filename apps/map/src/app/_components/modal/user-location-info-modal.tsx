@@ -20,7 +20,7 @@ export default function UserLocationInfoModal() {
         <DialogHeader>
           <DialogTitle className="text-center">GPS Permissions</DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col justify-start space-x-2 pl-4 pr-4 text-left">
+        <div className="flex flex-col justify-start space-x-2 pr-4 pl-4 text-left">
           <UserLocationContent allowInteraction={true} />
         </div>
       </DialogContent>

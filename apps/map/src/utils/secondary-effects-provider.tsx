@@ -12,7 +12,7 @@ import { ModalType, openModal } from "./store/modal";
 export const SecondaryEffectsProvider = () => {
   const { status, session } = useAuth();
   const mode = appStore.use.mode();
-  const initialEditMode = useRef<"view" | "edit">();
+  const initialEditMode = useRef<"view" | "edit" | undefined>(undefined);
 
   // Show info about edit mode if it is on
   useEffect(() => {
@@ -25,13 +25,14 @@ export const SecondaryEffectsProvider = () => {
         updateLocation: null,
       });
     } else if (mode === "edit" && initialEditMode.current === "view") {
-      toast.info("Edit mode is on", {
+      toast.info("Edit mode is on. Try clicking the map or dragging a marker", {
         action: {
           label: "Learn more",
           onClick: () => {
             openModal(ModalType.EDIT_MODE_INFO);
           },
         },
+        duration: 10000,
       });
     }
   }, [mode]);

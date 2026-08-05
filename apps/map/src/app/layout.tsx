@@ -7,8 +7,6 @@ import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 import { SessionProvider } from "next-auth/react";
 
-import { headers } from "next/headers";
-
 import { cn } from "@acme/ui";
 import { ThemeProvider } from "@acme/ui/theme";
 import { Toaster } from "@acme/ui/toast";
@@ -24,7 +22,6 @@ import { UserLocationProvider } from "~/app/_components/map/user-location-provid
 import { ModalSwitcher } from "~/app/_components/modal/modal-switcher";
 import { ShadCnContainer } from "~/app/_components/shad-cn-container-ref";
 import { OrpcReactProvider } from "~/orpc/react";
-import type { Channel } from "~/utils/runtime-config";
 import { RuntimeConfigProvider } from "~/utils/runtime-config";
 import { KeyPressProvider } from "~/utils/key-press/provider";
 import { RouteChangeTracker } from "./_components/route-change-tracker";
@@ -56,10 +53,7 @@ export const viewport: Viewport = {
   ],
 };
 
-export default async function RootLayout(props: { children: React.ReactNode }) {
-  // Opt into per-request rendering so runtime env (e.g. F3_GOOGLE_API_KEY) is
-  // read at request time, not baked in at build (which breaks Maps in staging/prod).
-  await headers();
+export default function RootLayout(props: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body
@@ -69,7 +63,7 @@ export default async function RootLayout(props: { children: React.ReactNode }) {
           GeistMono.variable,
         )}
       >
-        <GoogleAnalytics />
+        <GoogleAnalytics measurementId={env.NEXT_PUBLIC_GA_MEASUREMENT_ID} />
         <RouteChangeTracker />
         <DataProvider>
           <ElementProvider>{props.children}</ElementProvider>
@@ -82,11 +76,7 @@ export default async function RootLayout(props: { children: React.ReactNode }) {
 const DataProvider = ({ children }: { children: React.ReactNode }) => {
   return (
     <SessionProvider>
-      <RuntimeConfigProvider
-        channel={(process.env.F3_CHANNEL ?? "local") as Channel}
-        googleApiKey={process.env.F3_GOOGLE_API_KEY ?? ""}
-        adminUrl={process.env.F3_ADMIN_URL ?? ""}
-      >
+      <RuntimeConfigProvider>
         <OrpcReactProvider>
           <UserLocationProvider>
             <KeyPressProvider>{children}</KeyPressProvider>

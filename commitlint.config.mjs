@@ -1,55 +1,58 @@
 /** @type {import('@commitlint/types').UserConfig} */
 export default {
-  extends: ['@commitlint/config-conventional'],
+  extends: ["@commitlint/config-conventional"],
   rules: {
-    'scope-enum': [
+    "scope-enum": [
       2,
-      'always',
+      "always",
       [
         // apps
-        'admin',
-        'homepage',
-        'map',
-        'me',
+        "admin",
+        "homepage",
+        "map",
+        "me",
+        "slackbot",
 
         // apps & packages (exist in both apps/ and packages/)
-        'api',
-        'auth',
+        "api",
+        "auth",
 
         // packages
-        'db',
-        'env',
-        'mail',
-        'shared',
-        'sso',
-        'storage',
-        'ui',
-        'validators',
+        "db",
+        "env",
+        "mail",
+        "shared",
+        "sso",
+        "storage",
+        "ui",
+        "validators",
 
         // tooling
-        'eslint',
-        'prettier',
-        'tsconfig',
-        'scripts',
-        'github',
-        'tailwind',
+        "eslint",
+        "playwright",
+        "prettier",
+        "tsconfig",
+        "ci-factory",
+        "scripts",
+        "github",
+        "tailwind",
 
         // cross-cutting
-        'deps',
-        'ci',
-        'repo',
-        'release',
+        "deps",
+        "ci",
+        "repo",
+        "release",
 
-        // release-please uses the target branch as the scope (e.g. "chore(dev): release me 1.2.0")
-        'dev',
+        // release-please uses the target branch as the scope (e.g. "chore(main): release me 1.2.0")
+        "main",
       ],
     ],
-    'scope-empty': [2, 'never'],
+    "scope-empty": [2, "never"],
   },
   prompt: {
     settings: {
       enableMultipleScopes: true,
-      scopeEnumSeparator: ',',
+      scopeEnumSeparator: ",",
     },
   },
 };

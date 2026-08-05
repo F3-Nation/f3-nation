@@ -61,7 +61,7 @@ export function EditModeInfoModal() {
             </div>
           )}
           <Link
-            className="flex w-full flex-row items-center justify-center gap-2 rounded-md bg-card p-2 shadow-sm hover:bg-accent"
+            className="flex w-full flex-row items-center justify-center gap-2 rounded-md bg-card p-2 shadow-xs hover:bg-accent"
             target="_blank"
             href={"https://forms.gle/8AR4JCK3txSVr1Xy7"}
           >

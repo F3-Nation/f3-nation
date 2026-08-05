@@ -33,7 +33,7 @@ const authStore = new ZustandStore({
 });
 
 const SignInFormSchema = z.object({
-  email: z.string().email(),
+  email: z.email(),
 });
 
 export interface SignInComponentProps {
@@ -51,7 +51,7 @@ export const AuthWrapper = ({
     <div
       className={cn(
         "flex h-full w-full flex-1 flex-col items-center bg-background p-8 pb-16 text-center",
-        "xs:h-auto xs:w-min xs:min-w-[400px] xs:flex-grow-0 xs:rounded-xl xs:pb-8 xs:shadow-md",
+        "xs:h-auto xs:w-min xs:min-w-[400px] xs:grow-0 xs:rounded-xl xs:pb-8 xs:shadow-md",
         className,
       )}
     >
@@ -200,7 +200,7 @@ const VerifyEmail = () => {
 
   return (
     <div className="w-full">
-      <h2 className="mb-4 mt-2 text-center text-2xl font-semibold">
+      <h2 className="mt-2 mb-4 text-center text-2xl font-semibold">
         {"Verify your email"}
       </h2>
       <div className="text-center">
@@ -248,7 +248,7 @@ const VerifyCode = () => {
 
   return (
     <div className="w-full">
-      <h2 className="mb-4 mt-2 text-center text-2xl font-semibold">
+      <h2 className="mt-2 mb-4 text-center text-2xl font-semibold">
         {"Enter code"}
       </h2>
       <div className="text-center">

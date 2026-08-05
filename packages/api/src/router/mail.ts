@@ -1,5 +1,6 @@
 // data comes from z.record(z.unknown()) — String() casts are intentional
 /* eslint-disable @typescript-eslint/no-base-to-string */
+import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 
 import { env } from "@acme/env";
@@ -7,6 +8,17 @@ import { mail, Templates } from "@acme/mail";
 
 import { logError } from "../logger";
 import { nationAdminProcedure } from "../shared";
+
+/**
+ * Templates the sendTest/preview handlers actually implement. Narrowing the
+ * input to this subset prevents unsupported templates (e.g. regionInABox) from
+ * passing validation — which would make sendTest report success without sending
+ * and preview throw "Unknown template".
+ */
+export const supportedTemplateSchema = z.enum([
+  Templates.feedbackForm,
+  Templates.mapChangeRequest,
+]);
 
 /**
  * Mail router for testing email templates (nation admin only)
@@ -63,11 +75,11 @@ export const mailRouter = {
   sendTest: nationAdminProcedure
     .input(
       z.object({
-        template: z.nativeEnum(Templates).describe("The template ID to send"),
-        to: z.string().email().describe("Recipient email address"),
+        template: supportedTemplateSchema.describe("The template ID to send"),
+        to: z.email().describe("Recipient email address"),
         // Template-specific data
         data: z
-          .record(z.unknown())
+          .record(z.string(), z.unknown())
           .describe(
             "Template-specific data object. See /mail/templates endpoint for required/optional fields.",
           ),
@@ -136,11 +148,11 @@ export const mailRouter = {
   preview: nationAdminProcedure
     .input(
       z.object({
-        template: z
-          .nativeEnum(Templates)
-          .describe("The template ID to preview"),
+        template: supportedTemplateSchema.describe(
+          "The template ID to preview",
+        ),
         data: z
-          .record(z.unknown())
+          .record(z.string(), z.unknown())
           .describe(
             "Template-specific data object. See /mail/templates endpoint for required/optional fields.",
           ),
@@ -186,7 +198,9 @@ export const mailRouter = {
             : undefined,
         });
       } else {
-        throw new Error("Unknown template");
+        throw new ORPCError("INTERNAL_SERVER_ERROR", {
+          message: "Unknown template",
+        });
       }
 
       return { html };

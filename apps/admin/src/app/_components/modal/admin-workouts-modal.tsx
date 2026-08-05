@@ -63,19 +63,16 @@ import { ControlledTimeInput } from "../time-input";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 
 const EventInsertForm = EventInsertSchema.extend({
-  startTime: z.string().regex(/^\d{2}:\d{2}$/, {
-    message: "Start time must be in 24hr format (HH:mm)",
+  startTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, {
+    error: "Start time must be in 24hr format (HH:mm)",
   }),
-  endTime: z.string().regex(/^\d{2}:\d{2}$/, {
-    message: "End time must be in 24hr format (HH:mm)",
+  endTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, {
+    error: "End time must be in 24hr format (HH:mm)",
   }),
-  eventTypeIds: z
-    .number()
-    .array()
-    .min(1, { message: "Event type is required" }),
-  startDate: z.string().min(1, { message: "Start date is required" }),
+  eventTypeIds: z.number().array().min(1, { error: "Event type is required" }),
+  startDate: z.string().min(1, { error: "Start date is required" }),
   dayOfWeek: z.enum(DayOfWeek, {
-    message: "Day of week is required",
+    error: "Day of week is required",
   }),
 });
 type EventInsertFormType = z.infer<typeof EventInsertForm>;

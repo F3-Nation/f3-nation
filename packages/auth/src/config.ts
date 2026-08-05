@@ -7,13 +7,14 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { db } from "@acme/db/client";
 import { orgs } from "@acme/db/schema/schema";
 import { env } from "@acme/env";
-import type { UserRole } from "@acme/shared/app/enums";
 import { COOKIE_NAME } from "@acme/shared/common/constants";
 import { ProviderId } from "@acme/shared/common/enums";
 
 import { emailProvider } from "./lib/email-provider";
 import { MDPGDrizzleAdapter } from "./lib/md-pg-drizzzle-adapter";
 import OtpProvider from "./lib/otp-provider";
+import { logWarn } from "./logger";
+import type { UserRole } from "@acme/shared/app/enums";
 
 export type { Session } from "next-auth";
 
@@ -21,7 +22,7 @@ const isProd = env.NEXT_PUBLIC_CHANNEL === "prod";
 
 // Cookie configuration for cross-subdomain auth (map.f3nation.com <-> api.f3nation.com)
 // In production: use __Secure- prefix (requires HTTPS) and .f3nation.com domain
-// In development with .f3nation.test: still use HTTPS (via Caddy/mkcert), so secure: true
+// In local development (plain HTTP on localhost): no prefix, no domain, secure: false
 /**
  * Extract hostname from URL, stripping protocol and path/port
  */
@@ -39,7 +40,6 @@ function extractHostname(url: string | undefined): string | undefined {
  * Determine the cookie domain dynamically, handling:
  * - localhost (dev): no domain (so cookies only for localhost)
  * - map.f3nation.com, api.f3nation.com, etc: use .f3nation.com
- * - map.f3nation.test, api.f3nation.test: use .f3nation.test
  *
  * On the client, uses window.location.hostname.
  * On the server, prefer NEXT_PUBLIC_ADMIN_URL before API/MAP so the admin app on its own host
@@ -69,7 +69,6 @@ function getCookieDomain(): string | undefined {
   }
 
   if (hostname.endsWith(".f3nation.com")) return ".f3nation.com";
-  if (hostname.endsWith(".f3nation.test")) return ".f3nation.test";
 
   // fallback: scope cookie to current base domain (e.g. .example.com)
   const parts = hostname.split(".");
@@ -85,12 +84,12 @@ function getCookieDomain(): string | undefined {
 
 /**
  * Determine if we should use secure cookies.
- * True when: production OR using HTTPS URLs (e.g., .f3nation.test with Caddy/mkcert)
+ * True when: production OR any configured app URL is HTTPS
  */
 function shouldUseSecureCookies(): boolean {
   if (isProd) return true;
 
-  // Check if any URL is HTTPS (for local HTTPS dev with .f3nation.test)
+  // Check if any URL is HTTPS
   const urls = [
     env.NEXT_PUBLIC_ADMIN_URL,
     env.NEXT_PUBLIC_API_URL,
@@ -120,11 +119,28 @@ if (!isProd) {
       async authorize(credentials) {
         if (isProd) return null;
 
-        const [f3Nation] = await db
-          .select()
-          .from(orgs)
-          .where(eq(orgs.orgType, "nation"));
-        if (!f3Nation) return null;
+        // Resolve the nation org for the mock admin role. Per-PR preview MAP
+        // services run WITHOUT a database (only api/auth get a seeded Postgres
+        // sidecar), so fall back to the deterministic seed's nation — id 1,
+        // "F3 Nation" — when the DB can't be reached. The preview api validates
+        // against that same seed, so the ids line up; envs with a real DB
+        // (local dev, api, auth) use the actual row.
+        let nation = { id: 1, name: "F3 Nation" };
+        try {
+          const [f3Nation] = await db
+            .select()
+            .from(orgs)
+            .where(eq(orgs.orgType, "nation"));
+          if (f3Nation) nation = { id: f3Nation.id, name: f3Nation.name };
+        } catch (err) {
+          // No database reachable (e.g. a preview map) — keep the seed
+          // fallback, but never swallow the reason silently. logWarn has no
+          // err param (only logError/logFatal fan out to the error
+          // reporter), so fold it into ctx.
+          logWarn("auth.dev_mode.nation_lookup_failed", {
+            err: err instanceof Error ? err.message : String(err),
+          });
+        }
 
         // Return a mock user for development
         return {
@@ -133,8 +149,8 @@ if (!isProd) {
           name: "Dev User",
           roles: [
             {
-              orgId: f3Nation.id,
-              orgName: f3Nation.name,
+              orgId: nation.id,
+              orgName: nation.name,
               roleName: "admin",
             },
           ],
@@ -216,8 +232,7 @@ export const authConfig: NextAuthConfig = {
         email: token.email,
         name: token.name as string | undefined,
         roles: token.roles as
-          | { orgId: number; orgName: string; roleName: UserRole }[]
-          | undefined,
+          { orgId: number; orgName: string; roleName: UserRole }[] | undefined,
       };
       return Promise.resolve(result);
     },

@@ -8,6 +8,7 @@ import {
 import { Z_INDEX } from "@acme/shared/app/constants";
 import { dayOfWeekToShortDayOfWeek } from "@acme/shared/app/functions";
 import { cn } from "@acme/ui";
+import { toast } from "@acme/ui/toast";
 
 import { groupMarkerClick } from "~/utils/actions/group-marker-click";
 import { appStore } from "~/utils/store/app";
@@ -81,7 +82,7 @@ export const FeatureMarker = ({
       const lat = e.latLng?.lat();
       const lng = e.latLng?.lng();
 
-      if (!lat || !lng) return;
+      if (lat == null || lng == null) return;
 
       mapStore.setState({
         modifiedLocationMarkers: {
@@ -89,6 +90,11 @@ export const FeatureMarker = ({
           [id]: { lat, lng },
         },
       });
+
+      toast.success(
+        'Marker moved! Latitude and longitude updated in draft. Click "Edit AO" → "Edit AO details" and Save to persist these changes to the database.',
+        { duration: 10000 },
+      );
     },
     [id],
   );
@@ -171,7 +177,7 @@ export const FeatureMarker = ({
                 className={cn(
                   // min-h-[32.5px] so it doesn't collapse with no text
                   "min-h-[32.5px] flex-1 cursor-pointer bg-foreground py-2 text-center text-background",
-                  "border-b-2 border-l-2 border-r-2 border-t-2 border-foreground ",
+                  "border-t-2 border-r-2 border-b-2 border-l-2 border-foreground",
                   `google-eventid-${event.id}`,
                   {
                     "rounded-r-full": isEnd,

@@ -1,0 +1,23 @@
+# Changelog
+
+## [0.1.3](https://github.com/F3-Nation/f3-nation/compare/tailwind-config@0.1.2...tailwind-config@0.1.3) (2026-07-14)
+
+
+### Bug Fixes
+
+* **slackbot,tailwind,sso:** fixing local lint issues ([#659](https://github.com/F3-Nation/f3-nation/issues/659)) ([030cb9b](https://github.com/F3-Nation/f3-nation/commit/030cb9becb28159e32f6340201dc5bf9149f0124))
+
+## [0.1.2](https://github.com/F3-Nation/f3-nation/compare/tailwind-config@0.1.1...tailwind-config@0.1.2) (2026-07-08)
+
+
+### Bug Fixes
+
+* **deps:** pin internal @acme/* refs to workspace:* to prevent release-please version drift ([#587](https://github.com/F3-Nation/f3-nation/issues/587)) ([21ded4b](https://github.com/F3-Nation/f3-nation/commit/21ded4bef25dbdd00b2e66e5d8abda516b7dd0b1))
+
+## [0.1.1](https://github.com/F3-Nation/f3-nation/compare/tailwind-config@0.1.0...tailwind-config@0.1.1) (2026-07-05)
+
+
+### Bug Fixes
+
+* **map,admin:** regions in region picker were grayed out ([37cec72](https://github.com/F3-Nation/f3-nation/commit/37cec722b933f6a121283403b3a5eb9fd8900f5e))
+* **ui:** make cmdk combobox options selectable and restore button cursor ([#582](https://github.com/F3-Nation/f3-nation/issues/582)) ([a7ac4d2](https://github.com/F3-Nation/f3-nation/commit/a7ac4d2a99821e51971654af7d49893c2cce3915))

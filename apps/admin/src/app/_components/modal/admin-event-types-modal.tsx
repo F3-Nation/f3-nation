@@ -158,7 +158,12 @@ export default function AdminEventTypesModal({
                   <FormItem>
                     <FormLabel>ID</FormLabel>
                     <FormControl>
-                      <Input placeholder="ID" disabled {...field} />
+                      <Input
+                        placeholder="ID"
+                        disabled
+                        {...field}
+                        value={field.value?.toString() ?? ""}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -197,7 +202,9 @@ export default function AdminEventTypesModal({
                 control={form.control}
                 name="specificOrgId"
                 render={({ field }) => (
-                  <FormItem key={`region-${String(field.value ?? "new")}`}>
+                  <FormItem
+                    key={`region-${(field.value as number | null) ?? "new"}`}
+                  >
                     <FormLabel>Specific Org</FormLabel>
                     <VirtualizedCombobox
                       value={field.value?.toString()}
@@ -245,7 +252,7 @@ export default function AdminEventTypesModal({
               />
             </div>
             <div className="mb-4 w-full px-2">
-              <div className="mb-4 flex flex-col space-y-2 pt-4 sm:flex-row sm:space-x-4 sm:space-y-0">
+              <div className="mb-4 flex flex-col space-y-2 pt-4 sm:flex-row sm:space-y-0 sm:space-x-4">
                 <Button
                   type="button"
                   variant="outline"

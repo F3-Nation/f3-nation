@@ -107,6 +107,13 @@ const APP_GROUPS: AppGroup[] = [
           "Real-time health and status for all F3 Nation services. Check if something's down before filing a bug report.",
         href: "https://status.f3nation.com",
       },
+      {
+        name: "SyncBot",
+        description:
+          "Slack app for syncing channels and messages across multiple workspaces (threads, reactions, and media).",
+        href: "https://github.com/F3-Nation/syncbot/blob/main/docs/USER_GUIDE.md",
+        linkLabel: "Learn More",
+      },
     ],
   },
   {
@@ -186,7 +193,7 @@ function AppCard({ app }: { app: App }) {
 
   if (!resolvedHref) {
     return (
-      <div className="flex flex-col rounded-lg border border-border bg-card p-6 shadow-sm">
+      <div className="flex flex-col rounded-lg border border-border bg-card p-6 shadow-xs">
         {inner}
       </div>
     );
@@ -197,7 +204,7 @@ function AppCard({ app }: { app: App }) {
       href={resolvedHref}
       target="_blank"
       rel="noopener noreferrer"
-      className="group flex flex-col rounded-lg border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md"
+      className="group flex flex-col rounded-lg border border-border bg-card p-6 shadow-xs transition-shadow hover:shadow-md"
     >
       {inner}
     </a>

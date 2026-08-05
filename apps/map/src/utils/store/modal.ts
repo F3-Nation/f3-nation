@@ -1,145 +1,119 @@
 import type { ReactNode } from "react";
 
-import type { DayOfWeek, RequestType } from "@acme/shared/app/enums";
+import type { PartialBy } from "@acme/shared/common/types";
+import type {
+  CreateAOAndLocationAndEventType,
+  CreateEventType,
+  DeleteAOType,
+  DeleteEventType,
+  EditAOAndLocationType,
+  EditEventType,
+  MoveAOToDifferentLocationType,
+  MoveAoToDifferentRegionType,
+  MoveAOToNewLocationType,
+  MoveEventToDifferentAOType,
+  MoveEventToNewAOType,
+  MoveEventToNewLocationType,
+} from "@acme/validators/request-schemas";
 import { ZustandStore } from "@acme/shared/common/classes";
 
-import type { RouterOutputs } from "~/orpc/types";
-import { mapStore } from "./map";
-
 export enum ModalType {
+  LOADING = "LOADING",
   HOW_TO_JOIN = "HOW_TO_JOIN",
   USER_LOCATION_INFO = "USER_LOCATION_INFO",
-  UPDATE_LOCATION = "UPDATE_LOCATION",
+  DELETE_EVENT = "DELETE_EVENT",
+  DELETE_AO = "DELETE_AO",
   WORKOUT_DETAILS = "WORKOUT_DETAILS",
   INFO = "INFO",
   SETTINGS = "SETTINGS",
-  DELETE_CONFIRMATION = "DELETE_CONFIRMATION",
   QR_CODE = "QR_CODE",
   ABOUT_MAP = "ABOUT_MAP",
   MAP_HELP = "MAP_HELP",
   FULL_IMAGE = "FULL_IMAGE",
   SIGN_IN = "SIGN_IN",
   EDIT_MODE_INFO = "EDIT_MODE_INFO",
+  EDIT_AO_AND_LOCATION = "AO_EDIT",
+  EDIT_EVENT = "EVENT_EDIT",
+  CREATE_EVENT = "CREATE_EVENT",
+  CREATE_AO_AND_LOCATION_AND_EVENT = "CREATE_LOCATION_AND_EVENT",
+  MOVE_AO_TO_NEW_LOCATION = "MOVE_AO_TO_NEW_LOCATION",
+  MOVE_EVENT_TO_NEW_LOCATION = "MOVE_EVENT_TO_NEW_LOCATION",
+  MOVE_AO_TO_DIFFERENT_LOCATION = "MOVE_AO_TO_DIFFERENT_LOCATION",
+  MOVE_AO_TO_DIFFERENT_REGION = "MOVE_AO_TO_DIFFERENT_REGION",
+  MOVE_EVENT_TO_DIFFERENT_AO = "MOVE_EVENT_TO_DIFFERENT_AO",
+  MOVE_EVENT_TO_NEW_AO = "MOVE_EVENT_TO_NEW_AO",
 }
-
-export enum DeleteType {
-  USER = "USER",
-  AREA = "AREA",
-  LOCATION = "LOCATION",
-  AO = "AO",
-  EVENT = "EVENT",
-  EVENT_TYPE = "EVENT_TYPE",
-  REGION = "REGION",
-  SECTOR = "SECTOR",
-  NATION = "NATION",
-}
-
-export const eventDefaults = {
-  eventId: -1,
-  workoutName: "",
-  startTime: "0530",
-  endTime: "0615",
-  dayOfWeek: null,
-  eventTypeIds: [1],
-  eventDescription: "",
-  aoId: null,
-  aoWebsite: "",
-};
-
-export const locationDefaults = {
-  locationId: null,
-  locationAddress: "",
-  locationAddress2: "",
-  locationCity: "",
-  locationState: "",
-  locationZip: "",
-  locationCountry: "",
-  locationDescription: "",
-  aoName: "",
-  aoLogo: "",
-  regionId: null,
-  regionWebsite: "",
-};
-
-export const eventAndLocationToUpdateRequest = ({
-  event,
-  location,
-}: {
-  event:
-    | NonNullable<
-        NonNullable<
-          RouterOutputs["map"]["location"]["locationWorkout"]
-        >["location"]
-      >["events"][number]
-    | undefined;
-  location: NonNullable<
-    NonNullable<RouterOutputs["map"]["location"]["locationWorkout"]>["location"]
-  >;
-}): Omit<DataType[ModalType.UPDATE_LOCATION], "mode" | "requestType"> => {
-  const possiblyEditedLoc = mapStore.get("modifiedLocationMarkers")[
-    location.id
-  ];
-
-  const lat = possiblyEditedLoc?.lat ?? location.lat;
-  const lng = possiblyEditedLoc?.lng ?? location.lon;
-
-  return {
-    eventId: event?.id ?? null,
-    workoutName: event?.name ?? null,
-    lat,
-    lng,
-    startTime: event?.startTime ?? null,
-    endTime: event?.endTime ?? null,
-    dayOfWeek: event?.dayOfWeek ?? null,
-    eventTypeIds: event?.eventTypes.map((type) => type.id) ?? [],
-    eventDescription: event?.description ?? null,
-    locationId: location.id,
-    locationAddress: location.locationAddress,
-    locationAddress2: location.locationAddress2,
-    locationCity: location.locationCity,
-    locationState: location.locationState,
-    locationZip: location.locationZip,
-    locationCountry: location.locationCountry,
-    locationDescription: location.locationDescription,
-    regionId: location.regionId,
-    regionWebsite: location.regionWebsite,
-    aoId: event?.aoId ?? null,
-    aoName: event?.aoName ?? null,
-    aoLogo: event?.aoLogo ?? null,
-    aoWebsite: event?.aoWebsite ?? null,
-  };
-};
 
 export interface DataType {
-  [ModalType.HOW_TO_JOIN]: {
-    content?: ReactNode;
-  };
-  [ModalType.UPDATE_LOCATION]: {
-    requestType: RequestType;
-    locationId: number | null;
-    eventId: number | null;
-    regionId: number | null;
-    regionWebsite: string | null;
-    workoutName: string | null;
-    aoId: number | null;
-    aoLogo: string | null;
-    aoName: string | null;
-    aoWebsite: string | null;
-    lat: number;
-    lng: number;
-    startTime: string | null;
-    endTime: string | null;
-    dayOfWeek: DayOfWeek | null;
-    eventTypeIds: number[];
-    eventDescription: string | null;
-    locationAddress: string | null;
-    locationAddress2: string | null;
-    locationCity: string | null;
-    locationState: string | null;
-    locationZip: string | null;
-    locationCountry: string | null;
-    locationDescription: string | null;
-  };
+  [ModalType.LOADING]: null;
+  [ModalType.HOW_TO_JOIN]: { content?: ReactNode };
+  [ModalType.EDIT_AO_AND_LOCATION]: PartialBy<
+    EditAOAndLocationType,
+    | "locationLat"
+    | "locationLng"
+    | "originalRegionId"
+    | "originalAoId"
+    | "originalLocationId"
+    | "submittedBy"
+  >;
+  [ModalType.EDIT_EVENT]: PartialBy<EditEventType, "submittedBy">;
+  [ModalType.CREATE_EVENT]: PartialBy<
+    CreateEventType,
+    "originalLocationId" | "submittedBy"
+  >;
+  [ModalType.CREATE_AO_AND_LOCATION_AND_EVENT]: PartialBy<
+    CreateAOAndLocationAndEventType,
+    "originalRegionId" | "submittedBy"
+  >;
+
+  [ModalType.MOVE_AO_TO_NEW_LOCATION]: PartialBy<
+    MoveAOToNewLocationType,
+    | "originalRegionId"
+    | "originalAoId"
+    | "originalLocationId"
+    | "locationLat"
+    | "locationLng"
+    | "submittedBy"
+  >;
+  [ModalType.MOVE_EVENT_TO_NEW_LOCATION]: PartialBy<
+    MoveEventToNewLocationType,
+    | "originalRegionId"
+    | "originalEventId"
+    | "originalLocationId"
+    | "locationLat"
+    | "locationLng"
+    | "submittedBy"
+  >;
+  [ModalType.MOVE_AO_TO_DIFFERENT_LOCATION]: PartialBy<
+    MoveAOToDifferentLocationType,
+    | "newLocationId"
+    | "originalLocationId"
+    | "originalRegionId"
+    | "originalAoId"
+    | "submittedBy"
+  >;
+  [ModalType.MOVE_AO_TO_DIFFERENT_REGION]: PartialBy<
+    MoveAoToDifferentRegionType,
+    "originalRegionId" | "originalAoId" | "newRegionId" | "submittedBy"
+  >;
+  [ModalType.MOVE_EVENT_TO_DIFFERENT_AO]: PartialBy<
+    MoveEventToDifferentAOType,
+    | "originalRegionId"
+    | "originalAoId"
+    | "originalEventId"
+    | "newLocationId"
+    | "newAoId"
+    | "submittedBy"
+  >;
+  [ModalType.MOVE_EVENT_TO_NEW_AO]: PartialBy<
+    MoveEventToNewAOType,
+    | "originalRegionId"
+    | "originalEventId"
+    | "originalAoId"
+    | "originalLocationId"
+    | "newLocationId"
+    | "submittedBy"
+  >;
   [ModalType.WORKOUT_DETAILS]: {
     locationId?: number | null;
     eventId?: number | null;
@@ -147,10 +121,6 @@ export interface DataType {
   [ModalType.INFO]: null;
   [ModalType.USER_LOCATION_INFO]: null;
   [ModalType.SETTINGS]: null;
-  [ModalType.DELETE_CONFIRMATION]: {
-    type: DeleteType;
-    onConfirm: () => void;
-  };
   [ModalType.QR_CODE]: {
     url: string;
     fileName: string;
@@ -169,6 +139,14 @@ export interface DataType {
     message?: string;
   };
   [ModalType.EDIT_MODE_INFO]: null;
+  [ModalType.DELETE_EVENT]: PartialBy<
+    DeleteEventType,
+    "originalRegionId" | "submittedBy"
+  >;
+  [ModalType.DELETE_AO]: PartialBy<
+    DeleteAOType,
+    "originalRegionId" | "submittedBy"
+  >;
 }
 
 export interface Modal<T extends ModalType> {
@@ -197,7 +175,10 @@ export const openModal = <T extends ModalType>(type: T, data?: DataType[T]) => {
 
   modalStore.setState({
     modals: [
-      ...existingModals.filter((m) => m.type !== type),
+      ...existingModals.filter(
+        // Prevent duplicate modals; when opening a modal, the loading modal is closed
+        (m) => m.type !== type && m.type !== ModalType.LOADING,
+      ),
       { open: true, type, data },
     ],
   });

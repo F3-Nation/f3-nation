@@ -3,7 +3,6 @@
 import { useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
-import { useToast } from "@/components/ui/toast";
 import { useAvatarUpload } from "@/hooks/useAvatarUpload";
 import { cn } from "@/lib/utils";
 
@@ -18,7 +17,6 @@ export function AvatarUpload({
   fallbackName,
   onUploaded,
 }: AvatarUploadProps) {
-  const { toast } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
   const {
     uploading,
@@ -27,7 +25,7 @@ export function AvatarUpload({
     setDragOver,
     handleDrop,
     handleFileChange,
-  } = useAvatarUpload({ currentUrl, onUploaded, toast });
+  } = useAvatarUpload({ currentUrl, onUploaded });
 
   const openFilePicker = () => inputRef.current?.click();
 
@@ -37,7 +35,7 @@ export function AvatarUpload({
         type="button"
         className={cn(
           "relative cursor-pointer rounded-full",
-          dragOver && "ring-primary ring-2 ring-offset-2",
+          dragOver && "ring-2 ring-primary ring-offset-2",
         )}
         onClick={openFilePicker}
         onDragOver={(e) => {
@@ -68,7 +66,7 @@ export function AvatarUpload({
         >
           {uploading ? "Uploading..." : "Change avatar"}
         </Button>
-        <p className="text-muted-foreground text-xs">
+        <p className="text-xs text-muted-foreground">
           JPEG, PNG, or WebP. Max 5MB. Will be converted to JPEG.
         </p>
       </div>

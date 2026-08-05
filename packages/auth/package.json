@@ -1,6 +1,6 @@
 {
   "name": "@acme/auth",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -16,10 +16,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@acme/db": "workspace:^0.1.0",
-    "@acme/env": "workspace:^0.1.0",
+    "@acme/db": "workspace:*",
+    "@acme/env": "workspace:*",
     "@acme/logger": "workspace:*",
-    "@acme/shared": "workspace:^0.1.0",
+    "@acme/shared": "workspace:*",
     "@auth/core": "catalog:",
     "dayjs": "catalog:",
     "drizzle-orm": "catalog:",
@@ -31,9 +31,9 @@
     "react-dom": "catalog:"
   },
   "devDependencies": {
-    "@acme/eslint-config": "workspace:^0.2.0",
-    "@acme/prettier-config": "workspace:^0.1.0",
-    "@acme/tsconfig": "workspace:^0.1.0",
+    "@acme/eslint-config": "workspace:*",
+    "@acme/prettier-config": "workspace:*",
+    "@acme/tsconfig": "workspace:*",
     "@types/lodash": "catalog:",
     "@types/nodemailer": "catalog:",
     "eslint": "catalog:",

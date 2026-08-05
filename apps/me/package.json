@@ -1,7 +1,7 @@
 {
   "name": "f3-me",
   "type": "module",
-  "version": "1.4.1",
+  "version": "2.1.4",
   "private": true,
   "scripts": {
     "dev": "next dev --port 3003",
@@ -17,17 +17,16 @@
     "deploy:variables-secrets:prod": "/usr/bin/env bash scripts/cloud-run-env.sh --env prod"
   },
   "dependencies": {
-    "@acme/api": "workspace:^0.2.0",
+    "@acme/api": "workspace:*",
     "@acme/logger": "workspace:*",
-    "@acme/shared": "workspace:^0.1.0",
+    "@acme/shared": "workspace:*",
     "@acme/sso": "workspace:*",
     "@acme/storage": "workspace:*",
-    "@acme/ui": "workspace:^0.1.0",
+    "@acme/ui": "workspace:*",
     "@orpc/client": "catalog:",
     "@orpc/server": "catalog:",
     "@t3-oss/env-nextjs": "catalog:",
     "clsx": "catalog:",
-    "jose": "catalog:",
     "next": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
@@ -36,9 +35,11 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@acme/eslint-config": "workspace:^0.2.0",
-    "@acme/tsconfig": "workspace:^0.1.0",
-    "@acme/vitest-config": "workspace:^0.1.0",
+    "@acme/eslint-config": "workspace:*",
+    "@acme/tailwind-config": "workspace:*",
+    "@acme/tsconfig": "workspace:*",
+    "@acme/vitest-config": "workspace:*",
+    "@tailwindcss/postcss": "catalog:",
     "@testing-library/jest-dom": "catalog:",
     "@testing-library/react": "catalog:",
     "@testing-library/user-event": "catalog:",
@@ -47,12 +48,10 @@
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "@vitest/coverage-v8": "catalog:",
-    "autoprefixer": "catalog:",
     "eslint": "catalog:",
     "postcss": "catalog:",
+    "postcss-load-config": "catalog:",
     "prettier": "catalog:",
-    "tailwindcss": "catalog:",
-    "tailwindcss-animate": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"

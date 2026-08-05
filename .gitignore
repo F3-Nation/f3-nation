@@ -9,6 +9,11 @@ node_modules
 # testing
 coverage
 
+# playwright
+test-results/
+playwright-report/
+blob-report/
+
 # next.js
 .next/
 out/
@@ -63,3 +68,11 @@ pr.md
 
 # claude code
 .claude/worktrees/
+# generated mirror of .agents/skills/ (see scripts/sync-agent-skills.mjs)
+.claude/skills/
+
+# deepwork progress
+.slim/deepwork/
+
+# A spot to keep scripts, skills, and docs just for you
+.personal/

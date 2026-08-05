@@ -1,7 +1,7 @@
 {
   "name": "@acme/ui",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.3",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
@@ -46,24 +46,20 @@
     "lodash": "catalog:",
     "lucide-react": "catalog:",
     "next-themes": "catalog:",
-    "react-day-picker": "catalog:",
     "react-hook-form": "catalog:",
     "sonner": "catalog:",
-    "tailwind-merge": "catalog:",
-    "vaul": "catalog:"
+    "tailwind-merge": "catalog:"
   },
   "devDependencies": {
-    "@acme/eslint-config": "workspace:^0.2.0",
-    "@acme/prettier-config": "workspace:^0.1.0",
-    "@acme/tailwind-config": "workspace:^0.1.0",
-    "@acme/tsconfig": "workspace:^0.1.0",
+    "@acme/eslint-config": "workspace:*",
+    "@acme/prettier-config": "workspace:*",
+    "@acme/tsconfig": "workspace:*",
     "@types/lodash": "catalog:",
     "@types/react": "catalog:",
     "eslint": "catalog:",
     "prettier": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "zod": "catalog:"
   },

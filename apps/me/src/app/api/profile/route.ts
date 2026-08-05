@@ -5,39 +5,33 @@ import { requireAuth } from "@/lib/auth/server";
 import { getMyProfile, updateMyProfile } from "@/lib/api/client";
 import type { UserMeta } from "@/lib/types";
 import { logError } from "@/lib/logging";
+import { storage } from "@/lib/storage";
 
-// Enforce avatar host allow-list at this boundary so malformed avatarUrl
-// values are rejected with a 400 before calling the underlying API.
-const ALLOWED_AVATAR_HOST_PATTERN =
-  /^https:\/\/storage\.googleapis\.com\/f3-public-images(-staging)?\//;
-const isAllowedAvatarUrl = (url: string): boolean =>
-  ALLOWED_AVATAR_HOST_PATTERN.test(url);
-
-const profileUpdateSchema = z
-  .object({
-    // Regular editable fields
-    f3Name: z.string().min(1).max(200).optional(),
-    firstName: z.string().max(200).nullable().optional(),
-    lastName: z.string().max(200).optional(),
-    phone: z.string().max(50).nullable().optional(),
-    homeRegionId: z.number().int().positive().nullable().optional(),
-    avatarUrl: z
-      .string()
-      .url()
-      .refine(isAllowedAvatarUrl, "avatarUrl must be a GCS public-image URL")
-      .nullable()
-      .optional(),
-    emergencyContact: z.string().max(200).nullable().optional(),
-    emergencyPhone: z.string().max(50).nullable().optional(),
-    emergencyNotes: z.string().max(1000).nullable().optional(),
-    // Meta sub-fields
-    f3_name_origin: z.string().max(1000).optional(),
-    my_f3_why: z.string().max(2000).optional(),
-    user_emergency_info_dr_sharing: z.boolean().optional(),
-    start_date_override: z.string().max(50).optional(),
-    brought_by: z.number().int().positive().nullable().optional(),
-  })
-  .strict();
+const profileUpdateSchema = z.strictObject({
+  // Regular editable fields
+  f3Name: z.string().min(1).max(200).optional(),
+  firstName: z.string().max(200).nullable().optional(),
+  lastName: z.string().max(200).optional(),
+  phone: z.string().max(50).nullable().optional(),
+  homeRegionId: z.number().int().positive().nullable().optional(),
+  avatarUrl: z
+    .url()
+    .refine(
+      (url) => storage.isAllowedPublicImageUrl(url),
+      "avatarUrl must be a GCS public-image URL",
+    )
+    .nullable()
+    .optional(),
+  emergencyContact: z.string().max(200).nullable().optional(),
+  emergencyPhone: z.string().max(50).nullable().optional(),
+  emergencyNotes: z.string().max(1000).nullable().optional(),
+  // Meta sub-fields
+  f3_name_origin: z.string().max(1000).optional(),
+  my_f3_why: z.string().max(2000).optional(),
+  user_emergency_info_dr_sharing: z.boolean().optional(),
+  start_date_override: z.string().max(50).optional(),
+  brought_by: z.number().int().positive().nullable().optional(),
+});
 
 const EDITABLE_FIELDS = new Set([
   "f3Name",
@@ -106,7 +100,10 @@ export async function PATCH(request: NextRequest) {
     const parsed = profileUpdateSchema.safeParse(raw);
     if (!parsed.success) {
       return NextResponse.json(
-        { error: "Invalid request body", details: parsed.error.flatten() },
+        {
+          error: "Invalid request body",
+          details: z.flattenError(parsed.error),
+        },
         { status: 400 },
       );
     }

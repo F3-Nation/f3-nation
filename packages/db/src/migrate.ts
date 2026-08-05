@@ -6,12 +6,21 @@ import { sql } from ".";
 import { db } from "./client";
 import { alembicVersionValue, reset } from "./reset";
 import { seed } from "./seed";
+import { createDatabaseIfNotExists } from "./utils/functions";
 
 const databaseUrl = env.DATABASE_URL;
 
 const migrate = async () => {
   if (!databaseUrl) return;
   if (process.env.CI) return;
+
+  try {
+    await createDatabaseIfNotExists(databaseUrl);
+    console.log("Database check/creation completed.");
+  } catch (err) {
+    console.error("Failed to check/create database:", err);
+    throw err;
+  }
 
   // If we have arg `--reset` then we should reset the database
   if (process.argv.includes("--reset")) {

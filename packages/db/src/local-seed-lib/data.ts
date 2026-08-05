@@ -194,18 +194,52 @@ export const POSITIONS = [
 // API keys (local dev — used by apps/auth to call the API on behalf of users)
 // ---------------------------------------------------------------------------
 
-export const LOCAL_API_KEYS = [
+export interface LocalApiKeySeed {
+  key: string;
+  name: string;
+  description: string;
+  /** null = read-only (the system's read-only tier is the absence of a role). */
+  role: "editor" | "admin" | null;
+  /**
+   * When set, the role attaches to this region org instead of the nation,
+   * making the key region-scoped (see seedApiKeys). Must match a REGIONS name.
+   */
+  regionName?: string;
+}
+
+export const LOCAL_API_KEYS: LocalApiKeySeed[] = [
   {
     key: "local-api-key",
     name: "Auth Service (local dev)",
     description: "Used by apps/auth to register new users via the API",
-    role: "editor" as const,
+    role: "editor",
+  },
+  {
+    // Region-scoped principal: editor on the Boone region org only (NOT the
+    // nation), so cross-region RBAC denials (e.g. spec AC-15 — an editor of
+    // region S cannot reject in region R) have a deterministic seeded key.
+    // The "local-" prefix keeps it inside the obfuscator's
+    // --preserve-local-seed allowlist (tooling/scripts/src/obfuscate-db.ts).
+    key: "local-boone-editor-key",
+    name: "Boone Editor (local dev)",
+    description:
+      "Editor scoped to the Boone region only — used by e2e tests to exercise cross-region RBAC denial",
+    role: "editor",
+    regionName: "Boone",
   },
   {
     key: "local-map-key",
     name: "Map App (local dev)",
     description: "Used by apps/map for read-only API access",
-    role: "user" as const,
+    // Read-only access is the absence of a role (defacto "user"); the system
+    // only assigns the editor/admin roles. See seedApiKeys.
+    role: null,
+  },
+  {
+    key: "local-slackbot-key",
+    name: "Slackbot (local dev)",
+    description: "Used by apps/slackbot for full Admin access",
+    role: "admin",
   },
 ];
 
@@ -236,4 +270,24 @@ export const LOCAL_OAUTH_CLIENTS = [
     scopes: "openid profile email",
     isActive: true,
   },
+];
+
+// ---------------------------------------------------------------------------
+// Attendance types (1=PAX, 2=Q, 3=Co-Q)
+// ---------------------------------------------------------------------------
+export const ATTENDANCE_TYPES = [
+  { id: 1, type: "PAX" },
+  { id: 2, type: "Q" },
+  { id: 3, type: "Co-Q" },
+];
+
+// ---------------------------------------------------------------------------
+// Event tags
+// ---------------------------------------------------------------------------
+export const EVENT_TAGS = [
+  { name: "Convergence", color: "Orange" },
+  { name: "VQ", color: "Yellow" },
+  { name: "F3Versary", color: "White" },
+  { name: "Pre-Workout", color: "Black" },
+  { name: "Off-The-Books", color: "Black" },
 ];

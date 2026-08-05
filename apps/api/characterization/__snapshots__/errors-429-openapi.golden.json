@@ -1,0 +1,15 @@
+{
+  "body": {
+    "code": "TOO_MANY_REQUESTS",
+    "defined": false,
+    "message": "<RATE_LIMIT_MESSAGE>",
+    "status": 429
+  },
+  "headers": {
+    "access-control-allow-credentials": "true",
+    "access-control-allow-origin": "",
+    "content-type": "application/json",
+    "vary": "Origin"
+  },
+  "status": 429
+}

@@ -1,6 +1,6 @@
 # ---------- Stage 1: Prune monorepo ----------
     ARG TURBO_VERSION=2
-    FROM node:24.17.0-alpine AS builder
+    FROM node:24.18.0-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS builder
     ARG TURBO_VERSION
     
     ENV TURBO_TELEMETRY_DISABLED=1
@@ -17,7 +17,7 @@
     RUN turbo prune f3-api --docker
     
     # ---------- Stage 2: Install + build ----------
-    FROM node:24.17.0-alpine AS installer
+    FROM node:24.18.0-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS installer
     ARG TURBO_VERSION
     
     ENV NEXT_TELEMETRY_DISABLED=1
@@ -33,7 +33,7 @@
     # Install dependencies from pruned lockfile
     COPY --from=builder /app/out/json/ .
     COPY --from=builder /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
-    RUN pnpm install --frozen-lockfile
+    RUN pnpm install --frozen-lockfile --ignore-scripts
     
     # Copy source and build
     COPY --from=builder /app/out/full/ .
@@ -50,9 +50,12 @@
     RUN printf '\nverifyDepsBeforeRun: false\n' >> pnpm-workspace.yaml
 
     RUN pnpm turbo build --filter=f3-api
-    
+
+    # Assert the next.config libvips tracing include landed (a zero-match glob is a silent no-op).
+    RUN test -n "$(find apps/api/.next/standalone -name 'libvips-cpp*')"
+
     # ---------- Stage 3: Production runner ----------
-    FROM node:24.17.0-alpine AS runner
+    FROM node:24.18.0-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS runner
     
     RUN apk add --no-cache libc6-compat openssl && apk update
     WORKDIR /app
@@ -63,7 +66,7 @@
     # Copy standalone output
     COPY --from=installer --chown=api:nodejs /app/apps/api/.next/standalone ./
     COPY --from=installer --chown=api:nodejs /app/apps/api/.next/static ./apps/api/.next/static
-    
+
     USER api
     
     ENV PORT=8080

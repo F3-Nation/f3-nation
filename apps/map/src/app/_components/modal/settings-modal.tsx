@@ -79,7 +79,7 @@ export default function SettingsModal() {
             </p>
             <div className="flex flex-row items-center gap-2">
               <button
-                className="flex flex-col items-center gap-1 rounded-md bg-card p-2 shadow-sm hover:bg-accent"
+                className="flex flex-col items-center gap-1 rounded-md bg-card p-2 shadow-xs hover:bg-accent"
                 onClick={handleQRModal}
               >
                 <QrCode />
@@ -102,7 +102,7 @@ export default function SettingsModal() {
               <button
                 onClick={() => mapStore.setState({ tiles: "street" })}
                 className={cn(
-                  "relative flex flex-col items-center gap-1 overflow-hidden rounded-md border-2 border-transparent bg-card p-2 shadow-sm hover:bg-accent",
+                  "relative flex flex-col items-center gap-1 overflow-hidden rounded-md border-2 border-transparent bg-card p-2 shadow-xs hover:bg-accent",
                   {
                     "bg-primary text-white hover:bg-primary/90":
                       tiles === "street",
@@ -121,7 +121,7 @@ export default function SettingsModal() {
               <button
                 onClick={() => mapStore.setState({ tiles: "hybrid" })}
                 className={cn(
-                  "relative flex flex-col items-center gap-1 overflow-hidden rounded-md border-2 border-transparent bg-card p-2 shadow-sm hover:bg-accent",
+                  "relative flex flex-col items-center gap-1 overflow-hidden rounded-md border-2 border-transparent bg-card p-2 shadow-xs hover:bg-accent",
                   {
                     "bg-primary text-white hover:bg-primary/90":
                       tiles === "hybrid",
@@ -145,7 +145,7 @@ export default function SettingsModal() {
               <button
                 onClick={() => appStore.setState({ mode: "view" })}
                 className={cn(
-                  "flex flex-col items-center gap-1 rounded-md bg-card p-2 shadow-sm hover:bg-accent",
+                  "flex flex-col items-center gap-1 rounded-md bg-card p-2 shadow-xs hover:bg-accent",
                   {
                     "bg-primary text-white hover:bg-primary/90":
                       mode === "view",
@@ -161,7 +161,7 @@ export default function SettingsModal() {
                   appStore.setState({ mode: "edit" });
                 }}
                 className={cn(
-                  "flex flex-col items-center gap-1 rounded-md bg-card p-2 shadow-sm hover:bg-accent",
+                  "flex flex-col items-center gap-1 rounded-md bg-card p-2 shadow-xs hover:bg-accent",
                   "disabled:pointer-events-none disabled:opacity-20",
                   {
                     "bg-blue-500 text-white hover:bg-blue-500/90":
@@ -185,7 +185,7 @@ export default function SettingsModal() {
               <button
                 onClick={() => setTheme("light")}
                 className={cn(
-                  "flex flex-col items-center gap-1 rounded-md bg-card p-2 shadow-sm hover:bg-accent",
+                  "flex flex-col items-center gap-1 rounded-md bg-card p-2 shadow-xs hover:bg-accent",
                   {
                     "bg-primary text-white hover:bg-primary/90":
                       theme === "light",
@@ -198,7 +198,7 @@ export default function SettingsModal() {
               <button
                 onClick={() => setTheme("dark")}
                 className={cn(
-                  "flex flex-col items-center gap-1 rounded-md bg-card p-2 shadow-sm hover:bg-accent",
+                  "flex flex-col items-center gap-1 rounded-md bg-card p-2 shadow-xs hover:bg-accent",
                   {
                     "bg-primary text-white hover:bg-primary/90":
                       theme === "dark",
@@ -213,7 +213,7 @@ export default function SettingsModal() {
               <button
                 onClick={() => setTheme("system")}
                 className={cn(
-                  "flex flex-col items-center gap-1 rounded-md bg-card p-2 shadow-sm hover:bg-accent",
+                  "flex flex-col items-center gap-1 rounded-md bg-card p-2 shadow-xs hover:bg-accent",
                   {
                     "bg-primary text-white hover:bg-primary/90":
                       theme === "system",
@@ -231,7 +231,7 @@ export default function SettingsModal() {
               <>
                 <button
                   className={cn(
-                    "flex w-full flex-row items-center justify-center gap-1 rounded-md bg-primary p-2 text-primary-foreground shadow-sm hover:bg-primary/90",
+                    "flex w-full flex-row items-center justify-center gap-1 rounded-md bg-primary p-2 text-primary-foreground shadow-xs hover:bg-primary/90",
                   )}
                   onClick={() => {
                     closeModal();
@@ -244,7 +244,7 @@ export default function SettingsModal() {
                 {!isProd && (isDevelopment || showDebug) ? (
                   <button
                     className={cn(
-                      "flex w-full flex-row items-center justify-center gap-1 rounded-md bg-primary p-2 text-primary-foreground shadow-sm hover:bg-primary/90",
+                      "flex w-full flex-row items-center justify-center gap-1 rounded-md bg-primary p-2 text-primary-foreground shadow-xs hover:bg-primary/90",
                     )}
                     onClick={() => {
                       signIn(ProviderId.DEV_MODE, {
@@ -297,7 +297,7 @@ export default function SettingsModal() {
                       >
                         <button
                           className={cn(
-                            "flex w-full flex-row items-center justify-center gap-1 rounded-md bg-background p-2 text-foreground shadow-sm hover:bg-accent",
+                            "flex w-full flex-row items-center justify-center gap-1 rounded-md bg-background p-2 text-foreground shadow-xs hover:bg-accent",
                           )}
                           onClick={() => {
                             closeModal();
@@ -317,7 +317,7 @@ export default function SettingsModal() {
                 >
                   <button
                     className={cn(
-                      "flex w-full flex-row items-center justify-center gap-1 rounded-md bg-card p-2 text-foreground shadow-sm hover:bg-accent",
+                      "flex w-full flex-row items-center justify-center gap-1 rounded-md bg-card p-2 text-foreground shadow-xs hover:bg-accent",
                     )}
                   >
                     <LogOut className="size-4" />
@@ -329,18 +329,28 @@ export default function SettingsModal() {
             {isNationAdmin ? (
               <button
                 className={cn(
-                  "flex w-full flex-row items-center justify-center gap-1 rounded-md bg-card p-2 text-foreground shadow-sm hover:bg-accent",
+                  "flex w-full flex-row items-center justify-center gap-1 rounded-md bg-card p-2 text-foreground shadow-xs hover:bg-accent",
                 )}
                 onClick={() => {
                   void fetch("/api/revalidate", { method: "POST" })
                     .then(async (response) => {
+                      const json = (await response.json()) as {
+                        error?: string;
+                        warmed?: boolean;
+                      };
                       if (!response.ok) {
-                        const json = (await response.json()) as {
-                          error: string;
-                        };
                         throw new Error(json.error ?? "Failed to revalidate");
                       }
-                      toast.success("Nation revalidated");
+                      // warmed=false means the cache was invalidated but this
+                      // instance couldn't eagerly regenerate it; other
+                      // instances will still pick it up lazily on next visit.
+                      if (json.warmed) {
+                        toast.success("Nation revalidated");
+                      } else {
+                        toast.warning(
+                          "Nation cache invalidated, but warm-up timed out — it will refresh on next visit",
+                        );
+                      }
                     })
                     .catch((error: unknown) => {
                       console.log("RevalidateNation", { error });
@@ -358,7 +368,7 @@ export default function SettingsModal() {
             ) : null}
 
             <Link
-              className="flex w-full flex-row items-center justify-center gap-2 rounded-md bg-card p-2 shadow-sm hover:bg-accent"
+              className="flex w-full flex-row items-center justify-center gap-2 rounded-md bg-card p-2 shadow-xs hover:bg-accent"
               target="_blank"
               href={"https://forms.gle/8AR4JCK3txSVr1Xy7"}
             >
@@ -370,7 +380,7 @@ export default function SettingsModal() {
           <div className="flex flex-col gap-1">
             <p className="text-sm font-bold text-muted-foreground">Info</p>
             <button
-              className="flex w-full flex-row items-center justify-center gap-2 rounded-md bg-card p-2 shadow-sm hover:bg-accent"
+              className="flex w-full flex-row items-center justify-center gap-2 rounded-md bg-card p-2 shadow-xs hover:bg-accent"
               onClick={() => {
                 openModal(ModalType.ABOUT_MAP);
               }}
@@ -379,7 +389,7 @@ export default function SettingsModal() {
               <span className="text-xs">About</span>
             </button>
             <button
-              className="flex w-full flex-row items-center justify-center gap-2 rounded-md bg-card p-2 shadow-sm hover:bg-accent"
+              className="flex w-full flex-row items-center justify-center gap-2 rounded-md bg-card p-2 shadow-xs hover:bg-accent"
               onClick={() => {
                 openModal(ModalType.MAP_HELP);
               }}
