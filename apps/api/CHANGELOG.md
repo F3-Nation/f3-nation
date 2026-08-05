@@ -1,5 +1,21 @@
 # Changelog
 
+## [6.2.0](https://github.com/F3-Nation/f3-nation/compare/api@6.1.3...api@6.2.0) (2026-08-05)
+
+
+### Features
+
+* **api:** adding routes for slack settings and channels ([#693](https://github.com/F3-Nation/f3-nation/issues/693)) ([d6d43e4](https://github.com/F3-Nation/f3-nation/commit/d6d43e47503cf7d65cfcae4b5c6877d5f1a994a8))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.5.0
+  * devDependencies
+    * @acme/db bumped to 0.3.0
+
 ## [6.1.3](https://github.com/F3-Nation/f3-nation/compare/api@6.1.2...api@6.1.3) (2026-07-26)
 
 

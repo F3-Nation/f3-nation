@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.5.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.4.1...pkg-api@0.5.0) (2026-08-05)
+
+
+### Features
+
+* **api:** adding routes for slack settings and channels ([#693](https://github.com/F3-Nation/f3-nation/issues/693)) ([d6d43e4](https://github.com/F3-Nation/f3-nation/commit/d6d43e47503cf7d65cfcae4b5c6877d5f1a994a8))
+* **api:** allow non-editor api users to query attendance on events ([#801](https://github.com/F3-Nation/f3-nation/issues/801)) ([dc5f8ad](https://github.com/F3-Nation/f3-nation/commit/dc5f8ad2979a6e15af3f02948ddf8e7f8e7597e2))
+* **api:** implement structured error handling with ORPCError ([#702](https://github.com/F3-Nation/f3-nation/issues/702)) ([ff9beea](https://github.com/F3-Nation/f3-nation/commit/ff9beea4931152001d21bc7dbf7c835f75d4a123))
+
+
+### Bug Fixes
+
+* **api:** hasPreblast on calendar-home-schedule checks the wrong column ([#695](https://github.com/F3-Nation/f3-nation/issues/695)) ([68a485c](https://github.com/F3-Nation/f3-nation/commit/68a485c2cdcfc82e2fb2dcab0b9029d99bf44517))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/auth bumped to 0.2.0
+    * @acme/db bumped to 0.3.0
+    * @acme/validators bumped to 0.2.1
+
 ## [0.4.1](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.4.0...pkg-api@0.4.1) (2026-07-26)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.2.0...pkg-db@0.3.0) (2026-08-05)
+
+
+### Features
+
+* **repo:** ai-native sdlc — previews, e2e, ai review/triage ([#685](https://github.com/F3-Nation/f3-nation/issues/685)) ([1c66c22](https://github.com/F3-Nation/f3-nation/commit/1c66c228727c9fbc4c5575f42e41c5b2576267be))
+
 ## [0.2.0](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.1.3...pkg-db@0.2.0) (2026-07-26)
 
 
