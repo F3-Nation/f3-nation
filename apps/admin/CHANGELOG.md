@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.2.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.1.3...admin@2.2.0) (2026-08-05)
+
+
+### Features
+
+* **admin,map:** enhance invalidateQueries to match nested router paths by segment name ([#701](https://github.com/F3-Nation/f3-nation/issues/701)) ([b5600ed](https://github.com/F3-Nation/f3-nation/commit/b5600edd2228a11dcf80988c46d9be935731606c))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.5.0
+    * @acme/validators bumped to 0.2.1
+
 ## [2.1.3](https://github.com/F3-Nation/f3-nation/compare/admin@2.1.2...admin@2.1.3) (2026-07-26)
 
 
