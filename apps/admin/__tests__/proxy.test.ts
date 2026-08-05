@@ -33,7 +33,8 @@ const {
   };
 });
 
-vi.mock("@f3nation/sso-next", () => ({
+vi.mock("@f3nation/sso-next", async (importActual) => ({
+  ...(await importActual<Record<string, unknown>>()),
   verifyAccessToken: verifyAccessTokenMock,
   AuthError,
 }));

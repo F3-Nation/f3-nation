@@ -40,6 +40,23 @@ export {
 } from "@f3nation/sso";
 
 // ---------------------------------------------------------------------------
+// Shared cookie name constants (F3 platform defaults)
+// ---------------------------------------------------------------------------
+
+export const ACCESS_TOKEN_COOKIE_NAME = "access_token";
+export const REFRESH_TOKEN_COOKIE_NAME = "refresh_token";
+export const OAUTH_CSRF_COOKIE_NAME = "oauth_csrf";
+export const OAUTH_CODE_VERIFIER_COOKIE_NAME = "oauth_code_verifier";
+
+/** Assembled SsoCookieNames using the F3 platform defaults. */
+export const SSO_COOKIE_NAMES: SsoCookieNames = {
+  accessToken: ACCESS_TOKEN_COOKIE_NAME,
+  refreshToken: REFRESH_TOKEN_COOKIE_NAME,
+  oauthCsrf: OAUTH_CSRF_COOKIE_NAME,
+  oauthCodeVerifier: OAUTH_CODE_VERIFIER_COOKIE_NAME,
+};
+
+// ---------------------------------------------------------------------------
 // Cookie helpers
 // ---------------------------------------------------------------------------
 

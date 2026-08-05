@@ -42,6 +42,8 @@ const config: KnipConfig = {
       ignoreDependencies: ["@f3nation/sso"],
     },
     "apps/me": {
+      // vi.mock("@f3nation/sso") in auth-login tests intercepts handleLoginRoute's
+      // internal call; no static import exists for knip to trace.
       ignoreDependencies: ["@f3nation/sso"],
     },
   },

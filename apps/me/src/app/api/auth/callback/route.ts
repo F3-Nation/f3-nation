@@ -1,22 +1,11 @@
 import type { NextRequest } from "next/server";
-import { handleCallbackRoute } from "@f3nation/sso-next";
+import { handleCallbackRoute, SSO_COOKIE_NAMES } from "@f3nation/sso-next";
 import {
-  ACCESS_TOKEN_COOKIE_NAME,
-  REFRESH_TOKEN_COOKIE_NAME,
-  OAUTH_CSRF_COOKIE_NAME,
-  OAUTH_CODE_VERIFIER_COOKIE_NAME,
   ACCESS_TOKEN_DEFAULT_MAX_AGE,
   REFRESH_TOKEN_MAX_AGE,
 } from "@/lib/auth/constants";
 import { sso } from "@/lib/auth/oauth";
 import { logError, logInfo, logWarn } from "@/lib/logging";
-
-const COOKIE_NAMES = {
-  accessToken: ACCESS_TOKEN_COOKIE_NAME,
-  refreshToken: REFRESH_TOKEN_COOKIE_NAME,
-  oauthCsrf: OAUTH_CSRF_COOKIE_NAME,
-  oauthCodeVerifier: OAUTH_CODE_VERIFIER_COOKIE_NAME,
-};
 
 function getPublicOrigin(): string {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
@@ -54,7 +43,7 @@ export async function GET(request: NextRequest) {
         }
       },
     },
-    cookieNames: COOKIE_NAMES,
+    cookieNames: SSO_COOKIE_NAMES,
     publicOrigin,
     errorPath: "/",
     errorReturnToParam: "redirect",

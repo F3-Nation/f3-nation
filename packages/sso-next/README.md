@@ -63,7 +63,10 @@ import { sso } from "@/lib/auth/oauth";
 export async function GET(request: NextRequest) {
   return handleLoginRoute(request, {
     adapter: sso,
-    cookieNames: { oauthCsrf: "oauth_csrf", oauthCodeVerifier: "oauth_cv" },
+    cookieNames: {
+      oauthCsrf: "oauth_csrf",
+      oauthCodeVerifier: "oauth_code_verifier",
+    },
     flowCookieMaxAge: 600,
     defaultReturnTo: "/",
   });
@@ -84,7 +87,7 @@ export async function GET(request: NextRequest) {
       accessToken: "access_token",
       refreshToken: "refresh_token",
       oauthCsrf: "oauth_csrf",
-      oauthCodeVerifier: "oauth_cv",
+      oauthCodeVerifier: "oauth_code_verifier",
     },
     publicOrigin: env.NEXT_PUBLIC_SITE_URL, // use your validated env module
     errorPath: "/",
