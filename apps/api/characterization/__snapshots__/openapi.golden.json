@@ -6154,6 +6154,17 @@
                               ],
                               "description": "Event email"
                             },
+                            "endDate": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "description": "Event end date"
+                            },
                             "endTime": {
                               "anyOf": [
                                 {
@@ -6295,6 +6306,7 @@
                             "location",
                             "locationId",
                             "startDate",
+                            "endDate",
                             "dayOfWeek",
                             "startTime",
                             "endTime",
@@ -8048,6 +8060,17 @@
                             ],
                             "description": "Event contact email"
                           },
+                          "endDate": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Event end date"
+                          },
                           "endTime": {
                             "anyOf": [
                               {
@@ -8288,6 +8311,7 @@
                           "parent",
                           "locationId",
                           "startDate",
+                          "endDate",
                           "dayOfWeek",
                           "startTime",
                           "endTime",
