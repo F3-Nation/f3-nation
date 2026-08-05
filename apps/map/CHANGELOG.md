@@ -1,5 +1,22 @@
 # Changelog
 
+## [7.1.0](https://github.com/F3-Nation/f3-nation/compare/map@7.0.9...map@7.1.0) (2026-08-05)
+
+
+### Features
+
+* **admin,map:** enhance invalidateQueries to match nested router paths by segment name ([#701](https://github.com/F3-Nation/f3-nation/issues/701)) ([b5600ed](https://github.com/F3-Nation/f3-nation/commit/b5600edd2228a11dcf80988c46d9be935731606c))
+* **repo:** ai-native sdlc — previews, e2e, ai review/triage ([#685](https://github.com/F3-Nation/f3-nation/issues/685)) ([1c66c22](https://github.com/F3-Nation/f3-nation/commit/1c66c228727c9fbc4c5575f42e41c5b2576267be))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.5.0
+    * @acme/auth bumped to 0.2.0
+    * @acme/validators bumped to 0.2.1
+
 ## [7.0.9](https://github.com/F3-Nation/f3-nation/compare/map@7.0.8...map@7.0.9) (2026-07-26)
 
 

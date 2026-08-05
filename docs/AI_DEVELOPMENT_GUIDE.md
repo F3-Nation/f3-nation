@@ -129,6 +129,101 @@ credential.
 
 ---
 
+## Error handling
+
+The rule lives in
+[`AGENTS.md` § API Error Handling](../AGENTS.md#api-error-handling), which is
+the canonical source and where any change to it belongs. This section is the
+rationale and code-selection guidance that rule points back at.
+
+Why it matters: oRPC only preserves the code, status, and message of a typed
+[`ORPCError`](https://orpc.unnoq.com/docs/error-handling). Any other thrown
+value (including a plain `throw new Error("...")`) is masked as an opaque 500
+`INTERNAL_SERVER_ERROR`, and the original message is dropped before it reaches
+the client. Concretely, this means:
+
+- **Clients can't distinguish their own mistake from a server bug.** A
+  missing required field and a database outage both come back as the same
+  generic 500, so retry logic can't tell which errors are worth retrying.
+- **The HTTP status code is wrong.** A validation failure should be a 4xx,
+  not a 500 — 5xx rates are typically used as a server-health signal, and
+  masked client errors pollute that signal with noise that isn't actionable.
+
+```ts
+// WRONG — becomes an opaque 500, message is dropped.
+if (!input.regionId) throw new Error("Region is required");
+
+// Client error — pick the code that matches why the request failed.
+if (!input.regionId) {
+  throw new ORPCError("BAD_REQUEST", { message: "Region is required" });
+}
+```
+
+Pick the code by what actually went wrong, not by what's convenient:
+
+| Situation                                             | Code                    | Status |
+| ----------------------------------------------------- | ----------------------- | ------ |
+| Missing/invalid input                                 | `BAD_REQUEST`           | 400    |
+| Not signed in, or signed in without the required role | `UNAUTHORIZED`          | 401    |
+| A referenced resource doesn't exist                   | `NOT_FOUND`             | 404    |
+| An upstream/external call failed                      | `BAD_GATEWAY`           | 502    |
+| Truly unexpected server state (should be unreachable) | `INTERNAL_SERVER_ERROR` | 500    |
+
+Full list of codes and status mappings:
+[oRPC error handling](https://orpc.dev/docs/openapi/error-handling).
+
+**A missing row is only `NOT_FOUND` if the caller could have caused it.** Ask
+where the lookup key came from. A caller-supplied id that matches nothing is
+`NOT_FOUND` (e.g. `updateAO` in `packages/api/src/lib/ao-handlers.ts`). But when
+the key is constrained at the boundary — a `z.enum`, a literal, a value derived
+from the session — the caller cannot produce a miss, so a miss means our own data
+is wrong and it is `INTERNAL_SERVER_ERROR`. The role lookup in
+[`packages/api/src/router/api-key.ts`](../packages/api/src/router/api-key.ts) is
+the reference case: `roleName` is `z.enum(["editor", "admin"])`, so an unresolved
+role means the `roles` table is missing its seeded rows, not that the client
+asked for something that doesn't exist. Returning 404 there would blame the
+caller for a seeding failure.
+
+**On `UNAUTHORIZED` vs `FORBIDDEN`.** Strict HTTP semantics reserve 401 for
+"unauthenticated" and 403 for "authenticated but not permitted". This codebase
+does not split them that way: `UNAUTHORIZED` covers both. Every procedure
+wrapper in [`packages/api/src/shared.ts`](../packages/api/src/shared.ts)
+(`protectedProcedure`, `editorProcedure`, `adminProcedure`,
+`nationAdminProcedure`, `revalidateAuthProcedure`) throws `UNAUTHORIZED` on a
+role failure, and handler-level permission checks match — e.g. the region and
+approval gates in `packages/api/src/router/request.ts`. Raw `UNAUTHORIZED`
+throws outnumber `FORBIDDEN` by more than an order of magnitude.
+
+Follow that convention in new code so clients need only one branch for "you
+can't do this". **Matching the surrounding code here is not a finding** — do not
+file or "fix" an `UNAUTHORIZED` permission check as a miscoded error. If the
+split is ever worth adopting, it is a deliberate repo-wide migration (every
+wrapper, plus the clients that branch on the code), not a per-PR cleanup.
+
+A lint failure from the enforcing rule means the error needs a real
+`ORPCError` code — not a suppression.
+
+### Never bare-rethrow in a `catch`
+
+`throw error` is an `Identifier`, so no AST rule can see whether the value is an
+`ORPCError` — the lint rule cannot catch this one. A raw DB or driver fault
+rethrown that way reaches oRPC untyped and is masked as an opaque 500 with its
+cause lost. Guard, log, then wrap:
+
+```ts
+} catch (error) {
+  if (error instanceof ORPCError) throw error; // already typed and client-safe
+  logError("api.<area>.<outcome>", { ...safeCtx }, error);
+  throw new ORPCError("INTERNAL_SERVER_ERROR", { message: "Generic message" });
+}
+```
+
+The `instanceof` guard is load-bearing wherever the same `try` block throws its
+own `ORPCError`s — without it, wrapping downgrades a typed 4xx into a generic 500. Keep the wrapped message generic (never interpolate the caught error, which
+can carry table names, constraint names, or PII) and keep PII out of the log
+context. Where classifiable, map the specific cause first: a duplicate-email
+violation is a `BAD_REQUEST`, not a 500.
+
 ## Authentication & tokens
 
 - **CSPRNG only** for OTPs, verification tokens, session tokens, nonces, API
