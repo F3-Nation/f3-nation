@@ -58,12 +58,14 @@ export function parseChangelog(markdown: string): ChangelogEntry[] {
   const entries: ChangelogEntry[] = [];
   let entry: ChangelogEntry | null = null;
   let section: ChangelogSection | null = null;
+  let seenItems = new Set<string>();
 
   for (const line of markdown.split("\n")) {
     const versionMatch = VERSION_HEADING.exec(line);
     if (versionMatch?.[1] && versionMatch[2]) {
       entry = { version: versionMatch[1], date: versionMatch[2], sections: [] };
       section = null;
+      seenItems = new Set();
       entries.push(entry);
       continue;
     }
@@ -79,7 +81,10 @@ export function parseChangelog(markdown: string): ChangelogEntry[] {
 
     if (section && LIST_ITEM.test(line) && !isInfraOnly(line)) {
       const item = cleanItem(line);
-      if (item) section.items.push(item);
+      if (item && !seenItems.has(item)) {
+        seenItems.add(item);
+        section.items.push(item);
+      }
     }
   }
 
@@ -98,7 +103,11 @@ export function getChangelog(): ChangelogEntry[] {
 
   try {
     const file = join(process.cwd(), "CHANGELOG.md");
-    cachedChangelog = parseChangelog(readFileSync(file, "utf8"));
+    const content = readFileSync(file, "utf8");
+    cachedChangelog = parseChangelog(content);
+    if (cachedChangelog.length === 0 && content.trim().length > 0) {
+      logWarn("me.changelog.parse_empty", { file });
+    }
   } catch (err) {
     logWarn("me.changelog.read_failed", { cwd: process.cwd(), err });
     cachedChangelog = [];

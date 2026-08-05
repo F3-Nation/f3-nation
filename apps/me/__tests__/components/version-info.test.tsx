@@ -30,5 +30,6 @@ describe("VersionInfo", () => {
     await userEvent.click(screen.getByRole("button", { name: /v1\.2\.0/ }));
     expect(screen.getByText("Features")).toBeInTheDocument();
     expect(screen.getByText("add profile avatar upload")).toBeInTheDocument();
+    expect(screen.getByText("June 1, 2024")).toBeInTheDocument();
   });
 });

@@ -34,13 +34,13 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${inter.className} min-h-screen overflow-x-hidden overscroll-y-none bg-background text-foreground antialiased`}
+        className={`${inter.className} flex min-h-screen flex-col overflow-x-hidden overscroll-y-none bg-background text-foreground antialiased`}
       >
         <GoogleAnalytics />
         <AuthProvider>
           <SaveProvider>
             <Navbar />
-            <main className="min-h-[calc(100vh-3.5rem)]">{children}</main>
+            <main className="flex-1">{children}</main>
             <VersionInfo
               version={packageJson.version}
               channel={channel}

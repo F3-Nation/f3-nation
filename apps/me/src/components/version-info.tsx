@@ -39,7 +39,7 @@ export function VersionInfo({ version, channel, changelog }: VersionInfoProps) {
             <VersionInfoBase
               versionLabel={<span>v{version}</span>}
               channel={channel}
-              className="cursor-pointer px-1.5 py-0.5 text-xs font-medium text-muted-foreground/60 hover:text-muted-foreground"
+              className="cursor-pointer px-1.5 py-0.5 text-xs font-medium text-muted-foreground hover:text-foreground [&_span]:cursor-pointer"
             />
           </button>
         </DialogTrigger>
@@ -53,6 +53,12 @@ export function VersionInfo({ version, channel, changelog }: VersionInfoProps) {
             </p>
           ) : (
             <div className="flex flex-col gap-6">
+              {changelog[0]?.version !== version && (
+                <p className="text-xs text-muted-foreground">
+                  Showing user-facing changes. Releases up to v{version} since v
+                  {changelog[0]?.version} contained only dependency updates.
+                </p>
+              )}
               {changelog.map((entry) => (
                 <article key={entry.version}>
                   <header className="mb-3 flex items-center justify-between border-b pb-2">

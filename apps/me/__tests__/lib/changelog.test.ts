@@ -51,6 +51,32 @@ describe("parseChangelog", () => {
     expect(entries.find((e) => e.version === "1.1.0")).toBeUndefined();
   });
 
+  it("keeps entries with mixed infra/non-infra multi-scope commits", () => {
+    const md = `
+## [1.0.0](https://example.com) (2024-01-01)
+
+### Features
+
+- **repo,map:** mixed scope feature
+`;
+    const entries = parseChangelog(md);
+    expect(entries).toHaveLength(1);
+    const features = entries[0]!.sections.find((s) => s.title === "Features")!;
+    expect(features.items[0]).toBe("mixed scope feature");
+  });
+
+  it("excludes entries where all multi-scope commits are infra-only", () => {
+    const md = `
+## [1.0.0](https://example.com) (2024-01-01)
+
+### Features
+
+- **repo,ci:** update ci pipeline
+`;
+    const entries = parseChangelog(md);
+    expect(entries).toHaveLength(0);
+  });
+
   it("includes user-facing feature items", () => {
     const entries = parseChangelog(SAMPLE);
     const v120 = entries.find((e) => e.version === "1.2.0")!;
