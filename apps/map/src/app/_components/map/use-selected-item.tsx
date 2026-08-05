@@ -6,7 +6,7 @@ import { CLOSE_ZOOM } from "@acme/shared/app/constants";
 import { RERENDER_LOGS } from "@acme/shared/common/constants";
 
 import { orpc, useQuery } from "~/orpc/react";
-import { dateToDayOfWeek } from "~/utils/date-to-day-of-week";
+import { dateToDayOfWeek } from "~/utils/date";
 import { mapStore } from "~/utils/store/map";
 import { selectedItemStore } from "~/utils/store/selected-item";
 

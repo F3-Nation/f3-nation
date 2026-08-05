@@ -9,7 +9,7 @@ import { RERENDER_LOGS } from "@acme/shared/common/constants";
 import { groupMarkersByAo } from "~/utils/group-markers-by-ao";
 import type { MapStatus, SparseF3Marker } from "~/utils/types";
 import { orpc, useQuery } from "~/orpc/react";
-import { dateToDayOfWeek } from "~/utils/date-to-day-of-week";
+import { dateToDayOfWeek } from "~/utils/date";
 import { getMapEventStatus, instanceMapStatus } from "~/utils/event-status-map";
 import { filterData } from "~/utils/filtered-data";
 import { filterStore } from "~/utils/store/filter";

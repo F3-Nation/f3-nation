@@ -28,7 +28,7 @@ export function instanceMapStatus(
 const STATUS_LABELS: Record<NonNullable<MapStatus>, string> = {
   closed: "Closed",
   "different-time": "Different time",
-  miscellaneous: "Changed",
+  miscellaneous: "Miscellaneous",
   "event-instance": "Special instance",
 };
 

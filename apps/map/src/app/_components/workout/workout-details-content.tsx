@@ -14,17 +14,19 @@ import { toast } from "@acme/ui/toast";
 
 import { orpc, useQuery } from "~/orpc/react";
 import type { RouterOutputs } from "~/orpc/types";
-import { dateToDayOfWeek } from "~/utils/date-to-day-of-week";
+import {
+  dateToDayOfWeek,
+  getWhenFromWorkout,
+  sortUpcomingInstancesByDate,
+} from "~/utils/date";
 import {
   buildEventStatusMap,
   instanceMapStatus,
   selectStatusInstances,
   statusLabel,
 } from "~/utils/event-status-map";
-import { getWhenFromWorkout } from "~/utils/get-when-from-workout";
 import { useUpdateEventSearchParams } from "~/utils/hooks/use-update-event-search-params";
 import { getStatusSolidBg } from "~/utils/map-status-colors";
-import { sortUpcomingInstancesByDate } from "~/utils/sort-upcoming-instances";
 import { ModalType, openModal } from "~/utils/store/modal";
 import textLink from "~/utils/text-link";
 import { ContactLinks } from "../contact-links";
@@ -266,11 +268,7 @@ export const WorkoutDetailsContent = ({
   );
 
   const hasAoContact = useMemo(
-    () =>
-      // An empty string is a real "no value" case for these fields, so `??`
-      // (which only falls through on null/undefined) would wrongly hide the
-      // whole contact section whenever the first field happens to be "".
-      !!aoContact && Object.values(aoContact).some(Boolean),
+    () => !!aoContact && Object.values(aoContact).some(Boolean),
     [aoContact],
   );
 

@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { sortUpcomingInstancesByDate } from "~/utils/sort-upcoming-instances";
+import { sortUpcomingInstancesByDate } from "~/utils/date";
 
 const at = (startDate: string, startTime: string | null = null) => ({
   startDate,

@@ -12,7 +12,7 @@ import type { DayOfWeek } from "@acme/shared/app/enums";
 import { cn } from "@acme/ui";
 
 import type { MapStatus } from "~/utils/types";
-import { getWhenFromWorkout } from "~/utils/get-when-from-workout";
+import { getWhenFromWorkout } from "~/utils/date";
 import { getSelectedChipBg } from "~/utils/map-status-colors";
 import { setView } from "~/utils/set-view";
 import { setSelectedItem } from "~/utils/store/selected-item";

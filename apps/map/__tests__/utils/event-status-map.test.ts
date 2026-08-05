@@ -338,7 +338,7 @@ describe("statusLabel", () => {
   it("gives every status a text equivalent, so color is never the only cue", () => {
     expect(statusLabel("closed")).toBe("Closed");
     expect(statusLabel("different-time")).toBe("Different time");
-    expect(statusLabel("miscellaneous")).toBe("Changed");
+    expect(statusLabel("miscellaneous")).toBe("Miscellaneous");
     expect(statusLabel("event-instance")).toBe("Special instance");
     expect(statusLabel(null)).toBe("Scheduled");
   });

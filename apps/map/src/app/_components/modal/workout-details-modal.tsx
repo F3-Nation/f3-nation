@@ -49,17 +49,8 @@ export const WorkoutDetailsModal = ({
       enabled: mode === "edit" && (modalEventId ?? 0) < 0,
     }),
   );
-
-  // Temporary AO changes surface instance-derived pseudo-events, encoded as
-  // negative ids (`-instance.id`) that don't exist in `location.events`. The
-  // edit flow resolves `eventId` against that list (`openRequestModal` ->
-  // `getFormValues`), so handing it a pseudo-id opens a form filled with blank
-  // defaults and submits a negative `originalEventId` — its guards are
-  // truthiness-based, and a negative number passes. Resolve a pseudo-id to the
-  // parent series event, which is the real thing an editor can change. An
-  // orphan instance (no series, or a series absent from this location) has no
-  // editable parent, so yield null and let LocationEditButtons drop its workout
-  // menu while keeping AO-level actions.
+  // Handle negative (instance-derived) eventIds by resolving them to their parent series event.
+  // If no matching parent exists, return null—this hides the workout menu but keeps AO actions.
   const editableEventId = useMemo(() => {
     if (modalEventId == null) return null;
     if (modalEventId > 0) return modalEventId;
