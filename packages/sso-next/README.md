@@ -2,8 +2,9 @@
 
 Next.js adapter for F3 SSO.
 
-This package keeps framework-specific route helpers separate from the core
-`@f3nation/sso` client so non-Next consumers can depend only on the core SDK.
+This package is the **single entry point** for F3 SSO in Next.js apps.
+It wraps the framework-agnostic `@f3nation/sso` core and re-exports its
+public API so apps only need one dependency.
 
 ## Installation
 
@@ -13,11 +14,23 @@ pnpm add @f3nation/sso-next --filter your-app
 
 ## Includes
 
-- `createSsoAdapter`
-- `buildSsoCookieOptions`
+Route handlers:
+
 - `handleLoginRoute`
 - `handleCallbackRoute`
 - `handleLogoutRoute`
+
+Adapter:
+
+- `createSsoAdapter`
+- `buildSsoCookieOptions`
+
+Re-exported from `@f3nation/sso`:
+
+- `verifyAccessToken`
+- `isSafeReturnPath` / `sanitizeReturnPath`
+- `createOAuthLoginFlowArtifacts`
+- `AuthError`
 
 ## Peer Dependencies
 
