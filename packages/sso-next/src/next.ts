@@ -217,7 +217,7 @@ export interface SsoCallbackRouteConfig {
 
 /**
  * Handles `GET /api/auth/callback`:
- *  1. Validates the state param (CSRF, expiry, signature).
+ *  1. Validates the state param (CSRF cookie binding, expiry, safe returnTo).
  *  2. Exchanges the authorisation code for tokens.
  *  3. Fetches user info and runs optional `validateUser`.
  *  4. Sets access-token and refresh-token cookies, clears flow cookies.
@@ -269,8 +269,6 @@ export async function handleCallbackRoute(
   let tokens: AuthTokens;
   try {
     tokens = await config.adapter.exchangeCodeForToken({ code, codeVerifier });
-    if (!tokens.accessToken)
-      return errorRedirect("token_exchange_failed", returnTo);
   } catch {
     return errorRedirect("token_exchange_failed", returnTo);
   }
@@ -282,9 +280,14 @@ export async function handleCallbackRoute(
     return errorRedirect("userinfo_failed", returnTo);
   }
 
-  const isValid = config.validateUser
-    ? await config.validateUser(user, returnTo)
-    : Boolean(user.email);
+  let isValid: boolean;
+  try {
+    isValid = config.validateUser
+      ? await config.validateUser(user, returnTo)
+      : Boolean(user.email);
+  } catch {
+    return errorRedirect("user_not_found", returnTo);
+  }
   if (!isValid) return errorRedirect("user_not_found", returnTo);
 
   const response = NextResponse.redirect(
@@ -357,13 +360,19 @@ export async function handleLogoutRoute(
     }
   }
 
-  const { authServerUrl } = config.adapter.getOAuthConfig();
-  const logoutUrl = new URL("/api/oauth/logout", authServerUrl);
-  logoutUrl.searchParams.set(
-    "post_logout_redirect_uri",
-    config.postLogoutRedirectUri,
-  );
-  const redirectTo = logoutUrl.toString();
+  let redirectTo: string;
+  try {
+    const { authServerUrl } = config.adapter.getOAuthConfig();
+    const logoutUrl = new URL("/api/oauth/logout", authServerUrl);
+    logoutUrl.searchParams.set(
+      "post_logout_redirect_uri",
+      config.postLogoutRedirectUri,
+    );
+    redirectTo = logoutUrl.toString();
+  } catch {
+    // Fall back so cookies are always cleared even if config throws.
+    redirectTo = config.postLogoutRedirectUri;
+  }
 
   const response = NextResponse.json({ ok: true, redirectTo });
   const clearOpts = buildSsoCookieOptions(0);

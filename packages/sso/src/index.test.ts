@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  AuthClient,
+  AuthError,
   createOAuthLoginFlowArtifacts,
   createOAuthState,
   isOAuthStateExpired,
@@ -102,5 +104,37 @@ describe("OAuth login flow artifacts", () => {
       returnTo: "/profile",
       timestamp: 1_700_000_000_000,
     });
+  });
+});
+
+describe("AuthClient.exchangeCodeForToken", () => {
+  const client = new AuthClient({
+    clientId: "cid",
+    clientSecret: "secret",
+    redirectUri: "https://app.test/callback",
+    authServerUrl: "https://auth.test",
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("throws AuthError when the 200 response omits access_token", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ token_type: "Bearer" }),
+      }),
+    );
+
+    await expect(
+      client.exchangeCodeForToken({ code: "code", codeVerifier: "verifier" }),
+    ).rejects.toThrow(AuthError);
+
+    await expect(
+      client.exchangeCodeForToken({ code: "code", codeVerifier: "verifier" }),
+    ).rejects.toMatchObject({ code: "invalid_response" });
   });
 });

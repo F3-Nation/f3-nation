@@ -9,6 +9,7 @@ import {
   OAUTH_CSRF_COOKIE_NAME,
   REFRESH_TOKEN_MAX_AGE,
 } from "~/lib/auth/constants";
+import { env } from "~/env";
 import { sso } from "~/lib/auth/oauth";
 
 const COOKIE_NAMES = {
@@ -18,18 +19,11 @@ const COOKIE_NAMES = {
   oauthCodeVerifier: OAUTH_CODE_VERIFIER_COOKIE_NAME,
 };
 
-function getPublicOrigin(): string {
-  return (process.env.F3_ADMIN_BASE_URL ?? "http://localhost:3002").replace(
-    /\/+$/,
-    "",
-  );
-}
-
 export async function GET(request: NextRequest) {
   return handleCallbackRoute(request, {
     adapter: sso,
     cookieNames: COOKIE_NAMES,
-    publicOrigin: getPublicOrigin(),
+    publicOrigin: env.F3_ADMIN_BASE_URL,
     errorPath: "/auth/sign-in",
     errorReturnToParam: "callbackUrl",
     defaultReturnTo: "/",

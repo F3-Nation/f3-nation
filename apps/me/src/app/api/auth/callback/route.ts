@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
       exchangeCodeForToken: async (params) => {
         try {
           const tokens = await sso.exchangeCodeForToken(params);
+          if (!tokens.accessToken) throw new Error("missing_access_token");
           logInfo("me.auth.callback.token_exchange_success", {});
           return tokens;
         } catch (err) {

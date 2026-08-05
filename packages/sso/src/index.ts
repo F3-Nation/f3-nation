@@ -138,6 +138,14 @@ export class AuthClient {
       );
     }
 
+    if (!data.access_token) {
+      throw new AuthError(
+        "Token response missing access_token",
+        "invalid_response",
+        res.status,
+      );
+    }
+
     return {
       accessToken: data.access_token as string,
       refreshToken: data.refresh_token as string | undefined,

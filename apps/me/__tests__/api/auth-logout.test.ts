@@ -24,6 +24,7 @@ vi.mock("@/lib/auth/oauth", () => ({
 describe("Auth /logout route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.NEXT_PUBLIC_SITE_URL = "https://me.f3nation.test";
     vi.resetModules();
     mockCookieStore.get.mockReturnValue({ value: "refresh-token-value" });
   });

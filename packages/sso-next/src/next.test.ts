@@ -334,6 +334,18 @@ describe("handleCallbackRoute", () => {
     expect(response.headers.get("location")).toContain("error=user_not_found");
   });
 
+  it("redirects to errorPath when validateUser throws", async () => {
+    const { request } = await makeValidCallbackRequest();
+    const response = await handleCallbackRoute(request, {
+      ...BASE_CONFIG,
+      adapter: makeMockAdapter(),
+      validateUser: () => {
+        throw new Error("db error");
+      },
+    });
+    expect(response.headers.get("location")).toContain("error=user_not_found");
+  });
+
   it("uses errorReturnToParam in the error redirect query string", async () => {
     // errorReturnToParam only applies once returnTo has been resolved (i.e.
     // after CSRF+state validation passes). Use a failing token exchange so
@@ -424,5 +436,29 @@ describe("handleLogoutRoute", () => {
     });
     const body = (await response.json()) as { ok: boolean };
     expect(body.ok).toBe(true);
+    const cleared = response.headers
+      .getSetCookie()
+      .filter((c) => c.includes("Max-Age=0"));
+    expect(cleared.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("clears cookies and falls back to postLogoutRedirectUri when getOAuthConfig throws", async () => {
+    const adapter = makeMockAdapter({
+      getOAuthConfig: () => {
+        throw new Error("config error");
+      },
+    });
+    const response = await handleLogoutRoute(() => Promise.resolve(undefined), {
+      adapter,
+      cookieNames: TEST_COOKIE_NAMES,
+      postLogoutRedirectUri: "https://app.test?logged_out=true",
+    });
+    const body = (await response.json()) as { ok: boolean; redirectTo: string };
+    expect(body.ok).toBe(true);
+    expect(body.redirectTo).toBe("https://app.test?logged_out=true");
+    const cleared = response.headers
+      .getSetCookie()
+      .filter((c) => c.includes("Max-Age=0"));
+    expect(cleared.length).toBeGreaterThanOrEqual(4);
   });
 });

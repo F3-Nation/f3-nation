@@ -6,6 +6,7 @@ import {
   OAUTH_CSRF_COOKIE_NAME,
   OAUTH_CODE_VERIFIER_COOKIE_NAME,
 } from "@/lib/auth/constants";
+import { env } from "@/env";
 import { sso } from "@/lib/auth/oauth";
 
 const COOKIE_NAMES = {
@@ -16,8 +17,7 @@ const COOKIE_NAMES = {
 };
 
 function buildPostLogoutUri(): string {
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3003";
-  return `${siteUrl.replace(/\/+$/, "")}?logged_out=true`;
+  return `${env.NEXT_PUBLIC_SITE_URL.replace(/\/+$/, "")}?logged_out=true`;
 }
 
 export async function POST() {
