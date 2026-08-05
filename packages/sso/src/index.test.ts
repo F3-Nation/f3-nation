@@ -138,3 +138,31 @@ describe("AuthClient.exchangeCodeForToken", () => {
     ).rejects.toMatchObject({ code: "invalid_response" });
   });
 });
+
+describe("AuthClient.refreshToken", () => {
+  const client = new AuthClient({
+    clientId: "cid",
+    clientSecret: "secret",
+    redirectUri: "https://app.test/callback",
+    authServerUrl: "https://auth.test",
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("throws AuthError when the 200 response omits access_token", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ token_type: "Bearer" }),
+      }),
+    );
+
+    await expect(
+      client.refreshToken({ refreshToken: "rt" }),
+    ).rejects.toMatchObject({ code: "invalid_response" });
+  });
+});
