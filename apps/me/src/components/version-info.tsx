@@ -56,7 +56,7 @@ export function VersionInfo({ version, channel, changelog }: VersionInfoProps) {
               {changelog[0]?.version !== version && (
                 <p className="text-xs text-muted-foreground">
                   Showing user-facing changes. Releases up to v{version} since v
-                  {changelog[0]?.version} contained only dependency updates.
+                  {changelog[0]?.version} contained no user-facing changes.
                 </p>
               )}
               {changelog.map((entry) => (
