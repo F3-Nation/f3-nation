@@ -23,6 +23,21 @@ import { LowBandwidthF3Marker as LowBandwidthF3MarkerSchema } from "@acme/valida
 
 import { protectedProcedure } from "../../shared";
 
+/**
+ * The date window that makes an event current for the map: it starts within the
+ * next six days, and it either has no end date or one that hasn't passed.
+ * Shared by eventsAndLocations and locationWorkout so the two endpoints can't
+ * drift apart on which events count as current.
+ */
+const withinCurrentEventDateWindow = () =>
+  and(
+    lte(schema.events.startDate, sql`CURRENT_DATE + INTERVAL '6 days'`),
+    or(
+      isNull(schema.events.endDate),
+      gte(schema.events.endDate, sql`CURRENT_DATE`),
+    ),
+  );
+
 export const mapLocationRouter = os.router({
   eventsAndLocations: protectedProcedure
     .route({
@@ -87,11 +102,7 @@ export const mapLocationRouter = os.router({
             eq(schema.events.locationId, schema.locations.id),
             eq(schema.events.isActive, true),
             eq(schema.events.isPrivate, false),
-            lte(schema.events.startDate, sql`CURRENT_DATE + INTERVAL '6 days'`),
-            or(
-              isNull(schema.events.endDate),
-              gte(schema.events.endDate, sql`CURRENT_DATE`),
-            ),
+            withinCurrentEventDateWindow(),
           ),
         )
         .leftJoin(aoOrg, eq(schema.events.orgId, aoOrg.id))
@@ -388,11 +399,7 @@ export const mapLocationRouter = os.router({
             eq(schema.locations.id, schema.events.locationId),
             eq(schema.events.isActive, true),
             eq(schema.events.isPrivate, false),
-            lte(schema.events.startDate, sql`CURRENT_DATE + INTERVAL '6 days'`),
-            or(
-              isNull(schema.events.endDate),
-              gte(schema.events.endDate, sql`CURRENT_DATE`),
-            ),
+            withinCurrentEventDateWindow(),
           ),
         )
         .leftJoin(parentOrg, eq(schema.events.orgId, parentOrg.id))

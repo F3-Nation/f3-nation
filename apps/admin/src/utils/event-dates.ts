@@ -3,7 +3,11 @@
  * shared pattern behind the workouts table's Start/End Date columns.
  */
 export function formatDateOrEmpty(date: string | null | undefined): string {
-  return date ? new Date(date).toLocaleDateString() : "";
+  if (!date) return "";
+  const [year, month, day] = date.split("-").map(Number);
+  return year && month && day
+    ? new Date(year, month - 1, day).toLocaleDateString()
+    : new Date(date).toLocaleDateString();
 }
 
 /**
