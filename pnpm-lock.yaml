@@ -1629,13 +1629,13 @@ importers:
         version: 4.1.10(vitest@4.1.10)
       eslint:
         specifier: 'catalog:'
-        version: 10.7.0(jiti@2.7.0)(supports-color@8.1.1)
+        version: 10.8.0(jiti@2.7.0)(supports-color@8.1.1)
       next:
         specifier: 'catalog:'
-        version: 16.2.11(@babel/core@7.29.0(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@playwright/test@1.61.1)(@types/node@24.13.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+        version: 16.3.0(@babel/core@7.29.0(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@playwright/test@1.62.1)(@types/node@24.13.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       prettier:
         specifier: 'catalog:'
-        version: 3.9.5
+        version: 3.9.6
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
