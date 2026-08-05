@@ -52,6 +52,7 @@ import {
   useMutation,
   useQuery,
 } from "~/orpc/react";
+import { isEndDateBeforeStartDate } from "~/utils/event-dates";
 import type { DataType } from "~/utils/store/modal";
 import {
   closeModal,
@@ -194,7 +195,7 @@ export default function AdminWorkoutsModal({
       }
     }
 
-    if (data.endDate && data.startDate && data.endDate < data.startDate) {
+    if (isEndDateBeforeStartDate(data.startDate, data.endDate)) {
       form.setError("endDate", {
         message: "End date must be on or after start date",
       });

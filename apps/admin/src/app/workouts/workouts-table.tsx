@@ -29,6 +29,7 @@ import { Cell, Header } from "@acme/ui/table";
 
 import { orpc, useQuery } from "~/orpc/react";
 import type { RouterOutputs } from "~/orpc/types";
+import { formatDateOrEmpty } from "~/utils/event-dates";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
 import { AOSFilter } from "../_components/ao-filter";
 import { MobileFilterSheet } from "../_components/mobile-filter-sheet";
@@ -211,16 +212,14 @@ const columns: TableOptions<WorkoutEvent>["columns"] = [
   {
     accessorKey: "startDate",
     meta: { name: "Start Date" },
-    accessorFn: (row) =>
-      row.startDate ? new Date(row.startDate).toLocaleDateString() : "",
+    accessorFn: (row) => formatDateOrEmpty(row.startDate),
     header: Header,
     cell: Cell,
   },
   {
     accessorKey: "endDate",
     meta: { name: "End Date" },
-    accessorFn: (row) =>
-      row.endDate ? new Date(row.endDate).toLocaleDateString() : "",
+    accessorFn: (row) => formatDateOrEmpty(row.endDate),
     header: Header,
     cell: Cell,
   },
