@@ -134,7 +134,7 @@ export default function AdminWorkoutsModal({
       startTime: convertHHmmToHH_mm(event?.startTime ?? ""),
       endTime: convertHHmmToHH_mm(event?.endTime ?? ""),
       startDate: event?.startDate ?? "",
-      endDate: event?.endDate ?? null,
+      endDate: event?.endDate ?? "",
       dayOfWeek: event?.dayOfWeek ?? undefined,
       isActive: event?.isActive ?? true,
       highlight: event?.highlight ?? false,
