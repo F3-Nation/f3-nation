@@ -24,6 +24,8 @@ Adapter:
 
 - `createSsoAdapter`
 - `buildSsoCookieOptions`
+- `SSO_COOKIE_NAMES` (F3 platform defaults)
+- `ACCESS_TOKEN_COOKIE_NAME` / `REFRESH_TOKEN_COOKIE_NAME` / `OAUTH_CSRF_COOKIE_NAME` / `OAUTH_CODE_VERIFIER_COOKIE_NAME`
 
 Re-exported from `@f3nation/sso`:
 
@@ -57,16 +59,13 @@ export const sso = createSsoAdapter(() => ({
 
 ```ts
 import type { NextRequest } from "next/server";
-import { handleLoginRoute } from "@f3nation/sso-next";
+import { handleLoginRoute, SSO_COOKIE_NAMES } from "@f3nation/sso-next";
 import { sso } from "@/lib/auth/oauth";
 
 export async function GET(request: NextRequest) {
   return handleLoginRoute(request, {
     adapter: sso,
-    cookieNames: {
-      oauthCsrf: "oauth_csrf",
-      oauthCodeVerifier: "oauth_code_verifier",
-    },
+    cookieNames: SSO_COOKIE_NAMES,
     flowCookieMaxAge: 600,
     defaultReturnTo: "/",
   });
@@ -77,18 +76,13 @@ export async function GET(request: NextRequest) {
 
 ```ts
 import type { NextRequest } from "next/server";
-import { handleCallbackRoute } from "@f3nation/sso-next";
+import { handleCallbackRoute, SSO_COOKIE_NAMES } from "@f3nation/sso-next";
 import { sso } from "@/lib/auth/oauth";
 
 export async function GET(request: NextRequest) {
   return handleCallbackRoute(request, {
     adapter: sso,
-    cookieNames: {
-      accessToken: "access_token",
-      refreshToken: "refresh_token",
-      oauthCsrf: "oauth_csrf",
-      oauthCodeVerifier: "oauth_code_verifier",
-    },
+    cookieNames: SSO_COOKIE_NAMES,
     publicOrigin: env.NEXT_PUBLIC_SITE_URL, // use your validated env module
     errorPath: "/",
     accessTokenMaxAge: 3600,
@@ -101,23 +95,16 @@ export async function GET(request: NextRequest) {
 
 ```ts
 import { cookies } from "next/headers";
-import { handleLogoutRoute } from "@f3nation/sso-next";
+import { handleLogoutRoute, SSO_COOKIE_NAMES } from "@f3nation/sso-next";
 import { sso } from "@/lib/auth/oauth";
-
-const COOKIE_NAMES = {
-  accessToken: "access_token",
-  refreshToken: "refresh_token",
-  oauthCsrf: "oauth_csrf",
-  oauthCodeVerifier: "oauth_cv",
-};
 
 export async function POST() {
   const cookieStore = await cookies();
   return handleLogoutRoute(
-    async () => cookieStore.get(COOKIE_NAMES.refreshToken)?.value,
+    async () => cookieStore.get(SSO_COOKIE_NAMES.refreshToken)?.value,
     {
       adapter: sso,
-      cookieNames: COOKIE_NAMES,
+      cookieNames: SSO_COOKIE_NAMES,
       postLogoutRedirectUri: "https://app.example.com?logged_out=true",
     },
   );
