@@ -325,6 +325,26 @@ describe("handleCallbackRoute", () => {
     expect(response.headers.get("location")).toContain("error=user_not_found");
   });
 
+  it("clears the stale refresh-token cookie when the provider omits refreshToken", async () => {
+    const adapter = makeMockAdapter({
+      exchangeCodeForToken: vi.fn().mockResolvedValue({
+        accessToken: "at_test",
+        // no refreshToken
+        expiresIn: 3600,
+      }),
+    });
+    const { request } = await makeValidCallbackRequest();
+    const response = await handleCallbackRoute(request, {
+      ...BASE_CONFIG,
+      adapter,
+    });
+
+    const refreshEntry = response.headers
+      .getSetCookie()
+      .find((c) => c.startsWith(`${TEST_COOKIE_NAMES.refreshToken}=`));
+    expect(refreshEntry).toContain("Max-Age=0");
+  });
+
   it("uses errorReturnToParam in the error redirect query string", async () => {
     // errorReturnToParam only applies once returnTo has been resolved (i.e.
     // after CSRF+state validation passes). Use a failing token exchange so
@@ -435,6 +455,24 @@ describe("handleLogoutRoute", () => {
     const body = (await response.json()) as { ok: boolean; redirectTo: string };
     expect(body.ok).toBe(true);
     expect(body.redirectTo).toBe("https://app.test?logged_out=true");
+    const cleared = response.headers
+      .getSetCookie()
+      .filter((c) => c.includes("Max-Age=0"));
+    expect(cleared.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("clears cookies even when getRefreshToken throws", async () => {
+    const adapter = makeMockAdapter();
+    const response = await handleLogoutRoute(
+      () => Promise.reject(new Error("cookie store unavailable")),
+      {
+        adapter,
+        cookieNames: TEST_COOKIE_NAMES,
+        postLogoutRedirectUri: "https://app.test?logged_out=true",
+      },
+    );
+    const body = (await response.json()) as { ok: boolean };
+    expect(body.ok).toBe(true);
     const cleared = response.headers
       .getSetCookie()
       .filter((c) => c.includes("Max-Age=0"));

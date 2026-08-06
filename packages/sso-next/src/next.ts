@@ -329,13 +329,13 @@ export async function handleCallbackRoute(
     buildSsoCookieOptions(accessTokenMaxAge),
   );
 
-  if (tokens.refreshToken) {
-    response.cookies.set(
-      config.cookieNames.refreshToken,
-      tokens.refreshToken,
-      buildSsoCookieOptions(config.refreshTokenMaxAge),
-    );
-  }
+  // Always write the refresh-token cookie: set it when present, clear the
+  // stale cookie when the provider omits it from the response.
+  response.cookies.set(
+    config.cookieNames.refreshToken,
+    tokens.refreshToken ?? "",
+    buildSsoCookieOptions(tokens.refreshToken ? config.refreshTokenMaxAge : 0),
+  );
 
   const clearOpts = buildSsoCookieOptions(0);
   response.cookies.set(config.cookieNames.oauthCsrf, "", clearOpts);
@@ -374,7 +374,12 @@ export async function handleLogoutRoute(
   getRefreshToken: () => Promise<string | undefined>,
   config: SsoLogoutRouteConfig,
 ): Promise<NextResponse> {
-  const refreshToken = await getRefreshToken();
+  let refreshToken: string | undefined;
+  try {
+    refreshToken = await getRefreshToken();
+  } catch {
+    // Non-fatal: cookie reads can fail (e.g. edge runtime); proceed to clear.
+  }
 
   if (refreshToken) {
     try {
