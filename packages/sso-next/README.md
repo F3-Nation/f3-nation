@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
     adapter: sso,
     cookieNames: SSO_COOKIE_NAMES,
     flowCookieMaxAge: 600,
-    defaultReturnTo: "/",
+    defaultReturnTo: "/", // set to your app's post-login landing page
   });
 }
 ```
