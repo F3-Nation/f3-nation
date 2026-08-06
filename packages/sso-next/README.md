@@ -108,7 +108,7 @@ export async function POST() {
     {
       adapter: sso,
       cookieNames: SSO_COOKIE_NAMES,
-      postLogoutRedirectUri: "https://app.example.com?logged_out=true",
+      postLogoutRedirectUri: "https://app.example.com?logged_out=true", // set to your app's post-logout landing page
     },
   );
 }
