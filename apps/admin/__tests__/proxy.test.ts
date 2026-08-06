@@ -39,7 +39,9 @@ vi.mock("@f3nation/sso-next", async (importActual) => ({
   AuthError,
 }));
 
-vi.mock("~/lib/auth/oauth", () => ({ refreshToken: refreshTokenMock }));
+vi.mock("~/lib/auth/oauth", () => ({
+  sso: { refreshToken: refreshTokenMock },
+}));
 
 vi.mock("~/env", () => ({
   env: {

@@ -78,7 +78,9 @@ describe("lib/auth/oauth", () => {
       codeVerifier: "verifier-1",
     });
     const userInfo = await oauth.sso.getUserInfo("access-1");
-    const refreshed = await oauth.refreshToken({ refreshToken: "refresh-1" });
+    const refreshed = await oauth.sso.refreshToken({
+      refreshToken: "refresh-1",
+    });
     await oauth.sso.revokeToken("refresh-1");
 
     expect(oauthConfig).toEqual({

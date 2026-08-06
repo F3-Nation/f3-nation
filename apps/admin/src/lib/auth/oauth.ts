@@ -13,6 +13,3 @@ export const sso = createSsoAdapter(() => {
     authServerUrl,
   };
 });
-
-export const refreshToken = (p: Parameters<typeof sso.refreshToken>[0]) =>
-  sso.refreshToken(p);

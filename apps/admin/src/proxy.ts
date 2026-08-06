@@ -10,7 +10,7 @@ import {
   REFRESH_TOKEN_COOKIE_NAME,
   REFRESH_TOKEN_MAX_AGE,
 } from "~/lib/auth/constants";
-import { refreshToken } from "~/lib/auth/oauth";
+import { sso } from "~/lib/auth/oauth";
 import { env } from "~/env";
 import { logDebug, logWarn } from "~/lib/logging";
 
@@ -194,7 +194,9 @@ export async function proxy(request: NextRequest) {
       request.headers.get("sec-fetch-mode") === "navigate";
 
     try {
-      const tokens = await refreshToken({ refreshToken: refreshTokenCookie });
+      const tokens = await sso.refreshToken({
+        refreshToken: refreshTokenCookie,
+      });
       if (!tokens.accessToken) {
         throw new Error("Refreshed access token missing");
       }

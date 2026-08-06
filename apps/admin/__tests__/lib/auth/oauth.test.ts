@@ -111,7 +111,7 @@ describe("admin lib/auth/oauth", () => {
       AUTH_PROVIDER_URL: "https://auth.f3nation.test",
     });
 
-    await oauth.refreshToken({ refreshToken: "rt-1" });
+    await oauth.sso.refreshToken({ refreshToken: "rt-1" });
     expect(refreshTokenMock).toHaveBeenCalledWith({ refreshToken: "rt-1" });
   });
 });

@@ -10,9 +10,6 @@ export const sso = createSsoAdapter(() => {
     clientId: env.OAUTH_CLIENT_ID,
     clientSecret: env.OAUTH_CLIENT_SECRET,
     redirectUri: env.OAUTH_REDIRECT_URI,
-    authServerUrl,
+    authServerUrl: authServerUrl,
   };
 });
-
-export const refreshToken = (p: Parameters<typeof sso.refreshToken>[0]) =>
-  sso.refreshToken(p);
