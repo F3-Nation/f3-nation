@@ -999,5 +999,77 @@ describe("Map Location Router", () => {
         result.find((returned) => returned.id === instance.id),
       ).toBeUndefined();
     });
+
+    // A series' visibility and retirement are not copied down onto its
+    // instances, so an instance can stay active and public after its parent is
+    // hidden. It must still inherit the parent's state here, or a hidden
+    // workout reappears through markers, details, and pin statuses.
+    describe.each([
+      { label: "private", parent: { isPrivate: true, isActive: true } },
+      { label: "inactive", parent: { isPrivate: false, isActive: false } },
+    ])("parent series is $label", ({ label, parent }) => {
+      it("should exclude an active public instance of that series", async () => {
+        const session = await createAdminSession();
+        await mockAuthWithSession(session);
+
+        const region = await createTestRegion();
+        if (!region) throw new Error("Failed to create test region");
+
+        const ao = await createTestAO(region.id);
+        if (!ao) throw new Error("Failed to create test AO");
+
+        const parentLocation = await createTestLocation(region.id);
+        if (!parentLocation) throw new Error("Failed to create test location");
+
+        const [event] = await db
+          .insert(schema.events)
+          .values({
+            name: `Hidden Series ${label} ${uniqueId()}`,
+            orgId: ao.id,
+            locationId: parentLocation.id,
+            dayOfWeek: "monday",
+            startTime: "0530",
+            highlight: false,
+            startDate: "2026-01-01",
+            ...parent,
+          })
+          .returning();
+
+        if (!event) throw new Error("Failed to create hidden series event");
+        createdEventIds.push(event.id);
+
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const startDate = tomorrow.toISOString().slice(0, 10);
+
+        // The instance's own flags say "show me", and the exception clears the
+        // outer predicate — the parent's state is the only disqualifier.
+        const [instance] = await db
+          .insert(schema.eventInstances)
+          .values({
+            name: `Orphaned Instance ${label} ${uniqueId()}`,
+            orgId: ao.id,
+            seriesId: event.id,
+            locationId: parentLocation.id,
+            startDate,
+            startTime: "0600",
+            endTime: "0700",
+            isActive: true,
+            highlight: false,
+            isPrivate: false,
+            seriesException: "closed",
+          })
+          .returning();
+
+        if (!instance) throw new Error("Failed to create event instance");
+
+        const client = createTestClient();
+        const result = await client.map.location.upcomingInstances();
+
+        expect(
+          result.find((returned) => returned.id === instance.id),
+        ).toBeUndefined();
+      });
+    });
   });
 });

@@ -327,6 +327,13 @@ export const mapLocationRouter = os.router({
           and(
             eq(schema.eventInstances.isActive, true),
             eq(schema.eventInstances.isPrivate, false),
+            or(
+              isNull(schema.eventInstances.seriesId),
+              and(
+                eq(seriesEvent.isActive, true),
+                eq(seriesEvent.isPrivate, false),
+              ),
+            ),
             sql`${schema.eventInstances.startDate} >= CURRENT_DATE`,
             sql`${schema.eventInstances.startDate} <= CURRENT_DATE + INTERVAL '30 days'`,
             // Locationless rows pass through (client skips markers without coords);
