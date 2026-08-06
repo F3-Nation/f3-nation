@@ -18,6 +18,10 @@ type Assert<T extends true> = T;
 // widens to `unknown` instead, which is what `IsKnown` catches.
 type IsKnown<T> = unknown extends T ? false : true;
 
+// `Session.id`/`Session.roles` are also declared by the `next-auth` augmentation
+// in packages/shared/src/app/types.ts, so these two assert availability to
+// consumers rather than isolating this file's augmentation specifically —
+// unlike the three below, they stay green even if only this file detaches.
 export type AssertSessionId = Assert<IsKnown<Session["id"]>>;
 export type AssertSessionRoles = Assert<IsKnown<Session["roles"]>>;
 export type AssertUserRoles = Assert<IsKnown<User["roles"]>>;

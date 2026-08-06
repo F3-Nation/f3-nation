@@ -35,7 +35,8 @@ export interface AdapterAccount {
 }
 
 /**
- * next-auth's `Adapter`, re-typed with numeric user ids.
+ * next-auth's `Adapter`, re-typed with numeric user ids (WebAuthn/passkey
+ * methods omitted — unimplemented and out of scope).
  *
  * Deliberately a plain exported interface rather than a `declare module "next-auth"`
  * augmentation: augmentations bind to a resolved file, so a duplicate `next-auth`
