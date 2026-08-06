@@ -213,13 +213,4 @@ describe("Auth /callback route", () => {
 
     expect(response.headers.get("location")).toContain("token_exchange_failed");
   });
-
-  it("throws when NEXT_PUBLIC_SITE_URL is not configured", async () => {
-    delete process.env.NEXT_PUBLIC_SITE_URL;
-
-    const { GET } = await import("@/app/api/auth/callback/route");
-    await expect(
-      GET(makeRequest("http://localhost/api/auth/callback?error=test")),
-    ).rejects.toThrow("NEXT_PUBLIC_SITE_URL is not configured");
-  });
 });

@@ -4,18 +4,11 @@ import {
   ACCESS_TOKEN_DEFAULT_MAX_AGE,
   REFRESH_TOKEN_MAX_AGE,
 } from "@/lib/auth/constants";
+import { env } from "@/env";
 import { sso } from "@/lib/auth/oauth";
 import { logError, logInfo, logWarn } from "@/lib/logging";
 
-function getPublicOrigin(): string {
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
-  if (!siteUrl) throw new Error("NEXT_PUBLIC_SITE_URL is not configured");
-  return siteUrl.replace(/\/+$/, "");
-}
-
 export async function GET(request: NextRequest) {
-  const publicOrigin = getPublicOrigin();
-
   return handleCallbackRoute(request, {
     adapter: {
       exchangeCodeForToken: async (params) => {
@@ -44,7 +37,7 @@ export async function GET(request: NextRequest) {
       },
     },
     cookieNames: SSO_COOKIE_NAMES,
-    publicOrigin,
+    publicOrigin: env.NEXT_PUBLIC_SITE_URL,
     errorPath: "/",
     errorReturnToParam: "redirect",
     defaultReturnTo: "/profile",
