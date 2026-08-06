@@ -209,6 +209,7 @@ describe("Event Instance Router", () => {
       startTime?: string | null;
       endTime?: string | null;
       meta?: Record<string, unknown>;
+      isActive?: boolean;
     },
   ) => {
     const [eventInstance] = await db
@@ -218,7 +219,7 @@ describe("Event Instance Router", () => {
         orgId,
         startDate:
           options?.startDate ?? new Date().toISOString().split("T")[0]!,
-        isActive: true,
+        isActive: options?.isActive ?? true,
         highlight: options?.highlight ?? false,
         seriesException: options?.seriesException ?? null,
         startTime: options?.startTime ?? null,
@@ -306,6 +307,85 @@ describe("Event Instance Router", () => {
       expect(result).toHaveProperty("eventInstances");
       expect(result).toHaveProperty("totalCount");
       expect(Array.isArray(result.eventInstances)).toBe(true);
+    });
+
+    describe("status filter", () => {
+      const seedActiveAndInactive = async () => {
+        const region = await createTestRegion();
+        if (!region) return null;
+
+        const ao = await createTestAO(region.id);
+        if (!ao) return null;
+
+        const active = await createTestEventInstance(ao.id, {
+          isActive: true,
+        });
+        const inactive = await createTestEventInstance(ao.id, {
+          isActive: false,
+        });
+        if (!active || !inactive) return null;
+
+        return { ao, active, inactive };
+      };
+
+      it("should default to active only when statuses is omitted", async () => {
+        const session = await createAdminSession();
+        await mockAuthWithSession(session);
+
+        const seeded = await seedActiveAndInactive();
+        if (!seeded) return;
+
+        const client = createTestClient();
+        const result = await client.eventInstance.all({
+          aoOrgId: seeded.ao.id,
+          pageIndex: 0,
+          pageSize: 10,
+        });
+
+        const ids = result.eventInstances.map((e) => e.id);
+        expect(ids).toContain(seeded.active.id);
+        expect(ids).not.toContain(seeded.inactive.id);
+      });
+
+      it("should return both statuses when statuses is empty", async () => {
+        const session = await createAdminSession();
+        await mockAuthWithSession(session);
+
+        const seeded = await seedActiveAndInactive();
+        if (!seeded) return;
+
+        const client = createTestClient();
+        const result = await client.eventInstance.all({
+          statuses: [],
+          aoOrgId: seeded.ao.id,
+          pageIndex: 0,
+          pageSize: 10,
+        });
+
+        const ids = result.eventInstances.map((e) => e.id);
+        expect(ids).toContain(seeded.active.id);
+        expect(ids).toContain(seeded.inactive.id);
+      });
+
+      it("should return only inactive instances when asked", async () => {
+        const session = await createAdminSession();
+        await mockAuthWithSession(session);
+
+        const seeded = await seedActiveAndInactive();
+        if (!seeded) return;
+
+        const client = createTestClient();
+        const result = await client.eventInstance.all({
+          statuses: ["inactive"],
+          aoOrgId: seeded.ao.id,
+          pageIndex: 0,
+          pageSize: 10,
+        });
+
+        const ids = result.eventInstances.map((e) => e.id);
+        expect(ids).toContain(seeded.inactive.id);
+        expect(ids).not.toContain(seeded.active.id);
+      });
     });
 
     it("should paginate results correctly", async () => {

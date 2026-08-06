@@ -10,7 +10,6 @@ import { convertHHmmToHH_mm } from "@acme/shared/app/functions";
 import { safeParseInt } from "@acme/shared/common/functions";
 import { cn } from "@acme/ui";
 import { Button } from "@acme/ui/button";
-import { Checkbox } from "@acme/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -94,6 +93,7 @@ const EventInstanceFormSchema = z
       .optional(),
     isPrivate: z.boolean(),
     highlight: z.boolean(),
+    isActive: z.boolean(),
   })
   .superRefine((data, ctx) => {
     if (
@@ -201,6 +201,7 @@ export default function AdminEventInstancesModal({
       seriesException: instance?.seriesException ?? null,
       isPrivate: instance?.isPrivate ?? false,
       highlight: instance?.highlight ?? false,
+      isActive: instance?.isActive ?? true,
     });
   }, [form, instance]);
 
@@ -270,6 +271,7 @@ export default function AdminEventInstancesModal({
         seriesException: formData.seriesException ?? null,
         isPrivate: formData.isPrivate,
         highlight: formData.seriesId ? false : formData.highlight,
+        isActive: formData.isActive,
       });
     } catch {
       // handled in onError
@@ -618,14 +620,51 @@ export default function AdminEventInstancesModal({
                 control={form.control}
                 name="isPrivate"
                 render={({ field }) => (
-                  <FormItem className="flex flex-row items-center gap-2 space-y-0">
-                    <FormControl>
-                      <Checkbox
-                        checked={field.value}
-                        onCheckedChange={(v) => field.onChange(v === true)}
-                      />
-                    </FormControl>
-                    <FormLabel className="!mt-0 font-normal">Private</FormLabel>
+                  <FormItem>
+                    <FormLabel>Visibility</FormLabel>
+                    <Select
+                      value={field.value === true ? "true" : "false"}
+                      onValueChange={(value) =>
+                        value && field.onChange(value === "true")
+                      }
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select visibility" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="false">Public</SelectItem>
+                        <SelectItem value="true">Private</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="isActive"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Status</FormLabel>
+                    <Select
+                      value={field.value === true ? "true" : "false"}
+                      onValueChange={(value) =>
+                        value && field.onChange(value === "true")
+                      }
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a status" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="true">Active</SelectItem>
+                        <SelectItem value="false">Inactive</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
                   </FormItem>
                 )}
               />
@@ -636,17 +675,29 @@ export default function AdminEventInstancesModal({
                   const seriesId = form.watch("seriesId");
                   const isStandalone = seriesId == null;
                   return (
-                    <FormItem className="flex flex-row items-center gap-2 space-y-0">
-                      <FormControl>
-                        <Checkbox
-                          checked={isStandalone && field.value}
-                          disabled={!isStandalone}
-                          onCheckedChange={(v) => field.onChange(v === true)}
-                        />
-                      </FormControl>
-                      <FormLabel className="!mt-0 font-normal">
-                        Highlight
-                      </FormLabel>
+                    <FormItem>
+                      <FormLabel>Highlight</FormLabel>
+                      <Select
+                        // Instances belonging to a series never highlight, so the
+                        // control reads "No" and is locked rather than showing a
+                        // stored value the server would ignore.
+                        value={isStandalone && field.value ? "true" : "false"}
+                        disabled={!isStandalone}
+                        onValueChange={(value) =>
+                          value && field.onChange(value === "true")
+                        }
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select highlight" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="false">No</SelectItem>
+                          <SelectItem value="true">Yes</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
                     </FormItem>
                   );
                 }}

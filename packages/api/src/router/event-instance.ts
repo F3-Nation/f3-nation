@@ -156,7 +156,8 @@ export const eventInstanceRouter = {
 
       const statusFilter = (() => {
         const s = input?.statuses;
-        if (!s?.length) return eq(schema.eventInstances.isActive, true);
+        if (s === undefined) return eq(schema.eventInstances.isActive, true);
+        if (s.length === 0) return undefined;
         if (s.length >= 2) return undefined;
         return s.includes("active")
           ? eq(schema.eventInstances.isActive, true)

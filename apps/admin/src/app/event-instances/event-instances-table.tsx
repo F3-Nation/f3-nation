@@ -227,11 +227,11 @@ const columns: TableOptions<
   },
   {
     accessorKey: "isPrivate",
-    meta: { name: "Private" },
+    meta: { name: "Visibility" },
     header: Header,
     cell: ({ row }) => (
       <Badge variant={row.original.isPrivate ? "secondary" : "outline"}>
-        {row.original.isPrivate ? "Yes" : "No"}
+        {row.original.isPrivate ? "Private" : "Public"}
       </Badge>
     ),
   },
@@ -240,9 +240,17 @@ const columns: TableOptions<
     meta: { name: "Status" },
     header: Header,
     cell: ({ row }) => (
-      <Badge variant={row.original.isActive ? "default" : "secondary"}>
-        {row.original.isActive ? "Active" : "Inactive"}
-      </Badge>
+      <div className="flex items-center justify-start">
+        <span
+          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${
+            row.original.isActive
+              ? "border-green-200 bg-green-100 text-green-700"
+              : "border-red-200 bg-red-100 text-red-700"
+          }`}
+        >
+          {row.original.isActive ? "Active" : "Inactive"}
+        </span>
+      </div>
     ),
   },
   {
