@@ -284,4 +284,4 @@ This requires access to the auth provider admin. The project owner handles this.
 
 ## License
 
-Internal — F3 Nation.
+AGPL-3.0-or-later — see the repository [LICENSE](../../LICENSE).
