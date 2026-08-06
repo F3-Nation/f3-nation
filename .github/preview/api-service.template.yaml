@@ -1,0 +1,84 @@
+# Cloud Run service template for per-PR api previews (F3-57).
+# Two containers: the api app + a seeded Postgres sidecar sharing localhost.
+# Rendered with envsubst by preview-env.yml; applied via
+# `gcloud run services replace`.
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: ${SERVICE_API}
+  labels:
+    preview-env: "true"
+    pr-number: "${PR_NUMBER}"
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "1"
+        # Start the api container only after the db sidecar passes its probe.
+        run.googleapis.com/container-dependencies: '{"api": ["db"]}'
+    spec:
+      serviceAccountName: ${RUNTIME_SA}
+      containers:
+        - name: api
+          image: ${API_IMAGE}
+          ports:
+            - name: http1
+              containerPort: 8080
+          env:
+            - name: DATABASE_URL
+              value: postgresql://f3local:f3local@localhost:5432/f3nation
+            - name: AUTH_SECRET
+              value: preview-auth-secret-placeholder-32c
+            - name: EMAIL_SERVER
+              value: smtp://user:pass@localhost:587
+            - name: EMAIL_FROM
+              value: preview@example.com
+            - name: EMAIL_ADMIN_DESTINATIONS
+              value: preview@example.com
+            - name: API_KEY
+              value: local-api-key
+            - name: SUPER_ADMIN_API_KEY
+              value: preview-super-admin-key
+            - name: LOG_LEVEL
+              value: info
+            - name: NEXT_PUBLIC_API_URL
+              value: ${API_URL}
+            - name: NEXT_PUBLIC_MAP_URL
+              value: ${MAP_URL}
+            # The auth preview's URL — packages/api verifies RS256 bearer
+            # JWTs against ${AUTH_URL}/.well-known/jwks.json (issuer check
+            # included), which is how E2E carries a signed-in identity to the
+            # api across run.app hosts. See docs/PREVIEW_AUTH.md.
+            - name: NEXT_PUBLIC_AUTH_URL
+              value: ${AUTH_URL}
+            - name: NEXT_PUBLIC_CHANNEL
+              value: branch
+            # PostHog error tracking (server-side capture reads this at
+            # runtime; empty when the secret is unset → capture no-ops).
+            - name: NEXT_PUBLIC_POSTHOG_KEY
+              value: ${NEXT_PUBLIC_POSTHOG_KEY}
+          resources:
+            limits:
+              cpu: "1"
+              memory: 1Gi
+        - name: db
+          image: ${DB_IMAGE}
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/postgresql/data
+          startupProbe:
+            tcpSocket:
+              port: 5432
+            initialDelaySeconds: 2
+            periodSeconds: 2
+            failureThreshold: 60
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi
+      volumes:
+        - name: pgdata
+          emptyDir:
+            medium: Memory
+            sizeLimit: 256Mi

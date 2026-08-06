@@ -218,6 +218,8 @@ export const LOCAL_API_KEYS: LocalApiKeySeed[] = [
     // Region-scoped principal: editor on the Boone region org only (NOT the
     // nation), so cross-region RBAC denials (e.g. spec AC-15 — an editor of
     // region S cannot reject in region R) have a deterministic seeded key.
+    // The "local-" prefix keeps it inside the obfuscator's
+    // --preserve-local-seed allowlist (tooling/scripts/src/obfuscate-db.ts).
     key: "local-boone-editor-key",
     name: "Boone Editor (local dev)",
     description:
