@@ -77,6 +77,7 @@ export async function GET(request: NextRequest) {
 ```ts
 import type { NextRequest } from "next/server";
 import { handleCallbackRoute, SSO_COOKIE_NAMES } from "@f3nation/sso-next";
+import { env } from "@/env";
 import { sso } from "@/lib/auth/oauth";
 
 export async function GET(request: NextRequest) {
