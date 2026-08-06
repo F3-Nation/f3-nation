@@ -85,7 +85,9 @@ export async function GET(request: NextRequest) {
     adapter: sso,
     cookieNames: SSO_COOKIE_NAMES,
     publicOrigin: env.NEXT_PUBLIC_SITE_URL, // use your validated env module
-    errorPath: "/",
+    errorPath: "/", // set to your app's sign-in or error page
+    errorReturnToParam: "returnTo", // query param name for the failed returnTo path on the error page
+    defaultReturnTo: "/", // set to your app's post-login landing page
     accessTokenMaxAge: 3600,
     refreshTokenMaxAge: 30 * 24 * 3600,
   });
