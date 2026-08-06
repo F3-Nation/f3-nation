@@ -71,7 +71,7 @@ export interface SsoCookieNames {
  * Returns standard httpOnly/secure/sameSite/path cookie options with the
  * given `maxAge`.  Use `maxAge: 0` to produce a clear-cookie instruction.
  */
-export function buildSsoCookieOptions(maxAge: number): {
+function buildSsoCookieOptions(maxAge: number): {
   httpOnly: boolean;
   secure: boolean;
   sameSite: "lax";

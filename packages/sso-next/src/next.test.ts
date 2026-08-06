@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import type { NextRequest } from "next/server";
 
 import {
-  buildSsoCookieOptions,
   createSsoAdapter,
   handleCallbackRoute,
   handleLoginRoute,
@@ -61,26 +60,6 @@ const TEST_COOKIE_NAMES = {
   oauthCsrf: "oauth_csrf",
   oauthCodeVerifier: "oauth_code_verifier",
 };
-
-// ---------------------------------------------------------------------------
-// buildSsoCookieOptions
-// ---------------------------------------------------------------------------
-
-describe("buildSsoCookieOptions", () => {
-  it("returns httpOnly lax options with given maxAge", () => {
-    const opts = buildSsoCookieOptions(3600);
-    expect(opts).toMatchObject({
-      httpOnly: true,
-      sameSite: "lax",
-      path: "/",
-      maxAge: 3600,
-    });
-  });
-
-  it("returns maxAge 0 for a clear-cookie instruction", () => {
-    expect(buildSsoCookieOptions(0).maxAge).toBe(0);
-  });
-});
 
 // ---------------------------------------------------------------------------
 // createSsoAdapter

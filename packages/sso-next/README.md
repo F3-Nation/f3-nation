@@ -23,7 +23,6 @@ Route handlers:
 Adapter:
 
 - `createSsoAdapter`
-- `buildSsoCookieOptions`
 - `SSO_COOKIE_NAMES` (F3 platform defaults)
 - `ACCESS_TOKEN_COOKIE_NAME` / `REFRESH_TOKEN_COOKIE_NAME` / `OAUTH_CSRF_COOKIE_NAME` / `OAUTH_CODE_VERIFIER_COOKIE_NAME`
 
