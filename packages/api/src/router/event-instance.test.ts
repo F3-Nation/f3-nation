@@ -528,6 +528,90 @@ describe("Event Instance Router", () => {
       );
     });
 
+    it("should bound the start date on both ends, inclusively", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      const dayAfter = (days: number) => {
+        const date = new Date();
+        date.setDate(date.getDate() + days);
+        return date.toISOString().split("T")[0]!;
+      };
+
+      const before = dayAfter(10);
+      const windowStart = dayAfter(20);
+      const windowEnd = dayAfter(30);
+      const after = dayAfter(40);
+
+      const [tooEarly, onLowerBound, onUpperBound, tooLate] = await Promise.all(
+        [before, windowStart, windowEnd, after].map((startDate) =>
+          createTestEventInstance(ao.id, { startDate }),
+        ),
+      );
+      if (!tooEarly || !onLowerBound || !onUpperBound || !tooLate) return;
+
+      const client = createTestClient();
+      const result = await client.eventInstance.all({
+        aoOrgId: ao.id,
+        startDate: windowStart,
+        startDateTo: windowEnd,
+        pageIndex: 0,
+        pageSize: 50,
+      });
+
+      const ids = result.eventInstances.map((e) => e.id);
+      // Both bounds are inclusive, so the instances sitting exactly on them stay.
+      expect(ids).toContain(onLowerBound.id);
+      expect(ids).toContain(onUpperBound.id);
+      expect(ids).not.toContain(tooEarly.id);
+      expect(ids).not.toContain(tooLate.id);
+    });
+
+    it("should accept an upper bound on its own", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      const soon = new Date();
+      soon.setDate(soon.getDate() + 5);
+      const soonStr = soon.toISOString().split("T")[0]!;
+
+      const later = new Date();
+      later.setDate(later.getDate() + 60);
+      const laterStr = later.toISOString().split("T")[0]!;
+
+      const included = await createTestEventInstance(ao.id, {
+        startDate: soonStr,
+      });
+      const excluded = await createTestEventInstance(ao.id, {
+        startDate: laterStr,
+      });
+      if (!included || !excluded) return;
+
+      const client = createTestClient();
+      const result = await client.eventInstance.all({
+        aoOrgId: ao.id,
+        startDateTo: soonStr,
+        pageIndex: 0,
+        pageSize: 50,
+      });
+
+      const ids = result.eventInstances.map((e) => e.id);
+      expect(ids).toContain(included.id);
+      expect(ids).not.toContain(excluded.id);
+    });
+
     it("should filter standalone instances only", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
@@ -1373,7 +1457,7 @@ describe("Event Instance Router", () => {
 
     // The join-table branches of crupdate: presence of the key decides whether
     // the association is rewritten, mirroring the startTime/endTime cases above.
-    it("should clear the event type association when eventTypeId is null, and preserve it when omitted", async () => {
+    it("should clear the event type association when eventTypeIds is empty, and preserve it when omitted", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
 
@@ -1406,7 +1490,7 @@ describe("Event Instance Router", () => {
         id: instance.id,
         orgId: ao.id,
         startDate: instance.startDate,
-        eventTypeId: eventType.id,
+        eventTypeIds: [eventType.id],
       });
       expect(await readAssociations()).toEqual([{ eventTypeId: eventType.id }]);
 
@@ -1418,12 +1502,84 @@ describe("Event Instance Router", () => {
       });
       expect(await readAssociations()).toEqual([{ eventTypeId: eventType.id }]);
 
-      // Explicit null clears it.
+      // An explicit empty array clears it.
       await client.eventInstance.crupdate({
         id: instance.id,
         orgId: ao.id,
         startDate: instance.startDate,
-        eventTypeId: null,
+        eventTypeIds: [],
+      });
+      expect(await readAssociations()).toEqual([]);
+    });
+
+    it("should link every event type in eventTypeIds, replacing what was there", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create region");
+
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create AO");
+
+      const first = await createTestEventType();
+      const second = await createTestEventType();
+      const third = await createTestEventType();
+      if (!first || !second || !third)
+        throw new Error("Failed to create event types");
+
+      const instance = await createTestEventInstance(ao.id);
+      if (!instance) throw new Error("Failed to create event instance");
+
+      const client = createTestClient();
+
+      const readAssociations = async () => {
+        const rows = await db
+          .select({
+            eventTypeId: schema.eventInstancesXEventTypes.eventTypeId,
+          })
+          .from(schema.eventInstancesXEventTypes)
+          .where(
+            eq(schema.eventInstancesXEventTypes.eventInstanceId, instance.id),
+          );
+        // The join table has no inherent order, so compare as a set.
+        return rows.map((r) => r.eventTypeId).sort((a, b) => a - b);
+      };
+
+      await client.eventInstance.crupdate({
+        id: instance.id,
+        orgId: ao.id,
+        startDate: instance.startDate,
+        eventTypeIds: [first.id, second.id],
+      });
+      expect(await readAssociations()).toEqual(
+        [first.id, second.id].sort((a, b) => a - b),
+      );
+
+      // A new list replaces the old one wholesale rather than adding to it.
+      await client.eventInstance.crupdate({
+        id: instance.id,
+        orgId: ao.id,
+        startDate: instance.startDate,
+        eventTypeIds: [third.id],
+      });
+      expect(await readAssociations()).toEqual([third.id]);
+
+      // Repeats in the payload would break the join table's primary key.
+      await client.eventInstance.crupdate({
+        id: instance.id,
+        orgId: ao.id,
+        startDate: instance.startDate,
+        eventTypeIds: [first.id, first.id],
+      });
+      expect(await readAssociations()).toEqual([first.id]);
+
+      // An empty array is a deliberate clear, not an untouched field.
+      await client.eventInstance.crupdate({
+        id: instance.id,
+        orgId: ao.id,
+        startDate: instance.startDate,
+        eventTypeIds: [],
       });
       expect(await readAssociations()).toEqual([]);
     });
@@ -1455,7 +1611,7 @@ describe("Event Instance Router", () => {
         id: instance.id,
         orgId: ao.id,
         startDate: instance.startDate,
-        eventTypeId: eventType.id,
+        eventTypeIds: [eventType.id],
       });
 
       await expect(
@@ -1463,7 +1619,7 @@ describe("Event Instance Router", () => {
           id: instance.id,
           orgId: ao.id,
           startDate: instance.startDate,
-          eventTypeId: 999999999,
+          eventTypeIds: [999999999],
         }),
       ).rejects.toThrow();
 
@@ -1564,7 +1720,7 @@ describe("Event Instance Router", () => {
         name: `Event With Type ${uniqueId()}`,
         orgId: ao.id,
         startDate: new Date().toISOString().split("T")[0]!,
-        eventTypeId: eventType.id,
+        eventTypeIds: [eventType.id],
       });
 
       expect(result).toBeDefined();
@@ -1585,7 +1741,7 @@ describe("Event Instance Router", () => {
       }
     });
 
-    it("should clear event type when eventTypeId is null", async () => {
+    it("should clear event type when eventTypeIds is empty", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
 
@@ -1609,7 +1765,7 @@ describe("Event Instance Router", () => {
         id: eventInstance.id,
         orgId: ao.id,
         startDate: eventInstance.startDate,
-        eventTypeId: null,
+        eventTypeIds: [],
       });
 
       const linkRecords = await db
@@ -1625,7 +1781,7 @@ describe("Event Instance Router", () => {
       expect(linkRecords).toHaveLength(0);
     });
 
-    it("should preserve event type when eventTypeId is omitted", async () => {
+    it("should preserve event type when eventTypeIds is omitted", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
 
@@ -1666,7 +1822,7 @@ describe("Event Instance Router", () => {
       expect(linkRecords[0]?.eventTypeId).toBe(eventType.id);
     });
 
-    it("should replace event type when a different eventTypeId is sent", async () => {
+    it("should replace event type when a different eventTypeIds is sent", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
 
@@ -1691,7 +1847,7 @@ describe("Event Instance Router", () => {
         id: eventInstance.id,
         orgId: ao.id,
         startDate: eventInstance.startDate,
-        eventTypeId: replacement.id,
+        eventTypeIds: [replacement.id],
       });
 
       const linkRecords = await db

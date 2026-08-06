@@ -21,6 +21,11 @@ import { orpc, useQuery } from "~/orpc/react";
 import { useDebounce } from "~/utils/hooks/use-debounce";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
 import { AOSFilter } from "../_components/ao-filter";
+import type { DateRange } from "../_components/date-range-filter";
+import {
+  DateRangeFilter,
+  EMPTY_DATE_RANGE,
+} from "../_components/date-range-filter";
 import { MobileFilterSheet } from "../_components/mobile-filter-sheet";
 import { RegionFilter } from "../_components/region-filter";
 import { ResetFilter } from "../_components/reset-filter";
@@ -49,6 +54,8 @@ export const EventInstancesTable = () => {
   const [selectedStatuses, setSelectedStatuses] = useState<IsActiveStatus[]>([
     "active",
   ]);
+  const [startDateRange, setStartDateRange] =
+    useState<DateRange>(EMPTY_DATE_RANGE);
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
@@ -66,6 +73,8 @@ export const EventInstancesTable = () => {
             : undefined,
         aoOrgIds:
           selectedAos.length > 0 ? selectedAos.map((a) => a.id) : undefined,
+        startDate: startDateRange.from || undefined,
+        startDateTo: startDateRange.to || undefined,
       },
     }),
   );
@@ -74,11 +83,20 @@ export const EventInstancesTable = () => {
     setSelectedStatuses(["active"]);
     setSelectedAos([]);
     setSelectedRegions([]);
+    setStartDateRange(EMPTY_DATE_RANGE);
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));
   };
 
   const activeFilterCount =
-    selectedStatuses.length + selectedAos.length + selectedRegions.length;
+    selectedStatuses.length +
+    selectedAos.length +
+    selectedRegions.length +
+    (startDateRange.from || startDateRange.to ? 1 : 0);
+
+  const handleStartDateRangeChange = (range: DateRange) => {
+    setStartDateRange(range);
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+  };
 
   const handleAoSelect = (ao: Org) => {
     const newAos = selectedAos.some((a) => a.id === ao.id)
@@ -134,6 +152,11 @@ export const EventInstancesTable = () => {
               onRegionSelect={handleRegionSelect}
               selectedRegions={selectedRegions}
             />
+            <DateRangeFilter
+              value={startDateRange}
+              onChange={handleStartDateRangeChange}
+              label="Filter by start date"
+            />
             <ResetFilter onClick={handleResetFilters} />
           </div>
           <MobileFilterSheet
@@ -159,6 +182,14 @@ export const EventInstancesTable = () => {
               <RegionFilter
                 onRegionSelect={handleRegionSelect}
                 selectedRegions={selectedRegions}
+              />
+            </div>
+            <div>
+              <p className="mb-1 text-sm font-medium">Start date</p>
+              <DateRangeFilter
+                value={startDateRange}
+                onChange={handleStartDateRangeChange}
+                label="Filter by start date"
               />
             </div>
           </MobileFilterSheet>

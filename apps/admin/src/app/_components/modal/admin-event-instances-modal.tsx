@@ -4,10 +4,10 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { z } from "zod";
 
-import { Z_INDEX } from "@acme/shared/app/constants";
+import { EVENT_CATEGORY_LABEL_MAP, Z_INDEX } from "@acme/shared/app/constants";
 import { SeriesException } from "@acme/shared/app/enums";
 import { convertHHmmToHH_mm } from "@acme/shared/app/functions";
-import { safeParseInt } from "@acme/shared/common/functions";
+import { isTruthy, safeParseInt } from "@acme/shared/common/functions";
 import { cn } from "@acme/ui";
 import { Button } from "@acme/ui/button";
 import {
@@ -19,6 +19,7 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -84,8 +85,7 @@ const EventInstanceFormSchema = z
     description: z.string().nullish(),
     startTime: z.string().nullable().optional(),
     endTime: z.string().nullable().optional(),
-    // null is "None" (clear the association); undefined is "untouched".
-    eventTypeId: z.number().nullish(),
+    eventTypeIds: z.number().array(),
     seriesId: z.number().nullable().optional(),
     seriesException: z
       .enum(["closed", "different-time", "miscellaneous"])
@@ -196,7 +196,7 @@ export default function AdminEventInstancesModal({
         instance?.endTime?.length === 4
           ? convertHHmmToHH_mm(instance.endTime)
           : null,
-      eventTypeId: instance?.eventTypes?.[0]?.eventTypeId,
+      eventTypeIds: instance?.eventTypes?.map((et) => et.eventTypeId) ?? [],
       seriesId: instance?.seriesId ?? null,
       seriesException: instance?.seriesException ?? null,
       isPrivate: instance?.isPrivate ?? false,
@@ -260,17 +260,11 @@ export default function AdminEventInstancesModal({
         description: descTrim == null || descTrim === "" ? null : descTrim,
         startTime,
         endTime,
-        // Send the key whenever the field holds a value the user chose —
-        // including null for "None", which clears the association. Only a
-        // genuinely untouched (undefined) field is omitted, so the server
-        // preserves what is already there.
-        ...(formData.eventTypeId !== undefined
-          ? { eventTypeId: formData.eventTypeId }
-          : {}),
+        eventTypeIds: formData.eventTypeIds,
         seriesId: formData.seriesId ?? null,
         seriesException: formData.seriesException ?? null,
         isPrivate: formData.isPrivate,
-        highlight: formData.seriesId ? false : formData.highlight,
+        highlight: formData.highlight,
         isActive: formData.isActive,
       });
     } catch {
@@ -329,7 +323,7 @@ export default function AdminEventInstancesModal({
                           field.onChange(orgId);
                           form.setValue("orgId", 0);
                           form.setValue("locationId", null);
-                          form.setValue("eventTypeId", null);
+                          form.setValue("eventTypeIds", []);
                           form.setValue("seriesId", null);
                         }}
                         isMulti={false}
@@ -515,32 +509,35 @@ export default function AdminEventInstancesModal({
               />
               <FormField
                 control={form.control}
-                name="eventTypeId"
+                name="eventTypeIds"
                 render={({ field }) => (
-                  <FormItem key={`eventType-${String(field.value ?? "none")}`}>
-                    <FormLabel>Event type (optional)</FormLabel>
-                    <Select
-                      value={
-                        field.value != null ? field.value.toString() : NONE
+                  <FormItem key="eventTypeIds">
+                    <FormLabel>Event types (optional)</FormLabel>
+                    <VirtualizedCombobox
+                      value={field.value?.map(String)}
+                      options={sortedEventTypes.map((et) => ({
+                        value: et.id.toString(),
+                        label: et.eventCategory
+                          ? `${et.name} (${EVENT_CATEGORY_LABEL_MAP[et.eventCategory] ?? et.eventCategory})`
+                          : et.name,
+                      }))}
+                      searchPlaceholder={
+                        formRegionId
+                          ? "Select event types"
+                          : "Select a region first"
                       }
-                      onValueChange={(value) => {
-                        field.onChange(value === NONE ? null : Number(value));
+                      disabled={!formRegionId}
+                      onSelect={(value) => {
+                        if (!Array.isArray(value)) {
+                          toast.error("Invalid event type");
+                          return;
+                        }
+                        field.onChange(
+                          value.map(safeParseInt).filter(isTruthy),
+                        );
                       }}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Optional" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value={NONE}>None</SelectItem>
-                        {sortedEventTypes.map((et) => (
-                          <SelectItem key={et.id} value={et.id.toString()}>
-                            {et.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      isMulti={true}
+                    />
                     <FormMessage />
                   </FormItem>
                 )}
@@ -571,7 +568,18 @@ export default function AdminEventInstancesModal({
                             field.onChange(null);
                             return;
                           }
-                          field.onChange(safeParseInt(value as string) ?? null);
+                          const seriesId =
+                            safeParseInt(value as string) ?? null;
+                          field.onChange(seriesId);
+                          const selectedSeries = events.find(
+                            (event) => event.id === seriesId,
+                          );
+                          if (selectedSeries) {
+                            form.setValue(
+                              "highlight",
+                              selectedSeries.highlight,
+                            );
+                          }
                         }}
                         isMulti={false}
                       />
@@ -678,10 +686,7 @@ export default function AdminEventInstancesModal({
                     <FormItem>
                       <FormLabel>Highlight</FormLabel>
                       <Select
-                        // Instances belonging to a series never highlight, so the
-                        // control reads "No" and is locked rather than showing a
-                        // stored value the server would ignore.
-                        value={isStandalone && field.value ? "true" : "false"}
+                        value={field.value ? "true" : "false"}
                         disabled={!isStandalone}
                         onValueChange={(value) =>
                           value && field.onChange(value === "true")
@@ -697,6 +702,12 @@ export default function AdminEventInstancesModal({
                           <SelectItem value="true">Yes</SelectItem>
                         </SelectContent>
                       </Select>
+                      {isStandalone ? null : (
+                        <FormDescription>
+                          Managed by the series. Edit the series to update all
+                          dates, or clear the series to edit only this one.
+                        </FormDescription>
+                      )}
                       <FormMessage />
                     </FormItem>
                   );

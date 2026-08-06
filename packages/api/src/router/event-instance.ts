@@ -12,6 +12,7 @@ import {
   ilike,
   inArray,
   isNull,
+  lte,
   or,
   schema,
   sql,
@@ -133,6 +134,7 @@ export const eventInstanceRouter = {
           regionOrgIds: z.array(z.coerce.number()).optional(),
           aoOrgIds: z.array(z.coerce.number()).optional(),
           startDate: z.string().optional(),
+          startDateTo: z.string().optional(),
           seriesId: z.coerce.number().optional(),
           onlyStandalone: z.coerce.boolean().optional(), // Only instances without a series
         })
@@ -188,6 +190,9 @@ export const eventInstanceRouter = {
         // Start date filter
         input?.startDate
           ? gte(schema.eventInstances.startDate, input.startDate)
+          : undefined,
+        input?.startDateTo
+          ? lte(schema.eventInstances.startDate, input.startDateTo)
           : undefined,
         // Series filter
         input?.seriesId
@@ -530,7 +535,7 @@ export const eventInstanceRouter = {
         highlight: z.boolean().optional().default(false),
         meta: z.record(z.string(), z.unknown()).nullish(),
         isPrivate: z.boolean().optional().default(false),
-        eventTypeId: z.coerce.number().nullish(),
+        eventTypeIds: z.array(z.coerce.number()).optional(),
         eventTagId: z.coerce.number().nullish(),
         preblast: z.string().nullish(),
         preblastRich: z.record(z.string(), z.unknown()).nullish(),
@@ -630,13 +635,13 @@ export const eventInstanceRouter = {
             .where(eq(schema.orgs.id, input.orgId));
           const aoName = ao?.name ?? "Workout";
 
-          // Get event type name if provided
           let eventTypeName = "Event";
-          if (input.eventTypeId) {
+          const firstEventTypeId = input.eventTypeIds?.[0];
+          if (firstEventTypeId != null) {
             const [eventType] = await ctx.db
               .select({ name: schema.eventTypes.name })
               .from(schema.eventTypes)
-              .where(eq(schema.eventTypes.id, input.eventTypeId));
+              .where(eq(schema.eventTypes.id, firstEventTypeId));
             eventTypeName = eventType?.name ?? "Event";
           }
 
@@ -650,12 +655,12 @@ export const eventInstanceRouter = {
       const isActive = input.isActive ?? existingIsActive ?? true;
 
       // Presence of the key — not truthiness of the value — decides whether the
-      // association is rewritten, so an explicit null can clear it. Must be read
+      // association is rewritten, so an empty array can clear it. Must be read
       // before destructuring, which would lose the distinction.
-      const shouldUpdateEventType = "eventTypeId" in input;
+      const shouldUpdateEventType = "eventTypeIds" in input;
       const shouldUpdateEventTag = "eventTagId" in input;
       const {
-        eventTypeId,
+        eventTypeIds,
         eventTagId,
         name: _inputName,
         isActive: _inputIsActive,
@@ -683,7 +688,7 @@ export const eventInstanceRouter = {
           });
         }
 
-        // Handle event type in join table
+        // Handle event types in join table
         if (shouldUpdateEventType) {
           await tx
             .delete(schema.eventInstancesXEventTypes)
@@ -691,11 +696,16 @@ export const eventInstanceRouter = {
               eq(schema.eventInstancesXEventTypes.eventInstanceId, upserted.id),
             );
 
-          if (eventTypeId != null) {
-            await tx.insert(schema.eventInstancesXEventTypes).values({
-              eventInstanceId: upserted.id,
-              eventTypeId,
-            });
+          // Duplicates in the payload would violate the join table's primary
+          // key, so collapse them before inserting.
+          const uniqueEventTypeIds = [...new Set(eventTypeIds)];
+          if (uniqueEventTypeIds.length > 0) {
+            await tx.insert(schema.eventInstancesXEventTypes).values(
+              uniqueEventTypeIds.map((id) => ({
+                eventInstanceId: upserted.id,
+                eventTypeId: id,
+              })),
+            );
           }
         }
 

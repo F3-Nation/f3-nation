@@ -74,10 +74,7 @@ export const EventTagSelectSchema = createSelectSchema(eventTags);
 export const EventInsertSchema = createInsertSchema(events, {
   name: (s: z.ZodString) => s.min(1, { error: "Name is required" }),
   locationId: (s: z.ZodNumber) =>
-    s
-      .min(1, { message: "Please select an location" })
-      .refine((value) => value !== -1, { message: "Invalid selection" })
-      .nullable(),
+    s.positive({ error: "Please select a location" }).nullable(),
   email: (s: z.ZodString) =>
     s.email({ error: "Invalid email format" }).or(z.literal("")),
   startTime: (s: z.ZodString) =>
