@@ -1,7 +1,27 @@
 import json
 
-from features.strava import STRAVA_ACTIVITY_BUTTON_LABEL_MAX_LENGTH, build_strava_activity_blocks
+import pytest
+
+from features.strava import (
+    STRAVA_ACTIVITY_BUTTON_LABEL_MAX_LENGTH,
+    build_strava_activity_blocks,
+    format_strava_activity_button_label,
+)
 from utilities.slack import actions
+
+
+@pytest.mark.parametrize(
+    ("activity_name", "expected_name"),
+    [
+        ("a" * 22, "a" * 22),
+        ("a" * 23, f"{'a' * 21}…"),
+    ],
+)
+def test_activity_button_label_truncation_boundary(activity_name: str, expected_name: str) -> None:
+    label = format_strava_activity_button_label("08-01 05:30", activity_name)
+
+    assert label == f"08-01 05:30 - {expected_name}"
+    assert len(label) <= STRAVA_ACTIVITY_BUTTON_LABEL_MAX_LENGTH
 
 
 def test_activity_buttons_truncate_names_and_preserve_selection_payloads() -> None:
