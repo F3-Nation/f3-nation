@@ -561,8 +561,10 @@ export const positionRouter = {
           .where(eq(schema.positions.id, input.id));
 
         if (!existingPosition) {
-          throw new ORPCError("NOT_FOUND", {
-            message: "Position not found",
+          // Return UNAUTHORIZED rather than NOT_FOUND to avoid leaking whether
+          // a given ID exists to callers who lack permission to see it.
+          throw new ORPCError("UNAUTHORIZED", {
+            message: "You are not authorized to edit this position",
           });
         }
 
