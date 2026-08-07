@@ -17,19 +17,19 @@ F3 Nation users need a way to manage their own profile information without requi
 
 ## Tech Stack
 
-| Layer         | Choice                               |
-| ------------- | ------------------------------------ |
-| Framework     | Next.js 15 (App Router)              |
-| Styling       | TailwindCSS + shadcn/ui              |
-| Auth          | F3 SSO (`@acme/sso`) + token cookies |
-| API Backend   | F3 Nation API (api.f3nation.com)     |
-| Image Storage | Google Cloud Storage                 |
-| Hosting       | GCP Cloud Run (via GitHub Actions)   |
-| Node          | 24.x                                 |
+| Layer         | Choice                                   |
+| ------------- | ---------------------------------------- |
+| Framework     | Next.js 15 (App Router)                  |
+| Styling       | TailwindCSS + shadcn/ui                  |
+| Auth          | F3 SSO (`@f3nation/sso`) + token cookies |
+| API Backend   | F3 Nation API (api.f3nation.com)         |
+| Image Storage | Google Cloud Storage                     |
+| Hosting       | GCP Cloud Run (via GitHub Actions)       |
+| Node          | 24.x                                     |
 
 ## Auth Architecture
 
-F3 Me uses [`@acme/sso`](../../packages/sso/README.md) for OAuth and OpenID Connect interactions with the F3 auth provider. The shared package is responsible for:
+F3 Me uses [`@f3nation/sso`](../../packages/sso/README.md) for OAuth and OpenID Connect interactions with the F3 auth provider. The shared package is responsible for:
 
 - Building the authorization URL
 - Exchanging the authorization code for tokens
@@ -40,13 +40,13 @@ F3 Me stores the OAuth access token and refresh token in `httpOnly` cookies and 
 
 Current auth flow:
 
-1. `/api/auth/login` generates CSRF + PKCE values, stores short-lived OAuth cookies, and redirects using `@acme/sso`.
-2. `/api/auth/callback` validates state and PKCE, exchanges the code via `@acme/sso`, validates the user via `userinfo`, and stores `access_token` and `refresh_token` cookies.
+1. `/api/auth/login` delegates to `handleLoginRoute` from `@f3nation/sso-next`, which generates CSRF + PKCE values, stores short-lived OAuth cookies, and redirects to the auth server. The app owns the cookie names and `flowCookieMaxAge`.
+2. `/api/auth/callback` delegates to `handleCallbackRoute` from `@f3nation/sso-next`. The app supplies a custom adapter that wraps `@f3nation/sso` with structured logging, and owns cookie names/lifetimes, the error redirect target, and the `validateUser` hook.
 3. Middleware refreshes the access token when needed using the refresh token.
 4. Server-side routes call the F3 API with `Authorization: Bearer <access_token>`.
-5. `/api/auth/logout` revokes the refresh token, clears auth cookies, and sends the browser through provider logout.
+5. `/api/auth/logout` delegates to `handleLogoutRoute` from `@f3nation/sso-next`, which revokes the refresh token, clears all auth cookies, and returns `{ ok, redirectTo }` JSON so the client can navigate to the auth-server's post-logout endpoint.
 
-This is aligned with the generic `@acme/sso` integration model: the shared package handles OAuth, while the app owns cookie storage and request/session plumbing.
+The `@f3nation/sso-next` adapter handles the shared protocol mechanics (PKCE, state validation, token exchange, cookie writes). The app owns all policy decisions: cookie names and lifetimes, redirect targets, role/user validation, and per-event logging.
 
 ## Project Structure
 
@@ -273,7 +273,7 @@ This requires access to the auth provider admin. The project owner handles this.
 
 ## Security Notes
 
-- `@acme/sso` is used for OAuth operations only; Next.js responses, redirects, and cookie/session handling remain app-owned.
+- `@f3nation/sso` is used for OAuth operations only; Next.js responses, redirects, and cookie/session handling remain app-owned.
 - The app stores `access_token` and `refresh_token` in `httpOnly` cookies and never exposes them to client-side JavaScript.
 - Middleware refreshes expired access tokens using the refresh token before protected requests continue.
 - Profile updates are authorized using the authenticated user's OAuth access token; users can only edit their own profile.
