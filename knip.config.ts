@@ -20,7 +20,7 @@ const config: KnipConfig = {
     "tooling/ci-factory/**",
   ],
   ignoreDependencies: ["@turbo/gen", "dotenv"],
-  ignoreBinaries: ["uv"],
+  ignoreBinaries: ["uv", "reset-test-db"],
   workspaces: {
     ".": {
       // scripts/lint-staged.mjs spawns the eslint binary by path, so the root
