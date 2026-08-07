@@ -11,7 +11,6 @@ const config: KnipConfig = {
     "packages/shared/src/app/constants.ts",
     ".claude/scripts/sync-agent-skills.mjs",
     ".github/scripts/code-scanning-issue.cjs",
-    "tooling/typescript/type-extensions.d.ts",
     "turbo/generators/config.ts",
     // AI-SDLC factory tooling (fork-only). Its entry points are CI workflows
     // (e2e-triage / adversarial-review) invoking `tsx src/review-pr.ts` /
