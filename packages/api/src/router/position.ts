@@ -552,8 +552,62 @@ export const positionRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
-      // For editing, check permission on the position's org
-      // For creating, check permission on the target org
+      // When editing, verify the caller can modify the position's *current* org
+      // before we ever look at where they want to move it.
+      if (input.id !== undefined) {
+        const [existingPosition] = await ctx.db
+          .select({ orgId: schema.positions.orgId })
+          .from(schema.positions)
+          .where(eq(schema.positions.id, input.id));
+
+        if (!existingPosition) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Position not found",
+          });
+        }
+
+        if (!existingPosition.orgId) {
+          const [nationOrg] = await ctx.db
+            .select({ id: schema.orgs.id })
+            .from(schema.orgs)
+            .where(eq(schema.orgs.orgType, "nation"));
+
+          if (!nationOrg) {
+            throw new ORPCError("NOT_FOUND", {
+              message: "Nation organization not found",
+            });
+          }
+
+          const roleCheckResult = await checkHasRoleOnOrg({
+            orgId: nationOrg.id,
+            session: ctx.session,
+            db: ctx.db,
+            roleName: "editor",
+          });
+
+          if (!roleCheckResult.success) {
+            throw new ORPCError("UNAUTHORIZED", {
+              message: "You are not authorized to edit global positions",
+            });
+          }
+        } else {
+          const roleCheckResult = await checkHasRoleOnOrg({
+            orgId: existingPosition.orgId,
+            session: ctx.session,
+            db: ctx.db,
+            roleName: "editor",
+          });
+
+          if (!roleCheckResult.success) {
+            throw new ORPCError("UNAUTHORIZED", {
+              message: "You are not authorized to edit this position",
+            });
+          }
+        }
+      }
+
+      // For creating, check permission on the target org.
+      // For editing, this additionally guards the destination of a rescope.
       const targetOrgId = input.orgId;
 
       if (!targetOrgId) {

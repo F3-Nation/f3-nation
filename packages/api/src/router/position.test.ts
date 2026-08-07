@@ -534,6 +534,26 @@ describe("Position Router", () => {
         }),
       ).rejects.toThrow();
     });
+
+    it("should reject a non-Nation editor rescoping a global position", async () => {
+      const region = await createTestRegion();
+      const globalPos = await createTestPosition({ orgId: null });
+
+      const editorSession = createEditorSession({
+        orgId: region.id,
+        orgName: region.name,
+      });
+      await mockAuthWithSession(editorSession);
+
+      const client = createTestClient();
+      await expect(
+        client.position.crupdate({
+          id: globalPos.id,
+          name: globalPos.name,
+          orgId: region.id,
+        }),
+      ).rejects.toThrow();
+    });
   });
 
   describe("delete", () => {
