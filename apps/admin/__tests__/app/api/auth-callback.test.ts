@@ -9,7 +9,7 @@ import { createOAuthLoginFlowArtifacts } from "@f3nation/sso-next";
 const ssoMock = vi.hoisted(() => ({
   getOAuthConfig: vi.fn(() => ({
     clientId: "test-client",
-    redirectUri: "https://me.f3nation.test/api/auth/callback",
+    redirectUri: "https://admin.f3nation.test/api/auth/callback",
     authServerUrl: "https://auth.f3nation.test",
   })),
   getAuthorizationUrl: vi.fn(),
@@ -19,17 +19,9 @@ const ssoMock = vi.hoisted(() => ({
   revokeToken: vi.fn(),
 }));
 
-vi.mock("@/lib/auth/oauth", () => ({
+vi.mock("~/lib/auth/oauth", () => ({
   sso: ssoMock,
 }));
-
-vi.mock("@/lib/logging", () => ({
-  logError: vi.fn(),
-  logInfo: vi.fn(),
-  logWarn: vi.fn(),
-}));
-
-import { logError, logInfo, logWarn } from "@/lib/logging";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -48,9 +40,9 @@ function makeRequest(url: string, cookieValues: Record<string, string> = {}) {
 }
 
 /** Build a request with a cryptographically valid CSRF token + state. */
-async function makeValidRequest(returnTo = "/profile") {
+async function makeValidRequest(returnTo = "/workouts") {
   const artifacts = await createOAuthLoginFlowArtifacts({ returnTo });
-  const url = `https://me.f3nation.test/api/auth/callback?code=auth_code&state=${artifacts.state}`;
+  const url = `https://admin.f3nation.test/api/auth/callback?code=auth_code&state=${artifacts.state}`;
   return {
     request: makeRequest(url, {
       oauth_csrf: artifacts.csrfToken,
@@ -64,11 +56,11 @@ async function makeValidRequest(returnTo = "/profile") {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe("Auth /callback route", () => {
+describe("Auth /callback route (admin)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
-    process.env.NEXT_PUBLIC_SITE_URL = "https://me.f3nation.test";
+    process.env.F3_ADMIN_BASE_URL = "https://admin.f3nation.test";
     ssoMock.exchangeCodeForToken.mockResolvedValue({
       accessToken: "access-token",
       refreshToken: "refresh-token",
@@ -76,48 +68,51 @@ describe("Auth /callback route", () => {
     });
     ssoMock.getUserInfo.mockResolvedValue({
       sub: 42,
-      email: "me@f3nation.test",
-      name: "Pax",
+      email: "admin@f3nation.test",
+      name: "Test Admin",
     });
   });
 
-  it("redirects auth server errors immediately", async () => {
-    const { GET } = await import("@/app/api/auth/callback/route");
+  it("redirects auth server errors to sign-in page immediately", async () => {
+    const { GET } = await import("~/app/api/auth/callback/route");
     const response = await GET(
       makeRequest(
-        "https://me.f3nation.test/api/auth/callback?error=access_denied",
+        "https://admin.f3nation.test/api/auth/callback?error=access_denied",
       ),
     );
 
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toContain("error=access_denied");
+    expect(response.headers.get("location")).toContain("/auth/sign-in");
   });
 
-  it("handles missing params and invalid state", async () => {
-    const { GET } = await import("@/app/api/auth/callback/route");
+  it("redirects when code or state is missing", async () => {
+    const { GET } = await import("~/app/api/auth/callback/route");
 
-    const missing = await GET(
-      makeRequest("https://me.f3nation.test/api/auth/callback?code=abc"),
+    const res = await GET(
+      makeRequest("https://admin.f3nation.test/api/auth/callback?code=abc"),
     );
-    expect(missing.headers.get("location")).toContain("error=missing_params");
+    expect(res.headers.get("location")).toContain("error=missing_params");
+  });
 
-    const invalidState = await GET(
+  it("redirects on invalid state", async () => {
+    const { GET } = await import("~/app/api/auth/callback/route");
+
+    const res = await GET(
       makeRequest(
-        "https://me.f3nation.test/api/auth/callback?code=abc&state=not-base64!",
+        "https://admin.f3nation.test/api/auth/callback?code=abc&state=not-base64!",
       ),
     );
-    expect(invalidState.headers.get("location")).toContain(
-      "error=invalid_state",
-    );
+    expect(res.headers.get("location")).toContain("error=invalid_state");
   });
 
   it("rejects CSRF mismatch", async () => {
-    const { GET } = await import("@/app/api/auth/callback/route");
+    const { GET } = await import("~/app/api/auth/callback/route");
     const { state } = await makeValidRequest();
 
     const response = await GET(
       makeRequest(
-        `https://me.f3nation.test/api/auth/callback?code=abc&state=${state}`,
+        `https://admin.f3nation.test/api/auth/callback?code=abc&state=${state}`,
         { oauth_csrf: "wrong-token" },
       ),
     );
@@ -125,14 +120,13 @@ describe("Auth /callback route", () => {
   });
 
   it("rejects missing code verifier", async () => {
-    const { GET } = await import("@/app/api/auth/callback/route");
+    const { GET } = await import("~/app/api/auth/callback/route");
     const { state, csrfToken } = await makeValidRequest();
 
     const response = await GET(
       makeRequest(
-        `https://me.f3nation.test/api/auth/callback?code=abc&state=${state}`,
+        `https://admin.f3nation.test/api/auth/callback?code=abc&state=${state}`,
         { oauth_csrf: csrfToken },
-        // no oauth_code_verifier cookie
       ),
     );
     expect(response.headers.get("location")).toContain(
@@ -140,27 +134,22 @@ describe("Auth /callback route", () => {
     );
   });
 
-  it("handles token exchange failure", async () => {
-    ssoMock.exchangeCodeForToken.mockRejectedValueOnce(new Error("boom"));
+  it("redirects on token exchange failure", async () => {
+    ssoMock.exchangeCodeForToken.mockRejectedValueOnce(new Error("bad creds"));
 
-    const { GET } = await import("@/app/api/auth/callback/route");
+    const { GET } = await import("~/app/api/auth/callback/route");
     const { request } = await makeValidRequest();
     const response = await GET(request);
 
     expect(response.headers.get("location")).toContain(
       "error=token_exchange_failed",
     );
-    expect(logError).toHaveBeenCalledWith(
-      "me.auth.callback.token_exchange_failed",
-      {},
-      expect.any(Error),
-    );
   });
 
-  it("handles userinfo failure", async () => {
+  it("redirects on userinfo failure", async () => {
     ssoMock.getUserInfo.mockRejectedValueOnce(new Error("userinfo failed"));
 
-    const { GET } = await import("@/app/api/auth/callback/route");
+    const { GET } = await import("~/app/api/auth/callback/route");
     const { request } = await makeValidRequest();
     const response = await GET(request);
 
@@ -170,24 +159,20 @@ describe("Auth /callback route", () => {
   it("rejects user without email", async () => {
     ssoMock.getUserInfo.mockResolvedValueOnce({ sub: 42 });
 
-    const { GET } = await import("@/app/api/auth/callback/route");
+    const { GET } = await import("~/app/api/auth/callback/route");
     const { request } = await makeValidRequest();
     const response = await GET(request);
 
     expect(response.headers.get("location")).toContain("error=user_not_found");
-    expect(logWarn).toHaveBeenCalledWith(
-      "me.auth.callback.user_missing_email",
-      expect.objectContaining({ userSub: 42 }),
-    );
   });
 
   it("sets auth cookies and clears oauth flow cookies on success", async () => {
-    const { GET } = await import("@/app/api/auth/callback/route");
-    const { request } = await makeValidRequest("/profile");
+    const { GET } = await import("~/app/api/auth/callback/route");
+    const { request } = await makeValidRequest("/workouts");
     const response = await GET(request);
 
     expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toContain("/profile");
+    expect(response.headers.get("location")).toContain("/workouts");
 
     const setCookies = response.headers.getSetCookie();
     const names = setCookies.map((c) => c.split("=")[0]);
@@ -198,19 +183,33 @@ describe("Auth /callback route", () => {
         (c) => c.startsWith("oauth_csrf=") && c.includes("Max-Age=0"),
       ),
     ).toBe(true);
-    expect(logInfo).toHaveBeenCalledWith(
-      "me.auth.callback.success",
-      expect.objectContaining({ userSub: 42 }),
-    );
   });
 
-  it("redirects when token exchange returns without accessToken", async () => {
-    ssoMock.exchangeCodeForToken.mockResolvedValueOnce({ accessToken: "" });
+  it("uses callbackUrl as the error returnTo query param", async () => {
+    ssoMock.exchangeCodeForToken.mockRejectedValueOnce(new Error("bad creds"));
 
-    const { GET } = await import("@/app/api/auth/callback/route");
-    const { request } = await makeValidRequest();
+    const { GET } = await import("~/app/api/auth/callback/route");
+    const { request } = await makeValidRequest("/workouts");
     const response = await GET(request);
 
-    expect(response.headers.get("location")).toContain("token_exchange_failed");
+    const location = response.headers.get("location") ?? "";
+    expect(location).toContain("error=token_exchange_failed");
+    expect(location).toContain("callbackUrl=");
+    expect(location).not.toContain("returnTo=");
+  });
+
+  it("uses F3_ADMIN_BASE_URL for the public origin", async () => {
+    process.env.F3_ADMIN_BASE_URL = "https://custom.admin.test";
+
+    const { GET } = await import("~/app/api/auth/callback/route");
+    const response = await GET(
+      makeRequest(
+        "https://admin.f3nation.test/api/auth/callback?error=test_error",
+      ),
+    );
+
+    expect(response.headers.get("location")).toContain(
+      "https://custom.admin.test",
+    );
   });
 });
