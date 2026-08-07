@@ -20,12 +20,16 @@ const config: KnipConfig = {
     "tooling/ci-factory/**",
   ],
   ignoreDependencies: ["@turbo/gen", "dotenv"],
-  ignoreBinaries: ["uv", "reset-test-db"],
+  ignoreBinaries: ["uv"],
   workspaces: {
     ".": {
       // scripts/lint-staged.mjs spawns the eslint binary by path, so the root
       // devDependency is never a static import knip can follow.
       ignoreDependencies: ["eslint"],
+    },
+    "packages/api": {
+      // reset-test-db is a pnpm script in packages/db, not a local binary.
+      ignoreBinaries: ["reset-test-db"],
     },
     "apps/api": {
       // The characterization suite runs under its own vitest config,

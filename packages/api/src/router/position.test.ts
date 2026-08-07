@@ -540,6 +540,45 @@ describe("Position Router", () => {
       ).rejects.toThrow();
     });
 
+    it("should return NOT_FOUND for a non-existent position ID", async () => {
+      const region = await createTestRegion();
+      const editorSession = createEditorSession({
+        orgId: region.id,
+        orgName: region.name,
+      });
+      await mockAuthWithSession(editorSession);
+
+      const client = createTestClient();
+      await expect(
+        client.position.crupdate({
+          id: 999999999,
+          name: "Ghost",
+          orgId: region.id,
+        }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    });
+
+    it("should reject an editor trying to edit a position owned by a different org", async () => {
+      const regionA = await createTestRegion();
+      const regionB = await createTestRegion();
+      const pos = await createTestPosition({ orgId: regionB.id });
+
+      const editorSession = createEditorSession({
+        orgId: regionA.id,
+        orgName: regionA.name,
+      });
+      await mockAuthWithSession(editorSession);
+
+      const client = createTestClient();
+      await expect(
+        client.position.crupdate({
+          id: pos.id,
+          name: pos.name,
+          orgId: regionA.id,
+        }),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    });
+
     it("should reject a non-Nation editor rescoping a global position", async () => {
       const region = await createTestRegion();
       const globalPos = await createTestPosition({ orgId: null });
