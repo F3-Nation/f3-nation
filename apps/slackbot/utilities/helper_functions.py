@@ -938,9 +938,13 @@ def extract_state_values(body: dict) -> dict[str, Any]:
             element_type = state.get("type")
             if element_type in (
                 "plain_text_input", "email_text_input", "url_text_input",
-                "number_input", "datepicker", "timepicker",
+                "number_input",
             ):
                 form_data[block_id] = state.get("value")
+            elif element_type == "datepicker":
+                form_data[block_id] = state.get("selected_date")
+            elif element_type == "timepicker":
+                form_data[block_id] = state.get("selected_time")
             elif element_type in ("users_select", "conversations_select", "channels_select"):
                 form_data[block_id] = (
                     state.get("selected_user")
