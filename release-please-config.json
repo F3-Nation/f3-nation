@@ -96,6 +96,11 @@
       "changelog-path": "CHANGELOG.md",
       "path": "packages/sso"
     },
+    "packages/sso-next": {
+      "component": "pkg-sso-next",
+      "changelog-path": "CHANGELOG.md",
+      "path": "packages/sso-next"
+    },
     "packages/storage": {
       "component": "pkg-storage",
       "changelog-path": "CHANGELOG.md",

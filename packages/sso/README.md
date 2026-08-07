@@ -1,4 +1,4 @@
-# @acme/sso
+# @f3nation/sso
 
 The official TypeScript client for F3 Nation's OAuth 2.0 / OpenID Connect auth server. Zero runtime dependencies — uses the Fetch API.
 
@@ -59,7 +59,7 @@ The F3 Nation auth server implements the **OAuth 2.0 Authorization Code** flow w
 **Monorepo apps** (inside the f3-nation workspace):
 
 ```bash
-pnpm add @acme/sso --filter your-app
+pnpm add @f3nation/sso --filter your-app
 ```
 
 Or add to your app's `package.json`:
@@ -67,12 +67,18 @@ Or add to your app's `package.json`:
 ```json
 {
   "dependencies": {
-    "@acme/sso": "workspace:*"
+    "@f3nation/sso": "workspace:*"
   }
 }
 ```
 
 Then run `pnpm install`.
+
+If you use Next.js route helpers, install the adapter package as well:
+
+```bash
+pnpm add @f3nation/sso-next --filter your-app
+```
 
 **External apps** (outside the monorepo):
 
@@ -83,7 +89,7 @@ Copy `packages/sso/src/index.ts` into your project — it's a single file with z
 ## Quick Start
 
 ```typescript
-import { AuthClient } from "@acme/sso";
+import { AuthClient } from "@f3nation/sso";
 
 // 1. Create the client (server-side only — contains client_secret)
 const auth = new AuthClient({
@@ -168,7 +174,7 @@ OAUTH_REDIRECT_URI=http://localhost:3000/api/auth/callback
 Create `src/lib/auth.ts`:
 
 ```typescript
-import { AuthClient } from "@acme/sso";
+import { AuthClient } from "@f3nation/sso";
 
 export const auth = new AuthClient({
   clientId: process.env.OAUTH_CLIENT_ID!,
@@ -478,7 +484,7 @@ The auth server supports two methods:
 
 ```typescript
 import crypto from "node:crypto";
-import { AuthClient } from "@acme/sso";
+import { AuthClient } from "@f3nation/sso";
 
 const auth = new AuthClient({/* ... */});
 
@@ -742,7 +748,7 @@ class AuthError extends Error {
 All async methods throw `AuthError` on failure. Catch it to handle specific error codes:
 
 ```typescript
-import { AuthClient, AuthError } from "@acme/sso";
+import { AuthClient, AuthError } from "@f3nation/sso";
 
 try {
   const tokens = await auth.exchangeCodeForToken({ code });
@@ -838,10 +844,10 @@ The auth server rotates refresh tokens on every use. If you detect an `invalid_g
 Access tokens are RS256 JWTs. The F3 API validates them by fetching the public key from the JWKS endpoint (`/.well-known/jwks.json`). If you need to validate tokens in your own API, fetch the JWKS and verify the JWT signature — don't just decode it.
 
 For Next.js client apps that consume F3 SSO directly, use the shared helpers in
-`@acme/sso` instead of duplicating JWKS verification logic:
+`@f3nation/sso` instead of duplicating JWKS verification logic:
 
 ```ts
-import { verifyJwtPayload } from "@acme/sso";
+import { verifyJwtPayload } from "@f3nation/sso";
 
 const payload = await verifyJwtPayload(accessToken, {
   authServerUrl: process.env.AUTH_PROVIDER_URL!,
@@ -870,7 +876,7 @@ This helper should still be called from server-only code (route handlers,
 middleware, server components), not client components.
 
 ```ts
-import { verifyAccessToken } from "@acme/sso";
+import { verifyAccessToken } from "@f3nation/sso";
 ```
 
 Example call site:
