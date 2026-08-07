@@ -18,7 +18,7 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
 }));
 
 import { and, eq, inArray, schema } from "@acme/db";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   cleanup,
   createAdminSession,
@@ -27,6 +27,7 @@ import {
   createTestClient,
   db,
   getOrCreateF3NationOrg,
+  getOrCreateRoles,
   mockAuthWithSession,
   uniqueId,
 } from "../__tests__/test-utils";
@@ -36,6 +37,10 @@ describe("Position Router", () => {
   const createdPositionIds: number[] = [];
   const createdOrgIds: number[] = [];
   const createdUserIds: number[] = [];
+
+  beforeAll(async () => {
+    await getOrCreateRoles();
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -552,7 +557,7 @@ describe("Position Router", () => {
           name: globalPos.name,
           orgId: region.id,
         }),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     });
   });
 
