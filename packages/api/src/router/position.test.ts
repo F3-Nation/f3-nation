@@ -598,6 +598,19 @@ describe("Position Router", () => {
         }),
       ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     });
+
+    it("should allow a nation admin to edit a global position", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const globalPos = await createTestPosition({ orgId: null });
+
+      const client = createTestClient();
+      const result = await client.position.crupdate({
+        id: globalPos.id,
+        name: `Renamed ${uniqueId()}`,
+      });
+
+      expect(result.position!.orgId).toBeNull();
+    });
   });
 
   describe("delete", () => {
