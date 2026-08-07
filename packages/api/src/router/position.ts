@@ -566,6 +566,7 @@ export const positionRouter = {
           });
         }
 
+        // Assume only one nation org will exist
         if (!existingPosition.orgId) {
           const [nationOrg] = await ctx.db
             .select({ id: schema.orgs.id })
@@ -573,8 +574,9 @@ export const positionRouter = {
             .where(eq(schema.orgs.orgType, "nation"));
 
           if (!nationOrg) {
-            throw new ORPCError("NOT_FOUND", {
-              message: "Nation organization not found",
+            throw new ORPCError("INTERNAL_SERVER_ERROR", {
+              message:
+                "Position has no associated org, which means it belongs to the nation, but the nation could not be located.",
             });
           }
 
