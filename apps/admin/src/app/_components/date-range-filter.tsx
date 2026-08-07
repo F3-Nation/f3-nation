@@ -9,24 +9,14 @@ import { Label } from "@acme/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@acme/ui/popover";
 
 export interface DateRange {
-  /** Inclusive lower bound, YYYY-MM-DD. Empty string means unbounded. */
   from: string;
-  /** Inclusive upper bound, YYYY-MM-DD. Empty string means unbounded. */
   to: string;
 }
 
 export const EMPTY_DATE_RANGE: DateRange = { from: "", to: "" };
 
-const formatBound = (value: string) =>
-  // The value is already YYYY-MM-DD; showing it verbatim keeps the trigger
-  // unambiguous across locales and avoids a timezone shift from parsing it
-  // into a Date only to print it again.
-  value.length > 0 ? value : "…";
+const formatBound = (value: string) => (value.length > 0 ? value : "…");
 
-/**
- * Filters a date column to an inclusive range. Either bound can stand alone,
- * so "everything from today onward" and "everything before March" both work.
- */
 export const DateRangeFilter = ({
   value,
   onChange,

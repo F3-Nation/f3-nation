@@ -47,7 +47,7 @@ import {
   useQuery,
 } from "~/orpc/react";
 import type { DataType } from "~/utils/store/modal";
-import { toStoredTime } from "~/utils/form-values";
+import { toStoredTime } from "~/utils/date";
 import {
   closeModal,
   DeleteType,
@@ -779,7 +779,7 @@ export default function AdminEventInstancesModal({
                   }}
                   className="w-full"
                 >
-                  Delete instance
+                  Deactivate instance
                 </Button>
               ) : null}
             </form>

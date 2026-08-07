@@ -1,6 +1,5 @@
 import {
   AdvancedMarker,
-  AdvancedMarkerAnchorPoint,
   useAdvancedMarkerRef,
 } from "@vis.gl/react-google-maps";
 
@@ -56,7 +55,8 @@ export const FeaturesClusterMarker = ({
         statusColor ? getClusterBg(statusColor) : "bg-foreground/30",
       )}
       style={{ width: markerSize, height: markerSize }}
-      anchorPoint={AdvancedMarkerAnchorPoint.CENTER}
+      anchorLeft="-50%"
+      anchorTop="-50%"
     >
       <div
         className={cn(

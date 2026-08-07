@@ -34,11 +34,13 @@ export const WorkoutDetailsModal = ({
     }),
   );
   const location = results?.location;
+  const events = location?.events;
   const modalEventId =
     typeof data.eventId === "number"
       ? data.eventId
-      : (location?.events.find((e) => e.id === selectedEventId)?.id ??
-        location?.events[0]?.id ??
+      : ((events?.some((e) => e.id === selectedEventId)
+          ? selectedEventId
+          : events?.[0]?.id) ??
         selectedEventId ??
         null);
   const modalAOIds = results?.location?.events.map((e) => e.aoId);
@@ -108,7 +110,6 @@ export const WorkoutDetailsModal = ({
         )}
 
         <WorkoutDetailsContent
-          // Need to provide a fallback for selectedEventId
           locationId={locationId}
           providedEventId={modalEventId}
           chipSize={isLarge ? "large" : isMedium ? "medium" : "large"}

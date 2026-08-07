@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { toStoredTime } from "~/utils/form-values";
+import { toStoredTime } from "~/utils/date";
 
 describe("toStoredTime", () => {
   it("converts a filled HH:mm input to the stored HHmm form", () => {
