@@ -3189,6 +3189,10 @@
                             },
                             "type": "array"
                           },
+                          "highlight": {
+                            "description": "Whether the event is highlighted",
+                            "type": "boolean"
+                          },
                           "id": {
                             "description": "Event ID",
                             "type": "number"
@@ -3375,6 +3379,7 @@
                           "description",
                           "isActive",
                           "isPrivate",
+                          "highlight",
                           "parent",
                           "locationId",
                           "startDate",
@@ -3550,8 +3555,9 @@
                       {
                         "anyOf": [
                           {
+                            "exclusiveMinimum": 0,
                             "maximum": 2147483647,
-                            "minimum": 1,
+                            "minimum": -2147483648,
                             "type": "integer"
                           },
                           {
@@ -4062,6 +4068,15 @@
             "allowEmptyValue": true,
             "allowReserved": true,
             "in": "query",
+            "name": "startDateTo",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "allowEmptyValue": true,
+            "allowReserved": true,
+            "in": "query",
             "name": "seriesId",
             "schema": {
               "type": "number"
@@ -4189,15 +4204,11 @@
                       }
                     ]
                   },
-                  "eventTypeId": {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
+                  "eventTypeIds": {
+                    "items": {
+                      "type": "number"
+                    },
+                    "type": "array"
                   },
                   "fngCount": {
                     "anyOf": [
