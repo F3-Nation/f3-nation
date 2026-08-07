@@ -464,9 +464,6 @@ importers:
       '@acme/shared':
         specifier: workspace:*
         version: link:../../packages/shared
-      '@acme/sso':
-        specifier: workspace:*
-        version: link:../../packages/sso
       '@acme/storage':
         specifier: workspace:*
         version: link:../../packages/storage
@@ -479,6 +476,9 @@ importers:
       '@acme/validators':
         specifier: workspace:*
         version: link:../../packages/validators
+      '@f3nation/sso-next':
+        specifier: workspace:*
+        version: link:../../packages/sso-next
       '@orpc/client':
         specifier: 'catalog:'
         version: 1.14.14(@opentelemetry/api@1.9.1)
@@ -555,6 +555,9 @@ importers:
       '@acme/vitest-config':
         specifier: workspace:*
         version: link:../../tooling/vitest
+      '@f3nation/sso':
+        specifier: workspace:*
+        version: link:../../packages/sso
       '@tailwindcss/postcss':
         specifier: 'catalog:'
         version: 4.3.3
@@ -1108,15 +1111,15 @@ importers:
       '@acme/shared':
         specifier: workspace:*
         version: link:../../packages/shared
-      '@acme/sso':
-        specifier: workspace:*
-        version: link:../../packages/sso
       '@acme/storage':
         specifier: workspace:*
         version: link:../../packages/storage
       '@acme/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@f3nation/sso-next':
+        specifier: workspace:*
+        version: link:../../packages/sso-next
       '@orpc/client':
         specifier: 'catalog:'
         version: 1.14.14(@opentelemetry/api@1.9.1)
@@ -1160,6 +1163,9 @@ importers:
       '@acme/vitest-config':
         specifier: workspace:*
         version: link:../../tooling/vitest
+      '@f3nation/sso':
+        specifier: workspace:*
+        version: link:../../packages/sso
       '@tailwindcss/postcss':
         specifier: 'catalog:'
         version: 4.3.3
@@ -1587,6 +1593,46 @@ importers:
       eslint:
         specifier: 'catalog:'
         version: 10.8.0(jiti@2.7.0)(supports-color@8.1.1)
+      prettier:
+        specifier: 'catalog:'
+        version: 3.9.6
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+      vite:
+        specifier: 'catalog:'
+        version: 8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.23.1)(yaml@2.9.0)
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.23.1)(yaml@2.9.0))
+
+  packages/sso-next:
+    dependencies:
+      '@f3nation/sso':
+        specifier: workspace:*
+        version: link:../sso
+    devDependencies:
+      '@acme/eslint-config':
+        specifier: workspace:*
+        version: link:../../tooling/eslint
+      '@acme/prettier-config':
+        specifier: workspace:*
+        version: link:../../tooling/prettier
+      '@acme/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.3
+      '@vitest/coverage-v8':
+        specifier: 'catalog:'
+        version: 4.1.10(vitest@4.1.10)
+      eslint:
+        specifier: 'catalog:'
+        version: 10.8.0(jiti@2.7.0)(supports-color@8.1.1)
+      next:
+        specifier: 'catalog:'
+        version: 16.3.0(@babel/core@7.29.0(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@playwright/test@1.62.1)(@types/node@24.13.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       prettier:
         specifier: 'catalog:'
         version: 3.9.6
