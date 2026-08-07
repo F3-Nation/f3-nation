@@ -12,9 +12,26 @@ import { selectedItemStore } from "~/utils/store/selected-item";
 import {
   formatTime,
   getShortDayOfWeek,
+  isInstanceEventId,
   LocationEditButtons,
+  resolveAoId,
 } from "../map/location-edit-buttons";
 import { WorkoutDetailsContent } from "../workout/workout-details-content";
+
+export const resolveModalEventId = ({
+  dataEventId,
+  selectedEventId,
+  events,
+}: {
+  dataEventId: unknown;
+  selectedEventId: number | null;
+  events: { id: number }[] | undefined;
+}): number | null => {
+  if (typeof dataEventId === "number") return dataEventId;
+  if (selectedEventId != null && selectedEventId < 0) return selectedEventId;
+  if (events?.some((e) => e.id === selectedEventId)) return selectedEventId;
+  return events?.[0]?.id ?? selectedEventId ?? null;
+};
 
 export const WorkoutDetailsModal = ({
   data,
@@ -35,14 +52,11 @@ export const WorkoutDetailsModal = ({
   );
   const location = results?.location;
   const events = location?.events;
-  const modalEventId =
-    typeof data.eventId === "number"
-      ? data.eventId
-      : ((events?.some((e) => e.id === selectedEventId)
-          ? selectedEventId
-          : events?.[0]?.id) ??
-        selectedEventId ??
-        null);
+  const modalEventId = resolveModalEventId({
+    dataEventId: data.eventId,
+    selectedEventId,
+    events,
+  });
   const modalAOIds = results?.location?.events.map((e) => e.aoId);
 
   const { data: upcomingInstancesData } = useQuery(
@@ -76,7 +90,12 @@ export const WorkoutDetailsModal = ({
   );
   const eventName = selectedEvent?.name ?? "Workout";
   const aoName = results?.location?.parentName ?? "AO";
-  const aoId = selectedEvent?.aoId ?? modalAOIds?.[0] ?? null;
+  const aoId = resolveAoId({
+    selectedEventAoId: selectedEvent?.aoId,
+    eventAoIds: modalAOIds,
+  });
+
+  const showEditButtons = aoId != null && !isInstanceEventId(modalEventId);
 
   // Format time display
   const shortDayOfWeek = getShortDayOfWeek(selectedEvent?.dayOfWeek);
@@ -95,7 +114,7 @@ export const WorkoutDetailsModal = ({
         </DialogHeader>
 
         {/* Edit buttons - only in edit mode */}
-        {mode === "edit" && locationId > 0 && (
+        {mode === "edit" && locationId > 0 && showEditButtons && (
           <div className="mb-4">
             <LocationEditButtons
               locationId={locationId}

@@ -18,7 +18,7 @@ import {
   sql,
 } from "@acme/db";
 import { SeriesException } from "@acme/shared/app/enums";
-import { arrayOrSingle } from "@acme/shared/app/functions";
+import { arrayOrSingle, getFullAddress } from "@acme/shared/app/functions";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { logWarn } from "../logger";
@@ -212,6 +212,14 @@ export const eventInstanceRouter = {
         aoName: aoOrg.name,
         regionName: regionOrg.name,
         locationId: schema.eventInstances.locationId,
+        // Raw parts feed `getFullAddress` below, which formats them into the
+        // single `location` string the admin table renders.
+        locationName: schema.locations.name,
+        locationAddress: schema.locations.addressStreet,
+        locationAddress2: schema.locations.addressStreet2,
+        locationCity: schema.locations.addressCity,
+        locationState: schema.locations.addressState,
+        locationCountry: schema.locations.addressCountry,
         orgId: schema.eventInstances.orgId,
         seriesId: schema.eventInstances.seriesId,
         seriesException: schema.eventInstances.seriesException,
@@ -250,10 +258,28 @@ export const eventInstanceRouter = {
         switch (sorting.id) {
           case "startDate":
             return direction(schema.eventInstances.startDate);
+          case "endDate":
+            return direction(schema.eventInstances.endDate);
           case "startTime":
             return direction(schema.eventInstances.startTime);
+          case "endTime":
+            return direction(schema.eventInstances.endTime);
           case "name":
             return direction(schema.eventInstances.name);
+          case "aoName":
+            return direction(aoOrg.name);
+          case "regionName":
+            return direction(regionOrg.name);
+          case "seriesException":
+            return direction(schema.eventInstances.seriesException);
+          case "isPrivate":
+            return direction(schema.eventInstances.isPrivate);
+          case "isActive":
+            return direction(schema.eventInstances.isActive);
+          case "location":
+            return direction(
+              sql`COALESCE(NULLIF(${schema.locations.name}, ''), ${schema.locations.addressStreet})`,
+            );
           default:
             return direction(schema.eventInstances.startDate);
         }
@@ -279,14 +305,28 @@ export const eventInstanceRouter = {
             eq(regionOrg.id, aoOrg.parentId),
           ),
         )
+        // Left join: an instance without a location still belongs in the list.
+        .leftJoin(
+          schema.locations,
+          eq(schema.locations.id, schema.eventInstances.locationId),
+        )
         .where(where);
 
       const instances = usePagination
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
         : await query.orderBy(...sortedColumns).limit(limit);
 
+      const instancesWithLocation = instances.map((instance) => {
+        const locationName = instance.locationName?.trim() ?? "";
+        return {
+          ...instance,
+          location:
+            locationName.length > 0 ? locationName : getFullAddress(instance),
+        };
+      });
+
       return {
-        eventInstances: instances,
+        eventInstances: instancesWithLocation,
         totalCount: instanceCount?.count ?? 0,
       };
     }),
@@ -532,9 +572,9 @@ export const eventInstanceRouter = {
         endDate: z.string().nullish(),
         startTime: z.string().nullish(),
         endTime: z.string().nullish(),
-        highlight: z.boolean().optional().default(false),
+        highlight: z.boolean().optional(),
         meta: z.record(z.string(), z.unknown()).nullish(),
-        isPrivate: z.boolean().optional().default(false),
+        isPrivate: z.boolean().optional(),
         eventTypeIds: z.array(z.coerce.number()).optional(),
         eventTagId: z.coerce.number().nullish(),
         preblast: z.string().nullish(),
@@ -560,12 +600,16 @@ export const eventInstanceRouter = {
       // its actual org — never trust the submitted orgId alone.
       let existingName: string | null = null;
       let existingIsActive: boolean | null = null;
+      let existingHighlight: boolean | null = null;
+      let existingIsPrivate: boolean | null = null;
       if (input.id) {
         const [existing] = await ctx.db
           .select({
             orgId: schema.eventInstances.orgId,
             name: schema.eventInstances.name,
             isActive: schema.eventInstances.isActive,
+            highlight: schema.eventInstances.highlight,
+            isPrivate: schema.eventInstances.isPrivate,
           })
           .from(schema.eventInstances)
           .where(eq(schema.eventInstances.id, input.id));
@@ -605,6 +649,8 @@ export const eventInstanceRouter = {
 
         existingName = existing.name;
         existingIsActive = existing.isActive;
+        existingHighlight = existing.highlight;
+        existingIsPrivate = existing.isPrivate;
       } else {
         const createAuth = await checkHasRoleOnOrg({
           orgId: input.orgId,
@@ -649,10 +695,9 @@ export const eventInstanceRouter = {
         }
       }
 
-      // On create, default isActive to true; on update, preserve the
-      // persisted value when the client omits the field so editing an
-      // inactive instance doesn't silently reactivate it.
       const isActive = input.isActive ?? existingIsActive ?? true;
+      const highlight = input.highlight ?? existingHighlight ?? false;
+      const isPrivate = input.isPrivate ?? existingIsPrivate ?? false;
 
       // Presence of the key — not truthiness of the value — decides whether the
       // association is rewritten, so an empty array can clear it. Must be read
@@ -664,6 +709,8 @@ export const eventInstanceRouter = {
         eventTagId,
         name: _inputName,
         isActive: _inputIsActive,
+        highlight: _inputHighlight,
+        isPrivate: _inputIsPrivate,
         ...eventData
       } = input;
 
@@ -675,10 +722,12 @@ export const eventInstanceRouter = {
             ...eventData,
             name,
             isActive,
+            highlight,
+            isPrivate,
           })
           .onConflictDoUpdate({
             target: [schema.eventInstances.id],
-            set: { ...eventData, name, isActive },
+            set: { ...eventData, name, isActive, highlight, isPrivate },
           })
           .returning();
 

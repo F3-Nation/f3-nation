@@ -149,6 +149,7 @@ export default function AdminEventInstancesModal({
   const instance = instanceResponse ?? undefined;
   const isEditing = !!instance;
   const isLoading = gte(data.id, 0) && isLoadingInstance;
+  const showDeactivateButton = isEditing && instance?.isActive !== false;
 
   const form = useForm({
     schema: EventInstanceFormSchema,
@@ -766,7 +767,7 @@ export default function AdminEventInstancesModal({
                   )}
                 </Button>
               </div>
-              {isEditing ? (
+              {showDeactivateButton ? (
                 <Button
                   type="button"
                   variant="outline"
@@ -779,7 +780,7 @@ export default function AdminEventInstancesModal({
                   }}
                   className="w-full"
                 >
-                  Deactivate instance
+                  Deactivate Event Instance
                 </Button>
               ) : null}
             </form>

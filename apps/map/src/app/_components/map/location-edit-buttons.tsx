@@ -280,6 +280,18 @@ export const LocationEditButtons = ({
   );
 };
 
+export const resolveAoId = ({
+  selectedEventAoId,
+  eventAoIds,
+}: {
+  selectedEventAoId?: number | null;
+  eventAoIds?: (number | null)[];
+}): number | null => selectedEventAoId ?? eventAoIds?.[0] ?? null;
+
+export const isInstanceEventId = (
+  eventId: number | null | undefined,
+): boolean => eventId != null && eventId < 0;
+
 export const getShortDayOfWeek = (day: string | null | undefined) => {
   if (!day) return "";
 

@@ -11,7 +11,9 @@ import { WorkoutDetailsContent } from "../workout/workout-details-content";
 import {
   formatTime,
   getShortDayOfWeek,
+  isInstanceEventId,
   LocationEditButtons,
+  resolveAoId,
 } from "./location-edit-buttons";
 
 export const DesktopLocationPanelContent = () => {
@@ -36,8 +38,12 @@ export const DesktopLocationPanelContent = () => {
     (event) => event.id === panelEventId,
   );
   const modalAOIds = locationData?.location?.events.map((e) => e.aoId);
-  const aoId = selectedEvent?.aoId ?? modalAOIds?.[0] ?? null;
+  const aoId = resolveAoId({
+    selectedEventAoId: selectedEvent?.aoId,
+    eventAoIds: modalAOIds,
+  });
   const eventName = selectedEvent?.name ?? "Workout";
+  const showEditButtons = aoId != null && !isInstanceEventId(panelEventId);
 
   // Get short day of week and format time
   const shortDayOfWeek = getShortDayOfWeek(selectedEvent?.dayOfWeek);
@@ -66,7 +72,7 @@ export const DesktopLocationPanelContent = () => {
       </button>
 
       {/* Edit buttons at the top */}
-      {mode === "edit" && (
+      {mode === "edit" && showEditButtons && (
         <div className="mb-4">
           <LocationEditButtons
             locationId={panelLocationId}

@@ -4221,7 +4221,6 @@
                     ]
                   },
                   "highlight": {
-                    "default": false,
                     "type": "boolean"
                   },
                   "id": {
@@ -4231,7 +4230,6 @@
                     "type": "boolean"
                   },
                   "isPrivate": {
-                    "default": false,
                     "type": "boolean"
                   },
                   "locationId": {

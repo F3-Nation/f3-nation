@@ -180,11 +180,12 @@ describe("Event Instance Router", () => {
   const createTestAO = async (
     regionId: number,
     meta?: Record<string, unknown>,
+    name?: string,
   ) => {
     const [ao] = await db
       .insert(schema.orgs)
       .values({
-        name: `Test AO ${uniqueId()}`,
+        name: name ?? `Test AO ${uniqueId()}`,
         orgType: "ao",
         parentId: regionId,
         isActive: true,
@@ -198,18 +199,48 @@ describe("Event Instance Router", () => {
     return ao;
   };
 
+  const createTestLocation = async (
+    orgId: number,
+    options?: {
+      name?: string;
+      addressStreet?: string;
+      addressCity?: string;
+      addressState?: string;
+    },
+  ) => {
+    const [location] = await db
+      .insert(schema.locations)
+      .values({
+        name: options?.name ?? `Test Location ${uniqueId()}`,
+        orgId,
+        isActive: true,
+        addressStreet: options?.addressStreet ?? null,
+        addressCity: options?.addressCity ?? null,
+        addressState: options?.addressState ?? null,
+      })
+      .returning();
+
+    if (location) {
+      createdLocationIds.push(location.id);
+    }
+    return location;
+  };
+
   // Helper to create a test event instance
   const createTestEventInstance = async (
     orgId: number,
     options?: {
       name?: string;
+      locationId?: number;
       startDate?: string;
+      endDate?: string;
       highlight?: boolean;
       seriesException?: SeriesException;
       startTime?: string | null;
       endTime?: string | null;
       meta?: Record<string, unknown>;
       isActive?: boolean;
+      isPrivate?: boolean;
     },
   ) => {
     const [eventInstance] = await db
@@ -217,9 +248,12 @@ describe("Event Instance Router", () => {
       .values({
         name: options?.name ?? `Test Event ${uniqueId()}`,
         orgId,
+        locationId: options?.locationId ?? null,
         startDate:
           options?.startDate ?? new Date().toISOString().split("T")[0]!,
+        endDate: options?.endDate ?? null,
         isActive: options?.isActive ?? true,
+        isPrivate: options?.isPrivate ?? false,
         highlight: options?.highlight ?? false,
         seriesException: options?.seriesException ?? null,
         startTime: options?.startTime ?? null,
@@ -365,6 +399,101 @@ describe("Event Instance Router", () => {
         const ids = result.eventInstances.map((e) => e.id);
         expect(ids).toContain(seeded.active.id);
         expect(ids).toContain(seeded.inactive.id);
+      });
+
+      it("should prefer the location name over the address", async () => {
+        const session = await createAdminSession();
+        await mockAuthWithSession(session);
+
+        const region = await createTestRegion();
+        if (!region) throw new Error("Failed to create region");
+
+        const ao = await createTestAO(region.id);
+        if (!ao) throw new Error("Failed to create AO");
+
+        const location = await createTestLocation(region.id, {
+          name: "The Ballfield",
+          addressStreet: "123 Main St",
+          addressCity: "Charlotte",
+          addressState: "NC",
+        });
+        if (!location) throw new Error("Failed to create location");
+
+        const instance = await createTestEventInstance(ao.id, {
+          locationId: location.id,
+        });
+        if (!instance) throw new Error("Failed to create event instance");
+
+        const client = createTestClient();
+        const result = await client.eventInstance.all({
+          aoOrgId: ao.id,
+          pageIndex: 0,
+          pageSize: 10,
+        });
+
+        const found = result.eventInstances.find((e) => e.id === instance.id);
+        expect(found?.location).toBe("The Ballfield");
+      });
+
+      it("should fall back to the formatted address when the name is blank", async () => {
+        const session = await createAdminSession();
+        await mockAuthWithSession(session);
+
+        const region = await createTestRegion();
+        if (!region) throw new Error("Failed to create region");
+
+        const ao = await createTestAO(region.id);
+        if (!ao) throw new Error("Failed to create AO");
+
+        // `name` is NOT NULL, so "no name" is the empty string, not null.
+        const location = await createTestLocation(region.id, {
+          name: "",
+          addressStreet: "123 Main St",
+          addressCity: "Charlotte",
+          addressState: "NC",
+        });
+        if (!location) throw new Error("Failed to create location");
+
+        const instance = await createTestEventInstance(ao.id, {
+          locationId: location.id,
+        });
+        if (!instance) throw new Error("Failed to create event instance");
+
+        const client = createTestClient();
+        const result = await client.eventInstance.all({
+          aoOrgId: ao.id,
+          pageIndex: 0,
+          pageSize: 10,
+        });
+
+        const found = result.eventInstances.find((e) => e.id === instance.id);
+        expect(found?.location).toBe("123 Main St, Charlotte, NC");
+      });
+
+      it("should return a null location for an instance without one", async () => {
+        const session = await createAdminSession();
+        await mockAuthWithSession(session);
+
+        const region = await createTestRegion();
+        if (!region) throw new Error("Failed to create region");
+
+        const ao = await createTestAO(region.id);
+        if (!ao) throw new Error("Failed to create AO");
+
+        const instance = await createTestEventInstance(ao.id);
+        if (!instance) throw new Error("Failed to create event instance");
+
+        const client = createTestClient();
+        const result = await client.eventInstance.all({
+          aoOrgId: ao.id,
+          pageIndex: 0,
+          pageSize: 10,
+        });
+
+        // The left join must not drop locationless rows.
+        const found = result.eventInstances.find((e) => e.id === instance.id);
+        expect(found).toBeDefined();
+        expect(found?.location).toBeNull();
       });
 
       it("should return only inactive instances when asked", async () => {
@@ -1341,6 +1470,141 @@ describe("Event Instance Router", () => {
       expect(result.isActive).toBe(true);
     });
 
+    it("should preserve highlight when updating without sending highlight", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create region");
+
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create AO");
+
+      const instance = await createTestEventInstance(ao.id, {
+        highlight: true,
+      });
+      if (!instance) throw new Error("Failed to create event instance");
+
+      const client = createTestClient();
+      const result = await client.eventInstance.crupdate({
+        id: instance.id,
+        orgId: ao.id,
+        name: `Renamed ${uniqueId()}`,
+        startDate: instance.startDate,
+      });
+
+      expect(result.id).toBe(instance.id);
+      expect(result.highlight).toBe(true);
+    });
+
+    it("should allow explicitly clearing highlight", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create region");
+
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create AO");
+
+      const instance = await createTestEventInstance(ao.id, {
+        highlight: true,
+      });
+      if (!instance) throw new Error("Failed to create event instance");
+
+      const client = createTestClient();
+      const result = await client.eventInstance.crupdate({
+        id: instance.id,
+        orgId: ao.id,
+        name: instance.name,
+        startDate: instance.startDate,
+        highlight: false,
+      });
+
+      expect(result.id).toBe(instance.id);
+      expect(result.highlight).toBe(false);
+    });
+
+    it("should preserve isPrivate when updating without sending isPrivate", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create region");
+
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create AO");
+
+      const instance = await createTestEventInstance(ao.id, {
+        isPrivate: true,
+      });
+      if (!instance) throw new Error("Failed to create event instance");
+
+      const client = createTestClient();
+      const result = await client.eventInstance.crupdate({
+        id: instance.id,
+        orgId: ao.id,
+        name: `Renamed ${uniqueId()}`,
+        startDate: instance.startDate,
+      });
+
+      expect(result.id).toBe(instance.id);
+      expect(result.isPrivate).toBe(true);
+    });
+
+    it("should allow explicitly making a private instance public", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create region");
+
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create AO");
+
+      const instance = await createTestEventInstance(ao.id, {
+        isPrivate: true,
+      });
+      if (!instance) throw new Error("Failed to create event instance");
+
+      const client = createTestClient();
+      const result = await client.eventInstance.crupdate({
+        id: instance.id,
+        orgId: ao.id,
+        name: instance.name,
+        startDate: instance.startDate,
+        isPrivate: false,
+      });
+
+      expect(result.id).toBe(instance.id);
+      expect(result.isPrivate).toBe(false);
+    });
+
+    it("should default highlight and isPrivate to false on create", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create region");
+
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create AO");
+
+      const client = createTestClient();
+      const result = await client.eventInstance.crupdate({
+        orgId: ao.id,
+        name: `Created ${uniqueId()}`,
+        startDate: new Date().toISOString().split("T")[0]!,
+      });
+
+      if (result.id) {
+        createdEventInstanceIds.push(result.id);
+      }
+
+      expect(result.highlight).toBe(false);
+      expect(result.isPrivate).toBe(false);
+    });
+
     it("should clear startTime when null is sent", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
@@ -2309,6 +2573,208 @@ describe("Event Instance Router", () => {
           expect(dates[i]! <= dates[i - 1]!).toBe(true);
         }
       }
+    });
+
+    // The cases below deliberately order the sort column *opposite* to
+    // startDate. An id the router doesn't map falls through to sorting by
+    // startDate, which would return the reverse of what each test expects.
+    it("should sort by end date, not fall back to start date", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create region");
+
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create AO");
+
+      const dayAfter = (days: number) => {
+        const date = new Date();
+        date.setDate(date.getDate() + days);
+        return date.toISOString().split("T")[0]!;
+      };
+
+      const first = await createTestEventInstance(ao.id, {
+        startDate: dayAfter(10),
+        endDate: dayAfter(40),
+      });
+      const second = await createTestEventInstance(ao.id, {
+        startDate: dayAfter(20),
+        endDate: dayAfter(30),
+      });
+      const third = await createTestEventInstance(ao.id, {
+        startDate: dayAfter(30),
+        endDate: dayAfter(20),
+      });
+      if (!first || !second || !third) {
+        throw new Error("Failed to create event instances");
+      }
+
+      const client = createTestClient();
+      const result = await client.eventInstance.all({
+        aoOrgId: ao.id,
+        sorting: [{ id: "endDate", desc: false }],
+        pageIndex: 0,
+        pageSize: 50,
+      });
+
+      expect(result.eventInstances.map((e) => e.id)).toEqual([
+        third.id,
+        second.id,
+        first.id,
+      ]);
+    });
+
+    it("should sort by AO name, not fall back to start date", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create region");
+
+      const suffix = uniqueId();
+      const firstAlphabetically = await createTestAO(
+        region.id,
+        undefined,
+        `AAA AO ${suffix}`,
+      );
+      const lastAlphabetically = await createTestAO(
+        region.id,
+        undefined,
+        `ZZZ AO ${suffix}`,
+      );
+      if (!firstAlphabetically || !lastAlphabetically) {
+        throw new Error("Failed to create AOs");
+      }
+
+      const dayAfter = (days: number) => {
+        const date = new Date();
+        date.setDate(date.getDate() + days);
+        return date.toISOString().split("T")[0]!;
+      };
+
+      // The alphabetically-first AO gets the *later* start date.
+      const inAaa = await createTestEventInstance(firstAlphabetically.id, {
+        startDate: dayAfter(30),
+      });
+      const inZzz = await createTestEventInstance(lastAlphabetically.id, {
+        startDate: dayAfter(10),
+      });
+      if (!inAaa || !inZzz) {
+        throw new Error("Failed to create event instances");
+      }
+
+      const client = createTestClient();
+      const result = await client.eventInstance.all({
+        regionOrgId: region.id,
+        sorting: [{ id: "aoName", desc: false }],
+        pageIndex: 0,
+        pageSize: 50,
+      });
+
+      expect(result.eventInstances.map((e) => e.id)).toEqual([
+        inAaa.id,
+        inZzz.id,
+      ]);
+    });
+
+    it("should sort by location name, not fall back to start date", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create region");
+
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create AO");
+
+      const suffix = uniqueId();
+      const firstAlphabetically = await createTestLocation(region.id, {
+        name: `AAA Location ${suffix}`,
+      });
+      const lastAlphabetically = await createTestLocation(region.id, {
+        name: `ZZZ Location ${suffix}`,
+      });
+      if (!firstAlphabetically || !lastAlphabetically) {
+        throw new Error("Failed to create locations");
+      }
+
+      const dayAfter = (days: number) => {
+        const date = new Date();
+        date.setDate(date.getDate() + days);
+        return date.toISOString().split("T")[0]!;
+      };
+
+      // The alphabetically-first location gets the later start date.
+      const atAaa = await createTestEventInstance(ao.id, {
+        locationId: firstAlphabetically.id,
+        startDate: dayAfter(30),
+      });
+      const atZzz = await createTestEventInstance(ao.id, {
+        locationId: lastAlphabetically.id,
+        startDate: dayAfter(10),
+      });
+      if (!atAaa || !atZzz) {
+        throw new Error("Failed to create event instances");
+      }
+
+      const client = createTestClient();
+      const result = await client.eventInstance.all({
+        aoOrgId: ao.id,
+        sorting: [{ id: "location", desc: false }],
+        pageIndex: 0,
+        pageSize: 50,
+      });
+
+      expect(result.eventInstances.map((e) => e.id)).toEqual([
+        atAaa.id,
+        atZzz.id,
+      ]);
+    });
+
+    it("should sort by status, not fall back to start date", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create region");
+
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create AO");
+
+      const dayAfter = (days: number) => {
+        const date = new Date();
+        date.setDate(date.getDate() + days);
+        return date.toISOString().split("T")[0]!;
+      };
+
+      // The inactive instance gets the later start date, so a fall-through to
+      // startDate would put the active one first.
+      const active = await createTestEventInstance(ao.id, {
+        startDate: dayAfter(10),
+        isActive: true,
+      });
+      const inactive = await createTestEventInstance(ao.id, {
+        startDate: dayAfter(30),
+        isActive: false,
+      });
+      if (!active || !inactive) {
+        throw new Error("Failed to create event instances");
+      }
+
+      const client = createTestClient();
+      const result = await client.eventInstance.all({
+        aoOrgId: ao.id,
+        statuses: ["active", "inactive"],
+        sorting: [{ id: "isActive", desc: false }],
+        pageIndex: 0,
+        pageSize: 50,
+      });
+
+      expect(result.eventInstances.map((e) => e.id)).toEqual([
+        inactive.id,
+        active.id,
+      ]);
     });
   });
 });

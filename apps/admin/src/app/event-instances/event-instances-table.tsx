@@ -5,7 +5,6 @@ import { DotsHorizontalIcon } from "@radix-ui/react-icons";
 import { useState } from "react";
 
 import type { IsActiveStatus } from "@acme/shared/app/enums";
-import { Badge } from "@acme/ui/badge";
 import { Button } from "@acme/ui/button";
 import {
   DropdownMenu,
@@ -245,6 +244,12 @@ const columns: TableOptions<
     cell: (cell) => <Cell {...cell} />,
   },
   {
+    accessorKey: "location",
+    meta: { name: "Location" },
+    header: Header,
+    cell: (cell) => <Cell {...cell} />,
+  },
+  {
     accessorKey: "seriesException",
     meta: { name: "Series exception" },
     header: Header,
@@ -261,9 +266,17 @@ const columns: TableOptions<
     meta: { name: "Visibility" },
     header: Header,
     cell: ({ row }) => (
-      <Badge variant={row.original.isPrivate ? "secondary" : "outline"}>
-        {row.original.isPrivate ? "Private" : "Public"}
-      </Badge>
+      <div className="flex items-center justify-start">
+        <span
+          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${
+            row.original.isPrivate
+              ? "border-amber-200 bg-amber-100 text-amber-700"
+              : "border-blue-200 bg-blue-100 text-blue-700"
+          }`}
+        >
+          {row.original.isPrivate ? "Private" : "Public"}
+        </span>
+      </div>
     ),
   },
   {
@@ -288,6 +301,8 @@ const columns: TableOptions<
     id: "id",
     enableHiding: false,
     cell: ({ row }) => {
+      if (!row.original.isActive) return null;
+
       return (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -311,7 +326,7 @@ const columns: TableOptions<
                 });
               }}
             >
-              <div>Delete</div>
+              <div>Deactivate</div>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
