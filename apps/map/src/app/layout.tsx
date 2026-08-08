@@ -17,6 +17,7 @@ import "~/app/globals.css";
 
 import { TooltipProvider } from "@acme/ui/tooltip";
 
+import { ApiDownSplash } from "~/app/_components/api-down-splash";
 import { GoogleAnalytics } from "~/app/_components/google-analytics";
 import { UserLocationProvider } from "~/app/_components/map/user-location-provider";
 import { ModalSwitcher } from "~/app/_components/modal/modal-switcher";
@@ -25,6 +26,20 @@ import { OrpcReactProvider } from "~/orpc/react";
 import { RuntimeConfigProvider } from "~/utils/runtime-config";
 import { KeyPressProvider } from "~/utils/key-press/provider";
 import { RouteChangeTracker } from "./_components/route-change-tracker";
+
+async function isApiDown(): Promise<boolean> {
+  const base = env.F3_API_BASE_URL;
+  if (!base) return false;
+  try {
+    const res = await fetch(`${base}/v1/ping`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(3000),
+    });
+    return !res.ok;
+  } catch {
+    return true;
+  }
+}
 
 const mapBaseUrl = (() => {
   // F3_MAP_BASE_URL is typed required, but under skipValidation (CI/lint builds)
@@ -53,16 +68,26 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout(props: { children: React.ReactNode }) {
+export default async function RootLayout(props: { children: React.ReactNode }) {
+  const bodyClass = cn(
+    "min-h-dvh w-screen overflow-hidden bg-background font-sans text-foreground antialiased",
+    GeistSans.variable,
+    GeistMono.variable,
+  );
+
+  if (await isApiDown()) {
+    return (
+      <html lang="en" suppressHydrationWarning>
+        <body className={bodyClass}>
+          <ApiDownSplash />
+        </body>
+      </html>
+    );
+  }
+
   return (
     <html lang="en" suppressHydrationWarning>
-      <body
-        className={cn(
-          "min-h-dvh w-screen overflow-hidden bg-background font-sans text-foreground antialiased",
-          GeistSans.variable,
-          GeistMono.variable,
-        )}
-      >
+      <body className={bodyClass}>
         <GoogleAnalytics measurementId={env.NEXT_PUBLIC_GA_MEASUREMENT_ID} />
         <RouteChangeTracker />
         <DataProvider>

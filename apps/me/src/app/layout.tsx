@@ -8,9 +8,24 @@ import { Navbar } from "@/components/navbar";
 import { SaveProvider } from "@/lib/save-context";
 import { GoogleAnalytics } from "@/components/google-analytics";
 import { VersionInfo } from "@/components/version-info";
+import { ApiDownSplash } from "@/components/api-down-splash";
 import { getChangelog } from "@/lib/changelog";
 import { env } from "@/env";
 import packageJson from "../../package.json";
+
+async function isApiDown(): Promise<boolean> {
+  const base = process.env.F3_API_BASE_URL;
+  if (!base) return false;
+  try {
+    const res = await fetch(`${base}/ping`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(3000),
+    });
+    return !res.ok;
+  } catch {
+    return true;
+  }
+}
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -23,11 +38,12 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const apiDown = await isApiDown();
   const channel = env.F3_CHANNEL;
   const changelog = getChangelog().slice(0, 10);
 
@@ -36,18 +52,24 @@ export default function RootLayout({
       <body
         className={`${inter.className} flex min-h-screen flex-col overflow-x-hidden overscroll-y-none bg-background text-foreground antialiased`}
       >
-        <GoogleAnalytics />
-        <AuthProvider>
-          <SaveProvider>
-            <Navbar />
-            <main className="flex-1">{children}</main>
-            <VersionInfo
-              version={packageJson.version}
-              channel={channel}
-              changelog={changelog}
-            />
-          </SaveProvider>
-        </AuthProvider>
+        {apiDown ? (
+          <ApiDownSplash />
+        ) : (
+          <>
+            <GoogleAnalytics />
+            <AuthProvider>
+              <SaveProvider>
+                <Navbar />
+                <main className="flex-1">{children}</main>
+                <VersionInfo
+                  version={packageJson.version}
+                  channel={channel}
+                  changelog={changelog}
+                />
+              </SaveProvider>
+            </AuthProvider>
+          </>
+        )}
         <Toaster />
       </body>
     </html>

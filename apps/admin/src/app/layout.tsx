@@ -10,11 +10,26 @@ import { TooltipProvider } from "@acme/ui/tooltip";
 
 import "~/app/globals.css";
 
+import { ApiDownSplash } from "~/app/_components/api-down-splash";
 import { ModalSwitcher } from "~/app/_components/modal/modal-switcher";
 import { env } from "~/env";
 import { AdminSessionProvider } from "~/lib/auth/client";
 import { getSessionUser, requireAdminPortalAccess } from "~/lib/auth/server";
 import { OrpcReactProvider } from "~/orpc/react";
+
+async function isApiDown(): Promise<boolean> {
+  const base = env.F3_API_BASE_URL;
+  if (!base) return false;
+  try {
+    const res = await fetch(`${base}/ping`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(3000),
+    });
+    return !res.ok;
+  } catch {
+    return true;
+  }
+}
 
 export const metadata: Metadata = {
   title: "F3 Nation Admin",
@@ -29,6 +44,22 @@ export const viewport: Viewport = {
 };
 
 export default async function RootLayout(props: { children: React.ReactNode }) {
+  if (await isApiDown()) {
+    return (
+      <html lang="en" suppressHydrationWarning>
+        <body
+          className={cn(
+            "min-h-dvh bg-background font-sans text-foreground antialiased",
+            GeistSans.variable,
+            GeistMono.variable,
+          )}
+        >
+          <ApiDownSplash />
+        </body>
+      </html>
+    );
+  }
+
   const requestHeaders = await headers();
   const protectedPathname = requestHeaders.get("x-admin-pathname");
   const initialSession = await getSessionUser();
