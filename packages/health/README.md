@@ -115,14 +115,5 @@ Recommended endpoint test assertions:
 ## Packaging note (workspace vs publish)
 
 This repository uses source-first entrypoints in `packages/health/package.json`
-for monorepo workspace consumers, with a `publishConfig` override to rewrite
+for monorepo workspace consumers, with a `publishConfig` override that rewrites
 entrypoints to compiled `dist` artifacts for published consumers.
-
-Why this is intentional:
-
-- workspace apps resolve quickly against source during local dev and CI
-- published consumers resolve compiled JS/types from `dist`
-
-Do not remove `publishConfig` unless the workspace build orchestration is also
-changed to guarantee `dist` artifacts exist before every consumer resolves this
-package.

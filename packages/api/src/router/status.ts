@@ -216,49 +216,50 @@ async function fetchTextWithTimeout(
   }
 }
 
+type PollResult =
+  { ok: true; raw: unknown } | { ok: false; result: StatusResult };
+
+async function pollAndParseJson(
+  url: string,
+  buildFailure: (reason: "unreachable" | "invalid_json") => StatusResult,
+  fetchImpl: typeof fetch,
+): Promise<PollResult> {
+  let fetchResult: { ok: boolean; status: number; text: string };
+  try {
+    fetchResult = await fetchTextWithTimeout(url, fetchImpl);
+  } catch {
+    return { ok: false, result: buildFailure("unreachable") };
+  }
+  if (!fetchResult.ok) {
+    return { ok: false, result: buildFailure("unreachable") };
+  }
+  let raw: unknown;
+  try {
+    raw = JSON.parse(fetchResult.text) as unknown;
+  } catch {
+    return { ok: false, result: buildFailure("invalid_json") };
+  }
+  return { ok: true, raw };
+}
+
 async function fetchContractStatus(
   target: ContractStatusTarget,
   fetchImpl: typeof fetch = fetch,
   currentContractMajor = CURRENT_HEALTH_CONTRACT_MAJOR,
 ): Promise<StatusResult> {
-  let fetchResult: { ok: boolean; status: number; text: string };
-
-  try {
-    fetchResult = await fetchTextWithTimeout(target.url, fetchImpl);
-  } catch {
-    return {
+  const poll = await pollAndParseJson(
+    target.url,
+    (reason): StatusResult => ({
       ok: false,
       source: "contract",
       target,
       status: "down",
-      reason: "unreachable",
-    };
-  }
-
-  if (!fetchResult.ok) {
-    return {
-      ok: false,
-      source: "contract",
-      target,
-      status: "down",
-      reason: "unreachable",
-    };
-  }
-
-  let raw: unknown;
-  try {
-    raw = JSON.parse(fetchResult.text) as unknown;
-  } catch {
-    return {
-      ok: false,
-      source: "contract",
-      target,
-      status: "down",
-      reason: "invalid_json",
-    };
-  }
-
-  return parseContractStatusResponse(target, raw, currentContractMajor);
+      reason,
+    }),
+    fetchImpl,
+  );
+  if (!poll.ok) return poll.result;
+  return parseContractStatusResponse(target, poll.raw, currentContractMajor);
 }
 
 const SLACK_DOWN_STATUSES = new Set([
@@ -368,45 +369,21 @@ async function fetchExternalStatus(
     };
   }
 
-  let fetchResult: { ok: boolean; status: number; text: string };
-
-  try {
-    fetchResult = await fetchTextWithTimeout(target.apiUrl, fetchImpl);
-  } catch {
-    return {
+  const poll = await pollAndParseJson(
+    target.apiUrl,
+    (reason): StatusResult => ({
       ok: false,
       source: "external",
       target,
       status: "down",
-      reason: "unreachable",
-    };
-  }
-
-  if (!fetchResult.ok) {
-    return {
-      ok: false,
-      source: "external",
-      target,
-      status: "down",
-      reason: "unreachable",
-    };
-  }
-
-  let raw: unknown;
-  try {
-    raw = JSON.parse(fetchResult.text) as unknown;
-  } catch {
-    return {
-      ok: false,
-      source: "external",
-      target,
-      status: "down",
-      reason: "invalid_json",
-    };
-  }
+      reason,
+    }),
+    fetchImpl,
+  );
+  if (!poll.ok) return poll.result;
 
   if (target.provider === "slack") {
-    return parseSlackStatusResponse(target, raw);
+    return parseSlackStatusResponse(target, poll.raw);
   }
 
   return {
