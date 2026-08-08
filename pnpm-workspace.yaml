@@ -151,6 +151,8 @@ overrides:
   "sharp@<0.35.0": "0.35.3" # inherited libvips vulnerabilities
   "next@>=16.0.0 <16.3.0": "16.3.0" # GHSA-89xv-2m56-2m9x / GHSA-p9j2-gv94-2wf4 (SSRF in rewrites); covers transitive geist>next & @scalar>next. Keep in lockstep with the `next` catalog entry: a second `next` version forks next-auth's peer instance and detaches the type-extensions augmentation.
   "postcss@<8.5.12": "^8.5.24" # GHSA-6g55-p6wh-862q (sourceMappingURL arbitrary file read)
+  "nanoid@<3.3.17": "^3.3.17" # GHSA-2v37-7h3g-55p8
+  "nanoid@>=4.0.0 <5.1.16": "^5.1.16" # GHSA-28wg-ghj8-5hjv
 peerDependencyRules:
   allowedVersions:
     eslint-plugin-react>eslint: "10"
