@@ -1,5 +1,5 @@
 {
-  "name": "@acme/sso",
+  "name": "@f3nation/sso",
   "version": "0.2.1",
   "private": true,
   "type": "module",

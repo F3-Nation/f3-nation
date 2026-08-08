@@ -397,6 +397,8 @@ overrides:
   sharp@<0.35.0: 0.35.3
   next@>=16.0.0 <16.3.0: 16.3.0
   postcss@<8.5.12: ^8.5.24
+  nanoid@<3.3.17: ^3.3.17
+  nanoid@>=4.0.0 <5.1.16: ^5.1.16
 
 packageExtensionsChecksum: sha256-MiHZ3mgtOUb60KfpkAkui5ad/9eLmcQda0MiZKaTRqA=
 
@@ -464,9 +466,6 @@ importers:
       '@acme/shared':
         specifier: workspace:*
         version: link:../../packages/shared
-      '@acme/sso':
-        specifier: workspace:*
-        version: link:../../packages/sso
       '@acme/storage':
         specifier: workspace:*
         version: link:../../packages/storage
@@ -479,6 +478,9 @@ importers:
       '@acme/validators':
         specifier: workspace:*
         version: link:../../packages/validators
+      '@f3nation/sso-next':
+        specifier: workspace:*
+        version: link:../../packages/sso-next
       '@orpc/client':
         specifier: 'catalog:'
         version: 1.14.14(@opentelemetry/api@1.9.1)
@@ -555,6 +557,9 @@ importers:
       '@acme/vitest-config':
         specifier: workspace:*
         version: link:../../tooling/vitest
+      '@f3nation/sso':
+        specifier: workspace:*
+        version: link:../../packages/sso
       '@tailwindcss/postcss':
         specifier: 'catalog:'
         version: 4.3.3
@@ -1108,15 +1113,15 @@ importers:
       '@acme/shared':
         specifier: workspace:*
         version: link:../../packages/shared
-      '@acme/sso':
-        specifier: workspace:*
-        version: link:../../packages/sso
       '@acme/storage':
         specifier: workspace:*
         version: link:../../packages/storage
       '@acme/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@f3nation/sso-next':
+        specifier: workspace:*
+        version: link:../../packages/sso-next
       '@orpc/client':
         specifier: 'catalog:'
         version: 1.14.14(@opentelemetry/api@1.9.1)
@@ -1160,6 +1165,9 @@ importers:
       '@acme/vitest-config':
         specifier: workspace:*
         version: link:../../tooling/vitest
+      '@f3nation/sso':
+        specifier: workspace:*
+        version: link:../../packages/sso
       '@tailwindcss/postcss':
         specifier: 'catalog:'
         version: 4.3.3
@@ -1587,6 +1595,46 @@ importers:
       eslint:
         specifier: 'catalog:'
         version: 10.8.0(jiti@2.7.0)(supports-color@8.1.1)
+      prettier:
+        specifier: 'catalog:'
+        version: 3.9.6
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+      vite:
+        specifier: 'catalog:'
+        version: 8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.23.1)(yaml@2.9.0)
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.23.1)(yaml@2.9.0))
+
+  packages/sso-next:
+    dependencies:
+      '@f3nation/sso':
+        specifier: workspace:*
+        version: link:../sso
+    devDependencies:
+      '@acme/eslint-config':
+        specifier: workspace:*
+        version: link:../../tooling/eslint
+      '@acme/prettier-config':
+        specifier: workspace:*
+        version: link:../../tooling/prettier
+      '@acme/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.3
+      '@vitest/coverage-v8':
+        specifier: 'catalog:'
+        version: 4.1.10(vitest@4.1.10)
+      eslint:
+        specifier: 'catalog:'
+        version: 10.8.0(jiti@2.7.0)(supports-color@8.1.1)
+      next:
+        specifier: 'catalog:'
+        version: 16.3.0(@babel/core@7.29.0(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@playwright/test@1.62.1)(@types/node@24.13.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       prettier:
         specifier: 'catalog:'
         version: 3.9.6
@@ -7042,13 +7090,13 @@ packages:
     resolution: {integrity: sha512-WWdIxpyjEn+FhQJQQv9aQAYlHoNVdzIzUySNV1gHUPDSdZJ3yZn7pAAbQcV7B56Mvu881q9FZV+0Vx2xC44VWA==}
     engines: {node: ^18.17.0 || >=20.5.0}
 
-  nanoid@3.3.16:
-    resolution: {integrity: sha512-bzlKTyNJ7+LdGIIwy8ijFpIqEQIvafahV7eYykJ8Cvh42EdJeODoJ6gUJXpQJvej1BddH8OqTXZNE/KfbWAu8Q==}
+  nanoid@3.3.18:
+    resolution: {integrity: sha512-DTg4MJbGMWkfi6VZFdNt2/caMbQy4Ou+Op/hJQvGEWcnVfoA1QA+xzRKAzw9jD6+GVOOeYr/mIcuDSdug6F6+w==}
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
-  nanoid@5.1.7:
-    resolution: {integrity: sha512-ua3NDgISf6jdwezAheMOk4mbE1LXjm1DfMUDMuJf4AqxLFK3ccGpgWizwa5YV7Yz9EpXwEaWoRXSb/BnV0t5dQ==}
+  nanoid@5.1.16:
+    resolution: {integrity: sha512-kVrnsrJqMR8+oLJnGEmSWw9BivK5mt7H3FZatVRjrc5wGqFYuBxX1yG7+A7Gi5AefkX6t/oCkizcQgpu0cY1dQ==}
     engines: {node: ^18 || >=20}
     hasBin: true
 
@@ -10512,7 +10560,7 @@ snapshots:
   '@scalar/types@0.16.4':
     dependencies:
       '@scalar/helpers': 0.9.2
-      nanoid: 5.1.7
+      nanoid: 5.1.16
       type-fest: 5.5.0
       zod: 4.4.3
 
@@ -13181,9 +13229,9 @@ snapshots:
 
   mute-stream@2.0.0: {}
 
-  nanoid@3.3.16: {}
+  nanoid@3.3.18: {}
 
-  nanoid@5.1.7: {}
+  nanoid@5.1.16: {}
 
   napi-postinstall@0.3.4: {}
 
@@ -13547,19 +13595,19 @@ snapshots:
 
   postcss@8.5.20:
     dependencies:
-      nanoid: 3.3.16
+      nanoid: 3.3.18
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
   postcss@8.5.23:
     dependencies:
-      nanoid: 3.3.16
+      nanoid: 3.3.18
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
   postcss@8.5.25:
     dependencies:
-      nanoid: 3.3.16
+      nanoid: 3.3.18
       picocolors: 1.1.1
       source-map-js: 1.2.1
     optional: true
