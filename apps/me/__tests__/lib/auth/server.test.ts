@@ -58,7 +58,7 @@ describe("auth server helpers", () => {
     verifyAccessTokenMock.mockResolvedValue({
       ok: false,
       code: "expired",
-      error: "Token has expired",
+      error: "Token expired",
     });
 
     const { getSessionUser } = await import("@/lib/auth/server");

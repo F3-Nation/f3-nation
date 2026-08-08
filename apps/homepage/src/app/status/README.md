@@ -1,4 +1,4 @@
-## Status Monitors (`/status`)
+# Status Monitors (`/status`)
 
 The `/status` page supports two monitor types:
 
@@ -20,7 +20,7 @@ Adding a provider is more than extending the string union. Use this checklist:
 
 1. Extend provider type
 
-- File: `packages/api/src/router/status.ts`
+- File: `packages/health/src/index.ts`
 - Update `ExternalProvider` to include the new provider name.
 
 1. Add provider adapter logic

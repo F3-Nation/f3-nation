@@ -126,7 +126,7 @@ export function StatusDashboardClient() {
           ? null
           : data?.results.map((result) => (
               <StatusCard
-                key={result.target.id}
+                key={`${result.source}-${result.target.id}`}
                 result={result}
                 showDetail={showDetail}
               />

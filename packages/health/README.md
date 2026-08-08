@@ -44,31 +44,33 @@ import {
   runChecks,
 } from "@f3nation/health";
 
-const startedAt = Date.now();
+export async function GET() {
+  const startedAt = Date.now();
 
-const checks = await runChecks([
-  {
-    id: "primary-database",
-    defaultSeverity: "critical",
-    timeoutMs: 500,
-    run: async () => ({ status: "ok" }),
-  },
-]);
+  const checks = await runChecks([
+    {
+      id: "primary-database",
+      defaultSeverity: "critical",
+      timeoutMs: 500,
+      run: async () => ({ status: "ok" }),
+    },
+  ]);
 
-const payload = buildHealthResponse({
-  service: "f3-api",
-  version: "2026.07.09+abc1234",
-  startedAt,
-  checks,
-});
+  const payload = buildHealthResponse({
+    service: "f3-api",
+    version: "2026.07.09+abc1234",
+    startedAt,
+    checks,
+  });
 
-// Validate before responding
-healthResponseSchema.parse(payload);
+  // Validate before responding
+  healthResponseSchema.parse(payload);
 
-return Response.json(payload, {
-  status: 200,
-  headers: { "Cache-Control": "no-store" },
-});
+  return Response.json(payload, {
+    status: 200,
+    headers: { "Cache-Control": "no-store" },
+  });
+}
 ```
 
 ## HTTP requirements
@@ -106,9 +108,9 @@ Recommended endpoint test assertions:
 
 ## Packaging note (workspace vs publish)
 
-This repository intentionally uses source-first entrypoints in
-`packages/health/package.json` for monorepo workspace consumers, while using
-`publishConfig` to rewrite entrypoints to `dist` for published artifacts.
+This repository uses source-first entrypoints in `packages/health/package.json`
+for monorepo workspace consumers, with a `publishConfig` override to rewrite
+entrypoints to compiled `dist` artifacts for published consumers.
 
 Why this is intentional:
 

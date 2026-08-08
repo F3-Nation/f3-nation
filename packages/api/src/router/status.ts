@@ -196,19 +196,21 @@ function parseContractStatusResponse(
   };
 }
 
-async function fetchWithTimeout(
+async function fetchTextWithTimeout(
   url: string,
   fetchImpl: typeof fetch,
-): Promise<Response> {
+): Promise<{ ok: boolean; status: number; text: string }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), STATUS_FETCH_TIMEOUT_MS);
 
   try {
-    return await fetchImpl(url, {
+    const response = await fetchImpl(url, {
       headers: { Accept: "application/json" },
       cache: "no-store",
       signal: controller.signal,
     });
+    const text = await response.text();
+    return { ok: response.ok, status: response.status, text };
   } finally {
     clearTimeout(timeout);
   }
@@ -219,10 +221,10 @@ async function fetchContractStatus(
   fetchImpl: typeof fetch = fetch,
   currentContractMajor = CURRENT_HEALTH_CONTRACT_MAJOR,
 ): Promise<StatusResult> {
-  let response: Response;
+  let fetchResult: { ok: boolean; status: number; text: string };
 
   try {
-    response = await fetchWithTimeout(target.url, fetchImpl);
+    fetchResult = await fetchTextWithTimeout(target.url, fetchImpl);
   } catch {
     return {
       ok: false,
@@ -233,10 +235,7 @@ async function fetchContractStatus(
     };
   }
 
-  let bodyText: string;
-  try {
-    bodyText = await response.text();
-  } catch {
+  if (!fetchResult.ok) {
     return {
       ok: false,
       source: "contract",
@@ -248,7 +247,7 @@ async function fetchContractStatus(
 
   let raw: unknown;
   try {
-    raw = JSON.parse(bodyText) as unknown;
+    raw = JSON.parse(fetchResult.text) as unknown;
   } catch {
     return {
       ok: false,
@@ -256,7 +255,6 @@ async function fetchContractStatus(
       target,
       status: "down",
       reason: "invalid_json",
-      details: { bodyPreview: bodyText.slice(0, 200) },
     };
   }
 
@@ -370,10 +368,10 @@ async function fetchExternalStatus(
     };
   }
 
-  let response: Response;
+  let fetchResult: { ok: boolean; status: number; text: string };
 
   try {
-    response = await fetchWithTimeout(target.apiUrl, fetchImpl);
+    fetchResult = await fetchTextWithTimeout(target.apiUrl, fetchImpl);
   } catch {
     return {
       ok: false,
@@ -384,10 +382,7 @@ async function fetchExternalStatus(
     };
   }
 
-  let bodyText: string;
-  try {
-    bodyText = await response.text();
-  } catch {
+  if (!fetchResult.ok) {
     return {
       ok: false,
       source: "external",
@@ -399,7 +394,7 @@ async function fetchExternalStatus(
 
   let raw: unknown;
   try {
-    raw = JSON.parse(bodyText) as unknown;
+    raw = JSON.parse(fetchResult.text) as unknown;
   } catch {
     return {
       ok: false,

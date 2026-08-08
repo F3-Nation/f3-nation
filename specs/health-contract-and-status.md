@@ -44,7 +44,7 @@ health contract natively.
 ### Service producers (`/health` in each app)
 
 - **AC-7** — GIVEN any sanctioned service WHEN `/health` is requested THEN response is HTTP `200`, JSON, includes `Cache-Control: no-store`, and validates against `healthResponseSchema`.
-- **AC-8** — GIVEN a service has partial dependency failure WHEN `/health` is requested THEN body `status` reflects contract semantics (`degraded` for warning/info issues; `down` for critical failures), regardless of HTTP status code.
+- **AC-8** — GIVEN a service has partial dependency failure WHEN `/health` is requested THEN body `status` reflects contract semantics (`degraded` for warning/info issues; `down` for critical failures). The HTTP response code is always `200` (per AC-7); the body `status` field is the sole indicator of health state.
 
 ### Status aggregation + consumer (`packages/api` + `apps/homepage/status`)
 

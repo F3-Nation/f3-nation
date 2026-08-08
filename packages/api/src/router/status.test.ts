@@ -318,6 +318,87 @@ describe("Status Router", () => {
     );
   });
 
+  it("maps contract non-2xx response to unreachable even with valid-looking body", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: string | URL | Request) => {
+        const url = getUrl(input);
+
+        if (url.includes("/health")) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                service: "f3-me",
+                version: "test",
+                contractVersion: "1.0.0",
+                status: "ok",
+                timestamp: "2026-07-09T12:00:00.000Z",
+                durationMs: 10,
+                checks: [
+                  { id: "f3-api-upstream", status: "ok", severity: "critical" },
+                ],
+              }),
+              { status: 502 },
+            ),
+          );
+        }
+
+        return Promise.resolve(buildSlackOkResponse());
+      }),
+    );
+
+    const client = createTestClient();
+    const result = await client.status();
+    const me = result.results.find((entry) => entry.target.id === "me");
+
+    expect(me).toMatchObject({
+      ok: false,
+      source: "contract",
+      status: "down",
+      reason: "unreachable",
+    });
+    expect(mockLogWarn).toHaveBeenCalledWith(
+      "api.status.poll_unreachable",
+      expect.objectContaining({ targetId: "me", source: "contract" }),
+    );
+  });
+
+  it("maps external non-2xx response to unreachable even with valid-looking body", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: string | URL | Request) => {
+        const url = getUrl(input);
+
+        if (url.includes("/health")) {
+          return Promise.resolve(buildContractOkResponse());
+        }
+
+        return Promise.resolve(
+          new Response(JSON.stringify({ status: "ok", active_incidents: [] }), {
+            status: 503,
+          }),
+        );
+      }),
+    );
+
+    const client = createTestClient();
+    const result = await client.status();
+    const external = result.results.find(
+      (entry) => entry.target.id === "slack",
+    );
+
+    expect(external).toMatchObject({
+      ok: false,
+      source: "external",
+      status: "down",
+      reason: "unreachable",
+    });
+    expect(mockLogWarn).toHaveBeenCalledWith(
+      "api.status.poll_unreachable",
+      expect.objectContaining({ targetId: "slack", source: "external" }),
+    );
+  });
+
   it("maps external fetch errors to unreachable and emits warning log", async () => {
     vi.stubGlobal(
       "fetch",
