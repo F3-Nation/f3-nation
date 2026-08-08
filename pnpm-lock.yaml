@@ -305,7 +305,7 @@ catalogs:
       version: 13.1.3
     postcss:
       specifier: ^8.5.20
-      version: 8.5.20
+      version: 8.5.25
     postcss-load-config:
       specifier: ^6.0.1
       version: 6.0.1
@@ -397,6 +397,8 @@ overrides:
   sharp@<0.35.0: 0.35.3
   next@>=16.0.0 <16.3.0: 16.3.0
   postcss@<8.5.12: ^8.5.24
+  nanoid@<3.3.17: ^3.3.17
+  nanoid@>=4.0.0 <5.1.16: ^5.1.16
 
 packageExtensionsChecksum: sha256-MiHZ3mgtOUb60KfpkAkui5ad/9eLmcQda0MiZKaTRqA=
 
@@ -464,9 +466,6 @@ importers:
       '@acme/shared':
         specifier: workspace:*
         version: link:../../packages/shared
-      '@acme/sso':
-        specifier: workspace:*
-        version: link:../../packages/sso
       '@acme/storage':
         specifier: workspace:*
         version: link:../../packages/storage
@@ -479,6 +478,9 @@ importers:
       '@acme/validators':
         specifier: workspace:*
         version: link:../../packages/validators
+      '@f3nation/sso-next':
+        specifier: workspace:*
+        version: link:../../packages/sso-next
       '@orpc/client':
         specifier: 'catalog:'
         version: 1.14.14(@opentelemetry/api@1.9.1)
@@ -555,6 +557,9 @@ importers:
       '@acme/vitest-config':
         specifier: workspace:*
         version: link:../../tooling/vitest
+      '@f3nation/sso':
+        specifier: workspace:*
+        version: link:../../packages/sso
       '@tailwindcss/postcss':
         specifier: 'catalog:'
         version: 4.3.3
@@ -593,10 +598,10 @@ importers:
         version: 29.1.1
       postcss:
         specifier: 'catalog:'
-        version: 8.5.20
+        version: 8.5.25
       postcss-load-config:
         specifier: 'catalog:'
-        version: 6.0.1(jiti@2.7.0)(postcss@8.5.20)(tsx@4.23.1)(yaml@2.9.0)
+        version: 6.0.1(jiti@2.7.0)(postcss@8.5.25)(tsx@4.23.1)(yaml@2.9.0)
       prettier:
         specifier: 'catalog:'
         version: 3.9.6
@@ -823,10 +828,10 @@ importers:
         version: 10.8.0(jiti@2.7.0)(supports-color@8.1.1)
       postcss:
         specifier: 'catalog:'
-        version: 8.5.20
+        version: 8.5.25
       postcss-load-config:
         specifier: 'catalog:'
-        version: 6.0.1(jiti@2.7.0)(postcss@8.5.20)(tsx@4.23.1)(yaml@2.9.0)
+        version: 6.0.1(jiti@2.7.0)(postcss@8.5.25)(tsx@4.23.1)(yaml@2.9.0)
       prettier:
         specifier: 'catalog:'
         version: 3.9.6
@@ -905,10 +910,10 @@ importers:
         version: 29.1.1
       postcss:
         specifier: 'catalog:'
-        version: 8.5.20
+        version: 8.5.25
       postcss-load-config:
         specifier: 'catalog:'
-        version: 6.0.1(jiti@2.7.0)(postcss@8.5.20)(tsx@4.23.1)(yaml@2.9.0)
+        version: 6.0.1(jiti@2.7.0)(postcss@8.5.25)(tsx@4.23.1)(yaml@2.9.0)
       prettier:
         specifier: 'catalog:'
         version: 3.9.6
@@ -962,7 +967,7 @@ importers:
         version: 3.1.1(react@19.2.8)
       '@sentry/nextjs':
         specifier: 'catalog:'
-        version: 10.68.0(@opentelemetry/core@2.9.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.9.0(@opentelemetry/api@1.9.1))(next@16.3.0(@babel/core@7.29.0(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@playwright/test@1.62.1)(@types/node@24.13.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)(supports-color@8.1.1)(webpack@5.105.4(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.20))
+        version: 10.68.0(@opentelemetry/core@2.9.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.9.0(@opentelemetry/api@1.9.1))(next@16.3.0(@babel/core@7.29.0(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@playwright/test@1.62.1)(@types/node@24.13.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)(supports-color@8.1.1)(webpack@5.105.4(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.25))
       '@t3-oss/env-nextjs':
         specifier: 'catalog:'
         version: 0.13.11(typescript@6.0.3)(zod@4.4.3)
@@ -1104,10 +1109,10 @@ importers:
         version: 29.1.1
       postcss:
         specifier: 'catalog:'
-        version: 8.5.20
+        version: 8.5.25
       postcss-load-config:
         specifier: 'catalog:'
-        version: 6.0.1(jiti@2.7.0)(postcss@8.5.20)(tsx@4.23.1)(yaml@2.9.0)
+        version: 6.0.1(jiti@2.7.0)(postcss@8.5.25)(tsx@4.23.1)(yaml@2.9.0)
       prettier:
         specifier: 'catalog:'
         version: 3.9.6
@@ -1135,9 +1140,6 @@ importers:
       '@acme/shared':
         specifier: workspace:*
         version: link:../../packages/shared
-      '@acme/sso':
-        specifier: workspace:*
-        version: link:../../packages/sso
       '@acme/storage':
         specifier: workspace:*
         version: link:../../packages/storage
@@ -1147,6 +1149,9 @@ importers:
       '@f3nation/health':
         specifier: workspace:*
         version: link:../../packages/health
+      '@f3nation/sso-next':
+        specifier: workspace:*
+        version: link:../../packages/sso-next
       '@orpc/client':
         specifier: 'catalog:'
         version: 1.14.14(@opentelemetry/api@1.9.1)
@@ -1190,6 +1195,9 @@ importers:
       '@acme/vitest-config':
         specifier: workspace:*
         version: link:../../tooling/vitest
+      '@f3nation/sso':
+        specifier: workspace:*
+        version: link:../../packages/sso
       '@tailwindcss/postcss':
         specifier: 'catalog:'
         version: 4.3.3
@@ -1222,10 +1230,10 @@ importers:
         version: 10.8.0(jiti@2.7.0)(supports-color@8.1.1)
       postcss:
         specifier: 'catalog:'
-        version: 8.5.20
+        version: 8.5.25
       postcss-load-config:
         specifier: 'catalog:'
-        version: 6.0.1(jiti@2.7.0)(postcss@8.5.20)(tsx@4.23.1)(yaml@2.9.0)
+        version: 6.0.1(jiti@2.7.0)(postcss@8.5.25)(tsx@4.23.1)(yaml@2.9.0)
       prettier:
         specifier: 'catalog:'
         version: 3.9.6
@@ -1654,6 +1662,46 @@ importers:
       eslint:
         specifier: 'catalog:'
         version: 10.8.0(jiti@2.7.0)(supports-color@8.1.1)
+      prettier:
+        specifier: 'catalog:'
+        version: 3.9.6
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+      vite:
+        specifier: 'catalog:'
+        version: 8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.23.1)(yaml@2.9.0)
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.23.1)(yaml@2.9.0))
+
+  packages/sso-next:
+    dependencies:
+      '@f3nation/sso':
+        specifier: workspace:*
+        version: link:../sso
+    devDependencies:
+      '@acme/eslint-config':
+        specifier: workspace:*
+        version: link:../../tooling/eslint
+      '@acme/prettier-config':
+        specifier: workspace:*
+        version: link:../../tooling/prettier
+      '@acme/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.3
+      '@vitest/coverage-v8':
+        specifier: 'catalog:'
+        version: 4.1.10(vitest@4.1.10)
+      eslint:
+        specifier: 'catalog:'
+        version: 10.8.0(jiti@2.7.0)(supports-color@8.1.1)
+      next:
+        specifier: 'catalog:'
+        version: 16.3.0(@babel/core@7.29.0(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@playwright/test@1.62.1)(@types/node@24.13.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       prettier:
         specifier: 'catalog:'
         version: 3.9.6
@@ -7109,13 +7157,13 @@ packages:
     resolution: {integrity: sha512-WWdIxpyjEn+FhQJQQv9aQAYlHoNVdzIzUySNV1gHUPDSdZJ3yZn7pAAbQcV7B56Mvu881q9FZV+0Vx2xC44VWA==}
     engines: {node: ^18.17.0 || >=20.5.0}
 
-  nanoid@3.3.16:
-    resolution: {integrity: sha512-bzlKTyNJ7+LdGIIwy8ijFpIqEQIvafahV7eYykJ8Cvh42EdJeODoJ6gUJXpQJvej1BddH8OqTXZNE/KfbWAu8Q==}
+  nanoid@3.3.18:
+    resolution: {integrity: sha512-DTg4MJbGMWkfi6VZFdNt2/caMbQy4Ou+Op/hJQvGEWcnVfoA1QA+xzRKAzw9jD6+GVOOeYr/mIcuDSdug6F6+w==}
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
-  nanoid@5.1.7:
-    resolution: {integrity: sha512-ua3NDgISf6jdwezAheMOk4mbE1LXjm1DfMUDMuJf4AqxLFK3ccGpgWizwa5YV7Yz9EpXwEaWoRXSb/BnV0t5dQ==}
+  nanoid@5.1.16:
+    resolution: {integrity: sha512-kVrnsrJqMR8+oLJnGEmSWw9BivK5mt7H3FZatVRjrc5wGqFYuBxX1yG7+A7Gi5AefkX6t/oCkizcQgpu0cY1dQ==}
     engines: {node: ^18 || >=20}
     hasBin: true
 
@@ -7400,10 +7448,6 @@ packages:
         optional: true
       yaml:
         optional: true
-
-  postcss@8.5.20:
-    resolution: {integrity: sha512-lW616l85ucIQL+FocMmL7pQFPqBmwejrCMg+iPxyImlrANNJG9NHq/RkyCZopDhd8C3LA03PHRJDjkbGu8vvug==}
-    engines: {node: ^10 || ^12 || >=14}
 
   postcss@8.5.23:
     resolution: {integrity: sha512-g50586zr4bZmwFiTlflMu8E0bDTb5I5gertgwAKmsdUlTQIhZtunzUlD1WSzwcVWPoAVpsrA6vlfCD7oXvRwgg==}
@@ -10579,7 +10623,7 @@ snapshots:
   '@scalar/types@0.16.4':
     dependencies:
       '@scalar/helpers': 0.9.2
-      nanoid: 5.1.7
+      nanoid: 5.1.16
       type-fest: 5.5.0
       zod: 4.4.3
 
@@ -10667,32 +10711,6 @@ snapshots:
   '@sentry/feedback@10.68.0':
     dependencies:
       '@sentry/core': 10.68.0
-
-  '@sentry/nextjs@10.68.0(@opentelemetry/core@2.9.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.9.0(@opentelemetry/api@1.9.1))(next@16.3.0(@babel/core@7.29.0(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@playwright/test@1.62.1)(@types/node@24.13.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)(supports-color@8.1.1)(webpack@5.105.4(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.20))':
-    dependencies:
-      '@opentelemetry/api': 1.9.1
-      '@rollup/plugin-commonjs': 28.0.1(rollup@4.62.2)
-      '@sentry/browser-utils': 10.68.0
-      '@sentry/bundler-plugin-core': 5.3.0(supports-color@8.1.1)
-      '@sentry/conventions': 0.16.0
-      '@sentry/core': 10.68.0
-      '@sentry/node': 10.68.0(@opentelemetry/core@2.9.0(@opentelemetry/api@1.9.1))(supports-color@8.1.1)
-      '@sentry/opentelemetry': 10.68.0(@opentelemetry/api@1.9.1)(@opentelemetry/core@2.9.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.9.0(@opentelemetry/api@1.9.1))
-      '@sentry/react': 10.68.0(react@19.2.8)
-      '@sentry/server-utils': 10.68.0(supports-color@8.1.1)
-      '@sentry/vercel-edge': 10.68.0
-      '@sentry/webpack-plugin': 5.3.0(supports-color@8.1.1)(webpack@5.105.4(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.20))
-      next: 16.3.0(@babel/core@7.29.0(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@playwright/test@1.62.1)(@types/node@24.13.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      rollup: 4.62.2
-      stacktrace-parser: 0.1.11
-    transitivePeerDependencies:
-      - '@opentelemetry/core'
-      - '@opentelemetry/exporter-trace-otlp-http'
-      - '@opentelemetry/sdk-trace-base'
-      - encoding
-      - react
-      - supports-color
-      - webpack
 
   '@sentry/nextjs@10.68.0(@opentelemetry/core@2.9.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.9.0(@opentelemetry/api@1.9.1))(next@16.3.0(@babel/core@7.29.0(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@playwright/test@1.62.1)(@types/node@24.13.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)(supports-color@8.1.1)(webpack@5.105.4(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.25))':
     dependencies:
@@ -10787,14 +10805,6 @@ snapshots:
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@sentry/core': 10.68.0
-
-  '@sentry/webpack-plugin@5.3.0(supports-color@8.1.1)(webpack@5.105.4(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.20))':
-    dependencies:
-      '@sentry/bundler-plugin-core': 5.3.0(supports-color@8.1.1)
-      webpack: 5.105.4(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.20)
-    transitivePeerDependencies:
-      - encoding
-      - supports-color
 
   '@sentry/webpack-plugin@5.3.0(supports-color@8.1.1)(webpack@5.105.4(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.25))':
     dependencies:
@@ -10896,7 +10906,7 @@ snapshots:
       '@alloc/quick-lru': 5.2.0
       '@tailwindcss/node': 4.3.3
       '@tailwindcss/oxide': 4.3.3
-      postcss: 8.5.20
+      postcss: 8.5.25
       tailwindcss: 4.3.3
 
   '@tanstack/query-core@5.101.4': {}
@@ -13248,9 +13258,9 @@ snapshots:
 
   mute-stream@2.0.0: {}
 
-  nanoid@3.3.16: {}
+  nanoid@3.3.18: {}
 
-  nanoid@5.1.7: {}
+  nanoid@5.1.16: {}
 
   napi-postinstall@0.3.4: {}
 
@@ -13603,33 +13613,26 @@ snapshots:
 
   possible-typed-array-names@1.1.0: {}
 
-  postcss-load-config@6.0.1(jiti@2.7.0)(postcss@8.5.20)(tsx@4.23.1)(yaml@2.9.0):
+  postcss-load-config@6.0.1(jiti@2.7.0)(postcss@8.5.25)(tsx@4.23.1)(yaml@2.9.0):
     dependencies:
       lilconfig: 3.1.3
     optionalDependencies:
       jiti: 2.7.0
-      postcss: 8.5.20
+      postcss: 8.5.25
       tsx: 4.23.1
       yaml: 2.9.0
 
-  postcss@8.5.20:
-    dependencies:
-      nanoid: 3.3.16
-      picocolors: 1.1.1
-      source-map-js: 1.2.1
-
   postcss@8.5.23:
     dependencies:
-      nanoid: 3.3.16
+      nanoid: 3.3.18
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
   postcss@8.5.25:
     dependencies:
-      nanoid: 3.3.16
+      nanoid: 3.3.18
       picocolors: 1.1.1
       source-map-js: 1.2.1
-    optional: true
 
   postgres-array@2.0.0: {}
 
@@ -14262,18 +14265,6 @@ snapshots:
       - encoding
       - supports-color
 
-  terser-webpack-plugin@5.6.1(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.20)(webpack@5.105.4(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.20)):
-    dependencies:
-      '@jridgewell/trace-mapping': 0.3.31
-      jest-worker: 27.5.1
-      schema-utils: 4.3.3
-      terser: 5.48.0
-      webpack: 5.105.4(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.20)
-    optionalDependencies:
-      esbuild: 0.28.1
-      lightningcss: 1.32.0
-      postcss: 8.5.20
-
   terser-webpack-plugin@5.6.1(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.25)(webpack@5.105.4(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.25)):
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
@@ -14492,7 +14483,7 @@ snapshots:
     dependencies:
       lightningcss: 1.32.0
       picomatch: 4.0.5
-      postcss: 8.5.20
+      postcss: 8.5.25
       rolldown: 1.1.5
       tinyglobby: 0.2.17
     optionalDependencies:
@@ -14508,7 +14499,7 @@ snapshots:
     dependencies:
       lightningcss: 1.32.0
       picomatch: 4.0.5
-      postcss: 8.5.20
+      postcss: 8.5.25
       rolldown: 1.1.5
       tinyglobby: 0.2.17
     optionalDependencies:
@@ -14606,47 +14597,6 @@ snapshots:
   webidl-conversions@8.0.1: {}
 
   webpack-sources@3.5.0: {}
-
-  webpack@5.105.4(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.20):
-    dependencies:
-      '@types/eslint-scope': 3.7.7
-      '@types/estree': 1.0.9
-      '@types/json-schema': 7.0.15
-      '@webassemblyjs/ast': 1.14.1
-      '@webassemblyjs/wasm-edit': 1.14.1
-      '@webassemblyjs/wasm-parser': 1.14.1
-      acorn: 8.16.0
-      acorn-import-phases: 1.0.4(acorn@8.16.0)
-      browserslist: 4.28.2
-      chrome-trace-event: 1.0.4
-      enhanced-resolve: 5.24.3
-      es-module-lexer: 2.1.0
-      eslint-scope: 5.1.1
-      events: 3.3.0
-      glob-to-regexp: 0.4.1
-      graceful-fs: 4.2.11
-      json-parse-even-better-errors: 2.3.1
-      loader-runner: 4.3.2
-      mime-types: 2.1.35
-      neo-async: 2.6.2
-      schema-utils: 4.3.3
-      tapable: 2.3.3
-      terser-webpack-plugin: 5.6.1(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.20)(webpack@5.105.4(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.20))
-      watchpack: 2.5.1
-      webpack-sources: 3.5.0
-    transitivePeerDependencies:
-      - '@minify-html/node'
-      - '@swc/core'
-      - '@swc/css'
-      - '@swc/html'
-      - clean-css
-      - cssnano
-      - csso
-      - esbuild
-      - html-minifier-terser
-      - lightningcss
-      - postcss
-      - uglify-js
 
   webpack@5.105.4(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.25):
     dependencies:
