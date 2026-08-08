@@ -66,6 +66,25 @@ export function createLogger(
 ): AppLogger {
   const level = options?.level ?? process.env.LOG_LEVEL ?? "info";
 
+  const redactKeys = [
+    "token",
+    "sessionToken",
+    "accessToken",
+    "refreshToken",
+    "access_token",
+    "refresh_token",
+    "password",
+    "credentials",
+    "clientSecret",
+    "client_secret",
+    "apiKey",
+    "api_key",
+    "idToken",
+    "id_token",
+    "authorization",
+    "email",
+  ];
+
   const baseOptions: LoggerOptions = {
     level,
     base: { service },
@@ -74,24 +93,14 @@ export function createLogger(
     messageKey: "event",
     serializers: { err: pino.stdSerializers.err },
     redact: {
-      paths: [
-        "token",
-        "*.token",
-        "sessionToken",
-        "*.sessionToken",
-        "access_token",
-        "*.access_token",
-        "refresh_token",
-        "*.refresh_token",
-        "password",
-        "*.password",
-        "credentials",
-        "*.credentials",
-        "client_secret",
-        "*.client_secret",
-        "email",
-        "*.email",
-      ],
+      paths: redactKeys.flatMap((k) => [
+        k,
+        `*.${k}`,
+        `*[*].${k}`,
+        `*.*.${k}`,
+        `*.*[*].${k}`,
+        `*.*.*.${k}`,
+      ]),
       censor: "[REDACTED]",
     },
   };

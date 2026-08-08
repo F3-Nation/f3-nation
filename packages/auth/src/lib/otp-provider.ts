@@ -16,7 +16,7 @@ const OtpProvider = {
   options: {},
   maxAge: 5 * 60,
   generateVerificationToken: async () => {
-    // Generate a random 6 digit alphanumeric code that includes uppercase letters using CSPRNG
+    // Generate a random 6-character uppercase alphanumeric code using CSPRNG
     let token = "";
     for (let i = 0; i < 6; i++) {
       token += ALPHABET[randomInt(ALPHABET.length)];
