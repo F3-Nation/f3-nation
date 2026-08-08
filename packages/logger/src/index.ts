@@ -73,6 +73,27 @@ export function createLogger(
     // identifier) as pino's message key rather than the default `msg`.
     messageKey: "event",
     serializers: { err: pino.stdSerializers.err },
+    redact: {
+      paths: [
+        "token",
+        "*.token",
+        "sessionToken",
+        "*.sessionToken",
+        "access_token",
+        "*.access_token",
+        "refresh_token",
+        "*.refresh_token",
+        "password",
+        "*.password",
+        "credentials",
+        "*.credentials",
+        "client_secret",
+        "*.client_secret",
+        "email",
+        "*.email",
+      ],
+      censor: "[REDACTED]",
+    },
   };
 
   let logger: Logger;
