@@ -3,6 +3,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mockLimit = vi.hoisted(() => vi.fn());
 const mockLogInfo = vi.hoisted(() => vi.fn());
 const mockLogWarn = vi.hoisted(() => vi.fn());
+const statusTargetsHolder = vi.hoisted(() => ({
+  current: [
+    {
+      id: "me",
+      label: "F3 Me",
+      url: "http://localhost:3003/health",
+      source: "contract" as const,
+    },
+    {
+      id: "slack",
+      label: "Slack",
+      url: "https://status.slack.com",
+      source: "external" as const,
+      provider: "slack" as const,
+      apiUrl: "https://slack-status.com/api/v2.0.0/current",
+    },
+  ],
+}));
 
 vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   MemoryRatelimiter: vi.fn(function () {
@@ -14,6 +32,17 @@ vi.mock("../logger", () => ({
   logInfo: mockLogInfo,
   logWarn: mockLogWarn,
 }));
+
+vi.mock("./status-targets", () => {
+  const mod: Record<string, unknown> = {};
+  Object.defineProperty(mod, "STATUS_TARGETS", {
+    get() {
+      return statusTargetsHolder.current;
+    },
+    enumerable: true,
+  });
+  return mod;
+});
 
 import { createTestClient } from "../__tests__/test-utils";
 import { __resetStatusCacheForTests } from "./status";
@@ -62,6 +91,22 @@ describe("Status Router", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     __resetStatusCacheForTests();
+    statusTargetsHolder.current = [
+      {
+        id: "me",
+        label: "F3 Me",
+        url: "http://localhost:3003/health",
+        source: "contract" as const,
+      },
+      {
+        id: "slack",
+        label: "Slack",
+        url: "https://status.slack.com",
+        source: "external" as const,
+        provider: "slack" as const,
+        apiUrl: "https://slack-status.com/api/v2.0.0/current",
+      },
+    ];
     mockLimit.mockResolvedValue({
       success: true,
       limit: 10,
@@ -302,6 +347,37 @@ describe("Status Router", () => {
     expect(mockLogWarn).toHaveBeenCalledWith(
       "api.status.poll_unreachable",
       expect.objectContaining({ targetId: "slack", source: "external" }),
+    );
+  });
+
+  it("maps external invalid_monitor_config and emits warning log", async () => {
+    statusTargetsHolder.current = [
+      {
+        id: "bad-monitor",
+        label: "Bad Monitor",
+        url: "https://status.slack.com",
+        source: "external" as const,
+        provider: "slack" as const,
+        // ftp:// passes z.string().url() but fails hasValidExternalConfig
+        apiUrl: "ftp://not-http.example.com",
+      },
+    ];
+
+    const client = createTestClient();
+    const result = await client.status();
+    const external = result.results.find(
+      (entry) => entry.target.id === "bad-monitor",
+    );
+
+    expect(external).toMatchObject({
+      ok: false,
+      source: "external",
+      status: "down",
+      reason: "invalid_monitor_config",
+    });
+    expect(mockLogWarn).toHaveBeenCalledWith(
+      "api.status.poll_invalid_monitor_config",
+      expect.objectContaining({ targetId: "bad-monitor", source: "external" }),
     );
   });
 
