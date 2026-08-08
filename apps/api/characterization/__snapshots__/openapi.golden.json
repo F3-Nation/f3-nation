@@ -17909,11 +17909,6 @@
       "get": {
         "description": "Returns aggregated status for contract and external monitors, cached for 60 seconds.",
         "operationId": "status",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ClientHeader"
-          }
-        ],
         "responses": {
           "200": {
             "content": {
@@ -18295,6 +18290,7 @@
             "description": "OK"
           }
         },
+        "security": [],
         "summary": "Aggregated status",
         "tags": [
           "status"

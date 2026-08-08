@@ -31,6 +31,11 @@ export type HealthSeverity = z.infer<typeof healthSeveritySchema>;
 export type HealthCheck = z.infer<typeof healthCheckSchema>;
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
 
+/**
+ * Returned by a {@link CheckRunner}. All fields are included verbatim in the
+ * public `/health` response body — never include secrets, PII, connection
+ * strings, or internal stack details in `message` or `details`.
+ */
 export interface CheckRunnerResult {
   status: HealthStatus;
   severity?: HealthSeverity;

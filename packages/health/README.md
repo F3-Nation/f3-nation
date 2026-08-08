@@ -82,6 +82,12 @@ to send it. Every `/health` endpoint using this package must:
 - return JSON matching `healthResponseSchema`
 - set `Cache-Control: no-store`
 
+> **Security:** `CheckRunnerResult.message` and `CheckRunnerResult.details` are
+> included verbatim in the public `/health` response body. Never return secrets,
+> PII, connection strings, or internal stack details from a `CheckRunner`.
+> Thrown errors are caught by `runChecks` and mapped to `{ reason: "error" }`
+> without exposing the original exception.
+
 `@f3nation/health` does not enforce transport headers directly because the package is
 intentionally framework-agnostic and must remain usable outside Next.js,
 including from non-JavaScript stacks. Header enforcement therefore belongs in
