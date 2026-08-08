@@ -76,7 +76,10 @@ function makeExternalResult(status: "ok" | "degraded" | "down"): StatusResult {
 describe("status card rendering", () => {
   it("renders OK state with explicit status text", () => {
     const html = renderToStaticMarkup(
-      React.createElement(StatusCard, { result: makeOkResult("ok") }),
+      React.createElement(StatusCard, {
+        result: makeOkResult("ok"),
+        showDetail: true,
+      }),
     );
 
     expect(html).toContain("Status: OK");
@@ -110,6 +113,7 @@ describe("status card rendering", () => {
     const html = renderToStaticMarkup(
       React.createElement(StatusCard, {
         result: makeExternalResult("degraded"),
+        showDetail: true,
       }),
     );
 

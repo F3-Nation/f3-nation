@@ -6,7 +6,7 @@ const isLocal = isDevelopment;
 export const STATUS_TARGETS: StatusTarget[] = [
   {
     id: "me",
-    label: "F3 Me",
+    label: "Me",
     url: isLocal
       ? "http://localhost:3003/health"
       : "https://me.f3nation.com/health",

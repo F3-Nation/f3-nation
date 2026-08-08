@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { StatusDashboardClient } from "@/app/status/status-dashboard-client";
 
 export default function StatusPage() {
@@ -10,11 +11,13 @@ export default function StatusPage() {
           </h1>
           <p className="max-w-2xl text-muted-foreground">
             Health checks for services commonly used by F3 PAX and their
-            regions. Data updates once a minute.
+            regions.
           </p>
         </div>
 
-        <StatusDashboardClient />
+        <Suspense>
+          <StatusDashboardClient />
+        </Suspense>
       </div>
     </main>
   );

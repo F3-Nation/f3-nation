@@ -7,6 +7,10 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 
 import { StatusDashboardClient } from "./status-dashboard-client";
 
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 // Render a minimal stub so tests don't depend on StatusCard's internals.
 vi.mock("@/app/status/status-card", () => ({
   StatusCard: ({ result }: { result: { target: { label: string } } }) =>

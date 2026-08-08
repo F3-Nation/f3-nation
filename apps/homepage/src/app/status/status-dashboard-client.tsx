@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 import { StatusCard } from "@/app/status/status-card";
 import type { StatusResult } from "@f3nation/health";
@@ -31,6 +32,8 @@ function statusEndpointUrl(): string {
 }
 
 export function StatusDashboardClient() {
+  const searchParams = useSearchParams();
+  const showDetail = searchParams.has("detail");
   const [data, setData] = useState<StatusApiResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -108,7 +111,7 @@ export function StatusDashboardClient() {
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
         {data
-          ? `Last refreshed: ${new Date(data.generatedAt).toLocaleString()} (updates every ${data.ttlSeconds}s)`
+          ? `Data as of ${new Date(data.generatedAt).toLocaleString()} · auto-refreshes every ${data.ttlSeconds}s`
           : "Fetching latest status..."}
       </p>
 
@@ -122,7 +125,11 @@ export function StatusDashboardClient() {
         {isLoading && !data
           ? null
           : data?.results.map((result) => (
-              <StatusCard key={result.target.id} result={result} />
+              <StatusCard
+                key={result.target.id}
+                result={result}
+                showDetail={showDetail}
+              />
             ))}
       </div>
     </div>
