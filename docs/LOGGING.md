@@ -203,27 +203,6 @@ Log **identifiers, not personal data** — `{ userId }`, not `{ email }`;
 `Object.keys(updateSet)` (which fields changed), not the values themselves. When
 in doubt, log a stable id and look the rest up out-of-band.
 
-### Redaction is a backstop, not a substitute for not logging secrets
-
-`createLogger` installs a recursive redactor (matching by key name, at any
-depth and inside arrays) for a fixed list of sensitive keys — `token`,
-`accessToken`/`access_token`, `password`, `apiKey`, `email`, and their
-camelCase/snake_case siblings. It applies to every log line across every app,
-and to whatever context reaches Sentry via `logError`/`logFatal`.
-
-Two things about it that are easy to get wrong:
-
-- **`[REDACTED]` doesn't mean a secret was actually present.** The redactor
-  censors any matching key that _exists_, so `{ token: "" }` and
-  `{ token: null }` render identically to a real value — only an _absent_ key
-  is distinguishable (it's simply omitted). If you're debugging why a field is
-  null, don't rely on the log line to tell you; check the value at the source.
-- **It's a safety net for keys the list doesn't yet know about, not a reason
-  to log secrets on purpose.** `credentials` is on the list, but in this repo
-  the bare identifier is usually the non-secret `fetch` flag
-  (`credentials: "include"` / `credentials: true`) — it gets redacted too,
-  since the redactor can't tell intent from a key name alone.
-
 See
 [`docs/AI_DEVELOPMENT_GUIDE.md` § Secrets & sensitive data](AI_DEVELOPMENT_GUIDE.md#secrets--sensitive-data)
 for the full policy.

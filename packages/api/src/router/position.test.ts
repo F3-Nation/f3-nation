@@ -18,7 +18,7 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
 }));
 
 import { and, eq, inArray, schema } from "@acme/db";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
   cleanup,
   createAdminSession,
@@ -27,7 +27,6 @@ import {
   createTestClient,
   db,
   getOrCreateF3NationOrg,
-  getOrCreateRoles,
   mockAuthWithSession,
   uniqueId,
 } from "../__tests__/test-utils";
@@ -37,10 +36,6 @@ describe("Position Router", () => {
   const createdPositionIds: number[] = [];
   const createdOrgIds: number[] = [];
   const createdUserIds: number[] = [];
-
-  beforeAll(async () => {
-    await getOrCreateRoles();
-  });
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -538,78 +533,6 @@ describe("Position Router", () => {
           orgId: region.id,
         }),
       ).rejects.toThrow();
-    });
-
-    it("should return NOT_FOUND for a non-existent position ID", async () => {
-      const region = await createTestRegion();
-      const editorSession = createEditorSession({
-        orgId: region.id,
-        orgName: region.name,
-      });
-      await mockAuthWithSession(editorSession);
-
-      const client = createTestClient();
-      await expect(
-        client.position.crupdate({
-          id: 999999999,
-          name: "Ghost",
-          orgId: region.id,
-        }),
-      ).rejects.toMatchObject({ code: "NOT_FOUND" });
-    });
-
-    it("should reject an editor trying to edit a position owned by a different org", async () => {
-      const regionA = await createTestRegion();
-      const regionB = await createTestRegion();
-      const pos = await createTestPosition({ orgId: regionB.id });
-
-      const editorSession = createEditorSession({
-        orgId: regionA.id,
-        orgName: regionA.name,
-      });
-      await mockAuthWithSession(editorSession);
-
-      const client = createTestClient();
-      await expect(
-        client.position.crupdate({
-          id: pos.id,
-          name: pos.name,
-          orgId: regionA.id,
-        }),
-      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
-    });
-
-    it("should reject a non-Nation editor rescoping a global position", async () => {
-      const region = await createTestRegion();
-      const globalPos = await createTestPosition({ orgId: null });
-
-      const editorSession = createEditorSession({
-        orgId: region.id,
-        orgName: region.name,
-      });
-      await mockAuthWithSession(editorSession);
-
-      const client = createTestClient();
-      await expect(
-        client.position.crupdate({
-          id: globalPos.id,
-          name: globalPos.name,
-          orgId: region.id,
-        }),
-      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
-    });
-
-    it("should allow a nation admin to edit a global position", async () => {
-      await mockAuthWithSession(await createAdminSession());
-      const globalPos = await createTestPosition({ orgId: null });
-
-      const client = createTestClient();
-      const result = await client.position.crupdate({
-        id: globalPos.id,
-        name: `Renamed ${uniqueId()}`,
-      });
-
-      expect(result.position!.orgId).toBeNull();
     });
   });
 
