@@ -29,8 +29,10 @@ export default {
 
         // tooling
         "eslint",
+        "playwright",
         "prettier",
         "tsconfig",
+        "ci-factory",
         "scripts",
         "github",
         "tailwind",

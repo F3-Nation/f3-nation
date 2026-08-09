@@ -1,6 +1,6 @@
 {
   "name": "@acme/api",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -8,12 +8,12 @@
     "./testing": "./src/testing/index.ts",
     "./services/map-request-notification": "./src/services/map-request-notification.ts"
   },
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "scripts": {
     "clean": "rm -rf .turbo node_modules",
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
     "lint": "eslint .",
-    "test": "pnpm with-env vitest --run --coverage",
+    "test": "pnpm -C ../db reset-test-db && pnpm with-env vitest --run --coverage",
     "test:org-hierarchy": "pnpm with-env tsx src/scripts/test-org-hierarchy.ts",
     "test:watch": "pnpm with-env vitest -w",
     "typecheck": "tsc --noEmit",

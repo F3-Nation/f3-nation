@@ -2,6 +2,18 @@
 
 <!-- version list -->
 
+## [2.2.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.1.3...slackbot@2.2.0) (2026-08-05)
+
+
+### Features
+
+* **slackbot:** adding kotter reports ([#703](https://github.com/F3-Nation/f3-nation/issues/703)) ([4b4c9bb](https://github.com/F3-Nation/f3-nation/commit/4b4c9bbe6d5896482aec199cdd8adc98a0785d03))
+
+
+### Bug Fixes
+
+* **deps:** update dependency pillow-heif to v1 [security] ([#773](https://github.com/F3-Nation/f3-nation/issues/773)) ([6cf133d](https://github.com/F3-Nation/f3-nation/commit/6cf133dddc8c1b5e232c94917ed637d016fa47a1))
+
 ## [2.1.3](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.1.2...slackbot@2.1.3) (2026-07-27)
 
 
