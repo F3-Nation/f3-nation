@@ -538,15 +538,10 @@ describe("exchangeRefreshToken", () => {
     mockGetClientResult(PUBLIC_CLIENT);
     // The UPDATE ... RETURNING (rotation) finds nothing — this exact token
     // was already consumed by an earlier request. The follow-up SELECT
-    // finds the row (rotatedAt set from that earlier rotation, well outside
-    // the concurrent-refresh grace window), which is what marks this as a
-    // genuine replay rather than a garbage token or a request race.
+    // finds the row (rotatedAt set from that earlier rotation), which is
+    // what marks this as a genuine replay rather than a garbage token.
     dbMock.update.mockReturnValueOnce(chain([]));
-    dbMock.select.mockReturnValueOnce(
-      chain([
-        { userId: 42, rotatedAt: new Date(Date.now() - 60_000).toISOString() },
-      ]),
-    );
+    dbMock.select.mockReturnValueOnce(chain([{ userId: 42 }]));
 
     const result = await exchangeRefreshToken({
       refreshToken: "already-used-token",
@@ -563,15 +558,16 @@ describe("exchangeRefreshToken", () => {
     expect(dbMock.delete).toHaveBeenCalledTimes(1);
   });
 
-  it("does not revoke the family when the same token is reused within the concurrent-refresh grace window", async () => {
+  it("revokes the family even when the reuse is near-simultaneous with the rotation (no grace window)", async () => {
     mockGetClientResult(PUBLIC_CLIENT);
-    // Same shape as a replay (UPDATE finds nothing, SELECT finds an already-
-    // rotated row) but rotatedAt is seconds old — this is the losing side of
-    // two overlapping refresh calls on the same original token, not theft.
+    // Same shape as any replay — a losing request in a race against the
+    // winning rotation looks identical to an attacker redeeming a stolen
+    // token moments before the legitimate client's own request arrives.
+    // There's deliberately no time-based exception for this: the server
+    // can't tell those two cases apart, so any reuse revokes the family
+    // regardless of how soon after rotation it happens.
     dbMock.update.mockReturnValueOnce(chain([]));
-    dbMock.select.mockReturnValueOnce(
-      chain([{ userId: 42, rotatedAt: new Date().toISOString() }]),
-    );
+    dbMock.select.mockReturnValueOnce(chain([{ userId: 42 }]));
 
     const result = await exchangeRefreshToken({
       refreshToken: "raced-token",
@@ -580,12 +576,10 @@ describe("exchangeRefreshToken", () => {
 
     expect(result).toEqual({ error: "invalid_grant" });
     expect(logWarn).toHaveBeenCalledWith(
-      "auth.oauth.refresh_token_concurrent_reuse",
+      "auth.oauth.refresh_token_reuse_detected",
       { clientId: PUBLIC_CLIENT.id, userId: 42 },
     );
-    // The winner's freshly-issued token (and the rest of the family) must
-    // survive the loser's request.
-    expect(dbMock.delete).not.toHaveBeenCalled();
+    expect(dbMock.delete).toHaveBeenCalledTimes(1);
   });
 
   it("rotates a valid public-client refresh token and issues a new one", async () => {

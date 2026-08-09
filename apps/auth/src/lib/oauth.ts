@@ -22,18 +22,6 @@ function hashSecret(secret: string): string {
   return crypto.createHash("sha256").update(secret).digest("hex");
 }
 
-// A losing request in a genuine race (two overlapping refresh calls on the
-// same original token — a client-side retry, overlapping tabs/processes)
-// lands in the same "already rotated" path as a real replay: its own
-// UPDATE ... WHERE rotatedAt IS NULL finds nothing because the winner claimed
-// the row first. Without this window, that race would be indistinguishable
-// from theft and would revoke the winner's freshly-issued token too,
-// stranding a legitimate session. 10s is generous enough to absorb normal
-// request jitter/retries without meaningfully weakening replay detection —
-// an attacker replaying a stolen-then-rotated token is realistically doing
-// so well after the legitimate rotation, not within the same window.
-const REPLAY_GRACE_WINDOW_MS = 10_000;
-
 // ---------------------------------------------------------------------------
 // Client validation
 // ---------------------------------------------------------------------------
@@ -303,11 +291,19 @@ export async function exchangeRefreshToken(params: {
       // RFC 9700 §4.14.2 — this matters most for public clients, where
       // rotation is the *only* theft mitigation (no secret as a second
       // factor).
+      //
+      // Deliberately no grace window for concurrent/racing requests on the
+      // same original token: the server has no way to tell "our own client
+      // retried" apart from "an attacker redeemed the stolen token first and
+      // this is the legitimate request arriving moments later" — both look
+      // identical, a reused token shortly after a rotation. Any leniency
+      // here would let an attacker who wins that race keep their session
+      // past the point it was detected. A client that fires concurrent
+      // refresh requests with the same token is responsible for serializing
+      // them itself (a single-flight/mutex around refresh calls); the cost
+      // of getting that wrong is one forced re-login, not a security hole.
       const [reused] = await tx
-        .select({
-          userId: oauthRefreshTokens.userId,
-          rotatedAt: oauthRefreshTokens.rotatedAt,
-        })
+        .select({ userId: oauthRefreshTokens.userId })
         .from(oauthRefreshTokens)
         .where(
           and(
@@ -318,29 +314,18 @@ export async function exchangeRefreshToken(params: {
         )
         .limit(1);
       if (reused) {
-        const rotatedMsAgo = Date.now() - new Date(reused.rotatedAt!).getTime();
-        if (rotatedMsAgo <= REPLAY_GRACE_WINDOW_MS) {
-          // Within the grace window: treat as a concurrent-request race, not
-          // theft. Reject only this request — the winner's new token (and
-          // the rest of the family) stays intact.
-          logWarn("auth.oauth.refresh_token_concurrent_reuse", {
-            clientId: params.clientId,
-            userId: reused.userId,
-          });
-        } else {
-          logWarn("auth.oauth.refresh_token_reuse_detected", {
-            clientId: params.clientId,
-            userId: reused.userId,
-          });
-          await tx
-            .delete(oauthRefreshTokens)
-            .where(
-              and(
-                eq(oauthRefreshTokens.userId, reused.userId),
-                eq(oauthRefreshTokens.clientId, params.clientId),
-              ),
-            );
-        }
+        logWarn("auth.oauth.refresh_token_reuse_detected", {
+          clientId: params.clientId,
+          userId: reused.userId,
+        });
+        await tx
+          .delete(oauthRefreshTokens)
+          .where(
+            and(
+              eq(oauthRefreshTokens.userId, reused.userId),
+              eq(oauthRefreshTokens.clientId, params.clientId),
+            ),
+          );
       }
       return reject("refresh_token_invalid_or_expired");
     }
