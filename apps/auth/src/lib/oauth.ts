@@ -312,6 +312,12 @@ export async function validateAccessToken(token: string) {
     return null;
   }
 
+  // /userinfo is an access-token-only endpoint per the OIDC spec — reject
+  // an ID Token here too, since it shares this server's signing key and
+  // issuer with access tokens and would otherwise pass signature+expiry
+  // verification just as well.
+  if (payload.token_use !== "access") return null;
+
   const userId = Number(payload.sub);
   if (!userId) return null;
 

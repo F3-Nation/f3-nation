@@ -114,7 +114,17 @@ describe("signAccessToken", () => {
       "iss",
       "scope",
       "sub",
+      "token_use",
     ]);
+  });
+
+  it("stamps token_use so this can never be verified as an ID Token", async () => {
+    const token = await signSample();
+    const keySet = createLocalJWKSet(await jwt.getJWKS());
+
+    const { payload } = await jwtVerify(token, keySet, { issuer: ISSUER });
+
+    expect(payload.token_use).toBe("access");
   });
 
   it("serializes sub as a numeric string, not a number", async () => {
@@ -199,7 +209,7 @@ describe("signIdToken", () => {
     expect(payload.name).toBe("PermVac");
   });
 
-  it("emits only sub/iss/aud/exp/iat with a bare openid scope", async () => {
+  it("emits only sub/iss/aud/exp/iat/token_use with a bare openid scope", async () => {
     const token = await signSampleId({ scope: "openid" });
     const keySet = createLocalJWKSet(await jwt.getJWKS());
 
@@ -214,7 +224,20 @@ describe("signIdToken", () => {
       "iat",
       "iss",
       "sub",
+      "token_use",
     ]);
+  });
+
+  it("stamps token_use so this can never be verified as an access token", async () => {
+    const token = await signSampleId();
+    const keySet = createLocalJWKSet(await jwt.getJWKS());
+
+    const { payload } = await jwtVerify(token, keySet, {
+      issuer: ISSUER,
+      audience: "f3-map",
+    });
+
+    expect(payload.token_use).toBe("id");
   });
 
   it("omits (rather than nulls) optional claims the user has no value for", async () => {

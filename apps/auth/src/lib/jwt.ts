@@ -52,6 +52,7 @@ export async function signAccessToken(params: {
   const issuer = env.NEXT_PUBLIC_AUTH_URL;
 
   return new SignJWT({
+    token_use: "access",
     email: params.email,
     scope: params.scope,
     client_id: params.clientId,
@@ -90,7 +91,13 @@ export async function signIdToken(params: {
   // explicit null — relying parties commonly validate these as "string or
   // absent," and a literal null on a claim they expect typed can break
   // strict OIDC parsing.
-  const claims: Record<string, unknown> = {};
+  //
+  // token_use is always present, unlike the scope-gated claims below —
+  // this token shares its signing key, kid, and issuer with access tokens
+  // (see signAccessToken), so without an explicit discriminator every
+  // verifier that checks signature + issuer alone would accept an ID
+  // Token as a fully privileged API credential.
+  const claims: Record<string, unknown> = { token_use: "id" };
   if (scopes.has("profile")) {
     if (params.name != null) claims.name = params.name;
     if (params.picture != null) claims.picture = params.picture;
