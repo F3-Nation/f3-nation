@@ -1,3 +1,7 @@
+## Testing & Database Reset
+
+The test suite resets and re-seeds the `f3_test` database from its own `globalSetup` (`vitest.globalSetup.ts`), meaning any suite invocation path (plain pnpm command, Vitest watch mode, editor test runner, etc.) will run exactly once per suite invocation and does not require an external manual reset step.
+
 ## Error Handling
 
 Full rationale, the code-selection table, and the `catch`-block pattern:

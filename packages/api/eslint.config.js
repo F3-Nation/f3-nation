@@ -5,7 +5,7 @@ const ORPC_ERROR_MESSAGE =
 
 export default [
   ...baseConfig,
-  { ignores: ["vitest.config.ts", "__tests__", "coverage"] },
+  { ignores: ["vitest.config.ts", "vitest.globalSetup.ts", "__tests__", "coverage"] },
   {
     // oRPC masks any thrown value that isn't an ORPCError as an opaque 500
     // INTERNAL_SERVER_ERROR — the original message never reaches the client.
