@@ -552,107 +552,47 @@ export const positionRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
-      // When editing, verify the caller can modify the position's *current* org
-      // before we ever look at where they want to move it.
-      if (input.id !== undefined) {
-        const [existingPosition] = await ctx.db
-          .select({ orgId: schema.positions.orgId })
-          .from(schema.positions)
-          .where(eq(schema.positions.id, input.id));
+      // For editing, check permission on the position's org
+      // For creating, check permission on the target org
+      const targetOrgId = input.orgId;
 
-        if (!existingPosition) {
+      if (!targetOrgId) {
+        // Creating a global position requires nation-level permissions
+        const [nationOrg] = await ctx.db
+          .select({ id: schema.orgs.id })
+          .from(schema.orgs)
+          .where(eq(schema.orgs.orgType, "nation"));
+
+        if (!nationOrg) {
           throw new ORPCError("NOT_FOUND", {
-            message: "Position not found",
+            message: "Nation organization not found",
           });
         }
 
-        // Assume only one nation org will exist
-        if (!existingPosition.orgId) {
-          const [nationOrg] = await ctx.db
-            .select({ id: schema.orgs.id })
-            .from(schema.orgs)
-            .where(eq(schema.orgs.orgType, "nation"));
+        const roleCheckResult = await checkHasRoleOnOrg({
+          orgId: nationOrg.id,
+          session: ctx.session,
+          db: ctx.db,
+          roleName: "editor",
+        });
 
-          if (!nationOrg) {
-            throw new ORPCError("INTERNAL_SERVER_ERROR", {
-              message:
-                "Position has no associated org, which means it belongs to the nation, but the nation could not be located.",
-            });
-          }
-
-          const roleCheckResult = await checkHasRoleOnOrg({
-            orgId: nationOrg.id,
-            session: ctx.session,
-            db: ctx.db,
-            roleName: "editor",
+        if (!roleCheckResult.success) {
+          throw new ORPCError("UNAUTHORIZED", {
+            message: "You are not authorized to create global positions",
           });
-
-          if (!roleCheckResult.success) {
-            throw new ORPCError("UNAUTHORIZED", {
-              message: "You are not authorized to edit global positions",
-            });
-          }
-        } else {
-          const roleCheckResult = await checkHasRoleOnOrg({
-            orgId: existingPosition.orgId,
-            session: ctx.session,
-            db: ctx.db,
-            roleName: "editor",
-          });
-
-          if (!roleCheckResult.success) {
-            throw new ORPCError("UNAUTHORIZED", {
-              message: "You are not authorized to edit this position",
-            });
-          }
         }
-      }
+      } else {
+        const roleCheckResult = await checkHasRoleOnOrg({
+          orgId: targetOrgId,
+          session: ctx.session,
+          db: ctx.db,
+          roleName: "editor",
+        });
 
-      // Check permission on the target org when creating, or when explicitly
-      // rescoping. Pure field edits (orgId absent from payload) skip this —
-      // the current-org check above already authorized the caller.
-      if (input.id === undefined || input.orgId !== undefined) {
-        const targetOrgId = input.orgId;
-
-        if (!targetOrgId) {
-          // Creating a global position requires nation-level permissions
-          const [nationOrg] = await ctx.db
-            .select({ id: schema.orgs.id })
-            .from(schema.orgs)
-            .where(eq(schema.orgs.orgType, "nation"));
-
-          if (!nationOrg) {
-            throw new ORPCError("INTERNAL_SERVER_ERROR", {
-              message: "Nation organization not found",
-            });
-          }
-
-          const roleCheckResult = await checkHasRoleOnOrg({
-            orgId: nationOrg.id,
-            session: ctx.session,
-            db: ctx.db,
-            roleName: "editor",
+        if (!roleCheckResult.success) {
+          throw new ORPCError("UNAUTHORIZED", {
+            message: "You are not authorized to manage positions for this org",
           });
-
-          if (!roleCheckResult.success) {
-            throw new ORPCError("UNAUTHORIZED", {
-              message: "You are not authorized to create global positions",
-            });
-          }
-        } else {
-          const roleCheckResult = await checkHasRoleOnOrg({
-            orgId: targetOrgId,
-            session: ctx.session,
-            db: ctx.db,
-            roleName: "editor",
-          });
-
-          if (!roleCheckResult.success) {
-            throw new ORPCError("UNAUTHORIZED", {
-              message:
-                "You are not authorized to manage positions for this org",
-            });
-          }
         }
       }
 
