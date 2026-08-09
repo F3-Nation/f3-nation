@@ -31,11 +31,12 @@ async function isApiDown(): Promise<boolean> {
   const base = env.F3_API_BASE_URL;
   if (!base) return false;
   try {
-    const res = await fetch(`${base}/v1/ping`, {
+    const res = await fetch(new URL("/v1/ping", base).href, {
       cache: "no-store",
       signal: AbortSignal.timeout(3000),
     });
-    return !res.ok;
+    // 4xx (e.g. 429 rate-limit) means the API is up and responding
+    return res.status >= 500;
   } catch {
     return true;
   }

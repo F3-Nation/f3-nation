@@ -22,7 +22,7 @@ export function ApiDownSplash() {
         <h1 className="text-2xl font-bold">Be Back Soon, PAX</h1>
         <p className="max-w-md text-muted-foreground">
           The backend API that supports this app isn&apos;t running right now.
-          Please try back later. You can also check{" "}
+          Please try again later. You can also check{" "}
           <a
             href="https://f3nation.com/status"
             className="underline underline-offset-4"
