@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 
 import type { SendVerificationRequestServerParams } from "@acme/auth/lib/send-otp-verification-request-server";
 import { env } from "~/env";
+import { logError } from "~/lib/logging";
 
 import { sendVerificationRequest } from "./send-verification-request";
 
@@ -23,7 +24,7 @@ export const POST = async (req: NextRequest) => {
     });
     return NextResponse.json({ success: true });
   } catch (err) {
-    console.error("sendVerificationRequest failed:", err);
+    logError("map.otp.send_failed", {}, err);
     return NextResponse.json({ success: false }, { status: 500 });
   }
 };

@@ -133,7 +133,11 @@ export const mailRouter = {
           message: `Test email sent to ${to}`,
         };
       } catch (error) {
-        logError("api.mail.test_email_failed", { template, to }, error);
+        logError(
+          "api.mail.test_email_failed",
+          { template, toDomain: to.split("@")[1] },
+          error,
+        );
         return {
           success: false,
           message:

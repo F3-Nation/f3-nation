@@ -13,6 +13,7 @@ a free-text message.
 - [Log levels](#log-levels)
 - [Helpers vs. the raw `logger`](#helpers-vs-the-raw-logger)
 - [Sentry / error reporting](#sentry--error-reporting)
+- [Redaction](#redaction)
 - [Environment behavior](#environment-behavior)
 - [API Reference](#api-reference)
 
@@ -148,6 +149,20 @@ setErrorReporter((event, ctx, err) => {
 The reporter receives the full payload, so error logs that carry no `Error`
 (config/validation failures) are still reported — preserving the `event` as a
 Sentry tag for triage.
+
+## Redaction
+
+`createLogger` installs a recursive redactor — matching by key name, at any
+depth and inside arrays — for a fixed list of sensitive keys (`token`,
+`accessToken`/`access_token`, `password`, `apiKey`, `email`, and their
+camelCase/snake_case variants). It runs on every log line, and on whatever
+`ctx` reaches Sentry via `logError`/`logFatal`.
+
+`[REDACTED]` means the key was present, not that it held a real secret — an
+empty string or `null` value redacts the same way a live token does. This is a
+backstop for keys the list doesn't yet cover, not a reason to log secrets on
+purpose: prefer not logging the sensitive value at all (see
+[docs/LOGGING.md § the golden rule](../../docs/LOGGING.md#the-golden-rule-never-log-secrets-or-pii)).
 
 ## Environment behavior
 

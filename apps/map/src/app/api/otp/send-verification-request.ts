@@ -37,7 +37,7 @@ export const sendVerificationRequest = async (
   const failed = result.rejected.concat(result.pending).filter(Boolean);
   if (failed.length) {
     throw new Error(
-      `Email (${failed.map((f) => (typeof f === "string" ? f : f.address)).join(", ")}) could not be sent`,
+      `Email could not be sent (${failed.length} recipient(s) rejected)`,
     );
   }
 };

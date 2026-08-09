@@ -22,6 +22,58 @@ const levelToSeverity: Record<string, string> = {
 
 export type LogContext = Record<string, unknown>;
 
+const REDACTED = "[REDACTED]";
+
+// Key names censored at any depth, in objects and arrays alike. See
+// docs/LOGGING.md § "The golden rule: never log secrets or PII" for what
+// belongs on this list vs. what should just never be logged in the first
+// place (e.g. raw email addresses — log a domain or identifier instead).
+const REDACT_KEYS = new Set([
+  "token",
+  "sessionToken",
+  "accessToken",
+  "refreshToken",
+  "access_token",
+  "refresh_token",
+  "password",
+  "credentials",
+  "clientSecret",
+  "client_secret",
+  "apiKey",
+  "api_key",
+  "idToken",
+  "id_token",
+  "authorization",
+  "email",
+]);
+
+/**
+ * Recursively censors matching keys at any depth and inside arrays — unlike
+ * pino's own `redact` option, which only matches a fixed set of static paths
+ * and can't express "this key, wherever it appears."
+ *
+ * Exported for direct unit testing; not part of the intended public API —
+ * consumers should get redaction for free via `createLogger`.
+ */
+export function redactDeep(
+  value: unknown,
+  seen = new WeakSet<object>(),
+): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => redactDeep(item, seen));
+  }
+  if (value !== null && typeof value === "object") {
+    if (seen.has(value)) return value;
+    seen.add(value);
+    const result: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+      result[key] = REDACT_KEYS.has(key) ? REDACTED : redactDeep(val, seen);
+    }
+    return result;
+  }
+  return value;
+}
+
 /**
  * Optional process-global error sink. Apps with Sentry register a reporter here
  * at startup (see each app's instrumentation) so that everything logged via
@@ -64,26 +116,12 @@ export function createLogger(
   service: string,
   options?: { level?: string },
 ): AppLogger {
-  const level = options?.level ?? process.env.LOG_LEVEL ?? "info";
-
-  const redactKeys = [
-    "token",
-    "sessionToken",
-    "accessToken",
-    "refreshToken",
-    "access_token",
-    "refresh_token",
-    "password",
-    "credentials",
-    "clientSecret",
-    "client_secret",
-    "apiKey",
-    "api_key",
-    "idToken",
-    "id_token",
-    "authorization",
-    "email",
-  ];
+  const configuredLevel = options?.level ?? process.env.LOG_LEVEL ?? "info";
+  // Never let a misconfigured LOG_LEVEL leave verbose output enabled in prod.
+  const level =
+    isProduction && (configuredLevel === "trace" || configuredLevel === "debug")
+      ? "info"
+      : configuredLevel;
 
   const baseOptions: LoggerOptions = {
     level,
@@ -92,16 +130,8 @@ export function createLogger(
     // identifier) as pino's message key rather than the default `msg`.
     messageKey: "event",
     serializers: { err: pino.stdSerializers.err },
-    redact: {
-      paths: redactKeys.flatMap((k) => [
-        k,
-        `*.${k}`,
-        `*[*].${k}`,
-        `*.*.${k}`,
-        `*.*[*].${k}`,
-        `*.*.*.${k}`,
-      ]),
-      censor: "[REDACTED]",
+    formatters: {
+      log: (obj) => redactDeep(obj) as Record<string, unknown>,
     },
   };
 
@@ -110,6 +140,7 @@ export function createLogger(
     logger = pino({
       ...baseOptions,
       formatters: {
+        ...baseOptions.formatters,
         level: (label) => ({ severity: levelToSeverity[label] ?? "DEFAULT" }),
       },
     });
@@ -139,7 +170,7 @@ export function createLogger(
       // don't re-enter the reporter.
       if (errorReporter) {
         try {
-          errorReporter(event, ctx, err);
+          errorReporter(event, redactDeep(ctx) as LogContext, err);
         } catch (reporterErr) {
           logger.error(
             { err: reporterErr, event },

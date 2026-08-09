@@ -86,9 +86,7 @@ const getUser = async (
 export function MDPGDrizzleAdapter(
   client: InstanceType<typeof PgDatabase>,
 ): MdAdapter {
-  // Security-critical NextAuth database adapter.
-  // Audited to ensure that all raw console.logs and hardcoded LOG variables are removed,
-  // and that event logging uses safe identifiers only.
+  // Log event names and opaque numeric ids only — never tokens, credentials, or whole user/session/account records.
   return {
     async createUser(data) {
       logDebug("auth.adapter.create_user", { fields: Object.keys(data) });
