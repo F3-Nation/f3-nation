@@ -3,6 +3,6 @@
   "compilerOptions": {
     "tsBuildInfoFile": "node_modules/.cache/tsbuildinfo.json"
   },
-  "include": ["src", "__tests__"],
+  "include": ["src", "__tests__", "vitest.globalSetup.ts"],
   "exclude": ["node_modules"]
 }

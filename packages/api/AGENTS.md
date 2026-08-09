@@ -1,3 +1,11 @@
+## Testing
+
+`vitest.globalSetup.ts` resets and re-seeds `f3_test` before the suite runs.
+This works no matter how you invoke it — `pnpm --filter @acme/api test`,
+`pnpm -C packages/api test`, `turbo run test`, bare `vitest`, or an editor test
+runner — so no external reset step is needed. `apps/api`'s characterization
+suite is unaffected; it still resets through Turbo's `reset-test-db` task.
+
 ## Error Handling
 
 Full rationale, the code-selection table, and the `catch`-block pattern:
