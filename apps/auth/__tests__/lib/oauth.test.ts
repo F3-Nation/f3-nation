@@ -538,10 +538,15 @@ describe("exchangeRefreshToken", () => {
     mockGetClientResult(PUBLIC_CLIENT);
     // The UPDATE ... RETURNING (rotation) finds nothing — this exact token
     // was already consumed by an earlier request. The follow-up SELECT
-    // finds the row (rotatedAt set from that earlier rotation), which is
-    // what marks this as a genuine replay rather than a garbage token.
+    // finds the row (rotatedAt set from that earlier rotation, well outside
+    // the concurrent-refresh grace window), which is what marks this as a
+    // genuine replay rather than a garbage token or a request race.
     dbMock.update.mockReturnValueOnce(chain([]));
-    dbMock.select.mockReturnValueOnce(chain([{ userId: 42 }]));
+    dbMock.select.mockReturnValueOnce(
+      chain([
+        { userId: 42, rotatedAt: new Date(Date.now() - 60_000).toISOString() },
+      ]),
+    );
 
     const result = await exchangeRefreshToken({
       refreshToken: "already-used-token",
@@ -556,6 +561,31 @@ describe("exchangeRefreshToken", () => {
     // The whole token family for that user+client is revoked, not just the
     // replayed token.
     expect(dbMock.delete).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not revoke the family when the same token is reused within the concurrent-refresh grace window", async () => {
+    mockGetClientResult(PUBLIC_CLIENT);
+    // Same shape as a replay (UPDATE finds nothing, SELECT finds an already-
+    // rotated row) but rotatedAt is seconds old — this is the losing side of
+    // two overlapping refresh calls on the same original token, not theft.
+    dbMock.update.mockReturnValueOnce(chain([]));
+    dbMock.select.mockReturnValueOnce(
+      chain([{ userId: 42, rotatedAt: new Date().toISOString() }]),
+    );
+
+    const result = await exchangeRefreshToken({
+      refreshToken: "raced-token",
+      clientId: PUBLIC_CLIENT.id,
+    });
+
+    expect(result).toEqual({ error: "invalid_grant" });
+    expect(logWarn).toHaveBeenCalledWith(
+      "auth.oauth.refresh_token_concurrent_reuse",
+      { clientId: PUBLIC_CLIENT.id, userId: 42 },
+    );
+    // The winner's freshly-issued token (and the rest of the family) must
+    // survive the loser's request.
+    expect(dbMock.delete).not.toHaveBeenCalled();
   });
 
   it("rotates a valid public-client refresh token and issues a new one", async () => {

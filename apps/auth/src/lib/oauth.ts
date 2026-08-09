@@ -22,6 +22,18 @@ function hashSecret(secret: string): string {
   return crypto.createHash("sha256").update(secret).digest("hex");
 }
 
+// A losing request in a genuine race (two overlapping refresh calls on the
+// same original token — a client-side retry, overlapping tabs/processes)
+// lands in the same "already rotated" path as a real replay: its own
+// UPDATE ... WHERE rotatedAt IS NULL finds nothing because the winner claimed
+// the row first. Without this window, that race would be indistinguishable
+// from theft and would revoke the winner's freshly-issued token too,
+// stranding a legitimate session. 10s is generous enough to absorb normal
+// request jitter/retries without meaningfully weakening replay detection —
+// an attacker replaying a stolen-then-rotated token is realistically doing
+// so well after the legitimate rotation, not within the same window.
+const REPLAY_GRACE_WINDOW_MS = 10_000;
+
 // ---------------------------------------------------------------------------
 // Client validation
 // ---------------------------------------------------------------------------
@@ -292,7 +304,10 @@ export async function exchangeRefreshToken(params: {
       // rotation is the *only* theft mitigation (no secret as a second
       // factor).
       const [reused] = await tx
-        .select({ userId: oauthRefreshTokens.userId })
+        .select({
+          userId: oauthRefreshTokens.userId,
+          rotatedAt: oauthRefreshTokens.rotatedAt,
+        })
         .from(oauthRefreshTokens)
         .where(
           and(
@@ -303,18 +318,29 @@ export async function exchangeRefreshToken(params: {
         )
         .limit(1);
       if (reused) {
-        logWarn("auth.oauth.refresh_token_reuse_detected", {
-          clientId: params.clientId,
-          userId: reused.userId,
-        });
-        await tx
-          .delete(oauthRefreshTokens)
-          .where(
-            and(
-              eq(oauthRefreshTokens.userId, reused.userId),
-              eq(oauthRefreshTokens.clientId, params.clientId),
-            ),
-          );
+        const rotatedMsAgo = Date.now() - new Date(reused.rotatedAt!).getTime();
+        if (rotatedMsAgo <= REPLAY_GRACE_WINDOW_MS) {
+          // Within the grace window: treat as a concurrent-request race, not
+          // theft. Reject only this request — the winner's new token (and
+          // the rest of the family) stays intact.
+          logWarn("auth.oauth.refresh_token_concurrent_reuse", {
+            clientId: params.clientId,
+            userId: reused.userId,
+          });
+        } else {
+          logWarn("auth.oauth.refresh_token_reuse_detected", {
+            clientId: params.clientId,
+            userId: reused.userId,
+          });
+          await tx
+            .delete(oauthRefreshTokens)
+            .where(
+              and(
+                eq(oauthRefreshTokens.userId, reused.userId),
+                eq(oauthRefreshTokens.clientId, params.clientId),
+              ),
+            );
+        }
       }
       return reject("refresh_token_invalid_or_expired");
     }
