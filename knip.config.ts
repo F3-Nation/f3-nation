@@ -27,6 +27,10 @@ const config: KnipConfig = {
       // devDependency is never a static import knip can follow.
       ignoreDependencies: ["eslint"],
     },
+    "packages/api": {
+      // reset-test-db is a pnpm script in packages/db, not a local binary.
+      ignoreBinaries: ["reset-test-db"],
+    },
     "apps/api": {
       // The characterization suite runs under its own vitest config,
       // which the vitest plugin does not discover from the default name.
