@@ -1,3 +1,4 @@
+import { coverageExclude, coverageInclude } from "@acme/vitest-config";
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import path from "path";
@@ -13,9 +14,14 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "json", "html"],
       reportsDirectory: "./coverage",
-      include: ["src/lib/**/*.ts", "src/app/status/**/*.{ts,tsx}"],
+      include: coverageInclude,
+      exclude: coverageExclude,
       thresholds: {
         autoUpdate: true,
+        statements: 61.53,
+        branches: 63.88,
+        functions: 60,
+        lines: 64.7,
       },
     },
   },
