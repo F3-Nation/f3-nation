@@ -127,6 +127,20 @@
       "when": 1783701196342,
       "tag": "0017_even_thing",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1786308790190,
+      "tag": "0018_codex_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1786308791190,
+      "tag": "0019_audit_history",
+      "breakpoints": true
     }
   ]
 }

@@ -25,7 +25,7 @@
     "reset-test-db": "SKIP_ENV_VALIDATION=1 NODE_ENV=test pnpm with-env node -r esbuild-register src/utils/run-reset-test-db.ts",
     "seed:local": "pnpm with-env tsx src/local-seed.ts",
     "typecheck": "tsc --noEmit",
-    "with-env": "dotenv -e ../env/.env --",
+    "with-env": "dotenv -e .env --",
     "update-db": "pnpm with-env node -r esbuild-register src/update-db.ts"
   },
   "dependencies": {
