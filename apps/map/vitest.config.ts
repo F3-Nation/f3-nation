@@ -8,7 +8,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "jsdom",
-    env: { NODE_ENV: "test" },
+    env: { NODE_ENV: "test", SKIP_ENV_VALIDATION: "1" },
     setupFiles: ["__tests__/setup.tsx"],
     coverage: {
       provider: "v8",
@@ -19,7 +19,7 @@ export default defineConfig({
       thresholds: {
         autoUpdate: true,
         statements: 18.77,
-        branches: 16.45,
+        branches: 16.5,
         functions: 13.93,
         lines: 19.19,
       },
