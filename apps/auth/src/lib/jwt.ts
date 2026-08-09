@@ -68,10 +68,14 @@ export async function signAccessToken(params: {
 /**
  * Sign an OIDC ID Token with RS256. Only call this when "openid" is in the
  * granted scope — an ID Token asserts identity to the *client app itself*
- * (aud = client_id), which is what RP-initiated logout's idTokenHint and
- * any client-side "who is this" check rely on. Claim selection mirrors the
- * userinfo endpoint's own scope gating (name/picture under "profile",
- * email/email_verified under "email") so both surfaces agree.
+ * (aud = client_id). No consumer reads it yet; this exists for future
+ * RP-initiated logout (id_token_hint) and client-side identity checks.
+ * Claim *selection* mirrors the userinfo endpoint's own scope gating
+ * (name/picture under "profile", email/email_verified under "email"), but
+ * the two surfaces aren't shape-identical: userinfo emits name/picture as
+ * literal null when unavailable, this omits them entirely (see the comment
+ * below on why), so don't assume a client can treat the two responses
+ * interchangeably.
  */
 export async function signIdToken(params: {
   sub: number;

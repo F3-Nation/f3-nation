@@ -12,6 +12,8 @@ import { importJWK, jwtVerify } from "jose";
 import { constantTimeEqual } from "~/lib/crypto-utils";
 import { db } from "~/lib/db";
 import { getJWKS, signAccessToken, signIdToken } from "~/lib/jwt";
+import { logError } from "~/lib/logging";
+import { idTokenScopeOrNull } from "~/lib/oauth-scope";
 
 function generateOpaqueToken(): string {
   return crypto.randomBytes(32).toString("base64url");
@@ -144,7 +146,24 @@ export async function exchangeAuthorizationCode(params: {
 
   // Create tokens — access token is a JWT, refresh token is opaque
   const ACCESS_TOKEN_TTL = 3600; // 1 hour
-  const scopes = authCode.scopes ?? "openid profile email";
+
+  // /authorize always writes a real scopes string for every code it
+  // creates, so a null read-back here means something is anomalous, not
+  // "no scope requested." Reject the whole exchange rather than defaulting
+  // to the broad "openid profile email" scope — that default previously
+  // still reached signAccessToken even though the ID Token was correctly
+  // suppressed below, so an anomalous code could still walk away with a
+  // full-scope access token. Log it: this is a data-integrity condition
+  // worth being able to find in production, not just fail silently on.
+  if (!authCode.scopes) {
+    logError("auth.oauth.authorization_code_missing_scopes", {
+      clientId: authCode.clientId,
+      userId: authCode.userId,
+    });
+    return { error: "invalid_grant" as const };
+  }
+  const scopes = authCode.scopes;
+
   const accessToken = await signAccessToken({
     sub: authCode.userId,
     email: user.email,
@@ -155,18 +174,13 @@ export async function exchangeAuthorizationCode(params: {
 
   // ID Token is only meaningful (and only spec'd) when "openid" was actually
   // granted — omit it entirely otherwise rather than issuing an unrequested
-  // identity assertion. Gated on authCode.scopes directly (the actual
-  // recorded grant), not the defaulted `scopes` variable above: /authorize
-  // always writes a real scopes string for every code it creates, so a null
-  // read-back here means something is anomalous, not "no scope requested."
-  // Falling back to the broad "openid profile email" default in that case
-  // would silently issue an identity assertion with real PII (name, avatar,
-  // email) nobody actually consented to — fail closed instead.
-  const idToken = authCode.scopes?.split(" ").includes("openid")
+  // identity assertion.
+  const idTokenScope = idTokenScopeOrNull(scopes);
+  const idToken = idTokenScope
     ? await signIdToken({
         sub: authCode.userId,
         clientId: authCode.clientId,
-        scope: authCode.scopes,
+        scope: idTokenScope,
         expiresInSeconds: ACCESS_TOKEN_TTL,
         name: user.f3Name,
         picture: user.avatarUrl,
@@ -259,12 +273,15 @@ export async function exchangeRefreshToken(params: {
     expiresInSeconds: ACCESS_TOKEN_TTL,
   });
 
-  // Same "only if openid was granted" rule as the authorization_code path.
-  const idToken = scopes.split(" ").includes("openid")
+  // NOTE: unlike the authorization_code path, this gates on the client's
+  // *registered* scopes — the granted scopes aren't persisted on the refresh
+  // token row, so they can't be recovered here. Tracked for the schema fix.
+  const idTokenScope = idTokenScopeOrNull(scopes);
+  const idToken = idTokenScope
     ? await signIdToken({
         sub: existing.userId,
         clientId: existing.clientId,
-        scope: scopes,
+        scope: idTokenScope,
         expiresInSeconds: ACCESS_TOKEN_TTL,
         name: user.f3Name,
         picture: user.avatarUrl,
