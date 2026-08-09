@@ -131,7 +131,7 @@ const APP_GROUPS: AppGroup[] = [
         name: "Status",
         description:
           "Real-time health and status for all F3 Nation services. Check if something's down or having issues.",
-        href: "https://status.f3nation.com",
+        href: "https://apps.f3nation.com/status/",
         localHref: "http://localhost:3005/status",
       },
     ],

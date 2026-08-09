@@ -104,6 +104,7 @@ const statusResultSchema = z.union([
       "unsupported_contract_version",
       "invalid_monitor_config",
     ]),
+    details: z.record(z.string(), z.unknown()).optional(),
   }),
   externalSuccessSchema,
   z.object({
@@ -116,7 +117,9 @@ const statusResultSchema = z.union([
       url: z.string().url(),
       source: z.literal("external"),
       provider: z.literal("slack"),
-      apiUrl: z.string().url(),
+      // plain z.string() — this echoes already-validated config; an invalid
+      // apiUrl must degrade to invalid_monitor_config rather than 500 the endpoint.
+      apiUrl: z.string(),
     }),
     reason: z.enum([
       "unreachable",
@@ -125,6 +128,7 @@ const statusResultSchema = z.union([
       "unsupported_contract_version",
       "invalid_monitor_config",
     ]),
+    details: z.record(z.string(), z.unknown()).optional(),
   }),
 ]);
 
@@ -221,7 +225,10 @@ type PollResult =
 
 async function pollAndParseJson(
   url: string,
-  buildFailure: (reason: "unreachable" | "invalid_json") => StatusResult,
+  buildFailure: (
+    reason: "unreachable" | "invalid_json",
+    details?: Record<string, unknown>,
+  ) => StatusResult,
   fetchImpl: typeof fetch,
 ): Promise<PollResult> {
   let fetchResult: { ok: boolean; status: number; text: string };
@@ -231,7 +238,10 @@ async function pollAndParseJson(
     return { ok: false, result: buildFailure("unreachable") };
   }
   if (!fetchResult.ok) {
-    return { ok: false, result: buildFailure("unreachable") };
+    return {
+      ok: false,
+      result: buildFailure("unreachable", { httpStatus: fetchResult.status }),
+    };
   }
   let raw: unknown;
   try {
@@ -249,12 +259,13 @@ async function fetchContractStatus(
 ): Promise<StatusResult> {
   const poll = await pollAndParseJson(
     target.url,
-    (reason): StatusResult => ({
+    (reason, details): StatusResult => ({
       ok: false,
       source: "contract",
       target,
       status: "down",
       reason,
+      ...(details ? { details } : {}),
     }),
     fetchImpl,
   );
@@ -371,12 +382,13 @@ async function fetchExternalStatus(
 
   const poll = await pollAndParseJson(
     target.apiUrl,
-    (reason): StatusResult => ({
+    (reason, details): StatusResult => ({
       ok: false,
       source: "external",
       target,
       status: "down",
       reason,
+      ...(details ? { details } : {}),
     }),
     fetchImpl,
   );

@@ -18071,6 +18071,13 @@
                           },
                           {
                             "properties": {
+                              "details": {
+                                "additionalProperties": {},
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "type": "object"
+                              },
                               "ok": {
                                 "const": false
                               },
@@ -18208,6 +18215,13 @@
                           },
                           {
                             "properties": {
+                              "details": {
+                                "additionalProperties": {},
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "type": "object"
+                              },
                               "ok": {
                                 "const": false
                               },
@@ -18230,7 +18244,6 @@
                               "target": {
                                 "properties": {
                                   "apiUrl": {
-                                    "format": "uri",
                                     "type": "string"
                                   },
                                   "id": {

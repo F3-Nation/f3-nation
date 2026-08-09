@@ -516,4 +516,72 @@ describe("Status Router", () => {
       expect(healthCalls).toHaveLength(1);
     });
   });
+
+  describe("mapSlackStatus branches", () => {
+    it.each([
+      [{ status: "ok", active_incidents: [] }, "ok"],
+      [{ status: "ok", active_incidents: [{}] }, "degraded"],
+      [{ status: "active", active_incidents: [{}] }, "degraded"],
+      [{ status: "  MAJOR_OUTAGE  ", active_incidents: [] }, "down"],
+      [{ status: "outage", active_incidents: [] }, "down"],
+      [{ status: "degraded", active_incidents: [] }, "degraded"],
+      [{ status: "partial_outage", active_incidents: [] }, "degraded"],
+      [{ status: "banana", active_incidents: [] }, "degraded"],
+    ] as const)(
+      "maps Slack response %o to overall status %s",
+      async (slackPayload, expectedStatus) => {
+        vi.stubGlobal(
+          "fetch",
+          vi.fn((input: string | URL | Request) => {
+            const url = getUrl(input);
+            if (url.includes("/health")) {
+              return Promise.resolve(buildContractOkResponse());
+            }
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  ...slackPayload,
+                  date_updated: "2026-07-09T12:00:00.000Z",
+                }),
+                { status: 200 },
+              ),
+            );
+          }),
+        );
+
+        const client = createTestClient();
+        const result = await client.status();
+        const slack = result.results.find((r) => r.target.id === "slack");
+
+        expect(slack?.ok).toBe(true);
+        expect(slack?.status).toBe(expectedStatus);
+      },
+    );
+
+    it("emits poll_slack_unknown_status warning for unrecognised status", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn((input: string | URL | Request) => {
+          const url = getUrl(input);
+          if (url.includes("/health")) {
+            return Promise.resolve(buildContractOkResponse());
+          }
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({ status: "banana", active_incidents: [] }),
+              { status: 200 },
+            ),
+          );
+        }),
+      );
+
+      const client = createTestClient();
+      await client.status();
+
+      expect(mockLogWarn).toHaveBeenCalledWith(
+        "api.status.poll_slack_unknown_status",
+        expect.objectContaining({ providerStatus: "banana" }),
+      );
+    });
+  });
 });

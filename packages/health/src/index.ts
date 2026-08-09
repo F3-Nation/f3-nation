@@ -43,8 +43,7 @@ export interface CheckRunnerResult {
   details?: Record<string, unknown>;
 }
 
-export type CheckRunner =
-  (() => CheckRunnerResult) | (() => Promise<CheckRunnerResult>);
+export type CheckRunner = () => CheckRunnerResult | Promise<CheckRunnerResult>;
 
 export interface CheckSpec {
   id: string;

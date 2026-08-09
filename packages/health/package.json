@@ -43,7 +43,7 @@
       }
     }
   },
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "clean": "rm -rf .turbo node_modules",
