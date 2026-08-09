@@ -3,11 +3,8 @@ import { NextRequest } from "next/server";
 
 // Mocks must be declared before imports that trigger module evaluation.
 vi.mock("@f3nation/sso-next", async () => {
-  const actual =
-    await vi.importActual<typeof import("@f3nation/sso-next")>(
-      "@f3nation/sso-next",
-    );
-  return { ...actual, verifyAccessToken: vi.fn() };
+  const actual = await vi.importActual("@f3nation/sso-next");
+  return { ...(actual as object), verifyAccessToken: vi.fn() };
 });
 
 vi.mock("@/lib/auth/oauth", () => ({
