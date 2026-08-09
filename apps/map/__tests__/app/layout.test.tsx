@@ -95,7 +95,7 @@ afterEach(() => {
 
 describe("layout app router", () => {
   it("should render layout", async () => {
-    const layoutResult = RootLayout({ children: <div /> });
+    const layoutResult = await RootLayout({ children: <div /> });
     render(layoutResult);
     // React 19 treats <html>/<body> as singleton host components and applies
     // their props to the real document elements instead of nesting them inside
