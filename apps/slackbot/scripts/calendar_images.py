@@ -34,10 +34,18 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import aliased
 
 from utilities.constants import EVENT_TAG_COLORS, GCP_IMAGE_URL, LOCAL_DEVELOPMENT, S3_IMAGE_URL
-from utilities.helper_functions import current_date_cst, safe_get, update_local_region_records
+from utilities.helper_functions import current_date_cst, safe_convert, safe_get, update_local_region_records
 from utilities.slack import actions
 
 DB_SCHEMA = os.getenv("DATABASE_SCHEMA", "f3_staging")
+
+MAX_CALENDAR_WEEKS = 3
+WEEK_LABELS = ["current", "next", "third"]
+WEEK_ALT_TEXT = {
+    "current": "This Week's Q Sheet",
+    "next": "Next Week's Q Sheet",
+    "third": "In Two Weeks' Q Sheet",
+}
 
 
 def time_int_to_str(time: int) -> str:
@@ -115,9 +123,7 @@ def generate_calendar_images(force: bool = False):
     with get_session() as session:
         tomorrow_day_of_week = (current_date_cst() + timedelta(days=1)).weekday()
         current_week_start = current_date_cst() + timedelta(days=-tomorrow_day_of_week + 1)
-        current_week_end = current_date_cst() + timedelta(days=7 - tomorrow_day_of_week + 1)
-        next_week_start = current_week_start + timedelta(weeks=1)
-        next_week_end = current_week_end + timedelta(weeks=1)
+        overall_end = current_week_start + timedelta(weeks=MAX_CALENDAR_WEEKS)
 
         firstq_subquery = (
             select(
@@ -133,7 +139,7 @@ def generate_calendar_images(force: bool = False):
             .filter(
                 Attendance_x_AttendanceType.attendance_type_id == 2,
                 EventInstance.start_date >= current_week_start,
-                EventInstance.start_date < next_week_end,
+                EventInstance.start_date < overall_end,
             )
             .alias()
         )
@@ -149,7 +155,7 @@ def generate_calendar_images(force: bool = False):
             .filter(
                 Attendance_x_AttendanceType.attendance_type_id == 2,
                 EventInstance.start_date >= current_week_start,
-                EventInstance.start_date < next_week_end,
+                EventInstance.start_date < overall_end,
             )
             .group_by(Attendance.event_instance_id)
             .alias()
@@ -195,7 +201,7 @@ def generate_calendar_images(force: bool = False):
             .outerjoin(attendance_subquery, EventInstance.id == attendance_subquery.c.event_instance_id)
             .filter(
                 (EventInstance.start_date >= current_week_start),
-                (EventInstance.start_date < next_week_end),
+                (EventInstance.start_date < overall_end),
                 (EventInstance.is_active),
                 # (EventInstance.series_id.is_not(None)),
                 or_(EventTag.name.is_(None), EventTag.name != "Off-The-Books"),
@@ -245,17 +251,21 @@ def generate_calendar_images(force: bool = False):
                         "generic": color_dict_generic,
                     }
                     calendar_updated = False
+                    num_weeks = safe_convert(slack_app_settings.get("calendar_weeks_shown"), int) or 2
+                    num_weeks = max(1, min(num_weeks, MAX_CALENDAR_WEEKS))
 
-                    for week in ["current", "next"]:
-                        if week == "current":
-                            df = df_full[
-                                (df_full["start_date"] >= current_week_start)
-                                & (df_full["start_date"] < current_week_end)
-                            ].copy()
-                        else:
-                            df = df_full[
-                                (df_full["start_date"] >= next_week_start) & (df_full["start_date"] < next_week_end)
-                            ].copy()
+                    for stale_week in WEEK_LABELS[num_weeks:]:
+                        stale_file = slack_app_settings.pop(f"calendar_image_{stale_week}", None)
+                        if stale_file and not LOCAL_DEVELOPMENT:
+                            try:
+                                os.remove(f"/mnt/calendar-images/{stale_file}")
+                            except Exception as e:
+                                print(f"Error deleting stale file {stale_file} from local storage: {e}")
+
+                    for week_index, week in enumerate(WEEK_LABELS[:num_weeks]):
+                        week_start = current_week_start + timedelta(weeks=week_index)
+                        week_end = week_start + timedelta(days=7)
+                        df = df_full[(df_full["start_date"] >= week_start) & (df_full["start_date"] < week_end)].copy()
 
                         max_event_updated = (
                             datetime(year=1900, month=1, day=1)
@@ -467,26 +477,18 @@ def generate_calendar_images(force: bool = False):
                         else:
                             IMAGE_URL = GCP_IMAGE_URL
                         block_list = [blocks.HeaderBlock(text=":calendar: Q Calendar")]
-                        if slack_app_settings.get("calendar_image_current"):
-                            block_list.append(
-                                blocks.ImageBlock(
-                                    image_url=IMAGE_URL.format(
-                                        bucket="f3nation-calendar-images",
-                                        image_name=slack_app_settings["calendar_image_current"],
-                                    ),
-                                    alt_text="This Week's Q Sheet",
+                        for week in WEEK_LABELS[:num_weeks]:
+                            image_name = slack_app_settings.get(f"calendar_image_{week}")
+                            if image_name:
+                                block_list.append(
+                                    blocks.ImageBlock(
+                                        image_url=IMAGE_URL.format(
+                                            bucket="f3nation-calendar-images",
+                                            image_name=image_name,
+                                        ),
+                                        alt_text=WEEK_ALT_TEXT[week],
+                                    )
                                 )
-                            )
-                        if slack_app_settings.get("calendar_image_next"):
-                            block_list.append(
-                                blocks.ImageBlock(
-                                    image_url=IMAGE_URL.format(
-                                        bucket="f3nation-calendar-images",
-                                        image_name=slack_app_settings["calendar_image_next"],
-                                    ),
-                                    alt_text="Next Week's Q Sheet",
-                                )
-                            )
                         block_list.append(
                             blocks.ActionsBlock(
                                 elements=[
