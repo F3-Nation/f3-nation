@@ -15,22 +15,8 @@ import { ModalSwitcher } from "~/app/_components/modal/modal-switcher";
 import { env } from "~/env";
 import { AdminSessionProvider } from "~/lib/auth/client";
 import { getSessionUser, requireAdminPortalAccess } from "~/lib/auth/server";
+import { isApiDown } from "~/lib/api-health";
 import { OrpcReactProvider } from "~/orpc/react";
-
-async function isApiDown(): Promise<boolean> {
-  const base = env.F3_API_BASE_URL;
-  if (!base) return false;
-  try {
-    const res = await fetch(new URL("/v1/ping", base).href, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(3000),
-    });
-    // 4xx (e.g. 429 rate-limit) means the API is up and responding
-    return res.status >= 500;
-  } catch {
-    return true;
-  }
-}
 
 export const metadata: Metadata = {
   title: "F3 Nation Admin",
@@ -45,7 +31,7 @@ export const viewport: Viewport = {
 };
 
 export default async function RootLayout(props: { children: React.ReactNode }) {
-  if (await isApiDown()) {
+  if (await isApiDown(env.F3_API_BASE_URL)) {
     return (
       <html lang="en" suppressHydrationWarning>
         <body

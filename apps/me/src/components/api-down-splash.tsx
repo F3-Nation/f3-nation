@@ -5,7 +5,9 @@ import Image from "next/image";
 
 export function ApiDownSplash() {
   useEffect(() => {
-    const id = setInterval(() => window.location.reload(), 30_000);
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") window.location.reload();
+    }, 30_000);
     return () => clearInterval(id);
   }, []);
 

@@ -26,21 +26,7 @@ import { OrpcReactProvider } from "~/orpc/react";
 import { RuntimeConfigProvider } from "~/utils/runtime-config";
 import { KeyPressProvider } from "~/utils/key-press/provider";
 import { RouteChangeTracker } from "./_components/route-change-tracker";
-
-async function isApiDown(): Promise<boolean> {
-  const base = env.F3_API_BASE_URL;
-  if (!base) return false;
-  try {
-    const res = await fetch(new URL("/v1/ping", base).href, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(3000),
-    });
-    // 4xx (e.g. 429 rate-limit) means the API is up and responding
-    return res.status >= 500;
-  } catch {
-    return true;
-  }
-}
+import { isApiDown } from "~/lib/api-health";
 
 const mapBaseUrl = (() => {
   // F3_MAP_BASE_URL is typed required, but under skipValidation (CI/lint builds)
@@ -70,16 +56,17 @@ export const viewport: Viewport = {
 };
 
 export default async function RootLayout(props: { children: React.ReactNode }) {
-  const bodyClass = cn(
-    "min-h-dvh w-screen overflow-hidden bg-background font-sans text-foreground antialiased",
-    GeistSans.variable,
-    GeistMono.variable,
-  );
+  const fontVars = cn(GeistSans.variable, GeistMono.variable);
 
-  if (await isApiDown()) {
+  if (await isApiDown(env.F3_API_BASE_URL)) {
     return (
       <html lang="en" suppressHydrationWarning>
-        <body className={bodyClass}>
+        <body
+          className={cn(
+            "min-h-dvh bg-background font-sans text-foreground antialiased",
+            fontVars,
+          )}
+        >
           <ApiDownSplash />
         </body>
       </html>
@@ -88,7 +75,12 @@ export default async function RootLayout(props: { children: React.ReactNode }) {
 
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={bodyClass}>
+      <body
+        className={cn(
+          "min-h-dvh w-screen overflow-hidden bg-background font-sans text-foreground antialiased",
+          fontVars,
+        )}
+      >
         <GoogleAnalytics measurementId={env.NEXT_PUBLIC_GA_MEASUREMENT_ID} />
         <RouteChangeTracker />
         <DataProvider>

@@ -10,23 +10,9 @@ import { GoogleAnalytics } from "@/components/google-analytics";
 import { VersionInfo } from "@/components/version-info";
 import { ApiDownSplash } from "@/components/api-down-splash";
 import { getChangelog } from "@/lib/changelog";
+import { isApiDown } from "@/lib/api-health";
 import { env } from "@/env";
 import packageJson from "../../package.json";
-
-async function isApiDown(): Promise<boolean> {
-  const base = process.env.F3_API_BASE_URL;
-  if (!base) return false;
-  try {
-    const res = await fetch(new URL("/v1/ping", base).href, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(3000),
-    });
-    // 4xx (e.g. 429 rate-limit) means the API is up and responding
-    return res.status >= 500;
-  } catch {
-    return true;
-  }
-}
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -44,7 +30,7 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const apiDown = await isApiDown();
+  const apiDown = await isApiDown(process.env.F3_API_BASE_URL);
   const channel = env.F3_CHANNEL;
   const changelog = getChangelog().slice(0, 10);
 

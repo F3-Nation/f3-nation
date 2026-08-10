@@ -35,12 +35,28 @@ describe("ApiDownSplash", () => {
     );
   });
 
-  it("reloads the page after 30 seconds", () => {
+  it("reloads the page after 30 seconds when tab is visible", () => {
+    Object.defineProperty(document, "visibilityState", {
+      value: "visible",
+      writable: true,
+    });
     render(<ApiDownSplash />);
     expect(reloadMock).not.toHaveBeenCalled();
     act(() => {
       vi.advanceTimersByTime(30_000);
     });
     expect(reloadMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not reload when the tab is hidden", () => {
+    Object.defineProperty(document, "visibilityState", {
+      value: "hidden",
+      writable: true,
+    });
+    render(<ApiDownSplash />);
+    act(() => {
+      vi.advanceTimersByTime(30_000);
+    });
+    expect(reloadMock).not.toHaveBeenCalled();
   });
 });
