@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/F3-Nation/f3-nation/compare/pkg-sso@0.2.1...pkg-sso@0.3.0) (2026-08-10)
+
+
+### Features
+
+* **sso:** new next wrapper for sso, partially completed ([#688](https://github.com/F3-Nation/f3-nation/issues/688)) ([8555b36](https://github.com/F3-Nation/f3-nation/commit/8555b3687808c26713f9b7b524e65296756d4504))
+
 ## [0.2.1](https://github.com/F3-Nation/f3-nation/compare/pkg-sso@0.2.0...pkg-sso@0.2.1) (2026-07-14)
 
 

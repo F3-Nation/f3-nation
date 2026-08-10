@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.6.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.5.0...pkg-api@0.6.0) (2026-08-10)
+
+
+### Features
+
+* **health:** add /status to homepage and introduce shared package for reporting ([#657](https://github.com/F3-Nation/f3-nation/issues/657)) ([88e7547](https://github.com/F3-Nation/f3-nation/commit/88e754751e25461e25c7361c878c78e3902daad4))
+
+
+### Bug Fixes
+
+* **api:** require editor on current org when editing a position ([#814](https://github.com/F3-Nation/f3-nation/issues/814)) ([af7719a](https://github.com/F3-Nation/f3-nation/commit/af7719adac2934f20eee01b36bbd3d572f2d26a6))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @f3nation/health bumped to 1.1.0
+
 ## [0.5.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.4.1...pkg-api@0.5.0) (2026-08-05)
 
 

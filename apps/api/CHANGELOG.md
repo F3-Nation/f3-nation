@@ -1,5 +1,19 @@
 # Changelog
 
+## [6.3.0](https://github.com/F3-Nation/f3-nation/compare/api@6.2.0...api@6.3.0) (2026-08-10)
+
+
+### Features
+
+* **health:** add /status to homepage and introduce shared package for reporting ([#657](https://github.com/F3-Nation/f3-nation/issues/657)) ([88e7547](https://github.com/F3-Nation/f3-nation/commit/88e754751e25461e25c7361c878c78e3902daad4))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.6.0
+
 ## [6.2.0](https://github.com/F3-Nation/f3-nation/compare/api@6.1.3...api@6.2.0) (2026-08-05)
 
 

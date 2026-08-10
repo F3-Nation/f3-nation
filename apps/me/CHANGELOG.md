@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.2.0](https://github.com/F3-Nation/f3-nation/compare/me@2.1.4...me@2.2.0) (2026-08-10)
+
+
+### Features
+
+* **health:** add /status to homepage and introduce shared package for reporting ([#657](https://github.com/F3-Nation/f3-nation/issues/657)) ([88e7547](https://github.com/F3-Nation/f3-nation/commit/88e754751e25461e25c7361c878c78e3902daad4))
+* **me:** adding version, env, and changelog ([#790](https://github.com/F3-Nation/f3-nation/issues/790)) ([dfb9956](https://github.com/F3-Nation/f3-nation/commit/dfb99560fa1a4109884f0261910d4398a0531732))
+* **sso:** new next wrapper for sso, partially completed ([#688](https://github.com/F3-Nation/f3-nation/issues/688)) ([8555b36](https://github.com/F3-Nation/f3-nation/commit/8555b3687808c26713f9b7b524e65296756d4504))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.6.0
+    * @f3nation/health bumped to 1.1.0
+    * @f3nation/sso-next bumped to 0.2.0
+  * devDependencies
+    * @f3nation/sso bumped to 0.3.0
+
 ## [2.1.4](https://github.com/F3-Nation/f3-nation/compare/me@2.1.3...me@2.1.4) (2026-08-05)
 
 

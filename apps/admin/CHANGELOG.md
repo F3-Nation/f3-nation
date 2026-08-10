@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.3.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.2.0...admin@2.3.0) (2026-08-10)
+
+
+### Features
+
+* **sso:** new next wrapper for sso, partially completed ([#688](https://github.com/F3-Nation/f3-nation/issues/688)) ([8555b36](https://github.com/F3-Nation/f3-nation/commit/8555b3687808c26713f9b7b524e65296756d4504))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.6.0
+    * @f3nation/sso-next bumped to 0.2.0
+  * devDependencies
+    * @f3nation/sso bumped to 0.3.0
+
 ## [2.2.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.1.3...admin@2.2.0) (2026-08-05)
 
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## [7.1.1](https://github.com/F3-Nation/f3-nation/compare/map@7.1.0...map@7.1.1) (2026-08-10)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.6.0
+
 ## [7.1.0](https://github.com/F3-Nation/f3-nation/compare/map@7.0.9...map@7.1.0) (2026-08-05)
 
 
