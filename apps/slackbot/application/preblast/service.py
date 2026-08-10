@@ -223,9 +223,7 @@ class PreblastService:
             raise ValueError("AttendanceService is required to update attendance")
         return self._attendance_service.assign_qs(event_instance_id, q_user_id, co_q_user_ids)
 
-    def check_and_mark_hc_announcement(
-        self, event_instance_id: int, slack_user_id: str, *, is_hc: bool
-    ) -> bool:
+    def check_and_mark_hc_announcement(self, event_instance_id: int, slack_user_id: str, *, is_hc: bool) -> bool:
         """Return True if the HC announcement should be posted (and mark it sent)."""
         if not self._event_instance_service:
             return True  # fail open
@@ -239,8 +237,9 @@ class PreblastService:
             event_instance_id,
             existing_instance=event,
             meta_updates={
-                k: updated_meta[k] for k in updated_meta
-                if k not in (event.meta or {}) or updated_meta[k] != event.meta.get(k)
+                k: updated_meta[k]
+                for k in updated_meta
+                if k not in (event.meta or {}) or updated_meta[k] != event.meta.get(k)  # type: ignore[union-attr]  # meta.get is unreachable when meta is None: the first clause "k not in (event.meta or {})" is always True in that case, short-circuiting before this operand runs
             },
         )
         return True
