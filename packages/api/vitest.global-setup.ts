@@ -26,6 +26,13 @@ export async function setup() {
       seedType: "test",
     });
   } finally {
+    // `setup` is a named export, so Vitest's globalSetup contract does not
+    // treat its return value as a teardown callback (only a default export's
+    // return, or a separately named `teardown` export, would be). This
+    // client's lifetime only needs to span the reset itself, so close it
+    // here rather than trying to keep it alive for a `teardown` export.
+    await close();
+
     if (prevSkipEnvValidation === undefined) {
       delete process.env.SKIP_ENV_VALIDATION;
     } else {
@@ -34,6 +41,4 @@ export async function setup() {
       });
     }
   }
-
-  return close;
 }

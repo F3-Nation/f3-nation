@@ -20,20 +20,34 @@ export const reset = async (db?: AppDb) => {
 
   const isTestDB = databaseName?.endsWith("_test");
 
-  process.stdout.write(
-    `Resetting database ${databaseUrl} ${isTest ? "(TEST)" : ""} ARE YOU SURE? (y/n): `,
-  );
   // wait for confirmation from the command line
-  if (isTest && isTestDB) {
+  if (isTest) {
+    // A caller-supplied `db` can be connected to a different database than
+    // TEST_DATABASE_URL describes, so trusting `databaseName` (parsed from
+    // the URL, not the live connection) isn't enough before destructive
+    // schema operations run against `dbToUse`. Confirm the client we're
+    // actually about to drop schemas on is itself a "_test" database.
+    const [connectedDb] = await dbToUse.execute<{
+      current_database: string;
+    }>(sql`SELECT current_database()`);
+    const connectedDbName = connectedDb?.current_database;
+
+    if (!isTestDB || !connectedDbName?.endsWith("_test")) {
+      // Automated/non-interactive callers (e.g. Vitest globalSetup) only
+      // ever intend to reset a "_test" database. Falling through to the
+      // stdin prompt below would hang forever with no TTY to answer it.
+      throw new Error(
+        `Refusing to reset "${connectedDbName ?? databaseName}": NODE_ENV=test requires a database name ending in "_test" (check TEST_DATABASE_URL).`,
+      );
+    }
     console.log("Bypassing confirmation for test database");
-  } else if (isTest) {
-    // Automated/non-interactive callers (e.g. Vitest globalSetup) only ever
-    // intend to reset a "_test" database. Falling through to the stdin
-    // prompt below would hang forever with no TTY to answer it.
-    throw new Error(
-      `Refusing to reset "${databaseName}": NODE_ENV=test requires a database name ending in "_test" (check TEST_DATABASE_URL).`,
-    );
   } else {
+    // Only printed for the interactive path: the full URL can carry
+    // credentials, and the automated (isTest) branches above never read
+    // this prompt, so it must not run unconditionally on every reset.
+    process.stdout.write(
+      `Resetting database ${databaseUrl} ARE YOU SURE? (y/n): `,
+    );
     const confirmation = await new Promise((resolve) => {
       process.stdin.once("data", (data) => {
         resolve(data.toString().trim());
