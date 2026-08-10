@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm/sql";
 
 import { isTest } from "@acme/shared/common/constants";
 
+import type { AppDb } from "./client";
 import { alembicVersion } from "../drizzle/schema";
 import { getDb, getDbUrl } from "./utils/functions";
 
@@ -11,9 +12,9 @@ interface DbUser extends Record<string, unknown> {
 
 export let alembicVersionValue: string | undefined;
 
-export const reset = async () => {
+export const reset = async (db?: AppDb) => {
   const { databaseUrl, databaseName } = getDbUrl();
-  const db = getDb();
+  const dbToUse = db ?? getDb();
   if (!databaseUrl) return;
   if (process.env.CI && !isTest) return;
 
@@ -25,6 +26,13 @@ export const reset = async () => {
   // wait for confirmation from the command line
   if (isTest && isTestDB) {
     console.log("Bypassing confirmation for test database");
+  } else if (isTest) {
+    // Automated/non-interactive callers (e.g. Vitest globalSetup) only ever
+    // intend to reset a "_test" database. Falling through to the stdin
+    // prompt below would hang forever with no TTY to answer it.
+    throw new Error(
+      `Refusing to reset "${databaseName}": NODE_ENV=test requires a database name ending in "_test" (check TEST_DATABASE_URL).`,
+    );
   } else {
     const confirmation = await new Promise((resolve) => {
       process.stdin.once("data", (data) => {
@@ -39,7 +47,7 @@ export const reset = async () => {
   // We need to manually handle the alembic version table for moneyball's work
   let version_num: string | undefined;
   try {
-    const [result] = await db.select().from(alembicVersion);
+    const [result] = await dbToUse.select().from(alembicVersion);
     version_num = result?.versionNum;
     console.log("Alembic version", version_num);
   } catch {
@@ -47,19 +55,19 @@ export const reset = async () => {
   }
 
   // Get all non-system users before dropping the schema
-  const users = await db.execute<DbUser>(sql`
-    SELECT rolname FROM pg_roles 
+  const users = await dbToUse.execute<DbUser>(sql`
+    SELECT rolname FROM pg_roles
     WHERE rolname NOT IN ('postgres', 'azure_pg_admin', 'azure_superuser', 'cloudsqlsuperuser')
   `);
 
-  await db.execute(sql`DROP SCHEMA IF EXISTS public CASCADE`);
-  await db.execute(sql`DROP SCHEMA IF EXISTS drizzle CASCADE`);
-  await db.execute(sql`DROP SCHEMA IF EXISTS auth CASCADE`);
-  await db.execute(sql`CREATE SCHEMA public`);
+  await dbToUse.execute(sql`DROP SCHEMA IF EXISTS public CASCADE`);
+  await dbToUse.execute(sql`DROP SCHEMA IF EXISTS drizzle CASCADE`);
+  await dbToUse.execute(sql`DROP SCHEMA IF EXISTS auth CASCADE`);
+  await dbToUse.execute(sql`CREATE SCHEMA public`);
 
   for (const user of users) {
     const quotedRolname = `"${user.rolname}"`;
-    await db.execute(sql`
+    await dbToUse.execute(sql`
       GRANT USAGE ON SCHEMA public TO ${sql.raw(quotedRolname)};
       GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO ${sql.raw(quotedRolname)};
       GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO ${sql.raw(quotedRolname)};

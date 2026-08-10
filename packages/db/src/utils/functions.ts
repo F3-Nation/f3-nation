@@ -22,11 +22,14 @@ export const getDbUrl = () => {
   return { databaseUrl, useSsl, databaseName };
 };
 
-export const getDb = () => {
+export const createDbClient = () => {
   const { databaseUrl, useSsl } = getDbUrl();
   const sslOptions = useSsl ? { ssl: "require" as const } : undefined;
-  return drizzle(postgres(databaseUrl, sslOptions), { schema });
+  const client = postgres(databaseUrl, sslOptions);
+  return { db: drizzle(client, { schema }), close: () => client.end() };
 };
+
+export const getDb = () => createDbClient().db;
 
 export async function createDatabaseIfNotExists(
   connectionString: string,

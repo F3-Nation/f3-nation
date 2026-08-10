@@ -8,7 +8,7 @@ export default defineConfig({
     exclude: ["**/node_modules/**", "**/dist/**"],
     environment: "node",
     setupFiles: ["./src/__tests__/setup.ts"],
-    globalSetup: ["./vitest.globalSetup.ts"],
+    globalSetup: ["./vitest.global-setup.ts"],
     fileParallelism: false,
     env: { NODE_ENV: "test" },
     coverage: {
