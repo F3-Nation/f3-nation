@@ -51,7 +51,7 @@ catalog:
   "@tanstack/react-table": ^8.21.3
   "@tanstack/react-virtual": ^3.14.9
   "@tanstack/table-core": ^8.21.3
-  "@testing-library/jest-dom": ^6.9.1
+  "@testing-library/jest-dom": ^7.0.0
   "@testing-library/react": ^16.3.2
   "@testing-library/user-event": ^14.6.1
   "@turbo/gen": ^2.10.8
