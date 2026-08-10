@@ -6,8 +6,6 @@
 -- Constraints use IF NOT EXISTS so this is safe to re-run against production
 -- where the PKs may already exist.
 --
--- After this migration lands, 0019_audit_history.sql (or a follow-up migration)
--- can add enable_tracking calls for these tables.
 
 DO $$ BEGIN
   IF NOT EXISTS (
