@@ -148,9 +148,7 @@ mirrors:
 | `id`          | bigserial   | History-row primary key                                                              |
 | `row_id`      | text        | PK of the changed row, colon-joined for composite PKs                                |
 | `op`          | char(1)     | `I` (insert), `U` (update), `D` (delete)                                             |
-| `changed_at`  | timestamptz | When the change was committed                                                        |
-| `changed_by`  | integer     | `users.id` of the acting user; `NULL` for seeds, migrations, and bot writes          |
-| `changed_via` | text        | Originating app (`f3-map`, `f3-admin`, `f3-me`, `f3-slackbot`, …); `NULL` when unset |
+| `changed_at`  | timestamptz | When the change was committed   
 | `old_row`     | jsonb       | Full row before the change; `NULL` on INSERT                                         |
 | `new_row`     | jsonb       | Full row after the change; `NULL` on DELETE                                          |
 
