@@ -17,6 +17,11 @@ task_name="${1:?usage: python-task.sh <task-name> <package-label> <command...>}"
 package_label="${2:?usage: python-task.sh <task-name> <package-label> <command...>}"
 shift 2
 
+if (($# == 0)); then
+  echo "ERROR: missing command — usage: python-task.sh <task-name> <package-label> <command...>" >&2
+  exit 2
+fi
+
 if ! command -v uv >/dev/null 2>&1; then
   if [ -n "${CI:-}" ]; then
     echo "ERROR: uv is not installed and CI is set — refusing to skip '${task_name}' for ${package_label}." >&2
@@ -54,4 +59,9 @@ while (($#)); do
   esac
 done
 
-exec "${cmd[@]+"${cmd[@]}"}"
+if ((${#cmd[@]} == 0)); then
+  echo "ERROR: command stripped to empty — usage: python-task.sh <task-name> <package-label> <command...>" >&2
+  exit 2
+fi
+
+exec "${cmd[@]}"
