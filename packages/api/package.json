@@ -27,6 +27,7 @@
     "@acme/mail": "workspace:*",
     "@acme/shared": "workspace:*",
     "@acme/validators": "workspace:*",
+    "@f3nation/health": "workspace:*",
     "@orpc/experimental-ratelimit": "catalog:",
     "@orpc/server": "catalog:",
     "dayjs": "catalog:",
