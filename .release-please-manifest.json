@@ -10,6 +10,7 @@
   "packages/auth": "0.2.0",
   "packages/db": "0.3.0",
   "packages/env": "0.1.2",
+  "packages/health": "1.0.0",
   "packages/logger": "0.1.1",
   "packages/mail": "0.1.2",
   "packages/shared": "0.1.3",

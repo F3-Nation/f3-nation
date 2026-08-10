@@ -28,9 +28,11 @@ DO $$ BEGIN
     ALTER TABLE codex.admins ALTER COLUMN id SET DEFAULT nextval('codex.admins_id_seq'::regclass);
   END IF;
   -- Always sync: guard-only checks sequence existence, not whether it is ahead of MAX(id).
-  PERFORM setval('codex.admins_id_seq',
-    GREATEST((SELECT last_value FROM codex.admins_id_seq),
-             COALESCE((SELECT MAX(id) FROM codex.admins), 0)) + 1, false);
+  IF (SELECT MAX(id) FROM codex.admins) IS NOT NULL THEN
+    PERFORM setval('codex.admins_id_seq',
+      GREATEST((SELECT last_value FROM codex.admins_id_seq),
+               (SELECT MAX(id) FROM codex.admins)) + 1, false);
+  END IF;
 END $$;
 
 -- ─── references ──────────────────────────────────────────────────────────────
@@ -50,9 +52,11 @@ DO $$ BEGIN
     ALTER SEQUENCE codex.codex_references_id_seq OWNED BY codex."references".id;
     ALTER TABLE codex."references" ALTER COLUMN id SET DEFAULT nextval('codex.codex_references_id_seq'::regclass);
   END IF;
-  PERFORM setval('codex.codex_references_id_seq',
-    GREATEST((SELECT last_value FROM codex.codex_references_id_seq),
-             COALESCE((SELECT MAX(id) FROM codex."references"), 0)) + 1, false);
+  IF (SELECT MAX(id) FROM codex."references") IS NOT NULL THEN
+    PERFORM setval('codex.codex_references_id_seq',
+      GREATEST((SELECT last_value FROM codex.codex_references_id_seq),
+               (SELECT MAX(id) FROM codex."references")) + 1, false);
+  END IF;
 END $$;
 
 -- ─── entries (text PK, no sequence) ──────────────────────────────────────────
@@ -87,9 +91,11 @@ DO $$ BEGIN
     ALTER SEQUENCE codex.entry_references_id_seq OWNED BY codex.entry_references.id;
     ALTER TABLE codex.entry_references ALTER COLUMN id SET DEFAULT nextval('codex.entry_references_id_seq'::regclass);
   END IF;
-  PERFORM setval('codex.entry_references_id_seq',
-    GREATEST((SELECT last_value FROM codex.entry_references_id_seq),
-             COALESCE((SELECT MAX(id) FROM codex.entry_references), 0)) + 1, false);
+  IF (SELECT MAX(id) FROM codex.entry_references) IS NOT NULL THEN
+    PERFORM setval('codex.entry_references_id_seq',
+      GREATEST((SELECT last_value FROM codex.entry_references_id_seq),
+               (SELECT MAX(id) FROM codex.entry_references)) + 1, false);
+  END IF;
 END $$;
 
 -- ─── entry_tags (no sequence) ────────────────────────────────────────────────
@@ -138,9 +144,11 @@ DO $$ BEGIN
       START WITH 1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE CACHE 1
     );
   END IF;
-  PERFORM setval('codex.user_submissions_id_seq',
-    GREATEST((SELECT last_value FROM codex.user_submissions_id_seq),
-             COALESCE((SELECT MAX(id) FROM codex.user_submissions), 0)) + 1, false);
+  IF (SELECT MAX(id) FROM codex.user_submissions) IS NOT NULL THEN
+    PERFORM setval('codex.user_submissions_id_seq',
+      GREATEST((SELECT last_value FROM codex.user_submissions_id_seq),
+               (SELECT MAX(id) FROM codex.user_submissions)) + 1, false);
+  END IF;
 END $$;
 
 -- ─── Indexes ──────────────────────────────────────────────────────────────────
