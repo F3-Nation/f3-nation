@@ -18,5 +18,3 @@
 * The following workspace dependencies were updated
   * dependencies
     * @f3nation/sso bumped to 0.3.0
-
-## Changelog
