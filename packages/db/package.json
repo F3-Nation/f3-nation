@@ -5,6 +5,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./client": "./src/client.ts",
+    "./testing": "./src/utils/reset-test-db.ts",
     "./schema/schema": "./drizzle/schema.ts",
     "./schema/relations": "./drizzle/relations.ts"
   },
