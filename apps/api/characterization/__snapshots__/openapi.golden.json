@@ -8723,6 +8723,17 @@
                                     ],
                                     "description": "Event description"
                                   },
+                                  "endDate": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ],
+                                    "description": "Date the event stops recurring, or null when open-ended"
+                                  },
                                   "endTime": {
                                     "anyOf": [
                                       {
@@ -8780,6 +8791,7 @@
                                   "dayOfWeek",
                                   "startTime",
                                   "endTime",
+                                  "endDate",
                                   "eventTypes",
                                   "aoId",
                                   "aoLogo",
