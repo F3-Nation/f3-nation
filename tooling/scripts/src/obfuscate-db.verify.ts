@@ -182,8 +182,15 @@ async function startLocalPostgres(): Promise<() => void> {
   console.log(`Postgres (local initdb, ${dataDir}) up on :${PORT}`);
   return () => {
     spawnSync("pg_ctl", ["-D", dataDir, "-m", "fast", "stop"]);
-    rmSync(dataDir, { recursive: true, force: true });
-    console.log("Stopped local postgres and removed its temp data dir.");
+    try {
+      rmSync(dataDir, { recursive: true, force: true });
+      console.log("Stopped local postgres and removed its temp data dir.");
+    } catch (err) {
+      console.error(
+        `Stopped local postgres, but failed to remove ${dataDir}:`,
+        err,
+      );
+    }
   };
 }
 
@@ -291,13 +298,32 @@ async function plantSyntheticPii(
   return { userId: user.id };
 }
 
+/** Collect every string in a JSON value: leaves and object keys. */
+function stringLeaves(value: unknown, out: string[]): string[] {
+  if (typeof value === "string") out.push(value);
+  else if (Array.isArray(value)) {
+    for (const v of value) stringLeaves(v, out);
+  } else if (value !== null && typeof value === "object") {
+    for (const [k, v] of Object.entries(value)) {
+      out.push(k);
+      stringLeaves(v, out);
+    }
+  }
+  return out;
+}
+
 async function sweepForEmails(
   sql: postgres.Sql,
 ): Promise<{ violations: string[]; columnsScanned: number }> {
   const columns = await sql<
-    { table_schema: string; table_name: string; column_name: string }[]
+    {
+      table_schema: string;
+      table_name: string;
+      column_name: string;
+      data_type: string;
+    }[]
   >`
-    SELECT c.table_schema, c.table_name, c.column_name
+    SELECT c.table_schema, c.table_name, c.column_name, c.data_type
     FROM information_schema.columns c
     JOIN information_schema.tables t
       ON t.table_schema = c.table_schema AND t.table_name = c.table_name
@@ -309,13 +335,21 @@ async function sweepForEmails(
   const violations: string[] = [];
   for (const col of columns) {
     const qualified = `${col.table_schema === "public" ? "" : `${col.table_schema}.`}${col.table_name}`;
+    const isJson = col.data_type === "json" || col.data_type === "jsonb";
     const rows = await sql<{ v: string | null }[]>`
       SELECT ${sql(col.column_name)}::text AS v FROM ${sql(qualified)}
       WHERE ${sql(col.column_name)}::text LIKE '%@%'`;
     for (const row of rows) {
-      for (const match of row.v?.match(EMAIL_REGEX) ?? []) {
-        if (!match.toLowerCase().endsWith(ALLOWED_EMAIL_SUFFIX)) {
-          violations.push(`${qualified}.${col.column_name}: ${match}`);
+      if (row.v === null) continue;
+      // Regexing a jsonb column's raw ::text serialization risks false
+      // matches around backslash-escapes; parse and scan actual string
+      // leaves instead, same as obfuscate-db.verify-target.ts.
+      const texts = isJson ? stringLeaves(JSON.parse(row.v), []) : [row.v];
+      for (const text of texts) {
+        for (const match of text.match(EMAIL_REGEX) ?? []) {
+          if (!match.toLowerCase().endsWith(ALLOWED_EMAIL_SUFFIX)) {
+            violations.push(`${qualified}.${col.column_name}: ${match}`);
+          }
         }
       }
     }
@@ -338,6 +372,7 @@ async function main(): Promise<void> {
   // SIGTERM (Ctrl-C) skips finally — restore on those signals too so we never
   // leave their env file replaced. Idempotent so the finally can also call it.
   let envRestored = false;
+  let envRestoreFailed = false;
   const restoreEnv = (): void => {
     if (envRestored) return;
     envRestored = true;
@@ -347,8 +382,16 @@ async function main(): Promise<void> {
       } else {
         writeFileSync(envFile, envBackup);
       }
-    } catch {
-      // best effort — nothing actionable if the restore itself fails
+    } catch (err) {
+      // Not actually best-effort-recoverable: if this fails, the developer's
+      // real packages/env/.env is left pointed at a torn-down sandbox
+      // Postgres. Loud, since nothing here can retry it.
+      envRestoreFailed = true;
+      console.error(
+        `FAILED to restore ${envFile} — it may still point at the ` +
+          `now-stopped sandbox Postgres. Restore it manually.`,
+        err,
+      );
     }
   };
   const onSignal = (): void => {
@@ -512,7 +555,11 @@ async function main(): Promise<void> {
     }
     restoreEnv();
     stopPostgres();
-    console.log("Cleaned up throwaway postgres and packages/env/.env.");
+    console.log(
+      envRestoreFailed
+        ? "Stopped throwaway postgres, but packages/env/.env restore FAILED — see above."
+        : "Cleaned up throwaway postgres and packages/env/.env.",
+    );
   }
 }
 

@@ -20,10 +20,15 @@ export function databaseNameFromUrl(url: string): string | undefined {
 // Exact-match, not substring: prod is named "f3data" (docs/STAGING_REFRESH.md),
 // which a bare /prod/i test does not catch, but staging ("f3data-nonprod")
 // legitimately contains "f3data" as a substring and must stay allowed.
-// Shared by obfuscate-db.ts and obfuscate-db.verify-target.ts so a name added
-// to one production-guard can't be missed in the other.
-export const FORBIDDEN_DB_NAMES = new Set(["f3data"]);
+const FORBIDDEN_DB_NAMES = new Set(["f3data"]);
 
 export function looksLikeProdDbName(name: string): boolean {
-  return FORBIDDEN_DB_NAMES.has(name) || /prod/i.test(name);
+  const normalizedName = name.toLowerCase();
+  return (
+    FORBIDDEN_DB_NAMES.has(normalizedName) ||
+    // Token-aware, not bare substring: /prod/i alone matches "nonprod" inside
+    // "f3data-nonprod" (staging's own db name), wrongly blocking the
+    // documented staging refresh target.
+    /(?:^|[-_])prod(?:uction)?(?:$|[-_])/.test(normalizedName)
+  );
 }

@@ -256,10 +256,18 @@ async function main(): Promise<void> {
     const [submitted] = await sql<{ n: number }[]>`
       SELECT count(*)::int AS n FROM update_requests
       WHERE submitted_by IS NOT NULL`;
+    const submittedCount = submitted?.n ?? 0;
+    const joinedCount = joined?.n ?? 0;
+    // A bare `joinedCount > 0` would pass on one coincidental match while the
+    // mapping is mostly broken. Require a majority to actually join —
+    // some legitimate non-user submitters (e.g. external admins) are
+    // expected, so this isn't 100%, but a mostly-broken mapping can't hide
+    // behind a single lucky row anymore.
+    const MIN_JOIN_RATIO = 0.5;
     check(
       "deterministic cross-table email mapping",
-      (submitted?.n ?? 0) === 0 || (joined?.n ?? 0) > 0,
-      `${joined?.n}/${submitted?.n} submitted_by values join users.email`,
+      submittedCount === 0 || joinedCount / submittedCount >= MIN_JOIN_RATIO,
+      `${joinedCount}/${submittedCount} submitted_by values join users.email`,
     );
 
     // No '-local' exclusion here: --preserve-local-seed is a sandbox-only

@@ -77,6 +77,11 @@ let SALT: string;
 const LOCAL_SEED_EMAIL_SUFFIX = "@f3local.dev";
 const OBFUSCATED_EMAIL_DOMAIN = "obfuscated.f3nation.dev";
 
+// sha256 hex digests are 64 chars — a collision-lengthening loop that keeps
+// growing `length` past this stops changing its output and would spin
+// forever on a true collision. Every such loop must check this.
+const MAX_HASH_HEX_LENGTH = 64;
+
 function hashHex(input: string, length: number): string {
   return createHash("sha256")
     .update(`${SALT}:${input}`)
@@ -105,6 +110,11 @@ function fakeEmail(original: string): string {
   let fake = `user-${hashHex(key, length)}@${OBFUSCATED_EMAIL_DOMAIN}`;
   while (emailFakesInUse.has(fake) && emailFakesInUse.get(fake) !== key) {
     length += 4;
+    if (length > MAX_HASH_HEX_LENGTH) {
+      throw new Error(
+        `fakeEmail: exhausted hash length disambiguating "${key}"`,
+      );
+    }
     fake = `user-${hashHex(key, length)}@${OBFUSCATED_EMAIL_DOMAIN}`;
   }
   emailFakes.set(key, fake);
@@ -123,7 +133,10 @@ function fakeName(original: string): string {
 // and 10 digits total, a valid-shaped NANP number instead of 11.
 function fakePhone(original: string): string {
   const digits = hashDigits(original, 7);
-  return `555-${digits.slice(0, 3)}-${digits.slice(3)}`;
+  // NANP exchange codes can't start with 0 or 1 — force the first exchange
+  // digit into 2-9 so the fake number stays valid-shaped.
+  const exchangeFirst = String(2 + (Number(digits[0]) % 8));
+  return `555-${exchangeFirst}${digits.slice(1, 3)}-${digits.slice(3)}`;
 }
 
 // Memoized like fakeEmail: slack_id has no unique constraint in the schema,
@@ -140,6 +153,11 @@ function fakeSlackId(original: string): string {
   let fake = `U${hashHex(original, length).toUpperCase()}`;
   while (slackIdFakesInUse.has(fake)) {
     length += 4;
+    if (length > MAX_HASH_HEX_LENGTH) {
+      throw new Error(
+        `fakeSlackId: exhausted hash length disambiguating "${original}"`,
+      );
+    }
     fake = `U${hashHex(original, length).toUpperCase()}`;
   }
   slackIdFakes.set(original, fake);
@@ -151,6 +169,17 @@ function fakeSlackId(original: string): string {
 // dedicated email columns, so relational consistency holds there too.
 const EMAIL_REGEX = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g;
 
+// Slack mention syntax (`<@U0REALSLACK>`) embedded in free text/Block Kit
+// JSON (preblast/backblast bodies) — real-data finding 2026-08: this ID
+// joins straight to attendance.user_id, so leaving it real while the same
+// person's slack_users row gets faked creates a joinable fake<->real
+// mapping. Route through the same memoized fakeSlackId as the dedicated
+// column so it stays consistent with slack_users.slack_id. NOTE: this does
+// NOT cover real names (pax_names/q_name) appearing in free text with no
+// accompanying "@" — that's a separate, unresolved gap (see backblast_rich
+// scrub call sites) that needs a name-substitution pass, not a regex.
+const SLACK_MENTION_REGEX = /<@(U[A-Z0-9]+)>/g;
+
 function isAllowlistedEmail(email: string): boolean {
   const lower = email.toLowerCase();
   if (lower.endsWith(`@${OBFUSCATED_EMAIL_DOMAIN}`)) return true;
@@ -161,7 +190,11 @@ function isAllowlistedEmail(email: string): boolean {
 }
 
 function scrubText(value: string): string {
-  return value.replace(EMAIL_REGEX, (match) =>
+  const withoutMentions = value.replace(
+    SLACK_MENTION_REGEX,
+    (_match, id: string) => `<@${fakeSlackId(id)}>`,
+  );
+  return withoutMentions.replace(EMAIL_REGEX, (match) =>
     isAllowlistedEmail(match) ? match : fakeEmail(match),
   );
 }
@@ -1040,7 +1073,7 @@ async function obfuscate(sql: Sql): Promise<void> {
       const changes: Row = {};
       for (const col of ["name", "f3_name", "hospital_name"]) {
         const v = row[col] as string | null;
-        if (v) changes[col] = fakeName(v);
+        if (v) changes[col] = fakeName(`${col}:${v}`);
       }
       const email = row.email as string | null;
       if (email && !isAllowlistedEmail(email)) changes.email = fakeEmail(email);
@@ -1057,7 +1090,7 @@ async function obfuscate(sql: Sql): Promise<void> {
     actions: { hospital_name: "obfuscate (name)" },
     transform(row) {
       const v = row.hospital_name as string | null;
-      return v ? { hospital_name: fakeName(v) } : null;
+      return v ? { hospital_name: fakeName(`hospital_name:${v}`) } : null;
     },
   });
 
@@ -1065,8 +1098,9 @@ async function obfuscate(sql: Sql): Promise<void> {
   // The primary key itself is PII (real-data finding, 2026-07-10). Rewrite ids
   // through the same memoized fakeEmail as the email columns, so id === email
   // consistency holds. Snapshot ids first (a keyset cursor over a mutating pk
-  // would skip/revisit rows); the secrets truncation above already ran, so no
-  // FK rows reference the old ids by the time this runs.
+  // would skip/revisit rows). NOTE: auth.user_profiles (unlike the truncated
+  // secrets tables) is not rewritten here and may FK to auth.user.id — the
+  // docs/STAGING_REFRESH.md hard-gate checklist covers verifying that.
   if (await tableExists(sql, "auth.user")) {
     const all = await sql<{ id: string }[]>`
       SELECT id FROM ${sql("auth.user")} ORDER BY id`;
@@ -1091,6 +1125,11 @@ async function obfuscate(sql: Sql): Promise<void> {
       }
       let fake = fakeEmail(id);
       for (let length = 12; used.has(fake); length += 4) {
+        if (length > MAX_HASH_HEX_LENGTH) {
+          throw new Error(
+            `auth.user.id disambiguation: exhausted hash length for "${id}"`,
+          );
+        }
         fake = `user-${hashHex(id, length)}@${OBFUSCATED_EMAIL_DOMAIN}`;
       }
       // Register the (possibly disambiguated) fake in the same map fakeEmail()
