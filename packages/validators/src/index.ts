@@ -101,6 +101,30 @@ export const EventInsertSchema = createInsertSchema(events, {
     orgId: true,
   });
 
+export const checkEventDateOrder = (
+  data: { startDate?: unknown; endDate?: unknown },
+  ctx: z.RefinementCtx,
+) => {
+  const { startDate, endDate } = data;
+  if (
+    typeof startDate === "string" &&
+    typeof endDate === "string" &&
+    startDate !== "" &&
+    endDate !== "" &&
+    endDate < startDate
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      message: "End date must be on or after start date",
+      path: ["endDate"],
+    });
+  }
+};
+
+export const EventCrupdateSchema = EventInsertSchema.partial({
+  id: true,
+}).superRefine(checkEventDateOrder);
+
 export const EventSelectSchema = createSelectSchema(events);
 
 export const CreateEventSchema = EventInsertSchema.omit({

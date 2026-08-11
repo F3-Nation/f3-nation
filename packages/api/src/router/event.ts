@@ -23,7 +23,7 @@ import {
   IsActiveStatus,
 } from "@acme/shared/app/enums";
 import { arrayOrSingle, getFullAddress } from "@acme/shared/app/functions";
-import { EventInsertSchema } from "@acme/validators";
+import { EventCrupdateSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
@@ -677,7 +677,7 @@ export const eventRouter = {
       return { event: event ?? null };
     }),
   crupdate: editorProcedure
-    .input(EventInsertSchema.partial({ id: true }))
+    .input(EventCrupdateSchema)
     .route({
       method: "POST",
       path: "/",

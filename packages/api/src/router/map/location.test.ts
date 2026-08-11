@@ -6,7 +6,7 @@
  * - Test database to be seeded with test data
  */
 
-import { schema } from "@acme/db";
+import { schema, sql } from "@acme/db";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanup,
@@ -112,6 +112,136 @@ describe("Map Location Router", () => {
       createdLocationIds.push(location.id);
     }
     return location;
+  };
+
+  /**
+   * Postgres `CURRENT_DATE` as a `YYYY-MM-DD` string.
+   *
+   * The router's date window compares `start_date`/`end_date` against
+   * `CURRENT_DATE`, which the *database session's* timezone resolves. Anchoring
+   * the boundary fixtures on the value the database itself reports keeps them
+   * deterministic even when the test process runs in a different timezone.
+   */
+  const getDbCurrentDate = async (): Promise<string> => {
+    const rows = await db.execute<{ today: string }>(
+      sql`SELECT CURRENT_DATE::text AS today`,
+    );
+    const today = rows[0]?.today;
+    if (!today) {
+      throw new Error("Failed to read CURRENT_DATE from the test database");
+    }
+    return today;
+  };
+
+  /** Shifts a `YYYY-MM-DD` string by whole days using UTC math (DST-proof). */
+  const shiftDays = (isoDate: string, days: number): string => {
+    const [year, month, day] = isoDate.split("-").map(Number);
+    if (year == null || month == null || day == null) {
+      throw new Error(`Unexpected date string: ${isoDate}`);
+    }
+    return new Date(Date.UTC(year, month - 1, day + days))
+      .toISOString()
+      .split("T")[0]!;
+  };
+
+  // Helper to create a test event with explicit start/end dates
+  const createDatedEvent = async (opts: {
+    aoId: number;
+    locationId: number;
+    label: string;
+    dayOfWeek: (typeof schema.events.$inferInsert)["dayOfWeek"];
+    startDate: string;
+    endDate?: string | null;
+  }) => {
+    const [event] = await db
+      .insert(schema.events)
+      .values({
+        name: `${opts.label} ${uniqueId()}`,
+        orgId: opts.aoId,
+        locationId: opts.locationId,
+        dayOfWeek: opts.dayOfWeek,
+        startTime: "0530",
+        isActive: true,
+        highlight: false,
+        startDate: opts.startDate,
+        endDate: opts.endDate ?? null,
+        isPrivate: false,
+      })
+      .returning();
+
+    if (!event) throw new Error(`Failed to create event: ${opts.label}`);
+    createdEventIds.push(event.id);
+    return event;
+  };
+
+  /**
+   * Builds a region + AO + location carrying one event per date-window case, so a
+   * single query response can be asserted against every boundary at once.
+   *
+   * `today` is the database's `CURRENT_DATE`; the window is
+   * `start_date <= today + 6 days AND (end_date IS NULL OR end_date >= today)`.
+   */
+  const createDateWindowFixture = async () => {
+    const today = await getDbCurrentDate();
+
+    const region = await createTestRegion();
+    if (!region) throw new Error("Failed to create test region");
+    const ao = await createTestAO(region.id);
+    if (!ao) throw new Error("Failed to create test AO");
+    const location = await createTestLocation(region.id);
+    if (!location) throw new Error("Failed to create test location");
+
+    const base = { aoId: ao.id, locationId: location.id } as const;
+
+    // Included: starts exactly on the last day of the six-day window.
+    const startsOnBoundary = await createDatedEvent({
+      ...base,
+      label: "Starts On Boundary",
+      dayOfWeek: "monday",
+      startDate: shiftDays(today, 6),
+    });
+
+    // Excluded: starts one day past the six-day window.
+    const startsPastBoundary = await createDatedEvent({
+      ...base,
+      label: "Starts Past Boundary",
+      dayOfWeek: "tuesday",
+      startDate: shiftDays(today, 7),
+    });
+
+    // Included: ends today — the last day it should still be shown.
+    const endsToday = await createDatedEvent({
+      ...base,
+      label: "Ends Today",
+      dayOfWeek: "wednesday",
+      startDate: shiftDays(today, -30),
+      endDate: today,
+    });
+
+    // Excluded: ended yesterday.
+    const endedYesterday = await createDatedEvent({
+      ...base,
+      label: "Ended Yesterday",
+      dayOfWeek: "thursday",
+      startDate: shiftDays(today, -30),
+      endDate: shiftDays(today, -1),
+    });
+
+    // Included: open-ended recurring event with no end date.
+    const noEndDate = await createDatedEvent({
+      ...base,
+      label: "No End Date",
+      dayOfWeek: "friday",
+      startDate: shiftDays(today, -30),
+      endDate: null,
+    });
+
+    return {
+      today,
+      location,
+      included: [startsOnBoundary, endsToday, noEndDate],
+      excluded: [startsPastBoundary, endedYesterday],
+    };
   };
 
   describe("eventsAndLocations", () => {
@@ -592,6 +722,175 @@ describe("Map Location Router", () => {
         );
         expect(hasInactivePrivate).toBe(false);
       }
+    });
+  });
+
+  /**
+   * The date window (`withinCurrentEventDateWindow` in location.ts) gates both
+   * eventsAndLocations and locationWorkout. These cases pin its boundaries so a
+   * regression can't silently hide upcoming workouts or keep ended ones on the
+   * map.
+   */
+  describe("current event date window", () => {
+    it("should include only in-window events in eventsAndLocations", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const fixture = await createDateWindowFixture();
+
+      const client = createTestClient();
+      const result = await client.map.location.eventsAndLocations();
+
+      // Map data format: [locationId, name, logo, lat, lon, fullAddress, events[]]
+      const locationData = result.find(
+        (loc: [number, ...unknown[]]) => loc[0] === fixture.location.id,
+      );
+      expect(locationData).toBeDefined();
+
+      // Events are at tuple index 6; event tuple index 0 is the event id.
+      const events = locationData![6] as [number, ...unknown[]][];
+      const eventIds = events.map((event) => event[0]);
+
+      expect(eventIds.sort()).toEqual(
+        fixture.included.map((event) => event.id).sort(),
+      );
+      for (const excluded of fixture.excluded) {
+        expect(eventIds).not.toContain(excluded.id);
+      }
+    });
+
+    it("should include only in-window events in locationWorkout", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const fixture = await createDateWindowFixture();
+
+      const client = createTestClient();
+      const result = await client.map.location.locationWorkout({
+        locationId: fixture.location.id,
+      });
+
+      expect(result.location).not.toBeNull();
+      const eventIds = result.location!.events.map((event) => event.id);
+
+      expect(eventIds.sort()).toEqual(
+        fixture.included.map((event) => event.id).sort(),
+      );
+      for (const excluded of fixture.excluded) {
+        expect(eventIds).not.toContain(excluded.id);
+      }
+    });
+
+    it("should return endDate on locationWorkout events so the panel can show it", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const today = await getDbCurrentDate();
+      const endDate = shiftDays(today, 30);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create test AO");
+      const location = await createTestLocation(region.id);
+      if (!location) throw new Error("Failed to create test location");
+
+      const dated = await createDatedEvent({
+        aoId: ao.id,
+        locationId: location.id,
+        label: "Dated Event",
+        dayOfWeek: "monday",
+        startDate: shiftDays(today, -30),
+        endDate,
+      });
+      const openEnded = await createDatedEvent({
+        aoId: ao.id,
+        locationId: location.id,
+        label: "Open Ended Event",
+        dayOfWeek: "tuesday",
+        startDate: shiftDays(today, -30),
+        endDate: null,
+      });
+
+      const client = createTestClient();
+      const result = await client.map.location.locationWorkout({
+        locationId: location.id,
+      });
+
+      const events = result.location?.events ?? [];
+      expect(events.find((e) => e.id === dated.id)?.endDate).toBe(endDate);
+      // Open-ended events must report null, not the sibling's date.
+      expect(events.find((e) => e.id === openEnded.id)?.endDate).toBeNull();
+    });
+
+    it("should drop a location whose only event has already ended", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const today = await getDbCurrentDate();
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create test AO");
+      const location = await createTestLocation(region.id);
+      if (!location) throw new Error("Failed to create test location");
+
+      await createDatedEvent({
+        aoId: ao.id,
+        locationId: location.id,
+        label: "Only Ended Event",
+        dayOfWeek: "monday",
+        startDate: shiftDays(today, -30),
+        endDate: shiftDays(today, -1),
+      });
+
+      const client = createTestClient();
+      const result = await client.map.location.eventsAndLocations();
+
+      // The INNER JOIN on the date window must leave no orphaned pin behind.
+      expect(
+        result.find((loc: [number, ...unknown[]]) => loc[0] === location.id),
+      ).toBeUndefined();
+
+      const workout = await client.map.location.locationWorkout({
+        locationId: location.id,
+      });
+      expect(workout.location).toBeNull();
+    });
+
+    it("should drop a location whose only event starts past the six-day window", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const today = await getDbCurrentDate();
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create test AO");
+      const location = await createTestLocation(region.id);
+      if (!location) throw new Error("Failed to create test location");
+
+      await createDatedEvent({
+        aoId: ao.id,
+        locationId: location.id,
+        label: "Only Upcoming Event",
+        dayOfWeek: "monday",
+        startDate: shiftDays(today, 7),
+      });
+
+      const client = createTestClient();
+      const result = await client.map.location.eventsAndLocations();
+
+      expect(
+        result.find((loc: [number, ...unknown[]]) => loc[0] === location.id),
+      ).toBeUndefined();
+
+      const workout = await client.map.location.locationWorkout({
+        locationId: location.id,
+      });
+      expect(workout.location).toBeNull();
     });
   });
 });
