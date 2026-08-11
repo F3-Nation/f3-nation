@@ -8,7 +8,10 @@
 #   instead, so the gate can never be silently switched off.
 # - Strips the ESLint/Prettier cache flags (`--cache`, `--cache-location <path>`,
 #   a bare `--`) that turbo's root `lint`/`format` scripts append to every task
-#   in the graph. Python tools reject them.
+#   in the graph. Python tools reject them. Only strips them from the trailing
+#   run of the command's argument list, so identical tokens that are genuinely
+#   part of the wrapped command (e.g. a `--` the wrapped tool itself expects,
+#   followed by more of its own args) are left alone.
 #
 # Usage: python-task.sh <task-name> <package-label> <command...>
 set -uo pipefail
@@ -34,29 +37,25 @@ EOF
   exit 0
 fi
 
-cmd=()
-while (($#)); do
-  case "$1" in
-    --cache)
-      shift
-      ;;
-    --cache-location)
-      shift
-      if (($#)); then
-        shift
-      fi
+cmd=("$@")
+while ((${#cmd[@]})); do
+  n=${#cmd[@]}
+  last="${cmd[$((n - 1))]}"
+  case "$last" in
+    --cache | --)
+      cmd=("${cmd[@]:0:$((n - 1))}")
+      continue
       ;;
     --cache-location=*)
-      shift
-      ;;
-    --)
-      shift
-      ;;
-    *)
-      cmd+=("$1")
-      shift
+      cmd=("${cmd[@]:0:$((n - 1))}")
+      continue
       ;;
   esac
+  if ((n >= 2)) && [[ "${cmd[$((n - 2))]}" == "--cache-location" ]]; then
+    cmd=("${cmd[@]:0:$((n - 2))}")
+    continue
+  fi
+  break
 done
 
 if ((${#cmd[@]} == 0)); then
