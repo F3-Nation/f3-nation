@@ -1169,10 +1169,6 @@ async function obfuscate(sql: Sql): Promise<void> {
 // Safety rails + main
 // ---------------------------------------------------------------------------
 
-function getDatabaseNameFromUrl(url: string): string | undefined {
-  return databaseNameFromUrl(url);
-}
-
 function printSummary(): void {
   const header = {
     table: "TABLE",
@@ -1232,7 +1228,7 @@ async function main(): Promise<void> {
     );
   }
 
-  const urlDbName = getDatabaseNameFromUrl(databaseUrl);
+  const urlDbName = databaseNameFromUrl(databaseUrl);
   if (urlDbName !== ALLOW_DB) {
     throw new Error(
       `Refusing to run: DATABASE_URL points at database "${urlDbName}" but --allow-db is "${ALLOW_DB}".`,

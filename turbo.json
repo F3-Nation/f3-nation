@@ -13,7 +13,6 @@
     "DATABASE_USER",
     "DATABASE_PASSWORD",
     "DATABASE_NAME",
-    "OBFUSCATION_SALT",
     "TEST_DATABASE_URL",
     "SKIP_RESET_TEST_DB",
     "E2E_BASE_URL",
@@ -99,6 +98,10 @@
     },
     "clean": {
       "cache": false
+    },
+    "obfuscate-db": {
+      "cache": false,
+      "env": ["OBFUSCATION_SALT"]
     }
   }
 }
