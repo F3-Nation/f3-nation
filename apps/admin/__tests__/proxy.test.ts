@@ -6,29 +6,42 @@ import {
   REFRESH_TOKEN_COOKIE_NAME,
 } from "~/lib/auth/constants";
 
-const verifyAccessTokenMock = vi.fn();
-const refreshTokenMock = vi.fn();
-const logDebugMock = vi.fn();
-const logWarnMock = vi.fn();
-
-// Minimal AuthError matching the real class so instanceof checks in the proxy work.
-class AuthError extends Error {
-  code: string;
-  statusCode?: number;
-  constructor(message: string, code: string, statusCode?: number) {
-    super(message);
-    this.name = "AuthError";
-    this.code = code;
-    this.statusCode = statusCode;
+const {
+  verifyAccessTokenMock,
+  refreshTokenMock,
+  logDebugMock,
+  logWarnMock,
+  AuthError,
+} = vi.hoisted(() => {
+  // Minimal AuthError matching the real class so instanceof checks in the proxy work.
+  class AuthError extends Error {
+    code: string;
+    statusCode?: number;
+    constructor(message: string, code: string, statusCode?: number) {
+      super(message);
+      this.name = "AuthError";
+      this.code = code;
+      this.statusCode = statusCode;
+    }
   }
-}
+  return {
+    verifyAccessTokenMock: vi.fn(),
+    refreshTokenMock: vi.fn(),
+    logDebugMock: vi.fn(),
+    logWarnMock: vi.fn(),
+    AuthError,
+  };
+});
 
-vi.mock("@acme/sso", () => ({
+vi.mock("@f3nation/sso-next", async (importActual) => ({
+  ...(await importActual<Record<string, unknown>>()),
   verifyAccessToken: verifyAccessTokenMock,
   AuthError,
 }));
 
-vi.mock("~/lib/auth/oauth", () => ({ refreshToken: refreshTokenMock }));
+vi.mock("~/lib/auth/oauth", () => ({
+  sso: { refreshToken: refreshTokenMock },
+}));
 
 vi.mock("~/env", () => ({
   env: {

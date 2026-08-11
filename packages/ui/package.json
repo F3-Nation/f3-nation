@@ -7,7 +7,7 @@
     ".": "./src/index.ts",
     "./*": "./src/*.tsx"
   },
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "scripts": {
     "add": "pnpm dlx shadcn-ui add",
     "clean": "rm -rf .turbo node_modules",

@@ -46,6 +46,11 @@ vi.mock("@acme/db", () => ({
   // Capture the (column, value) predicate so tests can assert the actual
   // where clause, not just that where() was called.
   eq: vi.fn((column: unknown, value: unknown) => ({ column, value })),
+  and: vi.fn((...conditions: unknown[]) => ({ conditions })),
+  // Tagged so the mock db's select() can recognize an aggregate field spec
+  // and compute a real distinct count from its in-memory store instead of
+  // returning raw rows (see mock/db.ts).
+  countDistinct: vi.fn((column: unknown) => ({ __countDistinct: column })),
   schema: {
     updateRequests: { id: "id" },
     locations: { id: "id" },

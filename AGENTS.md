@@ -26,6 +26,7 @@ Reusable agent skills (procedural runbooks in the
 ## Project Structure & Module Organization
 
 - Deployable apps live in `apps/`, shared code in `packages/`, config in `tooling/`, and Turbo generators in `turbo/`.
+- `packages/health/package.json` uses source-first entrypoints for monorepo workspace consumers and a `publishConfig` override for published `dist` artifacts. Do not remove `publishConfig` unless the workspace build orchestration guarantees `dist` artifacts exist before any consumer resolves the package.
 
 ## Environment Setup
 
@@ -52,23 +53,19 @@ Reusable agent skills (procedural runbooks in the
 
 ## Logging
 
-- Log through the shared [`@acme/logger`](packages/logger/README.md) package,
-  imported from the app's `lib/logging` module — never `console.*`. There is one
-  helper per level: `logTrace` / `logDebug` / `logInfo` / `logWarn` / `logError`
-  / `logFatal`. Prefer these for all event logging; reach for the raw `logger`
-  only for request-scoped children (`logger.child({ requestId })`). The helpers
-  take the `event` **first**; pino's native methods take the context object
-  first — don't mix the orders.
-- The **first argument is a dot-namespaced `event` identifier**, not a sentence:
-  `<area>.<feature>.<outcome>`, lowercase with `snake_case` segments (e.g.
-  `auth.register.f3_api_error`, `me.avatar.upload_failed`). Keep it a fixed
-  string literal — never interpolate variable data into it.
-- Put per-occurrence data in the structured `ctx` object (second arg) and the
-  thrown value in `err` (third arg of `logError`): `logError("api.rpc.handler_error", { orgId }, err)`.
-- Never log secrets or PII — see [`docs/AI_DEVELOPMENT_GUIDE.md`](docs/AI_DEVELOPMENT_GUIDE.md#secrets--sensitive-data).
-- New to the logging setup? [`docs/LOGGING.md`](docs/LOGGING.md) is the
-  human-facing primer (why pino, how to use it, controlling `LOG_LEVEL`);
-  [`packages/logger/README.md`](packages/logger/README.md) is the full API reference.
+- Never `console.*`. Use the `log*` helpers (`logTrace`…`logFatal`) from
+  [`@acme/logger`](packages/logger/README.md), imported via the app's
+  `lib/logging`. Reserve the raw `logger` for request-scoped children
+  (`logger.child({ requestId })`).
+- Signature is `(event, ctx, err)` — **`event` first**, unlike pino's native
+  methods. `event` is a fixed dot-namespaced literal
+  (`<area>.<feature>.<outcome>`, `snake_case` segments); per-occurrence data goes
+  in `ctx`: `logError("api.rpc.handler_error", { orgId }, err)`.
+- **Never log secrets or PII.**
+- Details: [`docs/LOGGING.md`](docs/LOGGING.md) (primer, `LOG_LEVEL`, event
+  naming), [`packages/logger/README.md`](packages/logger/README.md) (API
+  reference), [`docs/AI_DEVELOPMENT_GUIDE.md`](docs/AI_DEVELOPMENT_GUIDE.md#secrets--sensitive-data)
+  (what counts as sensitive).
 
 ## GitHub Actions Conventions
 
@@ -83,16 +80,11 @@ Reusable agent skills (procedural runbooks in the
 - Use Vitest for unit and integration tests; name test files `*.test.ts[x]` and place under or near source code or in `__tests__`.
 - Reset databases before any suite that mutates data (`pnpm reset-test-db` or `pnpm -C packages/db reset-test-db`).
 - Prefer fixtures in `apps/map/tests` or `packages/*/__mocks__` instead of live service calls.
-- How coverage is measured and why thresholds are set the way they are (Vitest 4's whole-`src` denominator, shared `coverageInclude`/`coverageExclude`): [`docs/testing.md`](docs/testing.md).
-- **Never set `test.coverage.thresholds.autoUpdate` to `false`, and never remove
-  the key** (its default is `false`, so deleting it has the same effect). Vitest
-  ratchets the threshold numbers in `vitest.config.ts` upward as coverage
-  improves — a config file modified by a test run is **expected**, and that
-  change should be committed, not reverted or suppressed. Lowering or freezing
-  thresholds to make a failing suite pass is not an acceptable fix; add the
-  missing tests instead. Enforced by
-  [`scripts/check-vitest-thresholds.mjs`](scripts/check-vitest-thresholds.mjs),
-  which runs in `pnpm lint` (and therefore CI) and as a `pre-commit` job.
+- **Coverage thresholds ratchet upward.** `vitest.config.ts` being rewritten by a
+  test run is expected — commit it. Never set `thresholds.autoUpdate` to `false`
+  or delete the key, and never lower a threshold to make a suite pass; add tests
+  instead. Enforced in `pnpm lint` and `pre-commit`. How coverage is measured and
+  why: [`docs/testing.md`](docs/testing.md).
 
 ### Driving auth-bounded flows in local dev
 

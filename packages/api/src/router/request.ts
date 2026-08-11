@@ -82,6 +82,14 @@ const ValidateSubmissionByAdminSchema = z.discriminatedUnion("requestType", [
   DeleteAOSchema,
 ]);
 
+const USES_ORIGINAL_IDS: readonly string[] = [
+  "edit_ao_and_location",
+  "edit_ao",
+  "edit_location",
+  "create_event",
+  "edit_event",
+];
+
 const normalizeAdminRequestInput = (input: unknown) => {
   const source =
     input && typeof input === "object"
@@ -92,13 +100,9 @@ const normalizeAdminRequestInput = (input: unknown) => {
     normalized.meta && typeof normalized.meta === "object"
       ? (normalized.meta as Record<string, unknown>)
       : {};
-  const usesOriginalIds = [
-    "edit_ao_and_location",
-    "edit_ao",
-    "edit_location",
-    "create_event",
-    "edit_event",
-  ].includes(String(normalized.requestType));
+  const usesOriginalIds = USES_ORIGINAL_IDS.includes(
+    String(normalized.requestType),
+  );
 
   if (usesOriginalIds) {
     normalized.originalRegionId ??= normalized.regionId;
@@ -913,6 +917,45 @@ export const requestRouter = {
         });
       }
 
+      // A request can outlive the locations it points at; hitting the FK
+      // constraint would surface as an opaque 500, so check up front and 404
+      // instead. A non-null `newLocationId` is always written; a null one means
+      // "create a fresh location", so there is nothing to look up.
+      const locationChecks: { id: number; message: string }[] = [];
+      if (
+        "originalLocationId" in input &&
+        input.originalLocationId != null &&
+        USES_ORIGINAL_IDS.includes(input.requestType)
+      ) {
+        locationChecks.push({
+          id: input.originalLocationId,
+          message: "Failed to find location to update",
+        });
+      }
+      if ("newLocationId" in input && input.newLocationId != null) {
+        locationChecks.push({
+          id: input.newLocationId,
+          message: "Failed to find target location",
+        });
+      }
+      if (locationChecks.length > 0) {
+        const found = await ctx.db
+          .select({ id: schema.locations.id })
+          .from(schema.locations)
+          .where(
+            inArray(
+              schema.locations.id,
+              locationChecks.map((check) => check.id),
+            ),
+          );
+        const foundIds = new Set(found.map((location) => location.id));
+        const missing = locationChecks.find((check) => !foundIds.has(check.id));
+
+        if (missing) {
+          throw new ORPCError("NOT_FOUND", { message: missing.message });
+        }
+      }
+
       switch (input.requestType) {
         case "create_ao_and_location_and_event":
           return await handleRequest({
@@ -1035,7 +1078,9 @@ export const requestRouter = {
         .where(eq(schema.updateRequests.id, input.id));
 
       if (!updateRequest) {
-        throw new Error("Failed to find update request");
+        throw new ORPCError("NOT_FOUND", {
+          message: "Failed to find update request",
+        });
       }
 
       const { success: hasPermissionToEditThisRegion } =
@@ -1098,18 +1143,33 @@ const checkRequest = async ({
 }) => {
   const regionId = input.newRegionId ?? input.originalRegionId;
   if (!regionId) {
-    throw new Error("Region id is required");
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Region id is required",
+    });
   }
 
-  const submittedBy = ctx.session?.user?.email ?? input.submittedBy;
-  if (!submittedBy) {
-    throw new Error("Submitted by is required");
-  }
-
+  // `protectedProcedure` guarantees a session user but not that it carries an
+  // email, so this is a missing session identity rather than bad input.
+  //
+  // This has to precede the `submittedBy` resolution below, not follow it: the
+  // session email is the only identity accepted, so an emailless session can
+  // never yield a usable `submittedBy`. Checking input first reported
+  // BAD_REQUEST "Submitted by is required" for what is really an emailless
+  // session — the wrong status for the actual cause.
   const email = ctx.session?.user?.email;
   if (!email) {
-    throw new Error("Email is required");
+    throw new ORPCError("UNAUTHORIZED", {
+      message: "Email is required",
+    });
   }
+
+  // Identity for the audit trail comes from the session, never from the client.
+  // `input.submittedBy` is required by the request schemas and echoed back in
+  // the recorded row, but it is deliberately not trusted here — honoring it
+  // would let a caller attribute a change to someone else. It was already
+  // unreachable as a fallback (the email check above rejects every session that
+  // would have needed it), so this is the previous behavior made explicit.
+  const submittedBy = email;
 
   const permissions = await checkUpdatePermissions({
     input,

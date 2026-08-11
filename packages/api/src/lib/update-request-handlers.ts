@@ -1,3 +1,4 @@
+import { ORPCError } from "@orpc/server";
 import type { schema as dbSchema } from "@acme/db";
 import type { EventMeta, UpdateRequestMeta } from "@acme/shared/app/types";
 import type {
@@ -16,7 +17,6 @@ import type {
   MoveEventToNewAOType,
   MoveEventToNewLocationType,
 } from "@acme/validators/request-schemas";
-import { ORPCError } from "@orpc/server";
 
 import { and, countDistinct, eq, schema } from "@acme/db";
 import { PRESERVED_META_FIELDS } from "@acme/shared/app/types";
@@ -215,7 +215,9 @@ export const recordUpdateRequest = async (params: {
       requestId: params.updateRequest.id,
       requestType: params.updateRequest.requestType,
     });
-    throw new Error("Region ID is required");
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Region ID is required",
+    });
   }
 
   const parsedRequestInsertData = RequestInsertSchema.strip().parse({
@@ -292,13 +294,18 @@ export const recordUpdateRequest = async (params: {
     logInfo("api.update_request.recorded", { requestId });
 
     if (!updated) {
-      throw new Error("Failed to update request record");
+      throw new ORPCError("INTERNAL_SERVER_ERROR", {
+        message: "Failed to update request record",
+      });
     }
 
     return updated;
   } catch (error) {
     logError("api.update_request.db_error", { requestId }, error);
-    throw error;
+    if (error instanceof ORPCError) throw error;
+    throw new ORPCError("INTERNAL_SERVER_ERROR", {
+      message: "Failed to record update request",
+    });
   }
 };
 
@@ -408,7 +415,9 @@ export const handleCreateEvent = async (
 
 export const handleEditEvent = async (ctx: Context, request: EditEventType) => {
   if (!request.originalEventId) {
-    throw new Error("Event ID is required");
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Event ID is required",
+    });
   }
   // Use explicit type for updateData
   const updateData: Parameters<typeof updateEvent>[1] = {

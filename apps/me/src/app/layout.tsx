@@ -7,6 +7,10 @@ import { AuthProvider } from "@/lib/auth/AuthProvider";
 import { Navbar } from "@/components/navbar";
 import { SaveProvider } from "@/lib/save-context";
 import { GoogleAnalytics } from "@/components/google-analytics";
+import { VersionInfo } from "@/components/version-info";
+import { getChangelog } from "@/lib/changelog";
+import { env } from "@/env";
+import packageJson from "../../package.json";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -24,16 +28,24 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const channel = env.F3_CHANNEL;
+  const changelog = getChangelog().slice(0, 10);
+
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${inter.className} min-h-screen overflow-x-hidden overscroll-y-none bg-background text-foreground antialiased`}
+        className={`${inter.className} flex min-h-screen flex-col overflow-x-hidden overscroll-y-none bg-background text-foreground antialiased`}
       >
         <GoogleAnalytics />
         <AuthProvider>
           <SaveProvider>
             <Navbar />
-            <main className="min-h-[calc(100vh-3.5rem)]">{children}</main>
+            <main className="flex-1">{children}</main>
+            <VersionInfo
+              version={packageJson.version}
+              channel={channel}
+              changelog={changelog}
+            />
           </SaveProvider>
         </AuthProvider>
         <Toaster />

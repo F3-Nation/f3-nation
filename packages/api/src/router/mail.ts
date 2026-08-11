@@ -1,5 +1,6 @@
 // data comes from z.record(z.unknown()) — String() casts are intentional
 /* eslint-disable @typescript-eslint/no-base-to-string */
+import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 
 import { env } from "@acme/env";
@@ -197,7 +198,9 @@ export const mailRouter = {
             : undefined,
         });
       } else {
-        throw new Error("Unknown template");
+        throw new ORPCError("INTERNAL_SERVER_ERROR", {
+          message: "Unknown template",
+        });
       }
 
       return { html };
