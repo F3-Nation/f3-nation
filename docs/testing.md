@@ -81,10 +81,10 @@ tests. It exists for one reason: the Hono migration (epic #644) replaces the
 framework underneath `apps/api`, and the code with the largest blast radius —
 auth resolution and the HTTP wire layer — had no end-to-end tests at all. The
 suite dispatches real `Request` objects into the real route handlers with the
-auth, codec, and CORS stack unmocked — only `next/headers` and `next/cache` are
-shimmed, because both throw outside a Next request scope — so a port can be
-proven behavior-identical instead of argued to be. The `live` target issues
-real HTTP over a socket; `next` dispatches in-process.
+auth, codec, and CORS stack unmocked — only `next/headers` is shimmed, because
+it throws outside a Next request scope — so a port can be proven
+behavior-identical instead of argued to be. The `live` target issues real HTTP
+over a socket; `next` dispatches in-process.
 
 The framework decision itself is recorded in
 [ADR 0001](adr/0001-api-server-framework.md).
