@@ -689,20 +689,26 @@ async function obfuscate(sql: Sql): Promise<void> {
     },
     transform: (row) => {
       const email = str(row.email);
-      if (
+      const isLocalFixture =
         PRESERVE_LOCAL_SEED &&
-        email?.toLowerCase().endsWith(LOCAL_SEED_EMAIL_SUFFIX)
-      ) {
-        return null;
-      }
+        email?.toLowerCase().endsWith(LOCAL_SEED_EMAIL_SUFFIX);
+      // A committed dev fixture keeps its login identity (email/slack_id/
+      // user_name) intact even under --preserve-local-seed, but Strava
+      // tokens are secrets, not fixture identity — always null those out
+      // regardless, in case a fixture row ever picked up a real token
+      // value during local testing.
       const changes: Row = {};
-      const slackId = str(row.slack_id);
-      if (slackId) changes.slack_id = fakeSlackId(slackId);
-      const userName = str(row.user_name);
-      if (userName) changes.user_name = fakeName(`slack:${userName}`);
-      if (email && !isAllowlistedEmail(email)) changes.email = fakeEmail(email);
+      if (!isLocalFixture) {
+        const slackId = str(row.slack_id);
+        if (slackId) changes.slack_id = fakeSlackId(slackId);
+        const userName = str(row.user_name);
+        if (userName) changes.user_name = fakeName(`slack:${userName}`);
+        if (email && !isAllowlistedEmail(email)) {
+          changes.email = fakeEmail(email);
+        }
+        if (row.avatar_url !== null) changes.avatar_url = null;
+      }
       for (const col of [
-        "avatar_url",
         "strava_access_token",
         "strava_refresh_token",
         "strava_expires_at",

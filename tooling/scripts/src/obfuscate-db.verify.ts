@@ -286,6 +286,15 @@ async function plantSyntheticPii(
       'Great morning. FNG welcomed — reach bob.smith@yahoo.com to connect.',
       '{"mumblechatter": "email carl@aol.com"}')`;
 
+  // No email anywhere in this row — proves the row-selection WHERE clause
+  // (keyed on a bare "%@%" LIKE) still catches Slack mention syntax on its
+  // own, since "<@U...>" itself contains "@".
+  await sql`
+    INSERT INTO event_instances (org_id, is_active, highlight, start_date,
+      name, backblast_rich)
+    VALUES (${ao.id}, true, false, current_date, 'Mention-Only Beatdown',
+      '{"type": "mrkdwn", "text": "<@U0REALSLACK> led 20 burpees"}')`;
+
   await sql`
     INSERT INTO slack_users (slack_id, user_name, email, is_admin, is_owner,
       is_bot, slack_team_id, strava_access_token, strava_refresh_token,
@@ -518,6 +527,19 @@ async function main(): Promise<void> {
       "free-text backblast scrubbed",
       backblastOk,
       instance?.backblast ?? "missing",
+    );
+
+    const [mentionRow] = await sql<{ backblast_rich: string | null }[]>`
+      SELECT backblast_rich::text AS backblast_rich FROM event_instances
+      WHERE name = 'Mention-Only Beatdown' LIMIT 1`;
+    const mentionOk =
+      !!mentionRow?.backblast_rich &&
+      !mentionRow.backblast_rich.includes("U0REALSLACK") &&
+      mentionRow.backblast_rich.includes("<@U");
+    check(
+      "Slack mention in JSON scrubbed with no email present",
+      mentionOk,
+      mentionRow?.backblast_rich ?? "missing",
     );
 
     // FK spot-check: every attendance row still resolves to a user + instance.
