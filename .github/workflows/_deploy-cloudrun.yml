@@ -94,7 +94,10 @@ on:
         description: 'NEXT_PUBLIC_POSTHOG_SESSION_RECORDING build-arg ("true" to opt in); Next.js inlines this at build time same as the PostHog key'
         required: false
         type: string
-        default: ""
+        # Not "" — apps/{api,map}/src/env.ts validates this as
+        # z.enum(["true","false"]).optional(), which rejects an empty
+        # string. An omitted input must still produce a schema-valid value.
+        default: "false"
     secrets:
       posthog_key:
         description: "NEXT_PUBLIC_POSTHOG_KEY build-arg — Next.js inlines NEXT_PUBLIC_* vars into the bundle at build time, so this must be supplied here, not as a Cloud Run runtime env var"

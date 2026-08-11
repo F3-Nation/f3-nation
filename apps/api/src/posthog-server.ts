@@ -45,14 +45,19 @@ export async function captureServerException(
   err: unknown,
   properties?: Record<string, unknown>,
 ): Promise<void> {
-  const posthog = getPostHogServer();
-  if (!posthog) return;
-  const error = err instanceof Error ? err : new Error(String(err));
-  // Immediate (awaited) send: the queued captureException can be lost when a
-  // scale-to-zero Cloud Run instance is reaped before the async flush runs.
-  // Swallow transport failures — this is awaited from the request-error
-  // instrumentation, and error reporting must never break error handling.
+  // The whole body is inside this try, not just the awaited send: this is an
+  // async function, so a synchronous throw from getPostHogServer() or
+  // String(err) (a non-Error value with a throwing toString/
+  // Symbol.toPrimitive) wouldn't throw synchronously out of this call — it
+  // would become a rejected Promise. registerPostHogErrorReporter below
+  // calls this with `void`, so an unhandled rejection would crash the
+  // process (Node terminates on one by default since v15).
   try {
+    const posthog = getPostHogServer();
+    if (!posthog) return;
+    const error = err instanceof Error ? err : new Error(safeStringify(err));
+    // Immediate (awaited) send: the queued captureException can be lost when a
+    // scale-to-zero Cloud Run instance is reaped before the async flush runs.
     // properties spread AFTER environment: a caller-supplied "environment"
     // key must not be able to overwrite the canonical one.
     await posthog.captureExceptionImmediate(error, undefined, {
@@ -62,11 +67,22 @@ export async function captureServerException(
   } catch (reportErr) {
     // Never propagate — but always leave a trace so a PostHog outage (bad
     // key, network failure, rate limit, TLS error) doesn't look identical to
-    // "no errors occurred." This bridge runs decoupled from @acme/logger's
-    // own errorReporter try/catch (registerPostHogErrorReporter's callback
-    // is synchronous and returns before this awaited call can fail), so
-    // without this, nothing records that a report was attempted and failed.
+    // "no errors occurred." Deliberately console.error, not logError: this
+    // file's registerPostHogErrorReporter IS the app's errorReporter, so
+    // logError here would re-enter it via packages/logger/src/index.ts's
+    // reportable(). The raw pino `logger` isn't an option either — this
+    // repo's own no-restricted-syntax ESLint rule reserves it for
+    // packages/logger itself (see its eslint.config.js override), which
+    // needs the exact same escape hatch for the exact same reason.
     console.error("posthog.capture_exception_failed", reportErr);
+  }
+}
+
+function safeStringify(value: unknown): string {
+  try {
+    return String(value);
+  } catch {
+    return "[unstringifiable error value]";
   }
 }
 

@@ -75,6 +75,36 @@ describe("posthog-server", () => {
     consoleErrorSpy.mockRestore();
   });
 
+  it("never rejects even when String(err) itself throws", async () => {
+    const { captureServerException } = await import("../src/posthog-server");
+    const hostile = {
+      toString() {
+        throw new Error("hostile toString");
+      },
+    };
+    await expect(captureServerException(hostile)).resolves.toBeUndefined();
+    const [reportedError] = captureExceptionImmediateMock.mock.calls[0] as [
+      Error,
+    ];
+    expect(reportedError.message).toBe("[unstringifiable error value]");
+  });
+
+  it("constructs the PostHog client with a bounded timeout and no retries", async () => {
+    const { captureServerException } = await import("../src/posthog-server");
+    await captureServerException(new Error("boom"));
+    expect(PostHogMock).toHaveBeenCalledWith(
+      "test-key",
+      expect.objectContaining({ requestTimeout: 3000, fetchRetryCount: 0 }),
+    );
+  });
+
+  it("reuses one PostHog client across multiple calls", async () => {
+    const { captureServerException } = await import("../src/posthog-server");
+    await captureServerException(new Error("first"));
+    await captureServerException(new Error("second"));
+    expect(PostHogMock).toHaveBeenCalledTimes(1);
+  });
+
   it("registers a reporter that cannot have its event overwritten by ctx", async () => {
     const { registerPostHogErrorReporter } =
       await import("../src/posthog-server");

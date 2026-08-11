@@ -53,4 +53,21 @@ describe("GlobalError", () => {
     render(<GlobalError error={mockError} reset={mockReset} />);
     expect(captureExceptionMock).not.toHaveBeenCalled();
   });
+
+  it("does not throw when captureException itself throws (last-resort UI, no boundary above it)", () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    captureExceptionMock.mockImplementationOnce(() => {
+      throw new Error("ingest host blocked");
+    });
+    expect(() =>
+      render(<GlobalError error={mockError} reset={mockReset} />),
+    ).not.toThrow();
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "posthog.capture_exception_failed",
+      expect.any(Error),
+    );
+    consoleErrorSpy.mockRestore();
+  });
 });

@@ -28,11 +28,16 @@ if (env.NEXT_PUBLIC_POSTHOG_KEY) {
 
     // Session recording is opt-in via env flag — previews/sandbox must never
     // record. When enabled, inputs stay masked (the update-request form
-    // carries names and emails).
+    // carries names and emails). `mask_all_text` above only governs
+    // autocapture — replay has its own separate masking config, so
+    // maskTextSelector is required too or rendered page text would be
+    // stored unmasked in the recording (this app's old Sentry replay config
+    // had maskAllText: true; this restores that same coverage under PostHog).
     disable_session_recording:
       env.NEXT_PUBLIC_POSTHOG_SESSION_RECORDING !== "true",
     session_recording: {
       maskAllInputs: true,
+      maskTextSelector: "*",
     },
   });
 }
