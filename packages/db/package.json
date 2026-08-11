@@ -1,14 +1,15 @@
 {
   "name": "@acme/db",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "exports": {
     ".": "./src/index.ts",
     "./client": "./src/client.ts",
+    "./testing": "./src/utils/reset-test-db.ts",
     "./schema/schema": "./drizzle/schema.ts",
     "./schema/relations": "./drizzle/relations.ts"
   },
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "scripts": {
     "clean": "rm -rf .turbo node_modules",
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",

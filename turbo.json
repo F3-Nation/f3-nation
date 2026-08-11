@@ -91,7 +91,7 @@
       "dependsOn": ["^topo"]
     },
     "test": {
-      "dependsOn": ["^topo", "reset-test-db", "^reset-test-db"],
+      "dependsOn": ["^topo"],
       "outputs": ["coverage/**"]
     },
     "test:characterization": {

@@ -27,7 +27,7 @@ async function loadModuleWithEnv(envOverrides: {
 }) {
   vi.resetModules();
 
-  vi.doMock("@acme/sso", () => ({
+  vi.doMock("@f3nation/sso", () => ({
     AuthClient: AuthClientMock,
   }));
 
@@ -67,19 +67,21 @@ describe("lib/auth/oauth", () => {
       AUTH_PROVIDER_URL: "http://auth.local",
     });
 
-    const oauthConfig = oauth.getOAuthConfig();
-    const authUrl = oauth.getAuthorizationUrl({
+    const oauthConfig = oauth.sso.getOAuthConfig();
+    const authUrl = oauth.sso.getAuthorizationUrl({
       state: "state-1",
       codeChallenge: "challenge-1",
       codeChallengeMethod: "S256",
     });
-    const tokens = await oauth.exchangeCodeForToken({
+    const tokens = await oauth.sso.exchangeCodeForToken({
       code: "code-1",
       codeVerifier: "verifier-1",
     });
-    const userInfo = await oauth.getUserInfo("access-1");
-    const refreshed = await oauth.refreshToken({ refreshToken: "refresh-1" });
-    await oauth.revokeToken("refresh-1");
+    const userInfo = await oauth.sso.getUserInfo("access-1");
+    const refreshed = await oauth.sso.refreshToken({
+      refreshToken: "refresh-1",
+    });
+    await oauth.sso.revokeToken("refresh-1");
 
     expect(oauthConfig).toEqual({
       clientId: "client-id",
@@ -121,7 +123,7 @@ describe("lib/auth/oauth", () => {
       AUTH_PROVIDER_URL: "http://auth.insecure.test",
     });
 
-    expect(() => oauth.getOAuthConfig()).toThrow(
+    expect(() => oauth.sso.getOAuthConfig()).toThrow(
       "AUTH_PROVIDER_URL must use HTTPS in production",
     );
     expect(AuthClientMock).not.toHaveBeenCalled();
@@ -133,7 +135,7 @@ describe("lib/auth/oauth", () => {
       AUTH_PROVIDER_URL: "https://auth.f3nation.test",
     });
 
-    oauth.getOAuthConfig();
+    oauth.sso.getOAuthConfig();
 
     expect(AuthClientMock).toHaveBeenCalledTimes(1);
     expect(AuthClientMock).toHaveBeenCalledWith(

@@ -1,6 +1,6 @@
 {
   "name": "@acme/api",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -8,7 +8,7 @@
     "./testing": "./src/testing/index.ts",
     "./services/map-request-notification": "./src/services/map-request-notification.ts"
   },
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "scripts": {
     "clean": "rm -rf .turbo node_modules",
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
@@ -27,6 +27,7 @@
     "@acme/mail": "workspace:*",
     "@acme/shared": "workspace:*",
     "@acme/validators": "workspace:*",
+    "@f3nation/health": "workspace:*",
     "@orpc/experimental-ratelimit": "catalog:",
     "@orpc/server": "catalog:",
     "dayjs": "catalog:",
