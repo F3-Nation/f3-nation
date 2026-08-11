@@ -21,7 +21,7 @@ services:
       retries: 10
 
   adminer:
-    image: adminer:5.5.0@sha256:494d4a9461105644222c938679fe58d5e3fd13fb228c76a426e81c16d4ffbaef
+    image: adminer:5.5.0@sha256:a1e730bf95a18f1d7c38b409ab58a39d57d07bdb090614b81f5c7b37c6021b96
     container_name: f3-adminer
     restart: unless-stopped
     ports:
