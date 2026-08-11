@@ -212,16 +212,18 @@ const columns: TableOptions<WorkoutEvent>["columns"] = [
   {
     accessorKey: "startDate",
     meta: { name: "Start Date" },
-    accessorFn: (row) => formatDateOrEmpty(row.startDate),
     header: Header,
-    cell: Cell,
+    cell: (cell) => (
+      <Cell {...cell}>{formatDateOrEmpty(cell.row.original.startDate)}</Cell>
+    ),
   },
   {
     accessorKey: "endDate",
     meta: { name: "End Date" },
-    accessorFn: (row) => formatDateOrEmpty(row.endDate),
     header: Header,
-    cell: Cell,
+    cell: (cell) => (
+      <Cell {...cell}>{formatDateOrEmpty(cell.row.original.endDate)}</Cell>
+    ),
   },
   {
     accessorKey: "isActive",
