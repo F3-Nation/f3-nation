@@ -102,9 +102,15 @@ Authorized networks (the only IPs allowed to reach the public IP):
 | `34.172.230.30`                                                                | `PG Bouncer?` — the PgBouncer VM   |
 | `34.72.28.29`, `34.67.234.134`, `34.67.6.157`, `34.72.239.218`, `34.71.242.81` | Datastream replication to BigQuery |
 
-That is the enforcement point: **nothing but PgBouncer and Datastream can reach prod
-Postgres over its public IP.** If you add an app that connects directly, it will hang
-until you either add its egress IP here or route it through PgBouncer.
+That is the enforcement point for the **public IP**: nothing but PgBouncer and
+Datastream can reach prod Postgres that way. If you add an app that dials the public IP
+directly, it will hang until you either add its egress IP here or route it through
+PgBouncer.
+
+It is not the only door, though. Workloads attached through the Cloud SQL connector
+(`--add-cloudsql-instances` / Auth Proxy) bypass authorized networks entirely — that is
+how `app_auth` and `f3slackbot` connect today (see
+[§4](#not-everything-in-production-goes-through-pgbouncer)).
 
 The non-production instance `f3data-nonprod` (`db-g1-small`, `34.46.232.108`) is
 separate and is **not** fronted by PgBouncer.
@@ -124,6 +130,64 @@ separate and is **not** fronted by PgBouncer.
 Practical consequence: **pooling behavior is not exercised anywhere except
 production.** A query pattern that works in staging can still break in prod if it
 depends on session state (see [App-side constraints](#5-app-side-constraints)).
+
+### Not everything in production goes through PgBouncer
+
+`pg_stat_activity` on `f3_prod`, grouped by `client_addr`, shows the pooler fronts only
+some of the fleet:
+
+| Client                                     | Reaches Postgres via                                                                        |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| `api`, `map` (and `admin`) — `postgres.js` | `client_addr = 34.172.230.30` → **through PgBouncer**                                       |
+| `app_auth` — `postgres.js`                 | no `client_addr` → **direct** (Cloud SQL socket / connector)                                |
+| `f3slackbot`                               | no `client_addr` → **direct**                                                               |
+| `datastream_user`                          | `client_addr = 34.67.234.134` → **direct** (BigQuery CDC, its own authorized-network entry) |
+| `cloudsqladmin`                            | `127.0.0.1` — Cloud SQL's own agent                                                         |
+
+So the "everything goes through the pooler" mental model is already false. Two app
+workloads connect straight to Cloud SQL today.
+
+### Measured load (30 days, Cloud Monitoring)
+
+Metric `cloudsql.googleapis.com/database/postgresql/num_backends`, hourly `ALIGN_MAX`:
+
+| Instance         | Peak                          | p95 | Median | `max_connections` |
+| ---------------- | ----------------------------- | --- | ------ | ----------------- |
+| `f3data` (prod)  | **88** (2026-07-17 03:45 UTC) | 24  | 1      | **400**           |
+| `f3data-nonprod` | 20                            | 3   | 1      | —                 |
+
+All 88 of the prod peak were on the `f3_prod` database. Peak sits at **22% of
+`max_connections`**; the median hour uses one connection. For scale on the app side,
+`f3-admin` peaked at **13 active Cloud Run instances** in the same window against a
+`maxScale` of 100.
+
+Repro:
+
+```bash
+# max_connections + who is actually connected, without printing the secret
+doppler run --project f3-map --config prd --command \
+  'psql "$DATABASE_URL" -tAc "show max_connections" \
+     -c "select usename, application_name, client_addr, state, count(*) \
+         from pg_stat_activity group by 1,2,3,4 order by 5 desc"'
+```
+
+Historical connection counts come from the Monitoring API — see the helper script
+referenced in the F3 Plane ticket for "PgBouncer VM is an unmanaged zonal SPOF".
+
+### Do we still need it?
+
+The original reason was serverless: connection-per-invocation churn. That is gone —
+every app is a Cloud Run container and `packages/db/src/client.ts` memoizes one
+`postgres.js` client per process. But **PgBouncer is currently the only ceiling on
+connections**: `packages/db/src/utils/functions.ts:28` calls `postgres(databaseUrl,
+sslOptions)` with no `max`, so the driver default of 10 applies, and `f3-admin` alone
+allows `maxScale: 100` — a theoretical 1000 connections from one service against a
+400-connection database. `max_db_connections = 40` is what makes that safe.
+
+Going direct is viable, but only after the ceiling moves into the app: set an explicit
+`max` on the postgres-js client (3–5 is ample at `containerConcurrency: 80`), bound
+`maxScale` per service, and attach through the Cloud SQL connector rather than the
+public IP. Tracked as a decision on the SPOF ticket in Plane.
 
 ### Where the connection strings live
 
