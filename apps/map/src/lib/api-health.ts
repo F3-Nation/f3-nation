@@ -12,9 +12,7 @@ export async function isApiDown(base: string | undefined): Promise<boolean> {
     // 4xx (e.g. 429 rate-limit) means the API is up and responding
     return res.status >= 500;
   } catch (err) {
-    logWarn("map.api_health.check_failed", {
-      message: err instanceof Error ? err.message : String(err),
-    });
+    logWarn("map.api_health.check_failed", { err });
     return true;
   }
 }

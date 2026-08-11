@@ -32,24 +32,24 @@ describe("isApiDown", () => {
 
   it("returns true and logs a warning when fetch throws", async () => {
     const { logWarn } = await import("@/lib/logging");
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockRejectedValue(new Error("ECONNREFUSED")),
-    );
+    const err = new Error("ECONNREFUSED");
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(err));
     expect(await isApiDown("http://api.test")).toBe(true);
     expect(vi.mocked(logWarn)).toHaveBeenCalledWith(
       "me.api_health.check_failed",
-      expect.objectContaining({ message: "ECONNREFUSED" }),
+      { err },
     );
   });
 
-  it("fetches the /v1/ping path regardless of base suffix", async () => {
+  it("fetches the /v1/ping path with a 30s revalidate window and a 3s timeout", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ status: 200 });
     vi.stubGlobal("fetch", fetchMock);
+    const timeoutSpy = vi.spyOn(AbortSignal, "timeout");
     await isApiDown("http://api.test/v1");
     expect(fetchMock).toHaveBeenCalledWith(
       "http://api.test/v1/ping",
-      expect.objectContaining({}),
+      expect.objectContaining({ next: { revalidate: 30 } }),
     );
+    expect(timeoutSpy).toHaveBeenCalledWith(3000);
   });
 });
