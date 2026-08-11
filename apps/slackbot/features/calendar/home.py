@@ -30,8 +30,8 @@ from features.calendar.event_preblast import (
     get_preblast_channel,
     post_hc_thread_reply,
 )
-from scripts.calendar_images import MAX_CALENDAR_WEEKS, WEEK_LABELS
 from utilities import constants
+from utilities.calendar_constants import MAX_CALENDAR_WEEKS, WEEK_LABELS
 from utilities.constants import GCP_IMAGE_URL, LOCAL_DEVELOPMENT, S3_IMAGE_URL
 from utilities.database.orm import SlackSettings
 from utilities.database.special_queries import CalendarHomeQuery, get_admin_users, get_aoq_users, home_schedule_query
@@ -327,8 +327,8 @@ def build_calendar_image_form(
     num_weeks = max(1, min(num_weeks, MAX_CALENDAR_WEEKS))
     weeks = WEEK_LABELS[:num_weeks]
 
+    valid_weeks: List[str] = []
     image_urls: dict[str, str] = {}
-    all_valid = True
     for week in weeks:
         image_name = getattr(region_record, f"calendar_image_{week}", None) or "default.png"
         if LOCAL_DEVELOPMENT:
@@ -340,16 +340,19 @@ def build_calendar_image_form(
         except Exception as e:
             logger.error(f"Error checking calendar image URL for {week} week: {e}")
             valid = False
-        all_valid = all_valid and valid
-        image_urls[week] = image_url
+        if valid:
+            valid_weeks.append(week)
+            image_urls[week] = image_url
 
-    if all_valid:
+    if valid_weeks:
         blocks = [
             orm.ImageBlock(
                 label=WEEK_SCHEDULE_LABELS[week], alt_text=WEEK_SCHEDULE_LABELS[week], image_url=image_urls[week]
             )
-            for week in weeks
+            for week in valid_weeks
         ]
+        if len(valid_weeks) < len(weeks):
+            blocks.append(orm.SectionBlock(label="Some weeks are still generating and will appear here shortly."))
     else:
         blocks = [orm.SectionBlock(label="No calendar images available. Please wait for them to generate.")]
     form = orm.BlockView(blocks=blocks)

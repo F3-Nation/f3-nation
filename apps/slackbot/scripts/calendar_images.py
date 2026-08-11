@@ -33,19 +33,12 @@ from slack_sdk.models import blocks
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import aliased
 
+from utilities.calendar_constants import MAX_CALENDAR_WEEKS, WEEK_ALT_TEXT, WEEK_LABELS
 from utilities.constants import EVENT_TAG_COLORS, GCP_IMAGE_URL, LOCAL_DEVELOPMENT, S3_IMAGE_URL
 from utilities.helper_functions import current_date_cst, safe_convert, safe_get, update_local_region_records
 from utilities.slack import actions
 
 DB_SCHEMA = os.getenv("DATABASE_SCHEMA", "f3_staging")
-
-MAX_CALENDAR_WEEKS = 3
-WEEK_LABELS = ["current", "next", "third"]
-WEEK_ALT_TEXT = {
-    "current": "This Week's Q Sheet",
-    "next": "Next Week's Q Sheet",
-    "third": "In Two Weeks' Q Sheet",
-}
 
 
 def time_int_to_str(time: int) -> str:
@@ -256,11 +249,13 @@ def generate_calendar_images(force: bool = False):
 
                     for stale_week in WEEK_LABELS[num_weeks:]:
                         stale_file = slack_app_settings.pop(f"calendar_image_{stale_week}", None)
-                        if stale_file and not LOCAL_DEVELOPMENT:
-                            try:
-                                os.remove(f"/mnt/calendar-images/{stale_file}")
-                            except Exception as e:
-                                print(f"Error deleting stale file {stale_file} from local storage: {e}")
+                        if stale_file:
+                            calendar_updated = True
+                            if not LOCAL_DEVELOPMENT:
+                                try:
+                                    os.remove(f"/mnt/calendar-images/{stale_file}")
+                                except Exception as e:
+                                    print(f"Error deleting stale file {stale_file} from local storage: {e}")
 
                     for week_index, week in enumerate(WEEK_LABELS[:num_weeks]):
                         week_start = current_week_start + timedelta(weeks=week_index)
@@ -283,7 +278,8 @@ def generate_calendar_images(force: bool = False):
                         first_sunday_run = now_cst.weekday() == 6 and now_cst.hour < 1
 
                         if (
-                            (max_changed > datetime.now() - timedelta(hours=1))
+                            not slack_app_settings.get(f"calendar_image_{week}")
+                            or (max_changed > datetime.now() - timedelta(hours=1))
                             or first_sunday_run
                             or LOCAL_DEVELOPMENT
                             or force
