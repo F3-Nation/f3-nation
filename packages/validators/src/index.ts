@@ -101,18 +101,17 @@ export const EventInsertSchema = createInsertSchema(events, {
     orgId: true,
   });
 
+const isoDateOnly = z.iso.date();
+
 export const checkEventDateOrder = (
   data: { startDate?: unknown; endDate?: unknown },
   ctx: z.RefinementCtx,
 ) => {
-  const { startDate, endDate } = data;
-  if (
-    typeof startDate === "string" &&
-    typeof endDate === "string" &&
-    startDate !== "" &&
-    endDate !== "" &&
-    endDate < startDate
-  ) {
+  const startDate = isoDateOnly.safeParse(data.startDate);
+  const endDate = isoDateOnly.safeParse(data.endDate);
+  if (!startDate.success || !endDate.success) return;
+
+  if (endDate.data < startDate.data) {
     ctx.addIssue({
       code: "custom",
       message: "End date must be on or after start date",

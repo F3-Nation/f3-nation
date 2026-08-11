@@ -1104,16 +1104,33 @@ describe("Event Router", () => {
       it("should report the rejection against the endDate field", async () => {
         const { client, payload } = await setupCrupdateFixture();
 
-        await expect(
-          client.event.crupdate({
+        const error = await client.event
+          .crupdate({
             ...payload,
             startDate: "2026-02-01",
             endDate: "2026-01-01",
+          })
+          .then(
+            () => undefined,
+            (rejection: unknown) => rejection,
+          );
+
+        // Input validation failures surface as BAD_REQUEST, not a 500.
+        expect(error).toMatchObject({ code: "BAD_REQUEST" });
+        const issues =
+          (
+            error as {
+              data?: { issues?: { path?: unknown[]; message?: string }[] };
+            }
+          ).data?.issues ?? [];
+        // Pathed at endDate so the admin form can attach the message to that
+        // field rather than showing a form-level error.
+        expect(issues).toContainEqual(
+          expect.objectContaining({
+            path: ["endDate"],
+            message: "End date must be on or after start date",
           }),
-        ).rejects.toMatchObject({
-          // Input validation failures surface as BAD_REQUEST, not a 500.
-          code: "BAD_REQUEST",
-        });
+        );
       });
 
       it("should accept an endDate equal to the startDate (single-day event)", async () => {

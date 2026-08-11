@@ -82,8 +82,7 @@ export const WorkoutDetailsContent = ({
   );
 
   const hasAoContact = useMemo(
-    () =>
-      !!aoContact && Object.values(aoContact).some(Boolean),
+    () => !!aoContact && Object.values(aoContact).some(Boolean),
     [aoContact],
   );
 

@@ -5,7 +5,7 @@ import { getEndDateLabel } from "~/utils/get-end-date-label";
 describe("getEndDateLabel", () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-15"));
+    vi.setSystemTime(new Date(2026, 5, 15, 12));
   });
 
   afterEach(() => {
