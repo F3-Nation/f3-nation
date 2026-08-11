@@ -67,14 +67,32 @@ export const createMockDb = () => {
   const mockSet = vi.fn().mockReturnValue({ where: mockWhere });
   const mockUpdate = vi.fn().mockReturnValue({ set: mockSet });
 
-  // Resolves a select query to the current contents of the mock database.
-  const resolveSelectRows = () =>
-    Promise.resolve(Array.from(mockDatabase.values()));
+  // Resolves a select query to the current contents of the mock database —
+  // except when `fields` (the object passed to `.select()`) contains a
+  // `countDistinct` marker (see the @acme/db mock's `countDistinct`), in
+  // which case it computes a real distinct count over the in-memory store
+  // instead of returning raw rows. Predicates passed to `.where()` are
+  // otherwise ignored here, same as everywhere else in this mock — tests
+  // populate `_database` with only the rows relevant to what they assert.
+  const resolveSelectRows = (fields?: Record<string, unknown>) => {
+    if (fields) {
+      for (const [key, value] of Object.entries(fields)) {
+        if (value && typeof value === "object" && "__countDistinct" in value) {
+          const column = (value as { __countDistinct: string }).__countDistinct;
+          const distinct = new Set(
+            Array.from(mockDatabase.values()).map((row) => row[column]),
+          );
+          return Promise.resolve([{ [key]: distinct.size }]);
+        }
+      }
+    }
+    return Promise.resolve(Array.from(mockDatabase.values()));
+  };
 
   // Builds a chainable, awaitable select builder so handlers can compose
   // `.from().leftJoin().where()` (and plain `.from()` awaited directly) the
   // same way Drizzle's query builder does.
-  const createSelectChain = () => {
+  const createSelectChain = (fields?: Record<string, unknown>) => {
     const chain = {
       leftJoin: vi.fn(() => chain),
       innerJoin: vi.fn(() => chain),
@@ -82,20 +100,34 @@ export const createMockDb = () => {
       fullJoin: vi.fn(() => chain),
       orderBy: vi.fn(() => chain),
       groupBy: vi.fn(() => chain),
-      limit: vi.fn(() => resolveSelectRows()),
-      where: vi.fn(() => resolveSelectRows()),
+      limit: vi.fn(() => resolveSelectRows(fields)),
+      where: vi.fn(() => resolveSelectRows(fields)),
       then: <TResult1 = unknown[], TResult2 = never>(
         onfulfilled?:
           ((value: unknown[]) => TResult1 | PromiseLike<TResult1>) | null,
         onrejected?:
           ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
-      ) => resolveSelectRows().then(onfulfilled, onrejected),
+      ) => resolveSelectRows(fields).then(onfulfilled, onrejected),
     };
     return chain;
   };
 
-  const mockFrom = vi.fn().mockImplementation(() => createSelectChain());
-  const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
+  // `mockFrom` is shared across calls but must resolve rows for whichever
+  // field spec the preceding `.select(fields)` call captured — closed over
+  // per select() call via `selectFields`, reset immediately after `.from()`
+  // reads it so unrelated selects (with no field spec) aren't affected.
+  let selectFields: Record<string, unknown> | undefined;
+  const mockFrom = vi.fn().mockImplementation(() => {
+    const fields = selectFields;
+    selectFields = undefined;
+    return createSelectChain(fields);
+  });
+  const mockSelect = vi
+    .fn()
+    .mockImplementation((fields?: Record<string, unknown>) => {
+      selectFields = fields;
+      return { from: mockFrom };
+    });
 
   const mockDelete = vi.fn().mockReturnValue({ where: mockWhere });
 

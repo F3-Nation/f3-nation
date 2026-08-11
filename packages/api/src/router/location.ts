@@ -319,6 +319,117 @@ export const locationRouter = {
 
       return { location: location ?? null };
     }),
+  linkedAos: protectedProcedure
+    .input(
+      z.object({
+        locationId: z.coerce
+          .number()
+          .describe("The location whose linked AOs/events to list"),
+      }),
+    )
+    .route({
+      method: "GET",
+      path: "/linked-aos",
+      tags: ["location"],
+      summary: "List AOs and events linked to a location",
+      description:
+        "Returns the distinct active AOs (and their active, non-private events) that share a location, so callers can warn before editing a location used by more than one AO. Private events are excluded entirely — same contract as every other map read.",
+    })
+    .output(
+      z.object({
+        aos: z
+          .array(
+            z.object({
+              aoId: z.number().describe("AO org ID"),
+              aoName: z.string().describe("AO name"),
+              aoLogo: z.string().nullable().describe("AO logo URL"),
+              events: z
+                .array(
+                  z.object({
+                    id: z.number(),
+                    name: z.string().nullable(),
+                    dayOfWeek: z.string().nullable(),
+                    startTime: z.string().nullable(),
+                  }),
+                )
+                .describe("Active, non-private events for this AO"),
+            }),
+          )
+          .describe("Distinct AOs with active events at this location"),
+        totalAoCount: z
+          .number()
+          .describe("Number of distinct AOs sharing this location"),
+      }),
+    )
+    .handler(async ({ context: ctx, input }) => {
+      // A defensive cap, not a real limit: any genuine F3 location shares
+      // among a handful of AOs with a handful of events each. This only
+      // guards against a corrupted-data or pathological location — nothing
+      // realistic should ever come close to it.
+      const ROW_LIMIT = 2000;
+      // Private events are filtered out entirely — same contract as every
+      // other map read (eventsAndLocations excludes them from markers
+      // outright). Counting them here (even without exposing details) would
+      // let any authenticated caller probe an arbitrary locationId to learn
+      // whether/how many private events exist there.
+      const rows = await ctx.db
+        .select({
+          aoId: schema.orgs.id,
+          aoName: schema.orgs.name,
+          aoLogo: schema.orgs.logoUrl,
+          eventId: schema.events.id,
+          eventName: schema.events.name,
+          eventDayOfWeek: schema.events.dayOfWeek,
+          eventStartTime: schema.events.startTime,
+        })
+        .from(schema.events)
+        .innerJoin(schema.orgs, eq(schema.events.orgId, schema.orgs.id))
+        .where(
+          and(
+            eq(schema.events.locationId, input.locationId),
+            eq(schema.events.isActive, true),
+            eq(schema.events.isPrivate, false),
+          ),
+        )
+        .limit(ROW_LIMIT);
+
+      const byAo = new Map<
+        number,
+        {
+          aoId: number;
+          aoName: string;
+          aoLogo: string | null;
+          events: {
+            id: number;
+            name: string | null;
+            dayOfWeek: string | null;
+            startTime: string | null;
+          }[];
+        }
+      >();
+
+      for (const row of rows) {
+        let ao = byAo.get(row.aoId);
+        if (!ao) {
+          ao = {
+            aoId: row.aoId,
+            aoName: row.aoName,
+            aoLogo: row.aoLogo,
+            events: [],
+          };
+          byAo.set(row.aoId, ao);
+        }
+        ao.events.push({
+          id: row.eventId,
+          name: row.eventName,
+          dayOfWeek: row.eventDayOfWeek,
+          startTime: row.eventStartTime,
+        });
+      }
+
+      const aos = Array.from(byAo.values());
+      return { aos, totalAoCount: aos.length };
+    }),
   crupdate: editorProcedure
     .input(LocationInsertSchema.partial({ id: true }))
     .route({

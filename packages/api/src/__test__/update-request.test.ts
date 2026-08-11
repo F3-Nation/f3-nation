@@ -11,8 +11,10 @@ import {
   handleCreateLocationAndEvent,
   handleDeleteAO,
   handleDeleteEvent,
+  handleEditAO,
   handleEditAOAndLocation,
   handleEditEvent,
+  handleEditLocation,
   handleMoveAOToDifferentLocation,
   handleMoveAOToDifferentRegion,
   handleMoveAOToNewLocation,
@@ -26,7 +28,9 @@ import {
   createDeleteAORequest,
   createDeleteEventRequest,
   createEditAOAndLocationRequest,
+  createEditAORequest,
   createEditEventRequest,
+  createEditLocationRequest,
   createEventRequest,
   createMoveAOToDifferentLocationRequest,
   createMoveAOToDifferentRegionRequest,
@@ -42,11 +46,21 @@ vi.mock("@acme/db", () => ({
   // Capture the (column, value) predicate so tests can assert the actual
   // where clause, not just that where() was called.
   eq: vi.fn((column: unknown, value: unknown) => ({ column, value })),
+  and: vi.fn((...conditions: unknown[]) => ({ conditions })),
+  // Tagged so the mock db's select() can recognize an aggregate field spec
+  // and compute a real distinct count from its in-memory store instead of
+  // returning raw rows (see mock/db.ts).
+  countDistinct: vi.fn((column: unknown) => ({ __countDistinct: column })),
   schema: {
     updateRequests: { id: "id" },
     locations: { id: "id" },
     orgs: { id: "id" },
-    events: { id: "id", orgId: "orgId" },
+    events: {
+      id: "id",
+      orgId: "orgId",
+      locationId: "locationId",
+      isActive: "isActive",
+    },
     eventsXEventTypes: { eventId: "eventId", eventTypeId: "eventTypeId" },
   },
 }));
@@ -453,6 +467,135 @@ describe("handleEditAOAndLocation - modifies an existing AO and location", () =>
         locationCountry: "United States",
       }),
     );
+  });
+});
+
+describe("handleEditAO - modifies only an AO, never its location", () => {
+  it("updates the AO and leaves the location row untouched", async () => {
+    const { ctx } = createMockContext();
+
+    const editRequest = createEditAORequest();
+    await handleEditAO(ctx, editRequest);
+
+    expect(mockUpdateAO).toHaveBeenCalledTimes(1);
+    expect(mockUpdateAO).toHaveBeenCalledWith(ctx, {
+      id: 1,
+      name: "Updated AO Name",
+      logoUrl: null,
+      website: null,
+    });
+
+    // The whole point of edit_ao is that it does NOT touch the location.
+    expect(mockUpdateLocation).not.toHaveBeenCalled();
+
+    const editResult = await recordUpdateRequest({
+      ctx,
+      updateRequest: editRequest,
+      status: "approved",
+    });
+
+    expect(editResult).toEqual(
+      expect.objectContaining({
+        status: "approved",
+        requestType: "edit_ao",
+        aoName: "Updated AO Name",
+      }),
+    );
+  });
+});
+
+describe("handleEditLocation - modifies only a location, never an AO", () => {
+  it("updates the location and leaves the AO row untouched", async () => {
+    const { ctx } = createMockContext();
+
+    const editRequest = createEditLocationRequest();
+    await handleEditLocation(ctx, editRequest);
+
+    expect(mockUpdateLocation).toHaveBeenCalledTimes(1);
+    expect(mockUpdateLocation).toHaveBeenCalledWith(ctx, {
+      locationId: 1,
+      locationName: null,
+      locationLat: 36.1,
+      locationLng: -81.2,
+      locationAddress: "999 Updated Ave",
+      locationAddress2: undefined,
+      locationCity: "Boone",
+      locationState: "NC",
+      locationZip: "28607",
+      locationCountry: "United States",
+      locationDescription: undefined,
+    });
+
+    // The whole point of edit_location is that it does NOT touch any AO,
+    // even when the location is shared by several AOs.
+    expect(mockUpdateAO).not.toHaveBeenCalled();
+
+    const editResult = await recordUpdateRequest({
+      ctx,
+      updateRequest: editRequest,
+      status: "approved",
+    });
+
+    expect(editResult).toEqual(
+      expect.objectContaining({
+        status: "approved",
+        requestType: "edit_location",
+        locationLat: 36.1,
+        locationLng: -81.2,
+        locationAddress: "999 Updated Ave",
+        locationCity: "Boone",
+        locationState: "NC",
+        locationZip: "28607",
+        locationCountry: "United States",
+      }),
+    );
+  });
+
+  it("rejects an unacknowledged edit when the location is shared by multiple active AOs", async () => {
+    const { ctx, mockDb } = createMockContext();
+    // Two active events from distinct AOs sharing location 1.
+    mockDb._database.set("e1", {
+      id: "e1",
+      orgId: 1,
+      locationId: 1,
+      isActive: true,
+    });
+    mockDb._database.set("e2", {
+      id: "e2",
+      orgId: 2,
+      locationId: 1,
+      isActive: true,
+    });
+
+    await expect(
+      handleEditLocation(ctx, createEditLocationRequest()),
+    ).rejects.toThrow(/shared by 2 AOs/);
+
+    // The shared row must be left untouched when the edit is not acknowledged.
+    expect(mockUpdateLocation).not.toHaveBeenCalled();
+  });
+
+  it("allows a shared-location edit once it is acknowledged", async () => {
+    const { ctx, mockDb } = createMockContext();
+    mockDb._database.set("e1", {
+      id: "e1",
+      orgId: 1,
+      locationId: 1,
+      isActive: true,
+    });
+    mockDb._database.set("e2", {
+      id: "e2",
+      orgId: 2,
+      locationId: 1,
+      isActive: true,
+    });
+
+    await handleEditLocation(
+      ctx,
+      createEditLocationRequest({ acknowledgeShared: true }),
+    );
+
+    expect(mockUpdateLocation).toHaveBeenCalledTimes(1);
   });
 });
 

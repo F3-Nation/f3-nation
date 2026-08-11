@@ -7,7 +7,9 @@ import type {
   DeleteAOType,
   DeleteEventType,
   EditAOAndLocationType,
+  EditAOType,
   EditEventType,
+  EditLocationType,
   MoveAOToDifferentLocationType,
   MoveAoToDifferentRegionType,
   MoveAOToNewLocationType,
@@ -33,6 +35,8 @@ export enum ModalType {
   SIGN_IN = "SIGN_IN",
   EDIT_MODE_INFO = "EDIT_MODE_INFO",
   EDIT_AO_AND_LOCATION = "AO_EDIT",
+  EDIT_AO = "AO_ONLY_EDIT",
+  EDIT_LOCATION = "LOCATION_EDIT",
   EDIT_EVENT = "EVENT_EDIT",
   CREATE_EVENT = "CREATE_EVENT",
   CREATE_AO_AND_LOCATION_AND_EVENT = "CREATE_LOCATION_AND_EVENT",
@@ -53,6 +57,18 @@ export interface DataType {
     | "locationLng"
     | "originalRegionId"
     | "originalAoId"
+    | "originalLocationId"
+    | "submittedBy"
+  >;
+  [ModalType.EDIT_AO]: PartialBy<
+    EditAOType,
+    "originalRegionId" | "originalAoId" | "submittedBy"
+  >;
+  [ModalType.EDIT_LOCATION]: PartialBy<
+    EditLocationType,
+    | "locationLat"
+    | "locationLng"
+    | "originalRegionId"
     | "originalLocationId"
     | "submittedBy"
   >;

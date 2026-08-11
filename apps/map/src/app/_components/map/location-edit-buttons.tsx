@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowRight, CirclePlus, Edit, Trash } from "lucide-react";
+import { ArrowRight, CirclePlus, Edit, MapPin, Trash } from "lucide-react";
 
 import type { DayOfWeek } from "@acme/shared/app/enums";
 import { dayOfWeekToShortDayOfWeek } from "@acme/shared/app/functions";
@@ -203,7 +203,7 @@ export const LocationEditButtons = ({
             className="flex cursor-pointer items-center px-3 py-2 hover:bg-blue-50 dark:hover:bg-blue-900/30"
             onClick={() => {
               void openRequestModal({
-                type: "edit_ao_and_location",
+                type: "edit_ao",
                 locationId,
                 eventId,
                 aoId,
@@ -214,6 +214,25 @@ export const LocationEditButtons = ({
               <Edit className="mr-2 h-4 w-4 flex-shrink-0" />
               <span className="leading-none break-words whitespace-normal">
                 Edit AO details
+              </span>
+            </span>
+          </DropdownMenuItem>
+
+          <DropdownMenuItem
+            className="flex cursor-pointer items-center px-3 py-2 hover:bg-blue-50 dark:hover:bg-blue-900/30"
+            onClick={() => {
+              void openRequestModal({
+                type: "edit_location",
+                locationId,
+                eventId,
+                aoId,
+              });
+            }}
+          >
+            <span className="inline-flex items-center">
+              <MapPin className="mr-2 h-4 w-4 flex-shrink-0" />
+              <span className="leading-none break-words whitespace-normal">
+                Edit location details
               </span>
             </span>
           </DropdownMenuItem>

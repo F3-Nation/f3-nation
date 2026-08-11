@@ -135,6 +135,38 @@ export const openRequestModal = async (params: {
       });
       break;
 
+    case "edit_ao": // Edit AO details only
+      if (!formValues.originalRegionId) {
+        toastError(requestType, "Region id not found");
+        return;
+      }
+      if (!formValues.originalAoId) {
+        toastError(requestType, "AO id not found");
+        return;
+      }
+      openModal(ModalType.EDIT_AO, {
+        ...formValues,
+        requestType,
+        currentValues,
+      });
+      break;
+
+    case "edit_location": // Edit location details directly
+      if (!formValues.originalRegionId) {
+        toastError(requestType, "Region id not found");
+        return;
+      }
+      if (!formValues.originalLocationId) {
+        toastError(requestType, "Location id not found");
+        return;
+      }
+      openModal(ModalType.EDIT_LOCATION, {
+        ...formValues,
+        requestType,
+        currentValues,
+      });
+      break;
+
     case "move_ao_to_different_region": // Move to different region
       if (!formValues.originalRegionId) {
         toastError(requestType, "Original region id not found");

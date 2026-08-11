@@ -23,7 +23,9 @@ import {
   DeleteAOSchema,
   DeleteEventSchema,
   EditAOAndLocationSchema,
+  EditAOSchema,
   EditEventSchema,
+  EditLocationSchema,
   MoveAOToDifferentLocationSchema,
   MoveAOToDifferentRegionSchema,
   MoveAOToNewLocationSchema,
@@ -45,8 +47,10 @@ import {
   handleCreateLocationAndEvent,
   handleDeleteAO,
   handleDeleteEvent,
+  handleEditAO,
   handleEditAOAndLocation,
   handleEditEvent,
+  handleEditLocation,
   handleMoveAOToDifferentLocation,
   handleMoveAOToDifferentRegion,
   handleMoveAOToNewLocation,
@@ -66,6 +70,8 @@ const ValidateSubmissionByAdminSchema = z.discriminatedUnion("requestType", [
   CreateEventSchema,
   EditEventSchema,
   EditAOAndLocationSchema,
+  EditAOSchema,
+  EditLocationSchema,
   MoveAOToDifferentRegionSchema,
   MoveAOToDifferentLocationSchema,
   MoveAOToNewLocationSchema,
@@ -78,6 +84,8 @@ const ValidateSubmissionByAdminSchema = z.discriminatedUnion("requestType", [
 
 const USES_ORIGINAL_IDS: readonly string[] = [
   "edit_ao_and_location",
+  "edit_ao",
+  "edit_location",
   "create_event",
   "edit_event",
 ];
@@ -799,6 +807,18 @@ export const requestRouter = {
       const handler = handleEditAOAndLocation;
       return await handleRequest({ ctx, input, handler });
     }),
+  submitEditAORequest: protectedProcedure
+    .input(EditAOSchema)
+    .handler(async ({ context: ctx, input }) => {
+      const handler = handleEditAO;
+      return await handleRequest({ ctx, input, handler });
+    }),
+  submitEditLocationRequest: protectedProcedure
+    .input(EditLocationSchema)
+    .handler(async ({ context: ctx, input }) => {
+      const handler = handleEditLocation;
+      return await handleRequest({ ctx, input, handler });
+    }),
   submitMoveAOToDifferentRegionRequest: protectedProcedure
     .input(MoveAOToDifferentRegionSchema)
     .handler(async ({ context: ctx, input }) => {
@@ -960,6 +980,18 @@ export const requestRouter = {
             ctx,
             input,
             handler: handleEditAOAndLocation,
+          });
+        case "edit_ao":
+          return await handleRequest({
+            ctx,
+            input,
+            handler: handleEditAO,
+          });
+        case "edit_location":
+          return await handleRequest({
+            ctx,
+            input,
+            handler: handleEditLocation,
           });
         case "move_ao_to_different_region":
           return await handleRequest({
@@ -1188,6 +1220,8 @@ const REQUEST_TYPE_TO_MAP_EVENT: Record<
   create_event: "map.created",
   edit_event: "map.updated",
   edit_ao_and_location: "map.updated",
+  edit_ao: "map.updated",
+  edit_location: "map.updated",
   move_ao_to_different_region: "map.updated",
   move_ao_to_new_location: "map.updated",
   move_ao_to_different_location: "map.updated",

@@ -7,7 +7,9 @@ import type {
   DeleteAOType,
   DeleteEventType,
   EditAOAndLocationType,
+  EditAOType,
   EditEventType,
+  EditLocationType,
   MoveAOToDifferentLocationType,
   MoveAoToDifferentRegionType,
   MoveAOToNewLocationType,
@@ -15,7 +17,8 @@ import type {
   MoveEventToNewAOType,
   MoveEventToNewLocationType,
 } from "@acme/validators/request-schemas";
-import { eq, schema } from "@acme/db";
+
+import { and, countDistinct, eq, schema } from "@acme/db";
 import { PRESERVED_META_FIELDS } from "@acme/shared/app/types";
 import { RequestInsertSchema } from "@acme/validators";
 
@@ -465,6 +468,57 @@ export const handleEditAOAndLocation = async (
       locationCountry: request.locationCountry,
       locationDescription: request.locationDescription,
     });
+  });
+};
+
+export const handleEditAO = async (ctx: Context, request: EditAOType) => {
+  await updateAO(ctx, {
+    id: request.originalAoId,
+    name: request.aoName,
+    logoUrl: request.aoLogo,
+    website: request.aoWebsite,
+  });
+};
+
+export const handleEditLocation = async (
+  ctx: Context,
+  request: EditLocationType,
+) => {
+  // The Map disabled-submit button is client-only and bypassable, and this
+  // handler runs for both direct auto-apply and admin approval. Enforce the
+  // shared-location acknowledgment server-side: if more than one active AO
+  // shares this location, the edit affects all of them, so require an explicit
+  // acknowledgment before mutating the shared row.
+  if (!request.acknowledgeShared) {
+    const [row] = await ctx.db
+      .select({ activeAoCount: countDistinct(schema.events.orgId) })
+      .from(schema.events)
+      .where(
+        and(
+          eq(schema.events.locationId, request.originalLocationId),
+          eq(schema.events.isActive, true),
+        ),
+      );
+    const activeAoCount = row?.activeAoCount ?? 0;
+    if (activeAoCount > 1) {
+      throw new ORPCError("CONFLICT", {
+        message: `This location is shared by ${activeAoCount} AOs; the edit must be acknowledged before saving because it affects all of them.`,
+      });
+    }
+  }
+
+  await updateLocation(ctx, {
+    locationId: request.originalLocationId,
+    locationName: null,
+    locationLat: request.locationLat,
+    locationLng: request.locationLng,
+    locationAddress: request.locationAddress,
+    locationAddress2: request.locationAddress2,
+    locationCity: request.locationCity,
+    locationState: request.locationState,
+    locationZip: request.locationZip,
+    locationCountry: request.locationCountry,
+    locationDescription: request.locationDescription,
   });
 };
 
