@@ -1296,9 +1296,6 @@ importers:
       lodash:
         specifier: 'catalog:'
         version: 4.18.1
-      react-dom:
-        specifier: '>=18 <20'
-        version: 19.2.8(react@19.2.8)
       zod:
         specifier: 'catalog:'
         version: 4.4.3
@@ -1327,9 +1324,6 @@ importers:
       prettier:
         specifier: 'catalog:'
         version: 3.9.6
-      react:
-        specifier: 'catalog:'
-        version: 19.2.8
       tsx:
         specifier: 'catalog:'
         version: 4.23.12

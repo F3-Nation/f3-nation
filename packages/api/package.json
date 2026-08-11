@@ -36,10 +36,6 @@
     "lodash": "catalog:",
     "zod": "catalog:"
   },
-  "peerDependencies": {
-    "react": ">=18 <20",
-    "react-dom": ">=18 <20"
-  },
   "devDependencies": {
     "@acme/eslint-config": "workspace:*",
     "@acme/prettier-config": "workspace:*",
@@ -49,7 +45,6 @@
     "dotenv-cli": "catalog:",
     "eslint": "catalog:",
     "prettier": "catalog:",
-    "react": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
