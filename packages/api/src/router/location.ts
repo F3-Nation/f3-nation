@@ -333,7 +333,7 @@ export const locationRouter = {
       tags: ["location"],
       summary: "List AOs and events linked to a location",
       description:
-        "Returns the distinct active AOs (and their active events) that share a location, so callers can warn before editing a location used by more than one AO. Private events are counted but their details are omitted.",
+        "Returns the distinct active AOs (and their active, non-private events) that share a location, so callers can warn before editing a location used by more than one AO. Private events are excluded entirely — same contract as every other map read.",
     })
     .output(
       z.object({
@@ -343,9 +343,6 @@ export const locationRouter = {
               aoId: z.number().describe("AO org ID"),
               aoName: z.string().describe("AO name"),
               aoLogo: z.string().nullable().describe("AO logo URL"),
-              eventCount: z
-                .number()
-                .describe("Count of active events (includes private)"),
               events: z
                 .array(
                   z.object({
@@ -370,6 +367,11 @@ export const locationRouter = {
       // guards against a corrupted-data or pathological location — nothing
       // realistic should ever come close to it.
       const ROW_LIMIT = 2000;
+      // Private events are filtered out entirely — same contract as every
+      // other map read (eventsAndLocations excludes them from markers
+      // outright). Counting them here (even without exposing details) would
+      // let any authenticated caller probe an arbitrary locationId to learn
+      // whether/how many private events exist there.
       const rows = await ctx.db
         .select({
           aoId: schema.orgs.id,
@@ -379,7 +381,6 @@ export const locationRouter = {
           eventName: schema.events.name,
           eventDayOfWeek: schema.events.dayOfWeek,
           eventStartTime: schema.events.startTime,
-          eventIsPrivate: schema.events.isPrivate,
         })
         .from(schema.events)
         .innerJoin(schema.orgs, eq(schema.events.orgId, schema.orgs.id))
@@ -387,6 +388,7 @@ export const locationRouter = {
           and(
             eq(schema.events.locationId, input.locationId),
             eq(schema.events.isActive, true),
+            eq(schema.events.isPrivate, false),
           ),
         )
         .limit(ROW_LIMIT);
@@ -397,7 +399,6 @@ export const locationRouter = {
           aoId: number;
           aoName: string;
           aoLogo: string | null;
-          eventCount: number;
           events: {
             id: number;
             name: string | null;
@@ -414,20 +415,16 @@ export const locationRouter = {
             aoId: row.aoId,
             aoName: row.aoName,
             aoLogo: row.aoLogo,
-            eventCount: 0,
             events: [],
           };
           byAo.set(row.aoId, ao);
         }
-        ao.eventCount += 1;
-        if (!row.eventIsPrivate) {
-          ao.events.push({
-            id: row.eventId,
-            name: row.eventName,
-            dayOfWeek: row.eventDayOfWeek,
-            startTime: row.eventStartTime,
-          });
-        }
+        ao.events.push({
+          id: row.eventId,
+          name: row.eventName,
+          dayOfWeek: row.eventDayOfWeek,
+          startTime: row.eventStartTime,
+        });
       }
 
       const aos = Array.from(byAo.values());

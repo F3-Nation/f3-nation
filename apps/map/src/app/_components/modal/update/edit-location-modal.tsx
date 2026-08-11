@@ -26,10 +26,13 @@ export const EditLocationModal = ({
   });
 
   // Fail closed: the shared-location check must resolve before submission is
-  // allowed. `onSharedChange` only fires once LinkedAosNotice has a successful
-  // result, so an unresolved (loading/errored) check keeps the button disabled.
-  const [sharedCheckResolved, setSharedCheckResolved] = useState(false);
-  const [isShared, setIsShared] = useState(false);
+  // allowed. LinkedAosNotice reports { resolved, shared } on every change
+  // (not just the first success), so a later refetch failure re-closes this
+  // gate instead of leaving it permanently open once it's opened once.
+  const [sharedCheck, setSharedCheck] = useState({
+    resolved: false,
+    shared: false,
+  });
   const [acknowledged, setAcknowledged] = useState(false);
 
   const handleSubmission = async (values: EditLocationType) => {
@@ -51,17 +54,16 @@ export const EditLocationModal = ({
             locationId={data.originalLocationId}
             acknowledged={acknowledged}
             onAcknowledgeChange={setAcknowledged}
-            onSharedChange={(shared) => {
-              setIsShared(shared);
-              setSharedCheckResolved(true);
-            }}
+            onSharedChange={setSharedCheck}
           />
           <LocationDetailsForm<EditLocationType> />
           <ContactDetailsForm<EditLocationType> />
           <SubmitSection<EditLocationType>
             mutationFn={handleSubmission}
             text="Update Location"
-            disabled={!sharedCheckResolved || (isShared && !acknowledged)}
+            disabled={
+              !sharedCheck.resolved || (sharedCheck.shared && !acknowledged)
+            }
           />
         </form>
       </Form>

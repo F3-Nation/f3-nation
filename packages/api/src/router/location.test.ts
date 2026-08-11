@@ -570,4 +570,87 @@ describe("Location Router", () => {
       expect(result.locations.every((l) => l.isActive === true)).toBe(true);
     });
   });
+
+  describe("linkedAos", () => {
+    it("excludes private events entirely — from both the event list and the count", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+
+      const [ao] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Test AO ${uniqueId()}`,
+          orgType: "ao",
+          parentId: region.id,
+          isActive: true,
+        })
+        .returning();
+      if (!ao) throw new Error("Failed to create test AO");
+      createdOrgIds.push(ao.id);
+
+      const [location] = await db
+        .insert(schema.locations)
+        .values({
+          name: `LinkedAos Test ${uniqueId()}`,
+          orgId: region.id,
+          isActive: true,
+          latitude: 35.0,
+          longitude: -80.0,
+        })
+        .returning();
+      if (!location) throw new Error("Failed to create test location");
+      createdLocationIds.push(location.id);
+
+      const [publicEvent] = await db
+        .insert(schema.events)
+        .values({
+          name: `Public Event ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: location.id,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          isActive: true,
+          highlight: false,
+          startDate: "2026-01-01",
+          isPrivate: false,
+        })
+        .returning();
+      const [privateEvent] = await db
+        .insert(schema.events)
+        .values({
+          name: `Private Event ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: location.id,
+          dayOfWeek: "wednesday",
+          startTime: "0600",
+          isActive: true,
+          highlight: false,
+          startDate: "2026-01-01",
+          isPrivate: true,
+        })
+        .returning();
+      expect(publicEvent).toBeDefined();
+      expect(privateEvent).toBeDefined();
+
+      const client = createTestClient();
+      const result = await client.location.linkedAos({
+        locationId: location.id,
+      });
+
+      const aoResult = result.aos.find((a) => a.aoId === ao.id);
+      expect(aoResult).toBeDefined();
+      const eventIds = (aoResult?.events ?? []).map((e) => e.id);
+
+      // The public event is visible ...
+      expect(eventIds).toContain(publicEvent?.id);
+      // ... but the private event is excluded entirely — not just its
+      // details, its existence isn't inferable from the response at all
+      // (no separate count field either).
+      expect(eventIds).not.toContain(privateEvent?.id);
+      expect(aoResult).not.toHaveProperty("eventCount");
+    });
+  });
 });

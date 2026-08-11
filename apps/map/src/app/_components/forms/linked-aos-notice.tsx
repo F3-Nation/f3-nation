@@ -27,7 +27,7 @@ export const LinkedAosNotice = ({
   locationId: number | undefined;
   acknowledged: boolean;
   onAcknowledgeChange: (ack: boolean) => void;
-  onSharedChange?: (shared: boolean) => void;
+  onSharedChange?: (state: { resolved: boolean; shared: boolean }) => void;
 }) => {
   const { data, isLoading, isError, refetch } = useQuery({
     ...orpc.location.linkedAos.queryOptions({
@@ -37,15 +37,18 @@ export const LinkedAosNotice = ({
     throwOnError: false,
   });
 
-  // Fail closed: only report a shared/not-shared verdict once the check has
-  // actually resolved. While loading or after an error we deliberately stay
-  // silent so the parent keeps submission gated rather than defaulting to
-  // "not shared" and letting an unacknowledged shared edit through.
+  // Fail closed: `resolved` reflects the check's CURRENT state, not just
+  // whether it ever succeeded — a later background refetch failure (e.g. on
+  // window refocus, or a manual Retry) flips `isError` back to true and
+  // `resolved` back to false. Reporting this unconditionally on every change
+  // (not just when it becomes true) lets the parent re-close the gate it
+  // already opened, instead of latching "resolved" permanently on the first
+  // success.
   const resolved = locationId == null || (!isLoading && !isError && !!data);
   const isShared = (data?.totalAoCount ?? 0) > 1;
 
   useEffect(() => {
-    if (resolved) onSharedChange?.(isShared);
+    onSharedChange?.({ resolved, shared: isShared });
   }, [resolved, isShared, onSharedChange]);
 
   if (locationId == null) return null;
@@ -77,7 +80,6 @@ export const LinkedAosNotice = ({
       </h2>
       <ul className="space-y-2">
         {data.aos.map((ao) => {
-          const privateCount = ao.eventCount - ao.events.length;
           return (
             <li key={ao.aoId} className="text-sm">
               <div className="flex items-center gap-2">
@@ -109,11 +111,6 @@ export const LinkedAosNotice = ({
                     </span>
                   );
                 })}
-                {privateCount > 0 ? (
-                  <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-                    +{privateCount} private
-                  </span>
-                ) : null}
               </div>
               {isShared ? (
                 <Button

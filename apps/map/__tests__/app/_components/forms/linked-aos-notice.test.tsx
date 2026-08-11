@@ -30,7 +30,7 @@ describe("LinkedAosNotice", () => {
     vi.clearAllMocks();
   });
 
-  it("does not report shared/not-shared while the check is loading (fail closed)", () => {
+  it("reports unresolved while the check is loading (fail closed)", () => {
     const onSharedChange = vi.fn();
     useQueryMock.mockReturnValue({
       data: undefined,
@@ -46,10 +46,13 @@ describe("LinkedAosNotice", () => {
         onSharedChange={onSharedChange}
       />,
     );
-    expect(onSharedChange).not.toHaveBeenCalled();
+    expect(onSharedChange).toHaveBeenCalledWith({
+      resolved: false,
+      shared: false,
+    });
   });
 
-  it("does not report shared/not-shared on error (fail closed) and shows a retry", () => {
+  it("reports unresolved on error (fail closed) and shows a retry", () => {
     const onSharedChange = vi.fn();
     const refetch = vi.fn();
     useQueryMock.mockReturnValue({
@@ -66,8 +69,55 @@ describe("LinkedAosNotice", () => {
         onSharedChange={onSharedChange}
       />,
     );
-    expect(onSharedChange).not.toHaveBeenCalled();
+    expect(onSharedChange).toHaveBeenCalledWith({
+      resolved: false,
+      shared: false,
+    });
     expect(screen.getByText("Retry")).toBeInTheDocument();
+  });
+
+  it("re-closes the gate when a refetch fails after an earlier successful resolution", () => {
+    const onSharedChange = vi.fn();
+    useQueryMock.mockReturnValue({
+      data: { totalAoCount: 1, aos: [] },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+    const { rerender } = render(
+      <LinkedAosNotice
+        locationId={1}
+        acknowledged={false}
+        onAcknowledgeChange={vi.fn()}
+        onSharedChange={onSharedChange}
+      />,
+    );
+    expect(onSharedChange).toHaveBeenLastCalledWith({
+      resolved: true,
+      shared: false,
+    });
+
+    // A later background refetch (e.g. window refocus) fails — stale `data`
+    // is still present (TanStack Query default), but isError flips true.
+    onSharedChange.mockClear();
+    useQueryMock.mockReturnValue({
+      data: { totalAoCount: 1, aos: [] },
+      isLoading: false,
+      isError: true,
+      refetch: vi.fn(),
+    });
+    rerender(
+      <LinkedAosNotice
+        locationId={1}
+        acknowledged={false}
+        onAcknowledgeChange={vi.fn()}
+        onSharedChange={onSharedChange}
+      />,
+    );
+    expect(onSharedChange).toHaveBeenLastCalledWith({
+      resolved: false,
+      shared: false,
+    });
   });
 
   it("reports not-shared once resolved with a single AO", () => {
@@ -104,7 +154,10 @@ describe("LinkedAosNotice", () => {
         onSharedChange={onSharedChange}
       />,
     );
-    expect(onSharedChange).toHaveBeenCalledWith(false);
+    expect(onSharedChange).toHaveBeenCalledWith({
+      resolved: true,
+      shared: false,
+    });
   });
 
   it("reports shared and renders the warning + checkbox when totalAoCount > 1", () => {
@@ -150,7 +203,10 @@ describe("LinkedAosNotice", () => {
         onSharedChange={onSharedChange}
       />,
     );
-    expect(onSharedChange).toHaveBeenCalledWith(true);
+    expect(onSharedChange).toHaveBeenCalledWith({
+      resolved: true,
+      shared: true,
+    });
     expect(screen.getByText(/shared by 2 AOs/)).toBeInTheDocument();
     expect(screen.getByText("Workout")).toBeInTheDocument();
     expect(screen.getByText("Workout").textContent).toBe("Workout");

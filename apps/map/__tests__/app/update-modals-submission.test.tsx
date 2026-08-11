@@ -79,9 +79,12 @@ vi.mock("~/app/_components/forms/linked-aos-notice", () => {
     LinkedAosNotice: ({
       onSharedChange,
     }: {
-      onSharedChange?: (shared: boolean) => void;
+      onSharedChange?: (state: { resolved: boolean; shared: boolean }) => void;
     }) => {
-      useEffect(() => onSharedChange?.(false), [onSharedChange]);
+      useEffect(
+        () => onSharedChange?.({ resolved: true, shared: false }),
+        [onSharedChange],
+      );
       return <div data-testid="linked-aos-notice" />;
     },
   };
