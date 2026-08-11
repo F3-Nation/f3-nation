@@ -1,11 +1,6 @@
 import type { Session } from "@acme/auth";
 import { vi } from "vitest";
 
-// Mock next/server before anything imports it
-vi.mock("next/server", () => ({
-  default: {},
-}));
-
 // Mock @acme/mail to prevent module-load-time crash when EMAIL_ADMIN_DESTINATIONS
 // is unavailable in test workers (e.g. Vitest 3 forks pool in CI).
 // API unit tests should never depend on real mail infrastructure.
