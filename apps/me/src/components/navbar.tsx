@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useSave } from "@/lib/save-context";
@@ -10,11 +9,6 @@ import { useSave } from "@/lib/save-context";
 export function Navbar() {
   const { user, loading, signOut } = useAuth();
   const { isDirty, saving, save } = useSave();
-  const [isStaging, setIsStaging] = useState(false);
-
-  useEffect(() => {
-    setIsStaging(window.location.hostname.includes("staging"));
-  }, []);
 
   return (
     <nav className="sticky top-0 z-40 w-full bg-[hsl(var(--f3-charcoal))] text-[#f8f4ea]">
@@ -30,11 +24,6 @@ export function Navbar() {
             />
             <span className="text-lg font-bold tracking-tight">F3 Me</span>
           </Link>
-          {isStaging && (
-            <span className="rounded-full bg-yellow-500/20 px-2 py-0.5 text-xs font-medium text-yellow-400">
-              Staging
-            </span>
-          )}
         </div>
 
         <div className="flex items-center gap-3">

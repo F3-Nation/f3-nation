@@ -1,67 +1,15 @@
-import { AuthClient } from "@acme/sso";
-import type {
-  AuthClientConfig,
-  AuthTokens,
-  AuthUser,
-  OAuthClient,
-} from "@acme/sso";
-
+import { createSsoAdapter } from "@f3nation/sso-next";
 import { env } from "~/env";
 
-function buildAuthConfig(): AuthClientConfig {
+export const sso = createSsoAdapter(() => {
   const authServerUrl = env.AUTH_PROVIDER_URL;
   if (env.NODE_ENV === "production" && !authServerUrl.startsWith("https://")) {
     throw new Error("AUTH_PROVIDER_URL must use HTTPS in production");
   }
-
   return {
     clientId: env.OAUTH_CLIENT_ID,
     clientSecret: env.OAUTH_CLIENT_SECRET,
     redirectUri: env.OAUTH_REDIRECT_URI,
-    authServerUrl,
+    authServerUrl: authServerUrl,
   };
-}
-
-let authClient: AuthClient | null = null;
-
-function getAuthClient(): AuthClient {
-  authClient ??= new AuthClient(buildAuthConfig());
-  return authClient;
-}
-
-export function getOAuthConfig(): OAuthClient {
-  return getAuthClient().getOAuthConfig();
-}
-
-export function getAuthorizationUrl(params: {
-  scope?: string;
-  state?: string;
-  codeChallenge?: string;
-  codeChallengeMethod?: string;
-}): string {
-  return getAuthClient().getAuthorizationUrl(params);
-}
-
-export async function exchangeCodeForToken(params: {
-  code: string;
-  codeVerifier: string;
-}): Promise<AuthTokens> {
-  return getAuthClient().exchangeCodeForToken({
-    code: params.code,
-    codeVerifier: params.codeVerifier,
-  });
-}
-
-export async function getUserInfo(accessToken: string): Promise<AuthUser> {
-  return getAuthClient().getUserInfo(accessToken);
-}
-
-export async function refreshToken(params: {
-  refreshToken: string;
-}): Promise<AuthTokens> {
-  return getAuthClient().refreshToken({ refreshToken: params.refreshToken });
-}
-
-export async function revokeToken(token: string): Promise<void> {
-  return getAuthClient().revokeToken(token);
-}
+});

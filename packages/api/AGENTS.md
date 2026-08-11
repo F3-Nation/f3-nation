@@ -1,0 +1,32 @@
+# Testing
+
+`vitest.global-setup.ts` resets and re-seeds the database at `TEST_DATABASE_URL`
+(`f3nation_test` locally, `f3_test` in CI) before the suite runs. This covers
+`pnpm --filter @acme/api test`, `pnpm -C packages/api test`, and `turbo run
+test` — all of which load `.env` via `with-env` — so no external reset step is
+needed. A bare `vitest` invocation or most editor test runners bypass
+`with-env`; without `TEST_DATABASE_URL` set, the reset silently no-ops instead
+of running. `apps/api`'s characterization suite is unaffected; it still resets
+through Turbo's `reset-test-db` task.
+
+## Error Handling
+
+Full rationale, the code-selection table, and the `catch`-block pattern:
+[`docs/AI_DEVELOPMENT_GUIDE.md`](../../docs/AI_DEVELOPMENT_GUIDE.md#error-handling).
+
+- Throw `new ORPCError(code, { message })`, never a raw `Error` — oRPC masks
+  untyped throws as an opaque 500 and drops the message. Enforced by ESLint over
+  `src/router` and `src/lib` (see `eslint.config.js`); the router delegates its
+  apply path to `src/lib`, so a raw throw there is masked the same way.
+- 4xx for client errors, `INTERNAL_SERVER_ERROR`/`BAD_GATEWAY` only for genuinely
+  unexpected server or upstream failures.
+- **`UNAUTHORIZED` covers both unauthenticated and insufficient-role** in this
+  codebase; `FORBIDDEN` is used at only three sites. Use `UNAUTHORIZED` for
+  permission checks, and do not file existing ones as miscoded — it is not a
+  finding.
+- **Never bare-rethrow in a `catch`.** No lint rule can catch `throw error`.
+  Guard on `error instanceof ORPCError`, `logError` the original, then wrap in a
+  generic `INTERNAL_SERVER_ERROR`.
+- A missing row is only `NOT_FOUND` if the caller could have caused it. If the
+  lookup key is boundary-constrained (a `z.enum`, a literal, session-derived), a
+  miss means our data is wrong — that is `INTERNAL_SERVER_ERROR`.

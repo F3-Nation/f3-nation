@@ -1,5 +1,4 @@
 import type { PgDatabase } from "drizzle-orm/pg-core";
-import type { MdAdapter } from "next-auth";
 import dayjs from "dayjs";
 import { and, eq } from "drizzle-orm";
 import omit from "lodash/omit";
@@ -9,6 +8,7 @@ import { normalizeEmail } from "@acme/shared/common/functions";
 import { ilike } from "drizzle-orm";
 import { schema, sql } from "@acme/db";
 
+import type { MdAdapter } from "./adapter-types";
 import { logDebug } from "../logger";
 
 const {

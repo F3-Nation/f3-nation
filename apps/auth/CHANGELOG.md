@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.0.9](https://github.com/F3-Nation/f3-nation/compare/auth@2.0.8...auth@2.0.9) (2026-08-05)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.3.0
+
 ## [2.0.8](https://github.com/F3-Nation/f3-nation/compare/auth@2.0.7...auth@2.0.8) (2026-07-26)
 
 

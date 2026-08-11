@@ -5,6 +5,8 @@ import { reset } from "../reset";
 import { testSeed } from "../test-seed";
 import { createDatabaseIfNotExists, getDb, getDbUrl } from "./functions";
 
+export { createDbClient } from "./functions";
+
 const shouldSkipReset = () => {
   if (
     process.env.SKIP_RESET_TEST_DB === "1" ||
@@ -56,7 +58,7 @@ export const resetTestDb = async (params?: {
   // If we have arg `--reset` then we should reset the database
   if (shouldReset) {
     console.log("Resetting database");
-    await reset();
+    await reset(params?.db);
   }
 
   console.log("Migrating database", databaseName, {

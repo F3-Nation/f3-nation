@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.1.4](https://github.com/F3-Nation/f3-nation/compare/me@2.1.3...me@2.1.4) (2026-08-05)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.5.0
+
 ## [2.1.3](https://github.com/F3-Nation/f3-nation/compare/me@2.1.2...me@2.1.3) (2026-07-26)
 
 
