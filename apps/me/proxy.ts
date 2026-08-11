@@ -1,17 +1,17 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { verifyAccessToken } from "@acme/sso";
+import { verifyAccessToken } from "@f3nation/sso-next";
 import {
   ACCESS_TOKEN_COOKIE_NAME,
   ACCESS_TOKEN_DEFAULT_MAX_AGE,
   REFRESH_TOKEN_COOKIE_NAME,
   REFRESH_TOKEN_MAX_AGE,
 } from "@/lib/auth/constants";
-import { refreshToken } from "@/lib/auth/oauth";
+import { sso } from "@/lib/auth/oauth";
 import { env } from "@/env";
 import { logDebug, logWarn } from "@/lib/logging";
 
-const PUBLIC_PATHS = ["/", "/api/auth/login", "/api/auth/callback"];
+const PUBLIC_PATHS = ["/", "/api/auth/login", "/api/auth/callback", "/health"];
 const STATIC_ASSET_PATTERN =
   /\.(?:css|js|mjs|map|txt|xml|json|png|jpe?g|gif|webp|svg|ico|bmp|avif|woff2?|ttf|otf|eot|mp4|webm|mp3|wav|ogg|pdf)$/i;
 
@@ -83,7 +83,9 @@ export async function proxy(request: NextRequest) {
       request.headers.get("sec-fetch-mode") === "navigate";
 
     try {
-      const tokens = await refreshToken({ refreshToken: refreshTokenCookie });
+      const tokens = await sso.refreshToken({
+        refreshToken: refreshTokenCookie,
+      });
       if (tokens.accessToken) {
         // Forward refreshed tokens into the current request cycle so downstream
         // route handlers and Server Components see the new values immediately.

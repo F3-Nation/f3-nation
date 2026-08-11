@@ -17929,6 +17929,411 @@
         ]
       }
     },
+    "/v1/status": {
+      "get": {
+        "description": "Returns aggregated status for contract and external monitors, cached for 60 seconds.",
+        "operationId": "status",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "generatedAt": {
+                      "type": "string"
+                    },
+                    "results": {
+                      "items": {
+                        "anyOf": [
+                          {
+                            "properties": {
+                              "data": {
+                                "properties": {
+                                  "checks": {
+                                    "items": {
+                                      "properties": {
+                                        "details": {
+                                          "additionalProperties": {},
+                                          "propertyNames": {
+                                            "type": "string"
+                                          },
+                                          "type": "object"
+                                        },
+                                        "id": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "latencyMs": {
+                                          "maximum": 9007199254740991,
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        },
+                                        "message": {
+                                          "type": "string"
+                                        },
+                                        "severity": {
+                                          "default": "warning",
+                                          "enum": [
+                                            "critical",
+                                            "warning",
+                                            "info"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "status": {
+                                          "enum": [
+                                            "ok",
+                                            "degraded",
+                                            "down"
+                                          ],
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "status"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "minItems": 1,
+                                    "type": "array"
+                                  },
+                                  "contractVersion": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "durationMs": {
+                                    "maximum": 9007199254740991,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "notes": {
+                                    "items": {
+                                      "type": "string"
+                                    },
+                                    "type": "array"
+                                  },
+                                  "service": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "status": {
+                                    "enum": [
+                                      "ok",
+                                      "degraded",
+                                      "down"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "timestamp": {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "service",
+                                  "version",
+                                  "contractVersion",
+                                  "status",
+                                  "timestamp",
+                                  "durationMs",
+                                  "checks"
+                                ],
+                                "type": "object"
+                              },
+                              "ok": {
+                                "const": true
+                              },
+                              "source": {
+                                "const": "contract"
+                              },
+                              "status": {
+                                "enum": [
+                                  "ok",
+                                  "degraded",
+                                  "down"
+                                ],
+                                "type": "string"
+                              },
+                              "target": {
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "type": "string"
+                                  },
+                                  "source": {
+                                    "const": "contract"
+                                  },
+                                  "url": {
+                                    "format": "uri",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "label",
+                                  "url",
+                                  "source"
+                                ],
+                                "type": "object"
+                              }
+                            },
+                            "required": [
+                              "ok",
+                              "source",
+                              "status",
+                              "target",
+                              "data"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "properties": {
+                              "details": {
+                                "additionalProperties": {},
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "type": "object"
+                              },
+                              "ok": {
+                                "const": false
+                              },
+                              "reason": {
+                                "enum": [
+                                  "unreachable",
+                                  "invalid_json",
+                                  "invalid_contract",
+                                  "unsupported_contract_version",
+                                  "invalid_monitor_config"
+                                ],
+                                "type": "string"
+                              },
+                              "source": {
+                                "const": "contract"
+                              },
+                              "status": {
+                                "const": "down"
+                              },
+                              "target": {
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "type": "string"
+                                  },
+                                  "source": {
+                                    "const": "contract"
+                                  },
+                                  "url": {
+                                    "format": "uri",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "label",
+                                  "url",
+                                  "source"
+                                ],
+                                "type": "object"
+                              }
+                            },
+                            "required": [
+                              "ok",
+                              "source",
+                              "status",
+                              "target",
+                              "reason"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "properties": {
+                              "data": {
+                                "properties": {
+                                  "incidents": {
+                                    "type": "number"
+                                  },
+                                  "provider": {
+                                    "const": "slack"
+                                  },
+                                  "providerStatus": {
+                                    "type": "string"
+                                  },
+                                  "timestamp": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "provider",
+                                  "providerStatus",
+                                  "timestamp",
+                                  "incidents"
+                                ],
+                                "type": "object"
+                              },
+                              "ok": {
+                                "const": true
+                              },
+                              "source": {
+                                "const": "external"
+                              },
+                              "status": {
+                                "enum": [
+                                  "ok",
+                                  "degraded",
+                                  "down"
+                                ],
+                                "type": "string"
+                              },
+                              "target": {
+                                "properties": {
+                                  "apiUrl": {
+                                    "format": "uri",
+                                    "type": "string"
+                                  },
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "type": "string"
+                                  },
+                                  "provider": {
+                                    "const": "slack"
+                                  },
+                                  "source": {
+                                    "const": "external"
+                                  },
+                                  "url": {
+                                    "format": "uri",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "label",
+                                  "url",
+                                  "source",
+                                  "provider",
+                                  "apiUrl"
+                                ],
+                                "type": "object"
+                              }
+                            },
+                            "required": [
+                              "ok",
+                              "source",
+                              "status",
+                              "target",
+                              "data"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "properties": {
+                              "details": {
+                                "additionalProperties": {},
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "type": "object"
+                              },
+                              "ok": {
+                                "const": false
+                              },
+                              "reason": {
+                                "enum": [
+                                  "unreachable",
+                                  "invalid_json",
+                                  "invalid_contract",
+                                  "unsupported_contract_version",
+                                  "invalid_monitor_config"
+                                ],
+                                "type": "string"
+                              },
+                              "source": {
+                                "const": "external"
+                              },
+                              "status": {
+                                "const": "down"
+                              },
+                              "target": {
+                                "properties": {
+                                  "apiUrl": {
+                                    "type": "string"
+                                  },
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "type": "string"
+                                  },
+                                  "provider": {
+                                    "const": "slack"
+                                  },
+                                  "source": {
+                                    "const": "external"
+                                  },
+                                  "url": {
+                                    "format": "uri",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "label",
+                                  "url",
+                                  "source",
+                                  "provider",
+                                  "apiUrl"
+                                ],
+                                "type": "object"
+                              }
+                            },
+                            "required": [
+                              "ok",
+                              "source",
+                              "status",
+                              "target",
+                              "reason"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "type": "array"
+                    },
+                    "ttlSeconds": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "generatedAt",
+                    "ttlSeconds",
+                    "results"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [],
+        "summary": "Aggregated status",
+        "tags": [
+          "status"
+        ]
+      }
+    },
     "/v1/user": {
       "get": {
         "description": "Get a paginated list of users with optional filtering by role, status, and organization. Includes PII fields (email, phone, emergency contacts) if includePii is true and the user is an F3 Nation admin.",
@@ -20178,6 +20583,10 @@
     {
       "description": "Slack and F3 Nation Slack app integration endpoints for managing content",
       "name": "slack"
+    },
+    {
+      "description": "Service status and health check endpoints",
+      "name": "status"
     }
   ],
   "x-tagGroups": [
@@ -20223,6 +20632,12 @@
       "name": "Slack",
       "tags": [
         "slack"
+      ]
+    },
+    {
+      "name": "Status",
+      "tags": [
+        "status"
       ]
     }
   ]

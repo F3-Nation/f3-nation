@@ -1,21 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NextRequest } from "next/server";
 
-vi.mock("@acme/sso", () => ({
-  createOAuthLoginFlowArtifacts: vi.fn(),
+const ssoMock = vi.hoisted(() => ({
+  getAuthorizationUrl: vi.fn(),
+}));
+const createOAuthLoginFlowArtifacts = vi.hoisted(() => vi.fn());
+
+vi.mock("@f3nation/sso", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  createOAuthLoginFlowArtifacts,
 }));
 
 vi.mock("@/lib/auth/oauth", () => ({
-  getAuthorizationUrl: vi.fn(),
+  sso: ssoMock,
 }));
-
-vi.mock("@/lib/auth/validation", () => ({
-  safeReturnTo: vi.fn(),
-}));
-
-import { createOAuthLoginFlowArtifacts } from "@acme/sso";
-import { getAuthorizationUrl } from "@/lib/auth/oauth";
-import { safeReturnTo } from "@/lib/auth/validation";
 
 function makeRequest(url: string) {
   return {
@@ -29,14 +27,13 @@ function makeRequest(url: string) {
 describe("Auth /login route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(safeReturnTo).mockReturnValue("/profile");
     vi.mocked(createOAuthLoginFlowArtifacts).mockResolvedValue({
       csrfToken: "csrf-token",
       codeVerifier: "code-verifier",
       codeChallenge: "code-challenge",
       state: "oauth-state",
     });
-    vi.mocked(getAuthorizationUrl).mockReturnValue(
+    ssoMock.getAuthorizationUrl.mockReturnValue(
       "https://auth.f3nation.test/api/oauth/authorize?state=oauth-state",
     );
   });
@@ -49,11 +46,10 @@ describe("Auth /login route", () => {
 
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toContain("oauth-state");
-    expect(safeReturnTo).toHaveBeenCalledWith("/profile");
-    expect(createOAuthLoginFlowArtifacts).toHaveBeenCalledWith({
-      returnTo: "/profile",
-    });
-    expect(getAuthorizationUrl).toHaveBeenCalledWith({
+    expect(createOAuthLoginFlowArtifacts).toHaveBeenCalledWith(
+      expect.objectContaining({ returnTo: "/profile" }),
+    );
+    expect(ssoMock.getAuthorizationUrl).toHaveBeenCalledWith({
       state: "oauth-state",
       codeChallenge: "code-challenge",
       codeChallengeMethod: "S256",
@@ -66,9 +62,8 @@ describe("Auth /login route", () => {
     expect(setCookieHeader).toContain("SameSite=lax");
   });
 
-  it("falls back returnTo through validation and marks cookies secure in prod", async () => {
+  it("falls back returnTo and marks cookies secure in prod", async () => {
     vi.stubEnv("NODE_ENV", "production");
-    vi.mocked(safeReturnTo).mockReturnValue("/profile");
 
     const { GET } = await import("@/app/api/auth/login/route");
     const response = await GET(
@@ -77,7 +72,10 @@ describe("Auth /login route", () => {
       ),
     );
 
-    expect(safeReturnTo).toHaveBeenCalledWith("https://evil.test");
+    // Unsafe absolute URL is sanitized to the default fallback.
+    expect(createOAuthLoginFlowArtifacts).toHaveBeenCalledWith(
+      expect.objectContaining({ returnTo: "/profile" }),
+    );
     const setCookieHeader = response.headers.get("set-cookie");
     expect(setCookieHeader).toContain("Secure");
 
