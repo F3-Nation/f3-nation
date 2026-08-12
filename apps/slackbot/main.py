@@ -64,10 +64,7 @@ def get_user_facing_error_message(exc: Exception) -> str:
     if isinstance(exc, F3ApiNotFoundError):
         return "The requested F3 Nation resource could not be found."
     if isinstance(exc, F3ApiError):
-        return (
-            "Something went wrong while contacting the F3 Nation API. "
-            "Please try again later."
-        )
+        return "Something went wrong while contacting the F3 Nation API. Please try again later."
     return "Something went wrong. Please try again later."
 
 
@@ -199,6 +196,7 @@ def main_response(body: dict, logger: logging.Logger, client: WebClient, ack: Ac
             f"{safe_get(safe_get(MAIN_MAPPER, request_type), request_id) or request_type + ', ' + request_id}"
         )
 
+
 try:
     ARGS = [main_response]
     LAZY_KWARGS = {}
@@ -232,6 +230,7 @@ def start_local_health_server(port: int):
     thread.start()
     return server
 
+
 if __name__ == "__main__":
     port = 8080
     local_http_port = int(os.environ.get("LOCAL_HTTP_PORT", "3006"))
@@ -242,9 +241,7 @@ if __name__ == "__main__":
     # Ensure SLACK_APP_TOKEN is present
     app_token = os.environ.get("SLACK_APP_TOKEN")
     if not app_token:
-        logging.getLogger().error(
-            "SLACK_APP_TOKEN is required to run the Slackbot. Please set it in your .env file."
-        )
+        logging.getLogger().error("SLACK_APP_TOKEN is required to run the Slackbot. Please set it in your .env file.")
         exit(1)
 
     if not SOCKET_MODE:

@@ -7,8 +7,8 @@
 # - Never skips in CI: if `uv` is missing while `CI` is set, fails loudly
 #   instead, so the gate can never be silently switched off.
 # - Strips the ESLint/Prettier cache flags (`--cache`, `--cache-location <path>`,
-#   a bare `--`) that turbo's root `lint`/`format` scripts append to every task
-#   in the graph. Python tools reject them. Only strips them from the trailing
+#   a bare `--`) that turbo's root `lint`, `lint:fix`, and `format:fix` scripts
+#   append to every task in the graph. Python tools reject them. Only strips them from the trailing
 #   run of the command's argument list, so identical tokens that are genuinely
 #   part of the wrapped command (e.g. a `--` the wrapped tool itself expects,
 #   followed by more of its own args) are left alone.
@@ -31,9 +31,7 @@ if ! command -v uv >/dev/null 2>&1; then
     exit 1
   fi
 
-  cat <<EOF
-Skipping ${task_name} for ${package_label}: uv is not installed. See docs/LOCAL_DEV_DOCKER.md — run \`pnpm python:install\` after installing uv.
-EOF
+  echo "Skipping ${task_name} for ${package_label}: uv is not installed. See docs/LOCAL_DEV_DOCKER.md — run \`pnpm python:install\` after installing uv."
   exit 0
 fi
 

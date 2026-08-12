@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import date
 from typing import Any, Iterable
 
@@ -20,6 +21,8 @@ from application.preblast import (
     PreblastPostDecision,
     PreblastUpdateCommand,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class PreblastService:
@@ -226,9 +229,22 @@ class PreblastService:
     def check_and_mark_hc_announcement(self, event_instance_id: int, slack_user_id: str, *, is_hc: bool) -> bool:
         """Return True if the HC announcement should be posted (and mark it sent)."""
         if not self._event_instance_service:
-            return True  # fail open
+            # Fail open: post rather than swallow the announcement, but make the
+            # wiring regression visible instead of silently indistinguishable
+            # from "not yet announced".
+            logger.warning(
+                "hc announcement check fell open: EventInstanceService is not wired (event_instance_id=%s)",
+                event_instance_id,
+            )
+            return True
         event = self._event_instance_service.get_by_id(event_instance_id)
         if not event:
+            # Fail open for the same reason: an unresolvable event instance is
+            # treated as not-yet-announced.
+            logger.warning(
+                "hc announcement check fell open: event instance not found (event_instance_id=%s)",
+                event_instance_id,
+            )
             return True
         if self.has_hc_announcement_been_sent(event.meta, slack_user_id, is_hc=is_hc):
             return False
@@ -239,7 +255,7 @@ class PreblastService:
             meta_updates={
                 k: updated_meta[k]
                 for k in updated_meta
-                if k not in (event.meta or {}) or updated_meta[k] != event.meta.get(k)  # type: ignore[union-attr]  # meta.get is unreachable when meta is None: the first clause "k not in (event.meta or {})" is always True in that case, short-circuiting before this operand runs
+                if k not in (event.meta or {}) or updated_meta[k] != event.meta.get(k)  # type: ignore[union-attr]
             },
         )
         return True
