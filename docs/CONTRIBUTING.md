@@ -15,7 +15,7 @@ All the apps in this monorepo can be developed and tested locally. See [LOCAL_DE
 1. Fork the repository into your own account, then create a branch from `main`.
 1. Make something awesome. Commit messages must follow [Conventional Commits](https://www.conventionalcommits.org/) (`type(scope): subject`) — see [AGENTS.md](../AGENTS.md#commit-message-convention) for allowed types and scopes. This is enforced locally by a commit hook.
 1. Submit a PR against the F3-Nation `main` branch in **DRAFT**. Your PR title must also follow Conventional Commits format (`type(scope): subject`) — it's checked by [pr-title.yml](../.github/workflows/pr-title.yml), since our release process parses the title rather than individual commits. Fill in the PR template with a plain-language summary up top — many reviewers are volunteers without deep context on your change.
-1. Run `pnpm ci:local` locally — it chains the same format/lint/typecheck/build/test steps CI runs — then make sure all Checks pass once pushed. Catching issues locally is faster than waiting on CI.
+1. Run `pnpm ci:local` locally — it chains the same steps CI runs — then make sure all Checks pass once pushed. Catching issues locally is faster than waiting on CI.
 1. Mark the PR as **Ready for review**. At this point, a number of AI bots will run and provide feedback (see "Use of AI" below).
 1. Address all review comments. Reply to each comment stating what you did to fix it or why you're not going to fix it.
 1. If AI suggests something that is out of the scope of the PR, create an Issue to track it, add the Issue number to the comment reply, and resolve it.
