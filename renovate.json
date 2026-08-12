@@ -62,6 +62,12 @@
       "matchDatasources": ["npm"],
       "matchPackageNames": ["@vis.gl/react-google-maps"],
       "allowedVersions": "<1.9.0"
+    },
+    {
+      "description": "Hold the brace-expansion@<1.1.16 override at <3.0.0: minimatch@3.1.5 (pulled in by eslint-plugin-react, eslint-plugin-jsx-a11y, and commitizen's glob@7.2.3) does `require('brace-expansion')` and calls the result directly. 1.x/2.x still export a callable default (`module.exports = expandTop`); 3.0.0 switched to ESM-only, and 4.x/5.x ship a dual build whose CJS side exports only a named `expand` — either way minimatch@3.1.5 throws `TypeError: expand is not a function` the first time a brace-containing glob reaches it. See pnpm-workspace.yaml's matching override comment. Does not affect the separate `brace-expansion@>=3.0.0 <5.0.9` override, which feeds modern minimatch@10.x and is fine at 5.x. Remove this rule only once minimatch@3.1.5 is gone from the dependency tree (i.e. those three packages upgrade past it).",
+      "matchDatasources": ["npm"],
+      "matchDepNames": ["brace-expansion@<1.1.16"],
+      "allowedVersions": "<3.0.0"
     }
   ]
 }

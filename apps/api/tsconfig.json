@@ -4,7 +4,8 @@
     "lib": ["ES2022", "dom", "dom.iterable"],
     "jsx": "preserve",
     "paths": {
-      "~/*": ["./src/*"]
+      "~/*": ["./src/*"],
+      "@f3nation/health": ["../../packages/health/src/index.ts"]
     },
     "allowArbitraryExtensions": true,
     "plugins": [{ "name": "next" }],

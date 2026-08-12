@@ -13,7 +13,7 @@
     "clean": "rm -rf .turbo node_modules",
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
     "lint": "eslint .",
-    "test": "pnpm -C ../db reset-test-db && pnpm with-env vitest --run --coverage",
+    "test": "pnpm with-env vitest --run --coverage",
     "test:org-hierarchy": "pnpm with-env tsx src/scripts/test-org-hierarchy.ts",
     "test:watch": "pnpm with-env vitest -w",
     "typecheck": "tsc --noEmit",
@@ -27,6 +27,7 @@
     "@acme/mail": "workspace:*",
     "@acme/shared": "workspace:*",
     "@acme/validators": "workspace:*",
+    "@f3nation/health": "workspace:*",
     "@orpc/experimental-ratelimit": "catalog:",
     "@orpc/server": "catalog:",
     "dayjs": "catalog:",
@@ -34,11 +35,6 @@
     "jose": "catalog:",
     "lodash": "catalog:",
     "zod": "catalog:"
-  },
-  "peerDependencies": {
-    "next": ">=15.5.18 <17",
-    "react": ">=18 <20",
-    "react-dom": ">=18 <20"
   },
   "devDependencies": {
     "@acme/eslint-config": "workspace:*",
@@ -49,8 +45,6 @@
     "dotenv-cli": "catalog:",
     "eslint": "catalog:",
     "prettier": "catalog:",
-    "react": "catalog:",
-    "react-dom": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
