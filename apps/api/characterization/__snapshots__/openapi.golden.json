@@ -3488,6 +3488,7 @@
                   "endDate": {
                     "anyOf": [
                       {
+                        "format": "date",
                         "type": "string"
                       },
                       {
@@ -3641,6 +3642,7 @@
                     ]
                   },
                   "startDate": {
+                    "format": "date",
                     "type": "string"
                   },
                   "startTime": {
