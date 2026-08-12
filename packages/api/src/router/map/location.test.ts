@@ -76,7 +76,7 @@ describe("Map Location Router", () => {
   // Helper to create test AO
   const createTestAO = async (
     regionId: number,
-    opts?: { logoUrl?: string | null },
+    opts?: { logoUrl?: string | null; isActive?: boolean },
   ) => {
     const [ao] = await db
       .insert(schema.orgs)
@@ -84,7 +84,7 @@ describe("Map Location Router", () => {
         name: `Test AO ${uniqueId()}`,
         orgType: "ao",
         parentId: regionId,
-        isActive: true,
+        isActive: opts?.isActive ?? true,
         ...(opts?.logoUrl !== undefined ? { logoUrl: opts.logoUrl } : {}),
       })
       .returning();
@@ -353,6 +353,73 @@ describe("Map Location Router", () => {
       }
     });
 
+    it("should exclude active events under a deactivated AO (#606)", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+
+      // Two AOs sharing one location: one active, one deactivated. Both
+      // events below are themselves active — only the AO's status differs.
+      const activeAo = await createTestAO(region.id);
+      const deactivatedAo = await createTestAO(region.id, { isActive: false });
+      if (!activeAo) throw new Error("Failed to create active test AO");
+      if (!deactivatedAo) {
+        throw new Error("Failed to create deactivated test AO");
+      }
+
+      const location = await createTestLocation(region.id);
+      if (!location) throw new Error("Failed to create test location");
+
+      const createActiveEvent = async (orgId: number, label: string) => {
+        const [event] = await db
+          .insert(schema.events)
+          .values({
+            name: `${label} ${uniqueId()}`,
+            orgId,
+            locationId: location.id,
+            dayOfWeek: "wednesday",
+            startTime: "0700",
+            isActive: true,
+            highlight: false,
+            startDate: "2026-01-01",
+            isPrivate: false,
+          })
+          .returning();
+        if (event) createdEventIds.push(event.id);
+        return event;
+      };
+
+      const activeAoEvent = await createActiveEvent(activeAo.id, "Active-AO");
+      const deactivatedAoEvent = await createActiveEvent(
+        deactivatedAo.id,
+        "Deactivated-AO",
+      );
+      // Assert setup succeeded before using these ids — a failed insert here
+      // (returning `undefined`) would otherwise let the "excluded" assertion
+      // below pass vacuously (`.not.toContain(undefined)` is trivially true).
+      expect(activeAoEvent).toBeDefined();
+      expect(deactivatedAoEvent).toBeDefined();
+
+      const client = createTestClient();
+      const result = await client.map.location.eventsAndLocations();
+
+      const locationData = result.find(
+        (loc: [number, ...unknown[]]) => loc[0] === location.id,
+      );
+
+      // The location still renders because its active-AO event is shown ...
+      expect(locationData).toBeDefined();
+      const events = (locationData?.[6] ?? []) as [number, ...unknown[]][];
+      const eventIds = events.map((event) => event[0]);
+
+      // ... the active-AO event is present ...
+      expect(eventIds).toContain(activeAoEvent?.id);
+      // ... but the deactivated-AO event is excluded from the map.
+      expect(eventIds).not.toContain(deactivatedAoEvent?.id);
+    });
+
     describe("AO grouping", () => {
       it("should include per-event AO name when multiple AOs share a location", async () => {
         const session = await createAdminSession();
@@ -592,6 +659,69 @@ describe("Map Location Router", () => {
         );
         expect(hasInactivePrivate).toBe(false);
       }
+    });
+  });
+
+  describe("locationWorkout", () => {
+    it("should exclude active events under a deactivated AO (#606)", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+
+      // Two AOs sharing one location: one active, one deactivated. Both
+      // events below are themselves active — only the AO's status differs.
+      const activeAo = await createTestAO(region.id);
+      const deactivatedAo = await createTestAO(region.id, { isActive: false });
+      if (!activeAo) throw new Error("Failed to create active test AO");
+      if (!deactivatedAo) {
+        throw new Error("Failed to create deactivated test AO");
+      }
+
+      const location = await createTestLocation(region.id);
+      if (!location) throw new Error("Failed to create test location");
+
+      const createActiveEvent = async (orgId: number, label: string) => {
+        const [event] = await db
+          .insert(schema.events)
+          .values({
+            name: `${label} ${uniqueId()}`,
+            orgId,
+            locationId: location.id,
+            dayOfWeek: "wednesday",
+            startTime: "0700",
+            isActive: true,
+            highlight: false,
+            startDate: "2026-01-01",
+            isPrivate: false,
+          })
+          .returning();
+        if (event) createdEventIds.push(event.id);
+        return event;
+      };
+
+      const activeAoEvent = await createActiveEvent(activeAo.id, "Active-AO");
+      const deactivatedAoEvent = await createActiveEvent(
+        deactivatedAo.id,
+        "Deactivated-AO",
+      );
+      expect(activeAoEvent).toBeDefined();
+      expect(deactivatedAoEvent).toBeDefined();
+
+      const client = createTestClient();
+      const result = await client.map.location.locationWorkout({
+        locationId: location.id,
+      });
+
+      expect(result.location).toBeDefined();
+      const eventIds = (result.location?.events ?? []).map((e) => e.id);
+
+      // The active-AO event is present ...
+      expect(eventIds).toContain(activeAoEvent?.id);
+      // ... but the deactivated-AO event is excluded from the workout panel,
+      // matching eventsAndLocations' map-marker behavior above.
+      expect(eventIds).not.toContain(deactivatedAoEvent?.id);
     });
   });
 });

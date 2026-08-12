@@ -102,7 +102,13 @@ export const mapLocationRouter = os.router({
           schema.eventTypes,
           eq(schema.eventTypes.id, schema.eventsXEventTypes.eventTypeId),
         )
-        .where(eq(schema.locations.isActive, true))
+        // Exclude events whose AO org has been deactivated. events.orgId is a
+        // NOT NULL FK, so the aoOrg leftJoin always matches and this filter
+        // drops inactive-AO events without touching the join's result shape.
+        // (#606)
+        .where(
+          and(eq(schema.locations.isActive, true), eq(aoOrg.isActive, true)),
+        )
         .groupBy(
           schema.locations.id,
           aoOrg.name,
@@ -408,10 +414,17 @@ export const mapLocationRouter = os.router({
             eq(schema.eventTypes.isActive, true),
           ),
         )
+        // Exclude events whose AO org has been deactivated — events.orgId is
+        // a NOT NULL FK, so the parentOrg leftJoin always matches and this
+        // filter drops inactive-AO events without touching the join's result
+        // shape. Same invariant/fix as eventsAndLocations above (#606):
+        // without it, an event dropped from the map markers could still
+        // appear in this location's workout-detail panel.
         .where(
           and(
             eq(schema.locations.id, input.locationId),
             eq(schema.events.isActive, true),
+            eq(parentOrg.isActive, true),
           ),
         )
         .groupBy(
