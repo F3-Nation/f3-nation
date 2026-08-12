@@ -8,7 +8,7 @@
 > means replacing one exporter. Client-side stays `posthog-js` directly
 > (browser OTel is immature; `instrumentation-client.ts` masking rules
 > unchanged). Traces/metrics (incl. DB APM) remain open — tracked as F3-88.
-
+>
 > **OWNER DECISION (2026-07-06, Declan):** Go **OTEL + PostHog**, drop Sentry.
 > This supersedes the "keep Sentry" recommendation below (kept for the
 > reasoning trail). Deciding facts: PostHog error tracking now ships a

@@ -7,6 +7,16 @@ import posthog from "posthog-js";
 
 import { env } from "~/env";
 
+// map has no client-exposed channel env var (the channel lives server-side as
+// F3_CHANNEL), so derive it from the hostname — the same approach the removed
+// Sentry config used — mapped onto the F3_CHANNEL vocabulary.
+function environmentFromHostname(hostname: string): string {
+  if (hostname === "map.f3nation.com") return "prod";
+  if (hostname.includes("staging")) return "staging";
+  if (hostname === "localhost" || hostname === "127.0.0.1") return "local";
+  return "dev";
+}
+
 if (env.NEXT_PUBLIC_POSTHOG_KEY) {
   posthog.init(env.NEXT_PUBLIC_POSTHOG_KEY, {
     api_host: "https://us.i.posthog.com",
@@ -39,5 +49,13 @@ if (env.NEXT_PUBLIC_POSTHOG_KEY) {
       maskAllInputs: true,
       maskTextSelector: "*",
     },
+  });
+
+  // Tag every client-side event (incl. autocaptured $exception) with the
+  // deployment channel, mirroring the server pipeline's canonical
+  // `environment` property — without it, errors from prod and previews are
+  // indistinguishable in PostHog (the removed Sentry config tagged this too).
+  posthog.register({
+    environment: environmentFromHostname(window.location.hostname),
   });
 }

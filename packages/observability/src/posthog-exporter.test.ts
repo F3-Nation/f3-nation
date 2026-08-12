@@ -71,6 +71,30 @@ describe("PostHogExceptionExporter", () => {
     consoleErrorSpy.mockRestore();
   });
 
+  it("tolerates a foreign emitter using non-string exception attributes", async () => {
+    const exporter = new PostHogExceptionExporter({
+      apiKey: "test-key",
+      environment: "ci",
+    });
+    await exportRecords(exporter, [
+      record({ "exception.message": { weird: true }, "exception.type": 42 }),
+    ]);
+    const [reported] = captureExceptionImmediateMock.mock.calls[0] as [Error];
+    expect(reported.message).toBe('{"weird":true}');
+    // Non-string type is ignored — the Error keeps its default name.
+    expect(reported.name).toBe("Error");
+  });
+
+  it("keeps the rebuilt Error's own stack when the record carries none", async () => {
+    const exporter = new PostHogExceptionExporter({
+      apiKey: "test-key",
+      environment: "ci",
+    });
+    await exportRecords(exporter, [record({ "exception.message": "boom" })]);
+    const [reported] = captureExceptionImmediateMock.mock.calls[0] as [Error];
+    expect(reported.stack).toBeDefined();
+  });
+
   it("honors a custom PostHog host", async () => {
     const exporter = new PostHogExceptionExporter({
       apiKey: "test-key",

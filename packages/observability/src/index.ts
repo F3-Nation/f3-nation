@@ -12,10 +12,7 @@
 import type { LogContext } from "@acme/logger";
 import { logs, SeverityNumber } from "@opentelemetry/api-logs";
 import { resourceFromAttributes } from "@opentelemetry/resources";
-import {
-  LoggerProvider,
-  SimpleLogRecordProcessor,
-} from "@opentelemetry/sdk-logs";
+import { LoggerProvider } from "@opentelemetry/sdk-logs";
 import {
   ATTR_EXCEPTION_MESSAGE,
   ATTR_EXCEPTION_STACKTRACE,
@@ -25,6 +22,7 @@ import {
 
 import { setErrorReporter } from "@acme/logger";
 
+import { ImmediateLogRecordProcessor } from "./immediate-processor";
 import { PostHogExceptionExporter } from "./posthog-exporter";
 
 export interface ObservabilityConfig {
@@ -52,18 +50,20 @@ export function registerObservability(config: ObservabilityConfig): void {
 
   const processors = [];
   if (config.posthog?.apiKey) {
-    // Simple (not batching) processor: each record is handed to the exporter
-    // as it is emitted, so captureException's forceFlush awaits the actual
-    // HTTP send — a queued batch could be lost when a scale-to-zero Cloud
-    // Run instance is reaped.
+    // Immediate (not batching) processor: each record is handed to the
+    // exporter as it is emitted and the in-flight send is tracked, so
+    // captureException's forceFlush awaits the actual HTTP send — a queued
+    // batch could be lost when a scale-to-zero Cloud Run instance is reaped.
+    // (Not SimpleLogRecordProcessor — see immediate-processor.ts for why its
+    // forceFlush doesn't provide this guarantee.)
     processors.push(
-      new SimpleLogRecordProcessor({
-        exporter: new PostHogExceptionExporter({
+      new ImmediateLogRecordProcessor(
+        new PostHogExceptionExporter({
           apiKey: config.posthog.apiKey,
           host: config.posthog.host,
           environment: config.environment,
         }),
-      }),
+      ),
     );
   }
 

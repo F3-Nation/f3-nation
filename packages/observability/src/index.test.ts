@@ -143,6 +143,32 @@ describe("captureException", () => {
     expect("skipped" in properties).toBe(false);
   });
 
+  it("logs (but never throws) when the pipeline itself fails", async () => {
+    // Covers captureException's own catch — distinct from the exporter's
+    // catch (tested above via a transport failure): here emit() explodes
+    // before any record reaches the exporter.
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const { registerObservability, captureException } = await freshModule();
+    registerObservability(config);
+    const hostileAttrs = {};
+    Object.defineProperty(hostileAttrs, "route", {
+      enumerable: true,
+      get() {
+        throw new Error("hostile attribute getter");
+      },
+    });
+    await expect(
+      captureException(new Error("boom"), hostileAttrs),
+    ).resolves.toBeUndefined();
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "observability.capture_exception_failed",
+      expect.any(Error),
+    );
+    consoleErrorSpy.mockRestore();
+  });
+
   it("constructs the PostHog client with a bounded timeout and no retries", async () => {
     const { registerObservability, captureException } = await freshModule();
     registerObservability(config);

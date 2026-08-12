@@ -38,4 +38,10 @@ if (env.NEXT_PUBLIC_POSTHOG_KEY) {
       maskTextSelector: "*",
     },
   });
+
+  // Tag every client-side event (incl. autocaptured $exception) with the
+  // deployment channel, mirroring the server pipeline's canonical
+  // `environment` property — without it, errors from prod and previews are
+  // indistinguishable in PostHog (the removed Sentry config tagged this too).
+  posthog.register({ environment: env.NEXT_PUBLIC_CHANNEL });
 }

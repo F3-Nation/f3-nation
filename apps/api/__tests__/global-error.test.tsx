@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import GlobalError from "../src/app/global-error";
 
@@ -27,6 +27,13 @@ describe("GlobalError", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     envMock.NEXT_PUBLIC_POSTHOG_KEY = "test-key";
+  });
+
+  afterEach(() => {
+    // Restore spies (the console.error spy below) even when a render or
+    // assertion throws mid-test — a leaked spy would swallow errors in
+    // later tests.
+    vi.restoreAllMocks();
   });
 
   it("renders the error heading and reset button", () => {
@@ -68,6 +75,5 @@ describe("GlobalError", () => {
       "posthog.capture_exception_failed",
       expect.any(Error),
     );
-    consoleErrorSpy.mockRestore();
   });
 });

@@ -120,8 +120,8 @@ export class PostHogExceptionExporter implements LogRecordExporter {
   forceFlush(): Promise<void> {
     // Every send is immediate (captureExceptionImmediate) and export() only
     // reports success once all sends have settled, so there is never a
-    // buffered backlog to flush here — the processor's own pending-export
-    // tracking is what forceFlush awaits.
+    // buffered backlog to flush here — ImmediateLogRecordProcessor's
+    // pending-export tracking is what awaits the in-flight sends.
     return Promise.resolve();
   }
 
