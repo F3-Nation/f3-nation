@@ -767,6 +767,17 @@ describe("validateAccessToken", () => {
     expect(result).toBeNull();
   });
 
+  it("rejects a token with no token_use discriminator at all", async () => {
+    vi.mocked(jwtVerify).mockResolvedValueOnce({
+      payload: { sub: "42", scope: "openid", client_id: PUBLIC_CLIENT.id },
+      protectedHeader: {},
+    } as never);
+
+    const result = await validateAccessToken("token-missing-discriminator");
+
+    expect(result).toBeNull();
+  });
+
   it("returns null when the token's user no longer exists", async () => {
     vi.mocked(jwtVerify).mockResolvedValueOnce({
       payload: {
