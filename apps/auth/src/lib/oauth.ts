@@ -1,6 +1,6 @@
 import crypto from "crypto";
 
-import { and, eq, gt } from "@acme/db";
+import { and, eq, gt, isNotNull, isNull, lt } from "@acme/db";
 import {
   oauthAuthorizationCodes,
   oauthClients,
@@ -12,6 +12,7 @@ import { importJWK, jwtVerify } from "jose";
 import { constantTimeEqual } from "~/lib/crypto-utils";
 import { db } from "~/lib/db";
 import { getJWKS, signAccessToken } from "~/lib/jwt";
+import { logError, logWarn } from "~/lib/logging";
 
 function generateOpaqueToken(): string {
   return crypto.randomBytes(32).toString("base64url");
@@ -89,36 +90,64 @@ export async function createAuthorizationCode(params: {
 export async function exchangeAuthorizationCode(params: {
   code: string;
   clientId: string;
-  clientSecret: string;
+  clientSecret?: string;
   redirectUri: string;
   codeVerifier?: string;
 }) {
+  const reject = (
+    reason: string,
+    error: "invalid_grant" | "invalid_client" = "invalid_grant",
+  ) => {
+    logWarn("auth.oauth.token_rejected", {
+      clientId: params.clientId,
+      grantType: "authorization_code",
+      reason,
+    });
+    return { error };
+  };
+
   // Atomically consume the code (DELETE + RETURNING prevents TOCTOU races)
   const [authCode] = await db
     .delete(oauthAuthorizationCodes)
     .where(eq(oauthAuthorizationCodes.code, params.code))
     .returning();
 
-  if (!authCode) return { error: "invalid_grant" as const };
-  if (new Date(authCode.expiresAt) < new Date())
-    return { error: "invalid_grant" as const };
-  if (authCode.clientId !== params.clientId)
-    return { error: "invalid_grant" as const };
+  if (!authCode) return reject("code_not_found");
+  if (new Date(authCode.expiresAt) < new Date()) return reject("code_expired");
+  if (authCode.clientId !== params.clientId) return reject("client_mismatch");
   if (authCode.redirectUri !== params.redirectUri)
-    return { error: "invalid_grant" as const };
+    return reject("redirect_uri_mismatch");
 
-  // Validate client secret (compare hash)
+  // Validate client authentication.
+  // Confidential clients (default) must present the client secret.
+  // Public clients (RFC 8252 native/mobile apps, is_public = true) cannot
+  // keep a secret confidential, so they authenticate with PKCE alone —
+  // which is enforced unconditionally below for all client types.
   const client = await getClient(params.clientId);
-  if (!client) return { error: "invalid_client" as const };
-  if (
-    !constantTimeEqual(client.clientSecretHash, hashSecret(params.clientSecret))
-  )
-    return { error: "invalid_client" as const };
+  if (!client) return reject("unknown_client", "invalid_client");
+  if (!client.isPublic) {
+    if (!params.clientSecret)
+      return reject("missing_client_secret", "invalid_client");
+    if (
+      !constantTimeEqual(
+        client.clientSecretHash,
+        hashSecret(params.clientSecret),
+      )
+    )
+      return reject("invalid_client_secret", "invalid_client");
+  } else if (params.clientSecret) {
+    // Protocol anomaly (RFC 6749 §2.3): a public client should never present
+    // a secret. Not fatal — PKCE is still enforced below — but worth a
+    // signal in case the client is misconfigured or a DB flip mislabeled it.
+    logWarn("auth.oauth.public_client_sent_secret", {
+      clientId: params.clientId,
+    });
+  }
 
   // PKCE is required — reject codes that have no challenge stored (e.g. issued
   // before enforcement was in place) so there is no bypass window.
-  if (!authCode.codeChallenge) return { error: "invalid_grant" as const };
-  if (!params.codeVerifier) return { error: "invalid_grant" as const };
+  if (!authCode.codeChallenge) return reject("missing_code_challenge");
+  if (!params.codeVerifier) return reject("missing_code_verifier");
 
   const computedChallenge = crypto
     .createHash("sha256")
@@ -126,7 +155,7 @@ export async function exchangeAuthorizationCode(params: {
     .digest("base64url");
 
   if (!constantTimeEqual(computedChallenge, authCode.codeChallenge))
-    return { error: "invalid_grant" as const };
+    return reject("pkce_verifier_mismatch");
 
   // Look up user email for JWT claims
   const [user] = await db
@@ -134,7 +163,16 @@ export async function exchangeAuthorizationCode(params: {
     .from(users)
     .where(eq(users.id, authCode.userId))
     .limit(1);
-  if (!user) return { error: "invalid_grant" as const };
+  if (!user) {
+    // The code's userId came straight from a FK-constrained insert, so a
+    // missing user here means backend data corruption, not a client error.
+    logError("auth.oauth.user_not_found", {
+      clientId: params.clientId,
+      grantType: "authorization_code",
+      userId: authCode.userId,
+    });
+    return { error: "invalid_grant" as const };
+  }
 
   // Create tokens — access token is a JWT, refresh token is opaque
   const ACCESS_TOKEN_TTL = 3600; // 1 hour
@@ -174,74 +212,170 @@ export async function exchangeAuthorizationCode(params: {
 export async function exchangeRefreshToken(params: {
   refreshToken: string;
   clientId: string;
-  clientSecret: string;
+  clientSecret?: string;
 }) {
-  // Validate client
-  const client = await getClient(params.clientId);
-  if (!client) return { error: "invalid_client" as const };
-  if (
-    !constantTimeEqual(client.clientSecretHash, hashSecret(params.clientSecret))
-  )
-    return { error: "invalid_client" as const };
-
-  // Find refresh token
-  const [existing] = await db
-    .select()
-    .from(oauthRefreshTokens)
-    .where(
-      and(
-        eq(oauthRefreshTokens.token, params.refreshToken),
-        eq(oauthRefreshTokens.clientId, params.clientId),
-        gt(oauthRefreshTokens.expiresAt, new Date().toISOString()),
-      ),
-    )
-    .limit(1);
-
-  if (!existing) return { error: "invalid_grant" as const };
-
-  // Delete old refresh token (rotation)
-  await db
-    .delete(oauthRefreshTokens)
-    .where(eq(oauthRefreshTokens.token, params.refreshToken));
-
-  // Look up user email for JWT claims
-  const [user] = await db
-    .select({ email: users.email })
-    .from(users)
-    .where(eq(users.id, existing.userId))
-    .limit(1);
-  if (!user) return { error: "invalid_grant" as const };
-
-  const scopes = client.scopes ?? "openid profile email";
-  const ACCESS_TOKEN_TTL = 3600; // 1 hour
-
-  const accessToken = await signAccessToken({
-    sub: existing.userId,
-    email: user.email,
-    scope: scopes,
-    clientId: existing.clientId,
-    expiresInSeconds: ACCESS_TOKEN_TTL,
-  });
-
-  const refreshToken = generateOpaqueToken();
-  const refreshExpiresAt = new Date(
-    Date.now() + 30 * 24 * 60 * 60 * 1000,
-  ).toISOString();
-
-  await db.insert(oauthRefreshTokens).values({
-    token: refreshToken,
-    clientId: existing.clientId,
-    userId: existing.userId,
-    expiresAt: refreshExpiresAt,
-  });
-
-  return {
-    access_token: accessToken,
-    token_type: "Bearer" as const,
-    expires_in: ACCESS_TOKEN_TTL,
-    refresh_token: refreshToken,
-    scope: scopes,
+  const reject = (
+    reason: string,
+    error: "invalid_grant" | "invalid_client" = "invalid_grant",
+  ) => {
+    logWarn("auth.oauth.token_rejected", {
+      clientId: params.clientId,
+      grantType: "refresh_token",
+      reason,
+    });
+    return { error };
   };
+
+  // Validate client. Public clients skip the secret check (see
+  // exchangeAuthorizationCode); their refresh grant is protected by
+  // possession of the (single-use, rotated-below) refresh token itself,
+  // per RFC 6749 §6 + RFC 8252 §8.2 guidance for native apps.
+  const client = await getClient(params.clientId);
+  if (!client) return reject("unknown_client", "invalid_client");
+  if (!client.isPublic) {
+    if (!params.clientSecret)
+      return reject("missing_client_secret", "invalid_client");
+    if (
+      !constantTimeEqual(
+        client.clientSecretHash,
+        hashSecret(params.clientSecret),
+      )
+    )
+      return reject("invalid_client_secret", "invalid_client");
+  } else if (params.clientSecret) {
+    // See matching comment in exchangeAuthorizationCode — not fatal, PKCE
+    // rotation is still the real credential here, but worth a signal.
+    logWarn("auth.oauth.public_client_sent_secret", {
+      clientId: params.clientId,
+    });
+  }
+
+  // Consume + reissue inside one transaction: if signing or the new-row
+  // insert throws after the old refresh token is deleted, the whole thing
+  // rolls back instead of leaving the caller's session burned with nothing
+  // to show for it (this is the client's *only* credential for public
+  // clients, so a half-completed rotation would strand them at re-login).
+  return db.transaction(async (tx) => {
+    const nowIso = new Date().toISOString();
+
+    // Soft-consume: an UPDATE that stamps rotatedAt, instead of a DELETE,
+    // keeps the row around as evidence for the replay check below (RFC 9700
+    // §4.14.2) — a hard DELETE would erase it, making a replayed
+    // already-rotated token indistinguishable from one that never existed.
+    // isNull(rotatedAt) gives this the same single-use atomicity a
+    // DELETE...RETURNING would: only one concurrent UPDATE can flip a NULL
+    // rotatedAt to non-null and get the row back, mirroring the
+    // authorization-code consumption above. Rotated rows now accumulate
+    // instead of being deleted — see cleanupRotatedRefreshTokens below,
+    // which needs a scheduler wired up to actually run periodically (none
+    // exists yet in this app).
+    const [existing] = await tx
+      .update(oauthRefreshTokens)
+      .set({ rotatedAt: nowIso })
+      .where(
+        and(
+          eq(oauthRefreshTokens.token, params.refreshToken),
+          eq(oauthRefreshTokens.clientId, params.clientId),
+          isNull(oauthRefreshTokens.rotatedAt),
+          gt(oauthRefreshTokens.expiresAt, nowIso),
+        ),
+      )
+      .returning();
+
+    if (!existing) {
+      // Tell an unknown/garbage token apart from a REPLAY of one already
+      // rotated away — only the latter still has a row with rotatedAt set.
+      // A replay is treated as a compromise signal: revoke every refresh
+      // token for this user+client (including the legitimate rotated
+      // descendant) so a stolen-then-rotated token can't keep working, per
+      // RFC 9700 §4.14.2 — this matters most for public clients, where
+      // rotation is the *only* theft mitigation (no secret as a second
+      // factor).
+      //
+      // Deliberately no grace window for concurrent/racing requests on the
+      // same original token: the server has no way to tell "our own client
+      // retried" apart from "an attacker redeemed the stolen token first and
+      // this is the legitimate request arriving moments later" — both look
+      // identical, a reused token shortly after a rotation. Any leniency
+      // here would let an attacker who wins that race keep their session
+      // past the point it was detected. A client that fires concurrent
+      // refresh requests with the same token is responsible for serializing
+      // them itself (a single-flight/mutex around refresh calls); the cost
+      // of getting that wrong is one forced re-login, not a security hole.
+      const [reused] = await tx
+        .select({ userId: oauthRefreshTokens.userId })
+        .from(oauthRefreshTokens)
+        .where(
+          and(
+            eq(oauthRefreshTokens.token, params.refreshToken),
+            eq(oauthRefreshTokens.clientId, params.clientId),
+            isNotNull(oauthRefreshTokens.rotatedAt),
+          ),
+        )
+        .limit(1);
+      if (reused) {
+        logWarn("auth.oauth.refresh_token_reuse_detected", {
+          clientId: params.clientId,
+          userId: reused.userId,
+        });
+        await tx
+          .delete(oauthRefreshTokens)
+          .where(
+            and(
+              eq(oauthRefreshTokens.userId, reused.userId),
+              eq(oauthRefreshTokens.clientId, params.clientId),
+            ),
+          );
+      }
+      return reject("refresh_token_invalid_or_expired");
+    }
+
+    // Look up user email for JWT claims
+    const [user] = await tx
+      .select({ email: users.email })
+      .from(users)
+      .where(eq(users.id, existing.userId))
+      .limit(1);
+    if (!user) {
+      logError("auth.oauth.user_not_found", {
+        clientId: params.clientId,
+        grantType: "refresh_token",
+        userId: existing.userId,
+      });
+      return { error: "invalid_grant" as const };
+    }
+
+    const scopes = client.scopes ?? "openid profile email";
+    const ACCESS_TOKEN_TTL = 3600; // 1 hour
+
+    const accessToken = await signAccessToken({
+      sub: existing.userId,
+      email: user.email,
+      scope: scopes,
+      clientId: existing.clientId,
+      expiresInSeconds: ACCESS_TOKEN_TTL,
+    });
+
+    const refreshToken = generateOpaqueToken();
+    const refreshExpiresAt = new Date(
+      Date.now() + 30 * 24 * 60 * 60 * 1000,
+    ).toISOString();
+
+    await tx.insert(oauthRefreshTokens).values({
+      token: refreshToken,
+      clientId: existing.clientId,
+      userId: existing.userId,
+      expiresAt: refreshExpiresAt,
+    });
+
+    return {
+      access_token: accessToken,
+      token_type: "Bearer" as const,
+      expires_in: ACCESS_TOKEN_TTL,
+      refresh_token: refreshToken,
+      scope: scopes,
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -317,4 +451,28 @@ export async function revokeAllUserTokens(userId: number): Promise<void> {
   await db
     .delete(oauthRefreshTokens)
     .where(eq(oauthRefreshTokens.userId, userId));
+}
+
+// Rows only ever accumulate rotatedAt via the soft-consume in
+// exchangeRefreshToken (see above) — they're never deleted at rotation time
+// so a replayed token can still be recognized. Nothing calls this on a
+// schedule yet; this app has no cron/job runner today. Wire it up to
+// whatever gets adopted (Vercel Cron, a scheduled GitHub Actions workflow,
+// etc.) rather than leaving auth.oauth_refresh_tokens to grow unbounded.
+const ROTATED_TOKEN_RETENTION_DAYS = 30;
+
+export async function cleanupRotatedRefreshTokens(): Promise<number> {
+  const cutoff = new Date(
+    Date.now() - ROTATED_TOKEN_RETENTION_DAYS * 24 * 60 * 60 * 1000,
+  ).toISOString();
+  const deleted = await db
+    .delete(oauthRefreshTokens)
+    .where(
+      and(
+        isNotNull(oauthRefreshTokens.rotatedAt),
+        lt(oauthRefreshTokens.rotatedAt, cutoff),
+      ),
+    )
+    .returning({ token: oauthRefreshTokens.token });
+  return deleted.length;
 }
