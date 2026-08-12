@@ -2,21 +2,29 @@ import type { Instrumentation } from "next";
 
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
-    const { registerPostHogErrorReporter } = await import("./posthog-server");
-    registerPostHogErrorReporter();
     await import("./orpc/client.server");
+    const { registerObservability, registerLoggerErrorReporter } =
+      await import("@acme/observability");
+    const { env } = await import("~/env");
+    registerObservability({
+      serviceName: "map",
+      environment: env.F3_CHANNEL,
+      posthog: { apiKey: env.NEXT_PUBLIC_POSTHOG_KEY },
+    });
+    registerLoggerErrorReporter();
   }
 }
 
-// Report uncaught server-side request errors to PostHog error tracking.
+// Report uncaught server-side request errors through the OTel exception
+// pipeline (PostHog error tracking today — see @acme/observability).
 export const onRequestError: Instrumentation.onRequestError = async (
   err,
   request,
   context,
 ) => {
   if (process.env.NEXT_RUNTIME === "nodejs") {
-    const { captureServerException } = await import("./posthog-server");
-    await captureServerException(err, {
+    const { captureException } = await import("@acme/observability");
+    await captureException(err, {
       // Report the STATIC route template (e.g. "/[locale]/map"), never the
       // resolved request path — the resolved path can carry ids, tokens,
       // query strings, or PII. The route template is low-cardinality and safe.

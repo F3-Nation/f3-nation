@@ -1,5 +1,14 @@
 # Observability Baseline Plan (F3-63)
 
+> **STATUS (2026-08-12):** The error-tracking leg is now **OTel-first**:
+> server-side exceptions flow through an OpenTelemetry logs pipeline in
+> [`packages/observability`](../packages/observability/src/index.ts), with
+> PostHog attached as an exporter _adapter_ (the only place `posthog-node` is
+> imported). App code talks only to the OTel API — swapping trackers later
+> means replacing one exporter. Client-side stays `posthog-js` directly
+> (browser OTel is immature; `instrumentation-client.ts` masking rules
+> unchanged). Traces/metrics (incl. DB APM) remain open — tracked as F3-88.
+
 > **OWNER DECISION (2026-07-06, Declan):** Go **OTEL + PostHog**, drop Sentry.
 > This supersedes the "keep Sentry" recommendation below (kept for the
 > reasoning trail). Deciding facts: PostHog error tracking now ships a

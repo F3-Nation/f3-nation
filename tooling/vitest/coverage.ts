@@ -7,10 +7,10 @@ import { coverageConfigDefaults } from "vitest/config";
  * thresholds. Generalized globs cover filename variants across apps
  * (next.config.ts vs .js, postcss.config.mjs vs .cjs).
  *
- * posthog-server.ts is deliberately NOT here despite the name pattern: unlike
- * next.config/instrumentation-client, it exports testable logic
- * (captureServerException, registerPostHogErrorReporter) beyond init
- * boilerplate — see apps/api/__tests__/posthog-server.test.ts.
+ * instrumentation.ts stays here even though it wires up error capture: since
+ * the OTel rework it is init boilerplate delegating to @acme/observability,
+ * where the testable logic (captureException, registerLoggerErrorReporter)
+ * lives — see packages/observability/src/index.test.ts.
  */
 export const bootstrapCoverageExclude = [
   "**/next.config.{js,ts,mjs}",

@@ -19,6 +19,7 @@
   "dependencies": {
     "@acme/api": "workspace:*",
     "@acme/logger": "workspace:*",
+    "@acme/observability": "workspace:*",
     "@acme/shared": "workspace:*",
     "@orpc/openapi": "catalog:",
     "@orpc/server": "catalog:",
@@ -29,7 +30,6 @@
     "next": "catalog:",
     "next-auth": "catalog:",
     "posthog-js": "catalog:",
-    "posthog-node": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "zod": "catalog:"

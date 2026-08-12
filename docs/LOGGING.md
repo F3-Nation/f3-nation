@@ -181,18 +181,20 @@ everywhere and the package picks the right format.
 `logError` and `logFatal` write to **stdout** (pino), not `console.error` — an
 error tracker watching the console would never see our error logs.
 
-So apps that use PostHog register a process-global **error reporter** at
-startup (see [`apps/api/src/posthog-server.ts`](../apps/api/src/posthog-server.ts)).
+So apps register a process-global **error reporter** at startup via
+[`@acme/observability`](../packages/observability/src/index.ts)'s
+`registerLoggerErrorReporter()` (see each app's `instrumentation.ts`).
 Whenever you call `logError`/`logFatal`, the helper fans the event out to that
-reporter, which forwards it to PostHog error tracking as a captured exception —
+reporter, which forwards it through the OpenTelemetry exception pipeline to
+the configured error tracker (PostHog today, behind an exporter adapter) —
 with an `Error` it's captured as-is, and without one (a config/validation
 failure) a synthetic error named after the `event` is captured instead. The
 `event` name and `ctx` ride along as event properties for triage.
 
 The upshot for you: **just call `logError`** with the thrown value as the third
-argument. You don't call PostHog directly — error logging reaches it on a
-best-effort basis (the reporter call is synchronous/fire-and-forget, and a
-PostHog outage is logged, not thrown).
+argument. You don't call PostHog (or OTel) directly — error logging reaches
+the tracker on a best-effort basis (the reporter call is synchronous/
+fire-and-forget, and a tracker outage is logged, not thrown).
 
 ## The golden rule: never log secrets or PII
 

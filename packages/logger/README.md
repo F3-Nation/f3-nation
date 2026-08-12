@@ -12,7 +12,7 @@ a free-text message.
 - [`ctx` and `err`: where the variable data goes](#ctx-and-err-where-the-variable-data-goes)
 - [Log levels](#log-levels)
 - [Helpers vs. the raw `logger`](#helpers-vs-the-raw-logger)
-- [PostHog / error reporting](#posthog--error-reporting)
+- [Error reporting](#error-reporting)
 - [Environment behavior](#environment-behavior)
 - [API Reference](#api-reference)
 
@@ -80,9 +80,10 @@ Examples from the codebase:
 - **`err`** (third arg, `logError` / `logFatal` only) — the actual thrown value. It is
   serialized via pino's `err` serializer (name, message, stack) and, when an
   error reporter is registered (via `setErrorReporter`), forwarded to it as
-  the captured exception. This package doesn't require or assume PostHog —
-  it's simply the reporter every current app happens to register. See
-  [PostHog / error reporting](#posthog--error-reporting) below.
+  the captured exception. This package doesn't require or assume any
+  particular tracker — every current app registers @acme/observability's
+  OTel-based reporter. See
+  [Error reporting](#error-reporting) below.
 
 > [!IMPORTANT]
 > Never put secrets or PII (emails, tokens, full request bodies) in `event`,
@@ -130,13 +131,13 @@ reqLog.info({ path }, "api.request.received"); // pino order: (ctx, event)
 > string as the message and **silently drop `{ updateSet }`** as a printf arg.
 > If you're not creating a child logger, use `logDebug` instead.
 
-## PostHog / error reporting
+## Error reporting
 
 `logError` writes to stdout (pino), not `console.error`, so a console-watching
-error tracker would miss it. Apps that use PostHog register a process-global
-reporter at startup so error logs also reach PostHog error tracking, on a
-best-effort basis — see
-[`apps/api/src/posthog-server.ts`](../../apps/api/src/posthog-server.ts):
+error tracker would miss it. Apps register a process-global reporter at
+startup so error logs also reach the error tracker (PostHog today, behind
+@acme/observability's OTel pipeline), on a best-effort basis — see
+[`packages/observability/src/index.ts`](../observability/src/index.ts):
 
 ```ts
 import { setErrorReporter } from "@acme/logger";
@@ -144,7 +145,7 @@ import { setErrorReporter } from "@acme/logger";
 setErrorReporter((event, ctx, err) => {
   // ctx spread BEFORE event: a ctx key named "event" must not be able to
   // overwrite the canonical event identifier used for triage.
-  captureServerException(err ?? new Error(event), { ...ctx, event });
+  void captureException(err ?? new Error(event), { ...ctx, event });
 });
 ```
 
@@ -152,9 +153,9 @@ The reporter receives the full payload, so error logs that carry no `Error`
 (config/validation failures) are still reported as a synthetic error named
 after the `event` — with the `event` and `ctx` attached as properties for
 triage. `logError`/`logFatal` call the reporter synchronously and don't await
-it, and `captureServerException` swallows its own transport failures (logging
-them, never throwing) — so "reaches PostHog" here means "an attempt was made
-and logged if it failed," not a delivery guarantee.
+it, and `captureException` swallows its own transport failures (logging
+them, never throwing) — so "reaches the tracker" here means "an attempt was
+made and logged if it failed," not a delivery guarantee.
 
 ## Environment behavior
 
