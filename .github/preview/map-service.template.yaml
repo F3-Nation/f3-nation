@@ -1,0 +1,97 @@
+# Cloud Run service template for per-PR map previews (F3-56).
+# Two containers: the map app + a seeded Postgres sidecar sharing localhost.
+# The map needs a database because @acme/auth (its NextAuth handlers, adapter,
+# and dev-mode provider) reaches the DB during signed-in SSR — see
+# docs/PREVIEW_AUTH.md. Rendered with envsubst by preview-env.yml; applied via
+# `gcloud run services replace`. Mirrors api-service.template.yaml.
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: ${SERVICE_MAP}
+  labels:
+    preview-env: "true"
+    pr-number: "${PR_NUMBER}"
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "1"
+        # Start the map container only after the db sidecar passes its probe.
+        run.googleapis.com/container-dependencies: '{"map": ["db"]}'
+    spec:
+      serviceAccountName: ${RUNTIME_SA}
+      containers:
+        - name: map
+          image: ${MAP_IMAGE}
+          ports:
+            - name: http1
+              containerPort: 8080
+          env:
+            - name: DATABASE_URL
+              value: postgresql://f3local:f3local@localhost:5432/f3nation
+            - name: F3_CHANNEL
+              value: branch
+            - name: NEXT_PUBLIC_CHANNEL
+              value: branch
+            - name: F3_API_BASE_URL
+              value: ${API_URL}
+            - name: F3_MAP_BASE_URL
+              value: ${MAP_URL}
+            - name: F3_MAP_API_KEY
+              value: local-map-key
+            - name: F3_GOOGLE_API_KEY
+              value: ${MAPS_KEY}
+            - name: AUTH_SECRET
+              value: preview-auth-secret-placeholder-32c
+            - name: EMAIL_SERVER
+              value: smtp://user:pass@localhost:587
+            - name: EMAIL_FROM
+              value: preview@example.com
+            - name: EMAIL_ADMIN_DESTINATIONS
+              value: preview@example.com
+            - name: API_KEY
+              value: local-api-key
+            - name: SUPER_ADMIN_API_KEY
+              value: preview-super-admin-key
+            - name: NEXT_PUBLIC_API_URL
+              value: ${API_URL}
+            - name: NEXT_PUBLIC_MAP_URL
+              value: ${MAP_URL}
+            - name: NEXT_PUBLIC_AUTH_URL
+              value: ${AUTH_URL}
+            - name: NEXT_PUBLIC_GOOGLE_API_KEY
+              value: ${MAPS_KEY}
+            - name: NEXT_PUBLIC_MAP_API_KEY
+              value: preview-map-key
+            # PostHog error tracking (server-side capture reads this at
+            # runtime; empty when the secret is unset → capture no-ops).
+            - name: NEXT_PUBLIC_POSTHOG_KEY
+              value: ${NEXT_PUBLIC_POSTHOG_KEY}
+            # Previews never touch GCS, but env validation requires a value.
+            - name: GCS_CREDENTIALS
+              value: ${FAKE_GCS}
+          resources:
+            limits:
+              cpu: "1"
+              memory: 1Gi
+        - name: db
+          image: ${DB_IMAGE}
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/postgresql/data
+          startupProbe:
+            tcpSocket:
+              port: 5432
+            initialDelaySeconds: 2
+            periodSeconds: 2
+            failureThreshold: 60
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi
+      volumes:
+        - name: pgdata
+          emptyDir:
+            medium: Memory
+            sizeLimit: 256Mi

@@ -216,6 +216,7 @@ export const mapEventRouter = {
             parent: z.string().nullable().describe("Parent AO name"),
             locationId: z.number().nullable().describe("Location ID"),
             startDate: z.string().nullable().describe("Event start date"),
+            endDate: z.string().nullable().describe("Event end date"),
             dayOfWeek: z.enum(DayOfWeek).nullable().describe("Day of week"),
             startTime: z.string().nullable().describe("Event start time"),
             endTime: z.string().nullable().describe("Event end time"),
@@ -306,6 +307,10 @@ export const mapEventRouter = {
             return direction(schema.events.isActive);
           case "dayOfWeek":
             return direction(schema.events.dayOfWeek);
+          case "startDate":
+            return direction(schema.events.startDate);
+          case "endDate":
+            return direction(schema.events.endDate);
           case "created":
             return direction(schema.events.created);
           case "location":
@@ -324,6 +329,7 @@ export const mapEventRouter = {
         parent: parentOrg.name,
         locationId: schema.events.locationId,
         startDate: schema.events.startDate,
+        endDate: schema.events.endDate,
         dayOfWeek: schema.events.dayOfWeek,
         startTime: schema.events.startTime,
         endTime: schema.events.endTime,

@@ -1,6 +1,6 @@
 {
   "name": "f3-auth",
-  "version": "2.0.8",
+  "version": "2.1.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -39,6 +39,7 @@
     "@acme/prettier-config": "workspace:*",
     "@acme/tailwind-config": "workspace:*",
     "@acme/tsconfig": "workspace:*",
+    "@acme/vitest-config": "workspace:*",
     "@tailwindcss/postcss": "catalog:",
     "@types/node": "catalog:",
     "@types/nodemailer": "catalog:",

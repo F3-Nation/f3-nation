@@ -54,6 +54,7 @@ export async function GET(request: Request) {
   });
 
   const spec = (await generator.generate(router, {
+    filter: () => true,
     info: {
       title: "F3 Nation API",
       version: packageJson.version,
@@ -161,6 +162,10 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
         name: "Slack",
         tags: ["slack"],
       },
+      {
+        name: "Status",
+        tags: ["status"],
+      },
     ],
     tags: [
       {
@@ -212,6 +217,10 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
         description:
           "Slack and F3 Nation Slack app integration endpoints for managing content",
       },
+      {
+        name: "status",
+        description: "Service status and health check endpoints",
+      },
     ],
 
     components: {
@@ -252,7 +261,9 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
   spec.components.parameters ??= {};
   spec.components.parameters.ClientHeader = clientHeaderParam;
 
-  // Add the Client header parameter reference to all operations
+  // Add the Client header parameter reference to all operations except public ones.
+  // /v1/status is unauthenticated — it overrides global bearer security with security: [].
+  const PUBLIC_PATHS = new Set(["/v1/status"]);
   const httpMethods = [
     "get",
     "post",
@@ -264,15 +275,20 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
   ] as const;
 
   if (spec.paths) {
-    for (const pathItem of Object.values(spec.paths)) {
+    for (const [path, pathItem] of Object.entries(spec.paths)) {
       for (const method of httpMethods) {
         const operation = pathItem[method];
         if (operation) {
-          operation.parameters ??= [];
-          // Add reference to the Client header parameter
-          operation.parameters.unshift({
-            $ref: "#/components/parameters/ClientHeader",
-          } as unknown as OpenAPIParameter);
+          if (PUBLIC_PATHS.has(path)) {
+            // Public endpoint: strip auth requirements so docs are accurate.
+            operation.security = [];
+          } else {
+            operation.parameters ??= [];
+            // Add reference to the Client header parameter
+            operation.parameters.unshift({
+              $ref: "#/components/parameters/ClientHeader",
+            } as unknown as OpenAPIParameter);
+          }
         }
       }
     }

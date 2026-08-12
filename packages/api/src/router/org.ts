@@ -1031,8 +1031,8 @@ export const orgRouter = {
         .returning();
 
       if (!deletedOrg) {
-        throw new ORPCError("CONFLICT", {
-          message: "Failed to delete organization",
+        throw new ORPCError("NOT_FOUND", {
+          message: "Organization not found",
         });
       }
 

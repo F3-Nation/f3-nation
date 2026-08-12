@@ -1,5 +1,7 @@
-import { afterAll, beforeAll, describe, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { decodeJwt, decodeProtectedHeader } from "jose";
 
+import { FIXTURE_KID } from "../global-setup";
 import { generateForeignKey, signFixtureJwt } from "../fixtures/jwt";
 import { createFixtureUser } from "../fixtures/users";
 import { req, target } from "../transport";
@@ -79,5 +81,39 @@ describe.runIf(target.inProcess)("JWT resolution", () => {
       await target.invoke(jwtReq(5, token)),
       "Unauthorized",
     );
+  });
+});
+
+// The other half of the producer/mirror drift guard: apps/auth's own test pins
+// signAccessToken's output, this pins the fixture that imitates it. Both must
+// change together or one of the two goes red.
+describe("fixture token shape", () => {
+  it("mirrors the claim set signAccessToken emits", async () => {
+    const token = await signFixtureJwt({ sub: 4242 });
+
+    expect(Object.keys(decodeJwt(token)).sort()).toEqual([
+      "client_id",
+      "email",
+      "exp",
+      "iat",
+      "iss",
+      "scope",
+      "sub",
+    ]);
+  });
+
+  it("stamps the RS256 header the API resolves keys by", async () => {
+    const token = await signFixtureJwt({ sub: 4242 });
+
+    expect(decodeProtectedHeader(token)).toEqual({
+      alg: "RS256",
+      kid: FIXTURE_KID,
+    });
+  });
+
+  it("serializes sub as a numeric string", async () => {
+    const token = await signFixtureJwt({ sub: Number.MAX_SAFE_INTEGER });
+
+    expect(decodeJwt(token).sub).toBe("9007199254740991");
   });
 });

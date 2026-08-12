@@ -1036,6 +1036,172 @@ describe("Event Router", () => {
         }),
       ).rejects.toThrow();
     });
+
+    /**
+     * `endDate` decides whether an event still counts as current in the map
+     * queries and bounds the series instance cascade, so an inverted range must
+     * be rejected server-side — the admin UI's client guard is bypassable.
+     */
+    describe("start/end date ordering", () => {
+      /** Builds the org/location/event-type graph plus an editor session. */
+      const setupCrupdateFixture = async () => {
+        const session = await createAdminSession();
+        await mockAuthWithSession(session);
+
+        const region = await createTestRegion();
+        if (!region) throw new Error("Failed to create test region");
+
+        const ao = await createTestAO(region.id);
+        if (!ao) throw new Error("Failed to create test AO");
+
+        const location = await createTestLocation(region.id);
+        if (!location) throw new Error("Failed to create test location");
+
+        const eventType = await createTestEventType();
+        if (!eventType) throw new Error("Failed to create test event type");
+
+        await mockAuthWithSession(
+          createEditorSession({ orgId: ao.id, orgName: ao.name }),
+        );
+
+        return {
+          client: createTestClient(),
+          payload: {
+            name: `Date Order Event ${uniqueId()}`,
+            aoId: ao.id,
+            regionId: region.id,
+            locationId: location.id,
+            dayOfWeek: "monday" as const,
+            startTime: "0530",
+            endTime: "0615",
+            highlight: false,
+            isActive: true,
+            eventTypeIds: [eventType.id],
+            email: null,
+          },
+        };
+      };
+
+      it("should reject an endDate before the startDate", async () => {
+        const { client, payload } = await setupCrupdateFixture();
+
+        await expect(
+          client.event.crupdate({
+            ...payload,
+            startDate: "2026-02-01",
+            endDate: "2026-01-31",
+          }),
+        ).rejects.toThrow();
+
+        // Nothing may be persisted when the range is invalid.
+        const persisted = await db
+          .select({ id: schema.events.id })
+          .from(schema.events)
+          .where(eq(schema.events.name, payload.name));
+        expect(persisted).toHaveLength(0);
+      });
+
+      it("should report the rejection against the endDate field", async () => {
+        const { client, payload } = await setupCrupdateFixture();
+
+        const error = await client.event
+          .crupdate({
+            ...payload,
+            startDate: "2026-02-01",
+            endDate: "2026-01-01",
+          })
+          .then(
+            () => undefined,
+            (rejection: unknown) => rejection,
+          );
+
+        // Input validation failures surface as BAD_REQUEST, not a 500.
+        expect(error).toMatchObject({ code: "BAD_REQUEST" });
+        const issues =
+          (
+            error as {
+              data?: { issues?: { path?: unknown[]; message?: string }[] };
+            }
+          ).data?.issues ?? [];
+        // Pathed at endDate so the admin form can attach the message to that
+        // field rather than showing a form-level error.
+        expect(issues).toContainEqual(
+          expect.objectContaining({
+            path: ["endDate"],
+            message: "End date must be on or after start date",
+          }),
+        );
+      });
+
+      it("should accept an endDate equal to the startDate (single-day event)", async () => {
+        const { client, payload } = await setupCrupdateFixture();
+
+        const result = await client.event.crupdate({
+          ...payload,
+          startDate: "2026-02-01",
+          endDate: "2026-02-01",
+        });
+
+        if (result.event) createdEventIds.push(result.event.id);
+        expect(result.event?.startDate).toBe("2026-02-01");
+        expect(result.event?.endDate).toBe("2026-02-01");
+      });
+
+      it("should accept an endDate after the startDate", async () => {
+        const { client, payload } = await setupCrupdateFixture();
+
+        const result = await client.event.crupdate({
+          ...payload,
+          startDate: "2026-02-01",
+          endDate: "2026-03-01",
+        });
+
+        if (result.event) createdEventIds.push(result.event.id);
+        expect(result.event?.endDate).toBe("2026-03-01");
+      });
+
+      it("should accept a null endDate (open-ended series)", async () => {
+        const { client, payload } = await setupCrupdateFixture();
+
+        const result = await client.event.crupdate({
+          ...payload,
+          startDate: "2026-02-01",
+          endDate: null,
+        });
+
+        if (result.event) createdEventIds.push(result.event.id);
+        expect(result.event?.endDate).toBeNull();
+      });
+
+      it("should reject an inverted range when updating an existing event", async () => {
+        const { client, payload } = await setupCrupdateFixture();
+
+        const created = await client.event.crupdate({
+          ...payload,
+          startDate: "2026-02-01",
+          endDate: "2026-03-01",
+        });
+        const eventId = created.event?.id;
+        if (!eventId) throw new Error("Failed to create event");
+        createdEventIds.push(eventId);
+
+        await expect(
+          client.event.crupdate({
+            ...payload,
+            id: eventId,
+            startDate: "2026-02-01",
+            endDate: "2026-01-01",
+          }),
+        ).rejects.toThrow();
+
+        // The stored row must keep its valid range.
+        const [unchanged] = await db
+          .select({ endDate: schema.events.endDate })
+          .from(schema.events)
+          .where(eq(schema.events.id, eventId));
+        expect(unchanged?.endDate).toBe("2026-03-01");
+      });
+    });
   });
 
   describe("delete", () => {

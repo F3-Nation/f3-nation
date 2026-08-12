@@ -115,9 +115,8 @@ describe("Request Router", () => {
       })
       .returning();
 
-    if (region) {
-      createdOrgIds.push(region.id);
-    }
+    if (!region) throw new Error("Failed to create test region");
+    createdOrgIds.push(region.id);
     return region;
   };
 
@@ -133,9 +132,8 @@ describe("Request Router", () => {
       })
       .returning();
 
-    if (ao) {
-      createdOrgIds.push(ao.id);
-    }
+    if (!ao) throw new Error("Failed to create test AO");
+    createdOrgIds.push(ao.id);
     return ao;
   };
 
@@ -152,9 +150,8 @@ describe("Request Router", () => {
       })
       .returning();
 
-    if (location) {
-      createdLocationIds.push(location.id);
-    }
+    if (!location) throw new Error("Failed to create test location");
+    createdLocationIds.push(location.id);
     return location;
   };
 
@@ -174,9 +171,8 @@ describe("Request Router", () => {
       })
       .returning();
 
-    if (event) {
-      createdEventIds.push(event.id);
-    }
+    if (!event) throw new Error("Failed to create test event");
+    createdEventIds.push(event.id);
     return event;
   };
 
@@ -261,7 +257,6 @@ describe("Request Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
 
       // Create a test request
       const [testRequest] = await db
@@ -275,7 +270,7 @@ describe("Request Router", () => {
         })
         .returning();
 
-      if (!testRequest) return;
+      if (!testRequest) throw new Error("Failed to create test request");
       createdRequestIds.push(testRequest.id);
 
       const client = createTestClient();
@@ -307,16 +302,12 @@ describe("Request Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
 
       const location = await createTestLocation(region.id);
-      if (!location) return;
 
       const event = await createTestEvent(ao.id, location.id);
-      if (!event) return;
 
       const client = createTestClient();
       const result = await client.request.canDeleteEvent({
@@ -332,16 +323,12 @@ describe("Request Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
 
       const location = await createTestLocation(region.id);
-      if (!location) return;
 
       const event = await createTestEvent(ao.id, location.id);
-      if (!event) return;
 
       // Create a pending delete request for this event
       const [deleteRequest] = await db
@@ -396,7 +383,6 @@ describe("Request Router", () => {
 
     it("should return true for users with editor permission", async () => {
       const region = await createTestRegion();
-      if (!region) return;
 
       const session = createEditorSession({
         orgId: region.id,
@@ -416,7 +402,6 @@ describe("Request Router", () => {
 
     it("should return false for users without permission", async () => {
       const region = await createTestRegion();
-      if (!region) return;
 
       // Session with permission on a different org
       const session = createEditorSession({
@@ -441,13 +426,9 @@ describe("Request Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
       const ao = await createTestAO(region.id);
-      if (!ao) return;
       const location = await createTestLocation(ao.id);
-      if (!location) return;
       const event = await createTestEvent(ao.id, location.id);
-      if (!event) return;
 
       // Admin on F3 Nation has editor rights on descendants, so the delete
       // request is applied immediately instead of going to review.
@@ -480,13 +461,9 @@ describe("Request Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
       const ao = await createTestAO(region.id);
-      if (!ao) return;
       const location = await createTestLocation(ao.id);
-      if (!location) return;
       const event = await createTestEvent(ao.id, location.id);
-      if (!event) return;
 
       // Editor on an unrelated org has no permission on this region.
       const noPermSession = createEditorSession({
@@ -522,13 +499,9 @@ describe("Request Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
       const ao = await createTestAO(region.id);
-      if (!ao) return;
       const location = await createTestLocation(ao.id);
-      if (!location) return;
       const event = await createTestEvent(ao.id, location.id);
-      if (!event) return;
 
       // Editor on an unrelated org has no permission on this region, so the
       // request is recorded pending instead of applied.
@@ -559,13 +532,9 @@ describe("Request Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
       const ao = await createTestAO(region.id);
-      if (!ao) return;
       const location = await createTestLocation(ao.id);
-      if (!location) return;
       const event = await createTestEvent(ao.id, location.id);
-      if (!event) return;
 
       const noPermSession = createEditorSession({
         orgId: 99999,
@@ -607,13 +576,9 @@ describe("Request Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
       const ao = await createTestAO(region.id);
-      if (!ao) return;
       const location = await createTestLocation(ao.id);
-      if (!location) return;
       const event = await createTestEvent(ao.id, location.id);
-      if (!event) return;
 
       // A non-UUID id passes schema validation but makes the updateRequests
       // insert fail, after the delete handler has already run.
@@ -642,13 +607,9 @@ describe("Request Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
       const ao = await createTestAO(region.id);
-      if (!ao) return;
       const location = await createTestLocation(ao.id);
-      if (!location) return;
       const event = await createTestEvent(ao.id, location.id);
-      if (!event) return;
 
       // delete_ao writes both the AO and its events; it runs as a savepoint
       // inside handleRequest's transaction (with updateAO nesting once more).
@@ -682,11 +643,8 @@ describe("Request Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
       const ao = await createTestAO(region.id);
-      if (!ao) return;
       const location = await createTestLocation(ao.id);
-      if (!location) return;
 
       const [eventType] = await db
         .insert(schema.eventTypes)
@@ -695,7 +653,7 @@ describe("Request Router", () => {
           eventCategory: "first_f",
         })
         .returning();
-      if (!eventType) return;
+      if (!eventType) throw new Error("Failed to create event type");
       createdEventTypeIds.push(eventType.id);
 
       const client = createTestClient();
@@ -746,7 +704,6 @@ describe("Request Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
 
       const [eventType] = await db
         .insert(schema.eventTypes)
@@ -755,7 +712,7 @@ describe("Request Router", () => {
           eventCategory: "first_f",
         })
         .returning();
-      if (!eventType) return;
+      if (!eventType) throw new Error("Failed to create event type");
       createdEventTypeIds.push(eventType.id);
 
       const client = createTestClient();
@@ -848,18 +805,12 @@ describe("Request Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
       const sourceAo = await createTestAO(region.id);
-      if (!sourceAo) return;
       const sourceLocation = await createTestLocation(sourceAo.id);
-      if (!sourceLocation) return;
       const event = await createTestEvent(sourceAo.id, sourceLocation.id);
-      if (!event) return;
 
       const destinationAo = await createTestAO(region.id);
-      if (!destinationAo) return;
       const destinationLocation = await createTestLocation(destinationAo.id);
-      if (!destinationLocation) return;
 
       // Give the destination AO a default location with address details
       // distinct from anything the client submits, so a passing assertion
@@ -925,13 +876,9 @@ describe("Request Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
       const ao = await createTestAO(region.id);
-      if (!ao) return;
       const originalLocation = await createTestLocation(ao.id);
-      if (!originalLocation) return;
       const event = await createTestEvent(ao.id, originalLocation.id);
-      if (!event) return;
 
       const [eventType] = await db
         .insert(schema.eventTypes)
@@ -940,7 +887,7 @@ describe("Request Router", () => {
           eventCategory: "first_f",
         })
         .returning();
-      if (!eventType) return;
+      if (!eventType) throw new Error("Failed to create event type");
       createdEventTypeIds.push(eventType.id);
 
       // Give the event a distinguishing name/description the request never
@@ -1010,13 +957,9 @@ describe("Request Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
       const ao = await createTestAO(region.id);
-      if (!ao) return;
       const location = await createTestLocation(ao.id);
-      if (!location) return;
       const event = await createTestEvent(ao.id, location.id);
-      if (!event) return;
 
       // Editor on an unrelated org must not be able to review this region
       const noPermSession = createEditorSession({
@@ -1044,11 +987,8 @@ describe("Request Router", () => {
       await mockAuthWithSession(session);
 
       const originalRegion = await createTestRegion();
-      if (!originalRegion) return;
       const newRegion = await createTestRegion();
-      if (!newRegion) return;
       const ao = await createTestAO(originalRegion.id);
-      if (!ao) return;
 
       // Editor on the target region only: allowed to review that region, but
       // the move also affects the original region, so the approve must fail
@@ -1080,7 +1020,6 @@ describe("Request Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
 
       // Create a test request
       const [testRequest] = await db
@@ -1094,7 +1033,7 @@ describe("Request Router", () => {
         })
         .returning();
 
-      if (!testRequest) return;
+      if (!testRequest) throw new Error("Failed to create test request");
       createdRequestIds.push(testRequest.id);
 
       // Give session editor permission on this region
@@ -1131,7 +1070,6 @@ describe("Request Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
 
       // Create a test request
       const [testRequest] = await db
@@ -1145,7 +1083,7 @@ describe("Request Router", () => {
         })
         .returning();
 
-      if (!testRequest) return;
+      if (!testRequest) throw new Error("Failed to create test request");
       createdRequestIds.push(testRequest.id);
 
       // Session with no permission on this region
@@ -1162,6 +1100,223 @@ describe("Request Router", () => {
           id: testRequest.id,
         }),
       ).rejects.toThrow();
+    });
+
+    it("throws NOT_FOUND for a non-existent request", async () => {
+      const region = await createTestRegion();
+
+      const session = createEditorSession({
+        orgId: region.id,
+        orgName: region.name,
+      });
+      await mockAuthWithSession(session);
+
+      const client = createTestClient();
+
+      await expect(
+        client.request.rejectSubmission({
+          id: "00000000-0000-0000-0000-000000000000",
+        }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+        message: "Failed to find update request",
+      });
+    });
+  });
+
+  describe("validateSubmissionByAdmin", () => {
+    it("throws BAD_REQUEST when the end time is before the start time", async () => {
+      const region = await createTestRegion();
+
+      const ao = await createTestAO(region.id);
+
+      const location = await createTestLocation(ao.id);
+
+      const [eventType] = await db
+        .insert(schema.eventTypes)
+        .values({
+          name: `Test Event Type ${uniqueId()}`,
+          eventCategory: "first_f",
+        })
+        .returning();
+      if (!eventType) throw new Error("Failed to create event type");
+      createdEventTypeIds.push(eventType.id);
+
+      const session = createEditorSession({
+        orgId: region.id,
+        orgName: region.name,
+      });
+      await mockAuthWithSession(session);
+
+      const client = createTestClient();
+
+      // Every other field is deliberately valid so the reversed times are the
+      // only thing left to reject. With an invalid id / missing ao / null
+      // eventTypeIds the union fails first and the time-order refinement never
+      // runs, which is what made this assertion unreachable.
+      const error: unknown = await client.request
+        .validateSubmissionByAdmin({
+          id: crypto.randomUUID(),
+          regionId: region.id,
+          requestType: "create_event",
+          eventName: `Bad Time Test ${uniqueId()}`,
+          eventDayOfWeek: "monday",
+          eventStartTime: "0800",
+          eventEndTime: "0700",
+          eventTypeIds: [eventType.id],
+          aoId: ao.id,
+          locationId: location.id,
+          aoName: "Test AO",
+          submittedBy: "submitter@example.com",
+        })
+        .then(
+          () => undefined,
+          (rejection: unknown) => rejection,
+        );
+
+      expect(error).toMatchObject({ code: "BAD_REQUEST" });
+      const issues =
+        (
+          error as {
+            data?: { issues?: { path?: unknown[]; message?: string }[] };
+          }
+        ).data?.issues ?? [];
+      expect(issues).toContainEqual(
+        expect.objectContaining({
+          path: ["eventEndTime"],
+          message: "End time must be after start time",
+        }),
+      );
+    });
+
+    it("throws BAD_REQUEST when a delete_event request has neither eventId nor locationId", async () => {
+      const region = await createTestRegion();
+
+      const session = createEditorSession({
+        orgId: region.id,
+        orgName: region.name,
+      });
+      await mockAuthWithSession(session);
+
+      const client = createTestClient();
+
+      // `DeleteEventSchema` requires a positive `originalEventId`, so a request
+      // that names no event is refused at the input boundary rather than by a
+      // handler-level guard — earlier, and with the offending field named. A
+      // valid UUID `id` is supplied deliberately so the missing event id is the
+      // only possible reason for rejection; otherwise this would pass on an
+      // unrelated validation error and stop testing anything.
+      const error: unknown = await client.request
+        .validateSubmissionByAdmin({
+          id: crypto.randomUUID(),
+          regionId: region.id,
+          requestType: "delete_event",
+          eventName: `Nothing To Delete Test ${uniqueId()}`,
+          eventDayOfWeek: "monday",
+          eventStartTime: "0600",
+          eventEndTime: "0700",
+          eventTypeIds: null,
+          aoName: "Test AO",
+          submittedBy: "submitter@example.com",
+        })
+        .then(
+          () => undefined,
+          (rejection: unknown) => rejection,
+        );
+
+      expect(error).toMatchObject({ code: "BAD_REQUEST" });
+      const issues =
+        (error as { data?: { issues?: { path?: unknown[] }[] } }).data
+          ?.issues ?? [];
+      expect(
+        issues.some((issue) => issue.path?.[0] === "originalEventId"),
+      ).toBe(true);
+    });
+
+    it("throws NOT_FOUND when locationId references a location that does not exist", async () => {
+      const region = await createTestRegion();
+
+      const ao = await createTestAO(region.id);
+
+      const [eventType] = await db
+        .insert(schema.eventTypes)
+        .values({
+          name: `Test Event Type ${uniqueId()}`,
+          eventCategory: "first_f",
+        })
+        .returning();
+      if (!eventType) throw new Error("Failed to create event type");
+      createdEventTypeIds.push(eventType.id);
+
+      const session = createEditorSession({
+        orgId: region.id,
+        orgName: region.name,
+      });
+      await mockAuthWithSession(session);
+
+      const client = createTestClient();
+
+      await expect(
+        client.request.validateSubmissionByAdmin({
+          // The create_event branch of the union requires a UUID `id`, a
+          // positive `originalAoId` (backfilled from `aoId`), and at least one
+          // event type. Without all three the input boundary rejects with
+          // BAD_REQUEST and the location lookup under test never runs.
+          id: crypto.randomUUID(),
+          regionId: region.id,
+          requestType: "create_event",
+          eventName: `Bad Location Test ${uniqueId()}`,
+          eventDayOfWeek: "monday",
+          eventStartTime: "0600",
+          eventEndTime: "0700",
+          eventTypeIds: [eventType.id],
+          aoId: ao.id,
+          aoName: "Test AO",
+          submittedBy: "submitter@example.com",
+          locationId: 999999999,
+          locationDescription: "Updated description",
+        }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+        message: "Failed to find location to update",
+      });
+    });
+
+    it("throws NOT_FOUND when newLocationId references a location that does not exist", async () => {
+      const region = await createTestRegion();
+
+      const ao = await createTestAO(region.id);
+
+      const location = await createTestLocation(ao.id);
+
+      const session = createEditorSession({
+        orgId: region.id,
+        orgName: region.name,
+      });
+      await mockAuthWithSession(session);
+
+      const client = createTestClient();
+
+      // `handleMoveAOToDifferentLocation` writes a non-null `newLocationId`
+      // straight into `events.locationId` / `orgs.defaultLocationId`, so a
+      // dangling target must be caught by the preflight — otherwise the FK
+      // constraint fires and oRPC masks it as an opaque 500. The
+      // `originalLocationId` here is real, so the only broken reference is the
+      // target, and the message must say so.
+      await expect(
+        client.request.validateSubmissionByAdmin({
+          id: crypto.randomUUID(),
+          regionId: region.id,
+          requestType: "move_ao_to_different_location",
+          originalAoId: ao.id,
+          originalLocationId: location.id,
+          newLocationId: 999999999,
+          submittedBy: "submitter@example.com",
+        }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+        message: "Failed to find target location",
+      });
     });
   });
 
@@ -1186,19 +1341,97 @@ describe("Request Router", () => {
     return row;
   };
 
+  describe("validateSubmissionByAdmin — originalLocationId preflight scoping", () => {
+    // `handleMoveAOToNewLocation` always inserts a fresh location and moves the
+    // AO onto it by `originalAoId`; it never reads `originalLocationId`, and the
+    // id it creates shadows the stale one in the audit row. Approving such a
+    // request stayed valid after the old location was deleted, so the preflight
+    // must not 404 it — it did before the check was scoped to USES_ORIGINAL_IDS.
+    it("approves move_ao_to_new_location when originalLocationId no longer exists", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      const ao = await createTestAO(region.id);
+
+      const requestId = crypto.randomUUID();
+      await insertPendingRequest({
+        id: requestId,
+        regionId: region.id,
+        requestType: "move_ao_to_new_location",
+      });
+
+      const client = createTestClient();
+      const result = await client.request.validateSubmissionByAdmin({
+        id: requestId,
+        requestType: "move_ao_to_new_location",
+        submittedBy: "submitter@example.com",
+        originalAoId: ao.id,
+        originalRegionId: region.id,
+        // The location this request was raised against has since been deleted.
+        originalLocationId: 999999999,
+        locationLat: 35.6,
+        locationLng: -80.6,
+      });
+
+      expect(result.status).toBe("approved");
+
+      // The AO landed on a newly created location, never the missing id.
+      const [movedAo] = await db
+        .select({ defaultLocationId: schema.orgs.defaultLocationId })
+        .from(schema.orgs)
+        .where(eq(schema.orgs.id, ao.id));
+      expect(movedAo?.defaultLocationId).not.toBe(999999999);
+      expect(movedAo?.defaultLocationId ?? 0).toBeGreaterThan(0);
+      if (movedAo?.defaultLocationId) {
+        createdLocationIds.push(movedAo.defaultLocationId);
+      }
+    });
+
+    // The mirror case, and the reason the check cannot simply be dropped:
+    // `handleEditEvent` also ignores `originalLocationId`, but it creates no
+    // replacement location, so `recordUpdateRequest` writes the stale id into
+    // `update_requests.location_id` — which carries an FK. Without the preflight
+    // that surfaces as an opaque 500 instead of this 404.
+    it("still rejects edit_event when originalLocationId no longer exists", async () => {
+      const region = await createTestRegion();
+      const ao = await createTestAO(region.id);
+      const location = await createTestLocation(ao.id);
+      const event = await createTestEvent(ao.id, location.id);
+
+      const session = createEditorSession({
+        orgId: region.id,
+        orgName: region.name,
+      });
+      await mockAuthWithSession(session);
+
+      const client = createTestClient();
+      await expect(
+        client.request.validateSubmissionByAdmin({
+          id: crypto.randomUUID(),
+          requestType: "edit_event",
+          submittedBy: "submitter@example.com",
+          originalEventId: event.id,
+          originalRegionId: region.id,
+          originalLocationId: 999999999,
+          eventName: `Edited ${uniqueId()}`,
+        }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+        message: "Failed to find location to update",
+      });
+    });
+  });
+
   describe("validateSubmissionByAdmin — approve success path (#10)", () => {
     it("applies an authorized reviewer's approval end-to-end and stamps reviewedBy", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
       const ao = await createTestAO(region.id);
-      if (!ao) return;
       const location = await createTestLocation(ao.id);
-      if (!location) return;
       const event = await createTestEvent(ao.id, location.id);
-      if (!event) return;
 
       const requestId = crypto.randomUUID();
       await insertPendingRequest({
@@ -1245,11 +1478,8 @@ describe("Request Router", () => {
       await mockAuthWithSession(admin);
 
       const originalRegion = await createTestRegion();
-      if (!originalRegion) return;
       const newRegion = await createTestRegion();
-      if (!newRegion) return;
       const ao = await createTestAO(originalRegion.id);
-      if (!ao) return;
 
       const requestId = crypto.randomUUID();
       await insertPendingRequest({
@@ -1296,13 +1526,9 @@ describe("Request Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
       const ao = await createTestAO(region.id);
-      if (!ao) return;
       const location = await createTestLocation(ao.id);
-      if (!location) return;
       const event = await createTestEvent(ao.id, location.id);
-      if (!event) return;
 
       const requestId = crypto.randomUUID();
       await insertPendingRequest({
@@ -1333,13 +1559,9 @@ describe("Request Router", () => {
       await mockAuthWithSession(admin);
 
       const region = await createTestRegion();
-      if (!region) return;
       const ao = await createTestAO(region.id);
-      if (!ao) return;
       const location = await createTestLocation(ao.id);
-      if (!location) return;
       const event = await createTestEvent(ao.id, location.id);
-      if (!event) return;
 
       const requestId = crypto.randomUUID();
       const [seeded] = await db
@@ -1387,11 +1609,8 @@ describe("Request Router", () => {
       await mockAuthWithSession(admin);
 
       const source = await createTestRegion();
-      if (!source) return;
       const target = await createTestRegion();
-      if (!target) return;
       const ao = await createTestAO(source.id);
-      if (!ao) return;
 
       // Editor on BOTH regions — the `.every(c => c.success)` rule should pass.
       const session = createEditorSession({
@@ -1442,13 +1661,9 @@ describe("Request Router", () => {
       await mockAuthWithSession(admin);
 
       const source = await createTestRegion();
-      if (!source) return;
       const requested = await createTestRegion();
-      if (!requested) return;
       const edited = await createTestRegion();
-      if (!edited) return;
       const ao = await createTestAO(source.id);
-      if (!ao) return;
 
       const requestId = crypto.randomUUID();
       await insertPendingRequest({
@@ -1486,13 +1701,9 @@ describe("Request Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
       const ao = await createTestAO(region.id);
-      if (!ao) return;
       const location = await createTestLocation(ao.id);
-      if (!location) return;
       const event = await createTestEvent(ao.id, location.id);
-      if (!event) return;
 
       const requestId = crypto.randomUUID();
       const [row] = await db
@@ -1531,7 +1742,6 @@ describe("Request Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
       session.roles?.push({
         orgId: region.id,
         orgName: region.name,
@@ -1571,11 +1781,8 @@ describe("Request Router", () => {
       await mockAuthWithSession(admin);
 
       const source = await createTestRegion();
-      if (!source) return;
       const target = await createTestRegion();
-      if (!target) return;
       const ao = await createTestAO(source.id);
-      if (!ao) return;
 
       // Two DISTINCT locations in the source region, one event on each.
       const locA = await createTestLocation(source.id);

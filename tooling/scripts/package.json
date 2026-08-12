@@ -6,7 +6,7 @@
   "exports": {
     ".": "./src"
   },
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "scripts": {
     "clean": "rm -rf .turbo node_modules",
     "lint": "eslint .",

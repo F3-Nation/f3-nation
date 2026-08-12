@@ -5,9 +5,6 @@ import { defineConfig } from "vitest/config";
 const nextHeadersShim = fileURLToPath(
   new URL("./characterization/next-headers-shim.ts", import.meta.url),
 );
-const nextCacheShim = fileURLToPath(
-  new URL("./characterization/next-cache-shim.ts", import.meta.url),
-);
 
 export default defineConfig({
   resolve: {
@@ -16,9 +13,6 @@ export default defineConfig({
       // `vi.mock` cannot reach next-auth's own `next/headers` import, so the
       // shim is wired in by alias instead. Requires the deps.inline below.
       { find: /^next\/headers$/, replacement: nextHeadersShim },
-      // Same reason: revalidatePath() is a post-auth side effect that throws
-      // outside a Next request scope, and vi.mock cannot reach it either.
-      { find: /^next\/cache$/, replacement: nextCacheShim },
     ],
   },
   test: {
@@ -28,6 +22,10 @@ export default defineConfig({
     // in parallel files would interleave. (isolate: true already gives each file
     // a fresh module registry, so per-file module state is not the reason.)
     fileParallelism: false,
+    // isolate: true makes every file re-import the route module (next-auth,
+    // router, DB pool) on its first request through the seam, so each file's
+    // first test pays a full cold start against the 5s default.
+    testTimeout: 20_000,
     // Load-bearing: under NODE_ENV=development, getSession() (shared.ts) returns
     // getDevMockSession() — an authenticated but role-LESS session — for any
     // request with no session and no bearer token, instead of null. That makes
