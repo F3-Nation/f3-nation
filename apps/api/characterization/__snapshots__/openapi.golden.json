@@ -3050,8 +3050,10 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "description": "Zero-based page index for pagination. Defaults to 0.",
-              "type": "number"
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns every matching events.",
+              "maximum": 100000,
+              "minimum": 0,
+              "type": "integer"
             }
           },
           {
@@ -3060,8 +3062,10 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "description": "Number of events per page. Defaults to 10.",
-              "type": "number"
+              "description": "Number of events per page. Supplying this (or pageIndex) opts into paginated results; omitting both returns every matching events.",
+              "maximum": 100,
+              "minimum": -9007199254740991,
+              "type": "integer"
             }
           },
           {
@@ -3933,7 +3937,10 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "type": "number"
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns every matching event instances.",
+              "maximum": 100000,
+              "minimum": 0,
+              "type": "integer"
             }
           },
           {
@@ -3942,7 +3949,10 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "type": "number"
+              "description": "Number of event instances per page. Supplying this (or pageIndex) opts into paginated results; omitting both returns every matching event instances.",
+              "maximum": 100,
+              "minimum": -9007199254740991,
+              "type": "integer"
             }
           },
           {
@@ -4816,7 +4826,10 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "type": "number"
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns every matching event tags.",
+              "maximum": 100000,
+              "minimum": 0,
+              "type": "integer"
             }
           },
           {
@@ -4825,7 +4838,10 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "type": "number"
+              "description": "Number of event tags per page. Supplying this (or pageIndex) opts into paginated results; omitting both returns every matching event tags.",
+              "maximum": 100,
+              "minimum": -9007199254740991,
+              "type": "integer"
             }
           },
           {
@@ -5165,8 +5181,10 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "description": "Zero-based page index for pagination. Defaults to 0.",
-              "type": "number"
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns every matching event types.",
+              "maximum": 100000,
+              "minimum": 0,
+              "type": "integer"
             }
           },
           {
@@ -5175,8 +5193,10 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "description": "Number of event types per page. Defaults to 10.",
-              "type": "number"
+              "description": "Number of event types per page. Supplying this (or pageIndex) opts into paginated results; omitting both returns every matching event types.",
+              "maximum": 100,
+              "minimum": -9007199254740991,
+              "type": "integer"
             }
           },
           {
@@ -6370,8 +6390,10 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "description": "Zero-based page index for pagination. Defaults to 0.",
-              "type": "number"
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns every matching locations.",
+              "maximum": 100000,
+              "minimum": 0,
+              "type": "integer"
             }
           },
           {
@@ -6380,8 +6402,10 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "description": "Number of locations per page. Defaults to 10.",
-              "type": "number"
+              "description": "Number of locations per page. Supplying this (or pageIndex) opts into paginated results; omitting both returns every matching locations.",
+              "maximum": 100,
+              "minimum": -9007199254740991,
+              "type": "integer"
             }
           },
           {
@@ -7968,7 +7992,10 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "type": "number"
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns every matching events.",
+              "maximum": 100000,
+              "minimum": 0,
+              "type": "integer"
             }
           },
           {
@@ -7977,7 +8004,10 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "type": "number"
+              "description": "Number of events per page. Supplying this (or pageIndex) opts into paginated results; omitting both returns every matching events.",
+              "maximum": 100,
+              "minimum": -9007199254740991,
+              "type": "integer"
             }
           },
           {
@@ -10585,8 +10615,10 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "description": "Zero-based page index for pagination. Defaults to 0.",
-              "type": "number"
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns every matching organizations.",
+              "maximum": 100000,
+              "minimum": 0,
+              "type": "integer"
             }
           },
           {
@@ -10595,8 +10627,10 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "description": "Number of organizations per page. Defaults to 10.",
-              "type": "number"
+              "description": "Number of organizations per page. Supplying this (or pageIndex) opts into paginated results; omitting both returns every matching organizations.",
+              "maximum": 100,
+              "minimum": -9007199254740991,
+              "type": "integer"
             }
           },
           {
@@ -11790,7 +11824,10 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "type": "number"
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns every matching organizations.",
+              "maximum": 100000,
+              "minimum": 0,
+              "type": "integer"
             }
           },
           {
@@ -11799,7 +11836,10 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "type": "number"
+              "description": "Number of organizations per page. Supplying this (or pageIndex) opts into paginated results; omitting both returns every matching organizations.",
+              "maximum": 100,
+              "minimum": -9007199254740991,
+              "type": "integer"
             }
           },
           {
@@ -12591,8 +12631,10 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "description": "Zero-based page index for pagination.",
-              "type": "number"
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns every matching positions.",
+              "maximum": 100000,
+              "minimum": 0,
+              "type": "integer"
             }
           },
           {
@@ -12601,8 +12643,10 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "description": "Number of positions per page. Defaults to 20.",
-              "type": "number"
+              "description": "Number of positions per page. Supplying this (or pageIndex) opts into paginated results; omitting both returns every matching positions.",
+              "maximum": 100,
+              "minimum": -9007199254740991,
+              "type": "integer"
             }
           }
         ],
@@ -13827,8 +13871,10 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "description": "Zero-based page index for pagination. Defaults to 0.",
-              "type": "number"
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns every matching requests.",
+              "maximum": 100000,
+              "minimum": 0,
+              "type": "integer"
             }
           },
           {
@@ -13837,8 +13883,10 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "description": "Number of requests per page. Defaults to 10.",
-              "type": "number"
+              "description": "Number of requests per page. Supplying this (or pageIndex) opts into paginated results; omitting both returns every matching requests.",
+              "maximum": 100,
+              "minimum": -9007199254740991,
+              "type": "integer"
             }
           },
           {
@@ -18392,8 +18440,10 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "description": "Zero-based page index for pagination. Defaults to 0.",
-              "type": "number"
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns every matching users.",
+              "maximum": 100000,
+              "minimum": 0,
+              "type": "integer"
             }
           },
           {
@@ -18402,8 +18452,10 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "description": "Number of users per page. Defaults to 10.",
-              "type": "number"
+              "description": "Number of users per page. Supplying this (or pageIndex) opts into paginated results; omitting both returns every matching users.",
+              "maximum": 100,
+              "minimum": -9007199254740991,
+              "type": "integer"
             }
           },
           {
@@ -20166,8 +20218,10 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "description": "Zero-based page index for pagination. Defaults to 0.",
-              "type": "number"
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns every matching users.",
+              "maximum": 100000,
+              "minimum": 0,
+              "type": "integer"
             }
           },
           {
@@ -20176,8 +20230,10 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "description": "Number of users per page. Defaults to 10.",
-              "type": "number"
+              "description": "Number of users per page. Supplying this (or pageIndex) opts into paginated results; omitting both returns every matching users.",
+              "maximum": 100,
+              "minimum": -9007199254740991,
+              "type": "integer"
             }
           },
           {
