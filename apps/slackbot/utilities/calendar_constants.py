@@ -5,3 +5,8 @@ WEEK_ALT_TEXT = {
     "next": "Next Week's Q Sheet",
     "third": "In Two Weeks' Q Sheet",
 }
+WEEK_SCHEDULE_LABELS = {
+    "current": "This week's schedule",
+    "next": "Next week's schedule",
+    "third": "In two weeks' schedule",
+}

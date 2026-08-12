@@ -256,6 +256,15 @@ def generate_calendar_images(force: bool = False):
                                     os.remove(f"/mnt/calendar-images/{stale_file}")
                                 except Exception as e:
                                     print(f"Error deleting stale file {stale_file} from local storage: {e}")
+                                if DB_SCHEMA == "f3_prod":
+                                    # also drop the stable copy written alongside the randomized filename
+                                    stale_file_static = f"{region_id}-{stale_week}.png"
+                                    try:
+                                        os.remove(f"/mnt/calendar-images/{stale_file_static}")
+                                    except FileNotFoundError:
+                                        pass
+                                    except Exception as e:
+                                        print(f"Error deleting stale file {stale_file_static} from local storage: {e}")
 
                     for week_index, week in enumerate(WEEK_LABELS[:num_weeks]):
                         week_start = current_week_start + timedelta(weeks=week_index)
