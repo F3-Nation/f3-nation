@@ -20,6 +20,7 @@ export default {
         // packages
         "db",
         "env",
+        "health",
         "mail",
         "shared",
         "sso",

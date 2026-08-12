@@ -147,4 +147,35 @@ describe("docs openapi route", () => {
     expect(spec.components.parameters.ClientHeader.required).toBe(true);
     expect(spec.paths).toBeUndefined();
   });
+
+  it("sets security:[] and omits ClientHeader for public paths", async () => {
+    process.env.NEXT_PUBLIC_API_URL = "https://api.f3nation.com/";
+
+    generateMock.mockResolvedValueOnce({
+      servers: [{ url: "https://api.f3nation.com" }],
+      paths: {
+        "/v1/ping": { get: {} },
+        "/v1/status": { get: {} },
+      },
+    } as never);
+
+    const { GET } = await import("../src/app/docs/openapi.json/route");
+    const response = await GET(
+      new Request("https://api.f3nation.com/docs/openapi.json"),
+    );
+    const spec = (await response.json()) as {
+      paths: {
+        "/v1/ping": { get: { parameters?: { $ref?: string }[] } };
+        "/v1/status": {
+          get: { security?: unknown[]; parameters?: unknown[] };
+        };
+      };
+    };
+
+    expect(spec.paths["/v1/ping"].get.parameters?.[0]?.$ref).toBe(
+      "#/components/parameters/ClientHeader",
+    );
+    expect(spec.paths["/v1/status"].get.security).toEqual([]);
+    expect(spec.paths["/v1/status"].get.parameters).toBeUndefined();
+  });
 });

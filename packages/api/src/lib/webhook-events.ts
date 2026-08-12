@@ -1,5 +1,3 @@
-import { revalidatePath } from "next/cache";
-
 import { logError, logInfo } from "../logger";
 import type { WebhookPayload } from "./notify-webhooks";
 import { notifyWebhooks } from "./notify-webhooks";
@@ -100,7 +98,7 @@ const buildPayload = (event: WebhookEvent): WebhookPayload => {
  *
  * This function handles both:
  * 1. Emitting webhook events to external systems
- * 2. Revalidating the Next.js static page cache
+ * 2. Triggering the Map app's cache revalidation via HTTP
  *
  * This function is fire-and-forget - it does not block the response to the client.
  * Errors are logged but do not propagate to the caller.
@@ -122,30 +120,12 @@ export const notifyMapDataChange = (event: WebhookEvent): void => {
     payload,
   });
 
-  // Revalidate the statically generated map page so Next.js serves fresh data
-  // on the next request. Only works in Next.js request context (not in tests).
-  try {
-    revalidatePath("/");
-  } catch (error: unknown) {
-    // revalidatePath requires Next.js static generation context, which isn't
-    // available in test environments. Silently skip revalidation in tests.
-    if (
-      error instanceof Error &&
-      error.message.includes("static generation store missing")
-    ) {
-      // Expected in test environment, no need to log
-    } else {
-      // Unexpected error, log it but don't throw
-      logError("api.webhook.revalidate_failed", { webhookEvent: event }, error);
-    }
-  }
-
   // Fire and forget - don't await to not block response
   notifyWebhooks(payload).catch((error: unknown) => {
     logError("api.webhook.notify_failed", { webhookEvent: event }, error);
   });
 
-  // Trigger Map app revalidation via HTTP - API and Map are separate Next.js instances,
-  // so revalidatePath above only affects the API. The Map app must be notified explicitly.
+  // Trigger Map app revalidation via HTTP - API and Map are separate Next.js
+  // instances, so the Map app must be notified explicitly.
   void triggerMapAppRevalidation({ event });
 };

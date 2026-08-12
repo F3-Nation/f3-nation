@@ -8,6 +8,7 @@ import { cn } from "@acme/ui";
 import { toast } from "@acme/ui/toast";
 
 import { orpc, useQuery } from "~/orpc/react";
+import { getEndDateLabel } from "~/utils/get-end-date-label";
 import { getWhenFromWorkout } from "~/utils/get-when-from-workout";
 import { useUpdateEventSearchParams } from "~/utils/hooks/use-update-event-search-params";
 import { ModalType, openModal } from "~/utils/store/modal";
@@ -81,12 +82,18 @@ export const WorkoutDetailsContent = ({
   );
 
   const hasAoContact = useMemo(
-    () =>
-      // An empty string is a real "no value" case for these fields, so `??`
-      // (which only falls through on null/undefined) would wrongly hide the
-      // whole contact section whenever the first field happens to be "".
-      !!aoContact && Object.values(aoContact).some(Boolean),
+    () => !!aoContact && Object.values(aoContact).some(Boolean),
     [aoContact],
+  );
+
+  const whenText = useMemo(
+    () => (event ? getWhenFromWorkout(event) : ""),
+    [event],
+  );
+
+  const endDateLabel = useMemo(
+    () => getEndDateLabel(event?.endDate),
+    [event?.endDate],
   );
 
   const workoutFields = useMemo(
@@ -123,7 +130,15 @@ export const WorkoutDetailsContent = ({
                 </p>
               ) : null,
             ].filter(isTruthy),
-            When: event ? getWhenFromWorkout(event) : "",
+            When:
+              whenText || endDateLabel ? (
+                <>
+                  {whenText}
+                  {endDateLabel ? (
+                    <p className="text-sm">{endDateLabel}</p>
+                  ) : null}
+                </>
+              ) : null,
             Contact:
               hasAoContact && aoContact ? (
                 <ContactLinks contact={aoContact} iconSize="sm" />
@@ -131,7 +146,7 @@ export const WorkoutDetailsContent = ({
             Notes: event?.description ? textLink(event.description) : null,
           }
         : {},
-    [event, location, aoContact, hasAoContact],
+    [event, location, aoContact, hasAoContact, whenText, endDateLabel],
   );
 
   const hasMultipleWorkouts = (results?.location?.events.length ?? 0) > 1;

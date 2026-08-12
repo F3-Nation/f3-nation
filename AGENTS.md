@@ -26,6 +26,7 @@ Reusable agent skills (procedural runbooks in the
 ## Project Structure & Module Organization
 
 - Deployable apps live in `apps/`, shared code in `packages/`, config in `tooling/`, and Turbo generators in `turbo/`.
+- `packages/health/package.json` uses source-first entrypoints for monorepo workspace consumers and a `publishConfig` override for published `dist` artifacts. Do not remove `publishConfig` unless the workspace build orchestration guarantees `dist` artifacts exist before any consumer resolves the package.
 
 ## Environment Setup
 
