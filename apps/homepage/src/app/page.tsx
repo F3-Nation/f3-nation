@@ -102,12 +102,6 @@ const APP_GROUPS: AppGroup[] = [
         linkLabel: "Learn More",
       },
       {
-        name: "Status",
-        description:
-          "Real-time health and status for all F3 Nation services. Check if something's down before filing a bug report.",
-        href: "https://status.f3nation.com",
-      },
-      {
         name: "SyncBot",
         description:
           "Slack app for syncing channels and messages across multiple workspaces (threads, reactions, and media).",
@@ -132,6 +126,13 @@ const APP_GROUPS: AppGroup[] = [
           "The F3 Nation data API. Unified backend powering the map, admin, and other apps — the single source of truth for F3 data.",
         href: "https://api.f3nation.com",
         localHref: "http://localhost:3001",
+      },
+      {
+        name: "Status",
+        description:
+          "Real-time health and status for all F3 Nation services. Check if something's down or having issues.",
+        href: "https://apps.f3nation.com/status/",
+        localHref: "http://localhost:3005/status",
       },
     ],
   },
