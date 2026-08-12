@@ -87,6 +87,12 @@ export const EventInsertSchema = createInsertSchema(events, {
     s.regex(/^\d{4}$/, {
       error: "End time must be in 24hr format (HHmm)",
     }),
+  startDate: () =>
+    z.iso.date({ error: "Start date must be in ISO format (YYYY-MM-DD)" }),
+  endDate: () =>
+    z.iso
+      .date({ error: "End date must be in ISO format (YYYY-MM-DD)" })
+      .optional(),
 })
   .extend({
     regionId: z.number(),
@@ -103,18 +109,26 @@ export const EventInsertSchema = createInsertSchema(events, {
 
 const isoDateOnly = z.iso.date();
 
+export const EVENT_DATE_ORDER_MESSAGE =
+  "End date must be on or after start date";
+
+export const isEndDateBeforeStartDate = (
+  startDate: unknown,
+  endDate: unknown,
+): boolean => {
+  const start = isoDateOnly.safeParse(startDate);
+  const end = isoDateOnly.safeParse(endDate);
+  return start.success && end.success && end.data < start.data;
+};
+
 export const checkEventDateOrder = (
   data: { startDate?: unknown; endDate?: unknown },
   ctx: z.RefinementCtx,
 ) => {
-  const startDate = isoDateOnly.safeParse(data.startDate);
-  const endDate = isoDateOnly.safeParse(data.endDate);
-  if (!startDate.success || !endDate.success) return;
-
-  if (endDate.data < startDate.data) {
+  if (isEndDateBeforeStartDate(data.startDate, data.endDate)) {
     ctx.addIssue({
       code: "custom",
-      message: "End date must be on or after start date",
+      message: EVENT_DATE_ORDER_MESSAGE,
       path: ["endDate"],
     });
   }

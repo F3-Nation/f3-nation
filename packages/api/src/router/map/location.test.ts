@@ -857,6 +857,11 @@ describe("Map Location Router", () => {
         locationId: location.id,
       });
       expect(workout.location).toBeNull();
+      // A stale link is a routine case, not a missing-coordinates fault: the
+      // message is rendered verbatim to the user, so it must not leak the
+      // internal lat/lng diagnostic.
+      expect(workout.message).toBe("This workout is no longer scheduled.");
+      expect(workout.message).not.toContain("Lat/lng");
     });
 
     it("should drop a location whose only event starts past the six-day window", async () => {
@@ -891,6 +896,8 @@ describe("Map Location Router", () => {
         locationId: location.id,
       });
       expect(workout.location).toBeNull();
+      expect(workout.message).toBe("This workout is no longer scheduled.");
+      expect(workout.message).not.toContain("Lat/lng");
     });
   });
 });

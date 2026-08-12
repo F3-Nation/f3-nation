@@ -42,7 +42,11 @@ import {
 import { Spinner } from "@acme/ui/spinner";
 import { Textarea } from "@acme/ui/textarea";
 import { toast } from "@acme/ui/toast";
-import { EventInsertSchema } from "@acme/validators";
+import {
+  EVENT_DATE_ORDER_MESSAGE,
+  EventInsertSchema,
+  isEndDateBeforeStartDate,
+} from "@acme/validators";
 
 import gte from "lodash/gte";
 import {
@@ -52,7 +56,6 @@ import {
   useMutation,
   useQuery,
 } from "~/orpc/react";
-import { isEndDateBeforeStartDate } from "~/utils/event-dates";
 import type { DataType } from "~/utils/store/modal";
 import {
   closeModal,
@@ -196,10 +199,8 @@ export default function AdminWorkoutsModal({
     }
 
     if (isEndDateBeforeStartDate(data.startDate, data.endDate)) {
-      form.setError("endDate", {
-        message: "End date must be on or after start date",
-      });
-      toast.error("End date must be on or after start date");
+      form.setError("endDate", { message: EVENT_DATE_ORDER_MESSAGE });
+      toast.error(EVENT_DATE_ORDER_MESSAGE);
       return;
     }
 
