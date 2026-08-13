@@ -1,5 +1,21 @@
 # Changelog
 
+## [7.2.0](https://github.com/F3-Nation/f3-nation/compare/map@7.1.0...map@7.2.0) (2026-08-12)
+
+
+### Features
+
+* **map:** add start date column to workouts table ([#807](https://github.com/F3-Nation/f3-nation/issues/807)) ([c49b48d](https://github.com/F3-Nation/f3-nation/commit/c49b48d6131e13454425d3ce0660e02093bba175))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.6.0
+    * @acme/auth bumped to 0.2.1
+    * @acme/validators bumped to 0.3.0
+
 ## [7.1.0](https://github.com/F3-Nation/f3-nation/compare/map@7.0.9...map@7.1.0) (2026-08-05)
 
 

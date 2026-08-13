@@ -2,6 +2,13 @@
 
 <!-- version list -->
 
+## [2.2.1](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.2.0...slackbot@2.2.1) (2026-08-12)
+
+
+### Bug Fixes
+
+* **slackbot:** truncate long Strava activity button labels ([#810](https://github.com/F3-Nation/f3-nation/issues/810)) ([e6d6f84](https://github.com/F3-Nation/f3-nation/commit/e6d6f84841f299bf283adb65ccc307a63e41dc4b))
+
 ## [2.2.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.1.3...slackbot@2.2.0) (2026-08-05)
 
 

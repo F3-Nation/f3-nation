@@ -27,7 +27,11 @@ export async function GET(request: NextRequest) {
 
   const scopes = new Set((result.scopes ?? "").split(" "));
   const claims: Record<string, unknown> = {
-    sub: result.user.id,
+    // OIDC Core §2 requires sub to be a string, and §5.3.2 requires an RP to
+    // verify this exactly matches the ID Token's sub (also a string, see
+    // signIdToken) — a numeric sub here would fail that comparison in any
+    // conformant client and get the whole response discarded.
+    sub: String(result.user.id),
   };
 
   if (scopes.has("profile")) {
