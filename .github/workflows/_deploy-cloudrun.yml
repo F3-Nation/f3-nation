@@ -230,11 +230,17 @@ jobs:
             echo "::warning::Cache revalidated but warm-up did not complete; instance will regenerate lazily on next visit"
           fi
 
-  # ── File a brief regression-smoke-test issue after a successful staging deploy ──
+  # ── Update the shared staging smoke-test tracker issue after a successful staging deploy ──
   smoke-test-issue:
     needs: [build, deploy-staging]
     if: inputs.smoke_test_file != ''
     runs-on: ubuntu-latest
+    # Static (non-templated) group: serializes this job across every app's
+    # deploy workflow so two apps deploying around the same time can't both
+    # decide "no open tracker issue" and each create a duplicate.
+    concurrency:
+      group: staging-smoke-test-tracker
+      cancel-in-progress: false
     permissions:
       contents: read
       issues: write
@@ -243,34 +249,14 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Create staging smoke-test issue
-        env:
-          GH_TOKEN: ${{ github.token }}
-          SERVICE_NAME: ${{ inputs.service_name }}
-          VERSION: ${{ needs.build.outputs.version }}
-          STAGING_URL: ${{ inputs.staging_url }}
-          CHECKLIST_FILE: ${{ inputs.smoke_test_file }}
-          APP_LABEL: ${{ inputs.app_label }}
-        run: |
-          title="Staging smoke test: ${SERVICE_NAME} ${VERSION}"
-          body_file="$(mktemp)"
-          {
-            echo "Deployed \`${SERVICE_NAME}\` @ \`${VERSION}\` to Staging."
-            if [ -n "${STAGING_URL}" ]; then
-              echo "Staging URL: ${STAGING_URL}"
-            fi
-            echo
-            cat "${CHECKLIST_FILE}"
-            echo
-            echo "_Filed automatically after a successful staging deploy — see .github/smoke-tests/README.md._"
-          } > "${body_file}"
-
-          label_args=(--label staging-smoke-test)
-          if [ -n "${APP_LABEL}" ]; then
-            label_args+=(--label "${APP_LABEL}")
-          fi
-
-          gh issue create --title "${title}" "${label_args[@]}" --body-file "${body_file}"
+      - uses: ./.github/actions/staging-smoke-test-issue
+        with:
+          service_name: ${{ inputs.service_name }}
+          version: ${{ needs.build.outputs.version }}
+          staging_url: ${{ inputs.staging_url }}
+          checklist_file: ${{ inputs.smoke_test_file }}
+          app_label: ${{ inputs.app_label }}
+          github_token: ${{ github.token }}
 
   # ── Deploy to production (requires approval) ──
   deploy-prod:

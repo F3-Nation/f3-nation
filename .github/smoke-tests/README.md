@@ -6,9 +6,15 @@ individual release issues like [#841](https://github.com/F3-Nation/f3-nation/iss
 for that).
 
 After every successful staging deploy, `_deploy-cloudrun.yml` /
-`_deploy-cloudrun-job.yml` file a new issue titled `Staging smoke test: <service> <version>`,
-labeled `staging-smoke-test` + the matching `app: <name>` label, with this
-file's content as the body. See the `smoke_test_file` input on each
+`_deploy-cloudrun-job.yml` call the `.github/actions/staging-smoke-test-issue`
+composite action, which writes/updates **this app's own section** of a single,
+long-lived "Staging smoke test tracker" issue — one issue covering every app,
+not one issue per deploy. Each section is delimited by an HTML comment marker
+(`<!-- smoke-test:<name>:start/end -->`, `<name>` = this file's basename) so a
+redeploy replaces only that app's section and leaves everyone else's checkbox
+state alone. If no open `staging-smoke-test`-labeled issue exists, a new
+tracker issue is created; closing the issue once everything's checked lets the
+next deploy start a fresh one. See the `smoke_test_file` input on each
 `deploy-*.yml` caller workflow.
 
 **Adding a new deploy target:** add `<name>.md` here, then pass

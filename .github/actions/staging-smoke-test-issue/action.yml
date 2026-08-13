@@ -1,0 +1,123 @@
+name: Update staging smoke-test tracker issue
+description: >-
+  Creates or updates the single open "staging-smoke-test" tracking issue,
+  writing/replacing this app's own section so every app's checklist lives
+  in one issue instead of one issue per deploy.
+
+inputs:
+  service_name:
+    description: "Human-readable service name for the section heading (e.g. f3-map)"
+    required: true
+  version:
+    description: "Deployed version"
+    required: true
+  staging_url:
+    description: "Public staging URL for this app, if any"
+    required: false
+    default: ""
+  checklist_file:
+    description: "Path to the app's checklist markdown file; its basename (minus .md) is used as the section key"
+    required: true
+  app_label:
+    description: "Existing 'app: X' label to apply to the tracker issue"
+    required: false
+    default: ""
+  github_token:
+    description: "Token with issues:write on this repo"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      env:
+        SERVICE_NAME: ${{ inputs.service_name }}
+        VERSION: ${{ inputs.version }}
+        STAGING_URL: ${{ inputs.staging_url }}
+        CHECKLIST_FILE: ${{ inputs.checklist_file }}
+        APP_LABEL: ${{ inputs.app_label }}
+      with:
+        github-token: ${{ inputs.github_token }}
+        script: |
+          const fs = require("fs");
+          const path = require("path");
+
+          const appName = path.basename(process.env.CHECKLIST_FILE, ".md");
+          const serviceName = process.env.SERVICE_NAME;
+          const version = process.env.VERSION;
+          const stagingUrl = process.env.STAGING_URL;
+          const appLabel = process.env.APP_LABEL;
+          const checklist = fs.readFileSync(process.env.CHECKLIST_FILE, "utf8").trim();
+
+          const owner = context.repo.owner;
+          const repo = context.repo.repo;
+          const now = new Date().toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC");
+
+          const startMarker = `<!-- smoke-test:${appName}:start -->`;
+          const endMarker = `<!-- smoke-test:${appName}:end -->`;
+          const section = [
+            startMarker,
+            `### ${serviceName} — \`${version}\` (deployed ${now})`,
+            stagingUrl ? `Staging URL: ${stagingUrl}\n` : "",
+            checklist,
+            endMarker,
+          ]
+            .filter(Boolean)
+            .join("\n");
+
+          const HEADER = [
+            "## Staging smoke test tracker",
+            "",
+            "Auto-updated after each app's staging deploy — one section per app. " +
+              "Check items off as you verify them on Staging. When everything below " +
+              "is checked, close this issue; the next staging deploy opens a fresh one.",
+            "",
+            "---",
+          ].join("\n");
+
+          const open = await github.rest.issues.listForRepo({
+            owner,
+            repo,
+            state: "open",
+            labels: "staging-smoke-test",
+            sort: "created",
+            direction: "desc",
+            per_page: 5,
+          });
+
+          if (open.data.length === 0) {
+            const labels = ["staging-smoke-test"];
+            if (appLabel) labels.push(appLabel);
+            const created = await github.rest.issues.create({
+              owner,
+              repo,
+              title: "Staging smoke test tracker",
+              body: `${HEADER}\n\n${section}\n`,
+              labels,
+            });
+            core.info(`Created tracker issue #${created.data.number}`);
+            return;
+          }
+
+          const issue = open.data[0];
+          const blockRe = new RegExp(`${startMarker}[\\s\\S]*?${endMarker}`);
+          let body = issue.body ?? "";
+          body = blockRe.test(body)
+            ? body.replace(blockRe, section)
+            : `${body.trimEnd()}\n\n${section}\n`;
+
+          await github.rest.issues.update({ owner, repo, issue_number: issue.number, body });
+
+          if (appLabel) {
+            const existingLabels = issue.labels.map((l) => (typeof l === "string" ? l : l.name));
+            if (!existingLabels.includes(appLabel)) {
+              await github.rest.issues.addLabels({
+                owner,
+                repo,
+                issue_number: issue.number,
+                labels: [appLabel],
+              });
+            }
+          }
+
+          core.info(`Updated tracker issue #${issue.number} (section: ${appName})`);
