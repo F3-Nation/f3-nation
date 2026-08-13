@@ -11,11 +11,13 @@ concurrency:
   cancel-in-progress: false
 
 # Reusable workflows can't elevate GITHUB_TOKEN beyond what the caller grants.
-# id-token: write -> GCP OIDC (google-github-actions/auth); checks: read -> CI gate.
+# id-token: write -> GCP OIDC (google-github-actions/auth); checks: read -> CI gate;
+# issues: write -> file the post-staging-deploy smoke-test issue.
 permissions:
   contents: read
   id-token: write
   checks: read
+  issues: write
 
 jobs:
   deploy-main:
@@ -68,6 +70,8 @@ jobs:
         --add-volume-mount=volume=oauth_installations,mount-path=/mnt/oauth_installations
         --add-volume=name=calendar-images,type=cloud-storage,bucket=f3nation-calendar-images
         --add-volume-mount=volume=calendar-images,mount-path=/mnt/calendar-images
+      smoke_test_file: .github/smoke-tests/slackbot.md
+      app_label: "app: slackbot"
 
   deploy-scripts:
     uses: ./.github/workflows/_deploy-cloudrun-job.yml
@@ -97,3 +101,5 @@ jobs:
         --add-volume=name=calendar-images,type=cloud-storage,bucket=f3nation-calendar-images
         --add-volume-mount=volume=calendar-images,mount-path=/mnt/calendar-images
         --task-timeout=6h
+      smoke_test_file: .github/smoke-tests/slackbot-scripts.md
+      app_label: "app: slackbot"

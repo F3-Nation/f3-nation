@@ -90,6 +90,16 @@ on:
         required: false
         type: string
         default: SUPER_ADMIN_API_KEY
+      smoke_test_file:
+        description: "Path to a short staging smoke-test checklist (markdown) to file as an issue after a successful staging deploy; empty skips"
+        required: false
+        type: string
+        default: ""
+      app_label:
+        description: "Existing 'app: X' label to apply to the auto-filed smoke-test issue"
+        required: false
+        type: string
+        default: ""
 
 jobs:
   # ── Gate: wait for the full CI check set to pass on this commit ──
@@ -219,6 +229,48 @@ jobs:
           elif [ "$(printf '%s' "${body}" | jq -r '.warmed // false')" != "true" ]; then
             echo "::warning::Cache revalidated but warm-up did not complete; instance will regenerate lazily on next visit"
           fi
+
+  # ── File a brief regression-smoke-test issue after a successful staging deploy ──
+  smoke-test-issue:
+    needs: [build, deploy-staging]
+    if: inputs.smoke_test_file != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Create staging smoke-test issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SERVICE_NAME: ${{ inputs.service_name }}
+          VERSION: ${{ needs.build.outputs.version }}
+          STAGING_URL: ${{ inputs.staging_url }}
+          CHECKLIST_FILE: ${{ inputs.smoke_test_file }}
+          APP_LABEL: ${{ inputs.app_label }}
+        run: |
+          title="Staging smoke test: ${SERVICE_NAME} ${VERSION}"
+          body_file="$(mktemp)"
+          {
+            echo "Deployed \`${SERVICE_NAME}\` @ \`${VERSION}\` to Staging."
+            if [ -n "${STAGING_URL}" ]; then
+              echo "Staging URL: ${STAGING_URL}"
+            fi
+            echo
+            cat "${CHECKLIST_FILE}"
+            echo
+            echo "_Filed automatically after a successful staging deploy — see .github/smoke-tests/README.md._"
+          } > "${body_file}"
+
+          label_args=(--label staging-smoke-test)
+          if [ -n "${APP_LABEL}" ]; then
+            label_args+=(--label "${APP_LABEL}")
+          fi
+
+          gh issue create --title "${title}" "${label_args[@]}" --body-file "${body_file}"
 
   # ── Deploy to production (requires approval) ──
   deploy-prod:

@@ -1,0 +1,2 @@
+- [ ] `GET <staging URL>/v1/ping` returns HTTP 200.
+- [ ] `GET <staging URL>/api/docs/openapi.json` returns a valid JSON OpenAPI spec.

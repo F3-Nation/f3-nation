@@ -68,6 +68,16 @@ on:
         required: false
         type: string
         default: ""
+      smoke_test_file:
+        description: "Path to a short staging smoke-test checklist (markdown) to file as an issue after a successful staging deploy; empty skips"
+        required: false
+        type: string
+        default: ""
+      app_label:
+        description: "Existing 'app: X' label to apply to the auto-filed smoke-test issue"
+        required: false
+        type: string
+        default: ""
 
 jobs:
   ci-gate:
@@ -181,6 +191,44 @@ jobs:
             --region "${REGION}" \
             --project "${PROJECT_ID}" \
             "${extra_flags[@]}"
+
+  # ── File a brief regression-smoke-test issue after a successful staging deploy ──
+  smoke-test-issue:
+    needs: [build, deploy-staging]
+    if: inputs.smoke_test_file != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Create staging smoke-test issue
+        env:
+          JOB_NAME: ${{ inputs.job_name }}
+          VERSION: ${{ needs.build.outputs.version }}
+          CHECKLIST_FILE: ${{ inputs.smoke_test_file }}
+          APP_LABEL: ${{ inputs.app_label }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Staging smoke test: ${JOB_NAME} ${VERSION}"
+          body_file="$(mktemp)"
+          {
+            echo "Deployed \`${JOB_NAME}\` @ \`${VERSION}\` to Staging."
+            echo
+            cat "${CHECKLIST_FILE}"
+            echo
+            echo "_Filed automatically after a successful staging deploy — see .github/smoke-tests/README.md._"
+          } > "${body_file}"
+
+          label_args=(--label staging-smoke-test)
+          if [ -n "${APP_LABEL}" ]; then
+            label_args+=(--label "${APP_LABEL}")
+          fi
+
+          gh issue create --title "${title}" "${label_args[@]}" --body-file "${body_file}"
 
   deploy-prod:
     needs: [build, deploy-staging]

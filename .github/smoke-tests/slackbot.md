@@ -1,0 +1,3 @@
+- [ ] Not browser-testable — this service only talks to Slack.
+- [ ] In a Slack workspace connected to the staging bot, run a known slash command and confirm it responds.
+- [ ] If no staging Slack workspace is available to you, skip this item and flag it to whoever manages the staging bot's Slack app config.

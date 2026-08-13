@@ -1,0 +1,3 @@
+- [ ] Sign in via F3 SSO.
+- [ ] Profile page loads with your own data (name, avatar, etc.).
+- [ ] Edit a field (e.g. bio) and save successfully.

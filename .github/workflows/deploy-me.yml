@@ -11,11 +11,13 @@ concurrency:
   cancel-in-progress: false
 
 # Reusable workflows can't elevate GITHUB_TOKEN beyond what the caller grants.
-# id-token: write -> GCP OIDC (google-github-actions/auth); checks: read -> CI gate.
+# id-token: write -> GCP OIDC (google-github-actions/auth); checks: read -> CI gate;
+# issues: write -> file the post-staging-deploy smoke-test issue.
 permissions:
   contents: read
   id-token: write
   checks: read
+  issues: write
 
 jobs:
   deploy:
@@ -31,3 +33,5 @@ jobs:
       prod_environment: me-production
       staging_url: https://staging.me.f3nation.com
       prod_url: https://me.f3nation.com
+      smoke_test_file: .github/smoke-tests/me.md
+      app_label: "app: me"
