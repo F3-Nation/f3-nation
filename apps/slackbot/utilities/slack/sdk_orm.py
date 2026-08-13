@@ -163,6 +163,7 @@ class SdkBlockView:
                     "number_input",
                 ]:
                     value = state.get("value")
+                # Pickers carry selected_date/selected_time, not value.
                 elif element_type == "datepicker":
                     value = state.get("selected_date")
                 elif element_type == "timepicker":

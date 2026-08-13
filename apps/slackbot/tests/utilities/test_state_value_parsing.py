@@ -2,8 +2,11 @@
 
 Slack's ``view_submission`` payload exposes picker values under ``selected_date``
 and ``selected_time`` — not under ``value``, which is only used by the text-input
-family. Both shared parsers previously grouped the pickers in with the text
-inputs, so every date/time field silently resolved to ``None``.
+family. Two of the repo's three form parsers grouped the pickers in with the
+text inputs, so date/time fields parsed by ``extract_state_values`` or
+``SdkBlockView.get_selected_values`` silently resolved to ``None``. The third
+parser (``utilities.slack.orm.BlockView``) delegates to per-element classes and
+was never affected.
 
 See https://github.com/F3-Nation/f3-nation/issues/730
 """
@@ -104,9 +107,10 @@ def test_sdk_block_view_text_inputs_still_use_value():
 
 
 def test_both_parsers_agree_on_pickers():
-    for state in (
-        {"type": "timepicker", "selected_time": "18:45"},
-        {"type": "datepicker", "selected_date": "2026-12-25"},
+    for state, expected in (
+        ({"type": "timepicker", "selected_time": "18:45"}, "18:45"),
+        ({"type": "datepicker", "selected_date": "2026-12-25"}, "2026-12-25"),
     ):
         body = _body("field", state)
-        assert extract_state_values(body) == SdkBlockView(blocks=[]).get_selected_values(body)
+        assert extract_state_values(body) == {"field": expected}
+        assert SdkBlockView(blocks=[]).get_selected_values(body) == {"field": expected}

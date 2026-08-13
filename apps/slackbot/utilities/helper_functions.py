@@ -941,6 +941,7 @@ def extract_state_values(body: dict) -> dict[str, Any]:
                 "number_input",
             ):
                 form_data[block_id] = state.get("value")
+            # Pickers carry selected_date/selected_time, not value.
             elif element_type == "datepicker":
                 form_data[block_id] = state.get("selected_date")
             elif element_type == "timepicker":
