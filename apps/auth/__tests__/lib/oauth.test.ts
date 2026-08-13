@@ -724,6 +724,40 @@ describe("exchangeRefreshToken", () => {
     expect(result).toMatchObject({ scope: PUBLIC_CLIENT.scopes });
   });
 
+  it("persists the resolved fallback scope onto the rotated row for a legacy token, not the null it inherited", async () => {
+    dbMock.update.mockReturnValueOnce(
+      chain([
+        {
+          token: "rt-legacy",
+          clientId: PUBLIC_CLIENT.id,
+          userId: 42,
+          expiresAt: new Date(Date.now() + 60_000).toISOString(),
+          createdAt: "",
+          rotatedAt: new Date().toISOString(),
+          scopes: null,
+          authTime: null,
+        },
+      ]),
+    );
+    mockGetClientResult(PUBLIC_CLIENT);
+    dbMock.select.mockReturnValueOnce(chain([{ email: "pax@example.com" }]));
+    const insertChain = chain(undefined);
+    dbMock.insert.mockReturnValueOnce(insertChain);
+
+    await exchangeRefreshToken({
+      refreshToken: "rt-legacy",
+      clientId: PUBLIC_CLIENT.id,
+    });
+
+    // Without this, a legacy row's null scopes would propagate forever —
+    // every future rotation of this lineage would keep re-falling back to
+    // whatever the client's registered scopes happen to be *at that later
+    // time*, instead of locking in what was actually resolved here.
+    expect(insertChain.values).toHaveBeenCalledWith(
+      expect.objectContaining({ scopes: PUBLIC_CLIENT.scopes }),
+    );
+  });
+
   it("warns (but does not reject) when a public client sends a secret anyway", async () => {
     mockGetClientResult(PUBLIC_CLIENT);
     dbMock.update.mockReturnValueOnce(chain([]));

@@ -454,7 +454,7 @@ export async function exchangeRefreshToken(params: {
       clientId: existing.clientId,
       userId: existing.userId,
       expiresAt: refreshExpiresAt,
-      scopes: existing.scopes,
+      scopes,
       authTime: existing.authTime,
     });
 
