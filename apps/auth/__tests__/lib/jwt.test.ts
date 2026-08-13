@@ -268,6 +268,68 @@ describe("signIdToken", () => {
       kid: "f3-auth-1",
     });
   });
+
+  it("echoes the nonce claim verbatim when one was supplied", async () => {
+    const token = await signSampleId({ nonce: "abc-123-replay-guard" });
+    const keySet = createLocalJWKSet(await jwt.getJWKS());
+
+    const { payload } = await jwtVerify(token, keySet, {
+      issuer: ISSUER,
+      audience: "f3-map",
+    });
+
+    expect(payload.nonce).toBe("abc-123-replay-guard");
+  });
+
+  it("omits (rather than nulls) the nonce claim when none was supplied", async () => {
+    const token = await signSampleId({ nonce: null });
+    const keySet = createLocalJWKSet(await jwt.getJWKS());
+
+    const { payload } = await jwtVerify(token, keySet, {
+      issuer: ISSUER,
+      audience: "f3-map",
+    });
+
+    expect("nonce" in payload).toBe(false);
+  });
+
+  it("converts a persisted ISO authTime into the auth_time NumericDate claim", async () => {
+    const token = await signSampleId({ authTime: "2026-01-01T00:00:00.000Z" });
+    const keySet = createLocalJWKSet(await jwt.getJWKS());
+
+    const { payload } = await jwtVerify(token, keySet, {
+      issuer: ISSUER,
+      audience: "f3-map",
+    });
+
+    expect(payload.auth_time).toBe(
+      Math.floor(new Date("2026-01-01T00:00:00.000Z").getTime() / 1000),
+    );
+  });
+
+  it("omits auth_time when unknown, rather than guessing at iat", async () => {
+    const token = await signSampleId({ authTime: null });
+    const keySet = createLocalJWKSet(await jwt.getJWKS());
+
+    const { payload } = await jwtVerify(token, keySet, {
+      issuer: ISSUER,
+      audience: "f3-map",
+    });
+
+    expect("auth_time" in payload).toBe(false);
+  });
+
+  it("tolerates a garbled authTime value by omitting the claim instead of signing NaN", async () => {
+    const token = await signSampleId({ authTime: "not-a-real-date" });
+    const keySet = createLocalJWKSet(await jwt.getJWKS());
+
+    const { payload } = await jwtVerify(token, keySet, {
+      issuer: ISSUER,
+      audience: "f3-map",
+    });
+
+    expect("auth_time" in payload).toBe(false);
+  });
 });
 
 describe("getJWKS", () => {
