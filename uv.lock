@@ -720,7 +720,7 @@ source = { virtual = "." }
 
 [[package]]
 name = "f3-nation-slack-bot"
-version = "2.2.0"
+version = "2.2.1"
 source = { editable = "apps/slackbot" }
 dependencies = [
     { name = "cloud-sql-python-connector" },

@@ -314,6 +314,13 @@ async function getSessionFromJWT(token: string): Promise<Session | null> {
     return null;
   }
 
+  // ID Tokens share this issuer's signing key and protected header with
+  // access tokens, so signature + issuer alone doesn't tell them apart —
+  // without this check, an ID Token (meant to be safe to expose to
+  // client-side code, id_token_hint query strings, and logs) would work
+  // as a fully privileged API credential here.
+  if (payload.token_use !== "access") return null;
+
   const userId = Number(payload.sub);
   if (!userId) return null;
 
