@@ -1,2 +1,0 @@
-- [ ] Not testable via UI — this is a Cloud Run Job (batch/cron), not a web service.
-- [ ] In the GCP Console, check Cloud Run Jobs → `f3-slackbot-scripts` (staging project) → Executions, and confirm the latest execution after this deploy succeeded.

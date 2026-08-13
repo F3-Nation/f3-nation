@@ -33,5 +33,5 @@ jobs:
       prod_environment: admin-production
       staging_url: https://staging.admin.f3nation.com
       prod_url: https://admin.f3nation.com
-      smoke_test_file: .github/smoke-tests/admin.md
+      smoke_test_app: admin
       app_label: "app: admin"

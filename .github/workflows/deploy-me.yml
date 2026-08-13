@@ -33,5 +33,5 @@ jobs:
       prod_environment: me-production
       staging_url: https://staging.me.f3nation.com
       prod_url: https://me.f3nation.com
-      smoke_test_file: .github/smoke-tests/me.md
+      smoke_test_app: me
       app_label: "app: me"

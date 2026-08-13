@@ -33,7 +33,7 @@ jobs:
       prod_environment: auth-production
       staging_url: https://staging.auth.f3nation.com
       prod_url: https://auth.f3nation.com
-      smoke_test_file: .github/smoke-tests/auth.md
+      smoke_test_app: auth
       app_label: "app: auth"
       # Stop-gap for in-memory rate limiter: pin to a single instance so the
       # per-process Map store is authoritative across all requests.  When the

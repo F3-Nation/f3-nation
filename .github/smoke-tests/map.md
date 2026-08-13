@@ -1,3 +1,0 @@
-- [ ] Map loads with pins/markers visible, no console errors.
-- [ ] Search or filter for a known AO/region and confirm results update.
-- [ ] Click a marker and confirm the workout detail popup opens with correct info.

@@ -1,3 +1,0 @@
-- [ ] Start a sign-in flow against staging auth (directly, or from a client app pointed at it).
-- [ ] Enter your email, receive the 6-digit MFA code by real email, and complete sign-in.
-- [ ] Confirm a session is issued — redirected back to the client with no error page.

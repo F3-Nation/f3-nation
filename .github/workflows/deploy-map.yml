@@ -34,5 +34,5 @@ jobs:
       staging_url: https://staging.map.f3nation.com
       prod_url: https://map.f3nation.com
       revalidate_after_deploy: true
-      smoke_test_file: .github/smoke-tests/map.md
+      smoke_test_app: map
       app_label: "app: map"

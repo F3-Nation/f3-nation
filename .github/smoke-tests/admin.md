@@ -1,3 +1,0 @@
-- [ ] Sign in to the Admin app via F3 SSO.
-- [ ] Workouts table loads with existing rows — no error, no stuck spinner.
-- [ ] Open an existing workout in the edit modal, make a trivial edit, and save successfully.

@@ -15,8 +15,10 @@ inputs:
     description: "Public staging URL for this app, if any"
     required: false
     default: ""
-  checklist_file:
-    description: "Path to the app's checklist markdown file; its basename (minus .md) is used as the section key"
+  app_key:
+    description: >-
+      Section key matching a "## <app_key>" heading in
+      .github/smoke-tests/checklists.md (e.g. map, slackbot-scripts)
     required: true
   app_label:
     description: "Existing 'app: X' label to apply to the tracker issue"
@@ -34,20 +36,40 @@ runs:
         SERVICE_NAME: ${{ inputs.service_name }}
         VERSION: ${{ inputs.version }}
         STAGING_URL: ${{ inputs.staging_url }}
-        CHECKLIST_FILE: ${{ inputs.checklist_file }}
+        APP_KEY: ${{ inputs.app_key }}
         APP_LABEL: ${{ inputs.app_label }}
       with:
         github-token: ${{ inputs.github_token }}
         script: |
           const fs = require("fs");
-          const path = require("path");
 
-          const appName = path.basename(process.env.CHECKLIST_FILE, ".md");
+          const CHECKLISTS_FILE = ".github/smoke-tests/checklists.md";
+          const appName = process.env.APP_KEY;
           const serviceName = process.env.SERVICE_NAME;
           const version = process.env.VERSION;
           const stagingUrl = process.env.STAGING_URL;
           const appLabel = process.env.APP_LABEL;
-          const checklist = fs.readFileSync(process.env.CHECKLIST_FILE, "utf8").trim();
+
+          // Split checklists.md into { key -> body } on "## <key>" headings.
+          const raw = fs.readFileSync(CHECKLISTS_FILE, "utf8");
+          const headingRe = /^##\s+(\S+)\s*$/gm;
+          const heads = [];
+          let m;
+          while ((m = headingRe.exec(raw)) !== null) {
+            heads.push({ key: m[1], start: m.index, headingEnd: headingRe.lastIndex });
+          }
+          const sections = new Map(
+            heads.map(({ key, headingEnd }, i) => {
+              const end = i + 1 < heads.length ? heads[i + 1].start : raw.length;
+              return [key, raw.slice(headingEnd, end).trim()];
+            }),
+          );
+
+          const checklist = sections.get(appName);
+          if (!checklist) {
+            core.setFailed(`No "## ${appName}" section found in ${CHECKLISTS_FILE}`);
+            return;
+          }
 
           const owner = context.repo.owner;
           const repo = context.repo.repo;
