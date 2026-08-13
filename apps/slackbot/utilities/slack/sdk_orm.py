@@ -161,10 +161,13 @@ class SdkBlockView:
                     "email_text_input",
                     "url_text_input",
                     "number_input",
-                    "datepicker",
-                    "timepicker",
                 ]:
                     value = state.get("value")
+                # Pickers carry selected_date/selected_time, not value.
+                elif element_type == "datepicker":
+                    value = state.get("selected_date")
+                elif element_type == "timepicker":
+                    value = state.get("selected_time")
                 elif element_type in ["users_select", "conversations_select", "channels_select"]:
                     value = (
                         state.get("selected_user")
