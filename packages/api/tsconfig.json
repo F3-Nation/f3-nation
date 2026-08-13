@@ -1,8 +1,11 @@
 {
   "extends": "@acme/tsconfig/base.json",
   "compilerOptions": {
+    "paths": {
+      "@f3nation/health": ["../health/src/index.ts"]
+    },
     "tsBuildInfoFile": "node_modules/.cache/tsbuildinfo.json"
   },
-  "include": ["src", "__tests__"],
+  "include": ["src", "__tests__", "vitest.global-setup.ts"],
   "exclude": ["node_modules"]
 }

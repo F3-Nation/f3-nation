@@ -34,6 +34,7 @@ export async function signFixtureJwt(opts: {
   if (!issuer) throw new Error("NEXT_PUBLIC_AUTH_URL is not set");
 
   return new SignJWT({
+    token_use: "access",
     email: "char-jwt@example.com",
     scope: "openid profile",
     client_id: "characterization",
@@ -41,6 +42,33 @@ export async function signFixtureJwt(opts: {
     .setProtectedHeader({ alg: "RS256", kid: opts.kid ?? FIXTURE_KID })
     .setSubject(opts.sub.toString())
     .setIssuer(issuer)
+    .setIssuedAt()
+    .setExpirationTime(`${opts.expiresInSeconds ?? 3600}s`)
+    .sign(key);
+}
+
+/** Mirrors signIdToken's claim shape — same key/issuer/kid as an access
+ *  token, only the token_use claim (and presence of aud) differs. Used to
+ *  prove the API rejects an ID Token used as a bearer credential. */
+export async function signFixtureIdToken(opts: {
+  sub: number;
+  expiresInSeconds?: number;
+  issuer?: string;
+  kid?: string;
+  key?: CryptoKey;
+}): Promise<string> {
+  const key = opts.key ?? (await signingKey());
+  const issuer = opts.issuer ?? process.env.NEXT_PUBLIC_AUTH_URL;
+  if (!issuer) throw new Error("NEXT_PUBLIC_AUTH_URL is not set");
+
+  return new SignJWT({
+    token_use: "id",
+    email: "char-jwt@example.com",
+  })
+    .setProtectedHeader({ alg: "RS256", kid: opts.kid ?? FIXTURE_KID })
+    .setSubject(opts.sub.toString())
+    .setIssuer(issuer)
+    .setAudience("characterization")
     .setIssuedAt()
     .setExpirationTime(`${opts.expiresInSeconds ?? 3600}s`)
     .sign(key);

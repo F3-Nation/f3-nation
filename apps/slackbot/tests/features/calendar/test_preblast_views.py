@@ -156,9 +156,7 @@ class PreblastViewsTest(unittest.TestCase):
         block_ids = [getattr(b, "block_id", None) for b in result.blocks]
         self.assertIn(actions.EVENT_PREBLAST_MOLESKINE_EDIT, block_ids)
         # Check that the initial value was set
-        rich_block = next(
-            b for b in result.blocks if b.block_id == actions.EVENT_PREBLAST_MOLESKINE_EDIT
-        )
+        rich_block = next(b for b in result.blocks if b.block_id == actions.EVENT_PREBLAST_MOLESKINE_EDIT)
         self.assertIsNotNone(rich_block.element.initial_value)
 
     def test_build_preblast_form_preloads_existing_coqs(self):
@@ -176,9 +174,7 @@ class PreblastViewsTest(unittest.TestCase):
             existing_preblast_ts=None,
             preblast_moleskin_template={"type": "rich_text", "elements": [{"type": "text", "text": "template"}]},
         )
-        rich_block = next(
-            b for b in result.blocks if b.block_id == actions.EVENT_PREBLAST_MOLESKINE_EDIT
-        )
+        rich_block = next(b for b in result.blocks if b.block_id == actions.EVENT_PREBLAST_MOLESKINE_EDIT)
         self.assertIsNotNone(rich_block.element.initial_value)
 
     def test_build_select_form_returns_sdk_block_view(self):
@@ -209,9 +205,7 @@ class PreblastViewsTest(unittest.TestCase):
         result = self._build_form(event, user_is_q=True)
 
         action_ids = [
-            getattr(element, "action_id", None)
-            for block in result.blocks
-            for element in getattr(block, "elements", [])
+            getattr(element, "action_id", None) for block in result.blocks for element in getattr(block, "elements", [])
         ]
 
         self.assertIn(actions.EVENT_PREBLAST_REMOVE_Q, action_ids)
@@ -340,11 +334,7 @@ class PreblastViewsTest(unittest.TestCase):
         }
         mock_get_user.return_value = MagicMock(user_id=coq_user_id)
 
-        body = {
-            "view": {
-                "private_metadata": f'{{"event_instance_id": {event_id}, "preblast_ts": "None"}}'
-            }
-        }
+        body = {"view": {"private_metadata": f'{{"event_instance_id": {event_id}, "preblast_ts": "None"}}'}}
 
         handle_event_preblast_edit(body, MagicMock(), MagicMock(), {}, MagicMock())
 
@@ -395,11 +385,7 @@ class PreblastViewsTest(unittest.TestCase):
             actions.EVENT_PREBLAST_COQS: [],
         }
 
-        body = {
-            "view": {
-                "private_metadata": f'{{"event_instance_id": {event_id}, "preblast_ts": "None"}}'
-            }
-        }
+        body = {"view": {"private_metadata": f'{{"event_instance_id": {event_id}, "preblast_ts": "None"}}'}}
 
         handle_event_preblast_edit(body, MagicMock(), MagicMock(), {}, MagicMock())
 
@@ -448,7 +434,7 @@ class PreblastViewsTest(unittest.TestCase):
         body = {
             "view": {
                 "id": "V_SUBMISSION_1",
-                "private_metadata": f'{{"event_instance_id": {event_id}, "preblast_ts": "None"}}'
+                "private_metadata": f'{{"event_instance_id": {event_id}, "preblast_ts": "None"}}',
             }
         }
 
@@ -512,7 +498,7 @@ class PreblastViewsTest(unittest.TestCase):
         body = {
             "view": {
                 "id": "V_SUBMISSION_2",
-                "private_metadata": f'{{"event_instance_id": {event_id}, "preblast_ts": "None"}}'
+                "private_metadata": f'{{"event_instance_id": {event_id}, "preblast_ts": "None"}}',
             }
         }
 

@@ -1,7 +1,7 @@
 {
   "name": "f3-me",
   "type": "module",
-  "version": "2.1.4",
+  "version": "2.2.0",
   "private": true,
   "scripts": {
     "dev": "next dev --port 3003",
@@ -22,6 +22,7 @@
     "@acme/shared": "workspace:*",
     "@acme/storage": "workspace:*",
     "@acme/ui": "workspace:*",
+    "@f3nation/health": "workspace:*",
     "@f3nation/sso-next": "workspace:*",
     "@orpc/client": "catalog:",
     "@orpc/server": "catalog:",

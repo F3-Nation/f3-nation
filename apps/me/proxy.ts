@@ -11,7 +11,7 @@ import { sso } from "@/lib/auth/oauth";
 import { env } from "@/env";
 import { logDebug, logWarn } from "@/lib/logging";
 
-const PUBLIC_PATHS = ["/", "/api/auth/login", "/api/auth/callback"];
+const PUBLIC_PATHS = ["/", "/api/auth/login", "/api/auth/callback", "/health"];
 const STATIC_ASSET_PATTERN =
   /\.(?:css|js|mjs|map|txt|xml|json|png|jpe?g|gif|webp|svg|ico|bmp|avif|woff2?|ttf|otf|eot|mp4|webm|mp3|wav|ogg|pdf)$/i;
 

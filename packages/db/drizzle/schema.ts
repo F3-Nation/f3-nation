@@ -1124,6 +1124,10 @@ export const oauthClients = authProviderSchema.table("oauth_clients", {
     .default(sql`timezone('utc'::text, now())`)
     .notNull(),
   isActive: boolean("is_active").default(true).notNull(),
+  // Public clients (RFC 8252 native apps) cannot keep a client_secret
+  // confidential; token exchange for them relies on PKCE instead of the
+  // secret. Confidential (default) clients still require the secret.
+  isPublic: boolean("is_public").default(false).notNull(),
 });
 
 export const oauthAuthorizationCodes = authProviderSchema.table(
@@ -1179,6 +1183,12 @@ export const oauthRefreshTokens = authProviderSchema.table(
     createdAt: timestamp("created_at", { mode: "string" })
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
+    // Set (instead of deleting the row) when this token is consumed by a
+    // refresh-token rotation. Kept around, distinct from natural expiry via
+    // expiresAt, so a later presentation of this exact token can be told
+    // apart from a garbage/never-issued token — see exchangeRefreshToken's
+    // reuse-detection path (RFC 9700 §4.14.2).
+    rotatedAt: timestamp("rotated_at", { mode: "string" }),
   },
 );
 

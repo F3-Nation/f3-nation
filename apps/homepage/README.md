@@ -108,3 +108,5 @@ Apps belong to one of three groups: **Everyday Use**, **Region Admins**, or **De
 ### Adding a new route
 
 Create a new directory under `src/app/`. Because the site uses `output: "export"`, every page must be fully static — no `getServerSideProps`, no API routes, no dynamic segments without `generateStaticParams`.
+
+It is recommended that you add a dedicated README.md into the new directory.
