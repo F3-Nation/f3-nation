@@ -3,6 +3,7 @@ import NextAuth from "next-auth";
 import type { Session } from "next-auth";
 
 import { authConfig } from "./config";
+import { logWarn } from "./logger";
 
 export type { Session } from "next-auth";
 export const { handlers, auth, signIn, signOut } = NextAuth(authConfig);
@@ -17,15 +18,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth(authConfig);
  *
  * Must be defined after `NextAuth(authConfig)` above: that call runs
  * `setEnvDefaults` on `authConfig` (fills in `secret`/`basePath`/`trustHost`
- * from env) as a side effect, and this package's only export surface is this
- * module, so no caller can reach `getSessionFromHeaders` before that has run.
+ * from env) as a side effect. `getSessionFromHeaders` is reachable only via
+ * this module's default export path (`.`), and this module's body evaluates
+ * top-to-bottom before any importer's code runs, so no caller can reach it
+ * before `NextAuth(authConfig)` has. Do not re-export it from a subpath
+ * entry (e.g. `./config`, `./lib/*`) without re-verifying this ordering.
  */
 export async function getSessionFromHeaders(
   headers: Headers,
 ): Promise<Session | null> {
+  const proto =
+    headers.get("x-forwarded-proto")?.split(",")[0]?.trim() ?? "https";
   const url = createActionURL(
     "session",
-    headers.get("x-forwarded-proto") ?? "https",
+    proto,
     headers,
     process.env,
     authConfig,
@@ -39,6 +45,8 @@ export async function getSessionFromHeaders(
     callbacks: {
       ...authConfig.callbacks,
       async session(...args) {
+        // Unreachable with our current authConfig -- kept for parity in case
+        // a future authConfig omits its own session callback or user field.
         const session = (await authConfig.callbacks?.session?.(...args)) ?? {
           ...args[0].session,
           expires:
@@ -50,9 +58,9 @@ export async function getSessionFromHeaders(
     },
   });
 
-  if (!response.ok) return null;
-  const session = (await response.json()) as Session | Record<string, never>;
-  return session && Object.keys(session).length > 0
-    ? (session as Session)
-    : null;
+  if (!response.ok) {
+    logWarn("auth.session.non_ok_response", { status: response.status });
+    return null;
+  }
+  return (await response.json()) as Session | null;
 }

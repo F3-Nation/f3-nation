@@ -172,7 +172,7 @@ export const nationAdminProcedure = withSessionAndDb.use(
 const getSession = async ({ context }: { context: BaseContext }) => {
   let session: Session | null = null;
 
-  // Skip auth() call for SSG requests to allow static generation
+  // Skip session resolution for SSG requests to allow static generation
   // The SSG client uses API key auth instead of session auth
   const isSSGRequest =
     context.reqHeaders?.get(Header.Client) === Client.ORPC_SSG;
