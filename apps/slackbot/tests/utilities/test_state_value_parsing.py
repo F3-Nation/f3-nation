@@ -14,11 +14,11 @@ See https://github.com/F3-Nation/f3-nation/issues/730
 import os
 import sys
 
-
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 from utilities.helper_functions import extract_state_values  # noqa: E402
-from utilities.slack.sdk_orm import SdkBlockView  # noqa: E402
 from utilities.slack import actions  # noqa: E402
+from utilities.slack.sdk_orm import SdkBlockView  # noqa: E402
+
 
 def _body(block_id: str, state: dict) -> dict:
     """Wraps a single element state in a realistic view_submission payload."""

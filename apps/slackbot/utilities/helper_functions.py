@@ -942,7 +942,6 @@ def extract_state_values(body: dict) -> dict[str, Any]:
                 "email_text_input",
                 "url_text_input",
                 "number_input",
-
             ):
                 form_data[block_id] = state.get("value")
             # Pickers carry selected_date/selected_time, not value.

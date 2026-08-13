@@ -516,6 +516,7 @@ class PreblastViewsTest(unittest.TestCase):
         self.assertEqual(kwargs["level"], constants.AlertLevel.ERROR)
         self.assertEqual(kwargs["view_id"], "V_SUBMISSION_2")
 
+
 class TestPreblastEditStartTimeIntegration(unittest.TestCase):
     """Pins the parse → handler → service path that issue #730 broke.
 
@@ -578,6 +579,7 @@ class TestPreblastEditStartTimeIntegration(unittest.TestCase):
         kwargs = preblast_service.build_update_command.call_args.kwargs
         self.assertEqual(kwargs["start_time"], "0530")
         self.assertEqual(kwargs["name"], "The Gauntlet")
+
 
 if __name__ == "__main__":
     unittest.main()
