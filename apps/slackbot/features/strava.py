@@ -18,6 +18,43 @@ from utilities.helper_functions import parse_rich_block, replace_user_channel_id
 from utilities.slack import actions, forms
 from utilities.slack import orm as slack_orm
 
+STRAVA_ACTIVITY_BUTTON_LABEL_MAX_LENGTH = 36
+
+
+def format_strava_activity_button_label(date_fmt: str, activity_name: str) -> str:
+    prefix = f"{date_fmt} - "
+    available_name_length = STRAVA_ACTIVITY_BUTTON_LABEL_MAX_LENGTH - len(prefix)
+    if len(activity_name) > available_name_length:
+        activity_name = f"{activity_name[: available_name_length - 1].rstrip()}…"
+    return f"{prefix}{activity_name}"
+
+
+def build_strava_activity_blocks(
+    activities: List[Dict],
+    channel_id: str,
+    backblast_ts: str,
+    backblast_title: str,
+) -> List[slack_orm.ActionsBlock]:
+    button_elements = []
+    for activity in activities:
+        date = datetime.strptime(activity["start_date_local"], "%Y-%m-%dT%H:%M:%SZ")
+        date_fmt = date.strftime("%m-%d %H:%M")
+        button_elements.append(
+            slack_orm.ButtonElement(
+                label=format_strava_activity_button_label(date_fmt, str(activity["name"])),
+                action="-".join([actions.STRAVA_ACTIVITY_BUTTON, str(activity["id"])]),
+                value=json.dumps(
+                    {
+                        actions.STRAVA_ACTIVITY_ID: activity["id"],
+                        actions.STRAVA_CHANNEL_ID: channel_id,
+                        actions.STRAVA_BACKBLAST_TS: backblast_ts,
+                        actions.STRAVA_BACKBLAST_TITLE: backblast_title,
+                    }
+                ),
+            )
+        )
+    return [slack_orm.ActionsBlock(elements=button_elements)]
+
 
 def build_strava_form(body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings):
     user_id = safe_get(body, "user_id") or safe_get(body, "user", "id")
@@ -103,28 +140,13 @@ def build_strava_form(body: dict, client: WebClient, logger: Logger, context: di
                     ),
                     *auth_blocks,
                 ]
-
-            button_elements = []
-            for activity in strava_recent_activities:
-                date = datetime.strptime(activity["start_date_local"], "%Y-%m-%dT%H:%M:%SZ")
-                date_fmt = date.strftime("%m-%d %H:%M")
-                button_elements.append(
-                    slack_orm.ButtonElement(
-                        label=f"{date_fmt} - {activity['name']}"[:75],
-                        action="-".join([actions.STRAVA_ACTIVITY_BUTTON, str(activity["id"])]),
-                        value=json.dumps(
-                            {
-                                actions.STRAVA_ACTIVITY_ID: activity["id"],
-                                actions.STRAVA_CHANNEL_ID: channel_id,
-                                actions.STRAVA_BACKBLAST_TS: backblast_ts,
-                                actions.STRAVA_BACKBLAST_TITLE: backblast_meta["title"],
-                                # actions.STRAVA_BACKBLAST_MOLESKINE: moleskine_text[:1500],
-                            }
-                        ),
-                        # TODO: add confirmation modal
-                    )
+            else:
+                strava_blocks = build_strava_activity_blocks(
+                    activities=strava_recent_activities,
+                    channel_id=channel_id,
+                    backblast_ts=backblast_ts,
+                    backblast_title=backblast_meta["title"],
                 )
-                strava_blocks = [slack_orm.ActionsBlock(elements=button_elements)]
 
         strava_form = slack_orm.BlockView(blocks=strava_blocks)
 

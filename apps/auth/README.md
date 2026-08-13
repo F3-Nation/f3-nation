@@ -442,6 +442,24 @@ The CLI prompts for:
 
 Production modifications require explicit confirmation. The plaintext secret is displayed once and cannot be retrieved later.
 
+#### Public clients (native / mobile apps)
+
+Native apps (iOS/Android) cannot keep a `client_secret` confidential — anyone
+can extract it from the compiled binary. Per RFC 8252, register these as
+**public clients**: answer `y` to the "Public client?" prompt. For public
+clients:
+
+- No `client_secret` is issued or accepted. The authorization-code grant is
+  protected by **PKCE** (S256), which is already mandatory for all clients;
+  the refresh-token grant is protected by single-use rotation of the (opaque)
+  refresh token. Neither grant consults a secret for a public client.
+- Redirect URIs may additionally use a reverse-domain custom scheme with no
+  authority component (e.g. `com.example.app:/oauth2redirect`, per RFC 8252
+  §7.1) alongside HTTPS/localhost.
+
+Confidential (server-side) clients are unchanged and still require the
+secret.
+
 ### Programmatic Registration
 
 ```sql

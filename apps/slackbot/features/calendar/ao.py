@@ -214,7 +214,7 @@ def handle_ao_add(body: dict, client: WebClient, logger: Logger, context: dict, 
                 logo_url=logo_url,
             )
 
-    trigger_map_revalidation(logger=logger,action=map_action, map_update_data=MapUpdateData(orgId=org_id))
+    trigger_map_revalidation(logger=logger, action=map_action, map_update_data=MapUpdateData(orgId=org_id))
 
     action_text = (
         f":pencil2: AO edited: {name} by <@{slack_user_id or 'app'}>"
