@@ -26,6 +26,7 @@ from infrastructure.api_client.exceptions import F3ApiNotFoundError
 PREBLAST_CHANNEL_META_KEY = "preblast_channel_id"
 PREBLAST_POST_CHANNEL_META_KEY = "preblast_post_channel_id"
 
+
 def _resolve_and_validate_existing(
     repo: ApiEventInstanceRepository,
     instance_id: int,
@@ -39,6 +40,7 @@ def _resolve_and_validate_existing(
     if not existing.event_type_ids:
         raise ValueError(f"Event instance {instance_id} is missing required field 'event_type_ids'")
     return existing
+
 
 def _parse_instance(raw: dict) -> EventInstanceData:
     """Convert a raw API response dict to an ``EventInstanceData`` object."""
