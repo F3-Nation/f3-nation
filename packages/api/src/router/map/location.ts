@@ -650,14 +650,10 @@ export const mapLocationRouter = os.router({
         )
         .map((e) => ({ ...e, id: e.id, name: e.name }));
 
-      // Return a message instead of throwing so the client can show a friendly
-      // "deleted/unavailable" panel without crashing into an error state.
-      //
-      // No rows is the ordinary case of a location whose events have all ended
-      // or don't start within the current date window (see
-      // withinCurrentEventDateWindow) — the message is user-facing, so it must
-      // not leak an internal diagnostic for what is a routine "stale link".
-      if (results.length === 0) {
+      // No events → stale link (LEFT JOIN yields a null-event row when all
+      // events fall outside the date window). Return a message instead of
+      // throwing so the client shows a friendly panel.
+      if (events.length === 0) {
         return {
           location: null,
           message: "This workout is no longer scheduled.",
