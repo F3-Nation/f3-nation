@@ -1,0 +1,1 @@
+ALTER TABLE "auth"."oauth_refresh_tokens" ADD COLUMN "rotated_at" timestamp;

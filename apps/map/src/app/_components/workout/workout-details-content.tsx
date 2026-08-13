@@ -25,6 +25,7 @@ import {
   selectStatusInstances,
   statusLabel,
 } from "~/utils/event-status-map";
+import { getEndDateLabel } from "~/utils/get-end-date-label";
 import { useUpdateEventSearchParams } from "~/utils/hooks/use-update-event-search-params";
 import { getStatusSolidBg } from "~/utils/map-status-colors";
 import { ModalType, openModal } from "~/utils/store/modal";
@@ -76,6 +77,7 @@ export function createWorkoutEventFromInstance(
     endTime: instance.endTime,
     eventTypes: instance.eventTypes,
     aoId: null,
+    endDate: null,
     aoLogo: instance.aoLogo,
     aoWebsite: null,
     aoName: instance.aoName,
@@ -227,6 +229,7 @@ export const WorkoutDetailsContent = ({
         id: type.eventTypeId,
         name: type.eventTypeName,
       })),
+      endDate: parentEvent.endDate ?? null,
       aoId: parentEvent.aos[0]?.aoId ?? null,
       aoName: parentEvent.aos[0]?.aoName ?? null,
       aoLogo: null,
@@ -272,6 +275,16 @@ export const WorkoutDetailsContent = ({
     [aoContact],
   );
 
+  const whenText = useMemo(
+    () => (event ? getWhenFromWorkout(event) : ""),
+    [event],
+  );
+
+  const endDateLabel = useMemo(
+    () => getEndDateLabel(event?.endDate),
+    [event?.endDate],
+  );
+
   const workoutFields = useMemo(
     () =>
       event && location
@@ -306,7 +319,15 @@ export const WorkoutDetailsContent = ({
                 </p>
               ) : null,
             ].filter(isTruthy),
-            When: event ? getWhenFromWorkout(event) : "",
+            When:
+              whenText || endDateLabel ? (
+                <>
+                  {whenText}
+                  {endDateLabel ? (
+                    <p className="text-sm">{endDateLabel}</p>
+                  ) : null}
+                </>
+              ) : null,
             Contact:
               hasAoContact && aoContact ? (
                 <ContactLinks contact={aoContact} iconSize="sm" />
@@ -314,7 +335,7 @@ export const WorkoutDetailsContent = ({
             Notes: event?.description ? textLink(event.description) : null,
           }
         : {},
-    [event, location, aoContact, hasAoContact],
+    [event, location, aoContact, hasAoContact, whenText, endDateLabel],
   );
 
   const hasMultipleWorkouts = (results?.location?.events.length ?? 0) > 1;

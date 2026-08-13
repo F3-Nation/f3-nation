@@ -23,7 +23,7 @@ import {
   IsActiveStatus,
 } from "@acme/shared/app/enums";
 import { arrayOrSingle, getFullAddress } from "@acme/shared/app/functions";
-import { EventInsertSchema } from "@acme/validators";
+import { EventCrupdateSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
@@ -541,6 +541,7 @@ export const eventRouter = {
             location: z.string().nullable().describe("Location"),
             locationId: z.number().nullable().describe("Location ID"),
             startDate: z.string().nullable().describe("Event start date"),
+            endDate: z.string().nullable().describe("Event end date"),
             dayOfWeek: z
               .enum(DayOfWeek)
               .nullable()
@@ -596,6 +597,7 @@ export const eventRouter = {
           location: aoOrg.name,
           locationId: schema.events.locationId,
           startDate: schema.events.startDate,
+          endDate: schema.events.endDate,
           dayOfWeek: schema.events.dayOfWeek,
           startTime: schema.events.startTime,
           endTime: schema.events.endTime,
@@ -677,7 +679,7 @@ export const eventRouter = {
       return { event: event ?? null };
     }),
   crupdate: editorProcedure
-    .input(EventInsertSchema.partial({ id: true }))
+    .input(EventCrupdateSchema)
     .route({
       method: "POST",
       path: "/",

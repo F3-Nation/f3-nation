@@ -7,9 +7,11 @@ import {
   and,
   count,
   eq,
+  gte,
   isNotNull,
   isNull,
   ne,
+  lte,
   or,
   schema,
   sql,
@@ -21,6 +23,21 @@ import type { LowBandwidthF3Marker } from "@acme/validators";
 import { LowBandwidthF3Marker as LowBandwidthF3MarkerSchema } from "@acme/validators";
 
 import { protectedProcedure } from "../../shared";
+
+/**
+ * The date window that makes an event current for the map: it starts within the
+ * next six days, and it either has no end date or one that hasn't passed.
+ * Shared by eventsAndLocations and locationWorkout so the two endpoints can't
+ * drift apart on which events count as current.
+ */
+const withinCurrentEventDateWindow = () =>
+  and(
+    lte(schema.events.startDate, sql`CURRENT_DATE + INTERVAL '6 days'`),
+    or(
+      isNull(schema.events.endDate),
+      gte(schema.events.endDate, sql`CURRENT_DATE`),
+    ),
+  );
 
 export const mapLocationRouter = os.router({
   eventsAndLocations: protectedProcedure
@@ -88,6 +105,7 @@ export const mapLocationRouter = os.router({
             eq(schema.events.locationId, schema.locations.id),
             eq(schema.events.isActive, true),
             eq(schema.events.isPrivate, false),
+            withinCurrentEventDateWindow(),
           ),
         )
         .leftJoin(aoOrg, eq(schema.events.orgId, aoOrg.id))
@@ -474,6 +492,12 @@ export const mapLocationRouter = os.router({
                     .describe("Day of week"),
                   startTime: z.string().nullable().describe("Event start time"),
                   endTime: z.string().nullable().describe("Event end time"),
+                  endDate: z
+                    .string()
+                    .nullable()
+                    .describe(
+                      "Date the event stops recurring, or null when open-ended",
+                    ),
                   eventTypes: z
                     .array(z.object({ id: z.number(), name: z.string() }))
                     .describe("Event types"),
@@ -545,6 +569,7 @@ export const mapLocationRouter = os.router({
             dayOfWeek: schema.events.dayOfWeek,
             startTime: schema.events.startTime,
             endTime: schema.events.endTime,
+            endDate: schema.events.endDate,
             eventTypes: sql<{ id: number; name: string }[]>`COALESCE(
             json_agg(
               DISTINCT jsonb_build_object(
@@ -570,6 +595,7 @@ export const mapLocationRouter = os.router({
             eq(schema.locations.id, schema.events.locationId),
             eq(schema.events.isActive, true),
             eq(schema.events.isPrivate, false),
+            withinCurrentEventDateWindow(),
           ),
         )
         .leftJoin(parentOrg, eq(schema.events.orgId, parentOrg.id))
@@ -626,6 +652,18 @@ export const mapLocationRouter = os.router({
 
       // Return a message instead of throwing so the client can show a friendly
       // "deleted/unavailable" panel without crashing into an error state.
+      //
+      // No rows is the ordinary case of a location whose events have all ended
+      // or don't start within the current date window (see
+      // withinCurrentEventDateWindow) — the message is user-facing, so it must
+      // not leak an internal diagnostic for what is a routine "stale link".
+      if (results.length === 0) {
+        return {
+          location: null,
+          message: "This workout is no longer scheduled.",
+        };
+      }
+
       if (location?.lat == null || location?.lon == null) {
         return {
           location: null,
