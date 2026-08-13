@@ -46,6 +46,7 @@ vi.mock("~/lib/logging", () => ({
 }));
 vi.mock("~/lib/jwt", () => ({
   signAccessToken: vi.fn(async () => "signed.jwt.token"),
+  signIdToken: vi.fn(async () => "signed.id.token"),
   getJWKS: vi.fn(async () => ({ keys: [{ kty: "RSA" }] })),
 }));
 vi.mock("jose", () => ({
@@ -750,9 +751,41 @@ describe("validateAccessToken", () => {
     expect(result).toBeNull();
   });
 
-  it("returns null when the token's user no longer exists", async () => {
+  it("rejects an ID Token presented as an access token (token_use=id)", async () => {
+    vi.mocked(jwtVerify).mockResolvedValueOnce({
+      payload: {
+        sub: "42",
+        scope: "openid",
+        client_id: PUBLIC_CLIENT.id,
+        token_use: "id",
+      },
+      protectedHeader: {},
+    } as never);
+
+    const result = await validateAccessToken("an-id-token");
+
+    expect(result).toBeNull();
+  });
+
+  it("rejects a token with no token_use discriminator at all", async () => {
     vi.mocked(jwtVerify).mockResolvedValueOnce({
       payload: { sub: "42", scope: "openid", client_id: PUBLIC_CLIENT.id },
+      protectedHeader: {},
+    } as never);
+
+    const result = await validateAccessToken("token-missing-discriminator");
+
+    expect(result).toBeNull();
+  });
+
+  it("returns null when the token's user no longer exists", async () => {
+    vi.mocked(jwtVerify).mockResolvedValueOnce({
+      payload: {
+        sub: "42",
+        scope: "openid",
+        client_id: PUBLIC_CLIENT.id,
+        token_use: "access",
+      },
       protectedHeader: {},
     } as never);
     dbMock.select.mockReturnValueOnce(chain([]));
@@ -764,7 +797,12 @@ describe("validateAccessToken", () => {
 
   it("returns the userinfo payload for a valid token", async () => {
     vi.mocked(jwtVerify).mockResolvedValueOnce({
-      payload: { sub: "42", scope: "openid", client_id: PUBLIC_CLIENT.id },
+      payload: {
+        sub: "42",
+        scope: "openid",
+        client_id: PUBLIC_CLIENT.id,
+        token_use: "access",
+      },
       protectedHeader: {},
     } as never);
     dbMock.select.mockReturnValueOnce(

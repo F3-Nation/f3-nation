@@ -52,6 +52,7 @@ export async function signAccessToken(params: {
   const issuer = env.NEXT_PUBLIC_AUTH_URL;
 
   return new SignJWT({
+    token_use: "access",
     email: params.email,
     scope: params.scope,
     client_id: params.clientId,
@@ -59,6 +60,62 @@ export async function signAccessToken(params: {
     .setProtectedHeader({ alg: "RS256", kid: "f3-auth-1" })
     .setSubject(params.sub.toString())
     .setIssuer(issuer)
+    .setIssuedAt()
+    .setExpirationTime(`${params.expiresInSeconds}s`)
+    .sign(privateKey);
+}
+
+/**
+ * Sign an OIDC ID Token with RS256. Only call this when "openid" is in the
+ * granted scope — an ID Token asserts identity to the *client app itself*
+ * (aud = client_id). No consumer reads it yet; this exists for future
+ * RP-initiated logout (id_token_hint) and client-side identity checks.
+ * Claim *selection* mirrors the userinfo endpoint's own scope gating
+ * (name/picture under "profile", email/email_verified under "email"), but
+ * the two surfaces aren't shape-identical: userinfo emits name/picture as
+ * literal null when unavailable, this omits them entirely (see the comment
+ * below on why), so don't assume a client can treat the two responses
+ * interchangeably.
+ */
+export async function signIdToken(params: {
+  sub: number;
+  clientId: string;
+  scope: string;
+  expiresInSeconds: number;
+  name?: string | null;
+  picture?: string | null;
+  email?: string | null;
+  emailVerified?: boolean;
+}): Promise<string> {
+  const privateKey = await getPrivateKey();
+  const issuer = env.NEXT_PUBLIC_AUTH_URL;
+  const scopes = new Set(params.scope.split(" "));
+
+  // Optional claims are omitted entirely when unavailable, not emitted as
+  // explicit null — relying parties commonly validate these as "string or
+  // absent," and a literal null on a claim they expect typed can break
+  // strict OIDC parsing.
+  //
+  // token_use is always present, unlike the scope-gated claims below —
+  // this token shares its signing key, kid, and issuer with access tokens
+  // (see signAccessToken), so without an explicit discriminator every
+  // verifier that checks signature + issuer alone would accept an ID
+  // Token as a fully privileged API credential.
+  const claims: Record<string, unknown> = { token_use: "id" };
+  if (scopes.has("profile")) {
+    if (params.name != null) claims.name = params.name;
+    if (params.picture != null) claims.picture = params.picture;
+  }
+  if (scopes.has("email") && params.email != null) {
+    claims.email = params.email;
+    claims.email_verified = !!params.emailVerified;
+  }
+
+  return new SignJWT(claims)
+    .setProtectedHeader({ alg: "RS256", kid: "f3-auth-1" })
+    .setSubject(params.sub.toString())
+    .setIssuer(issuer)
+    .setAudience(params.clientId)
     .setIssuedAt()
     .setExpirationTime(`${params.expiresInSeconds}s`)
     .sign(privateKey);
