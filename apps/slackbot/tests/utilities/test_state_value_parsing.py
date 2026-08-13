@@ -14,10 +14,11 @@ See https://github.com/F3-Nation/f3-nation/issues/730
 import os
 import sys
 
+
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 from utilities.helper_functions import extract_state_values  # noqa: E402
 from utilities.slack.sdk_orm import SdkBlockView  # noqa: E402
-
+from utilities.slack import actions  # noqa: E402
 
 def _body(block_id: str, state: dict) -> dict:
     """Wraps a single element state in a realistic view_submission payload."""
@@ -53,19 +54,36 @@ def test_extract_state_values_text_inputs_still_use_value():
 
 
 def test_extract_state_values_preblast_form_mixed_payload():
-    """End-to-end shape of the preblast edit modal submission (issue #730)."""
+    """Mixed payload using the preblast form's real block IDs (issue #730).
+
+    Block IDs come from ``actions`` rather than literals: the form uses those
+    constants (``preblast_views.py``), and they are not uniformly formatted —
+    ``EVENT_PREBLAST_START_TIME`` is underscored while the other two are
+    hyphenated. The parser is block-ID agnostic, so a drifted literal would
+    never fail here.
+
+    This exercises the parser only; see
+    ``test_preblast_views.TestPreblastEditStartTimeIntegration`` for the
+    handler path.
+    """
     body = {
         "view": {
             "state": {
                 "values": {
-                    "event_preblast_start_time": {
-                        "event_preblast_start_time": {"type": "timepicker", "selected_time": "05:30"}
+                    actions.EVENT_PREBLAST_START_TIME: {
+                        actions.EVENT_PREBLAST_START_TIME: {
+                            "type": "timepicker",
+                            "selected_time": "05:30",
+                        }
                     },
-                    "event_preblast_title": {
-                        "event_preblast_title": {"type": "plain_text_input", "value": "The Gauntlet"}
+                    actions.EVENT_PREBLAST_TITLE: {
+                        actions.EVENT_PREBLAST_TITLE: {
+                            "type": "plain_text_input",
+                            "value": "The Gauntlet",
+                        }
                     },
-                    "event_preblast_location": {
-                        "event_preblast_location": {
+                    actions.EVENT_PREBLAST_LOCATION: {
+                        actions.EVENT_PREBLAST_LOCATION: {
                             "type": "static_select",
                             "selected_option": {"value": "12"},
                         }
@@ -75,9 +93,9 @@ def test_extract_state_values_preblast_form_mixed_payload():
         }
     }
     assert extract_state_values(body) == {
-        "event_preblast_start_time": "05:30",
-        "event_preblast_title": "The Gauntlet",
-        "event_preblast_location": "12",
+        actions.EVENT_PREBLAST_START_TIME: "05:30",
+        actions.EVENT_PREBLAST_TITLE: "The Gauntlet",
+        actions.EVENT_PREBLAST_LOCATION: "12",
     }
 
 
