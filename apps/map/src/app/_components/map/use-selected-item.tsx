@@ -98,6 +98,7 @@ export const useSelectedItem = () => {
           endTime: instance.endTime,
           description: null,
           eventTypes: instance.eventTypes,
+          startDate: null,
           endDate: null,
           aoId: null,
           aoName: instance.aoName,

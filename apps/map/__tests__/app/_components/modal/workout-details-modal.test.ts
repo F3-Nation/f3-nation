@@ -4,7 +4,10 @@ import {
   isInstanceEventId,
   resolveAoId,
 } from "~/app/_components/map/location-edit-buttons";
-import { resolveModalEventId } from "~/app/_components/modal/workout-details-modal";
+import {
+  resolveEditableEventId,
+  resolveModalEventId,
+} from "~/app/_components/modal/workout-details-modal";
 
 describe("resolveModalEventId", () => {
   const events = [{ id: 10 }, { id: 20 }];
@@ -68,6 +71,72 @@ describe("resolveModalEventId", () => {
         dataEventId: undefined,
         selectedEventId: null,
         events: [],
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("resolveEditableEventId", () => {
+  const events = [{ id: 10 }, { id: 20 }];
+
+  it("passes a series event id through untouched", () => {
+    expect(
+      resolveEditableEventId({
+        modalEventId: 20,
+        upcomingInstances: undefined,
+        events,
+      }),
+    ).toBe(20);
+  });
+
+  it("resolves an instance id to its parent series event", () => {
+    expect(
+      resolveEditableEventId({
+        modalEventId: -42,
+        upcomingInstances: [{ id: 42, seriesId: 20 }],
+        events,
+      }),
+    ).toBe(20);
+  });
+
+  it("returns null for a one-off instance with no parent series", () => {
+    expect(
+      resolveEditableEventId({
+        modalEventId: -42,
+        upcomingInstances: [{ id: 42, seriesId: null }],
+        events,
+      }),
+    ).toBeNull();
+  });
+
+  it("returns null when the parent series is not at this location", () => {
+    // The edit forms act on the parent series, so pointing them at an event
+    // this location does not own would edit an unrelated workout.
+    expect(
+      resolveEditableEventId({
+        modalEventId: -42,
+        upcomingInstances: [{ id: 42, seriesId: 999 }],
+        events,
+      }),
+    ).toBeNull();
+  });
+
+  it("returns null while the instances query is still loading", () => {
+    expect(
+      resolveEditableEventId({
+        modalEventId: -42,
+        upcomingInstances: undefined,
+        events,
+      }),
+    ).toBeNull();
+  });
+
+  it("returns null when there is no selection", () => {
+    expect(
+      resolveEditableEventId({
+        modalEventId: null,
+        upcomingInstances: [{ id: 42, seriesId: 20 }],
+        events,
       }),
     ).toBeNull();
   });

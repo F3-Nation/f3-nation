@@ -77,6 +77,7 @@ export function createWorkoutEventFromInstance(
     endTime: instance.endTime,
     eventTypes: instance.eventTypes,
     aoId: null,
+    startDate: null,
     endDate: null,
     aoLogo: instance.aoLogo,
     aoWebsite: null,
@@ -164,25 +165,28 @@ export const WorkoutDetailsContent = ({
     return sortUpcomingInstancesByDate(matches);
   }, [selectedEventId, upcomingInstancesData, selectedInstance]);
 
-  const baseEventIds = useMemo(
-    () => new Set((results?.location?.events ?? []).map((e) => e.id)),
+  const baseEvents = useMemo(
+    () => results?.location?.events ?? [],
     [results?.location?.events],
+  );
+
+  const baseEventIds = useMemo(
+    () => new Set(baseEvents.map((e) => e.id)),
+    [baseEvents],
   );
 
   const eventStatusMap = useMemo(() => {
     const currentLocationId = results?.location?.id;
-    if (currentLocationId == null || !upcomingInstancesData) {
-      return new Map<number, MapStatus>();
-    }
+    if (currentLocationId == null) return new Map<number, MapStatus>();
     return buildEventStatusMap(
       selectStatusInstances(
-        upcomingInstancesData,
+        upcomingInstancesData ?? [],
         currentLocationId,
         baseEventIds,
       ),
-      baseEventIds,
+      baseEvents,
     );
-  }, [upcomingInstancesData, results?.location?.id, baseEventIds]);
+  }, [upcomingInstancesData, results?.location?.id, baseEventIds, baseEvents]);
 
   const instanceEvents = useMemo(
     () =>
@@ -229,6 +233,7 @@ export const WorkoutDetailsContent = ({
         id: type.eventTypeId,
         name: type.eventTypeName,
       })),
+      startDate: parentEvent.startDate ?? null,
       endDate: parentEvent.endDate ?? null,
       aoId: parentEvent.aos[0]?.aoId ?? null,
       aoName: parentEvent.aos[0]?.aoName ?? null,

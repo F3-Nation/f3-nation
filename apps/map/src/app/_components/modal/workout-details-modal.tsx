@@ -12,7 +12,6 @@ import { selectedItemStore } from "~/utils/store/selected-item";
 import {
   formatTime,
   getShortDayOfWeek,
-  isInstanceEventId,
   LocationEditButtons,
   resolveAoId,
 } from "../map/location-edit-buttons";
@@ -31,6 +30,27 @@ export const resolveModalEventId = ({
   if (selectedEventId != null && selectedEventId < 0) return selectedEventId;
   if (events?.some((e) => e.id === selectedEventId)) return selectedEventId;
   return events?.[0]?.id ?? selectedEventId ?? null;
+};
+
+// Handle negative (instance-derived) eventIds by resolving them to their parent
+// series event. If no matching parent exists, return null—this hides the
+// workout menu but keeps AO actions.
+export const resolveEditableEventId = ({
+  modalEventId,
+  upcomingInstances,
+  events,
+}: {
+  modalEventId: number | null;
+  upcomingInstances: { id: number; seriesId: number | null }[] | undefined;
+  events: { id: number }[] | undefined;
+}): number | null => {
+  if (modalEventId == null) return null;
+  if (modalEventId > 0) return modalEventId;
+  const seriesId =
+    upcomingInstances?.find((instance) => instance.id === -modalEventId)
+      ?.seriesId ?? null;
+  if (seriesId == null) return null;
+  return events?.some((event) => event.id === seriesId) ? seriesId : null;
 };
 
 export const WorkoutDetailsModal = ({
@@ -65,19 +85,15 @@ export const WorkoutDetailsModal = ({
       enabled: mode === "edit" && (modalEventId ?? 0) < 0,
     }),
   );
-  // Handle negative (instance-derived) eventIds by resolving them to their parent series event.
-  // If no matching parent exists, return null—this hides the workout menu but keeps AO actions.
-  const editableEventId = useMemo(() => {
-    if (modalEventId == null) return null;
-    if (modalEventId > 0) return modalEventId;
-    const seriesId =
-      upcomingInstancesData?.find((instance) => instance.id === -modalEventId)
-        ?.seriesId ?? null;
-    if (seriesId == null) return null;
-    return location?.events.some((event) => event.id === seriesId)
-      ? seriesId
-      : null;
-  }, [modalEventId, upcomingInstancesData, location?.events]);
+  const editableEventId = useMemo(
+    () =>
+      resolveEditableEventId({
+        modalEventId,
+        upcomingInstances: upcomingInstancesData,
+        events: location?.events,
+      }),
+    [modalEventId, upcomingInstancesData, location?.events],
+  );
 
   const width = useWindowWidth();
   const isLarge = width > Number(BreakPoints.LG);
@@ -95,7 +111,7 @@ export const WorkoutDetailsModal = ({
     eventAoIds: modalAOIds,
   });
 
-  const showEditButtons = aoId != null && !isInstanceEventId(modalEventId);
+  const showEditButtons = aoId != null;
 
   // Format time display
   const shortDayOfWeek = getShortDayOfWeek(selectedEvent?.dayOfWeek);

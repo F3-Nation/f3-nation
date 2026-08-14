@@ -49,16 +49,34 @@ export function selectStatusInstances<T extends StatusInstance>(
 }
 
 /**
- * Maps each displayed event to its soonest upcoming instance's status.
- * Series-linked instances key by `seriesId`; orphans key by their negated id,
- * matching the synthetic events the component creates.
+ * The base-event fields that drive status coloring, mirroring what
+ * `getMapEventStatus` reads off a marker's event.
+ */
+export interface StatusBaseEvent {
+  id: number;
+  startDate?: string | null;
+  endDate?: string | null;
+}
+
+/**
+ * Maps each displayed event to its status, delegating per base event to
+ * `getMapEventStatus` so the panel and the map agree on a shared event.
+ *
+ * Orphan instances (no series, or a series this location does not own) have no
+ * base event to inspect, so they keep the instance-only path and key by their
+ * negated id, matching the synthetic events the component creates.
  */
 export function buildEventStatusMap(
   instances: readonly StatusInstance[],
-  baseEventIds: ReadonlySet<number>,
+  baseEvents: readonly StatusBaseEvent[],
+  todayIso: string = dayjs().format("YYYY-MM-DD"),
 ): Map<number, MapStatus> {
   const map = new Map<number, MapStatus>();
-  const nearestDate = new Map<number, string>();
+  const baseEventIds = new Set(baseEvents.map((event) => event.id));
+  const instancesBySeriesId = new Map<
+    number,
+    { seriesException: string | null; startDate: string }[]
+  >();
 
   for (const instance of instances) {
     const { seriesId } = instance;
@@ -68,11 +86,26 @@ export function buildEventStatusMap(
       continue;
     }
 
-    const existing = nearestDate.get(seriesId);
-    if (!existing || instance.startDate < existing) {
-      nearestDate.set(seriesId, instance.startDate);
-      map.set(seriesId, instanceMapStatus(instance.seriesException));
-    }
+    const list = instancesBySeriesId.get(seriesId) ?? [];
+    list.push({
+      seriesException: instance.seriesException,
+      startDate: instance.startDate,
+    });
+    instancesBySeriesId.set(seriesId, list);
+  }
+
+  for (const event of baseEvents) {
+    const status = getMapEventStatus(
+      {
+        id: event.id,
+        startDate: event.startDate ?? null,
+        endDate: event.endDate ?? null,
+      },
+      instancesBySeriesId,
+      todayIso,
+    );
+    // Only statuses land in the map; consumers read a miss as "no status".
+    if (status !== null) map.set(event.id, status);
   }
 
   return map;

@@ -2367,6 +2367,72 @@ describe("Event Instance Router", () => {
       ).rejects.toThrow(/not authorized to move/i);
     });
 
+    // The happy-path counterpart to the two rejections above. `orgId` reaches
+    // the update through the same `...eventData` spread as every other field,
+    // so excluding it from the upsert's `set` — or applying it on create only —
+    // would leave every other test in this block passing while instances stayed
+    // stuck at their old org.
+    it("should move the instance when the editor has the role on both orgs", async () => {
+      const adminSession = await createAdminSession();
+      await mockAuthWithSession(adminSession);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create region");
+
+      const aoA = await createTestAO(region.id);
+      if (!aoA) throw new Error("Failed to create AO A");
+      const aoB = await createTestAO(region.id);
+      if (!aoB) throw new Error("Failed to create AO B");
+
+      const instance = await createTestEventInstance(aoA.id);
+      if (!instance) throw new Error("Failed to create event instance");
+
+      const editorBothRoles = [
+        { orgId: aoA.id, orgName: aoA.name, roleName: "editor" as const },
+        { orgId: aoB.id, orgName: aoB.name, roleName: "editor" as const },
+      ];
+      const editorBothSession = {
+        id: 503,
+        email: "editor-both@example.com",
+        user: {
+          id: "503",
+          email: "editor-both@example.com",
+          name: "Editor Both",
+          roles: editorBothRoles,
+        },
+        roles: editorBothRoles,
+        expires: new Date(Date.now() + 86_400_000).toISOString(),
+      };
+      await mockAuthWithSession(editorBothSession);
+
+      const client = createTestClient();
+      const movedName = `Moved To B ${uniqueId()}`;
+      const result = await client.eventInstance.crupdate({
+        id: instance.id,
+        orgId: aoB.id,
+        name: movedName,
+        startDate: instance.startDate,
+      });
+
+      // Moved in place — not recreated under the destination org.
+      expect(result.id).toBe(instance.id);
+      expect(result.orgId).toBe(aoB.id);
+      expect(result.name).toBe(movedName);
+
+      // Read the row back so the assertion does not depend on the handler
+      // echoing its own input.
+      const [persisted] = await db
+        .select({
+          orgId: schema.eventInstances.orgId,
+          name: schema.eventInstances.name,
+        })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.id, instance.id));
+
+      expect(persisted?.orgId).toBe(aoB.id);
+      expect(persisted?.name).toBe(movedName);
+    });
+
     it("should allow in-place update by editor of the owning org", async () => {
       const adminSession = await createAdminSession();
       await mockAuthWithSession(adminSession);

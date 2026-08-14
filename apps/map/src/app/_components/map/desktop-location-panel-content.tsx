@@ -43,7 +43,8 @@ export const DesktopLocationPanelContent = () => {
     eventAoIds: modalAOIds,
   });
   const eventName = selectedEvent?.name ?? "Workout";
-  const showEditButtons = aoId != null && !isInstanceEventId(panelEventId);
+  const showEditButtons = aoId != null;
+  const editableEventId = isInstanceEventId(panelEventId) ? null : panelEventId;
 
   // Get short day of week and format time
   const shortDayOfWeek = getShortDayOfWeek(selectedEvent?.dayOfWeek);
@@ -76,7 +77,7 @@ export const DesktopLocationPanelContent = () => {
         <div className="mb-4">
           <LocationEditButtons
             locationId={panelLocationId}
-            eventId={panelEventId}
+            eventId={editableEventId}
             aoName={aoName}
             aoId={aoId}
             eventName={eventName}

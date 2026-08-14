@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { StatusInstance } from "~/utils/event-status-map";
+import type { StatusBaseEvent, StatusInstance } from "~/utils/event-status-map";
 import {
   buildEventStatusMap,
   getMapEventStatus,
@@ -33,12 +33,16 @@ const instance = (overrides: Partial<StatusInstance> = {}): StatusInstance => ({
 
 const statusMapFor = (
   instances: StatusInstance[],
-  baseEventIds = new Set([BASE_EVENT_ID]),
-) =>
-  buildEventStatusMap(
+  baseEvents: StatusBaseEvent[] = [{ id: BASE_EVENT_ID }],
+  todayIso?: string,
+) => {
+  const baseEventIds = new Set(baseEvents.map((event) => event.id));
+  return buildEventStatusMap(
     selectStatusInstances(instances, LOCATION_ID, baseEventIds),
-    baseEventIds,
+    baseEvents,
+    todayIso,
   );
+};
 
 describe("instanceMapStatus", () => {
   it("maps known exceptions and falls back for unknown or absent ones", () => {
@@ -331,6 +335,95 @@ describe("getMapEventStatus", () => {
 
     // Upcoming, not closing — so the future start wins, not the endDate.
     expect(status).toBe("different-time");
+  });
+});
+
+/**
+ * The two entry points compute the same concept from different inputs — the
+ * marker path from `getMapEventStatus`, the panel path from
+ * `buildEventStatusMap` — and both color the same `EventChip`. Each was well
+ * covered in isolation, but nothing asserted they agree on a shared event, so
+ * the panel silently ignoring a series' own start/end dates passed CI while
+ * rendering visibly different colors for one workout.
+ */
+describe("the panel and the map agree on a shared event", () => {
+  const TODAY = "2026-08-05";
+
+  const bothPaths = (
+    event: StatusBaseEvent,
+    instances: StatusInstance[] = [],
+  ) => {
+    const panel = statusMapFor(instances, [event], TODAY).get(event.id) ?? null;
+
+    // Rebuild the marker path's lookup the way the provider does: grouped by
+    // seriesId, with no location filtering.
+    const marker = getMapEventStatus(
+      {
+        id: event.id,
+        startDate: event.startDate ?? null,
+        endDate: event.endDate ?? null,
+      },
+      new Map([
+        [
+          event.id,
+          instances
+            .filter((i) => i.seriesId === event.id)
+            .map((i) => ({
+              seriesException: i.seriesException,
+              startDate: i.startDate,
+            })),
+        ],
+      ]),
+      TODAY,
+    );
+
+    return { panel, marker };
+  };
+
+  // The regression: a series closing inside the horizon with no exception
+  // instances rendered closed on the marker and uncolored in the panel.
+  it("agrees on a series closing inside the horizon with no instances", () => {
+    const { panel, marker } = bothPaths({
+      id: BASE_EVENT_ID,
+      startDate: "2026-01-01",
+      endDate: "2026-08-15",
+    });
+
+    expect(marker).toBe("closed");
+    expect(panel).toBe(marker);
+  });
+
+  // The reverse case: a future start read as "different-time" on the marker.
+  it("agrees on a series that has not started yet", () => {
+    const { panel, marker } = bothPaths({
+      id: BASE_EVENT_ID,
+      startDate: "2026-08-30",
+      endDate: null,
+    });
+
+    expect(marker).toBe("different-time");
+    expect(panel).toBe(marker);
+  });
+
+  it("agrees when a nearer instance outranks the series endDate", () => {
+    const { panel, marker } = bothPaths(
+      { id: BASE_EVENT_ID, startDate: "2026-01-01", endDate: "2026-08-28" },
+      [instance({ id: 1, startDate: "2026-08-06", seriesException: null })],
+    );
+
+    expect(marker).toBe("event-instance");
+    expect(panel).toBe(marker);
+  });
+
+  it("agrees when nothing dated is in range", () => {
+    const { panel, marker } = bothPaths({
+      id: BASE_EVENT_ID,
+      startDate: "2026-01-01",
+      endDate: null,
+    });
+
+    expect(marker).toBeNull();
+    expect(panel).toBeNull();
   });
 });
 

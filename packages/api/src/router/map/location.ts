@@ -492,6 +492,10 @@ export const mapLocationRouter = os.router({
                     .describe("Day of week"),
                   startTime: z.string().nullable().describe("Event start time"),
                   endTime: z.string().nullable().describe("Event end time"),
+                  startDate: z
+                    .string()
+                    .nullable()
+                    .describe("Date the event starts recurring"),
                   endDate: z
                     .string()
                     .nullable()
@@ -569,6 +573,7 @@ export const mapLocationRouter = os.router({
             dayOfWeek: schema.events.dayOfWeek,
             startTime: schema.events.startTime,
             endTime: schema.events.endTime,
+            startDate: schema.events.startDate,
             endDate: schema.events.endDate,
             eventTypes: sql<{ id: number; name: string }[]>`COALESCE(
             json_agg(

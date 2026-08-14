@@ -109,6 +109,7 @@ export const EventChip = (props: {
         "px-2 shadow-sm",
         "cursor-pointer",
         { "pointer-events-none bg-muted": !isInteractive },
+        isInteractive && !selected && "bg-muted",
         isInteractive && selected && getSelectedChipBg(props.mapStatus ?? null),
         { "gap-1 py-[1px]": size === "small" },
         { "gap-1 py-[2px]": size === "medium" },
@@ -136,7 +137,8 @@ export const EventChip = (props: {
       </div>
       {props.mapStatus === "closed" && (
         <Ban
-          className={cn("flex-shrink-0 text-white", {
+          className={cn("flex-shrink-0 text-foreground", {
+            "text-background": selected && isInteractive,
             "h-3 w-3": size === "small",
             "h-4 w-4": size === "medium",
             "h-5 w-5": size === "large",

@@ -72,7 +72,7 @@ function seriesExceptionLabel(value: string): string {
   }
 }
 
-const EventInstanceFormSchema = z
+export const EventInstanceFormSchema = z
   .object({
     regionId: z.number().optional(),
     orgId: z
