@@ -5,3 +5,4 @@ import os
 # don't depend on ambient dev settings like ENABLE_DEBUGGING=true.
 os.environ["ENABLE_DEBUGGING"] = "false"
 os.environ["LOCAL_DEVELOPMENT"] = "true"
+os.environ["SLACK_BOT_TOKEN"] = "test-token"
