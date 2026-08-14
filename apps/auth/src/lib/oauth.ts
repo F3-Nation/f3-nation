@@ -411,6 +411,12 @@ export async function exchangeRefreshToken(params: {
     // created before this column existed have no value here — fall back
     // to the client's registered scopes only for that legacy case, not as
     // the general rule anymore.
+    if (existing.scopes == null) {
+      logWarn("auth.oauth.refresh_token_legacy_scope_fallback", {
+        clientId: existing.clientId,
+        userId: existing.userId,
+      });
+    }
     const scopes = existing.scopes ?? client.scopes ?? "openid profile email";
     const ACCESS_TOKEN_TTL = 3600; // 1 hour
 

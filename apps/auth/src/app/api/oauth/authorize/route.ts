@@ -138,7 +138,11 @@ export async function GET(request: NextRequest) {
     scopes: scope,
     codeChallenge: codeChallenge ?? undefined,
     codeChallengeMethod: codeChallenge ? codeChallengeMethod : undefined,
-    nonce: nonce ?? undefined,
+    // `|| undefined`, not `?? undefined`: an empty nonce=&... provides no
+    // replay protection and shouldn't get echoed into a real id_token as a
+    // literal "nonce": "" claim — treat it the same as omitted.
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+    nonce: nonce || undefined,
     authTime: session.authTime,
   });
 

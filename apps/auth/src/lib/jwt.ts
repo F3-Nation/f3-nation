@@ -121,7 +121,19 @@ export async function signIdToken(params: {
   }
   if (params.nonce != null) claims.nonce = params.nonce;
   if (params.authTime != null) {
-    const authTimeMs = new Date(params.authTime).getTime();
+    // authTime is stored UTC (auth-options.ts writes new Date().toISOString()
+    // into a `timestamp` column with no tz), but drizzle-orm's postgres-js
+    // driver registers a transparent parser for that column type — it comes
+    // back as the raw Postgres wire text ("YYYY-MM-DD HH:MM:SS[.mmm]", no
+    // offset, space instead of "T"), not the ISO string that went in. new
+    // Date() treats that shape as local server time, not UTC, silently
+    // skewing the claim by the host's UTC offset on any non-UTC machine.
+    // Normalize to real ISO-with-Z before parsing; already-ISO input (e.g.
+    // test fixtures using .toISOString() directly) passes through unchanged.
+    const iso = params.authTime.includes("T")
+      ? params.authTime
+      : `${params.authTime.replace(" ", "T")}Z`;
+    const authTimeMs = new Date(iso).getTime();
     if (!Number.isNaN(authTimeMs)) {
       claims.auth_time = Math.floor(authTimeMs / 1000);
     }

@@ -722,6 +722,10 @@ describe("exchangeRefreshToken", () => {
     });
 
     expect(result).toMatchObject({ scope: PUBLIC_CLIENT.scopes });
+    expect(logWarn).toHaveBeenCalledWith(
+      "auth.oauth.refresh_token_legacy_scope_fallback",
+      { clientId: PUBLIC_CLIENT.id, userId: 42 },
+    );
   });
 
   it("persists the resolved fallback scope onto the rotated row for a legacy token, not the null it inherited", async () => {
