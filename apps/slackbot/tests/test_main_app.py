@@ -19,9 +19,7 @@ def test_import_does_not_create_slack_app():
 def test_get_slack_app_is_a_singleton_and_registers_listeners():
     slack_app = MagicMock()
 
-    with patch.object(main, "App", return_value=slack_app), patch.object(
-        main, "get_oauth_settings", return_value={}
-    ):
+    with patch.object(main, "App", return_value=slack_app), patch.object(main, "get_oauth_settings", return_value={}):
         first = main.get_slack_app()
         second = main.get_slack_app()
 

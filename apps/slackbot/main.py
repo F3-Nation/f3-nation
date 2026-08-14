@@ -122,6 +122,7 @@ def get_slack_app() -> App:
                 _app = create_slack_app()
     return _app
 
+
 # ----------------------------------------
 # Production Mode: Google Cloud Function HTTP Handler
 # (DISABLED in local development)
@@ -227,6 +228,7 @@ def main_response(body: dict, logger: logging.Logger, client: WebClient, ack: Ac
             f"no handler for path: "
             f"{safe_get(safe_get(MAIN_MAPPER, request_type), request_id) or request_type + ', ' + request_id}"
         )
+
 
 def start_local_health_server(port: int):
     class HealthHandler(BaseHTTPRequestHandler):
