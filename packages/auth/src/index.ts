@@ -27,12 +27,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth(authConfig);
 export async function getSessionFromHeaders(
   headers: Headers,
 ): Promise<Session | null> {
-  const proto =
-    headers.get("x-forwarded-proto")?.split(",")[0]?.trim() ?? "https";
+  const trimmedProto =
+    headers.get("x-forwarded-proto")?.split(",")[0]?.trim() ?? "";
+  const proto = trimmedProto.length > 0 ? trimmedProto : "https";
+  // createActionURL reads x-forwarded-proto directly off `headers` and
+  // ignores the `proto` param whenever the header is present, so the
+  // normalized value above must also be reflected back onto the headers
+  // passed in -- otherwise a comma-separated or whitespace-only header
+  // (e.g. from a proxy chain) reaches `new URL()` unnormalized and throws.
+  const normalizedHeaders = new Headers(headers);
+  normalizedHeaders.set("x-forwarded-proto", proto);
   const url = createActionURL(
     "session",
     proto,
-    headers,
+    normalizedHeaders,
     process.env,
     authConfig,
   );
@@ -62,5 +70,9 @@ export async function getSessionFromHeaders(
     logWarn("auth.session.non_ok_response", { status: response.status });
     return null;
   }
+  // Auth() may set Set-Cookie headers here (rolling JWT refresh, or clearing
+  // an invalid session cookie) -- intentionally dropped. This function is
+  // only used as an oRPC middleware authorization gate, which has no
+  // Response object of its own to carry Set-Cookie back to the client.
   return (await response.json()) as Session | null;
 }

@@ -88,5 +88,25 @@ describe.runIf(target.inProcess)(
       expectSameSession(viaHeaders, viaAuth);
       expect(viaHeaders).toBeNull();
     });
+
+    it("does not throw for a comma-separated x-forwarded-proto header", async () => {
+      const cookie = await sessionCookie();
+      const headers = headersWith(cookie);
+      headers.set("x-forwarded-proto", "https, https");
+
+      const viaHeaders = await getSessionFromHeaders(headers);
+
+      expect(viaHeaders).not.toBeNull();
+    });
+
+    it("does not throw for a whitespace-only x-forwarded-proto header", async () => {
+      const cookie = await sessionCookie();
+      const headers = headersWith(cookie);
+      headers.set("x-forwarded-proto", "   ");
+
+      const viaHeaders = await getSessionFromHeaders(headers);
+
+      expect(viaHeaders).not.toBeNull();
+    });
   },
 );
