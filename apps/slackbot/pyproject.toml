@@ -27,9 +27,17 @@ section-order = [
 ]
 known-first-party = []
 
+[tool.mypy]
+python_version = "3.12"
+# Scoped to the two layers that are well-tested and already near type-clean;
+# `features/` and `utilities/` are explicitly out of scope.
+files = ["application", "infrastructure"]
+warn_unused_ignores = true
+warn_redundant_casts = true
+
 [project]
 name = "f3-nation-slack-bot"
-version = "2.2.0"
+version = "2.2.1"
 description = ""
 authors = [{ name = "Evan Petzoldt", email = "evan.petzoldt@protonmail.com" }]
 readme = "README.md"
@@ -59,8 +67,8 @@ dependencies = [
 dev = [
     "pytest>=9.0.3,<9.1.0",
     "debugpy>=1.8.17,<2.0.0",
-    "pre-commit>=4.2.0,<5.0.0",
     "ruff>=0.14.0,<1.0.0",
+    "mypy>=1.14.0,<2.0.0",
 ]
 scripts = [
     "mplcyberpunk>=0.7.6,<0.8.0",
