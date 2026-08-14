@@ -133,6 +133,9 @@ def main_response(body: dict, logger: logging.Logger, client: WebClient, ack: Ac
 
     if lookup:
         run_function, add_loading, has_submission_ack = lookup
+        if request_type not in ("block_suggestion", "view_submission"):
+            ack()
+
         if ENABLE_DEBUGGING and request_type != "view_submission":
             body[LOADING_ID] = add_debug_form(body=body, client=client)
             # NOTE: do not put debugging breakpoints above this line
@@ -152,9 +155,6 @@ def main_response(body: dict, logger: logging.Logger, client: WebClient, ack: Ac
                 )
             else:
                 ack()
-
-        if request_type not in ("block_suggestion", "view_submission"):
-            ack()
 
         try:
             try:

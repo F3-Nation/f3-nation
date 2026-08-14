@@ -161,7 +161,7 @@ def add_loading_form(body: dict, client: WebClient, new_or_add: str = "new") -> 
             new_or_add=new_or_add,
         )
     # wait 0.1 seconds
-    time.sleep(0.3)
+    time.sleep(0.1)
     return safe_get(loading_form_response, "view", "id")
 
 
