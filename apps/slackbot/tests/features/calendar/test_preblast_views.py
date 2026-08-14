@@ -517,5 +517,69 @@ class PreblastViewsTest(unittest.TestCase):
         self.assertEqual(kwargs["view_id"], "V_SUBMISSION_2")
 
 
+class TestPreblastEditStartTimeIntegration(unittest.TestCase):
+    """Pins the parse → handler → service path that issue #730 broke.
+
+    Deliberately does NOT patch ``extract_state_values``: the bug lived in the
+    parser, and every other test in this file injects an already-parsed dict,
+    so the real payload shape was never exercised.
+    """
+
+    @patch("features.calendar.event_preblast.get_user")
+    @patch("features.calendar.event_preblast._build_attendance_service")
+    @patch("features.calendar.event_preblast._build_event_instance_service")
+    @patch("features.calendar.event_preblast._build_preblast_service")
+    def test_start_time_reaches_service_from_raw_payload(
+        self,
+        mock_build_preblast_service,
+        mock_build_event_service,
+        mock_build_attendance_service,
+        mock_get_user,
+    ):
+        event_id = 42
+        event = _event(id=event_id, start_time="0600")
+
+        preblast_service = MagicMock()
+        preblast_service.build_update_command.return_value = object()
+        preblast_service.save_event_update.return_value = event
+        mock_build_preblast_service.return_value = preblast_service
+
+        event_service = MagicMock()
+        event_service.get_by_id.return_value = event
+        mock_build_event_service.return_value = event_service
+
+        attendance_service = MagicMock()
+        attendance_service.get_planned_for_event_instance.return_value = []
+        mock_build_attendance_service.return_value = attendance_service
+
+        body = {
+            "view": {
+                "private_metadata": f'{{"event_instance_id": {event_id}, "preblast_ts": "None"}}',
+                "state": {
+                    "values": {
+                        actions.EVENT_PREBLAST_START_TIME: {
+                            actions.EVENT_PREBLAST_START_TIME: {
+                                "type": "timepicker",
+                                "selected_time": "05:30",
+                            }
+                        },
+                        actions.EVENT_PREBLAST_TITLE: {
+                            actions.EVENT_PREBLAST_TITLE: {
+                                "type": "plain_text_input",
+                                "value": "The Gauntlet",
+                            }
+                        },
+                    }
+                },
+            }
+        }
+
+        handle_event_preblast_edit(body, MagicMock(), MagicMock(), {}, MagicMock())
+
+        kwargs = preblast_service.build_update_command.call_args.kwargs
+        self.assertEqual(kwargs["start_time"], "0530")
+        self.assertEqual(kwargs["name"], "The Gauntlet")
+
+
 if __name__ == "__main__":
     unittest.main()
