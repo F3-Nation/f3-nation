@@ -12,10 +12,10 @@ import { req, target } from "./transport";
 
 /**
  * Mirrors the non-development branch of the private RATE_LIMIT_MAX_REQUESTS
- * (`isDevelopment ? 10000 : 200`) in packages/api/src/shared.ts; the suite
- * pins NODE_ENV=test, so 200 is the effective limit.
+ * (`isDevelopment ? 10000 : 500`) in packages/api/src/shared.ts; the suite
+ * pins NODE_ENV=test, so 500 is the effective limit.
  */
-const RATE_LIMIT = 200;
+const RATE_LIMIT = 500;
 
 /** checkLimit evicts entries older than now - 60s, so the window slides. */
 export const WINDOW_MS = 60_000;
