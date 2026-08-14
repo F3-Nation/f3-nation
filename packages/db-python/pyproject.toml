@@ -3,17 +3,17 @@ name = "f3-data-models"
 version = "1.1.0"
 description = "The data schema and models for F3 Nation applications."
 readme = "README.md"
-requires-python = ">=3.12,<4.0"
+requires-python = ">=3.14.7,<4.0"
 license = "AGPL-3.0-or-later"
 authors = [{name = "Evan Petzoldt", email = "evan.petzoldt@protonmail.com"}]
 dependencies = [
-    "sqlalchemy>=2.0.36,<3.0.0",
-    "psycopg2-binary>=2.9.10,<3.0.0",
-    "sqlmodel>=0.0.22,<0.0.23",
+    "sqlalchemy>=2.0.51,<3.0.0",
+    "psycopg2-binary>=2.9.12,<3.0.0",
+    "sqlmodel>=0.0.39,<0.0.40",
     "sqlalchemy-citext>=1.8.0,<2.0.0",
     "pg8000>=1.31.5,<2.0.0",
-    "cloud-sql-python-connector>=1.20.0,<2.0.0",
-    "sqlalchemy-bigquery>=1.13.0,<2.0.0",
+    "cloud-sql-python-connector>=1.21.0,<2.0.0",
+    "sqlalchemy-bigquery>=1.17.2,<2.0.0",
 ]
 
 [project.urls]
@@ -22,7 +22,7 @@ Documentation = "https://github.io/F3-Nation/f3-data-models"
 
 [dependency-groups]
 dev = [
-    "poethepoet>=0.34.0,<0.35.0",
+    "poethepoet>=0.48.0,<0.48.1",
 ]
 
 [tool.ruff]
@@ -54,7 +54,7 @@ build-js = "npm run build"
 install-mermaid-js = "npm install --save-dev @mermaid-js/mermaid-cli"
 
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=68.2.2", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
