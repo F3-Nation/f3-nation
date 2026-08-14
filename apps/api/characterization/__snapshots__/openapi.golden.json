@@ -8837,6 +8837,17 @@
                                     "description": "Event name",
                                     "type": "string"
                                   },
+                                  "startDate": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ],
+                                    "description": "Date the event starts recurring"
+                                  },
                                   "startTime": {
                                     "anyOf": [
                                       {
@@ -8856,6 +8867,7 @@
                                   "dayOfWeek",
                                   "startTime",
                                   "endTime",
+                                  "startDate",
                                   "endDate",
                                   "eventTypes",
                                   "aoId",
