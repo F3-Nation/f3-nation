@@ -43,7 +43,7 @@ export async function exhaustRateLimit(ip: string): Promise<void> {
   // MemoryRatelimiter's window slides: if the warm-up itself outran half the
   // window, early requests are already evicted and the 429 cases would fail as
   // `expected 200 to be 429` — a slow runner masquerading as a limiter
-  // regression. Report the real cause instead. ~4s locally.
+  // regression. Report the real cause instead.
   const elapsed = Date.now() - started;
   expect(
     elapsed,
