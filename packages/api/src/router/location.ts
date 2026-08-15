@@ -221,7 +221,7 @@ export const locationRouter = {
 
       const locations = usePagination
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
-        : await query.orderBy(...sortedColumns);
+        : await query.orderBy(...sortedColumns).limit(limit);
 
       return { locations, totalCount: locationCount?.count ?? 0 };
     }),

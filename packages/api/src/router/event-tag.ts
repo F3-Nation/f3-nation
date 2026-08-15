@@ -125,7 +125,7 @@ export const eventTagRouter = {
 
       const eventTags = usePagination
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
-        : await query.orderBy(...sortedColumns);
+        : await query.orderBy(...sortedColumns).limit(limit);
 
       return { eventTags, totalCount };
     }),

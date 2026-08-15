@@ -365,7 +365,7 @@ export const buildUserListQuery = async ({
 
   const users = usePagination
     ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
-    : await query.orderBy(...sortedColumns);
+    : await query.orderBy(...sortedColumns).limit(limit);
 
   return {
     users: users.map((user: (typeof users)[number]) => ({

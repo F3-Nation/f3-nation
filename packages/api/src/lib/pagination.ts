@@ -56,7 +56,7 @@ export function paginationFields(entityPlural: string) {
       .max(MAX_PAGE_INDEX)
       .optional()
       .describe(
-        `Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns every matching ${entityPlural}.`,
+        `Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both still returns a single default-sized page of ${entityPlural}, not every matching row.`,
       ),
     pageSize: z.coerce
       .number()
@@ -64,7 +64,7 @@ export function paginationFields(entityPlural: string) {
       .max(MAX_PAGE_SIZE)
       .optional()
       .describe(
-        `Number of ${entityPlural} per page. Supplying this (or pageIndex) opts into paginated results; omitting both returns every matching ${entityPlural}.`,
+        `Number of ${entityPlural} per page (max ${MAX_PAGE_SIZE}). Supplying this (or pageIndex) opts into paginated results; omitting both still returns a single default-sized page of ${entityPlural}, not every matching row.`,
       ),
   };
 }

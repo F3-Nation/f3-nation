@@ -439,7 +439,7 @@ export const mapEventRouter = {
 
       const events = usePagination
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
-        : await query.orderBy(...sortedColumns);
+        : await query.orderBy(...sortedColumns).limit(limit);
 
       const eventsWithLocation = events.map((event) => ({
         ...event,

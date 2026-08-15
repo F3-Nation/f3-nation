@@ -210,7 +210,7 @@ export const positionRouter = {
 
       const positions = usePagination
         ? await baseQuery.limit(limit).offset(offset)
-        : await baseQuery;
+        : await baseQuery.limit(limit);
 
       const [countResult] = await ctx.db
         .select({ total: count() })

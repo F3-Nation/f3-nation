@@ -260,7 +260,7 @@ export const eventInstanceRouter = {
 
       const instances = usePagination
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
-        : await query.orderBy(...sortedColumns);
+        : await query.orderBy(...sortedColumns).limit(limit);
 
       return {
         eventInstances: instances,
