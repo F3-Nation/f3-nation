@@ -19,5 +19,13 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --package f3-nation-slack-bot --no-dev --no-editable
 
 WORKDIR $APP_HOME
+
+# Create non-root user for security
+RUN groupadd --gid 1000 slackbot && \
+    useradd --uid 1000 --gid slackbot --shell /bin/bash --create-home slackbot && \
+    mkdir -p /app/.venv /app/packages /app/apps/slackbot && \
+    chown -R slackbot:slackbot /app
+
+USER slackbot
 EXPOSE 8080
 CMD ["functions-framework", "--target", "handler", "--port", "8080"]
