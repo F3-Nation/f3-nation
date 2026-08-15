@@ -49,6 +49,7 @@ from utilities.helper_functions import (
     current_date_cst,
     extract_state_values,
     fix_from_llm_tags,
+    format_event_time,
     get_location_display_name,
     get_user,
     get_user_names,
@@ -1093,7 +1094,7 @@ def build_preblast_info(
     event_details = (
         f"*Preblast: {event.name}*"
         f"\n*Date:* {event.start_date.strftime('%A, %B %d') if event.start_date else 'TBD'}"
-        f"\n*Time:* {event.start_time or 'TBD'}"
+        f"\n*Time:* {format_event_time(event.start_time)}"
         f"\n*Where:* {location_display or 'TBD'}"
         f"\n*Event Type:* {event_type_display}"
         + (f"\n*Event Tag:* {event_tag_display}" if event_tag_display else "")

@@ -737,6 +737,14 @@ def time_str_to_int(time: str) -> int:
     return int(time.replace(":", ""))
 
 
+def format_event_time(time: str | None) -> str:
+    """Format an ``HHMM`` time string for display (e.g. ``0530`` -> ``05:30 AM``)."""
+    if not time:
+        return "TBD"
+    parsed = safe_convert(time, datetime.strptime, ["%H%M"])
+    return parsed.strftime("%I:%M %p") if parsed else time
+
+
 def current_date_cst() -> date:
     """Returns the current date in US/Central timezone."""
     return datetime.now(pytz.timezone("US/Central")).date()
