@@ -1,10 +1,12 @@
 import baseConfig from "@acme/eslint-config/base";
+import drizzleConfig from "@acme/eslint-config/drizzle";
 
 const ORPC_ERROR_MESSAGE =
   "Throw `new ORPCError(code, { message })` instead of a raw Error — oRPC masks non-ORPCError throws as an opaque 500 and drops the message. Use BAD_REQUEST for invalid/missing input, UNAUTHORIZED for permission checks (this codebase uses it for both unauthenticated and insufficient-role — see docs/AI_DEVELOPMENT_GUIDE.md#error-handling), NOT_FOUND for a missing referenced resource, and INTERNAL_SERVER_ERROR only for truly unexpected server state.";
 
 export default [
   ...baseConfig,
+  ...drizzleConfig,
   { ignores: ["vitest.config.ts", "__tests__", "coverage"] },
   {
     // See the load-bearing ordering comment in vitest.global-setup.ts: a
