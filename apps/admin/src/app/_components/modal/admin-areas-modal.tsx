@@ -35,6 +35,7 @@ import { toast } from "@acme/ui/toast";
 import { AreaInsertSchema } from "@acme/validators";
 import gte from "lodash/gte";
 
+import { client } from "~/orpc/client";
 import {
   invalidateQueries,
   orpc,
@@ -43,6 +44,7 @@ import {
   useQuery,
 } from "~/orpc/react";
 import type { DataType } from "~/utils/store/modal";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import {
   closeModal,
   DeleteType,
@@ -62,9 +64,17 @@ export default function AdminAreasModal({
     }),
   );
   const area = areaResponse?.org;
-  const { data: sectors } = useQuery(
-    orpc.org.all.queryOptions({ input: { orgTypes: ["sector"] } }),
-  );
+  const { data: sectors } = useFetchAllPages({
+    queryKey: ["org.all.everySector"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.all({
+        orgTypes: ["sector"],
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+  });
   const router = useRouter();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -206,7 +216,7 @@ export default function AdminAreasModal({
                           <SelectValue placeholder="Select a sector" />
                         </SelectTrigger>
                         <SelectContent>
-                          {sectors?.orgs
+                          {sectors
                             ?.slice()
                             .sort((a, b) => a.name.localeCompare(b.name))
                             .map((sector) => (

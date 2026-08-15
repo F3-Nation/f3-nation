@@ -3,9 +3,10 @@ import { Controller, useFormContext } from "react-hook-form";
 
 import { dayOfWeekToShortDayOfWeek } from "@acme/shared/app/functions";
 
-import { orpc, useQuery } from "~/orpc/react";
+import { client } from "~/orpc/client";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 import { useOptions } from "~/utils/use-options";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import { SelectorLoadError } from "./selector-load-error";
 
 interface EventSelectorProps {
@@ -39,23 +40,30 @@ export function EventSelector({
   const aoId = form.watch(aoFieldName);
   const selectedEventId = form.watch(fieldName);
 
+  const eventFilter = {
+    ...(aoId ? { aoIds: [aoId] } : {}),
+    ...(regionId ? { regionIds: [regionId] } : {}),
+  };
   const {
     data: events,
     isError,
     refetch,
-  } = useQuery({
-    ...orpc.event.all.queryOptions({
-      input: {
-        ...(aoId ? { aoIds: [aoId] } : {}),
-        ...(regionId ? { regionIds: [regionId] } : {}),
-      },
-      enabled: regionId != null,
-    }),
+  } = useFetchAllPages({
+    queryKey: ["event.all.everyMatching", eventFilter],
+    enabled: regionId != null,
     throwOnError: false,
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { events: items, totalCount } = await client.event.all({
+        ...eventFilter,
+        pageIndex,
+        pageSize,
+      });
+      return { items, total: totalCount };
+    },
   });
 
   const eventOptions = useOptions(
-    events?.events,
+    events,
     (e) =>
       e.dayOfWeek
         ? `${e.name} (${dayOfWeekToShortDayOfWeek(e.dayOfWeek)})`
@@ -65,7 +73,7 @@ export function EventSelector({
 
   useEffect(() => {
     if (selectedEventId == null || !events) return;
-    const exists = events.events.some((event) => event.id === selectedEventId);
+    const exists = events.some((event) => event.id === selectedEventId);
     if (!exists) {
       form.setValue(fieldName, null, { shouldValidate: true });
     }
@@ -84,7 +92,7 @@ export function EventSelector({
               options={eventOptions}
               value={field.value?.toString()}
               onSelect={(item) => {
-                const event = events?.events?.find(
+                const event = events?.find(
                   (event) => event.id.toString() === item,
                 );
                 field.onChange(event?.id ?? null);

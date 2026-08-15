@@ -4,8 +4,9 @@ import { Controller, useFormContext } from "react-hook-form";
 
 import { isTruthy } from "@acme/shared/common/functions";
 
-import { orpc, useQuery } from "~/orpc/react";
+import { client } from "~/orpc/client";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import { SelectorLoadError } from "./selector-load-error";
 
 const NEW_LOCATION_VALUE = "new";
@@ -35,13 +36,18 @@ export const ExistingLocationPickerForm = (params: {
     data: locations,
     isError,
     refetch,
-  } = useQuery({
-    ...orpc.location.all.queryOptions({
-      input:
-        activeRegionId != null ? { regionIds: [activeRegionId] } : undefined,
-      enabled: activeRegionId != null,
-    }),
+  } = useFetchAllPages({
+    queryKey: ["location.all.everyInRegion", activeRegionId],
+    enabled: activeRegionId != null,
     throwOnError: false,
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { locations: items, totalCount } = await client.location.all({
+        ...(activeRegionId != null ? { regionIds: [activeRegionId] } : {}),
+        pageIndex,
+        pageSize,
+      });
+      return { items, total: totalCount };
+    },
   });
 
   const sortedRegionLocationOptions = useMemo(() => {
@@ -59,8 +65,9 @@ export const ExistingLocationPickerForm = (params: {
     };
 
     const existingLocations =
-      locations?.locations
-        ?.sort((a, b) => a.locationName.localeCompare(b.locationName))
+      locations
+        ?.slice()
+        .sort((a, b) => a.locationName.localeCompare(b.locationName))
         ?.map((l) => ({
           labelComponent: (
             <span>
@@ -74,7 +81,7 @@ export const ExistingLocationPickerForm = (params: {
         })) ?? [];
 
     return [newLocationOption, ...existingLocations];
-  }, [locations?.locations]);
+  }, [locations]);
 
   // When the region changes the filtered options change too; clear a selected
   // location that no longer belongs to the region so an invalid
@@ -82,19 +89,14 @@ export const ExistingLocationPickerForm = (params: {
   // location" and is always valid. Wait for location data so a pre-filled id
   // isn't wiped before the options have loaded.
   useEffect(() => {
-    if (formNewLocationId == null || !locations?.locations) return;
+    if (formNewLocationId == null || !locations) return;
     const stillValid = sortedRegionLocationOptions.some(
       (option) => option.value === formNewLocationId.toString(),
     );
     if (!stillValid) {
       form.setValue("newLocationId", null);
     }
-  }, [
-    formNewLocationId,
-    locations?.locations,
-    sortedRegionLocationOptions,
-    form,
-  ]);
+  }, [formNewLocationId, locations, sortedRegionLocationOptions, form]);
 
   return (
     <>

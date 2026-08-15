@@ -13,7 +13,8 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@acme/ui/popover";
 
 import type { RouterOutputs } from "~/orpc/types";
-import { orpc, useQuery } from "~/orpc/react";
+import { client } from "~/orpc/client";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 
 type Sector = RouterOutputs["org"]["all"]["orgs"][number];
 
@@ -24,9 +25,17 @@ export const SectorFilter = ({
   onSectorSelect: (sector: Sector) => void;
   selectedSectors: Sector[];
 }) => {
-  const { data: sectors } = useQuery(
-    orpc.org.all.queryOptions({ input: { orgTypes: ["sector"] } }),
-  );
+  const { data: sectors } = useFetchAllPages({
+    queryKey: ["org.all.everySector"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.all({
+        orgTypes: ["sector"],
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+  });
   const [open, setOpen] = useState(false);
 
   return (
@@ -50,7 +59,7 @@ export const SectorFilter = ({
             <CommandInput placeholder="Search statuses..." />
             <CommandEmpty>No statuses found.</CommandEmpty>
             <CommandGroup className="max-h-96 overflow-y-auto">
-              {sectors?.orgs.map((sector) => (
+              {sectors?.map((sector) => (
                 <CommandItem
                   key={sector.id}
                   value={sector.name}

@@ -39,7 +39,9 @@ import { toast } from "@acme/ui/toast";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 import { AOInsertSchema } from "@acme/validators";
 
+import { client } from "~/orpc/client";
 import { invalidateQueries, orpc, useMutation, useQuery } from "~/orpc/react";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import { uploadLogo } from "~/utils/image/upload-logo";
 import type { DataType } from "~/utils/store/modal";
 import {
@@ -64,9 +66,17 @@ export default function AdminAOsModal({
     }),
   );
   const ao = aoResponse?.org;
-  const { data: regions } = useQuery(
-    orpc.org.all.queryOptions({ input: { orgTypes: ["region"] } }),
-  );
+  const { data: regions } = useFetchAllPages({
+    queryKey: ["org.all.everyRegion"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.all({
+        orgTypes: ["region"],
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+  });
   const router = useRouter();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -245,8 +255,8 @@ export default function AdminAOsModal({
                       <VirtualizedCombobox
                         value={field.value?.toString()}
                         options={
-                          regions?.orgs
-                            .filter((org) => org.orgType === "region")
+                          regions
+                            ?.filter((org) => org.orgType === "region")
                             .map((region) => ({
                               value: region.id.toString(),
                               label: region.name,
@@ -526,8 +536,8 @@ export default function AdminAOsModal({
                         form.setValue("name", "Fake AO");
                         form.setValue(
                           "parentId",
-                          regions?.orgs?.[
-                            Math.floor(Math.random() * regions?.orgs.length)
+                          regions?.[
+                            Math.floor(Math.random() * (regions?.length ?? 0))
                           ]?.id ?? -1,
                         );
                         form.setValue("website", "https://fakeao.com");

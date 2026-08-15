@@ -20,6 +20,7 @@ import { Form } from "@acme/ui/form";
 import { Spinner } from "@acme/ui/spinner";
 import { toast } from "@acme/ui/toast";
 
+import { client } from "~/orpc/client";
 import {
   ORPCError,
   invalidateQueries,
@@ -27,6 +28,7 @@ import {
   useMutation,
   useQuery,
 } from "~/orpc/react";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import { useUpdateLocationForm } from "~/utils/forms";
 import { uploadLogo } from "~/utils/image/upload-logo";
 import type { DataType, ModalType } from "~/utils/store/modal";
@@ -127,9 +129,16 @@ export default function AdminRequestsModal({
       ? REQUEST_FORM_MAP[request.requestType]
       : null;
 
-  const { data: eventTypes } = useQuery(
-    orpc.eventType.all.queryOptions({ input: undefined }),
-  );
+  const { data: eventTypes } = useFetchAllPages({
+    queryKey: ["eventType.all.everyMatching"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { eventTypes: items, totalCount } = await client.eventType.all({
+        pageIndex,
+        pageSize,
+      });
+      return { items, total: totalCount };
+    },
+  });
 
   const validateSubmissionByAdmin = useMutation(
     orpc.request.validateSubmissionByAdmin.mutationOptions(),
