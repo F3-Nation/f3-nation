@@ -79,16 +79,49 @@ else:
     handler = StructuredLogHandler()
     setup_logging(handler, log_level=logging_level)
 
-try:
-    app = App(
-        process_before_response=process_before_response,
-        oauth_settings=get_oauth_settings(),
-    )
-except Exception as exc:
-    raise RuntimeError(
-        "Error initializing Slackbot: you may need to set up your .env file with the appropriate Slack credentials. "
-        f"Exception: {exc}"
-    ) from exc
+_app = None
+_app_lock = threading.Lock()
+
+
+def create_slack_app() -> App:
+    try:
+        slack_app = App(
+            process_before_response=process_before_response,
+            oauth_settings=get_oauth_settings(),
+        )
+    except Exception as exc:
+        raise RuntimeError(
+            "Error initializing Slackbot: you may need to set up your .env file with the appropriate Slack "
+            "credentials. "
+            f"Exception: {exc}"
+        ) from exc
+
+    try:
+        args = [main_response]
+        lazy_kwargs = {}
+
+        match_all_pattern = re.compile(".*")
+        slack_app.action(match_all_pattern)(*args, **lazy_kwargs)
+        slack_app.view(match_all_pattern)(*args, **lazy_kwargs)
+        slack_app.command(match_all_pattern)(*args, **lazy_kwargs)
+        slack_app.view_closed(match_all_pattern)(*args, **lazy_kwargs)
+        slack_app.event(match_all_pattern)(*args, **lazy_kwargs)
+        slack_app.options(match_all_pattern)(*args, **lazy_kwargs)
+        slack_app.shortcut(match_all_pattern)(*args, **lazy_kwargs)
+    except Exception:
+        pass
+
+    return slack_app
+
+
+def get_slack_app() -> App:
+    global _app
+    if _app is None:
+        with _app_lock:
+            if _app is None:
+                _app = create_slack_app()
+    return _app
+
 
 # ----------------------------------------
 # Production Mode: Google Cloud Function HTTP Handler
@@ -110,7 +143,7 @@ if not LOCAL_DEVELOPMENT:
             logging.info(f"Request body: {request.get_data(as_text=True)}")
             return strava.strava_exchange_token(request)
         elif request.path[:6] == "/slack":
-            slack_handler = SlackRequestHandler(app=app)
+            slack_handler = SlackRequestHandler(app=get_slack_app())
             return slack_handler.handle(request)
         elif request.path == "/hourly-runner-complete":
             update_local_region_records()
@@ -133,6 +166,9 @@ def main_response(body: dict, logger: logging.Logger, client: WebClient, ack: Ac
 
     if lookup:
         run_function, add_loading, has_submission_ack = lookup
+        if request_type not in ("block_suggestion", "view_submission"):
+            ack()
+
         if ENABLE_DEBUGGING and request_type != "view_submission":
             body[LOADING_ID] = add_debug_form(body=body, client=client)
             # NOTE: do not put debugging breakpoints above this line
@@ -152,9 +188,6 @@ def main_response(body: dict, logger: logging.Logger, client: WebClient, ack: Ac
                 )
             else:
                 ack()
-
-        if request_type not in ("block_suggestion", "view_submission"):
-            ack()
 
         try:
             try:
@@ -197,22 +230,6 @@ def main_response(body: dict, logger: logging.Logger, client: WebClient, ack: Ac
         )
 
 
-try:
-    ARGS = [main_response]
-    LAZY_KWARGS = {}
-
-    MATCH_ALL_PATTERN = re.compile(".*")
-    app.action(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
-    app.view(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
-    app.command(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
-    app.view_closed(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
-    app.event(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
-    app.options(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
-    app.shortcut(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
-except Exception:
-    pass
-
-
 def start_local_health_server(port: int):
     class HealthHandler(BaseHTTPRequestHandler):
         def do_GET(self):
@@ -246,7 +263,7 @@ if __name__ == "__main__":
 
     if not SOCKET_MODE:
         try:
-            app.start(port=port)
+            get_slack_app().start(port=port)
             update_local_region_records()
         except KeyboardInterrupt:
             # graceful shutdown during auto-reload
@@ -258,5 +275,5 @@ if __name__ == "__main__":
 
         logging.getLogger().info("Running in local Socket Mode.")
 
-        handler = SocketModeHandler(app, app_token)
+        handler = SocketModeHandler(get_slack_app(), app_token)
         handler.start()
