@@ -1,6 +1,5 @@
-FROM python:3.13.15-slim-bookworm@sha256:0f16c5d35fe6464ee471792ab3bb9116f911b65b3fbf10120c98d2bdc6332f48
-
-COPY --from=ghcr.io/astral-sh/uv:0.12.4@sha256:0ff11fbfed5cb87a930fa471748f03bd78cbc15a4fc09f18b06a15e0ead32370 /uv /uvx /bin/
+FROM python:3.13.15-slim-bookworm@sha256:00faa2debb87529f9f0764e9491d8ba400a3678976616c3bd7cb193745ac20d1
+COPY --from=ghcr.io/astral-sh/uv:0.12.4@sha256:d0a6eca6c669dc7e9c51218707b8438a3d30402733d739dcc00adb3e213e8f5c /uv /uvx /bin/
 
 ENV PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 \
