@@ -80,3 +80,6 @@ pr.md
 
 # deepwork progress
 .slim/deepwork/
+
+# A spot to keep scripts, skills, and docs just for you
+.personal/

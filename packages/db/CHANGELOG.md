@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.4.0](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.3.0...pkg-db@0.4.0) (2026-08-12)
+
+
+### Features
+
+* **auth:** support public OAuth clients (PKCE-only, RFC 8252) for native apps ([#692](https://github.com/F3-Nation/f3-nation/issues/692)) ([a19a9df](https://github.com/F3-Nation/f3-nation/commit/a19a9df5ce8ec14732825d4aaf84ce8c81292722))
+
+## [0.3.0](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.2.0...pkg-db@0.3.0) (2026-08-05)
+
+
+### Features
+
+* **repo:** ai-native sdlc — previews, e2e, ai review/triage ([#685](https://github.com/F3-Nation/f3-nation/issues/685)) ([1c66c22](https://github.com/F3-Nation/f3-nation/commit/1c66c228727c9fbc4c5575f42e41c5b2576267be))
+
 ## [0.2.0](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.1.3...pkg-db@0.2.0) (2026-07-26)
 
 

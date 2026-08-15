@@ -281,6 +281,7 @@ ACHIEVEMENTS_ALPHA_TESTING_ORG_IDS = [
 ]
 ACHIEVEMENT_AWARD_HOUR_CST = int(os.environ.get("ACHIEVEMENT_AWARD_HOUR_CST", 9))
 
+
 class AlertLevel(StrEnum):
     DEFAULT = "default"
     INFO = "info"

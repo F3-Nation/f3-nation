@@ -72,8 +72,15 @@ async function devSignIn(context: BrowserContext, email: string) {
   expect(csrfRes.ok()).toBe(true);
   const { csrfToken } = (await csrfRes.json()) as { csrfToken: string };
 
+  // Do NOT follow the redirect. On success NextAuth 302s to its post-login
+  // URL, which behind Cloud Run resolves to the container's own host
+  // (0.0.0.0:8080) and is unreachable from the test runner. The session cookie
+  // is set on the callback response itself (shared with this browser context's
+  // jar), so following the redirect is unnecessary — matching PREVIEW_AUTH.md
+  // Recipe 2, whose curl has no -L.
   const cbRes = await context.request.post("/api/auth/callback/dev-mode", {
     form: { csrfToken, email, json: "true" },
+    maxRedirects: 0,
   });
   expect(cbRes.status(), "dev-mode callback should succeed").toBeLessThan(400);
 

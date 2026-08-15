@@ -82,6 +82,11 @@
       "changelog-path": "CHANGELOG.md",
       "path": "packages/env"
     },
+    "packages/health": {
+      "component": "pkg-health",
+      "changelog-path": "CHANGELOG.md",
+      "path": "packages/health"
+    },
     "packages/logger": {
       "component": "pkg-logger",
       "changelog-path": "CHANGELOG.md",
@@ -101,6 +106,11 @@
       "component": "pkg-sso",
       "changelog-path": "CHANGELOG.md",
       "path": "packages/sso"
+    },
+    "packages/sso-next": {
+      "component": "pkg-sso-next",
+      "changelog-path": "CHANGELOG.md",
+      "path": "packages/sso-next"
     },
     "packages/storage": {
       "component": "pkg-storage",

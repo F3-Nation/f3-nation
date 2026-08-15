@@ -210,6 +210,24 @@ class PreblastServiceTest(unittest.TestCase):
         event_service.get_by_id.assert_called_once_with(55)
         event_service.update_preblast_fields.assert_not_called()
 
+    def test_check_and_mark_hc_announcement_handles_event_without_meta(self):
+        # A brand-new EventInstanceData carries meta=None, so the meta diff must
+        # not dereference it.
+        event = _event(id=55, meta=None)
+        event_service = MagicMock()
+        event_service.get_by_id.return_value = event
+        service = PreblastService(event_instance_service=event_service)
+
+        self.assertTrue(service.check_and_mark_hc_announcement(55, "U123", is_hc=True))
+
+        event_service.update_preblast_fields.assert_called_once_with(
+            55,
+            existing_instance=event,
+            meta_updates={
+                HC_ANNOUNCED_META_KEY: {HC_ANNOUNCEMENT_KEY: ["U123"]},
+            },
+        )
+
     def test_check_and_mark_hc_announcement_persists_only_changed_meta_keys(self):
         event = _event(
             id=55,

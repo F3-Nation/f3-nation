@@ -6,6 +6,7 @@
  * - Test database to be seeded with test data
  */
 
+import type * as apiLogger from "../logger";
 import { vi } from "vitest";
 
 // Use vi.hoisted to ensure mockLimit is available when vi.mock runs (mocks are hoisted)
@@ -18,7 +19,7 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
 }));
 
 vi.mock("../logger", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../logger")>()),
+  ...(await importOriginal<typeof apiLogger>()),
   logWarn: vi.fn(),
 }));
 

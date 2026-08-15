@@ -1,7 +1,7 @@
 {
   "name": "f3-me",
   "type": "module",
-  "version": "2.1.3",
+  "version": "2.2.0",
   "private": true,
   "scripts": {
     "dev": "next dev --port 3003",
@@ -20,9 +20,10 @@
     "@acme/api": "workspace:*",
     "@acme/logger": "workspace:*",
     "@acme/shared": "workspace:*",
-    "@acme/sso": "workspace:*",
     "@acme/storage": "workspace:*",
     "@acme/ui": "workspace:*",
+    "@f3nation/health": "workspace:*",
+    "@f3nation/sso-next": "workspace:*",
     "@orpc/client": "catalog:",
     "@orpc/server": "catalog:",
     "@t3-oss/env-nextjs": "catalog:",
@@ -39,6 +40,7 @@
     "@acme/tailwind-config": "workspace:*",
     "@acme/tsconfig": "workspace:*",
     "@acme/vitest-config": "workspace:*",
+    "@f3nation/sso": "workspace:*",
     "@tailwindcss/postcss": "catalog:",
     "@testing-library/jest-dom": "catalog:",
     "@testing-library/react": "catalog:",
