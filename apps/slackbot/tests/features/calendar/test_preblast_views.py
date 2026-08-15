@@ -256,6 +256,70 @@ class PreblastViewsTest(unittest.TestCase):
         self.assertNotIn("*Q:* Open!", event_details)
         self.assertNotIn("*HCs:* None", event_details)
 
+    @patch("f3_data_models.utils.DbManager.find_records")
+    @patch("features.calendar.event_preblast._build_attendance_service")
+    @patch("features.calendar.event_preblast._build_event_instance_service")
+    def test_build_preblast_info_formats_start_time_for_display(
+        self,
+        mock_build_event_service,
+        mock_build_attendance_service,
+        mock_find_records,
+    ):
+        """The posted preblast renders a readable time, not the stored HHMM value.
+
+        Unit tests cover ``format_event_time`` itself; this pins the rendering
+        path so the formatter cannot be dropped from ``build_preblast_info``
+        without a test failing.
+        """
+        event_id = 42
+        event_service = MagicMock()
+        event_service.get_by_id.return_value = _event(id=event_id, start_time="0530")
+        mock_build_event_service.return_value = event_service
+
+        attendance_service = MagicMock()
+        attendance_service.get_planned_for_event_instance.return_value = []
+        mock_build_attendance_service.return_value = attendance_service
+        mock_find_records.return_value = []
+
+        preblast_info = build_preblast_info(
+            logger=MagicMock(),
+            region_record=MagicMock(team_id="T123"),
+            event_instance_id=event_id,
+        )
+
+        event_details = preblast_info.preblast_blocks[0]["text"]["text"]
+        self.assertIn("*Time:* 05:30 AM", event_details)
+        self.assertNotIn("*Time:* 0530", event_details)
+
+    @patch("f3_data_models.utils.DbManager.find_records")
+    @patch("features.calendar.event_preblast._build_attendance_service")
+    @patch("features.calendar.event_preblast._build_event_instance_service")
+    def test_build_preblast_info_renders_tbd_when_start_time_missing(
+        self,
+        mock_build_event_service,
+        mock_build_attendance_service,
+        mock_find_records,
+    ):
+        """Preserves the previous ``or 'TBD'`` behavior for unset times."""
+        event_id = 43
+        event_service = MagicMock()
+        event_service.get_by_id.return_value = _event(id=event_id, start_time=None)
+        mock_build_event_service.return_value = event_service
+
+        attendance_service = MagicMock()
+        attendance_service.get_planned_for_event_instance.return_value = []
+        mock_build_attendance_service.return_value = attendance_service
+        mock_find_records.return_value = []
+
+        preblast_info = build_preblast_info(
+            logger=MagicMock(),
+            region_record=MagicMock(team_id="T123"),
+            event_instance_id=event_id,
+        )
+
+        event_details = preblast_info.preblast_blocks[0]["text"]["text"]
+        self.assertIn("*Time:* TBD", event_details)
+
     @patch("f3_data_models.utils.DbManager.find_records", side_effect=RuntimeError("db unavailable"))
     @patch("features.calendar.event_preblast._build_attendance_service")
     @patch("features.calendar.event_preblast._build_event_instance_service")
