@@ -11,19 +11,20 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# Create non-root user for security (must exist before uv sync so --chown works)
+# Create non-root user for security
 RUN groupadd --gid 1000 slackbot && \
     useradd --uid 1000 --gid slackbot --shell /bin/bash --create-home slackbot
 
-COPY pyproject.toml uv.lock ./
-COPY packages/db-python ./packages/db-python
-COPY apps/slackbot ./apps/slackbot
+# Copy source files owned by slackbot (BuildKit --chown is valid on COPY)
+COPY --chown=slackbot:slackbot pyproject.toml uv.lock ./
+COPY --chown=slackbot:slackbot packages/db-python ./packages/db-python
+COPY --chown=slackbot:slackbot apps/slackbot ./apps/slackbot
 
-# Run uv sync as slackbot so the venv is created with correct ownership;
-# no post-install chown -R needed, avoiding metadata rewrites on the venv tree.
+# uv sync runs as root (build-time); fix venv ownership afterward.
+# Only /app/.venv needs to be writable by slackbot at runtime.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    --chown=slackbot:slackbot \
-    uv sync --locked --package f3-nation-slack-bot --no-dev --no-editable
+    uv sync --locked --package f3-nation-slack-bot --no-dev --no-editable && \
+    chown -R slackbot:slackbot /app/.venv
 
 WORKDIR $APP_HOME
 USER slackbot
