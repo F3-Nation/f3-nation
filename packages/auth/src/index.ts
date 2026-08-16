@@ -23,6 +23,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth(authConfig);
  * top-to-bottom before any importer's code runs, so no caller can reach it
  * before `NextAuth(authConfig)` has. Do not re-export it from a subpath
  * entry (e.g. `./config`, `./lib/*`) without re-verifying this ordering.
+ *
+ * Read-only and non-rolling: any `Set-Cookie` headers Auth() would emit
+ * (rolling JWT refresh, clearing an invalid session cookie) are not
+ * propagated to the caller -- see the return statement below for why.
  */
 export async function getSessionFromHeaders(
   headers: Headers,
