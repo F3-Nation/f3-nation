@@ -119,7 +119,7 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
 
 - **401 Unauthorized**: Missing, invalid, revoked, or expired API key
 - **403 Forbidden**: Valid API key but insufficient permissions for the requested resource
-- **429 Too Many Requests**: Rate limit exceeded (200 requests per 60 seconds)`,
+- **429 Too Many Requests**: Rate limit exceeded (500 requests per 60 seconds)`,
       contact: {
         name: "F3 Nation",
         url: "https://f3nation.com",
