@@ -46,7 +46,7 @@ const getDevMockSession = (): Session => ({
 // Effective limit = RATE_LIMIT_MAX_REQUESTS * number_of_instances.
 // For true distributed rate limiting, use Redis/Upstash instead.
 const RATE_LIMIT_WINDOW_MS = 60000; // 60 seconds
-const RATE_LIMIT_MAX_REQUESTS = isDevelopment ? 10000 : 200;
+const RATE_LIMIT_MAX_REQUESTS = isDevelopment ? 10000 : 500;
 
 // Keep expiry checks anchored to one canonical DB clock source to avoid
 // app-server clock skew and cross-check inconsistencies.
