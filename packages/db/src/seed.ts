@@ -27,6 +27,12 @@ dayjs.extend(customParseFormat);
 if (!("DATABASE_URL" in env))
   throw new Error("DATABASE_URL not found on .env.development");
 
+// _reseedUsers/_reseedFromScratch/_deleteSeededData are unreachable — every
+// call site in seed() below is commented out; the live local-dev path is
+// local-seed.ts (`pnpm seed:local`). The full-table deletes in these dead
+// functions are intentional, so the rule is disabled just around them —
+// everything else in this file stays covered.
+/* eslint-disable drizzle/enforce-delete-with-where */
 const _reseedUsers = async () => {
   await db.delete(schema.authAccounts);
   await db.delete(schema.authSessions);
@@ -58,6 +64,7 @@ const _reseedFromScratch = async () => {
   await db.delete(schema.authVerificationTokens);
   await db.delete(schema.users);
   await db.delete(schema.updateRequests);
+  /* eslint-enable drizzle/enforce-delete-with-where */
 
   SEED_LOGS && console.log("Inserting data");
   // await insertData({ regionData, workoutData });
@@ -168,6 +175,7 @@ const _deleteSeededData = async () => {
     );
     console.log("deleted event instances");
     console.log("deleting update requests");
+    // eslint-disable-next-line drizzle/enforce-delete-with-where -- this dead-code helper is never invoked; see the note above _reseedUsers.
     await db.delete(schema.updateRequests);
 
     console.log("deleting event types");
