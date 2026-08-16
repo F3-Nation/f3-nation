@@ -12,10 +12,10 @@ import { req, target } from "./transport";
 
 /**
  * Mirrors the non-development branch of the private RATE_LIMIT_MAX_REQUESTS
- * (`isDevelopment ? 10000 : 200`) in packages/api/src/shared.ts; the suite
- * pins NODE_ENV=test, so 200 is the effective limit.
+ * (`isDevelopment ? 10000 : 500`) in packages/api/src/shared.ts; the suite
+ * pins NODE_ENV=test, so 500 is the effective limit.
  */
-const RATE_LIMIT = 200;
+const RATE_LIMIT = 500;
 
 /** checkLimit evicts entries older than now - 60s, so the window slides. */
 export const WINDOW_MS = 60_000;
@@ -43,7 +43,7 @@ export async function exhaustRateLimit(ip: string): Promise<void> {
   // MemoryRatelimiter's window slides: if the warm-up itself outran half the
   // window, early requests are already evicted and the 429 cases would fail as
   // `expected 200 to be 429` — a slow runner masquerading as a limiter
-  // regression. Report the real cause instead. ~4s locally.
+  // regression. Report the real cause instead.
   const elapsed = Date.now() - started;
   expect(
     elapsed,
