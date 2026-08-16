@@ -66,7 +66,7 @@ def make_settings(tmp_path):
             "ANALYTICS_POSTGRES_USER": "analytics",
             "ANALYTICS_POSTGRES_PASSWORD": "password",
             "ANALYTICS_POSTGRES_DATABASE": "f3_staging",
-            "ANALYTICS_GCS_PREFIX": "gs://analytics-nonprod/parquets/pv_regions",
+            "ANALYTICS_GCS_PREFIX": "gs://f3-analytics-nonprod/parquets/pv_regions",
             "ANALYTICS_BIGQUERY_TABLE": "f3data.paxVaultDuckStaging.pv_regions",
         }
     )

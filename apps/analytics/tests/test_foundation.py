@@ -27,7 +27,7 @@ def extension_env(tmp_path):
         "ANALYTICS_POSTGRES_USER": "analytics",
         "ANALYTICS_POSTGRES_PASSWORD": "password",
         "ANALYTICS_POSTGRES_DATABASE": "f3_staging",
-        "ANALYTICS_GCS_PREFIX": "gs://analytics-nonprod/parquets/pv_regions",
+        "ANALYTICS_GCS_PREFIX": "gs://f3-analytics-nonprod/parquets/pv_regions",
         "ANALYTICS_BIGQUERY_TABLE": "f3data.paxVaultDuckStaging.pv_regions",
     }
 
@@ -68,6 +68,79 @@ def test_settings_reject_adversarial_postgres_components(tmp_path):
 def test_settings_pin_publication_targets(tmp_path):
     values = extension_env(tmp_path)
     values["ANALYTICS_GCS_PREFIX"] += "/other"
+    with pytest.raises(SettingsError):
+        Settings.from_env(values)
+
+
+def local_tcp_env(tmp_path):
+    values = extension_env(tmp_path)
+    values["ANALYTICS_ENVIRONMENT"] = "local"
+    values.pop("ANALYTICS_POSTGRES_SOCKET_DIR")
+    values["ANALYTICS_POSTGRES_HOST"] = "localhost"
+    values["ANALYTICS_POSTGRES_PORT"] = "5433"
+    return values
+
+
+def test_local_tcp_endpoint_is_accepted_and_quoted(tmp_path):
+    settings = Settings.from_env(
+        local_tcp_env(tmp_path)
+        | {"ANALYTICS_POSTGRES_PASSWORD": "p'a;ss", "ANALYTICS_POSTGRES_PORT": "15432"}
+    )
+    assert settings.postgres_host == "localhost"
+    assert settings.postgres_port == 15432
+    statement = postgres_attach_sql(settings)
+    assert "postgresql://analytics:p%27a%3Bss@localhost:15432/f3_staging" in statement
+    assert "READ_ONLY" in statement
+
+
+@pytest.mark.parametrize(
+    ("host", "port"),
+    (
+        ("db.example.test", "5433"),
+        ("localhost", "not-a-port"),
+        ("localhost", "0"),
+        ("localhost", "-1"),
+        ("localhost", "65536"),
+        ("localhost", ""),
+        ("", "5433"),
+    ),
+)
+def test_local_tcp_endpoint_rejects_unapproved_or_incomplete_values(tmp_path, host, port):
+    values = local_tcp_env(tmp_path)
+    values["ANALYTICS_POSTGRES_HOST"] = host
+    values["ANALYTICS_POSTGRES_PORT"] = port
+    with pytest.raises(SettingsError):
+        Settings.from_env(values)
+
+
+def test_local_rejects_socket_and_tcp_together(tmp_path):
+    values = local_tcp_env(tmp_path)
+    values["ANALYTICS_POSTGRES_SOCKET_DIR"] = "/cloudsql/f3data:us-central1:f3data-nonprod"
+    with pytest.raises(SettingsError):
+        Settings.from_env(values)
+
+
+def test_nonprod_rejects_tcp_configuration(tmp_path):
+    values = extension_env(tmp_path)
+    values["ANALYTICS_POSTGRES_HOST"] = "localhost"
+    values["ANALYTICS_POSTGRES_PORT"] = "5433"
+    with pytest.raises(SettingsError):
+        Settings.from_env(values)
+
+
+def test_production_rejects_tcp_configuration(tmp_path):
+    values = extension_env(tmp_path)
+    values.update(
+        {
+            "ANALYTICS_ENVIRONMENT": "production",
+            "ANALYTICS_POSTGRES_DATABASE": "f3_prod",
+            "ANALYTICS_GCS_PREFIX": "gs://analytics/parquets/pv_regions",
+            "ANALYTICS_BIGQUERY_TABLE": "f3data.paxVaultDuck.pv_regions",
+            "ANALYTICS_POSTGRES_HOST": "localhost",
+            "ANALYTICS_POSTGRES_PORT": "5433",
+        }
+    )
+    values.pop("ANALYTICS_POSTGRES_SOCKET_DIR")
     with pytest.raises(SettingsError):
         Settings.from_env(values)
 
@@ -196,7 +269,7 @@ def test_cli_success_returns_zero(monkeypatch, tmp_path, capsys):
     monkeypatch.setenv("ANALYTICS_POSTGRES_USER", "analytics")
     monkeypatch.setenv("ANALYTICS_POSTGRES_PASSWORD", "password")
     monkeypatch.setenv("ANALYTICS_POSTGRES_DATABASE", "f3_staging")
-    monkeypatch.setenv("ANALYTICS_GCS_PREFIX", "gs://analytics-nonprod/parquets/pv_regions")
+    monkeypatch.setenv("ANALYTICS_GCS_PREFIX", "gs://f3-analytics-nonprod/parquets/pv_regions")
     monkeypatch.setenv("ANALYTICS_BIGQUERY_TABLE", "f3data.paxVaultDuckStaging.pv_regions")
     monkeypatch.setenv("DUCKDB_EXTENSION_DIR", str(tmp_path))
     extension = tmp_path / "postgres_scanner.duckdb_extension"

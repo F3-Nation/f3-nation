@@ -88,8 +88,11 @@ def postgres_attach_sql(settings: Settings) -> str:
     user = quote(settings.postgres_user, safe="")
     password = quote(settings.postgres_password, safe="")
     database = quote(settings.postgres_database, safe="")
-    socket = quote(settings.postgres_socket_dir, safe="")
-    literal = f"postgresql://{user}:{password}@/{database}?host={socket}"
+    if settings.postgres_host is not None:
+        literal = f"postgresql://{user}:{password}@{settings.postgres_host}:{settings.postgres_port}/{database}"
+    else:
+        socket = quote(settings.postgres_socket_dir or "", safe="")
+        literal = f"postgresql://{user}:{password}@/{database}?host={socket}"
     return f"ATTACH {_sql_literal(literal)} AS pg (TYPE postgres, READ_ONLY)"
 
 

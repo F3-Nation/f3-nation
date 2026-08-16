@@ -266,7 +266,7 @@ defaults.
   `gs://analytics/parquets/pv_regions`, and updates
   `f3data.paxVaultDuck.pv_regions`.
 - Nonprod job `analytics-etl-nonprod` uses Cloud SQL instance `f3data-nonprod`,
-  publishes to `gs://analytics-nonprod/parquets/pv_regions`, and updates
+  publishes to `gs://f3-analytics-nonprod/parquets/pv_regions`, and updates
   `f3data.paxVaultDuckStaging.pv_regions`.
 - Jobs use Cloud SQL Unix sockets. Production is triggered daily by Cloud
   Scheduler; nonprod is manual. Scheduler retries and task retries are zero.
