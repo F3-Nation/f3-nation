@@ -23,7 +23,7 @@ import { AOSFilter } from "../_components/ao-filter";
 import type { DateRange } from "../_components/date-range-filter";
 import {
   DateRangeFilter,
-  EMPTY_DATE_RANGE,
+  todayForwardDateRange,
 } from "../_components/date-range-filter";
 import { MobileFilterSheet } from "../_components/mobile-filter-sheet";
 import { RegionFilter } from "../_components/region-filter";
@@ -53,8 +53,10 @@ export const EventInstancesTable = () => {
   const [selectedStatuses, setSelectedStatuses] = useState<IsActiveStatus[]>([
     "active",
   ]);
-  const [startDateRange, setStartDateRange] =
-    useState<DateRange>(EMPTY_DATE_RANGE);
+
+  const [startDateRange, setStartDateRange] = useState<DateRange>(
+    todayForwardDateRange,
+  );
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
@@ -82,7 +84,7 @@ export const EventInstancesTable = () => {
     setSelectedStatuses(["active"]);
     setSelectedAos([]);
     setSelectedRegions([]);
-    setStartDateRange(EMPTY_DATE_RANGE);
+    setStartDateRange(todayForwardDateRange());
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));
   };
 

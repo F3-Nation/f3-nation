@@ -253,7 +253,11 @@ export const eventInstanceRouter = {
         )
         .where(where);
 
-      const sortedColumns = input?.sorting?.map((sorting) => {
+      const requestedSorting = input?.sorting?.length
+        ? input.sorting
+        : undefined;
+
+      const sortedColumns = requestedSorting?.map((sorting) => {
         const direction = sorting.desc ? desc : asc;
         switch (sorting.id) {
           case "startDate":
@@ -285,8 +289,12 @@ export const eventInstanceRouter = {
         }
       }) ?? [
         asc(schema.eventInstances.startDate),
-        asc(schema.eventInstances.startTime),
+        asc(schema.eventInstances.name),
       ];
+
+      // Every sort ends on the id so ties have a deterministic order; without it
+      // rows with equal sort keys can repeat or vanish between pages.
+      sortedColumns.push(asc(schema.eventInstances.id));
 
       const query = ctx.db
         .select(select)

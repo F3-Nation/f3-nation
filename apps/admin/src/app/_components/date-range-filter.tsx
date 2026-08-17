@@ -1,5 +1,6 @@
 "use client";
 
+import dayjs from "dayjs";
 import { CalendarRange, ChevronsUpDown } from "lucide-react";
 import { useState } from "react";
 
@@ -14,6 +15,11 @@ export interface DateRange {
 }
 
 export const EMPTY_DATE_RANGE: DateRange = { from: "", to: "" };
+
+export const todayForwardDateRange = (): DateRange => ({
+  from: dayjs().format("YYYY-MM-DD"),
+  to: "",
+});
 
 const formatBound = (value: string) => (value.length > 0 ? value : "…");
 

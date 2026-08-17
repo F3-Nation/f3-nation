@@ -2842,5 +2842,64 @@ describe("Event Instance Router", () => {
         active.id,
       ]);
     });
+
+    // The table sends `sorting: []` until a column header is clicked, so the
+    // empty-array case is the one users actually see on first load.
+    it.each([
+      ["omitted", undefined],
+      ["an empty array", [] as { id: string; desc: boolean }[]],
+    ])(
+      "should default to start date, then name, then id when sorting is %s",
+      async (_label, sorting) => {
+        const session = await createAdminSession();
+        await mockAuthWithSession(session);
+
+        const region = await createTestRegion();
+        if (!region) throw new Error("Failed to create region");
+
+        const ao = await createTestAO(region.id);
+        if (!ao) throw new Error("Failed to create AO");
+
+        const dayAfter = (days: number) => {
+          const date = new Date();
+          date.setDate(date.getDate() + days);
+          return date.toISOString().split("T")[0]!;
+        };
+
+        // Created in reverse of the expected order, and the inactive instance
+        // sorts into the middle: status must not influence the default sort.
+        const lateDate = await createTestEventInstance(ao.id, {
+          startDate: dayAfter(30),
+          name: "Aardvark",
+        });
+        const earlyNameZ = await createTestEventInstance(ao.id, {
+          startDate: dayAfter(10),
+          name: "Zulu",
+          isActive: false,
+        });
+        const earlyNameA = await createTestEventInstance(ao.id, {
+          startDate: dayAfter(10),
+          name: "Alpha",
+        });
+        if (!lateDate || !earlyNameZ || !earlyNameA) {
+          throw new Error("Failed to create event instances");
+        }
+
+        const client = createTestClient();
+        const result = await client.eventInstance.all({
+          aoOrgId: ao.id,
+          statuses: ["active", "inactive"],
+          sorting,
+          pageIndex: 0,
+          pageSize: 50,
+        });
+
+        expect(result.eventInstances.map((e) => e.id)).toEqual([
+          earlyNameA.id,
+          earlyNameZ.id,
+          lateDate.id,
+        ]);
+      },
+    );
   });
 });

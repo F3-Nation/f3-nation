@@ -1,9 +1,10 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
   DateRangeFilter,
   EMPTY_DATE_RANGE,
+  todayForwardDateRange,
 } from "~/app/_components/date-range-filter";
 
 // Radix's popper measures its trigger, and jsdom has no ResizeObserver.
@@ -129,5 +130,28 @@ describe("DateRangeFilter", () => {
     fireEvent.click(screen.getByRole("button", { name: "Clear dates" }));
 
     expect(onChange).toHaveBeenCalledWith(EMPTY_DATE_RANGE);
+  });
+});
+
+describe("todayForwardDateRange", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("starts on today and leaves the end open", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 0, 15, 9, 30));
+
+    expect(todayForwardDateRange()).toEqual({ from: "2026-01-15", to: "" });
+  });
+
+  it("re-reads the clock on every call", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 0, 15, 23, 59));
+    const before = todayForwardDateRange();
+
+    vi.setSystemTime(new Date(2026, 0, 16, 0, 1));
+
+    expect(todayForwardDateRange().from).not.toBe(before.from);
   });
 });

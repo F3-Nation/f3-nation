@@ -345,6 +345,7 @@ export const mapLocationRouter = os.router({
           and(
             eq(schema.eventInstances.isActive, true),
             eq(schema.eventInstances.isPrivate, false),
+            eq(aoOrg.isActive, true),
             or(
               isNull(schema.eventInstances.seriesId),
               and(
