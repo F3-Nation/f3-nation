@@ -17,6 +17,7 @@ import "~/app/globals.css";
 
 import { TooltipProvider } from "@acme/ui/tooltip";
 
+import { ApiDownSplash } from "~/app/_components/api-down-splash";
 import { GoogleAnalytics } from "~/app/_components/google-analytics";
 import { UserLocationProvider } from "~/app/_components/map/user-location-provider";
 import { ModalSwitcher } from "~/app/_components/modal/modal-switcher";
@@ -25,6 +26,7 @@ import { OrpcReactProvider } from "~/orpc/react";
 import { RuntimeConfigProvider } from "~/utils/runtime-config";
 import { KeyPressProvider } from "~/utils/key-press/provider";
 import { RouteChangeTracker } from "./_components/route-change-tracker";
+import { isApiDown } from "~/lib/api-health";
 
 const mapBaseUrl = (() => {
   // F3_MAP_BASE_URL is typed required, but under skipValidation (CI/lint builds)
@@ -53,14 +55,30 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout(props: { children: React.ReactNode }) {
+export default async function RootLayout(props: { children: React.ReactNode }) {
+  const fontVars = cn(GeistSans.variable, GeistMono.variable);
+
+  if (await isApiDown(env.F3_API_BASE_URL)) {
+    return (
+      <html lang="en" suppressHydrationWarning>
+        <body
+          className={cn(
+            "min-h-dvh bg-background font-sans text-foreground antialiased",
+            fontVars,
+          )}
+        >
+          <ApiDownSplash />
+        </body>
+      </html>
+    );
+  }
+
   return (
     <html lang="en" suppressHydrationWarning>
       <body
         className={cn(
           "min-h-dvh w-screen overflow-hidden bg-background font-sans text-foreground antialiased",
-          GeistSans.variable,
-          GeistMono.variable,
+          fontVars,
         )}
       >
         <GoogleAnalytics measurementId={env.NEXT_PUBLIC_GA_MEASUREMENT_ID} />
