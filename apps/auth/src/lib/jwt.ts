@@ -86,6 +86,15 @@ export async function signIdToken(params: {
   picture?: string | null;
   email?: string | null;
   emailVerified?: boolean;
+  // OIDC replay-protection value, echoed back verbatim from the original
+  // /authorize request. Omitted entirely when the client didn't send one
+  // (nonce is optional per spec) — never emitted as an empty/null claim.
+  nonce?: string | null;
+  // When the end user actually authenticated, as an ISO timestamp string
+  // (matches this repo's `timestamp(..., { mode: "string" })` convention
+  // elsewhere) — converted to the NumericDate the auth_time claim expects.
+  // Omitted when unknown (e.g. tokens issued before this was tracked).
+  authTime?: string | null;
 }): Promise<string> {
   const privateKey = await getPrivateKey();
   const issuer = env.NEXT_PUBLIC_AUTH_URL;
@@ -109,6 +118,25 @@ export async function signIdToken(params: {
   if (scopes.has("email") && params.email != null) {
     claims.email = params.email;
     claims.email_verified = !!params.emailVerified;
+  }
+  if (params.nonce != null) claims.nonce = params.nonce;
+  if (params.authTime != null) {
+    // authTime is stored UTC (auth-options.ts writes new Date().toISOString()
+    // into a `timestamp` column with no tz), but drizzle-orm's postgres-js
+    // driver registers a transparent parser for that column type — it comes
+    // back as the raw Postgres wire text ("YYYY-MM-DD HH:MM:SS[.mmm]", no
+    // offset, space instead of "T"), not the ISO string that went in. new
+    // Date() treats that shape as local server time, not UTC, silently
+    // skewing the claim by the host's UTC offset on any non-UTC machine.
+    // Normalize to real ISO-with-Z before parsing; already-ISO input (e.g.
+    // test fixtures using .toISOString() directly) passes through unchanged.
+    const iso = params.authTime.includes("T")
+      ? params.authTime
+      : `${params.authTime.replace(" ", "T")}Z`;
+    const authTimeMs = new Date(iso).getTime();
+    if (!Number.isNaN(authTimeMs)) {
+      claims.auth_time = Math.floor(authTimeMs / 1000);
+    }
   }
 
   return new SignJWT(claims)

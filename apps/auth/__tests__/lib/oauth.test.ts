@@ -67,6 +67,7 @@ const {
 } = await import("../../src/lib/oauth");
 const { logWarn, logError } = await import("~/lib/logging");
 const { jwtVerify } = await import("jose");
+const { signIdToken } = await import("~/lib/jwt");
 
 const CONFIDENTIAL_CLIENT = {
   id: "confidential-client",
@@ -493,6 +494,53 @@ describe("exchangeAuthorizationCode", () => {
     );
     expect(dbMock.insert).toHaveBeenCalledTimes(1);
   });
+
+  it("echoes the authorization code's nonce/authTime into the id_token and persists both onto the new refresh token row", async () => {
+    const verifier = "a-real-looking-code-verifier-string";
+    const computedChallenge = crypto
+      .createHash("sha256")
+      .update(verifier)
+      .digest("base64url");
+    const authTime = "2026-01-01T00:00:00.000Z";
+    dbMock.delete.mockReturnValueOnce(
+      chain([
+        {
+          code: "code-1",
+          clientId: PUBLIC_CLIENT.id,
+          userId: 1,
+          redirectUri: "https://example.com/callback",
+          scopes: "openid profile email",
+          codeChallenge: computedChallenge,
+          codeChallengeMethod: "S256",
+          nonce: "replay-guard-xyz",
+          authTime,
+          expiresAt: new Date(Date.now() + 60_000).toISOString(),
+          createdAt: "",
+        },
+      ]),
+    );
+    mockGetClientResult(PUBLIC_CLIENT);
+    dbMock.select.mockReturnValueOnce(chain([{ email: "pax@example.com" }]));
+    const insertChain = chain(undefined);
+    dbMock.insert.mockReturnValueOnce(insertChain);
+
+    await exchangeAuthorizationCode({
+      code: "code-1",
+      clientId: PUBLIC_CLIENT.id,
+      redirectUri: "https://example.com/callback",
+      codeVerifier: verifier,
+    });
+
+    expect(signIdToken).toHaveBeenCalledWith(
+      expect.objectContaining({ nonce: "replay-guard-xyz", authTime }),
+    );
+    expect(insertChain.values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scopes: "openid profile email",
+        authTime,
+      }),
+    );
+  });
 });
 
 describe("exchangeRefreshToken", () => {
@@ -609,6 +657,111 @@ describe("exchangeRefreshToken", () => {
     expect(dbMock.insert).toHaveBeenCalledTimes(1);
   });
 
+  it("uses the scopes/authTime persisted on the refresh token's own lineage, not the client's full registered scope", async () => {
+    const authTime = "2025-06-15T12:00:00.000Z";
+    dbMock.update.mockReturnValueOnce(
+      chain([
+        {
+          token: "rt-1",
+          clientId: PUBLIC_CLIENT.id,
+          userId: 42,
+          expiresAt: new Date(Date.now() + 60_000).toISOString(),
+          createdAt: "",
+          rotatedAt: new Date().toISOString(),
+          // Narrower than PUBLIC_CLIENT.scopes ("openid profile email") —
+          // proves this is what actually gets used, not the client max.
+          scopes: "openid email",
+          authTime,
+        },
+      ]),
+    );
+    mockGetClientResult(PUBLIC_CLIENT);
+    dbMock.select.mockReturnValueOnce(chain([{ email: "pax@example.com" }]));
+    const insertChain = chain(undefined);
+    dbMock.insert.mockReturnValueOnce(insertChain);
+
+    const result = await exchangeRefreshToken({
+      refreshToken: "rt-1",
+      clientId: PUBLIC_CLIENT.id,
+    });
+
+    expect(result).toMatchObject({ scope: "openid email" });
+    expect(signIdToken).toHaveBeenCalledWith(
+      expect.objectContaining({ scope: "openid email", authTime }),
+    );
+    // Deliberately no nonce on a refresh-issued id_token (OIDC Core 12.2).
+    const idTokenCall = vi.mocked(signIdToken).mock.calls[0]?.[0];
+    expect(idTokenCall).not.toHaveProperty("nonce");
+    // Carried forward so the *next* rotation can recover them too.
+    expect(insertChain.values).toHaveBeenCalledWith(
+      expect.objectContaining({ scopes: "openid email", authTime }),
+    );
+  });
+
+  it("falls back to the client's registered scopes for a legacy row with no persisted scopes", async () => {
+    dbMock.update.mockReturnValueOnce(
+      chain([
+        {
+          token: "rt-legacy",
+          clientId: PUBLIC_CLIENT.id,
+          userId: 42,
+          expiresAt: new Date(Date.now() + 60_000).toISOString(),
+          createdAt: "",
+          rotatedAt: new Date().toISOString(),
+          scopes: null,
+          authTime: null,
+        },
+      ]),
+    );
+    mockGetClientResult(PUBLIC_CLIENT);
+    dbMock.select.mockReturnValueOnce(chain([{ email: "pax@example.com" }]));
+
+    const result = await exchangeRefreshToken({
+      refreshToken: "rt-legacy",
+      clientId: PUBLIC_CLIENT.id,
+    });
+
+    expect(result).toMatchObject({ scope: PUBLIC_CLIENT.scopes });
+    expect(logWarn).toHaveBeenCalledWith(
+      "auth.oauth.refresh_token_legacy_scope_fallback",
+      { clientId: PUBLIC_CLIENT.id, userId: 42 },
+    );
+  });
+
+  it("persists the resolved fallback scope onto the rotated row for a legacy token, not the null it inherited", async () => {
+    dbMock.update.mockReturnValueOnce(
+      chain([
+        {
+          token: "rt-legacy",
+          clientId: PUBLIC_CLIENT.id,
+          userId: 42,
+          expiresAt: new Date(Date.now() + 60_000).toISOString(),
+          createdAt: "",
+          rotatedAt: new Date().toISOString(),
+          scopes: null,
+          authTime: null,
+        },
+      ]),
+    );
+    mockGetClientResult(PUBLIC_CLIENT);
+    dbMock.select.mockReturnValueOnce(chain([{ email: "pax@example.com" }]));
+    const insertChain = chain(undefined);
+    dbMock.insert.mockReturnValueOnce(insertChain);
+
+    await exchangeRefreshToken({
+      refreshToken: "rt-legacy",
+      clientId: PUBLIC_CLIENT.id,
+    });
+
+    // Without this, a legacy row's null scopes would propagate forever —
+    // every future rotation of this lineage would keep re-falling back to
+    // whatever the client's registered scopes happen to be *at that later
+    // time*, instead of locking in what was actually resolved here.
+    expect(insertChain.values).toHaveBeenCalledWith(
+      expect.objectContaining({ scopes: PUBLIC_CLIENT.scopes }),
+    );
+  });
+
   it("warns (but does not reject) when a public client sends a secret anyway", async () => {
     mockGetClientResult(PUBLIC_CLIENT);
     dbMock.update.mockReturnValueOnce(chain([]));
@@ -680,6 +833,45 @@ describe("createAuthorizationCode", () => {
     expect(typeof code).toBe("string");
     expect(code.length).toBeGreaterThan(0);
     expect(dbMock.insert).toHaveBeenCalledTimes(1);
+  });
+
+  it("persists nonce and authTime when the caller supplies them", async () => {
+    const insertChain = chain(undefined);
+    dbMock.insert.mockReturnValueOnce(insertChain);
+    const authTime = "2026-02-02T00:00:00.000Z";
+
+    await createAuthorizationCode({
+      clientId: PUBLIC_CLIENT.id,
+      userId: 1,
+      redirectUri: "https://example.com/callback",
+      scopes: "openid profile email",
+      codeChallenge: "challenge",
+      codeChallengeMethod: "S256",
+      nonce: "n-abc",
+      authTime,
+    });
+
+    expect(insertChain.values).toHaveBeenCalledWith(
+      expect.objectContaining({ nonce: "n-abc", authTime }),
+    );
+  });
+
+  it("stores null nonce/authTime when the caller omits them", async () => {
+    const insertChain = chain(undefined);
+    dbMock.insert.mockReturnValueOnce(insertChain);
+
+    await createAuthorizationCode({
+      clientId: PUBLIC_CLIENT.id,
+      userId: 1,
+      redirectUri: "https://example.com/callback",
+      scopes: "openid profile email",
+      codeChallenge: "challenge",
+      codeChallengeMethod: "S256",
+    });
+
+    expect(insertChain.values).toHaveBeenCalledWith(
+      expect.objectContaining({ nonce: null, authTime: null }),
+    );
   });
 });
 
