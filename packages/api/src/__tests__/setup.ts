@@ -52,5 +52,5 @@ const defaultSession: Session = {
 };
 
 vi.mock("@acme/auth", () => ({
-  auth: vi.fn().mockResolvedValue(defaultSession),
+  getSessionFromHeaders: vi.fn().mockResolvedValue(defaultSession),
 }));
