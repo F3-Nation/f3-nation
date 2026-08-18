@@ -292,6 +292,33 @@ jobs:
       - uses: ./.github/actions/setup
       - run: pnpm typecheck
 
+  # Regenerates Drizzle migrations from packages/db/drizzle/schema.ts and fails
+  # if the output differs from what's committed. Exists because a snapshot can
+  # silently go stale in an unrelated PR (a contributor's local schema.ts is
+  # behind main when they run `drizzle-kit generate`, so the new snapshot bakes
+  # in an out-of-date field) and then sit unnoticed on main for weeks until the
+  # next `generate` run re-emits the transformation as a spurious "new"
+  # migration. That happened with the request_type enum: it drifted in the
+  # 0018/0019 snapshots and only surfaced when PR #845 generated 0020, an exact
+  # duplicate of 0017. This job catches that class of drift at PR time instead.
+  db-schema-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Regenerate migrations and diff against what's committed
+        working-directory: packages/db
+        run: |
+          node_modules/.bin/drizzle-kit generate
+          if [ -n "$(git status --porcelain -- drizzle)" ]; then
+            echo "::error::drizzle-kit generate produced migration/snapshot output that doesn't match what's committed under packages/db/drizzle. This usually means schema.ts changed without regenerating migrations, or a stale local snapshot got committed on an earlier PR. Run 'pnpm --filter @acme/db generate' on a branch rebased on latest main, review the diff, and commit the result."
+            git status --porcelain -- drizzle
+            git --no-pager diff -- drizzle
+            exit 1
+          fi
+
   build:
     runs-on: ubuntu-latest
     steps:
