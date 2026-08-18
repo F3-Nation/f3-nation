@@ -1,6 +1,6 @@
 # ---------- Stage 1: Prune monorepo ----------
 ARG TURBO_VERSION=2
-FROM node:24.18.1-alpine@sha256:f70403e87646dc51b45295f4b8b70cdad0b63d2297c4c9899119b03f7af7a6b3 AS builder
+FROM node:24.19.0-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS builder
 ARG TURBO_VERSION
 
 ENV TURBO_TELEMETRY_DISABLED=1
@@ -17,7 +17,7 @@ COPY . .
 RUN turbo prune f3-auth --docker
 
 # ---------- Stage 2: Install + build ----------
-FROM node:24.18.1-alpine@sha256:f70403e87646dc51b45295f4b8b70cdad0b63d2297c4c9899119b03f7af7a6b3 AS installer
+FROM node:24.19.0-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS installer
 ARG TURBO_VERSION
 
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -55,7 +55,7 @@ RUN pnpm turbo build --filter=f3-auth
 RUN test -n "$(find apps/auth/.next/standalone -name 'libvips-cpp*')"
 
 # ---------- Stage 3: Production runner ----------
-FROM node:24.18.1-alpine@sha256:f70403e87646dc51b45295f4b8b70cdad0b63d2297c4c9899119b03f7af7a6b3 AS runner
+FROM node:24.19.0-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS runner
 
 RUN apk add --no-cache libc6-compat openssl && apk update
 WORKDIR /app
