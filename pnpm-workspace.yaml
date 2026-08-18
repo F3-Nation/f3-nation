@@ -13,13 +13,13 @@ catalog:
   "@google-cloud/storage": ^7.21.0
   "@hookform/resolvers": ^5.7.1
   "@ianvs/prettier-plugin-sort-imports": ^4.7.1
-  "@next/eslint-plugin-next": ^16.2.12
-  "@orpc/client": ^1.14.13
-  "@orpc/experimental-ratelimit": ^1.14.13
-  "@orpc/openapi": ^1.14.13
-  "@orpc/server": ^1.14.13
-  "@orpc/tanstack-query": ^1.14.13
-  "@orpc/zod": ^1.14.13
+  "@next/eslint-plugin-next": ^16.3.0
+  "@orpc/client": ^1.15.0
+  "@orpc/experimental-ratelimit": ^1.15.0
+  "@orpc/openapi": ^1.15.0
+  "@orpc/server": ^1.15.0
+  "@orpc/tanstack-query": ^1.15.0
+  "@orpc/zod": ^1.15.0
   "@playwright/test": ^1.62.1
   "@radix-ui/react-alert-dialog": ^1.1.23
   "@radix-ui/react-avatar": ^1.2.6
@@ -42,8 +42,8 @@ catalog:
   "@radix-ui/react-tabs": ^1.1.21
   "@radix-ui/react-tooltip": ^1.2.16
   "@react-hook/window-size": ^3.1.1
-  "@scalar/nextjs-api-reference": ^0.11.12
-  "@sentry/nextjs": ^10.69.0
+  "@scalar/nextjs-api-reference": ^0.11.13
+  "@sentry/nextjs": ^10.70.0
   "@t3-oss/env-core": ^0.13.11
   "@t3-oss/env-nextjs": ^0.13.11
   "@tailwindcss/postcss": ^4.3.3
@@ -52,16 +52,16 @@ catalog:
   "@tanstack/react-table": ^8.21.3
   "@tanstack/react-virtual": ^3.14.9
   "@tanstack/table-core": ^8.21.3
-  "@testing-library/jest-dom": ^7.0.0
+  "@testing-library/jest-dom": ^7.0.1
   "@testing-library/react": ^16.3.2
-  "@testing-library/user-event": ^14.6.1
-  "@turbo/gen": ^2.10.8
+  "@testing-library/user-event": ^14.6.3
+  "@turbo/gen": ^2.10.9
   "@types/geojson": ^7946.0.16
-  "@types/google.maps": ^3.65.4
+  "@types/google.maps": ^3.65.5
   "@types/lodash": ^4.17.25
   "@types/node": ^24.13.3
   "@types/nodemailer": ^8.0.1
-  "@types/pg": ^8.20.3
+  "@types/pg": ^8.21.0
   "@types/react": ^19.2.18
   "@types/react-dom": ^19.2.4
   "@types/supercluster": ^7.1.3
@@ -73,15 +73,15 @@ catalog:
   cmdk: ^1.1.1
   commitizen: ^4.3.2
   dayjs: ^1.11.21
-  dompurify: ^3.4.9
+  dompurify: ^3.4.13
   dotenv: ^17.4.2
   dotenv-cli: ^11.0.0
   drizzle-kit: ^0.31.10
   drizzle-orm: ^0.45.2
   drizzle-zod: ^0.8.3
   esbuild-register: ^3.6.0
-  eslint: ^10.8.0
-  eslint-config-turbo: ^2.10.8
+  eslint: ^10.8.1
+  eslint-config-turbo: ^2.10.9
   eslint-plugin-drizzle: ^0.2.3
   eslint-plugin-import-x: ^4.17.1
   eslint-plugin-jsx-a11y: ^6.10.2
@@ -92,47 +92,47 @@ catalog:
   jiti: ^2.7.0
   jose: ^6.2.8
   jsdom: ^29.1.1
-  knip: ^6.31.0
+  knip: ^6.32.1
   lefthook: ^2.1.10
   libphonenumber-js: ^1.13.10
   lodash: ^4.18.1
   lottie-react: ^2.4.1
-  lucide-react: ^1.28.0
-  next: ^16.2.12
+  lucide-react: ^1.31.0
+  next: ^16.3.0
   next-auth: 5.0.0-beta.32
   next-themes: ^0.4.6
-  nodemailer: ^9.0.3
-  pg: ^8.22.0
+  nodemailer: ^9.0.5
+  pg: ^8.23.0
   pg-connection-string: ^2.14.0
   pino: ^10.3.1
   pino-pretty: ^13.1.3
-  postcss: ^8.5.25
+  postcss: ^8.5.26
   postcss-load-config: ^6.0.1
   postgres: ^3.4.9
   prettier: ^3.9.6
   prettier-plugin-tailwindcss: ^0.8.1
   react: ^19.2.8
   react-dom: ^19.2.8
-  react-hook-form: ^7.84.0
+  react-hook-form: ^7.85.0
   react-phone-number-input: ^3.4.17
   react-qr-code: ^2.2.0
   react-responsive: ^10.0.1
   server-only: ^0.0.1
   sharp: ^0.35.3
-  sonner: ^2.0.7
+  sonner: ^2.0.8
   supercluster: ^8.0.1
   tailwind-merge: ^3.6.0
   tailwindcss: ^4.3.3
-  tsx: ^4.23.5
-  turbo: ^2.10.8
+  tsx: ^4.23.12
+  turbo: ^2.10.9
   tw-animate-css: ^1.4.0
   typescript: ^6.0.3
-  typescript-eslint: ^8.65.0
+  typescript-eslint: ^8.67.0
   uuid: ^11.1.1
   # Vitest 4 requires Vite >= 6. Vite is otherwise only a transitive (auto-installed
   # peer) dep, which pnpm won't reliably bump from the locked v5; declaring it
   # explicitly in each vitest package pins a compatible Vite deterministically.
-  vite: ^8.2.0
+  vite: ^8.2.1
   vitest: ^4.1.10
   vitest-canvas-mock: ^1.1.4
   zod: ^4.4.3
@@ -152,8 +152,8 @@ overrides:
   "fast-uri@<3.1.5": "3.1.5" # host confusion via failed backslash authority introducer
   "sharp@<0.35.0": "0.35.3" # inherited libvips vulnerabilities
   "next@>=16.0.0 <16.3.0": "16.3.0" # GHSA-89xv-2m56-2m9x / GHSA-p9j2-gv94-2wf4 (SSRF in rewrites); covers transitive geist>next & @scalar>next. Keep in lockstep with the `next` catalog entry: a second `next` version forks next-auth's peer instance and detaches the type-extensions augmentation.
-  "postcss@<8.5.12": "^8.5.25" # GHSA-6g55-p6wh-862q (sourceMappingURL arbitrary file read)
-  "nanoid@<3.3.17": "^3.3.17" # GHSA-2v37-7h3g-55p8
+  "postcss@<8.5.12": "^8.5.26" # GHSA-6g55-p6wh-862q (sourceMappingURL arbitrary file read)
+  "nanoid@<3.3.17": "^3.3.18" # GHSA-2v37-7h3g-55p8
   "nanoid@>=4.0.0 <5.1.16": "^5.1.16" # GHSA-28wg-ghj8-5hjv
 peerDependencyRules:
   allowedVersions:
