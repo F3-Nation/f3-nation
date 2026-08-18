@@ -311,7 +311,23 @@ jobs:
       - name: Regenerate migrations and diff against what's committed
         working-directory: packages/db
         run: |
-          pnpm exec drizzle-kit generate
+          # A rename-shaped change (column/table/enum) needs drizzle-kit to
+          # disambiguate rename-vs-drop+create interactively. In CI's non-TTY
+          # shell that prompt throws instead -- but only to stderr, with exit
+          # 0 and no file written, so a plain exit-code/git-status check goes
+          # green while the migration silently never gets generated. Catch
+          # both: a real crash, and this silent-success-with-stderr shape.
+          if ! pnpm exec drizzle-kit generate 2>drizzle-kit-stderr.log; then
+            cat drizzle-kit-stderr.log >&2
+            echo "::error::drizzle-kit generate exited non-zero"
+            exit 1
+          fi
+          if [ -s drizzle-kit-stderr.log ]; then
+            echo "::error::drizzle-kit generate wrote to stderr but reported success (exit 0). This happens when it needs an interactive prompt (e.g. disambiguating a column/table/enum rename) that CI's non-TTY shell can't answer. Resolve the rename locally, where drizzle-kit can prompt you, then commit the generated migration."
+            cat drizzle-kit-stderr.log >&2
+            exit 1
+          fi
+          rm -f drizzle-kit-stderr.log
           if [ -n "$(git status --porcelain -- drizzle)" ]; then
             echo "::error::drizzle-kit generate produced migration/snapshot output that doesn't match what's committed under packages/db/drizzle. This usually means schema.ts changed without regenerating migrations, or a stale local snapshot got committed on an earlier PR. Run 'pnpm --filter @acme/db generate' on a branch rebased on latest main, review the diff, and commit the result."
             git status --porcelain -- drizzle
