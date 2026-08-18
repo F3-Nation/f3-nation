@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
+import { REFRESH_TOKEN_COOKIE_NAME } from "@/lib/auth/constants";
 
 // Mocks must be declared before imports that trigger module evaluation.
 vi.mock("@f3nation/sso-next", async () => {
@@ -26,8 +27,11 @@ describe("proxy middleware", () => {
     vi.restoreAllMocks();
   });
 
-  function makeRequest(pathname: string): NextRequest {
-    return new NextRequest(`http://localhost:3003${pathname}`);
+  function makeRequest(
+    pathname: string,
+    init?: { headers?: Record<string, string> },
+  ): NextRequest {
+    return new NextRequest(`http://localhost:3003${pathname}`, init);
   }
 
   it("allows /health through without any auth check", async () => {
@@ -52,6 +56,47 @@ describe("proxy middleware", () => {
     const response = await proxy(makeRequest("/profile"));
 
     // No tokens → redirect to login at "/"
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toMatch(
+      /^http:\/\/localhost:3003/,
+    );
+  });
+
+  it("returns 401 for a non-navigation request when the refresh token is dead", async () => {
+    const { sso } = await import("@/lib/auth/oauth");
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    const refreshToken = sso.refreshToken as ReturnType<typeof vi.fn>;
+    refreshToken.mockRejectedValueOnce(new Error("invalid_grant"));
+
+    const { proxy } = await import("../src/proxy");
+    const response = await proxy(
+      makeRequest("/profile", {
+        headers: { cookie: `${REFRESH_TOKEN_COOKIE_NAME}=stale-token` },
+      }),
+    );
+
+    // No sec-fetch-mode header (as any non-browser client would send) must
+    // not be treated as a pass-through — it must be rejected outright.
+    expect(response.status).toBe(401);
+    expect(response.headers.get("location")).toBeNull();
+  });
+
+  it("redirects and clears cookies for a navigation request when the refresh token is dead", async () => {
+    const { sso } = await import("@/lib/auth/oauth");
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    const refreshToken = sso.refreshToken as ReturnType<typeof vi.fn>;
+    refreshToken.mockRejectedValueOnce(new Error("invalid_grant"));
+
+    const { proxy } = await import("../src/proxy");
+    const response = await proxy(
+      makeRequest("/profile", {
+        headers: {
+          cookie: `${REFRESH_TOKEN_COOKIE_NAME}=stale-token`,
+          "sec-fetch-mode": "navigate",
+        },
+      }),
+    );
+
     expect(response.status).toBe(307);
     expect(response.headers.get("location")).toMatch(
       /^http:\/\/localhost:3003/,
