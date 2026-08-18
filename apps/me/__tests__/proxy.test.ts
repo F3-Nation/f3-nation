@@ -31,7 +31,7 @@ describe("proxy middleware", () => {
   }
 
   it("allows /health through without any auth check", async () => {
-    const { proxy } = await import("../proxy");
+    const { proxy } = await import("../src/proxy");
     const response = await proxy(makeRequest("/health"));
 
     // NextResponse.next() produces a 200 response with no Location header.
@@ -40,7 +40,7 @@ describe("proxy middleware", () => {
   });
 
   it("allows / through without auth check", async () => {
-    const { proxy } = await import("../proxy");
+    const { proxy } = await import("../src/proxy");
     const response = await proxy(makeRequest("/"));
 
     expect(response.status).toBe(200);
@@ -48,7 +48,7 @@ describe("proxy middleware", () => {
   });
 
   it("redirects an unauthenticated request to a protected path", async () => {
-    const { proxy } = await import("../proxy");
+    const { proxy } = await import("../src/proxy");
     const response = await proxy(makeRequest("/profile"));
 
     // No tokens → redirect to login at "/"
