@@ -311,7 +311,7 @@ jobs:
       - name: Regenerate migrations and diff against what's committed
         working-directory: packages/db
         run: |
-          node_modules/.bin/drizzle-kit generate
+          pnpm exec drizzle-kit generate
           if [ -n "$(git status --porcelain -- drizzle)" ]; then
             echo "::error::drizzle-kit generate produced migration/snapshot output that doesn't match what's committed under packages/db/drizzle. This usually means schema.ts changed without regenerating migrations, or a stale local snapshot got committed on an earlier PR. Run 'pnpm --filter @acme/db generate' on a branch rebased on latest main, review the diff, and commit the result."
             git status --porcelain -- drizzle
