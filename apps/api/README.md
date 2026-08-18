@@ -1,132 +1,92 @@
-# F3 Nation Map Application
+# F3 Nation API
 
-This is the F3 Nation Map application, an interactive map for F3 Nation locations and events.
+The F3 Nation API server — an [oRPC](https://orpc.unnoq.com/) server exposing both a typed RPC surface and a REST/OpenAPI surface over the same [`packages/api`](../../packages/api) router.
 
-## Application Details
+**Live URL**: [api.f3nation.com](https://api.f3nation.com)
 
-- **Port**: 3000
-- **Framework**: Next.js
-- **TypeScript**: Yes
-- **Testing**: Vitest
+## What This Is
 
-## Setup
+apps/api is a pure API service: every route handler returns a raw `Response`, there are no pages, no layouts, and no client-rendered UI. Two consumer surfaces are served from the same router:
 
-1. **Navigate to the monorepo root**:
+- **RPC** (`/v1/*`) — typed procedure calls for first-party clients (the map app, F3 Me, internal tooling), matched by the `Client` header.
+- **REST/OpenAPI** (`/v1/*`, spec at `/docs/openapi.json`) — plain HTTP for external/third-party clients and `curl`.
 
-   ```bash
-   cd f3-nation
-   ```
+Interactive API docs (via [`@scalar/nextjs-api-reference`](https://github.com/scalar/scalar)) are served at [`/docs`](https://api.f3nation.com/docs); the root path (`/`) redirects there.
 
-2. **Install dependencies** (if not already installed):
+## Tech Stack
 
-   ```bash
-   pnpm install
-   ```
+| Layer     | Choice                                    |
+| --------- | ----------------------------------------- |
+| Framework | Next.js (App Router, Route Handlers only) |
+| RPC/REST  | oRPC (`@orpc/server`, `@orpc/openapi`)    |
+| API Docs  | Scalar (`@scalar/nextjs-api-reference`)   |
+| Database  | Drizzle ORM (via `@acme/db`)              |
+| Hosting   | GCP Cloud Run (via GitHub Actions)        |
 
-3. **Environment setup**:
-   - Get env.zip from F3 Nation Slack
-   - Unzip and rename to `.env`
-   - Place the `.env` file in this directory (`apps/map/.env`)
+## Authentication
 
-4. **Start development server**:
-
-   ```bash
-   # From the monorepo root, start only the map app
-   pnpm dev --filter f3-map
-
-   # Or navigate to the app directory and run directly
-   cd apps/map
-   pnpm dev
-   ```
-
-## Environment Variables
-
-Environment variables are application-specific in this monorepo. The `.env` file should be placed in the application directory (`apps/map/`) rather than the monorepo root.
-
-Required environment variables (typically provided in env.zip):
-
-- Database connection strings
-- Authentication secrets
-- API keys
-- Application configuration
-
-## Development
-
-### Running Tests
+All API endpoints (except `/v1/status`) require a Bearer API key and a `Client` header identifying the calling app:
 
 ```bash
-# Run all tests for the map app
-pnpm test --filter f3-map
-
-# Run specific test suites
-cd apps/map
-pnpm test:unit # Vitest unit tests
+curl -X GET "https://api.f3nation.com/v1/ping" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Client: my-app"
 ```
 
-### Building for Production
+API keys inherit the roles and permissions of their owner (**Editor** or **Admin**). Generate and manage keys at `map.f3nation.com/admin/api-keys` if you're an admin on a region or the F3 Nation organization. See `/docs` for the full auth contract, error responses, and rate limits.
+
+## Local Development
+
+### Setup
 
 ```bash
-# Build the map application
-pnpm build --filter f3-map
+# From the monorepo root
+cd apps/api
+
+# Copy and populate env file
+cp .env.example .env
+# Edit .env with actual values (get from team via Slack, or use local defaults for Docker dev)
+
+# Install dependencies (from monorepo root)
+cd ../..
+pnpm install
+
+# Run the dev server
+pnpm dev --filter f3-api
+# Or from apps/api:
+cd apps/api
+pnpm dev
 ```
 
-### Linting
+Open [http://localhost:3001/docs](http://localhost:3001/docs) to browse the interactive API reference.
+
+See [docs/LOCAL_DEV_DOCKER.md](../../docs/LOCAL_DEV_DOCKER.md) for the full local Docker setup (Postgres, GCS emulator, Mailpit).
+
+## Testing
 
 ```bash
-# Run linting for the map app
-pnpm lint --filter f3-map
+# Run all tests (coverage always collected)
+pnpm test
+
+# Run tests in watch mode (no coverage)
+pnpm test:watch
+
+# Run the characterization suite (Hono-migration parity gate)
+pnpm test:characterization
 ```
 
-## Features
+The characterization suite in `characterization/` pins the current Next.js implementation's request/response behavior end-to-end (auth, rate limiting, error shapes) so it can be diffed against the in-progress Hono rewrite.
 
-- Interactive map interface
-- Location management
-- Event scheduling and display
-- User authentication
-- Responsive design
+## Deployment
 
-## Architecture
-
-This application is built with:
-
-- **Next.js 14** with App Router
-- **React** with TypeScript
-- **Tailwind CSS** for styling
-- **oRPC** for type-safe API calls
-- **Drizzle ORM** for database operations
-- **Vitest** for unit testing
+Deployed to GCP Cloud Run via tag-based deploys (tag `api@X.Y.Z` on `main` triggers `.github/workflows/deploy-api.yml`), same pattern as [`apps/me`](../me/README.md#deployment). Staging and production run as separate Cloud Run services (`f3-api-app-staging`, `f3-api-app`).
 
 ## Related Documentation
 
-- [Main Monorepo README](../README.md) - Overview of the entire monorepo structure
-- [API Package README](../../packages/api/README.md) - Backend API documentation
-- [UI Package README](../../packages/ui/README.md) - Shared UI components
+- [Main Monorepo README](../../README.md) — overview of the entire monorepo structure
+- [API Package README](../../packages/api/README.md) — router/procedure implementation
+- [ADR 0001](../../docs/adr/0001-api-server-framework.md) — apps/api → Hono migration rationale (epic [#644](https://github.com/F3-Nation/f3-nation/issues/644))
 
-# NOTES
+## License
 
-F3 API ideas
-⁃ most queries will be by id
-⁃ filters by region
-⁃ Filters by lat, lng
-⁃ versioning - v1
-
-API Data hierarchy
-⁃ Slackbot
-⁃ specific logic here
-⁃ Maps
-⁃ Near me
-
-Public (get and lists and counts)
-⁃ Orgs
-⁃ Regions
-⁃ Locations
-⁃ Events
-
-Materialized views (or live joins)
-⁃ region with location summary
-⁃ maps (get all lat,lngs with some supplemental data)
-⁃ maps (get data for a particular location)
-⁃ Continue conversation on slack
-⁃ Slackbot: f3-nation-slack-bot/docs/api/endpoint_requirements.md at main · F3-Nation/f3-nation-slack-bot · GitHub
-
-API Key can be for a region or a userId
+AGPL-3.0-or-later — see the repository [LICENSE](../../LICENSE).

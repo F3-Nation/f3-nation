@@ -3,6 +3,7 @@ import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
 
 import { router } from "@acme/api";
 import { Client, Header } from "@acme/shared/common/enums";
+import { getBaseUrl } from "~/lib/get-base-url";
 import packageJson from "../../../../package.json";
 
 // OpenAPI types for spec manipulation
@@ -40,14 +41,7 @@ interface OpenAPISpec {
 }
 
 export async function GET(request: Request) {
-  const url = new URL(request.url);
-  const envBase = process.env.NEXT_PUBLIC_API_URL ?? undefined;
-  const forwardedProto = request.headers.get("x-forwarded-proto") ?? undefined;
-  const forwardedHost = request.headers.get("x-forwarded-host") ?? undefined;
-  const host = forwardedHost ?? request.headers.get("host") ?? url.host;
-  const proto = forwardedProto ?? url.protocol.replace(":", "");
-  const derivedBase = `${proto}://${host}`;
-  const baseUrl = (envBase ?? derivedBase).replace(/\/$/, "");
+  const baseUrl = getBaseUrl(request);
 
   const generator = new OpenAPIGenerator({
     schemaConverters: [new ZodToJsonSchemaConverter()],
