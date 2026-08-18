@@ -656,9 +656,6 @@ importers:
       next:
         specifier: 'catalog:'
         version: 16.3.0(@babel/core@7.29.0(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@playwright/test@1.62.1)(@types/node@24.13.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      next-auth:
-        specifier: 'catalog:'
-        version: 5.0.0-beta.32(next@16.3.0(@babel/core@7.29.0(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@playwright/test@1.62.1)(@types/node@24.13.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(nodemailer@9.0.5)(react@19.2.8)
       react:
         specifier: 'catalog:'
         version: 19.2.8
@@ -711,6 +708,9 @@ importers:
       jose:
         specifier: 'catalog:'
         version: 6.2.8
+      next-auth:
+        specifier: 'catalog:'
+        version: 5.0.0-beta.32(next@16.3.0(@babel/core@7.29.0(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@playwright/test@1.62.1)(@types/node@24.13.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(nodemailer@9.0.5)(react@19.2.8)
       prettier:
         specifier: 'catalog:'
         version: 3.9.6

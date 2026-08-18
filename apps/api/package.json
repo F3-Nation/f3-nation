@@ -28,7 +28,6 @@
     "@t3-oss/env-core": "catalog:",
     "dotenv-cli": "catalog:",
     "next": "catalog:",
-    "next-auth": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "zod": "catalog:"
@@ -48,6 +47,7 @@
     "eslint": "catalog:",
     "jiti": "catalog:",
     "jose": "catalog:",
+    "next-auth": "catalog:",
     "prettier": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",

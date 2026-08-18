@@ -13,6 +13,9 @@ describe("env skipValidation", () => {
   it("falls through to SKIP_ENV_VALIDATION when CI is unset", async () => {
     vi.stubEnv("CI", "");
     vi.stubEnv("SKIP_ENV_VALIDATION", "1");
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_CHANNEL", "");
+    vi.stubEnv("AUTH_SECRET", "");
     vi.resetModules();
 
     const { env } = await import("../src/env");
@@ -24,6 +27,9 @@ describe("env skipValidation", () => {
     vi.stubEnv("CI", "");
     vi.stubEnv("SKIP_ENV_VALIDATION", "");
     vi.stubEnv("npm_lifecycle_event", "lint");
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_CHANNEL", "");
+    vi.stubEnv("AUTH_SECRET", "");
     vi.resetModules();
 
     const { env } = await import("../src/env");

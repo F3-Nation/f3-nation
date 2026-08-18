@@ -25,15 +25,19 @@ Interactive API docs (via [`@scalar/nextjs-api-reference`](https://github.com/sc
 
 ## Authentication
 
-All API endpoints (except `/v1/status`) require a Bearer API key and a `Client` header identifying the calling app:
+Every endpoint is protected except `/v1/ping`, `/v1/status`, `/docs`, and `/docs/openapi.json`. Protected endpoints accept any of:
+
+- A session cookie, for browser clients already signed in via [`apps/auth`](../auth)
+- A verified JWT bearer token, for first-party clients (the map app, F3 Me)
+- A Bearer API key plus a `Client` header identifying the calling app, for third-party/external clients:
 
 ```bash
-curl -X GET "https://api.f3nation.com/v1/ping" \
+curl -X GET "https://api.f3nation.com/v1/org" \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Client: my-app"
 ```
 
-API keys inherit the roles and permissions of their owner (**Editor** or **Admin**). Generate and manage keys at `map.f3nation.com/admin/api-keys` if you're an admin on a region or the F3 Nation organization. See `/docs` for the full auth contract, error responses, and rate limits.
+API keys inherit the roles and permissions of their owner (**Editor** or **Admin**). Generate and manage keys at `admin.f3nation.com/api-keys` if you're an admin on a region or the F3 Nation organization. See `/docs` for the full auth contract, error responses, and rate limits.
 
 ## Local Development
 
@@ -79,12 +83,12 @@ The characterization suite in `characterization/` pins the current Next.js imple
 
 ## Deployment
 
-Deployed to GCP Cloud Run via tag-based deploys (tag `api@X.Y.Z` on `main` triggers `.github/workflows/deploy-api.yml`), same pattern as [`apps/me`](../me/README.md#deployment). Staging and production run as separate Cloud Run services (`f3-api-app-staging`, `f3-api-app`).
+Deployed to GCP Cloud Run via tag-based deploys (tag `api@X.Y.Z` on `main` triggers `.github/workflows/deploy-api.yml`), same pattern as [`apps/me`](../me/README.md#deployment). Staging and production deploy the same Cloud Run service (`f3-api`) into separate GCP projects (`f3-api-app-staging`, `f3-api-app`).
 
 ## Related Documentation
 
 - [Main Monorepo README](../../README.md) — overview of the entire monorepo structure
-- [API Package README](../../packages/api/README.md) — router/procedure implementation
+- [API Package AGENTS.md](../../packages/api/AGENTS.md) — router/procedure implementation
 - [ADR 0001](../../docs/adr/0001-api-server-framework.md) — apps/api → Hono migration rationale (epic [#644](https://github.com/F3-Nation/f3-nation/issues/644))
 
 ## License
