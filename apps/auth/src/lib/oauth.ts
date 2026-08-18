@@ -70,6 +70,8 @@ export async function createAuthorizationCode(params: {
   scopes: string;
   codeChallenge?: string;
   codeChallengeMethod?: string;
+  nonce?: string;
+  authTime?: string;
 }): Promise<string> {
   const code = generateOpaqueToken();
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min
@@ -82,6 +84,8 @@ export async function createAuthorizationCode(params: {
     scopes: params.scopes,
     codeChallenge: params.codeChallenge ?? null,
     codeChallengeMethod: params.codeChallengeMethod ?? null,
+    nonce: params.nonce ?? null,
+    authTime: params.authTime ?? null,
     expiresAt,
   });
 
@@ -223,6 +227,8 @@ export async function exchangeAuthorizationCode(params: {
         picture: user.avatarUrl,
         email: user.email,
         emailVerified: !!user.emailVerified,
+        nonce: authCode.nonce,
+        authTime: authCode.authTime,
       })
     : undefined;
 
@@ -231,11 +237,17 @@ export async function exchangeAuthorizationCode(params: {
     Date.now() + 30 * 24 * 60 * 60 * 1000,
   ).toISOString(); // 30 days
 
+  // Persist the actual granted scopes and original auth_time onto the
+  // refresh token's lineage — exchangeRefreshToken carries both forward on
+  // every rotation instead of losing them the moment this code is
+  // exchanged (see the NOTE removed from that function below).
   await db.insert(oauthRefreshTokens).values({
     token: refreshToken,
     clientId: authCode.clientId,
     userId: authCode.userId,
     expiresAt: refreshExpiresAt,
+    scopes,
+    authTime: authCode.authTime,
   });
 
   return {
@@ -394,7 +406,18 @@ export async function exchangeRefreshToken(params: {
       return { error: "invalid_grant" as const };
     }
 
-    const scopes = client.scopes ?? "openid profile email";
+    // The scopes actually granted at original authorization, persisted on
+    // this token's lineage (see exchangeAuthorizationCode). Older rows
+    // created before this column existed have no value here — fall back
+    // to the client's registered scopes only for that legacy case, not as
+    // the general rule anymore.
+    if (existing.scopes == null) {
+      logWarn("auth.oauth.refresh_token_legacy_scope_fallback", {
+        clientId: existing.clientId,
+        userId: existing.userId,
+      });
+    }
+    const scopes = existing.scopes ?? client.scopes ?? "openid profile email";
     const ACCESS_TOKEN_TTL = 3600; // 1 hour
 
     const accessToken = await signAccessToken({
@@ -405,9 +428,6 @@ export async function exchangeRefreshToken(params: {
       expiresInSeconds: ACCESS_TOKEN_TTL,
     });
 
-    // NOTE: unlike the authorization_code path, this gates on the client's
-    // *registered* scopes — the granted scopes aren't persisted on the refresh
-    // token row, so they can't be recovered here. Tracked for the schema fix.
     const idTokenScope = idTokenScopeOrNull(scopes);
     const idToken = idTokenScope
       ? await signIdToken({
@@ -419,6 +439,10 @@ export async function exchangeRefreshToken(params: {
           picture: user.avatarUrl,
           email: user.email,
           emailVerified: !!user.emailVerified,
+          // Deliberately no nonce here — OIDC Core 12.2 expects a refreshed
+          // ID Token not to replay the original request's nonce, unlike
+          // auth_time, which should keep reflecting the true original login.
+          authTime: existing.authTime,
         })
       : undefined;
 
@@ -427,11 +451,17 @@ export async function exchangeRefreshToken(params: {
       Date.now() + 30 * 24 * 60 * 60 * 1000,
     ).toISOString();
 
+    // Carry scopes/authTime forward onto the new row so the *next*
+    // rotation can still recover them too — otherwise only the first
+    // refresh in a chain would benefit and every rotation after it would
+    // silently fall back to the legacy client-scope behavior again.
     await tx.insert(oauthRefreshTokens).values({
       token: refreshToken,
       clientId: existing.clientId,
       userId: existing.userId,
       expiresAt: refreshExpiresAt,
+      scopes,
+      authTime: existing.authTime,
     });
 
     return {

@@ -1144,6 +1144,17 @@ export const oauthAuthorizationCodes = authProviderSchema.table(
     scopes: text(),
     codeChallenge: text("code_challenge"),
     codeChallengeMethod: text("code_challenge_method"),
+    // OIDC replay-protection value from the original /authorize request,
+    // echoed verbatim into the id_token's own nonce claim at code exchange.
+    // Null when the client didn't send one (nonce is optional per spec).
+    nonce: text(),
+    // When the end user actually authenticated (their NextAuth session's
+    // original sign-in, not this authorize request, which can reuse an
+    // existing session much later) — becomes the id_token's auth_time
+    // claim, and is carried forward onto the refresh token row below so
+    // every subsequent refresh can keep reporting the true original login
+    // instead of resetting to "now" on each rotation.
+    authTime: timestamp("auth_time", { mode: "string" }),
     expiresAt: timestamp("expires_at", { mode: "string" }).notNull(),
     createdAt: timestamp("created_at", { mode: "string" })
       .default(sql`timezone('utc'::text, now())`)
@@ -1189,6 +1200,19 @@ export const oauthRefreshTokens = authProviderSchema.table(
     // apart from a garbage/never-issued token — see exchangeRefreshToken's
     // reuse-detection path (RFC 9700 §4.14.2).
     rotatedAt: timestamp("rotated_at", { mode: "string" }),
+    // The scopes actually granted when this refresh token's lineage was
+    // first issued (carried forward on every rotation). Without this,
+    // exchangeRefreshToken had no way to recover the real grant and fell
+    // back to the client's full registered scope — looser than the
+    // authorization_code path, and the reason the refresh grant couldn't
+    // enforce the same openid-gating rules that path already had.
+    scopes: text(),
+    // Carried forward from the authorization code that started this
+    // token's lineage (see oauthAuthorizationCodes.authTime) — every
+    // rotation reuses the same original value rather than resetting to
+    // "now", so a relying party can still tell a 29-day-old login from a
+    // fresh one purely from the auth_time claim.
+    authTime: timestamp("auth_time", { mode: "string" }),
   },
 );
 
