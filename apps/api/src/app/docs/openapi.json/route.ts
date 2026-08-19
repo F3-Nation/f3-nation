@@ -83,7 +83,7 @@ The \`Client\` header must be present and contain a string that identifies your 
 ## Getting Started
 
 ### Step 1: Generate an API Key
-Navigate to **https://map.f3nation.com/admin/api-keys** if you are an admin on a specific region or the F3 Nation organization. You can:
+Navigate to **https://admin.f3nation.com/api-keys** if you are an admin on a specific region or the F3 Nation organization. You can:
 - Create new API keys
 - Set expiration dates for security
 - View and revoke keys
