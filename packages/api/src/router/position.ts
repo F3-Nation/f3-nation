@@ -23,6 +23,7 @@ import {
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
+import { paginationFields, resolvePagination } from "../lib/pagination";
 import { editorProcedure, protectedProcedure } from "../shared";
 import { arrayOrSingle } from "@acme/shared/app/functions";
 
@@ -81,16 +82,7 @@ export const positionRouter = {
             .describe(
               "Filter positions by status. Matches positions with ANY of the given statuses.",
             ),
-          /** Zero-based page index for pagination */
-          pageIndex: z.coerce
-            .number()
-            .optional()
-            .describe("Zero-based page index for pagination."),
-          /** Number of positions per page */
-          pageSize: z.coerce
-            .number()
-            .optional()
-            .describe("Number of positions per page. Defaults to 20."),
+          ...paginationFields("positions"),
         })
         .optional()
         .describe(
@@ -210,10 +202,11 @@ export const positionRouter = {
           asc(schema.positions.name),
         );
 
-      const usePagination =
-        input?.pageIndex !== undefined && input?.pageSize !== undefined;
-      const limit = input?.pageSize ?? 20;
-      const offset = (input?.pageIndex ?? 0) * limit;
+      const { limit, offset, usePagination } = resolvePagination({
+        pageSize: input?.pageSize,
+        pageIndex: input?.pageIndex,
+        defaultPageSize: 20,
+      });
 
       const positions = usePagination
         ? await baseQuery.limit(limit).offset(offset)
