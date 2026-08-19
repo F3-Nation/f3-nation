@@ -1,5 +1,27 @@
 # Changelog
 
+## [6.4.0](https://github.com/F3-Nation/f3-nation/compare/api@6.3.0...api@6.4.0) (2026-08-18)
+
+
+### Features
+
+* **auth:** issue an id_token on the authorization_code and refresh_token grants ([#749](https://github.com/F3-Nation/f3-nation/issues/749)) ([0a8a25d](https://github.com/F3-Nation/f3-nation/commit/0a8a25d635d618383d57669eff4415b32b6e3fef))
+
+
+### Bug Fixes
+
+* **api:** raise per-IP rate limit to 500 ([#850](https://github.com/F3-Nation/f3-nation/issues/850)) ([b8e320a](https://github.com/F3-Nation/f3-nation/commit/b8e320a30a6be2f8f79c912a6ae3cf3dedf86c91))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.7.0
+  * devDependencies
+    * @acme/auth bumped to 0.2.2
+    * @acme/db bumped to 0.4.1
+
 ## [6.3.0](https://github.com/F3-Nation/f3-nation/compare/api@6.2.0...api@6.3.0) (2026-08-12)
 
 
