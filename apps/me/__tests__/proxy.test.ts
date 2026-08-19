@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-import { REFRESH_TOKEN_COOKIE_NAME } from "@/lib/auth/constants";
+import {
+  ACCESS_TOKEN_COOKIE_NAME,
+  REFRESH_TOKEN_COOKIE_NAME,
+} from "@/lib/auth/constants";
 
 // Mocks must be declared before imports that trigger module evaluation.
 vi.mock("@f3nation/sso-next", async () => {
@@ -79,6 +82,8 @@ describe("proxy middleware", () => {
     // not be treated as a pass-through — it must be rejected outright.
     expect(response.status).toBe(401);
     expect(response.headers.get("location")).toBeNull();
+    // Must not clobber a concurrent request's freshly-rotated cookies (#375).
+    expect(response.headers.get("set-cookie")).toBeNull();
   });
 
   it("redirects and clears cookies for a navigation request when the refresh token is dead", async () => {
@@ -101,5 +106,10 @@ describe("proxy middleware", () => {
     expect(response.headers.get("location")).toMatch(
       /^http:\/\/localhost:3003/,
     );
+
+    const setCookieHeader = response.headers.get("set-cookie");
+    expect(setCookieHeader).toContain(`${ACCESS_TOKEN_COOKIE_NAME}=`);
+    expect(setCookieHeader).toContain(`${REFRESH_TOKEN_COOKIE_NAME}=`);
+    expect(setCookieHeader).toContain("Max-Age=0");
   });
 });
