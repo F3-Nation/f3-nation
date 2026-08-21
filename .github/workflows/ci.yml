@@ -2,8 +2,7 @@ name: CI
 
 on:
   push:
-    # TODO(#869): remove the feature branch after the GHCR cache smoke test.
-    branches: [main, ci/turbo-affected-869]
+    branches: [main]
   pull_request:
     branches: ["**"]
     types: [opened, synchronize, reopened]
