@@ -97,18 +97,18 @@ runs:
             "---",
           ].join("\n");
 
-          const open = await github.rest.issues.listForRepo({
+          const open = await github.paginate(github.rest.issues.listForRepo, {
             owner,
             repo,
             state: "open",
             labels: "staging-smoke-test",
             sort: "created",
             direction: "desc",
-            per_page: 10,
+            per_page: 100,
           });
           // listForRepo also returns pull requests carrying this label; only
           // real issues are valid trackers.
-          const trackerIssues = open.data.filter((candidate) => !candidate.pull_request);
+          const trackerIssues = open.filter((candidate) => !candidate.pull_request);
 
           if (trackerIssues.length === 0) {
             const labels = ["staging-smoke-test"];
