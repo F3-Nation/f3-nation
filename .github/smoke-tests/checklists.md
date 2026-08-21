@@ -1,3 +1,5 @@
+# Staging smoke-test checklists
+
 <!--
   One "## <app key>" section per deploy target. The staging-smoke-test-issue
   composite action extracts just the section matching the smoke_test_app
@@ -42,4 +44,4 @@
 ## slackbot-scripts
 
 - [ ] Not testable via UI — this is a Cloud Run Job (batch/cron), not a web service.
-- [ ] In the GCP Console, check Cloud Run Jobs → `f3-slackbot-scripts` (staging project) → Executions, and confirm the latest execution after this deploy succeeded.
+- [ ] Deploying only updates the job definition — it does not run it. In the GCP Console (Cloud Run Jobs → `f3-slackbot-scripts`, staging project) or via `gcloud run jobs execute f3-slackbot-scripts --region us-central1 --project f3-slackbot-staging`, manually trigger an execution and confirm it completes successfully.

@@ -1,9 +1,12 @@
 # Staging smoke-test checklists
 
-`checklists.md` holds one short (3-5 item) regression checklist per deploy
+`checklists.md` holds one short (2-5 item) regression checklist per deploy
 target, each under a `## <app key>` heading — the core flows that should
 still work, not new-feature testing (see individual release issues like
-[#841](https://github.com/F3-Nation/f3-nation/issues/841) for that).
+[#841](https://github.com/F3-Nation/f3-nation/issues/841) for that). Some
+targets land at the low end because there isn't much left to check without
+extra setup — e.g. `api`'s other routes all require auth, so its checklist
+only covers the two that don't.
 
 After every successful staging deploy, `_deploy-cloudrun.yml` /
 `_deploy-cloudrun-job.yml` call the `.github/actions/staging-smoke-test-issue`
