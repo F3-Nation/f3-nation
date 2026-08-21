@@ -124,25 +124,65 @@ runs:
             return;
           }
 
-          const issue = trackerIssues[0];
+          // Nothing serializes concurrent deploy-triggered jobs against each
+          // other (see the workflow caller for why), so another job can race
+          // this one to update the same tracker issue. Read-modify-write in a
+          // loop and verify our own section actually stuck after each write;
+          // retry on conflict instead of trusting a single update call.
+          const issueNumber = trackerIssues[0].number;
           const blockRe = new RegExp(`${startMarker}[\\s\\S]*?${endMarker}`);
-          let body = issue.body ?? "";
-          body = blockRe.test(body)
-            ? body.replace(blockRe, section)
-            : `${body.trimEnd()}\n\n${section}\n`;
+          const MAX_ATTEMPTS = 5;
+          let wrote = false;
 
-          await github.rest.issues.update({ owner, repo, issue_number: issue.number, body });
+          for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+            const { data: current } = await github.rest.issues.get({
+              owner,
+              repo,
+              issue_number: issueNumber,
+            });
+            const currentBody = current.body ?? "";
+            const body = blockRe.test(currentBody)
+              ? currentBody.replace(blockRe, section)
+              : `${currentBody.trimEnd()}\n\n${section}\n`;
 
-          if (appLabel) {
-            const existingLabels = issue.labels.map((l) => (typeof l === "string" ? l : l.name));
-            if (!existingLabels.includes(appLabel)) {
-              await github.rest.issues.addLabels({
-                owner,
-                repo,
-                issue_number: issue.number,
-                labels: [appLabel],
-              });
+            await github.rest.issues.update({ owner, repo, issue_number: issueNumber, body });
+
+            const { data: verify } = await github.rest.issues.get({
+              owner,
+              repo,
+              issue_number: issueNumber,
+            });
+            if ((verify.body ?? "").includes(section)) {
+              wrote = true;
+              if (appLabel) {
+                const existingLabels = verify.labels.map((l) => (typeof l === "string" ? l : l.name));
+                if (!existingLabels.includes(appLabel)) {
+                  await github.rest.issues.addLabels({
+                    owner,
+                    repo,
+                    issue_number: issueNumber,
+                    labels: [appLabel],
+                  });
+                }
+              }
+              break;
             }
+
+            core.warning(
+              `Attempt ${attempt}/${MAX_ATTEMPTS}: a concurrent deploy's write clobbered the ` +
+                `"${appName}" section on tracker issue #${issueNumber}; retrying`,
+            );
+            const backoffMs = 1000 * attempt + Math.floor(Math.random() * 1000);
+            await new Promise((resolve) => setTimeout(resolve, backoffMs));
           }
 
-          core.info(`Updated tracker issue #${issue.number} (section: ${appName})`);
+          if (!wrote) {
+            core.setFailed(
+              `Could not write the "${appName}" section to tracker issue #${issueNumber} after ` +
+                `${MAX_ATTEMPTS} attempts — concurrent deploys kept clobbering each other's ` +
+                `updates. Re-run this job.`,
+            );
+            return;
+          }
+
+          core.info(`Updated tracker issue #${issueNumber} (section: ${appName})`);

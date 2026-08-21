@@ -200,12 +200,13 @@ jobs:
     needs: [build, deploy-staging]
     if: inputs.smoke_test_app != ''
     runs-on: ubuntu-latest
-    # Static (non-templated) group: serializes this job across every app's
-    # deploy workflow so two apps deploying around the same time can't both
-    # decide "no open tracker issue" and each create a duplicate.
-    concurrency:
-      group: staging-smoke-test-tracker
-      cancel-in-progress: false
+    # No concurrency group here: with cancel-in-progress: false, Actions only
+    # keeps ONE job pending per group and cancels any earlier pending job when
+    # a new one arrives — a burst of 3+ near-simultaneous staging deploys
+    # (e.g. a release-please merge tagging several apps at once) would silently
+    # drop the evicted job's tracker update. The composite action below
+    # verifies its own write and retries on conflict instead, so every job
+    # runs and self-corrects rather than being queued and possibly skipped.
     permissions:
       contents: read
       issues: write
