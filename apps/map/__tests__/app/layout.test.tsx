@@ -3,8 +3,6 @@
 import { render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import RootLayout from "../../src/app/layout";
-
 // RootLayout mounts RuntimeConfigProvider, which fetches /api/runtime-config on
 // mount. Stub it so the suite doesn't hit an unmocked (and unresolvable)
 // relative URL, and so the bootstrap path is exercised with real config shape.
@@ -82,10 +80,14 @@ Object.defineProperty(window, "matchMedia", {
   })),
 });
 
-// Re-stub fetch before every test so afterEach's vi.unstubAllGlobals() (which
-// clears the module-scope stub above) doesn't leave later tests hitting the
-// real /api/runtime-config request.
+// Re-stub fetch and environment validation before every test so the suite is
+// independent of ambient process settings. Reset modules so layout reads the
+// environment only after these stubs are installed.
 beforeEach(() => {
+  vi.resetModules();
+  vi.stubEnv("CI", "");
+  vi.stubEnv("SKIP_ENV_VALIDATION", "1");
+  vi.stubEnv("npm_lifecycle_event", "");
   vi.stubGlobal("fetch", runtimeConfigFetchMock);
 });
 
@@ -97,7 +99,6 @@ afterEach(() => {
 describe("layout metadata base URL", () => {
   it("uses the configured map URL", async () => {
     vi.stubEnv("F3_MAP_BASE_URL", "https://map.example.com");
-    vi.resetModules();
 
     const { metadata } = await import("../../src/app/layout");
 
@@ -106,7 +107,6 @@ describe("layout metadata base URL", () => {
 
   it("falls back to localhost when the map URL is unavailable", async () => {
     vi.stubEnv("F3_MAP_BASE_URL", "");
-    vi.resetModules();
 
     const { metadata } = await import("../../src/app/layout");
 
@@ -116,6 +116,7 @@ describe("layout metadata base URL", () => {
 
 describe("layout app router", () => {
   it("should render layout", async () => {
+    const { default: RootLayout } = await import("../../src/app/layout");
     const layoutResult = RootLayout({ children: <div /> });
     render(layoutResult);
     // React 19 treats <html>/<body> as singleton host components and applies
