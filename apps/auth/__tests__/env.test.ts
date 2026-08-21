@@ -26,13 +26,13 @@ describe("env skipValidation", () => {
     vi.stubEnv("CI", "1");
     vi.stubEnv("SKIP_ENV_VALIDATION", "");
     vi.stubEnv("API_KEY", "");
-    expect(await importEnv()).toBeDefined();
+    expect((await importEnv()).API_KEY).toBeFalsy();
   });
 
   it("skips validation when SKIP_ENV_VALIDATION is set (operand 2)", async () => {
     vi.stubEnv("CI", "");
     vi.stubEnv("SKIP_ENV_VALIDATION", "1");
     vi.stubEnv("API_KEY", "");
-    expect(await importEnv()).toBeDefined();
+    expect((await importEnv()).API_KEY).toBeFalsy();
   });
 });
