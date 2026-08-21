@@ -16,9 +16,6 @@ permissions:
 
 env:
   CI: true
-  # Pull requests run tasks only for changed workspaces and their dependents.
-  # Pushes to main keep the full-repository validation required before deploys.
-  TURBO_RUN_ARGS: ${{ github.event_name == 'pull_request' && '--affected' || '' }}
   # Turborepo Remote Cache. TURBO_TOKEN is a secret; TURBO_TEAM is the
   # remote-cache team slug (repo variable). With both set, every job/run/rerun
   # shares task outputs, so unchanged work short-circuits to FULL TURBO.
@@ -56,6 +53,8 @@ jobs:
           fetch-depth: 0
           filter: blob:none
       - uses: ./.github/actions/setup
+        with:
+          select-turbo-affected: "true"
       - run: pnpm format ${TURBO_RUN_ARGS:+"$TURBO_RUN_ARGS"}
 
   security-audit:
@@ -287,6 +286,8 @@ jobs:
           fetch-depth: 0
           filter: blob:none
       - uses: ./.github/actions/setup
+        with:
+          select-turbo-affected: "true"
       - run: pnpm lint ${TURBO_RUN_ARGS:+"$TURBO_RUN_ARGS"}
       - run: pnpm lint:unused
 
@@ -299,6 +300,8 @@ jobs:
           fetch-depth: 0
           filter: blob:none
       - uses: ./.github/actions/setup
+        with:
+          select-turbo-affected: "true"
       - run: pnpm typecheck ${TURBO_RUN_ARGS:+"$TURBO_RUN_ARGS"}
 
   # Regenerates Drizzle migrations from packages/db/drizzle/schema.ts and fails
@@ -357,6 +360,8 @@ jobs:
           fetch-depth: 0
           filter: blob:none
       - uses: ./.github/actions/setup
+        with:
+          select-turbo-affected: "true"
       - run: pnpm build ${TURBO_RUN_ARGS:+"$TURBO_RUN_ARGS"}
 
   test-coverage:
@@ -382,6 +387,8 @@ jobs:
           fetch-depth: 0
           filter: blob:none
       - uses: ./.github/actions/setup
+        with:
+          select-turbo-affected: "true"
       # GCS_CREDENTIALS must exist with client_email/private_key fields, but
       # nothing real is needed. Built here from plainly fake JSON — a committed
       # base64 blob trips generic high-entropy secret scanners.

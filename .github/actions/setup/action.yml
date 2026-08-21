@@ -2,8 +2,16 @@ name: Setup Node, pnpm, Python, and uv
 description: >-
   Install Python and uv, then pnpm and Node (pinned via .nvmrc), restore the
   pnpm store cache, and install workspace dependencies from the frozen
-  lockfile. Shared by every CI job so the toolchain setup can never drift
-  between jobs.
+  lockfile. Shared by Node-based workflow jobs so the toolchain setup cannot
+  drift between callers.
+
+inputs:
+  select-turbo-affected:
+    description: >-
+      On pull requests, select affected Turbo workspaces. Falls back to the
+      full workspace when Turbo finds no affected package.
+    required: false
+    default: "false"
 
 runs:
   using: composite
@@ -26,3 +34,18 @@ runs:
     - name: Install dependencies
       shell: bash
       run: pnpm install --frozen-lockfile
+
+    - name: Select Turbo scope
+      if: inputs.select-turbo-affected == 'true' && github.event_name == 'pull_request'
+      shell: bash
+      run: |
+        affected_json="$(./node_modules/.bin/turbo ls --affected --output=json)"
+        affected_count="$(node -e 'const value = JSON.parse(process.argv[1]); process.stdout.write(String(value.packages.count));' "$affected_json")"
+
+        if [[ "$affected_count" -gt 0 ]]; then
+          echo "TURBO_RUN_ARGS=--affected" >> "$GITHUB_ENV"
+          echo "Selected ${affected_count} affected Turbo workspace(s)."
+        else
+          echo "TURBO_RUN_ARGS=" >> "$GITHUB_ENV"
+          echo "::notice::Turbo selected no affected workspaces; running the full workspace instead."
+        fi

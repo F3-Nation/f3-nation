@@ -51,9 +51,12 @@ The five Turbo-backed required checks (`format-check`, `lint`, `typecheck`,
 `build`, and `test-coverage`) add `--affected` on pull requests, selecting
 changed workspaces and their dependents. Their checkouts include the complete
 Git history needed for the base-to-head comparison. Pushes to `main` omit the
-flag and validate the full workspace. The non-Turbo safeguards in the `lint`
-job (`lint:ws`, coverage-threshold validation, Python task validation, and
-`lint:unused`) remain repository-wide on every run.
+flag and validate the full workspace. If Turbo maps a pull request to zero
+workspaces (for example, a root-only CI change), setup omits `--affected` and
+runs the full workspace so required checks cannot pass without selecting any
+tasks. The non-Turbo safeguards in the `lint` job (`lint:ws`,
+coverage-threshold validation, Python task validation, and `lint:unused`)
+remain repository-wide on every run.
 
 | #   | Gate                   | What it runs                                                                                                                 | What it catches                                                                                                                    | Merge-blocking (`main` ruleset) |
 | --- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
@@ -97,7 +100,12 @@ that app's thin `deploy-<app>.yml` caller into the shared
   to `main` receives `packages: write` and exports new layers. If login or cache
   import fails (including a fork PR without package access), the build retries
   without importing cache, so cache availability remains an optimization
-  rather than a correctness dependency.
+  rather than a correctness dependency. On first rollout, PR builds may run
+  uncached until the first merged `main` build creates the cache packages.
+- The active `main` ruleset permits squash merges only and requires strict
+  status checks. The squash creates a new commit SHA whose push-to-`main` CI run
+  performs full-workspace validation, so deploy gates on that full run rather
+  than a PR-scoped `--affected` run.
 - The deploy `ci-gate` regexp waits on the five build/test checks but not
   `security-audit` (the audit already gated the merge; a tag cut from an
   unmerged or old SHA relies on that earlier gate).
