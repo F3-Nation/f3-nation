@@ -2,7 +2,8 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # TODO(#869): remove the feature branch after the GHCR cache smoke test.
+    branches: [main, ci/turbo-affected-869]
   pull_request:
     branches: ["**"]
     types: [opened, synchronize, reopened]
@@ -405,6 +406,9 @@ jobs:
   # pnpm install layer warm between runs.
   docker-build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     strategy:
       fail-fast: false
       matrix:
@@ -414,7 +418,26 @@ jobs:
         with:
           persist-credentials: false
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+      - name: Set GHCR cache reference
+        id: cache
+        env:
+          APP: ${{ matrix.app }}
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          repository_name="${GITHUB_REPOSITORY#*/}"
+          repository_name="${repository_name,,}"
+          echo "ref=ghcr.io/${owner}/${repository_name}-ci-cache-${APP}" >> "$GITHUB_OUTPUT"
+      # Fork PRs receive a read-only token and must not receive credentials that
+      # can write packages in the base repository.
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
       - id: build
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         continue-on-error: true
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
@@ -424,18 +447,24 @@ jobs:
           # pin --platform (BuildKit lint), so the target arch is set here.
           platforms: linux/amd64
           push: false
-          cache-from: type=gha,scope=docker-${{ matrix.app }}
-          cache-to: type=gha,mode=max,scope=docker-${{ matrix.app }},ignore-error=true
-      # Fallback: GitHub evicts individual GHA cache blobs (LRU / 7-day) while
-      # leaving the index manifest behind, so cache-from can hit a dangling
-      # reference and fail with `BlobNotFound`. Retry without cache-from so the
-      # build still passes; cache-to rewrites a fresh index, re-warming the
-      # cache for the next run.
-      - if: steps.build.outcome == 'failure'
+          cache-from: type=registry,ref=${{ steps.cache.outputs.ref }}
+          cache-to: type=registry,ref=${{ steps.cache.outputs.ref }},mode=max,oci-mediatypes=true,image-manifest=true,ignore-error=true
+      # Registry cache availability is an optimization, not a correctness
+      # requirement. Retry without importing cache so an unavailable or corrupt
+      # cache cannot block an otherwise valid image build.
+      - if: steps.build.outcome == 'failure' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           file: apps/${{ matrix.app }}/Dockerfile
           platforms: linux/amd64
           push: false
-          cache-to: type=gha,mode=max,scope=docker-${{ matrix.app }},ignore-error=true
+          cache-to: type=registry,ref=${{ steps.cache.outputs.ref }},mode=max,oci-mediatypes=true,image-manifest=true,ignore-error=true
+      - name: Build without shared cache
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          platforms: linux/amd64
+          push: false
