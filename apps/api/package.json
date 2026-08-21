@@ -1,6 +1,6 @@
 {
   "name": "f3-api",
-  "version": "6.3.0",
+  "version": "6.4.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -25,7 +25,7 @@
     "@orpc/zod": "catalog:",
     "@scalar/nextjs-api-reference": "catalog:",
     "@sentry/nextjs": "catalog:",
-    "@t3-oss/env-nextjs": "catalog:",
+    "@t3-oss/env-core": "catalog:",
     "dotenv-cli": "catalog:",
     "next": "catalog:",
     "next-auth": "catalog:",
@@ -34,6 +34,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@acme/auth": "workspace:*",
     "@acme/db": "workspace:*",
     "@acme/eslint-config": "workspace:*",
     "@acme/prettier-config": "workspace:*",

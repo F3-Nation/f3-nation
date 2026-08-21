@@ -141,6 +141,20 @@
       "when": 1784606268765,
       "tag": "0019_add_oauth_refresh_token_rotated_at",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1786645046636,
+      "tag": "0020_sync_request_type_enum",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1786645277925,
+      "tag": "0021_add_oauth_nonce_authtime_refresh_scope",
+      "breakpoints": true
     }
   ]
 }

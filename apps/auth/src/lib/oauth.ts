@@ -11,8 +11,9 @@ import { importJWK, jwtVerify } from "jose";
 
 import { constantTimeEqual } from "~/lib/crypto-utils";
 import { db } from "~/lib/db";
-import { getJWKS, signAccessToken } from "~/lib/jwt";
+import { getJWKS, signAccessToken, signIdToken } from "~/lib/jwt";
 import { logError, logWarn } from "~/lib/logging";
+import { idTokenScopeOrNull } from "~/lib/oauth-scope";
 
 function generateOpaqueToken(): string {
   return crypto.randomBytes(32).toString("base64url");
@@ -69,6 +70,8 @@ export async function createAuthorizationCode(params: {
   scopes: string;
   codeChallenge?: string;
   codeChallengeMethod?: string;
+  nonce?: string;
+  authTime?: string;
 }): Promise<string> {
   const code = generateOpaqueToken();
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min
@@ -81,6 +84,8 @@ export async function createAuthorizationCode(params: {
     scopes: params.scopes,
     codeChallenge: params.codeChallenge ?? null,
     codeChallengeMethod: params.codeChallengeMethod ?? null,
+    nonce: params.nonce ?? null,
+    authTime: params.authTime ?? null,
     expiresAt,
   });
 
@@ -157,9 +162,15 @@ export async function exchangeAuthorizationCode(params: {
   if (!constantTimeEqual(computedChallenge, authCode.codeChallenge))
     return reject("pkce_verifier_mismatch");
 
-  // Look up user email for JWT claims
+  // Look up user fields for JWT claims (id_token needs the same fields the
+  // userinfo endpoint exposes, not just email, so both surfaces agree)
   const [user] = await db
-    .select({ email: users.email })
+    .select({
+      email: users.email,
+      f3Name: users.f3Name,
+      emailVerified: users.emailVerified,
+      avatarUrl: users.avatarUrl,
+    })
     .from(users)
     .where(eq(users.id, authCode.userId))
     .limit(1);
@@ -176,24 +187,67 @@ export async function exchangeAuthorizationCode(params: {
 
   // Create tokens — access token is a JWT, refresh token is opaque
   const ACCESS_TOKEN_TTL = 3600; // 1 hour
+
+  // /authorize always writes a real scopes string for every code it
+  // creates, so a null read-back here means something is anomalous, not
+  // "no scope requested." Reject the whole exchange rather than defaulting
+  // to the broad "openid profile email" scope — that default previously
+  // still reached signAccessToken even though the ID Token was correctly
+  // suppressed below, so an anomalous code could still walk away with a
+  // full-scope access token. Log it: this is a data-integrity condition
+  // worth being able to find in production, not just fail silently on.
+  if (!authCode.scopes) {
+    logError("auth.oauth.authorization_code_missing_scopes", {
+      clientId: authCode.clientId,
+      userId: authCode.userId,
+    });
+    return { error: "invalid_grant" as const };
+  }
+  const scopes = authCode.scopes;
+
   const accessToken = await signAccessToken({
     sub: authCode.userId,
     email: user.email,
-    scope: authCode.scopes ?? "openid profile email",
+    scope: scopes,
     clientId: authCode.clientId,
     expiresInSeconds: ACCESS_TOKEN_TTL,
   });
+
+  // ID Token is only meaningful (and only spec'd) when "openid" was actually
+  // granted — omit it entirely otherwise rather than issuing an unrequested
+  // identity assertion.
+  const idTokenScope = idTokenScopeOrNull(scopes);
+  const idToken = idTokenScope
+    ? await signIdToken({
+        sub: authCode.userId,
+        clientId: authCode.clientId,
+        scope: idTokenScope,
+        expiresInSeconds: ACCESS_TOKEN_TTL,
+        name: user.f3Name,
+        picture: user.avatarUrl,
+        email: user.email,
+        emailVerified: !!user.emailVerified,
+        nonce: authCode.nonce,
+        authTime: authCode.authTime,
+      })
+    : undefined;
 
   const refreshToken = generateOpaqueToken();
   const refreshExpiresAt = new Date(
     Date.now() + 30 * 24 * 60 * 60 * 1000,
   ).toISOString(); // 30 days
 
+  // Persist the actual granted scopes and original auth_time onto the
+  // refresh token's lineage — exchangeRefreshToken carries both forward on
+  // every rotation instead of losing them the moment this code is
+  // exchanged (see the NOTE removed from that function below).
   await db.insert(oauthRefreshTokens).values({
     token: refreshToken,
     clientId: authCode.clientId,
     userId: authCode.userId,
     expiresAt: refreshExpiresAt,
+    scopes,
+    authTime: authCode.authTime,
   });
 
   return {
@@ -201,7 +255,8 @@ export async function exchangeAuthorizationCode(params: {
     token_type: "Bearer" as const,
     expires_in: ACCESS_TOKEN_TTL,
     refresh_token: refreshToken,
-    scope: authCode.scopes,
+    scope: scopes,
+    ...(idToken ? { id_token: idToken } : {}),
   };
 }
 
@@ -330,9 +385,15 @@ export async function exchangeRefreshToken(params: {
       return reject("refresh_token_invalid_or_expired");
     }
 
-    // Look up user email for JWT claims
+    // Look up user fields for JWT claims (id_token needs the same fields the
+    // userinfo endpoint exposes, not just email, so both surfaces agree)
     const [user] = await tx
-      .select({ email: users.email })
+      .select({
+        email: users.email,
+        f3Name: users.f3Name,
+        emailVerified: users.emailVerified,
+        avatarUrl: users.avatarUrl,
+      })
       .from(users)
       .where(eq(users.id, existing.userId))
       .limit(1);
@@ -345,7 +406,18 @@ export async function exchangeRefreshToken(params: {
       return { error: "invalid_grant" as const };
     }
 
-    const scopes = client.scopes ?? "openid profile email";
+    // The scopes actually granted at original authorization, persisted on
+    // this token's lineage (see exchangeAuthorizationCode). Older rows
+    // created before this column existed have no value here — fall back
+    // to the client's registered scopes only for that legacy case, not as
+    // the general rule anymore.
+    if (existing.scopes == null) {
+      logWarn("auth.oauth.refresh_token_legacy_scope_fallback", {
+        clientId: existing.clientId,
+        userId: existing.userId,
+      });
+    }
+    const scopes = existing.scopes ?? client.scopes ?? "openid profile email";
     const ACCESS_TOKEN_TTL = 3600; // 1 hour
 
     const accessToken = await signAccessToken({
@@ -356,16 +428,40 @@ export async function exchangeRefreshToken(params: {
       expiresInSeconds: ACCESS_TOKEN_TTL,
     });
 
+    const idTokenScope = idTokenScopeOrNull(scopes);
+    const idToken = idTokenScope
+      ? await signIdToken({
+          sub: existing.userId,
+          clientId: existing.clientId,
+          scope: idTokenScope,
+          expiresInSeconds: ACCESS_TOKEN_TTL,
+          name: user.f3Name,
+          picture: user.avatarUrl,
+          email: user.email,
+          emailVerified: !!user.emailVerified,
+          // Deliberately no nonce here — OIDC Core 12.2 expects a refreshed
+          // ID Token not to replay the original request's nonce, unlike
+          // auth_time, which should keep reflecting the true original login.
+          authTime: existing.authTime,
+        })
+      : undefined;
+
     const refreshToken = generateOpaqueToken();
     const refreshExpiresAt = new Date(
       Date.now() + 30 * 24 * 60 * 60 * 1000,
     ).toISOString();
 
+    // Carry scopes/authTime forward onto the new row so the *next*
+    // rotation can still recover them too — otherwise only the first
+    // refresh in a chain would benefit and every rotation after it would
+    // silently fall back to the legacy client-scope behavior again.
     await tx.insert(oauthRefreshTokens).values({
       token: refreshToken,
       clientId: existing.clientId,
       userId: existing.userId,
       expiresAt: refreshExpiresAt,
+      scopes,
+      authTime: existing.authTime,
     });
 
     return {
@@ -374,6 +470,7 @@ export async function exchangeRefreshToken(params: {
       expires_in: ACCESS_TOKEN_TTL,
       refresh_token: refreshToken,
       scope: scopes,
+      ...(idToken ? { id_token: idToken } : {}),
     };
   });
 }
@@ -394,6 +491,12 @@ export async function validateAccessToken(token: string) {
   } catch {
     return null;
   }
+
+  // /userinfo is an access-token-only endpoint per the OIDC spec — reject
+  // an ID Token here too, since it shares this server's signing key and
+  // issuer with access tokens and would otherwise pass signature+expiry
+  // verification just as well.
+  if (payload.token_use !== "access") return null;
 
   const userId = Number(payload.sub);
   if (!userId) return null;
