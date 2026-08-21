@@ -23,6 +23,7 @@ assert_eq() {
 
 run_case() {
   local name="$1" turbo_body="$2"
+  local scm_base="${3-base-sha}" scm_head="${4-head-sha}"
   local case_dir="${tmp_dir}/${name}"
   mkdir -p "$case_dir"
   printf '%s\n' '#!/usr/bin/env bash' "$turbo_body" >"${case_dir}/turbo"
@@ -30,6 +31,8 @@ run_case() {
   : >"${case_dir}/github-env"
 
   GITHUB_ENV="${case_dir}/github-env" \
+    TURBO_SCM_BASE="$scm_base" \
+    TURBO_SCM_HEAD="$scm_head" \
     TURBO_SCOPE_TURBO_BIN="${case_dir}/turbo" \
     bash "$scope_script" >"${case_dir}/output" 2>&1
   status=$?
@@ -37,22 +40,29 @@ run_case() {
 
 run_case affected 'printf '\''%s\n'\'' '\''{"packages":{"count":2}}'\'''
 assert_eq "affected selection exits successfully" "0" "$status"
-assert_eq "affected selection enables --affected" "TURBO_RUN_ARGS=--affected" "$(cat "${tmp_dir}/affected/github-env")"
+assert_eq "affected selection persists base SHA" "TURBO_SCM_BASE=base-sha" "$(grep '^TURBO_SCM_BASE=' "${tmp_dir}/affected/github-env")"
+assert_eq "affected selection persists head SHA" "TURBO_SCM_HEAD=head-sha" "$(grep '^TURBO_SCM_HEAD=' "${tmp_dir}/affected/github-env")"
+assert_eq "affected selection enables --affected" "TURBO_RUN_ARGS=--affected" "$(grep '^TURBO_RUN_ARGS=' "${tmp_dir}/affected/github-env")"
 
 run_case empty 'printf '\''%s\n'\'' '\''{"packages":{"count":0}}'\'''
 assert_eq "empty selection exits successfully" "0" "$status"
-assert_eq "empty selection falls back to full" "TURBO_RUN_ARGS=" "$(cat "${tmp_dir}/empty/github-env")"
+assert_eq "empty selection falls back to full" "TURBO_RUN_ARGS=" "$(grep '^TURBO_RUN_ARGS=' "${tmp_dir}/empty/github-env")"
 assert_eq "empty selection emits a notice" "1" "$(grep -c '::notice::Turbo selected no affected workspaces' "${tmp_dir}/empty/output")"
 
 run_case failure 'exit 17'
 assert_eq "Turbo failure exits successfully" "0" "$status"
-assert_eq "Turbo failure falls back to full" "TURBO_RUN_ARGS=" "$(cat "${tmp_dir}/failure/github-env")"
+assert_eq "Turbo failure falls back to full" "TURBO_RUN_ARGS=" "$(grep '^TURBO_RUN_ARGS=' "${tmp_dir}/failure/github-env")"
 assert_eq "Turbo failure emits a warning" "1" "$(grep -c '::warning::Turbo affected-workspace detection failed' "${tmp_dir}/failure/output")"
 
 run_case malformed 'printf '\''%s\n'\'' '\''not-json'\'''
 assert_eq "malformed JSON exits successfully" "0" "$status"
-assert_eq "malformed JSON falls back to full" "TURBO_RUN_ARGS=" "$(cat "${tmp_dir}/malformed/github-env")"
+assert_eq "malformed JSON falls back to full" "TURBO_RUN_ARGS=" "$(grep '^TURBO_RUN_ARGS=' "${tmp_dir}/malformed/github-env")"
 assert_eq "malformed JSON emits a warning" "1" "$(grep -c '::warning::Turbo returned invalid affected-workspace JSON' "${tmp_dir}/malformed/output")"
+
+run_case missing-sha 'printf '\''%s\n'\'' '\''{"packages":{"count":2}}'\''' '' head-sha
+assert_eq "missing SHA exits successfully" "0" "$status"
+assert_eq "missing SHA falls back to full" "TURBO_RUN_ARGS=" "$(grep '^TURBO_RUN_ARGS=' "${tmp_dir}/missing-sha/github-env")"
+assert_eq "missing SHA emits a warning" "1" "$(grep -c '::warning::Pull-request base/head SHAs were unavailable' "${tmp_dir}/missing-sha/output")"
 
 if ((failures > 0)); then
   echo "${failures} test(s) failed."

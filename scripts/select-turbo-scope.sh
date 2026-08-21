@@ -11,6 +11,17 @@ use_full_workspace() {
   echo "::notice::${1}; running the full workspace instead."
 }
 
+if [[ -z "${TURBO_SCM_BASE:-}" || -z "${TURBO_SCM_HEAD:-}" ]]; then
+  echo "::warning::Pull-request base/head SHAs were unavailable."
+  use_full_workspace "Unable to pin the affected comparison range"
+  exit 0
+fi
+
+{
+  echo "TURBO_SCM_BASE=${TURBO_SCM_BASE}"
+  echo "TURBO_SCM_HEAD=${TURBO_SCM_HEAD}"
+} >>"$GITHUB_ENV"
+
 if ! affected_json="$("$turbo_bin" ls --affected --output=json)"; then
   echo "::warning::Turbo affected-workspace detection failed."
   use_full_workspace "Unable to calculate affected workspaces"
