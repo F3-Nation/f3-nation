@@ -91,6 +91,27 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+});
+
+describe("layout metadata base URL", () => {
+  it("uses the configured map URL", async () => {
+    vi.stubEnv("F3_MAP_BASE_URL", "https://map.example.com");
+    vi.resetModules();
+
+    const { metadata } = await import("../../src/app/layout");
+
+    expect(metadata.metadataBase).toEqual(new URL("https://map.example.com"));
+  });
+
+  it("falls back to localhost when the map URL is unavailable", async () => {
+    vi.stubEnv("F3_MAP_BASE_URL", "");
+    vi.resetModules();
+
+    const { metadata } = await import("../../src/app/layout");
+
+    expect(metadata.metadataBase).toEqual(new URL("http://localhost:3000"));
+  });
 });
 
 describe("layout app router", () => {
