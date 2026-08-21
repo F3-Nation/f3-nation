@@ -25,6 +25,12 @@ export default tseslint.config(
     languageOptions: {
       parserOptions: { project: true },
     },
+    settings: {
+      "import-x/extensions": [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"],
+      "import-x/resolver": {
+        node: { extensions: [".ts", ".tsx", ".js", ".jsx"] },
+      },
+    },
     rules: {
       "@typescript-eslint/no-unused-vars": [
         "error",

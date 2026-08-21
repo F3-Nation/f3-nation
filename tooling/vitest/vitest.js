@@ -7,13 +7,17 @@ export default [
     plugins: { vitest: vitestPlugin },
     rules: {
       ...vitestPlugin.configs.recommended.rules,
-      // Pre-existing violations (~200, mostly schema-validation tests that
-      // never assert on the parse result, and permission tests that assert
-      // inside an `if`) are tracked as follow-up cleanup rather than fixed
-      // here — see https://github.com/F3-Nation/f3-nation/issues/837. Every
-      // other recommended rule (no-focused-tests, no-standalone-expect,
+      // Pre-existing violations (~86, permission tests that assert inside an
+      // `if`) are tracked as follow-up cleanup rather than fixed here — see
+      // https://github.com/F3-Nation/f3-nation/issues/837. Every other
+      // recommended rule (no-focused-tests, no-standalone-expect,
       // valid-expect, …) is already clean and stays enabled.
-      "vitest/expect-expect": "off",
+      "vitest/expect-expect": [
+        "error",
+        {
+          assertFunctionNames: ["expect", "expect*", "assert*", "pass", "fail"],
+        },
+      ],
       "vitest/no-conditional-expect": "off",
     },
   },
