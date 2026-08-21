@@ -40,10 +40,12 @@ tag push (e.g. map@1.2.3) → deploy-<app>.yml → _deploy-cloudrun.yml
 
 ## Gate-by-gate
 
-All CI jobs run on `pull_request` (any target branch) and on `push` to `main`.
-Every job checks out with `persist-credentials: false` and uses the shared
-`.github/actions/setup` (pnpm + Node from `.nvmrc` + Turbo remote cache).
-Third-party actions are SHA-pinned.
+The required checks run on `pull_request` (any target branch) and on `push` to
+`main`. Every job checks out with `persist-credentials: false`; Node-based jobs
+use the shared `.github/actions/setup` for pnpm and Node from `.nvmrc`.
+Third-party actions are SHA-pinned. The advisory Docker path is event-specific:
+PRs validate images with read-only access to the GHCR cache, while a separate
+`main`-only job refreshes it with package-write permission.
 
 The five Turbo-backed required checks (`format-check`, `lint`, `typecheck`,
 `build`, and `test-coverage`) add `--affected` on pull requests, selecting
@@ -90,11 +92,12 @@ that app's thin `deploy-<app>.yml` caller into the shared
 - `docker-build` runs on every PR but is **not** in the `main` ruleset's
   required checks — an image-only breakage can merge and will surface at
   release time in the deploy `build` job.
-- Same-repository runs authenticate to GHCR with the job's short-lived
-  `GITHUB_TOKEN` and update a private cache package for each app. Fork PRs do
-  not receive registry credentials and build without the shared layer cache.
-  If GHCR cache import fails, the job retries without importing cache so cache
-  availability remains an optimization rather than a correctness dependency.
+- PR builds receive only `packages: read`: they may import each app's shared
+  GHCR cache but cannot update it. Only the `docker-cache-refresh` job on pushes
+  to `main` receives `packages: write` and exports new layers. If login or cache
+  import fails (including a fork PR without package access), the build retries
+  without importing cache, so cache availability remains an optimization
+  rather than a correctness dependency.
 - The deploy `ci-gate` regexp waits on the five build/test checks but not
   `security-audit` (the audit already gated the merge; a tag cut from an
   unmerged or old SHA relies on that earlier gate).
