@@ -524,4 +524,3 @@ jobs:
           file: apps/${{ matrix.app }}/Dockerfile
           platforms: linux/amd64
           push: false
-          cache-to: type=registry,ref=${{ steps.cache.outputs.ref }},mode=max,oci-mediatypes=true,image-manifest=true,ignore-error=true

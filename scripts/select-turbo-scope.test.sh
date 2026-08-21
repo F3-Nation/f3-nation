@@ -59,6 +59,11 @@ assert_eq "malformed JSON exits successfully" "0" "$status"
 assert_eq "malformed JSON falls back to full" "TURBO_RUN_ARGS=" "$(grep '^TURBO_RUN_ARGS=' "${tmp_dir}/malformed/github-env")"
 assert_eq "malformed JSON emits a warning" "1" "$(grep -c '::warning::Turbo returned invalid affected-workspace JSON' "${tmp_dir}/malformed/output")"
 
+run_case wrong-shape 'printf '\''%s\n'\'' '\''{"packages":{}}'\'''
+assert_eq "wrong-shaped JSON exits successfully" "0" "$status"
+assert_eq "wrong-shaped JSON falls back to full" "TURBO_RUN_ARGS=" "$(grep '^TURBO_RUN_ARGS=' "${tmp_dir}/wrong-shape/github-env")"
+assert_eq "wrong-shaped JSON emits a warning" "1" "$(grep -c '::warning::Turbo returned invalid affected-workspace JSON' "${tmp_dir}/wrong-shape/output")"
+
 run_case missing-sha 'printf '\''%s\n'\'' '\''{"packages":{"count":2}}'\''' '' head-sha
 assert_eq "missing SHA exits successfully" "0" "$status"
 assert_eq "missing SHA falls back to full" "TURBO_RUN_ARGS=" "$(grep '^TURBO_RUN_ARGS=' "${tmp_dir}/missing-sha/github-env")"
