@@ -39,6 +39,7 @@ export default tseslint.config(
         { checksVoidReturn: { attributes: false } },
       ],
       "import/consistent-type-specifier-style": ["error", "prefer-top-level"],
+      "import/no-cycle": "error",
       "@typescript-eslint/no-unused-expressions": [
         "error",
         { allowShortCircuit: true, allowTernary: true },
