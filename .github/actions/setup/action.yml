@@ -38,14 +38,7 @@ runs:
     - name: Select Turbo scope
       if: inputs.select-turbo-affected == 'true' && github.event_name == 'pull_request'
       shell: bash
-      run: |
-        affected_json="$(./node_modules/.bin/turbo ls --affected --output=json)"
-        affected_count="$(node -e 'const value = JSON.parse(process.argv[1]); process.stdout.write(String(value.packages.count));' "$affected_json")"
-
-        if [[ "$affected_count" -gt 0 ]]; then
-          echo "TURBO_RUN_ARGS=--affected" >> "$GITHUB_ENV"
-          echo "Selected ${affected_count} affected Turbo workspace(s)."
-        else
-          echo "TURBO_RUN_ARGS=" >> "$GITHUB_ENV"
-          echo "::notice::Turbo selected no affected workspaces; running the full workspace instead."
-        fi
+      env:
+        TURBO_SCM_BASE: ${{ github.event.pull_request.base.sha }}
+        TURBO_SCM_HEAD: ${{ github.event.pull_request.head.sha }}
+      run: bash scripts/select-turbo-scope.sh
