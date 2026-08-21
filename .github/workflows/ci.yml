@@ -16,6 +16,9 @@ permissions:
 
 env:
   CI: true
+  # Pull requests run tasks only for changed workspaces and their dependents.
+  # Pushes to main keep the full-repository validation required before deploys.
+  TURBO_RUN_ARGS: ${{ github.event_name == 'pull_request' && '--affected' || '' }}
   # Turborepo Remote Cache. TURBO_TOKEN is a secret; TURBO_TEAM is the
   # remote-cache team slug (repo variable). With both set, every job/run/rerun
   # shares task outputs, so unchanged work short-circuits to FULL TURBO.
@@ -50,8 +53,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
+          filter: blob:none
       - uses: ./.github/actions/setup
-      - run: pnpm format
+      - run: pnpm format $TURBO_RUN_ARGS
 
   security-audit:
     runs-on: ubuntu-latest
@@ -279,8 +284,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
+          filter: blob:none
       - uses: ./.github/actions/setup
-      - run: pnpm lint
+      - run: pnpm lint $TURBO_RUN_ARGS
       - run: pnpm lint:unused
 
   typecheck:
@@ -289,8 +296,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
+          filter: blob:none
       - uses: ./.github/actions/setup
-      - run: pnpm typecheck
+      - run: pnpm typecheck $TURBO_RUN_ARGS
 
   # Regenerates Drizzle migrations from packages/db/drizzle/schema.ts and fails
   # if the output differs from what's committed. Exists because a snapshot can
@@ -345,8 +354,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
+          filter: blob:none
       - uses: ./.github/actions/setup
-      - run: pnpm build
+      - run: pnpm build $TURBO_RUN_ARGS
 
   test-coverage:
     runs-on: ubuntu-latest
@@ -368,19 +379,21 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
+          filter: blob:none
       - uses: ./.github/actions/setup
       # GCS_CREDENTIALS must exist with client_email/private_key fields, but
       # nothing real is needed. Built here from plainly fake JSON — a committed
       # base64 blob trips generic high-entropy secret scanners.
       - name: Set mock GCS credentials
         run: echo "GCS_CREDENTIALS=$(printf '{\"client_email\":\"fake-not-a-real-credential@ci.invalid\",\"private_key\":\"THIS-IS-A-FAKE-PLACEHOLDER-FOR-CI\"}' | base64 -w0)" >> "$GITHUB_ENV"
-      - run: pnpm test
+      - run: pnpm test $TURBO_RUN_ARGS
       # The apps/api characterization matrix — the parity gate for the Hono
       # port. Runs in this job, sequentially after pnpm test and never
       # concurrent with it, because both suites mutate f3_test. Needs no extra
       # env: global-setup.ts stands up its own JWKS server and signing key, and
       # SUPER_ADMIN_API_KEY is already in the workflow env above.
-      - run: pnpm turbo run test:characterization
+      - run: pnpm turbo run test:characterization $TURBO_RUN_ARGS
 
   # Builds each app's deploy image the same way the release pipeline does
   # (turbo prune -> frozen install -> turbo build). The `build` job above only

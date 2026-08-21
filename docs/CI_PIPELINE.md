@@ -13,13 +13,13 @@ PR opened/updated
   │
   ├─ pr-title.yml ······· Conventional-Commit PR title lint
   └─ ci.yml
-       ├─ format-check ·· pnpm format (Prettier)            [required to merge]
-       ├─ lint ·········· pnpm lint (ESLint)                [required to merge]
-       ├─ typecheck ····· pnpm typecheck (tsc)              [required to merge]
-       ├─ build ········· pnpm build (Turbo, full workspace)[required to merge]
-       ├─ test-coverage · pnpm test (Vitest vs postgres:18) [required to merge]
+       ├─ format-check ·· pnpm format (Prettier)             [required to merge]
+       ├─ lint ·········· pnpm lint (ESLint)                 [required to merge]
+       ├─ typecheck ····· pnpm typecheck (tsc)               [required to merge]
+       ├─ build ········· pnpm build (Turbo)                 [required to merge]
+       ├─ test-coverage · pnpm test (Vitest vs postgres:18)  [required to merge]
        ├─ security-audit  pnpm audit --prod --level=high    [required to merge]
-       ├─ docker-build ·· per-app image build (5 apps)      [advisory]
+       ├─ docker-build ·· per-app image build (6 apps)      [advisory]
        ├─ recent-package-watch · npm publish-date report    [advisory, comment]
        │
        ├─ (reserved) preview-env ·· per-PR Cloud Run deploy, opt-in label
@@ -45,17 +45,25 @@ Every job checks out with `persist-credentials: false` and uses the shared
 `.github/actions/setup` (pnpm + Node from `.nvmrc` + Turbo remote cache).
 Third-party actions are SHA-pinned.
 
-| #   | Gate                   | What it runs                                                                                                           | What it catches                                                                                                                         | Merge-blocking (`main` ruleset) |
-| --- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
-| 1   | `format-check`         | `pnpm format`                                                                                                          | Prettier drift                                                                                                                          | ✅                              |
-| 2   | `lint`                 | `pnpm lint`                                                                                                            | ESLint violations (incl. security rules)                                                                                                | ✅                              |
-| 3   | `typecheck`            | `pnpm typecheck`                                                                                                       | Type errors across the workspace                                                                                                        | ✅                              |
-| 4   | `build`                | `pnpm build`                                                                                                           | Full-workspace build breakage                                                                                                           | ✅                              |
-| 5   | `test-coverage`        | `pnpm test` against a `postgres:18` service container (`f3_test` DB, mock env vars)                                    | Unit/integration regressions                                                                                                            | ✅                              |
-| 6   | `security-audit`       | `pnpm audit --prod --audit-level=high`                                                                                 | Known high/critical vulns in prod deps                                                                                                  | ✅                              |
-| 7   | `docker-build`         | Per-app `docker build` (admin, api, auth, map, me; matrix, `linux/amd64`, no push, GHA layer cache + cache-miss retry) | Breakage specific to the pruned Docker context (catalog mismatches, isolated-linker resolution) that the full-workspace build can't see | ❌ advisory                     |
-| 8   | `recent-package-watch` | npm publish-time report for all workspace deps (same-repo PRs only)                                                    | Supply-chain freshness signal — flags deps published in the last 3 days; upserts a PR comment                                           | ❌ advisory                     |
-| —   | `pr-title.yml`         | PR title lint                                                                                                          | Non-Conventional-Commit squash titles                                                                                                   | (separate workflow)             |
+The five Turbo-backed required checks (`format-check`, `lint`, `typecheck`,
+`build`, and `test-coverage`) add `--affected` on pull requests, selecting
+changed workspaces and their dependents. Their checkouts include the complete
+Git history needed for the base-to-head comparison. Pushes to `main` omit the
+flag and validate the full workspace. The non-Turbo safeguards in the `lint`
+job (`lint:ws`, coverage-threshold validation, Python task validation, and
+`lint:unused`) remain repository-wide on every run.
+
+| #   | Gate                   | What it runs                                                                                                          | What it catches                                                                                                                    | Merge-blocking (`main` ruleset) |
+| --- | ---------------------- | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| 1   | `format-check`         | `pnpm format` (affected workspaces on PRs; full workspace on `main`)                                                  | Prettier drift                                                                                                                     | ✅                              |
+| 2   | `lint`                 | `pnpm lint` (affected workspace ESLint plus repository-wide safeguards on PRs; full workspace on `main`)              | ESLint violations (incl. security rules)                                                                                           | ✅                              |
+| 3   | `typecheck`            | `pnpm typecheck` (affected workspaces and dependents on PRs; full workspace on `main`)                                | Type errors in changed workspaces and their consumers                                                                              | ✅                              |
+| 4   | `build`                | `pnpm build` (affected workspaces and dependents on PRs; full workspace on `main`)                                    | Build breakage in changed workspaces and their consumers                                                                           | ✅                              |
+| 5   | `test-coverage`        | `pnpm test` for affected workspaces on PRs or the full workspace on `main`, against `postgres:18`                     | Unit/integration regressions                                                                                                       | ✅                              |
+| 6   | `security-audit`       | `pnpm audit --prod --audit-level=high`                                                                                | Known high/critical vulns in prod deps                                                                                             | ✅                              |
+| 7   | `docker-build`         | Per-app `docker build` (admin, api, auth, map, me, slackbot; matrix, `linux/amd64`, no push, GHA layer cache + retry) | Breakage specific to the pruned Docker context (catalog mismatches, isolated-linker resolution) that the workspace build can't see | ❌ advisory                     |
+| 8   | `recent-package-watch` | npm publish-time report for all workspace deps (same-repo PRs only)                                                   | Supply-chain freshness signal — flags deps published in the last 3 days; upserts a PR comment                                      | ❌ advisory                     |
+| —   | `pr-title.yml`         | PR title lint                                                                                                         | Non-Conventional-Commit squash titles                                                                                              | (separate workflow)             |
 
 Local equivalents before pushing: `pnpm format`, `pnpm lint`, `pnpm typecheck`,
 `pnpm build`, `pnpm test` (see [`AGENTS.md`](../AGENTS.md#build-test-and-development-commands)).
