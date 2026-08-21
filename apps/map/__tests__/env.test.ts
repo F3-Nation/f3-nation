@@ -24,7 +24,7 @@ describe("env skipValidation", () => {
     vi.stubEnv("SKIP_ENV_VALIDATION", "");
     vi.stubEnv("npm_lifecycle_event", "");
     vi.stubEnv("F3_API_BASE_URL", "");
-    expect(await importEnv()).toBeDefined();
+    expect((await importEnv()).F3_API_BASE_URL).toBeFalsy();
   });
 
   it("skips validation when SKIP_ENV_VALIDATION is set (operand 2)", async () => {
@@ -32,7 +32,7 @@ describe("env skipValidation", () => {
     vi.stubEnv("SKIP_ENV_VALIDATION", "1");
     vi.stubEnv("npm_lifecycle_event", "");
     vi.stubEnv("F3_API_BASE_URL", "");
-    expect(await importEnv()).toBeDefined();
+    expect((await importEnv()).F3_API_BASE_URL).toBeFalsy();
   });
 
   it("skips validation for the lint lifecycle event (operand 3)", async () => {
@@ -40,6 +40,6 @@ describe("env skipValidation", () => {
     vi.stubEnv("SKIP_ENV_VALIDATION", "");
     vi.stubEnv("npm_lifecycle_event", "lint");
     vi.stubEnv("F3_API_BASE_URL", "");
-    expect(await importEnv()).toBeDefined();
+    expect((await importEnv()).F3_API_BASE_URL).toBeFalsy();
   });
 });
