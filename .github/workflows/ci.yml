@@ -469,7 +469,8 @@ jobs:
 
   # Only trusted main-branch code may update the shared registry cache. Keeping
   # this separate from docker-build gives pull_request jobs packages:read and
-  # prevents branches from racing to overwrite the same mutable cache tag.
+  # prevents branches from racing to overwrite the same mutable cache tag. The
+  # workflow-level concurrency group also serializes writers on main.
   docker-cache-refresh:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest

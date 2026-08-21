@@ -64,6 +64,17 @@ assert_eq "missing SHA exits successfully" "0" "$status"
 assert_eq "missing SHA falls back to full" "TURBO_RUN_ARGS=" "$(grep '^TURBO_RUN_ARGS=' "${tmp_dir}/missing-sha/github-env")"
 assert_eq "missing SHA emits a warning" "1" "$(grep -c '::warning::Pull-request base/head SHAs were unavailable' "${tmp_dir}/missing-sha/output")"
 
+# Exercise the installed Turbo binary so an upgrade that adds non-JSON stdout
+# cannot silently force every PR onto the full-workspace fallback.
+real_turbo="${script_dir}/../node_modules/.bin/turbo"
+if [[ -x "$real_turbo" ]]; then
+  real_json="$("$real_turbo" ls --output=json)"
+  node -e 'const value = JSON.parse(process.argv[1]); if (!Number.isInteger(value?.packages?.count)) process.exit(1);' "$real_json"
+  assert_eq "real Turbo output remains parseable JSON" "0" "$?"
+else
+  echo "SKIP: real Turbo output check (dependencies are not installed)"
+fi
+
 if ((failures > 0)); then
   echo "${failures} test(s) failed."
   exit 1

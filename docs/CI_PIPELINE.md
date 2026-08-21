@@ -59,6 +59,14 @@ selecting any tasks. The non-Turbo safeguards in the `lint` job (`lint:ws`,
 coverage-threshold validation, Python task validation, and `lint:unused`)
 remain repository-wide on every run.
 
+This deliberately changes the PR guarantee: a green PR proves the workspaces
+selected by Turbo's declared dependency graph, not every workspace in the
+repository. Undeclared cross-workspace coupling can therefore surface in the
+full `main` run after merge; a red full run blocks deploys until corrected. The
+zero-selection and detection-failure fallbacks above protect against an empty
+or unavailable affected set, but they cannot infer dependencies missing from
+the graph.
+
 | #   | Gate                   | What it runs                                                                                                                                               | What it catches                                                                                                                    | Merge-blocking (`main` ruleset) |
 | --- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
 | 1   | `format-check`         | `pnpm format` (affected workspaces and dependents on PRs; full workspace on `main`)                                                                        | Prettier drift                                                                                                                     | ✅                              |
@@ -103,7 +111,11 @@ that app's thin `deploy-<app>.yml` caller into the shared
   import fails (including a fork PR without package access), the build retries
   without importing cache, so cache availability remains an optimization
   rather than a correctness dependency. On first rollout, PR builds may run
-  uncached until the first merged `main` build creates the cache packages.
+  uncached until the first merged `main` build creates the cache packages. Fork
+  PRs without read access to the base repository's private GHCR packages remain
+  uncached permanently and use the same safe fallback.
+- The workflow concurrency group serializes pushes to `main`, so
+  `docker-cache-refresh` writers cannot overlap on the mutable per-app tags.
 - The active `main` ruleset permits squash merges only and requires strict
   status checks. The squash creates a new commit SHA whose push-to-`main` CI run
   performs full-workspace validation, so deploy gates on that full run rather
