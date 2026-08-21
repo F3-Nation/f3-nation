@@ -37,7 +37,7 @@ curl -X GET "https://api.f3nation.com/v1/org" \
   -H "Client: my-app"
 ```
 
-API keys inherit the roles and permissions of their owner (**Editor** or **Admin**). Generate and manage keys at `admin.f3nation.com/api-keys` if you're an admin on a region or the F3 Nation organization. See `/docs` for the full auth contract, error responses, and rate limits.
+API keys have their own role assignments (**Editor** or **Admin**, per org) configured at creation time — they do not inherit the roles of the user who owns them. The owner is recorded for accountability only. Generate and manage keys at `admin.f3nation.com/api-keys` if you're an admin on a region or the F3 Nation organization. See `/docs` for the full auth contract, error responses, and rate limits.
 
 ## Local Development
 
