@@ -2,24 +2,14 @@ import type { Invoke } from "../transport";
 import { withRequestHeaders } from "../header-store";
 
 /**
- * Mirrors next.config.js `redirects()`. Keep in sync with that file — importing
- * the real config here would run its jiti env validation and Sentry wrapper as
- * import-time side effects, which the seam must not trigger.
- */
-const CONFIG_REDIRECTS: {
-  source: string;
-  destination: string;
-  status: number;
-}[] = [{ source: "/map", destination: "/", status: 308 }];
-
-/**
  * In-process dispatch mirroring Next's file-system routing. apps/api has three
  * route files, and the catch-all does NOT cover /docs — dispatching everything
  * to it would silently skip the docs and OpenAPI cases.
  *
- * Two layers Next applies *before* handler matching are modelled here so goldens
- * encode what production returns: the implicit trailing-slash 308 and the
- * next.config.js redirect table.
+ * One layer Next applies *before* handler matching is modelled here so goldens
+ * encode what production returns: the implicit trailing-slash 308. (next.config.js
+ * has no redirects() table anymore — apps/api's own /map redirect was dead code
+ * removed in #648.)
  */
 export const invokeNext: Invoke = async (request) => {
   const { pathname, search } = new URL(request.url);
@@ -30,15 +20,6 @@ export const invokeNext: Invoke = async (request) => {
     return new Response(null, {
       status: 308,
       headers: { location: pathname.replace(/\/+$/, "") + search },
-    });
-  }
-
-  // next.config.js redirects() run next; permanent entries are 308.
-  const redirect = CONFIG_REDIRECTS.find((r) => r.source === pathname);
-  if (redirect) {
-    return new Response(null, {
-      status: redirect.status,
-      headers: { location: redirect.destination + search },
     });
   }
 

@@ -142,7 +142,7 @@ export async function proxy(request: NextRequest) {
         if (pathname.startsWith("/api/")) {
           return NextResponse.json({ error: "unauthorized" }, { status: 401 });
         }
-        return NextResponse.next();
+        return new NextResponse(null, { status: 401 });
       }
       // Navigation request: refresh genuinely dead — fall through to clear + redirect.
     }
