@@ -18,7 +18,7 @@ inputs:
   app_key:
     description: >-
       Section key matching a "## <app_key>" heading in
-      .github/smoke-tests/checklists.md (e.g. map, slackbot-scripts)
+      .github/smoke-tests/checklists.md (e.g. map, slackbot)
     required: true
   app_label:
     description: "Existing 'app: X' label to apply to the tracker issue"

@@ -40,8 +40,3 @@
 - [ ] Not browser-testable — this service only talks to Slack.
 - [ ] In a Slack workspace connected to the staging bot, run a known slash command and confirm it responds.
 - [ ] If no staging Slack workspace is available to you, skip this item and flag it to whoever manages the staging bot's Slack app config.
-
-## slackbot-scripts
-
-- [ ] Not testable via UI — this is a Cloud Run Job (batch/cron), not a web service.
-- [ ] Deploying only updates the job definition — it does not run it. In the GCP Console (Cloud Run Jobs → `f3-slackbot-scripts`, staging project) or via `gcloud run jobs execute f3-slackbot-scripts --region us-central1 --project f3-slackbot-staging`, manually trigger an execution and confirm it completes successfully.
