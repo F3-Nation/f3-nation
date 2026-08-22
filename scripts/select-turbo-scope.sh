@@ -29,7 +29,8 @@ if ! affected_json="$("$turbo_bin" ls --affected --output=json)"; then
 fi
 
 if ! affected_count="$(
-  node -e 'const value = JSON.parse(process.argv[1]); if (!Number.isInteger(value?.packages?.count) || value.packages.count < 0) process.exit(1); process.stdout.write(String(value.packages.count));' "$affected_json"
+  printf '%s' "$affected_json" |
+    node -e 'let input = ""; process.stdin.setEncoding("utf8"); process.stdin.on("data", (chunk) => (input += chunk)); process.stdin.on("end", () => { const value = JSON.parse(input); if (!Number.isInteger(value?.packages?.count) || value.packages.count < 0) process.exit(1); process.stdout.write(String(value.packages.count)); });'
 )"; then
   echo "::warning::Turbo returned invalid affected-workspace JSON."
   use_full_workspace "Unable to parse affected workspaces"
@@ -51,7 +52,8 @@ if [[ -n "${TURBO_SCOPE_TASK:-}" ]]; then
   fi
 
   if ! task_count="$(
-    node -e 'const value = JSON.parse(process.argv[1]); if (!Array.isArray(value?.tasks)) process.exit(1); process.stdout.write(String(value.tasks.length));' "$task_json"
+    printf '%s' "$task_json" |
+      node -e 'let input = ""; process.stdin.setEncoding("utf8"); process.stdin.on("data", (chunk) => (input += chunk)); process.stdin.on("end", () => { const value = JSON.parse(input); if (!Array.isArray(value?.tasks)) process.exit(1); process.stdout.write(String(value.tasks.length)); });'
   )"; then
     echo "::warning::Turbo returned invalid affected-task JSON."
     use_full_workspace "Unable to parse affected ${TURBO_SCOPE_TASK} tasks"

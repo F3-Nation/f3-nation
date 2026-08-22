@@ -405,7 +405,7 @@ jobs:
       # concurrent with it, because both suites mutate f3_test. Needs no extra
       # env: global-setup.ts stands up its own JWKS server and signing key, and
       # SUPER_ADMIN_API_KEY is already in the workflow env above.
-      - run: pnpm turbo run test:characterization
+      - run: pnpm turbo run test:characterization --filter=f3-api
 
   # Builds each app's deploy image the same way the release pipeline does
   # (turbo prune -> frozen install -> turbo build). The `build` job above only

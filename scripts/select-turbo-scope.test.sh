@@ -86,6 +86,10 @@ assert_eq "malformed affected task JSON exits successfully" "0" "$status"
 assert_eq "malformed affected task JSON falls back to full" "TURBO_RUN_ARGS=" "$(grep '^TURBO_RUN_ARGS=' "${tmp_dir}/task-malformed/github-env")"
 assert_eq "malformed affected task JSON emits a warning" "1" "$(grep -c '::warning::Turbo returned invalid affected-task JSON' "${tmp_dir}/task-malformed/output")"
 
+run_case task-large 'if [[ "$1" == "run" ]]; then printf '\''{"tasks":[{"padding":"'\''; head -c 140000 /dev/zero | tr '\''\0'\'' x; printf '\''"}]}\n'\''; else printf '\''%s\n'\'' '\''{"packages":{"count":2}}'\''; fi' base-sha head-sha build
+assert_eq "large affected task JSON exits successfully" "0" "$status"
+assert_eq "large affected task JSON enables --affected" "TURBO_RUN_ARGS=--affected" "$(grep '^TURBO_RUN_ARGS=' "${tmp_dir}/task-large/github-env")"
+
 # Exercise the real lint wrapper with command stubs so its shell indirection
 # cannot silently drop --affected before invoking Turbo.
 lint_case_dir="${tmp_dir}/lint-wrapper"
