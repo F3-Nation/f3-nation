@@ -94,16 +94,19 @@ assert_eq "large affected task JSON enables --affected" "TURBO_RUN_ARGS=--affect
 # cannot silently drop --affected before invoking Turbo.
 lint_case_dir="${tmp_dir}/lint-wrapper"
 mkdir -p "$lint_case_dir"
-printf '%s\n' '#!/bin/bash' 'printf "%s\n" "$*" > "$LINT_TURBO_ARGS"' >"${lint_case_dir}/turbo"
-for command_name in pnpm node bash; do
-  printf '%s\n' '#!/bin/bash' 'exit 0' >"${lint_case_dir}/${command_name}"
+printf '%s\n' '#!/usr/bin/env bash' 'printf "%s\n" "$*" > "$LINT_TURBO_ARGS"' >"${lint_case_dir}/turbo"
+for command_name in pnpm node; do
+  printf '%s\n' '#!/usr/bin/env bash' 'exit 0' >"${lint_case_dir}/${command_name}"
 done
-chmod +x "${lint_case_dir}/turbo" "${lint_case_dir}/pnpm" "${lint_case_dir}/node" "${lint_case_dir}/bash"
+chmod +x "${lint_case_dir}/turbo" "${lint_case_dir}/pnpm" "${lint_case_dir}/node"
 (
+  bash() { :; }
+  export -f bash
+
   cd "$repo_root" &&
     PATH="${lint_case_dir}:${PATH}" \
       LINT_TURBO_ARGS="${lint_case_dir}/turbo-args" \
-      /bin/bash scripts/lint.sh --affected --dry-run=json
+      command bash scripts/lint.sh --affected --dry-run=json
 )
 assert_eq \
   "lint wrapper forwards --affected to Turbo" \
