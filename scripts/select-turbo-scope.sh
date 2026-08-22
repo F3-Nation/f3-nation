@@ -36,9 +36,33 @@ if ! affected_count="$(
   exit 0
 fi
 
-if [[ "$affected_count" -gt 0 ]]; then
-  echo "TURBO_RUN_ARGS=--affected" >>"$GITHUB_ENV"
-  echo "Selected ${affected_count} affected Turbo workspace(s)."
-else
+if [[ "$affected_count" -eq 0 ]]; then
   use_full_workspace "Turbo selected no affected workspaces"
+  exit 0
 fi
+
+if [[ -n "${TURBO_SCOPE_TASK:-}" ]]; then
+  if ! task_json="$(
+    "$turbo_bin" run "$TURBO_SCOPE_TASK" --affected --dry-run=json
+  )"; then
+    echo "::warning::Turbo affected-task detection failed."
+    use_full_workspace "Unable to calculate affected ${TURBO_SCOPE_TASK} tasks"
+    exit 0
+  fi
+
+  if ! task_count="$(
+    node -e 'const value = JSON.parse(process.argv[1]); if (!Array.isArray(value?.tasks)) process.exit(1); process.stdout.write(String(value.tasks.length));' "$task_json"
+  )"; then
+    echo "::warning::Turbo returned invalid affected-task JSON."
+    use_full_workspace "Unable to parse affected ${TURBO_SCOPE_TASK} tasks"
+    exit 0
+  fi
+
+  if [[ "$task_count" -eq 0 ]]; then
+    use_full_workspace "Turbo selected no affected ${TURBO_SCOPE_TASK} tasks"
+    exit 0
+  fi
+fi
+
+echo "TURBO_RUN_ARGS=--affected" >>"$GITHUB_ENV"
+echo "Selected ${affected_count} affected Turbo workspace(s)."

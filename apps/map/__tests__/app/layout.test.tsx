@@ -13,6 +13,10 @@ const runtimeConfigFetchMock = vi.fn().mockResolvedValue({
 });
 vi.stubGlobal("fetch", runtimeConfigFetchMock);
 
+// This test cold-imports the full layout provider tree. Give coverage
+// instrumentation more headroom than Vitest's unit-test default.
+const layoutImportTimeout = 10_000;
+
 vi.mock("next/headers", () => ({
   headers: vi.fn().mockResolvedValue(new Headers()),
 }));
@@ -100,35 +104,47 @@ describe("layout metadata base URL", () => {
   it("uses the configured map URL", async () => {
     vi.stubEnv("F3_MAP_BASE_URL", "https://map.example.com");
 
-    const { metadata } = await import("../../src/app/layout");
+    const { mapMetadata } = await import("../../src/app/map-metadata");
 
-    expect(metadata.metadataBase).toEqual(new URL("https://map.example.com"));
+    expect(mapMetadata.metadataBase).toEqual(
+      new URL("https://map.example.com"),
+    );
+    expect(mapMetadata.openGraph?.url).toEqual(
+      new URL("https://map.example.com"),
+    );
   });
 
   it("falls back to localhost when the map URL is unavailable", async () => {
     vi.stubEnv("F3_MAP_BASE_URL", "");
 
-    const { metadata } = await import("../../src/app/layout");
+    const { mapMetadata } = await import("../../src/app/map-metadata");
 
-    expect(metadata.metadataBase).toEqual(new URL("http://localhost:3000"));
+    expect(mapMetadata.metadataBase).toEqual(new URL("http://localhost:3000"));
+    expect(mapMetadata.openGraph?.url).toEqual(
+      new URL("http://localhost:3000"),
+    );
   });
 });
 
 describe("layout app router", () => {
-  it("should render layout", async () => {
-    const { default: RootLayout } = await import("../../src/app/layout");
-    const layoutResult = RootLayout({ children: <div /> });
-    render(layoutResult);
-    // React 19 treats <html>/<body> as singleton host components and applies
-    // their props to the real document elements instead of nesting them inside
-    // the render container, so assert against document.body.
-    expect(document.querySelector("body")).toHaveClass(
-      "min-h-dvh w-screen bg-background font-sans text-foreground antialiased",
-    );
-    await waitFor(() =>
-      expect(runtimeConfigFetchMock).toHaveBeenCalledWith(
-        "/api/runtime-config",
-      ),
-    );
-  });
+  it(
+    "should render layout",
+    async () => {
+      const { default: RootLayout } = await import("../../src/app/layout");
+      const layoutResult = RootLayout({ children: <div /> });
+      render(layoutResult);
+      // React 19 treats <html>/<body> as singleton host components and applies
+      // their props to the real document elements instead of nesting them inside
+      // the render container, so assert against document.body.
+      expect(document.querySelector("body")).toHaveClass(
+        "min-h-dvh w-screen bg-background font-sans text-foreground antialiased",
+      );
+      await waitFor(() =>
+        expect(runtimeConfigFetchMock).toHaveBeenCalledWith(
+          "/api/runtime-config",
+        ),
+      );
+    },
+    layoutImportTimeout,
+  );
 });

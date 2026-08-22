@@ -9,9 +9,15 @@ inputs:
   select-turbo-affected:
     description: >-
       On pull requests, select affected Turbo workspaces. Falls back to the
-      full workspace when Turbo finds no affected package.
+      full workspace when Turbo finds no affected package or runnable task.
     required: false
     default: "false"
+  turbo-task:
+    description: >-
+      Turbo task the calling job will run. Used to ensure affected selection
+      schedules at least one task before enabling --affected.
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -41,4 +47,5 @@ runs:
       env:
         TURBO_SCM_BASE: ${{ github.event.pull_request.base.sha }}
         TURBO_SCM_HEAD: ${{ github.event.pull_request.head.sha }}
+        TURBO_SCOPE_TASK: ${{ inputs.turbo-task }}
       run: bash scripts/select-turbo-scope.sh

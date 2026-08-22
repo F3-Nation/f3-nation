@@ -27,6 +27,8 @@ PR opened/updated
   │
 merge to main (ruleset "main": PR required, the six checks above required,
   │            no force-push, no deletion)
+  ├─ ci.yml ············· full-workspace required checks
+  └─ docker-cache-refresh per-app GHCR cache repair/refresh
   │
 release-please.yml ····· accumulates merges into per-app release PRs
   │
@@ -50,14 +52,16 @@ PRs validate images with read-only access to the GHCR cache, while a separate
 The five Turbo-backed required checks (`format-check`, `lint`, `typecheck`,
 `build`, and `test-coverage`) add `--affected` on pull requests, selecting
 changed workspaces and their dependents. Their checkouts include the complete
-Git history needed for the comparison, and setup pins Turbo to the pull
-request's exact base and head SHAs. Pushes to `main` omit the flag and validate
-the full workspace. If Turbo maps a pull request to zero workspaces (for
-example, a root-only CI change), or affected detection fails, setup omits
-`--affected` and runs the full workspace so required checks cannot pass without
-selecting any tasks. The non-Turbo safeguards in the `lint` job (`lint:ws`,
-coverage-threshold validation, Python task validation, and `lint:unused`)
-remain repository-wide on every run.
+Git history needed for the comparison. Setup pins Turbo's affected calculation
+to the pull request's exact base and head SHAs, while the tasks themselves run
+against GitHub's checked-out synthetic merge commit. Pushes to `main` omit the
+flag and validate the full workspace from a shallow checkout. If Turbo maps a pull request to
+zero workspaces (for example, a root-only CI change), selects no runnable task
+for that specific gate, or affected detection fails, setup omits `--affected`
+and runs the full workspace so required checks cannot pass without selecting
+any tasks. The non-Turbo safeguards in the
+`lint` job (`lint:ws`, coverage-threshold validation, Python task validation,
+and `lint:unused`) remain repository-wide on every run.
 
 This deliberately changes the PR guarantee: a green PR proves the workspaces
 selected by Turbo's declared dependency graph, not every workspace in the
@@ -65,7 +69,8 @@ repository. Undeclared cross-workspace coupling can therefore surface in the
 full `main` run after merge; a red full run blocks deploys until corrected. The
 zero-selection and detection-failure fallbacks above protect against an empty
 or unavailable affected set, but they cannot infer dependencies missing from
-the graph.
+the graph or detect a plausible nonempty selection that differs from the
+checked-out merge tree.
 
 | #   | Gate                   | What it runs                                                                                                                                               | What it catches                                                                                                                    | Merge-blocking (`main` ruleset) |
 | --- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
@@ -116,6 +121,12 @@ that app's thin `deploy-<app>.yml` caller into the shared
   uncached permanently and use the same safe fallback.
 - The workflow concurrency group serializes pushes to `main`, so
   `docker-cache-refresh` writers cannot overlap on the mutable per-app tags.
+  If importing an existing cache fails, the fallback skips that import but
+  exports its clean build to repair the mutable tag for later runs.
+- GHCR retains package versions outside this workflow. Repository maintainers
+  should configure and periodically review a package retention policy; this
+  workflow does not delete registry data because retention duration and
+  recovery requirements are human-owned operational decisions.
 - The active `main` ruleset permits squash merges only and requires strict
   status checks. The squash creates a new commit SHA whose push-to-`main` CI run
   performs full-workspace validation, so deploy gates on that full run rather

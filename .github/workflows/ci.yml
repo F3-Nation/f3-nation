@@ -50,11 +50,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 0
-          filter: blob:none
+          fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
+          filter: ${{ github.event_name == 'pull_request' && 'blob:none' || '' }}
       - uses: ./.github/actions/setup
         with:
           select-turbo-affected: "true"
+          turbo-task: format
       - run: pnpm format ${TURBO_RUN_ARGS:+"$TURBO_RUN_ARGS"}
 
   security-audit:
@@ -283,11 +284,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 0
-          filter: blob:none
+          fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
+          filter: ${{ github.event_name == 'pull_request' && 'blob:none' || '' }}
       - uses: ./.github/actions/setup
         with:
           select-turbo-affected: "true"
+          turbo-task: lint
       - run: pnpm lint ${TURBO_RUN_ARGS:+"$TURBO_RUN_ARGS"}
       - run: pnpm lint:unused
 
@@ -297,11 +299,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 0
-          filter: blob:none
+          fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
+          filter: ${{ github.event_name == 'pull_request' && 'blob:none' || '' }}
       - uses: ./.github/actions/setup
         with:
           select-turbo-affected: "true"
+          turbo-task: typecheck
       - run: pnpm typecheck ${TURBO_RUN_ARGS:+"$TURBO_RUN_ARGS"}
 
   # Regenerates Drizzle migrations from packages/db/drizzle/schema.ts and fails
@@ -357,11 +360,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 0
-          filter: blob:none
+          fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
+          filter: ${{ github.event_name == 'pull_request' && 'blob:none' || '' }}
       - uses: ./.github/actions/setup
         with:
           select-turbo-affected: "true"
+          turbo-task: build
       - run: pnpm build ${TURBO_RUN_ARGS:+"$TURBO_RUN_ARGS"}
 
   test-coverage:
@@ -384,11 +388,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 0
-          filter: blob:none
+          fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
+          filter: ${{ github.event_name == 'pull_request' && 'blob:none' || '' }}
       - uses: ./.github/actions/setup
         with:
           select-turbo-affected: "true"
+          turbo-task: test
       # GCS_CREDENTIALS must exist with client_email/private_key fields, but
       # nothing real is needed. Built here from plainly fake JSON — a committed
       # base64 blob trips generic high-entropy secret scanners.
@@ -444,8 +449,9 @@ jobs:
           password: ${{ github.token }}
       - name: Warn if GHCR login failed
         if: steps.login.outcome == 'failure'
-        run: echo "::warning::GHCR login failed; Docker will retry without the shared cache."
+        run: echo "::warning::GHCR login failed; Docker will build without the shared cache."
       - id: build
+        if: steps.login.outcome == 'success'
         continue-on-error: true
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
@@ -457,9 +463,18 @@ jobs:
           push: false
           cache-from: type=registry,ref=${{ steps.cache.outputs.ref }}
       # Registry cache availability is an optimization, not a correctness
-      # requirement. Retry without importing cache so an unavailable or corrupt
-      # cache cannot block an otherwise valid image build.
-      - if: steps.build.outcome == 'failure'
+      # requirement. Login failure skips the cache attempt entirely.
+      - name: Validate image without registry cache
+        if: steps.login.outcome == 'failure'
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          platforms: linux/amd64
+          push: false
+      # A cache import failure must not prevent an otherwise valid image build.
+      - name: Retry without registry cache
+        if: steps.login.outcome == 'success' && steps.build.outcome == 'failure'
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
@@ -507,6 +522,7 @@ jobs:
         if: steps.login.outcome == 'failure'
         run: echo "::warning::GHCR login failed; Docker will build without refreshing the shared cache."
       - id: build
+        if: steps.login.outcome == 'success'
         continue-on-error: true
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
@@ -516,11 +532,25 @@ jobs:
           push: false
           cache-from: type=registry,ref=${{ steps.cache.outputs.ref }}
           cache-to: type=registry,ref=${{ steps.cache.outputs.ref }},mode=max,oci-mediatypes=true,image-manifest=true,ignore-error=true
-      # A cache import failure must not prevent the image validation itself.
-      - if: steps.build.outcome == 'failure'
+      # Login failure disables the registry optimization, but must not skip the
+      # image validation performed by this job.
+      - name: Validate image without registry cache
+        if: steps.login.outcome == 'failure'
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           file: apps/${{ matrix.app }}/Dockerfile
           platforms: linux/amd64
           push: false
+      # A cache import failure must not prevent image validation. Retry without
+      # importing the stale cache, but export the clean build so later runs do
+      # not repeat the same failed import indefinitely.
+      - name: Repair cache without importing it
+        if: steps.login.outcome == 'success' && steps.build.outcome == 'failure'
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          platforms: linux/amd64
+          push: false
+          cache-to: type=registry,ref=${{ steps.cache.outputs.ref }},mode=max,oci-mediatypes=true,image-manifest=true,ignore-error=true

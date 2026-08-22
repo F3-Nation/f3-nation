@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // `~/env` reads process.env once at import time. Drive every operand in the
-// skipValidation `||` chain explicitly so branch coverage is identical when
-// the ambient CI variable is present and when tests run locally.
+// skipValidation `||` chain explicitly, plus the no-bypass case, so behavior
+// is identical when the ambient CI variable is present and when tests run
+// locally.
 describe("env skipValidation", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -41,5 +42,13 @@ describe("env skipValidation", () => {
     vi.stubEnv("npm_lifecycle_event", "lint");
     vi.stubEnv("F3_API_BASE_URL", "");
     expect((await importEnv()).F3_API_BASE_URL).toBeFalsy();
+  });
+
+  it("validates when no bypass is active", async () => {
+    vi.stubEnv("CI", "");
+    vi.stubEnv("SKIP_ENV_VALIDATION", "");
+    vi.stubEnv("npm_lifecycle_event", "");
+    vi.stubEnv("F3_API_BASE_URL", "");
+    await expect(importEnv()).rejects.toThrow();
   });
 });
