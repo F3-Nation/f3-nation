@@ -14,8 +14,8 @@ const runtimeConfigFetchMock = vi.fn().mockResolvedValue({
 vi.stubGlobal("fetch", runtimeConfigFetchMock);
 
 // This test cold-imports the full layout provider tree. Give coverage
-// instrumentation more headroom than Vitest's unit-test default.
-const layoutImportTimeout = 10_000;
+// instrumentation and parallel workspace transforms enough headroom.
+const layoutImportTimeout = 30_000;
 
 vi.mock("next/headers", () => ({
   headers: vi.fn().mockResolvedValue(new Headers()),
@@ -122,6 +122,14 @@ describe("layout metadata base URL", () => {
     expect(mapMetadata.metadataBase).toEqual(new URL("http://localhost:3000"));
     expect(mapMetadata.openGraph?.url).toEqual(
       new URL("http://localhost:3000"),
+    );
+  });
+
+  it("rejects a malformed configured map URL", async () => {
+    vi.stubEnv("F3_MAP_BASE_URL", "not-a-url");
+
+    await expect(import("../../src/app/map-metadata")).rejects.toThrow(
+      /Invalid URL/,
     );
   });
 });

@@ -9,13 +9,18 @@ inputs:
   select-turbo-affected:
     description: >-
       On pull requests, select affected Turbo workspaces. Falls back to the
-      full workspace when Turbo finds no affected package or runnable task.
+      full workspace when detection fails, Turbo finds no affected package or
+      runnable task, or the diff touches files outside Turbo's package graph.
     required: false
     default: "false"
   turbo-task:
     description: >-
       Turbo task the calling job will run. Used to ensure affected selection
-      schedules at least one task before enabling --affected.
+      schedules at least one task before enabling --affected. When affected
+      selection is enabled, setup exports TURBO_RUN_ARGS and the pinned
+      TURBO_SCM_BASE/TURBO_SCM_HEAD values through GITHUB_ENV; the caller must
+      append ${TURBO_RUN_ARGS:+"$TURBO_RUN_ARGS"} to its Turbo command. An
+      empty task falls back to the full workspace.
     required: false
     default: ""
 

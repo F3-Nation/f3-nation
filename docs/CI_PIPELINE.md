@@ -11,7 +11,7 @@
 ```
 PR opened/updated
   │
-  ├─ pr-title.yml ······· Conventional-Commit PR title lint
+  ├─ pr-title.yml ······· Conventional-Commit PR title lint [required to merge]
   └─ ci.yml
        ├─ format-check ·· pnpm format (Prettier)             [required to merge]
        ├─ lint ·········· pnpm lint (ESLint)                 [required to merge]
@@ -19,13 +19,14 @@ PR opened/updated
        ├─ build ········· pnpm build (Turbo)                 [required to merge]
        ├─ test-coverage · pnpm test (Vitest vs postgres:18)  [required to merge]
        ├─ security-audit  pnpm audit --prod --level=high    [required to merge]
+       ├─ db-schema-sync · Drizzle migration drift check    [required to merge]
        ├─ docker-build ·· per-app image build (6 apps)      [advisory]
        ├─ recent-package-watch · npm publish-date report    [advisory, comment]
        │
        ├─ (reserved) preview-env ·· per-PR Cloud Run deploy, opt-in label
        └─ (reserved) e2e-blocking · Playwright critical paths vs preview env
   │
-merge to main (ruleset "main": PR required, the six checks above required,
+merge to main (ruleset "main": PR required, the eight checks above required,
   │            no force-push, no deletion)
   ├─ ci.yml ············· full-workspace required checks
   └─ docker-cache-refresh per-app GHCR cache repair/refresh
@@ -55,13 +56,14 @@ changed workspaces and their dependents. Their checkouts include the complete
 Git history needed for the comparison. Setup pins Turbo's affected calculation
 to the pull request's exact base and head SHAs, while the tasks themselves run
 against GitHub's checked-out synthetic merge commit. Pushes to `main` omit the
-flag and validate the full workspace from a shallow checkout. If Turbo maps a pull request to
-zero workspaces (for example, a root-only CI change), selects no runnable task
-for that specific gate, or affected detection fails, setup omits `--affected`
-and runs the full workspace so required checks cannot pass without selecting
-any tasks. The non-Turbo safeguards in the
-`lint` job (`lint:ws`, coverage-threshold validation, Python task validation,
-and `lint:unused`) remain repository-wide on every run.
+flag and validate the full workspace from a shallow checkout. Setup also runs
+the full workspace when Turbo maps a pull request to zero workspaces, selects
+no runnable task for the specific gate, receives no task name, cannot inspect
+the comparison, or sees Python/global files outside Turbo's package graph. Each
+gate therefore verifies that it schedules at least one task before
+`--affected` is enabled. The non-Turbo safeguards in the `lint` job (`lint:ws`,
+coverage-threshold validation, Python task validation, Turbo scope-selection
+validation, and `lint:unused`) remain repository-wide on every run.
 
 This deliberately changes the PR guarantee: a green PR proves the workspaces
 selected by Turbo's declared dependency graph, not every workspace in the
@@ -80,10 +82,11 @@ checked-out merge tree.
 | 4   | `build`                | `pnpm build` (affected workspaces and dependents on PRs; full workspace on `main`)                                                                         | Build breakage in changed workspaces and their consumers                                                                           | ✅                              |
 | 5   | `test-coverage`        | `pnpm test` for affected workspaces and dependents on PRs or the full workspace on `main`, plus the full API characterization suite, against `postgres:18` | Unit/integration regressions and API parity drift                                                                                  | ✅                              |
 | 6   | `security-audit`       | `pnpm audit --prod --audit-level=high`                                                                                                                     | Known high/critical vulns in prod deps                                                                                             | ✅                              |
-| 7   | `docker-build`         | Per-app `docker build` (admin, api, auth, map, me, slackbot; matrix, `linux/amd64`, no image push, per-app GHCR layer cache)                               | Breakage specific to the pruned Docker context (catalog mismatches, isolated-linker resolution) that the workspace build can't see | ❌ advisory                     |
-| 8   | `docker-cache-refresh` | Per-app Docker validation plus GHCR layer-cache export (`main` pushes only)                                                                                | Refreshes the read-only cache consumed by PR builds                                                                                | ❌ advisory                     |
-| 9   | `recent-package-watch` | npm publish-time report for all workspace deps (same-repo PRs only)                                                                                        | Supply-chain freshness signal — flags deps published in the last 3 days; upserts a PR comment                                      | ❌ advisory                     |
-| —   | `pr-title.yml`         | PR title lint                                                                                                                                              | Non-Conventional-Commit squash titles                                                                                              | (separate workflow)             |
+| 7   | `db-schema-sync`       | Regenerates Drizzle migrations from the schema and diffs them against committed output                                                                     | Schema/migration drift                                                                                                             | ✅                              |
+| 8   | `docker-build`         | Per-app `docker build` (admin, api, auth, map, me, slackbot; matrix, `linux/amd64`, no image push, per-app GHCR layer cache)                               | Breakage specific to the pruned Docker context (catalog mismatches, isolated-linker resolution) that the workspace build can't see | ❌ advisory                     |
+| 9   | `docker-cache-refresh` | Per-app Docker validation plus GHCR layer-cache export (`main` pushes only)                                                                                | Refreshes the read-only cache consumed by PR builds                                                                                | ❌ advisory                     |
+| 10  | `recent-package-watch` | npm publish-time report for all workspace deps (same-repo PRs only)                                                                                        | Supply-chain freshness signal — flags deps published in the last 3 days; upserts a PR comment                                      | ❌ advisory                     |
+| —   | `pr-title.yml`         | PR title lint (`lint-title`)                                                                                                                               | Non-Conventional-Commit squash titles                                                                                              | ✅ (separate workflow)          |
 
 Local equivalents before pushing: `pnpm format`, `pnpm lint`, `pnpm typecheck`,
 `pnpm build`, `pnpm test` (see [`AGENTS.md`](../AGENTS.md#build-test-and-development-commands)).
@@ -121,8 +124,10 @@ that app's thin `deploy-<app>.yml` caller into the shared
   uncached permanently and use the same safe fallback.
 - The workflow concurrency group serializes pushes to `main`, so
   `docker-cache-refresh` writers cannot overlap on the mutable per-app tags.
-  If importing an existing cache fails, the fallback skips that import but
-  exports its clean build to repair the mutable tag for later runs.
+  If importing or exporting an existing cache fails, the workflow attempts a
+  clean repair. A failed repair emits a warning and performs one final uncached
+  image validation, keeping the cache optional without hiding the outage or
+  allowing a real image-build failure to pass.
 - GHCR retains package versions outside this workflow. Repository maintainers
   should configure and periodically review a package retention policy; this
   workflow does not delete registry data because retention duration and

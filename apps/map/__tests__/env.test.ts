@@ -1,3 +1,5 @@
+// @vitest-environment node
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // `~/env` reads process.env once at import time. Drive every operand in the
@@ -49,6 +51,6 @@ describe("env skipValidation", () => {
     vi.stubEnv("SKIP_ENV_VALIDATION", "");
     vi.stubEnv("npm_lifecycle_event", "");
     vi.stubEnv("F3_API_BASE_URL", "");
-    await expect(importEnv()).rejects.toThrow();
+    await expect(importEnv()).rejects.toThrow(/Invalid environment variables/);
   });
 });

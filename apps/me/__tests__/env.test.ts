@@ -1,3 +1,5 @@
+// @vitest-environment node
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // `@/env` is built with @t3-oss/env-nextjs, which reads process.env once at
@@ -49,6 +51,6 @@ describe("env skipValidation", () => {
     vi.stubEnv("SKIP_ENV_VALIDATION", "");
     vi.stubEnv("npm_lifecycle_event", "");
     vi.stubEnv("NEXT_PUBLIC_SITE_URL", "");
-    await expect(importEnv()).rejects.toThrow();
+    await expect(importEnv()).rejects.toThrow(/Invalid environment variables/);
   });
 });

@@ -51,7 +51,6 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
-          filter: ${{ github.event_name == 'pull_request' && 'blob:none' || '' }}
       - uses: ./.github/actions/setup
         with:
           select-turbo-affected: "true"
@@ -285,7 +284,6 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
-          filter: ${{ github.event_name == 'pull_request' && 'blob:none' || '' }}
       - uses: ./.github/actions/setup
         with:
           select-turbo-affected: "true"
@@ -300,7 +298,6 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
-          filter: ${{ github.event_name == 'pull_request' && 'blob:none' || '' }}
       - uses: ./.github/actions/setup
         with:
           select-turbo-affected: "true"
@@ -361,7 +358,6 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
-          filter: ${{ github.event_name == 'pull_request' && 'blob:none' || '' }}
       - uses: ./.github/actions/setup
         with:
           select-turbo-affected: "true"
@@ -389,7 +385,6 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
-          filter: ${{ github.event_name == 'pull_request' && 'blob:none' || '' }}
       - uses: ./.github/actions/setup
         with:
           select-turbo-affected: "true"
@@ -408,10 +403,10 @@ jobs:
       - run: pnpm turbo run test:characterization --filter=f3-api
 
   # Builds each app's deploy image the same way the release pipeline does
-  # (turbo prune -> frozen install -> turbo build). The `build` job above only
-  # covers the full-workspace `pnpm build`; it cannot catch breakage that is
-  # specific to the pruned Docker context (e.g. catalog mismatches or deps that
-  # resolve transitively in the full install but not under the isolated linker).
+  # (turbo prune -> frozen install -> turbo build). The `build` job above is
+  # affected-scoped on PRs; it cannot catch breakage that is specific to the
+  # pruned Docker context (e.g. catalog mismatches or deps that resolve
+  # transitively in the workspace install but not under the isolated linker).
   # This surfaces those at PR time instead of at release. No image push —
   # building the image is the validation. PRs import the per-app GHCR layer
   # cache read-only; docker-cache-refresh updates it only from main.
@@ -462,6 +457,9 @@ jobs:
           platforms: linux/amd64
           push: false
           cache-from: type=registry,ref=${{ steps.cache.outputs.ref }}
+      - name: Warn if the registry cache could not be used
+        if: steps.login.outcome == 'success' && steps.build.outcome == 'failure'
+        run: echo "::warning::Cached Docker validation failed; retrying without the shared cache."
       # Registry cache availability is an optimization, not a correctness
       # requirement. Login failure skips the cache attempt entirely.
       - name: Validate image without registry cache
@@ -531,7 +529,7 @@ jobs:
           platforms: linux/amd64
           push: false
           cache-from: type=registry,ref=${{ steps.cache.outputs.ref }}
-          cache-to: type=registry,ref=${{ steps.cache.outputs.ref }},mode=max,oci-mediatypes=true,image-manifest=true,ignore-error=true
+          cache-to: type=registry,ref=${{ steps.cache.outputs.ref }},mode=max,oci-mediatypes=true,image-manifest=true
       # Login failure disables the registry optimization, but must not skip the
       # image validation performed by this job.
       - name: Validate image without registry cache
@@ -542,15 +540,29 @@ jobs:
           file: apps/${{ matrix.app }}/Dockerfile
           platforms: linux/amd64
           push: false
-      # A cache import failure must not prevent image validation. Retry without
-      # importing the stale cache, but export the clean build so later runs do
-      # not repeat the same failed import indefinitely.
+      # A cached build or export failure must not prevent image validation.
+      # Retry without importing the stale cache, but attempt to export the clean
+      # build so later runs can use it. A failed repair remains non-blocking only
+      # after a final uncached build proves the image itself is valid.
       - name: Repair cache without importing it
+        id: repair
         if: steps.login.outcome == 'success' && steps.build.outcome == 'failure'
+        continue-on-error: true
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           file: apps/${{ matrix.app }}/Dockerfile
           platforms: linux/amd64
           push: false
-          cache-to: type=registry,ref=${{ steps.cache.outputs.ref }},mode=max,oci-mediatypes=true,image-manifest=true,ignore-error=true
+          cache-to: type=registry,ref=${{ steps.cache.outputs.ref }},mode=max,oci-mediatypes=true,image-manifest=true
+      - name: Warn if the shared cache was not refreshed
+        if: steps.login.outcome == 'success' && steps.build.outcome == 'failure' && steps.repair.outcome == 'failure'
+        run: echo "::warning::GHCR cache export failed; validating the image without cache before continuing."
+      - name: Validate image after cache refresh failure
+        if: steps.login.outcome == 'success' && steps.build.outcome == 'failure' && steps.repair.outcome == 'failure'
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          platforms: linux/amd64
+          push: false
