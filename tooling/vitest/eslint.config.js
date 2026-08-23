@@ -1,3 +1,5 @@
 import baseConfig from "@acme/eslint-config/base";
 
-export default [...baseConfig];
+import vitestConfig from "./vitest.js";
+
+export default [...baseConfig, ...vitestConfig];
