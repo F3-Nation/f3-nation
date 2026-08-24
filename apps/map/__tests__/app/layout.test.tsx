@@ -3,7 +3,7 @@
 import { render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import RootLayout from "../../src/app/layout";
+import RootLayout, { getMapBaseUrl } from "../../src/app/layout";
 
 // RootLayout mounts RuntimeConfigProvider, which fetches /api/runtime-config on
 // mount. Stub it so the suite doesn't hit an unmocked (and unresolvable)
@@ -94,6 +94,16 @@ afterEach(() => {
 });
 
 describe("layout app router", () => {
+  it("uses localhost when no map base URL is configured", () => {
+    expect(getMapBaseUrl()).toEqual(new URL("http://localhost:3000"));
+  });
+
+  it("uses the configured map base URL", () => {
+    expect(getMapBaseUrl("https://map.example.test")).toEqual(
+      new URL("https://map.example.test"),
+    );
+  });
+
   it("should render layout", async () => {
     const layoutResult = RootLayout({ children: <div /> });
     render(layoutResult);
