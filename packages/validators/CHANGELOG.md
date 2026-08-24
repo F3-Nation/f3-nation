@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.3.1](https://github.com/F3-Nation/f3-nation/compare/pkg-validators@0.3.0...pkg-validators@0.3.1) (2026-08-18)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.4.1
+
+## [0.3.0](https://github.com/F3-Nation/f3-nation/compare/pkg-validators@0.2.1...pkg-validators@0.3.0) (2026-08-12)
+
+
+### Features
+
+* **map:** add start date column to workouts table ([#807](https://github.com/F3-Nation/f3-nation/issues/807)) ([c49b48d](https://github.com/F3-Nation/f3-nation/commit/c49b48d6131e13454425d3ce0660e02093bba175))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.4.0
+
 ## [0.2.1](https://github.com/F3-Nation/f3-nation/compare/pkg-validators@0.2.0...pkg-validators@0.2.1) (2026-08-05)
 
 

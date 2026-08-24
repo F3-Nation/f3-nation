@@ -1,7 +1,7 @@
 {
   "name": "@acme/validators",
   "private": true,
-  "version": "0.2.1",
+  "version": "0.3.1",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",

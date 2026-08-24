@@ -32,11 +32,10 @@ export const onRequestError: Instrumentation.onRequestError = async (
       method: request.method,
     });
   } else {
-    // The edge runtime can't run the Node observability pipeline (the
-    // PostHog adapter needs Node APIs), so errors there — notably proxy.ts's
-    // admin-route JWT auth chain, which always runs on the edge — would
-    // otherwise vanish with zero signal. At minimum, log the drop so it's a
-    // known, monitored gap instead of a silent one.
+    // Nothing runs on the edge in this app since the map-app skeleton (and
+    // its middleware) was deleted, but the Node observability pipeline can't
+    // run there — if an edge surface ever reappears, log the drop so it's a
+    // known gap instead of a silent one.
     console.error("instrumentation.request_error_uncaptured", {
       runtime: process.env.NEXT_RUNTIME,
       route: context.routePath,

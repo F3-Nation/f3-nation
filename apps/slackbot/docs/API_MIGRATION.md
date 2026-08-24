@@ -49,6 +49,7 @@ infrastructure/api_client/
 ```python
 from pydantic import BaseModel
 
+
 class EventTagData(BaseModel):
     id: int
     name: str
@@ -69,6 +70,7 @@ class EventTagData(BaseModel):
 ```python
 from typing import Protocol
 from application.event_tag import EventTagData
+
 
 class EventTagRepository(Protocol):
     def get_by_org(self, org_id: int) -> list[EventTagData]: ...
@@ -265,7 +267,7 @@ def test_get_org_event_tags(self):
     repo.get_by_org.return_value = [_make_tag()]
     service = EventTagService(repository=repo)
     result = service.get_org_event_tags("1")
-    repo.get_by_org.assert_called_once_with(1)   # verifies int coercion
+    repo.get_by_org.assert_called_once_with(1)  # verifies int coercion
 ```
 
 #### Repository tests — inject a `MagicMock` client
@@ -274,6 +276,7 @@ def test_get_org_event_tags(self):
 def setUp(self):
     self.client = MagicMock()
     self.repo = ApiEventTagRepository(self.client)
+
 
 def test_get_by_org_filters_to_requested_org(self):
     self.client.get.return_value = {"eventTags": [...]}

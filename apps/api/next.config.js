@@ -33,27 +33,8 @@ const config = {
     "/*": ["../../node_modules/.pnpm/@img+sharp-libvips-*/**/*"],
   },
 
-  images: {
-    remotePatterns: [
-      {
-        protocol: "https",
-        hostname: "imgur.com",
-        pathname: "/*",
-      },
-    ],
-  },
-
   /** We already do typechecking as a separate task in CI */
   typescript: { ignoreBuildErrors: true },
-  redirects: async () => {
-    return [
-      {
-        source: "/map",
-        destination: "/",
-        permanent: true,
-      },
-    ];
-  },
 };
 
 export default config;

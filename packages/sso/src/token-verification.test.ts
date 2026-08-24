@@ -361,12 +361,18 @@ describe("verifyAccessToken", () => {
   it("returns ok with typed payload on success", async () => {
     const token = makeToken({
       sub: "42",
+      token_use: "access",
       email: "test@f3.com",
       exp: 1_900_000_000,
     });
 
     jwtVerifyMock.mockResolvedValueOnce({
-      payload: { sub: "42", email: "test@f3.com", exp: 1_900_000_000 },
+      payload: {
+        sub: "42",
+        token_use: "access",
+        email: "test@f3.com",
+        exp: 1_900_000_000,
+      },
     });
 
     const result = await verifyAccessToken(
@@ -377,7 +383,42 @@ describe("verifyAccessToken", () => {
 
     expect(result).toEqual({
       ok: true,
-      payload: { sub: "42", email: "test@f3.com", exp: 1_900_000_000 },
+      payload: {
+        sub: "42",
+        token_use: "access",
+        email: "test@f3.com",
+        exp: 1_900_000_000,
+      },
+    });
+  });
+
+  it("rejects an ID Token (token_use=id) even with an otherwise-valid payload", async () => {
+    const token = makeToken({
+      sub: "42",
+      token_use: "id",
+      email: "test@f3.com",
+      exp: 1_900_000_000,
+    });
+
+    jwtVerifyMock.mockResolvedValueOnce({
+      payload: {
+        sub: "42",
+        token_use: "id",
+        email: "test@f3.com",
+        exp: 1_900_000_000,
+      },
+    });
+
+    const result = await verifyAccessToken(
+      token,
+      "https://auth.example.com",
+      "web-client",
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      code: "invalid_claims",
+      error: "Token payload missing required sub claim",
     });
   });
 
