@@ -33,9 +33,7 @@ export const getMapBaseUrl = (raw?: string) => {
   return new URL(raw);
 };
 
-const mapBaseUrl = getMapBaseUrl(
-  env.F3_MAP_BASE_URL ?? process.env.F3_MAP_BASE_URL,
-);
+const mapBaseUrl = getMapBaseUrl(env.F3_MAP_BASE_URL);
 
 export const metadata: Metadata = {
   metadataBase: mapBaseUrl,

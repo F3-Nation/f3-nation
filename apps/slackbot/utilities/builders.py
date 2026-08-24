@@ -217,11 +217,13 @@ def send_error_response(body: dict, client: WebClient, error: str) -> None:
                 callback_id="error-id",
                 raise_on_error=True,
             )
-            if not safe_get(body, "view", "id"):
+            current_view_id = safe_get(body, "view", "id")
+            if current_view_id is None or current_view_id == loading_view_id:
                 return
         except Exception:
             # BlockView.update_modal records a sanitized failure. Fall through to a DM.
             pass
 
     blocks = [block.as_form_field() for block in error_form.blocks]
-    client.chat_postMessage(channel=safe_get(body, "user", "id"), text=error, blocks=blocks)
+    user_id = safe_get(body, "user", "id") or safe_get(body, "user_id")
+    client.chat_postMessage(channel=user_id, text=error, blocks=blocks)

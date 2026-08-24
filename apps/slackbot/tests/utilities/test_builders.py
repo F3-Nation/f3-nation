@@ -15,7 +15,7 @@ def test_send_error_response_replaces_loading_modal():
     client.views_update.return_value = {"ok": True}
 
     send_error_response(
-        body={actions.LOADING_ID: "V_LOADING", "user": {"id": "U_TEST"}},
+        body={actions.LOADING_ID: "V_LOADING", "user_id": "U_TEST"},
         client=client,
         error="Something went wrong.",
     )
@@ -54,7 +54,7 @@ def test_send_error_response_also_dms_when_loading_view_may_be_behind_another_mo
     send_error_response(
         body={
             actions.LOADING_ID: "V_LOADING",
-            "view": {"id": "V_LOADING"},
+            "view": {"id": "V_OTHER"},
             "user": {"id": "U_TEST"},
         },
         client=client,
@@ -63,3 +63,21 @@ def test_send_error_response_also_dms_when_loading_view_may_be_behind_another_mo
 
     client.views_update.assert_called_once()
     client.chat_postMessage.assert_called_once()
+
+
+def test_send_error_response_does_not_dm_when_loading_modal_is_current():
+    client = MagicMock()
+    client.views_update.return_value = {"ok": True}
+
+    send_error_response(
+        body={
+            actions.LOADING_ID: "V_LOADING",
+            "view": {"id": "V_LOADING"},
+            "user": {"id": "U_TEST"},
+        },
+        client=client,
+        error="Something went wrong.",
+    )
+
+    client.views_update.assert_called_once()
+    client.chat_postMessage.assert_not_called()
