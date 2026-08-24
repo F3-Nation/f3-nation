@@ -304,7 +304,7 @@ describe("Event Router", () => {
     });
   });
 
-  describe("map.event.all", () => {
+  describe("map.event.all pagination", () => {
     it("should return a list of events with filtering", async () => {
       const client = createTestClient();
       const result = await client.map.event.all({

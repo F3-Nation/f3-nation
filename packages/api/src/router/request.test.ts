@@ -951,7 +951,7 @@ describe("Request Router", () => {
     });
   });
 
-  describe("validateSubmissionByAdmin", () => {
+  describe("validateSubmissionByAdmin authorization", () => {
     it("throws UNAUTHORIZED when the reviewer has no editor role on the request's region", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);

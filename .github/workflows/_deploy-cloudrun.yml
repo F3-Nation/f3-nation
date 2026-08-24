@@ -90,6 +90,19 @@ on:
         required: false
         type: string
         default: SUPER_ADMIN_API_KEY
+      smoke_test_app:
+        description: >-
+          Section key matching a "## <key>" heading in .github/smoke-tests/checklists.md
+          to sync into the staging smoke-test tracker issue after a successful staging
+          deploy; empty skips
+        required: false
+        type: string
+        default: ""
+      app_label:
+        description: "Existing 'app: X' label to apply to the staging smoke-test tracker issue"
+        required: false
+        type: string
+        default: ""
 
 jobs:
   # ── Gate: wait for the full CI check set to pass on this commit ──
@@ -219,6 +232,35 @@ jobs:
           elif [ "$(printf '%s' "${body}" | jq -r '.warmed // false')" != "true" ]; then
             echo "::warning::Cache revalidated but warm-up did not complete; instance will regenerate lazily on next visit"
           fi
+
+  # ── Update the shared staging smoke-test tracker issue after a successful staging deploy ──
+  smoke-test-issue:
+    needs: [build, deploy-staging]
+    if: inputs.smoke_test_app != ''
+    runs-on: ubuntu-latest
+    # No concurrency group here: with cancel-in-progress: false, Actions only
+    # keeps ONE job pending per group and cancels any earlier pending job when
+    # a new one arrives — a burst of 3+ near-simultaneous staging deploys
+    # (e.g. a release-please merge tagging several apps at once) would silently
+    # drop the evicted job's tracker update. The composite action below
+    # verifies its own write and retries on conflict instead, so every job
+    # runs and self-corrects rather than being queued and possibly skipped.
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/staging-smoke-test-issue
+        with:
+          service_name: ${{ inputs.service_name }}
+          version: ${{ needs.build.outputs.version }}
+          staging_url: ${{ inputs.staging_url }}
+          app_key: ${{ inputs.smoke_test_app }}
+          app_label: ${{ inputs.app_label }}
+          github_token: ${{ github.token }}
 
   # ── Deploy to production (requires approval) ──
   deploy-prod:

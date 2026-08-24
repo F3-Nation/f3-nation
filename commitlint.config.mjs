@@ -37,6 +37,7 @@ export default {
         "scripts",
         "github",
         "tailwind",
+        "vitest",
 
         // cross-cutting
         "deps",
