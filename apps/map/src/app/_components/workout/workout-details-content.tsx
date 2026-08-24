@@ -1,12 +1,7 @@
-import dayjs from "dayjs";
 import gte from "lodash/gte";
 import Link from "next/link";
 import { useCallback, useMemo } from "react";
 
-import {
-  START_END_TIME_DB_FORMAT,
-  START_END_TIME_DISPLAY_FORMAT,
-} from "@acme/shared/app/constants";
 import { isProd } from "@acme/shared/common/constants";
 import { isTruthy } from "@acme/shared/common/functions";
 import { cn } from "@acme/ui";
@@ -21,13 +16,11 @@ import {
 } from "~/utils/date";
 import {
   buildEventStatusMap,
-  instanceMapStatus,
+  findNextExceptionNotice,
   selectStatusInstances,
-  statusLabel,
 } from "~/utils/event-status-map";
 import { getEndDateLabel } from "~/utils/get-end-date-label";
 import { useUpdateEventSearchParams } from "~/utils/hooks/use-update-event-search-params";
-import { getStatusSolidBg } from "~/utils/map-status-colors";
 import { ModalType, openModal } from "~/utils/store/modal";
 import textLink from "~/utils/text-link";
 import { ContactLinks } from "../contact-links";
@@ -35,6 +28,8 @@ import { ImageWithFallback } from "@acme/ui/image-with-fallback";
 import { EventChip } from "../map/event-chip";
 import { WorkoutDetailsSkeleton } from "../modal/workout-details-skeleton";
 import { DeletedWorkoutWarning } from "./deleted-workout-warning";
+import { ExceptionNotice } from "./exception-notice";
+import { UpdatesCallout } from "./updates-callout";
 import type { MapStatus } from "~/utils/types";
 
 type WorkoutDetailsEvent = NonNullable<
@@ -44,26 +39,6 @@ type WorkoutDetailsEvent = NonNullable<
 >;
 type UpcomingInstance =
   RouterOutputs["map"]["location"]["upcomingInstances"][number];
-
-function getUpdateStatusColor(instance: { seriesException: string | null }) {
-  return getStatusSolidBg(instanceMapStatus(instance.seriesException));
-}
-
-function formatUpdateText(instance: {
-  startDate: string;
-  startTime: string | null;
-  name: string;
-}) {
-  const date = dayjs(instance.startDate).format("M/D");
-  const time = instance.startTime
-    ? dayjs(instance.startTime, START_END_TIME_DB_FORMAT).format(
-        START_END_TIME_DISPLAY_FORMAT,
-      )
-    : null;
-  return time
-    ? `${date} - ${instance.name} at ${time}`
-    : `${date} - ${instance.name}`;
-}
 
 export function createWorkoutEventFromInstance(
   instance: UpcomingInstance,
@@ -290,6 +265,11 @@ export const WorkoutDetailsContent = ({
     [event?.endDate],
   );
 
+  const whenException = useMemo(
+    () => findNextExceptionNotice(event, upcomingInstancesData),
+    [event, upcomingInstancesData],
+  );
+
   const workoutFields = useMemo(
     () =>
       event && location
@@ -325,11 +305,14 @@ export const WorkoutDetailsContent = ({
               ) : null,
             ].filter(isTruthy),
             When:
-              whenText || endDateLabel ? (
+              whenText || endDateLabel || whenException ? (
                 <>
                   {whenText}
                   {endDateLabel ? (
                     <p className="text-sm">{endDateLabel}</p>
+                  ) : null}
+                  {whenException ? (
+                    <ExceptionNotice notice={whenException} />
                   ) : null}
                 </>
               ) : null,
@@ -340,7 +323,15 @@ export const WorkoutDetailsContent = ({
             Notes: event?.description ? textLink(event.description) : null,
           }
         : {},
-    [event, location, aoContact, hasAoContact, whenText, endDateLabel],
+    [
+      event,
+      location,
+      aoContact,
+      hasAoContact,
+      whenText,
+      endDateLabel,
+      whenException,
+    ],
   );
 
   const hasMultipleWorkouts = (results?.location?.events.length ?? 0) > 1;
@@ -420,34 +411,7 @@ export const WorkoutDetailsContent = ({
         </div>
       </div>
 
-      {selectedEventUpdates.length > 0 && (
-        <div className="mt-1">
-          <div className="text-sm font-bold">Updates</div>
-          <div className="mt-1 flex flex-col gap-1">
-            {selectedEventUpdates.map((instance) => (
-              <div
-                key={instance.id}
-                className="flex items-center gap-2 text-sm"
-              >
-                <div
-                  role="img"
-                  aria-label={statusLabel(
-                    instanceMapStatus(instance.seriesException),
-                  )}
-                  title={statusLabel(
-                    instanceMapStatus(instance.seriesException),
-                  )}
-                  className={cn(
-                    "h-3 w-3 flex-shrink-0 rounded-sm",
-                    getUpdateStatusColor(instance),
-                  )}
-                />
-                <span>{formatUpdateText(instance)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <UpdatesCallout instances={selectedEventUpdates} />
 
       <div>
         {displayedEvents.length > 1 ? (

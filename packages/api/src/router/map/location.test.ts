@@ -6,7 +6,7 @@
  * - Test database to be seeded with test data
  */
 
-import { schema, sql } from "@acme/db";
+import { eq, schema, sql } from "@acme/db";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanup,
@@ -1201,6 +1201,54 @@ describe("Map Location Router", () => {
         ).toBeUndefined();
       });
     });
+
+    it("should exclude a qualifying instance whose region is inactive", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create test AO");
+
+      const location = await createTestLocation(region.id);
+      if (!location) throw new Error("Failed to create test location");
+
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const startDate = tomorrow.toISOString().slice(0, 10);
+
+      // Standalone and public, AO still active — the retired region is the
+      // only reason this must not become a public marker or pin status.
+      const [instance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: `Instance In Retired Region ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: location.id,
+          startDate,
+          startTime: "0600",
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+
+      if (!instance) throw new Error("Failed to create event instance");
+
+      await db
+        .update(schema.orgs)
+        .set({ isActive: false })
+        .where(eq(schema.orgs.id, region.id));
+
+      const client = createTestClient();
+      const result = await client.map.location.upcomingInstances();
+
+      expect(
+        result.find((returned) => returned.id === instance.id),
+      ).toBeUndefined();
+    });
   });
 
   /**
@@ -1376,6 +1424,46 @@ describe("Map Location Router", () => {
       expect(workout.location).toBeNull();
       expect(workout.message).toBe("This workout is no longer scheduled.");
       expect(workout.message).not.toContain("Lat/lng");
+    });
+
+    it("should hide markers and workout details when the region is inactive", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const today = await getDbCurrentDate();
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create test AO");
+      const location = await createTestLocation(region.id);
+      if (!location) throw new Error("Failed to create test location");
+
+      await createDatedEvent({
+        aoId: ao.id,
+        locationId: location.id,
+        label: "Event In Retired Region",
+        dayOfWeek: "monday",
+        startDate: shiftDays(today, -1),
+      });
+
+      await db
+        .update(schema.orgs)
+        .set({ isActive: false })
+        .where(eq(schema.orgs.id, region.id));
+
+      const client = createTestClient();
+      const result = await client.map.location.eventsAndLocations();
+
+      expect(
+        result.find((loc: [number, ...unknown[]]) => loc[0] === location.id),
+      ).toBeUndefined();
+
+      const workout = await client.map.location.locationWorkout({
+        locationId: location.id,
+      });
+      expect(workout.location).toBeNull();
+      expect(workout.message).toBe("This workout is no longer scheduled.");
     });
   });
 });

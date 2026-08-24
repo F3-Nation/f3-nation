@@ -85,6 +85,7 @@ const SelectedItemWrapper = () => {
         device="desktop"
         selectedLocation={debouncedSelectedItem.selectedLocation}
         selectedEvent={debouncedSelectedItem.selectedEvent}
+        nextException={debouncedSelectedItem.nextException}
         hideCloseButton
       />
     </div>

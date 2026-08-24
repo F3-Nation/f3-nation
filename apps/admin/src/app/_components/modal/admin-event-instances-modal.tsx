@@ -5,7 +5,8 @@ import { useEffect, useState } from "react";
 import { z } from "zod";
 
 import { EVENT_CATEGORY_LABEL_MAP, Z_INDEX } from "@acme/shared/app/constants";
-import { SeriesException } from "@acme/shared/app/enums";
+import type { SeriesException } from "@acme/shared/app/enums";
+import { SelectableSeriesException } from "@acme/shared/app/enums";
 import { convertHHmmToHH_mm } from "@acme/shared/app/functions";
 import { isTruthy, safeParseInt } from "@acme/shared/common/functions";
 import { cn } from "@acme/ui";
@@ -58,6 +59,21 @@ import { ControlledTimeInput } from "../time-input";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 
 const NONE = "__none__";
+
+/**
+ * Only the selectable exceptions are offered, plus whatever the row already
+ * carries — a legacy `miscellaneous` value must stay visible in the trigger and
+ * survive an unrelated edit instead of silently reading as "None".
+ */
+export function seriesExceptionOptions(
+  current: SeriesException | null | undefined,
+): readonly SeriesException[] {
+  const selectable: readonly SeriesException[] = SelectableSeriesException;
+  if (current == null || selectable.includes(current)) {
+    return selectable;
+  }
+  return [...selectable, current];
+}
 
 function seriesExceptionLabel(value: string): string {
   switch (value) {
@@ -601,9 +617,7 @@ export default function AdminEventInstancesModal({
                       value={field.value != null ? String(field.value) : NONE}
                       onValueChange={(value) => {
                         field.onChange(
-                          value === NONE
-                            ? null
-                            : (value as (typeof SeriesException)[number]),
+                          value === NONE ? null : (value as SeriesException),
                         );
                       }}
                     >
@@ -614,7 +628,7 @@ export default function AdminEventInstancesModal({
                       </FormControl>
                       <SelectContent>
                         <SelectItem value={NONE}>None</SelectItem>
-                        {SeriesException.map((ex) => (
+                        {seriesExceptionOptions(field.value).map((ex) => (
                           <SelectItem key={ex} value={ex}>
                             {seriesExceptionLabel(ex)}
                           </SelectItem>

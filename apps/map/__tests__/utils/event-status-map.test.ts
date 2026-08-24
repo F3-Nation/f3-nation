@@ -10,9 +10,14 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { StatusBaseEvent, StatusInstance } from "~/utils/event-status-map";
+import type {
+  ExceptionInstance,
+  StatusBaseEvent,
+  StatusInstance,
+} from "~/utils/event-status-map";
 import {
   buildEventStatusMap,
+  findNextExceptionNotice,
   getMapEventStatus,
   instanceMapStatus,
   selectStatusInstances,
@@ -447,5 +452,103 @@ describe("statusLabel", () => {
     ]) {
       expect(statusLabel(instanceMapStatus(exception))).toMatch(/\S/);
     }
+  });
+});
+
+describe("findNextExceptionNotice", () => {
+  const exceptionInstance = (
+    overrides: Partial<ExceptionInstance> = {},
+  ): ExceptionInstance => ({
+    id: 1,
+    seriesId: BASE_EVENT_ID,
+    startDate: "2026-09-02",
+    startTime: "0615",
+    seriesException: "different-time",
+    ...overrides,
+  });
+
+  const series = { id: BASE_EVENT_ID, startTime: "0515" };
+
+  it("returns nothing when the event has no upcoming exception", () => {
+    expect(findNextExceptionNotice(series, [])).toBeUndefined();
+    expect(findNextExceptionNotice(series, undefined)).toBeUndefined();
+    expect(
+      findNextExceptionNotice(series, [
+        exceptionInstance({ seriesId: BASE_EVENT_ID + 1 }),
+      ]),
+    ).toBeUndefined();
+  });
+
+  it("returns nothing when there is no event to describe", () => {
+    expect(findNextExceptionNotice(undefined, [exceptionInstance()])).toBe(
+      undefined,
+    );
+    expect(
+      findNextExceptionNotice(null, [exceptionInstance()]),
+    ).toBeUndefined();
+  });
+
+  it("surfaces the overridden time for a different-time exception", () => {
+    expect(findNextExceptionNotice(series, [exceptionInstance()])).toEqual({
+      status: "different-time",
+      label: "Different time",
+      startDate: "2026-09-02",
+      overrideStartTime: "0615",
+    });
+  });
+
+  it("announces the soonest exception, not whichever the API listed first", () => {
+    // `upcomingInstances` comes back unordered, so a later change must not win
+    // just by arriving first.
+    const notice = findNextExceptionNotice(series, [
+      exceptionInstance({ id: 2, startDate: "2026-09-16", startTime: "0700" }),
+      exceptionInstance({ id: 3, startDate: "2026-09-09", startTime: "0630" }),
+    ]);
+    expect(notice?.startDate).toBe("2026-09-09");
+    expect(notice?.overrideStartTime).toBe("0630");
+  });
+
+  it("omits the time for a closed instance", () => {
+    // A closure carries whatever time the row happened to hold; printing it
+    // would read as "come at 6:15" for a workout that is not happening.
+    const notice = findNextExceptionNotice(series, [
+      exceptionInstance({ seriesException: "closed", startTime: "0615" }),
+    ]);
+    expect(notice?.status).toBe("closed");
+    expect(notice?.overrideStartTime).toBeNull();
+  });
+
+  it("omits the time when the exception keeps the regular schedule", () => {
+    const notice = findNextExceptionNotice(series, [
+      exceptionInstance({
+        seriesException: "miscellaneous",
+        startTime: "0515",
+      }),
+    ]);
+    expect(notice?.label).toBe("Miscellaneous");
+    expect(notice?.overrideStartTime).toBeNull();
+  });
+
+  it("matches an instance-derived event by its own id and skips the redundant time", () => {
+    // A negative id means the event was synthesized from the instance, so the
+    // chip beside the notice already shows this exact time.
+    const notice = findNextExceptionNotice({ id: -7, startTime: "0615" }, [
+      exceptionInstance({
+        id: 7,
+        seriesId: null,
+        seriesException: null,
+        startTime: "0615",
+      }),
+    ]);
+    expect(notice?.label).toBe("Special instance");
+    expect(notice?.overrideStartTime).toBeNull();
+  });
+
+  it("does not match an instance-derived event against its series siblings", () => {
+    expect(
+      findNextExceptionNotice({ id: -7, startTime: "0615" }, [
+        exceptionInstance({ id: 8 }),
+      ]),
+    ).toBeUndefined();
   });
 });

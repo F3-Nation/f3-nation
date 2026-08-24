@@ -1,6 +1,7 @@
 import dayjs from "dayjs";
 
 import type { MapStatus } from "~/utils/types";
+import { sortUpcomingInstancesByDate } from "~/utils/date";
 
 const HORIZON_DAYS = 30;
 
@@ -34,6 +35,65 @@ const STATUS_LABELS: Record<NonNullable<MapStatus>, string> = {
 
 export function statusLabel(status: MapStatus): string {
   return status ? STATUS_LABELS[status] : "Scheduled";
+}
+
+/** The instance fields the exception notice reads. */
+export interface ExceptionInstance {
+  id: number;
+  seriesId: number | null;
+  startDate: string;
+  startTime: string | null;
+  seriesException: string | null;
+}
+
+export interface ExceptionNotice {
+  status: NonNullable<MapStatus>;
+  label: string;
+  startDate: string;
+  /**
+   * The overridden start time, or null when there is nothing new to announce —
+   * either it matches the schedule already on screen, or the instance is closed
+   * and so has no meaningful time.
+   */
+  overrideStartTime: string | null;
+}
+
+/**
+ * The soonest upcoming exception affecting `event`, for surfaces that show a
+ * single schedule and would otherwise present a time the next occurrence does
+ * not use. Returns undefined when the event has no upcoming exception.
+ *
+ * A negative `event.id` marks an event synthesized from an instance: the
+ * instance *is* the event, so its own time is already on screen and
+ * `overrideStartTime` stays null rather than repeating it.
+ */
+export function findNextExceptionNotice(
+  event: { id: number; startTime: string | null } | null | undefined,
+  instances: readonly ExceptionInstance[] | undefined,
+): ExceptionNotice | undefined {
+  if (!event || !instances?.length) return undefined;
+
+  const matches =
+    event.id > 0
+      ? instances.filter((instance) => instance.seriesId === event.id)
+      : instances.filter((instance) => instance.id === -event.id);
+
+  // The API returns these unordered, and only the soonest is announced.
+  const next = sortUpcomingInstancesByDate(matches)[0];
+  if (!next) return undefined;
+
+  const status = instanceMapStatus(next.seriesException);
+  const hasNewTime =
+    next.seriesException !== "closed" &&
+    next.startTime != null &&
+    next.startTime !== event.startTime;
+
+  return {
+    status,
+    label: statusLabel(status),
+    startDate: next.startDate,
+    overrideStartTime: hasNewTime ? next.startTime : null,
+  };
 }
 
 export function selectStatusInstances<T extends StatusInstance>(

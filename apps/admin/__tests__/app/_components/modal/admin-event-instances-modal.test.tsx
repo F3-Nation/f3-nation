@@ -16,6 +16,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type * as ModalStore from "~/utils/store/modal";
 import AdminEventInstancesModal, {
   EventInstanceFormSchema,
+  seriesExceptionOptions,
 } from "~/app/_components/modal/admin-event-instances-modal";
 
 const { toastMock, crupdateMutateAsync, instanceState } = vi.hoisted(() => ({
@@ -442,5 +443,30 @@ describe("AdminEventInstancesModal", () => {
       });
       expect(crupdateMutateAsync).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("seriesExceptionOptions", () => {
+  it("offers only the selectable exceptions", () => {
+    expect(seriesExceptionOptions(null)).toEqual(["closed", "different-time"]);
+    expect(seriesExceptionOptions(undefined)).toEqual([
+      "closed",
+      "different-time",
+    ]);
+    expect(seriesExceptionOptions("closed")).toEqual([
+      "closed",
+      "different-time",
+    ]);
+  });
+
+  it("keeps a stored value that is no longer offered", () => {
+    // Without this the Select has no matching item, so an existing
+    // `miscellaneous` row would render as the "None" placeholder and get
+    // cleared by any unrelated save.
+    expect(seriesExceptionOptions("miscellaneous")).toEqual([
+      "closed",
+      "different-time",
+      "miscellaneous",
+    ]);
   });
 });

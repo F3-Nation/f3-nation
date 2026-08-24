@@ -124,7 +124,15 @@ export const mapLocationRouter = os.router({
           schema.eventTypes,
           eq(schema.eventTypes.id, schema.eventsXEventTypes.eventTypeId),
         )
-        .where(eq(schema.locations.isActive, true))
+        .where(
+          and(
+            eq(schema.locations.isActive, true),
+            // Deactivating a region does not cascade to child AOs or events, so
+            // the public map must hide them here.
+            or(isNull(aoOrg.id), eq(aoOrg.isActive, true)),
+            or(isNull(regionOrg.id), eq(regionOrg.isActive, true)),
+          ),
+        )
         .groupBy(
           schema.locations.id,
           aoOrg.name,
@@ -279,6 +287,7 @@ export const mapLocationRouter = os.router({
     )
     .handler(async ({ context: ctx }) => {
       const aoOrg = aliasedTable(schema.orgs, "ao_org");
+      const regionOrg = aliasedTable(schema.orgs, "region_org");
       const seriesEvent = aliasedTable(schema.events, "series_event");
 
       const instances = await ctx.db
@@ -324,6 +333,13 @@ export const mapLocationRouter = os.router({
         )
         .leftJoin(aoOrg, eq(schema.eventInstances.orgId, aoOrg.id))
         .leftJoin(
+          regionOrg,
+          and(
+            eq(regionOrg.id, aoOrg.parentId),
+            eq(regionOrg.orgType, "region"),
+          ),
+        )
+        .leftJoin(
           seriesEvent,
           eq(seriesEvent.id, schema.eventInstances.seriesId),
         )
@@ -346,6 +362,9 @@ export const mapLocationRouter = os.router({
             eq(schema.eventInstances.isActive, true),
             eq(schema.eventInstances.isPrivate, false),
             eq(aoOrg.isActive, true),
+            // Child AOs stay active when a region is retired; exclude those
+            // instances from public markers and pin statuses.
+            or(isNull(regionOrg.id), eq(regionOrg.isActive, true)),
             or(
               isNull(schema.eventInstances.seriesId),
               and(
@@ -634,6 +653,13 @@ export const mapLocationRouter = os.router({
           and(
             eq(schema.locations.id, input.locationId),
             eq(schema.locations.isActive, true),
+            or(
+              isNull(schema.events.id),
+              and(
+                or(isNull(parentOrg.id), eq(parentOrg.isActive, true)),
+                or(isNull(regionOrg.id), eq(regionOrg.isActive, true)),
+              ),
+            ),
           ),
         )
         .groupBy(

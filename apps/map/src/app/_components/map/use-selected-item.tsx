@@ -7,6 +7,7 @@ import { RERENDER_LOGS } from "@acme/shared/common/constants";
 
 import { orpc, useQuery } from "~/orpc/react";
 import { dateToDayOfWeek } from "~/utils/date";
+import { findNextExceptionNotice } from "~/utils/event-status-map";
 import { mapStore } from "~/utils/store/map";
 import { selectedItemStore } from "~/utils/store/selected-item";
 
@@ -111,6 +112,14 @@ export const useSelectedItem = () => {
     return undefined;
   }, [selectedLocation, eventId, upcomingInstancesData]);
 
+  // The hover card shows one schedule, so an upcoming change to it has to be
+  // called out here — a reader who never opens the modal has no other chance to
+  // see the real time.
+  const nextException = useMemo(
+    () => findNextExceptionNotice(selectedEvent, upcomingInstancesData),
+    [selectedEvent, upcomingInstancesData],
+  );
+
   // Create memoized debounced function
   const debouncedSetSelectedItem = useMemo(
     () =>
@@ -139,6 +148,7 @@ export const useSelectedItem = () => {
     eventId,
     selectedLocation,
     selectedEvent,
+    nextException,
     pagePosition: position,
   };
 };
