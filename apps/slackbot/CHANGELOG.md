@@ -2,6 +2,13 @@
 
 <!-- version list -->
 
+## [2.3.1](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.3.0...slackbot@2.3.1) (2026-08-25)
+
+
+### Bug Fixes
+
+* **slackbot:** prevent calendar modal block overflow ([#881](https://github.com/F3-Nation/f3-nation/issues/881)) ([faf7807](https://github.com/F3-Nation/f3-nation/commit/faf7807e8bd41fa6392f40787e4b5059899c470a))
+
 ## [2.3.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.2.1...slackbot@2.3.0) (2026-08-18)
 
 
