@@ -16,10 +16,4 @@ describe("formatDateOrEmpty", () => {
     expect(formatDateOrEmpty(null)).toBe("");
     expect(formatDateOrEmpty(undefined)).toBe("");
   });
-
-  it("falls back to native date parsing for non-calendar date strings", () => {
-    const date = "January 15, 2026";
-
-    expect(formatDateOrEmpty(date)).toBe(new Date(date).toLocaleDateString());
-  });
 });

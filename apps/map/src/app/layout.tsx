@@ -26,14 +26,13 @@ import { RuntimeConfigProvider } from "~/utils/runtime-config";
 import { KeyPressProvider } from "~/utils/key-press/provider";
 import { RouteChangeTracker } from "./_components/route-change-tracker";
 
-export const getMapBaseUrl = (raw?: string) => {
+const mapBaseUrl = (() => {
   // F3_MAP_BASE_URL is typed required, but under skipValidation (CI/lint builds)
   // env.* passes through unvalidated and can be undefined — keep this fallback.
+  const raw = env.F3_MAP_BASE_URL ?? process.env.F3_MAP_BASE_URL;
   if (!raw) return new URL("http://localhost:3000");
   return new URL(raw);
-};
-
-const mapBaseUrl = getMapBaseUrl(env.F3_MAP_BASE_URL);
+})();
 
 export const metadata: Metadata = {
   metadataBase: mapBaseUrl,
