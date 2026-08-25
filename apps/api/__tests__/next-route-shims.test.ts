@@ -21,8 +21,8 @@ vi.mock("@orpc/openapi", () => ({
 }));
 
 // apps/api/src/app/[[...rest]]/route.ts and app/docs/openapi.json/route.ts are
-// no longer where the logic lives (moved to ~/handler and ~/docs for #649) —
-// they're thin re-export shims that keep the currently-deployed Next entry
+// no longer where the logic lives (moved to ~/handler and ~/docs) — they're
+// thin re-export shims that keep the currently-deployed Next entry
 // working until phase 3+4 cuts over. Their own behavior is just "delegate";
 // handler.ts/docs.ts's own tests cover the actual logic.
 describe("Next route shims delegate to the moved modules", () => {

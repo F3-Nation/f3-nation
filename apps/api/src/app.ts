@@ -22,10 +22,46 @@ app.use("*", async (c, next) => {
   if (pathname.length > 1 && pathname.endsWith("/")) {
     return new Response(null, {
       status: 308,
-      headers: { location: pathname.replace(/\/+$/, "") + search },
+      headers: {
+        location:
+          "/" + pathname.replace(/^\/+/, "").replace(/\/+$/, "") + search,
+      },
     });
   }
   await next();
+});
+
+// Registered early (right after the trailing-slash redirect) so every route
+// below — including /health, /docs, and /docs/openapi.json — is covered.
+// Hono composes matched handlers in registration order; those routes are
+// terminal (no `next()`), so registering this after them would silently skip
+// compression for all of them. Load-bearing: Cloud Run does not compress
+// responses the way Next's standalone server does today, and the large map
+// endpoints (plus /docs/openapi.json's 200+KB payload) must not silently
+// lose it.
+app.use(compress());
+
+// oRPC's Response objects never set Content-Length, so hono/compress's own
+// size-threshold skip (`contentLength && Number(contentLength) < threshold`)
+// never fires and it stamps `Vary: Accept-Encoding` on every response, not
+// just ones actually worth compressing — a divergence the frozen
+// characterization goldens catch on every 401/404/429/validation-error case.
+// Registered after compress() (so, per Hono's onion composition, its own
+// post-`next()` step runs BEFORE compress's) to give compress the
+// information it needs to make the same real-size decision Next's own
+// compression already makes today.
+app.use(async (c, next) => {
+  await next();
+  if (
+    c.res.body && // redirects, 204s etc. have no body — and Response.redirect()'s
+    // headers are spec-immutable, so `.set()` below would throw for them
+    !c.res.headers.has("content-length") &&
+    !c.res.headers.has("content-encoding") &&
+    !c.res.headers.has("transfer-encoding")
+  ) {
+    const bytes = await c.res.clone().arrayBuffer();
+    c.res.headers.set("content-length", String(bytes.byteLength));
+  }
 });
 
 const SERVICE_NAME = "f3-api";
@@ -82,7 +118,10 @@ function docsMethodGuard(c: Context, next: Next) {
     });
   }
   if (c.req.method !== "GET" && c.req.method !== "HEAD") {
-    return new Response(null, { status: 405 });
+    return new Response(null, {
+      status: 405,
+      headers: { allow: "GET, HEAD, OPTIONS" },
+    });
   }
   return next();
 }
@@ -95,36 +134,5 @@ app.get("/docs/openapi.json", (c) => openApiJson(c.req.raw));
 
 // Only static asset apps/api serves today.
 app.use("/favicon.ico", serveStatic({ path: "./public/favicon.ico" }));
-
-// Registered here (after /health, /docs, favicon; before the catch-all) so it
-// wraps only the RPC/OpenAPI dispatch below — Hono composes matched handlers in
-// registration order, and the routes above are terminal (no `next()`), so this
-// middleware is never reached for them. Load-bearing: Cloud Run does not
-// compress responses the way Next's standalone server does today, and the large
-// map endpoints must not silently lose it.
-app.use(compress());
-
-// oRPC's Response objects never set Content-Length, so hono/compress's own
-// size-threshold skip (`contentLength && Number(contentLength) < threshold`)
-// never fires and it stamps `Vary: Accept-Encoding` on every response, not
-// just ones actually worth compressing — a divergence the frozen
-// characterization goldens catch on every 401/404/429/validation-error case.
-// Registered after compress() (so, per Hono's onion composition, its own
-// post-`next()` step runs BEFORE compress's) to give compress the
-// information it needs to make the same real-size decision Next's own
-// compression already makes today.
-app.use(async (c, next) => {
-  await next();
-  if (
-    c.res.body && // redirects, 204s etc. have no body — and Response.redirect()'s
-    // headers are spec-immutable, so `.set()` below would throw for them
-    !c.res.headers.has("content-length") &&
-    !c.res.headers.has("content-encoding") &&
-    !c.res.headers.has("transfer-encoding")
-  ) {
-    const bytes = await c.res.clone().arrayBuffer();
-    c.res.headers.set("content-length", String(bytes.byteLength));
-  }
-});
 
 app.all("*", (c) => handleRequest(c.req.raw));

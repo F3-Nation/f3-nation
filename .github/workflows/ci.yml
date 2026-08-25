@@ -383,15 +383,17 @@ jobs:
       - run: pnpm turbo run test:characterization
 
   # Same characterization suite as test-coverage above, but dispatched through
-  # the Hono app.fetch entry (#649) instead of the Next in-process target. A
+  # the Hono app.fetch entry instead of the Next in-process target. A
   # separate job (own Postgres service) so it runs in parallel with
   # test-coverage rather than lengthening that job's critical path — its own
   # DB never touches the other job's f3_test. Identical frozen goldens either
   # way: any diff here is a Hono-port parity bug, not a suite difference.
   # `test:characterization` depends on `reset-test-db` and `test` in turbo.json,
   # so `pnpm turbo run test:characterization` alone drives the same DB-reset +
-  # test chain the "next" leg relies on (turbo's remote cache dedupes the
-  # shared `test` dependency across the two jobs when it can).
+  # test chain the "next" leg relies on. `CHAR_TEST_TARGET` is in turbo.json's
+  # globalEnv, so setting it to "hono" here changes every task's cache key —
+  # this job always re-runs the full suite from scratch, it can't share a
+  # cache hit on `test` with test-coverage's run.
   test-coverage-hono:
     runs-on: ubuntu-latest
     services:

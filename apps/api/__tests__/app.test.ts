@@ -106,6 +106,7 @@ describe("app", () => {
       new Request("http://api.test/docs", { method: "POST" }),
     );
     expect(wrongVerb.status).toBe(405);
+    expect(wrongVerb.headers.get("allow")).toBe("GET, HEAD, OPTIONS");
     expect(docsPage).not.toHaveBeenCalled();
   });
 
@@ -136,6 +137,22 @@ describe("app", () => {
     expect(handleRequest).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["//evil.com/", "/evil.com"],
+    ["//", "/"],
+    ["/a//", "/a"],
+  ])(
+    "strips leading slashes from %s so the redirect can't become protocol-relative",
+    async (path, expectedLocation) => {
+      const res = await app.fetch(
+        new Request(`http://api.test${path}`, { redirect: "manual" }),
+      );
+
+      expect(res.status).toBe(308);
+      expect(res.headers.get("location")).toBe(expectedLocation);
+    },
+  );
+
   it("compresses a large catch-all response when the client accepts gzip", async () => {
     const res = await app.fetch(
       new Request("http://api.test/v1/some-large-endpoint", {
@@ -145,5 +162,66 @@ describe("app", () => {
 
     expect(res.status).toBe(200);
     expect(res.headers.get("content-encoding")).toBe("gzip");
+  });
+
+  it("does not compress a body under the 1024-byte threshold", async () => {
+    handleRequest.mockImplementationOnce(
+      async () => new Response("small body"),
+    );
+
+    const res = await app.fetch(
+      new Request("http://api.test/v1/small-endpoint", {
+        headers: { "accept-encoding": "gzip" },
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-encoding")).toBeNull();
+  });
+
+  it("does not compress when the client sends no Accept-Encoding header", async () => {
+    const res = await app.fetch(
+      new Request("http://api.test/v1/some-large-endpoint"),
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-encoding")).toBeNull();
+  });
+
+  it("leaves a response that already sets content-length alone", async () => {
+    const body = "x".repeat(2000);
+    handleRequest.mockImplementationOnce(
+      async () =>
+        new Response(body, {
+          headers: { "content-length": String(body.length) },
+        }),
+    );
+
+    const res = await app.fetch(
+      new Request("http://api.test/v1/precomputed-length", {
+        headers: { "accept-encoding": "gzip" },
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-encoding")).toBe("gzip");
+  });
+
+  it("leaves a response that already sets content-encoding alone", async () => {
+    handleRequest.mockImplementationOnce(
+      async () =>
+        new Response("x".repeat(2000), {
+          headers: { "content-encoding": "identity" },
+        }),
+    );
+
+    const res = await app.fetch(
+      new Request("http://api.test/v1/precompressed", {
+        headers: { "accept-encoding": "gzip" },
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-encoding")).toBe("identity");
   });
 });

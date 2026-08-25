@@ -4,22 +4,16 @@ import { Hono } from "hono";
 // docsPage is built once at module-eval time (Scalar's static-config form), so
 // exercising both branches of getDocsBaseUrl needs a fresh module per env value.
 describe("docsPage (Hono Scalar reference)", () => {
-  const originalApiUrl = process.env.NEXT_PUBLIC_API_URL;
-
   beforeEach(() => {
     vi.resetModules();
   });
 
   afterEach(() => {
-    if (originalApiUrl === undefined) {
-      delete process.env.NEXT_PUBLIC_API_URL;
-    } else {
-      process.env.NEXT_PUBLIC_API_URL = originalApiUrl;
-    }
+    vi.unstubAllEnvs();
   });
 
   it("renders the Scalar reference page when NEXT_PUBLIC_API_URL is set", async () => {
-    process.env.NEXT_PUBLIC_API_URL = "https://api.f3nation.com";
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "https://api.f3nation.com");
     const { docsPage } = await import("../src/docs-page");
     const app = new Hono();
     app.get("/docs", docsPage);
@@ -33,7 +27,7 @@ describe("docsPage (Hono Scalar reference)", () => {
   });
 
   it("still renders when NEXT_PUBLIC_API_URL is unset", async () => {
-    delete process.env.NEXT_PUBLIC_API_URL;
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "");
     const { docsPage } = await import("../src/docs-page");
     const app = new Hono();
     app.get("/docs", docsPage);
