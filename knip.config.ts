@@ -32,7 +32,9 @@ const config: KnipConfig = {
       // which the vitest plugin does not discover from the default name.
       vitest: ["vitest.config.ts", "vitest.characterization.config.ts"],
       // Wired in by resolve.alias rather than an import, so it is not
-      // reachable through the module graph.
+      // reachable through the module graph. (src/server.ts needs no entry
+      // here — knip's package.json plugin already discovers it via the
+      // dev:hono/start:hono scripts.)
       entry: ["characterization/next-headers-shim.ts"],
     },
     "apps/admin": {

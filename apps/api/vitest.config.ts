@@ -12,13 +12,16 @@ export default defineConfig({
       reporter: ["text", "json", "html"],
       reportsDirectory: "./coverage",
       include: coverageInclude,
-      exclude: coverageExclude,
+      // server.ts is a hand-verified process bootstrap (Sentry init, @hono/node-server
+      // serve(), SIGTERM handling) — same category as the instrumentation.ts it
+      // replaces, which bootstrapCoverageExclude already excludes for every app.
+      exclude: [...coverageExclude, "src/server.ts"],
       thresholds: {
         autoUpdate: true,
-        statements: 98.24,
+        statements: 98.95,
         branches: 100,
-        functions: 87.5,
-        lines: 98.24,
+        functions: 93.75,
+        lines: 98.93,
       },
     },
     exclude: [

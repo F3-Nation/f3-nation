@@ -50,11 +50,11 @@ interface Interceptors {
   interceptors: ((error: unknown) => void)[];
 }
 
-const importRoute = () => import("../src/app/[[...rest]]/route");
+const importHandler = () => import("../src/handler");
 
 const originalApiUrl = process.env.NEXT_PUBLIC_API_URL;
 
-describe("[[...rest]] catch-all route", () => {
+describe("handleRequest", () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
@@ -74,9 +74,11 @@ describe("[[...rest]] catch-all route", () => {
   describe("root redirect to /docs", () => {
     it("uses NEXT_PUBLIC_API_URL (trailing slash stripped) when set", async () => {
       process.env.NEXT_PUBLIC_API_URL = "https://api.f3nation.com/";
-      const { GET } = await importRoute();
+      const { handleRequest } = await importHandler();
 
-      const response = await GET(new Request("https://ignored.example.com/"));
+      const response = await handleRequest(
+        new Request("https://ignored.example.com/"),
+      );
 
       expect(response.status).toBe(302);
       expect(response.headers.get("location")).toBe(
@@ -87,9 +89,9 @@ describe("[[...rest]] catch-all route", () => {
     });
 
     it("derives the base URL from forwarded headers when env is unset", async () => {
-      const { GET } = await importRoute();
+      const { handleRequest } = await importHandler();
 
-      const response = await GET(
+      const response = await handleRequest(
         new Request("http://internal.local/", {
           headers: {
             "x-forwarded-proto": "https",
@@ -104,9 +106,11 @@ describe("[[...rest]] catch-all route", () => {
     });
 
     it("falls back to the request URL host when no forwarded headers exist", async () => {
-      const { GET } = await importRoute();
+      const { handleRequest } = await importHandler();
 
-      const response = await GET(new Request("http://localhost:3001/"));
+      const response = await handleRequest(
+        new Request("http://localhost:3001/"),
+      );
 
       expect(response.headers.get("location")).toBe(
         "http://localhost:3001/docs",
@@ -120,9 +124,9 @@ describe("[[...rest]] catch-all route", () => {
       async (client) => {
         const rpcResponse = new Response("rpc-ok");
         rpcHandle.mockResolvedValue({ response: rpcResponse });
-        const { POST } = await importRoute();
+        const { handleRequest } = await importHandler();
 
-        const response = await POST(
+        const response = await handleRequest(
           new Request("https://api.example.com/v1/ping", {
             method: "POST",
             headers: { [Header.Client]: client },
@@ -137,9 +141,9 @@ describe("[[...rest]] catch-all route", () => {
 
     it("returns 404 when the RPC handler produces no response", async () => {
       rpcHandle.mockResolvedValue({ response: undefined });
-      const { GET } = await importRoute();
+      const { handleRequest } = await importHandler();
 
-      const response = await GET(
+      const response = await handleRequest(
         new Request("https://api.example.com/v1/ping", {
           headers: { [Header.Client]: Client.ORPC },
         }),
@@ -154,9 +158,9 @@ describe("[[...rest]] catch-all route", () => {
     it("routes REST-style calls to the OpenAPI handler", async () => {
       const restResponse = new Response("rest-ok");
       openApiHandle.mockResolvedValue({ response: restResponse });
-      const { GET } = await importRoute();
+      const { handleRequest } = await importHandler();
 
-      const response = await GET(
+      const response = await handleRequest(
         new Request("https://api.example.com/v1/events"),
       );
 
@@ -167,9 +171,9 @@ describe("[[...rest]] catch-all route", () => {
 
     it("returns 404 when the OpenAPI handler produces no response", async () => {
       openApiHandle.mockResolvedValue({ response: undefined });
-      const { GET } = await importRoute();
+      const { handleRequest } = await importHandler();
 
-      const response = await GET(
+      const response = await handleRequest(
         new Request("https://api.example.com/v1/events"),
       );
 
@@ -180,7 +184,7 @@ describe("[[...rest]] catch-all route", () => {
 
   describe("error interceptors log via logError", () => {
     it("logs RPC and OpenAPI handler errors with distinct events", async () => {
-      await importRoute();
+      await importHandler();
 
       const rpcOptions = rpcCtor.mock.calls[0]![1] as Interceptors;
       const openApiOptions = openApiCtor.mock.calls[0]![1] as Interceptors;
@@ -200,19 +204,6 @@ describe("[[...rest]] catch-all route", () => {
         {},
         openApiError,
       );
-    });
-  });
-
-  describe("HTTP method exports", () => {
-    it("wires every method alias to the same handler", async () => {
-      const route = await importRoute();
-
-      expect(route.GET).toBe(route.HEAD);
-      expect(route.GET).toBe(route.POST);
-      expect(route.GET).toBe(route.PUT);
-      expect(route.GET).toBe(route.PATCH);
-      expect(route.GET).toBe(route.DELETE);
-      expect(route.GET).toBe(route.OPTIONS);
     });
   });
 });
