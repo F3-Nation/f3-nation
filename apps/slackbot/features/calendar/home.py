@@ -45,6 +45,32 @@ from utilities.helper_functions import (
 )
 from utilities.slack import actions, orm
 
+SLACK_MODAL_BLOCK_LIMIT = 100
+
+
+def _append_calendar_event_group(
+    blocks: list[orm.BaseBlock],
+    event_block: orm.SectionBlock,
+    event_date: datetime.date,
+    active_date: datetime.date | None,
+) -> tuple[datetime.date | None, bool]:
+    """Append a complete date/event group when it fits in Slack's modal limit."""
+    candidate_blocks: list[orm.BaseBlock] = []
+    if event_date != active_date:
+        candidate_blocks.extend(
+            [
+                orm.DividerBlock(),
+                orm.HeaderBlock(label=f":calendar: {event_date.strftime('%A, %B %d')}"),
+            ]
+        )
+    candidate_blocks.append(event_block)
+
+    if len(blocks) + len(candidate_blocks) > SLACK_MODAL_BLOCK_LIMIT:
+        return active_date, False
+
+    blocks.extend(candidate_blocks)
+    return event_date, True
+
 
 def handle_event_preblast_select_button(
     body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings
@@ -218,15 +244,9 @@ def build_home_form(
     start_time = time.time()
 
     # Build the event list
-    active_date = datetime.date(2020, 1, 1)
-    block_count = 1
+    active_date: datetime.date | None = None
     for event in events:
         option_names: List[str] = []
-        if event.event.start_date != active_date:
-            active_date = event.event.start_date
-            blocks.append(orm.DividerBlock())
-            blocks.append(orm.HeaderBlock(label=f":calendar: {active_date.strftime('%A, %B %d')}"))
-            block_count += 2
         if event.event.series_exception == Series_Exception.closed:
             label = f"{event.org.name} {' / '.join(t.name for t in event.event_types)} - CLOSED :no_entry:"
             if user_is_admin:
@@ -234,8 +254,6 @@ def build_home_form(
             else:
                 option_names.append("Event Closed")
         else:
-            if block_count > 90:
-                break
             if not user_is_admin:
                 if event.user_q:
                     option_names.append("Edit Preblast")
@@ -268,16 +286,21 @@ def build_home_form(
                     option_names.append("Edit Preblast")
                 else:
                     option_names.append("Edit Backblast")
-        blocks.append(
-            orm.SectionBlock(
-                label=label,
-                element=orm.OverflowElement(
-                    action=f"{actions.CALENDAR_HOME_EVENT}_{event.event.id}",
-                    options=orm.as_selector_options(option_names),
-                ),
-            )
+        event_block = orm.SectionBlock(
+            label=label,
+            element=orm.OverflowElement(
+                action=f"{actions.CALENDAR_HOME_EVENT}_{event.event.id}",
+                options=orm.as_selector_options(option_names),
+            ),
         )
-        block_count += 1
+        active_date, appended = _append_calendar_event_group(
+            blocks=blocks,
+            event_block=event_block,
+            event_date=event.event.start_date,
+            active_date=active_date,
+        )
+        if not appended:
+            break
 
     # TODO: add "next page" button
     form = orm.BlockView(blocks=blocks)
@@ -294,6 +317,7 @@ def build_home_form(
             callback_id=actions.CALENDAR_HOME_CALLBACK_ID,
             submit_button_text="None",
             parent_metadata=metadata,
+            raise_on_error=view_id == safe_get(body, actions.LOADING_ID),
         )
     else:
         form.post_modal(
