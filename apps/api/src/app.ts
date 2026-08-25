@@ -2,6 +2,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import type { Context, Next } from "hono";
 import { Hono } from "hono";
 import { compress } from "hono/compress";
+import { HTTPException } from "hono/http-exception";
 
 import { buildHealthResponse, runChecks } from "@f3nation/health";
 
@@ -59,8 +60,19 @@ app.use(async (c, next) => {
     !c.res.headers.has("content-encoding") &&
     !c.res.headers.has("transfer-encoding")
   ) {
-    const bytes = await c.res.clone().arrayBuffer();
-    c.res.headers.set("content-length", String(bytes.byteLength));
+    try {
+      const bytes = await c.res.clone().arrayBuffer();
+      c.res.headers.set("content-length", String(bytes.byteLength));
+    } catch (err) {
+      // The response itself already succeeded upstream; a failure computing
+      // its length shouldn't discard it and report a false 500 — log and send
+      // it through without a content-length instead.
+      logError(
+        "api.middleware.content_length_failed",
+        { path: c.req.path },
+        err,
+      );
+    }
   }
 });
 
@@ -136,3 +148,21 @@ app.get("/docs/openapi.json", (c) => openApiJson(c.req.raw));
 app.use("/favicon.ico", serveStatic({ path: "./public/favicon.ico" }));
 
 app.all("*", (c) => handleRequest(c.req.raw));
+
+// Equivalent of Next's `onRequestError` instrumentation hook: the last-resort
+// catch for anything that throws out of a handler unhandled. Registered here
+// (not in server.ts) so it's exercised by the characterization parity gate —
+// `characterization/targets/hono.ts` dispatches through `app.fetch`, not
+// `server.ts` — and counted by the coverage gate, which excludes server.ts as
+// process bootstrap. Hono's own default error handler unwraps a thrown
+// HTTPException into its carried response; preserve that instead of
+// flattening every thrown error to a generic 500.
+app.onError((err, c) => {
+  logError(
+    "api.app.unhandled_error",
+    { path: c.req.path, method: c.req.method },
+    err,
+  );
+  if (err instanceof HTTPException) return err.getResponse();
+  return c.text("Internal Server Error", 500);
+});

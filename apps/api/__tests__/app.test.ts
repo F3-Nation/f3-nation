@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { HTTPException } from "hono/http-exception";
 
 import type * as HealthModule from "@f3nation/health";
 import { healthResponseSchema } from "@f3nation/health";
@@ -120,6 +121,40 @@ describe("app", () => {
     expect(openApiJson).toHaveBeenCalledTimes(1);
   });
 
+  it("returns 204 for OPTIONS and 405 for other verbs on /docs/openapi.json", async () => {
+    const preflight = await app.fetch(
+      new Request("http://api.test/docs/openapi.json", {
+        method: "OPTIONS",
+      }),
+    );
+    expect(preflight.status).toBe(204);
+
+    const wrongVerb = await app.fetch(
+      new Request("http://api.test/docs/openapi.json", { method: "POST" }),
+    );
+    expect(wrongVerb.status).toBe(405);
+    expect(wrongVerb.headers.get("allow")).toBe("GET, HEAD, OPTIONS");
+    expect(openApiJson).not.toHaveBeenCalled();
+  });
+
+  it("allows HEAD requests through the docs method guard", async () => {
+    const docsHead = await app.fetch(
+      new Request("http://api.test/docs", { method: "HEAD" }),
+    );
+    expect(docsHead.status).not.toBe(405);
+
+    const openApiHead = await app.fetch(
+      new Request("http://api.test/docs/openapi.json", { method: "HEAD" }),
+    );
+    expect(openApiHead.status).not.toBe(405);
+  });
+
+  it("serves the favicon", async () => {
+    const res = await app.fetch(new Request("http://api.test/favicon.ico"));
+
+    expect(res.status).toBe(200);
+  });
+
   it("redirects / via the catch-all dispatching to handleRequest", async () => {
     const res = await app.fetch(new Request("http://api.test/"));
 
@@ -223,5 +258,48 @@ describe("app", () => {
 
     expect(res.status).toBe(200);
     expect(res.headers.get("content-encoding")).toBe("identity");
+  });
+
+  it("logs and still sends the response if computing content-length fails", async () => {
+    // Only the content-length middleware's own .clone() call should fail;
+    // restoring after one call lets compress()'s later .clone() succeed
+    // normally so this test isolates the one failure mode it targets.
+    const cloneSpy = vi
+      .spyOn(Response.prototype, "clone")
+      .mockImplementationOnce(() => {
+        throw new Error("clone failed");
+      });
+
+    const res = await app.fetch(
+      new Request("http://api.test/v1/broken-length", {
+        headers: { "accept-encoding": "gzip" },
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.has("content-length")).toBe(false);
+
+    cloneSpy.mockRestore();
+  });
+
+  it("returns a generic 500 when a handler throws an ordinary error", async () => {
+    handleRequest.mockImplementationOnce(() => {
+      throw new Error("boom");
+    });
+
+    const res = await app.fetch(new Request("http://api.test/v1/throws"));
+
+    expect(res.status).toBe(500);
+    expect(await res.text()).toBe("Internal Server Error");
+  });
+
+  it("passes a thrown HTTPException's own response through instead of flattening it", async () => {
+    handleRequest.mockImplementationOnce(() => {
+      throw new HTTPException(418, { message: "teapot" });
+    });
+
+    const res = await app.fetch(new Request("http://api.test/v1/teapot"));
+
+    expect(res.status).toBe(418);
   });
 });

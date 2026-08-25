@@ -6,18 +6,20 @@ import * as Sentry from "@sentry/node";
 import { app } from "~/app";
 import { logError, logInfo } from "~/lib/logging";
 
-// Equivalent of Next's `onRequestError` instrumentation hook: the last-resort
-// catch for anything that throws out of a handler unhandled.
-app.onError((err, c) => {
-  logError(
-    "api.app.unhandled_error",
-    { path: c.req.path, method: c.req.method },
-    err,
-  );
-  return c.text("Internal Server Error", 500);
-});
+// `Number(process.env.PORT)` silently produces 0 (empty string) or NaN
+// (non-numeric) for a misconfigured PORT, and @hono/node-server passes either
+// straight to Node's net.Server.listen, which binds an arbitrary ephemeral
+// port instead of the intended service port. Fail startup loudly instead.
+function resolvePort(raw: string | undefined): number {
+  if (raw === undefined || raw === "") return 3001;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`Invalid PORT env var: ${JSON.stringify(raw)}`);
+  }
+  return parsed;
+}
 
-const port = Number(process.env.PORT ?? 3001);
+const port = resolvePort(process.env.PORT);
 const server = serve({ fetch: app.fetch, port });
 
 // Cloud Run sends SIGTERM with a ~10s grace window before SIGKILL — force-exit

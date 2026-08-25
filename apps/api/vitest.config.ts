@@ -19,10 +19,10 @@ export default defineConfig({
       exclude: [...coverageExclude, "src/server.ts", "src/instrument.ts"],
       thresholds: {
         autoUpdate: true,
-        statements: 98.95,
+        statements: 99.02,
         branches: 100,
-        functions: 93.75,
-        lines: 98.93,
+        functions: 94.11,
+        lines: 99,
       },
     },
     exclude: [

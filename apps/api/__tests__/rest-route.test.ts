@@ -46,8 +46,14 @@ vi.mock("@orpc/openapi/fetch", () => ({
   },
 }));
 
+// Shape of the interceptor's options as oRPC actually calls it:
+// StandardLazyRequest carries `url` as a parsed URL and `method` as a string,
+// not a raw Request.
 interface Interceptors {
-  interceptors: ((error: unknown) => void)[];
+  interceptors: ((
+    error: unknown,
+    options: { request: { url: URL; method: string } },
+  ) => void)[];
 }
 
 const importHandler = () => import("../src/handler");
@@ -190,18 +196,28 @@ describe("handleRequest", () => {
       const openApiOptions = openApiCtor.mock.calls[0]![1] as Interceptors;
 
       const rpcError = new Error("rpc boom");
-      rpcOptions.interceptors[0]!(rpcError);
+      rpcOptions.interceptors[0]!(rpcError, {
+        request: {
+          url: new URL("http://api.test/v1/rpc-path"),
+          method: "POST",
+        },
+      });
       expect(logError).toHaveBeenCalledWith(
         "api.rpc.handler_error",
-        {},
+        { path: "/v1/rpc-path", method: "POST" },
         rpcError,
       );
 
       const openApiError = new Error("openapi boom");
-      openApiOptions.interceptors[0]!(openApiError);
+      openApiOptions.interceptors[0]!(openApiError, {
+        request: {
+          url: new URL("http://api.test/v1/openapi-path"),
+          method: "GET",
+        },
+      });
       expect(logError).toHaveBeenCalledWith(
         "api.openapi.handler_error",
-        {},
+        { path: "/v1/openapi-path", method: "GET" },
         openApiError,
       );
     });

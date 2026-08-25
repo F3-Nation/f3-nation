@@ -21,8 +21,12 @@ const corsPlugin = new CORSPlugin({
 const handler = new RPCHandler(router, {
   plugins: [corsPlugin, new RequestHeadersPlugin()],
   interceptors: [
-    onError((error) => {
-      logError("api.rpc.handler_error", {}, error);
+    onError((error, { request }) => {
+      logError(
+        "api.rpc.handler_error",
+        { path: request.url.pathname, method: request.method },
+        error,
+      );
     }),
   ],
 });
@@ -30,8 +34,12 @@ const handler = new RPCHandler(router, {
 const openAPIHandler = new OpenAPIHandler(router, {
   plugins: [corsPlugin, new RequestHeadersPlugin()],
   interceptors: [
-    onError((error) => {
-      logError("api.openapi.handler_error", {}, error);
+    onError((error, { request }) => {
+      logError(
+        "api.openapi.handler_error",
+        { path: request.url.pathname, method: request.method },
+        error,
+      );
     }),
   ],
 });
