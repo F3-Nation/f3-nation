@@ -206,15 +206,24 @@ def send_error_response(body: dict, client: WebClient, error: str) -> None:
     error_msg = constants.ERROR_FORM_MESSAGE_TEMPLATE.format(error=error)
     error_form.set_initial_values({actions.ERROR_FORM_MESSAGE: error_msg})
 
-    # if safe_get(body, actions.LOADING_ID):
-    #     update_view_id = safe_get(body, actions.LOADING_ID)
-    #     error_form.update_modal(
-    #         client=client,
-    #         view_id=update_view_id,
-    #         title_text="F3 Nation Error",
-    #         submit_button_text="None",
-    #         callback_id="error-id",
-    #     )
-    # else:
+    loading_view_id = safe_get(body, actions.LOADING_ID)
+    if loading_view_id:
+        try:
+            error_form.update_modal(
+                client=client,
+                view_id=loading_view_id,
+                title_text="F3 Nation Error",
+                submit_button_text="None",
+                callback_id="error-id",
+                raise_on_error=True,
+            )
+            current_view_id = safe_get(body, "view", "id")
+            if current_view_id is None or current_view_id == loading_view_id:
+                return
+        except Exception:
+            # BlockView.update_modal records a sanitized failure. Fall through to a DM.
+            pass
+
     blocks = [block.as_form_field() for block in error_form.blocks]
-    client.chat_postMessage(channel=safe_get(body, "user", "id"), text=error, blocks=blocks)
+    user_id = safe_get(body, "user", "id") or safe_get(body, "user_id")
+    client.chat_postMessage(channel=user_id, text=error, blocks=blocks)

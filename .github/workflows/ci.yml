@@ -292,6 +292,53 @@ jobs:
       - uses: ./.github/actions/setup
       - run: pnpm typecheck
 
+  # Regenerates Drizzle migrations from packages/db/drizzle/schema.ts and fails
+  # if the output differs from what's committed. Exists because a snapshot can
+  # silently go stale in an unrelated PR (a contributor's local schema.ts is
+  # behind main when they run `drizzle-kit generate`, so the new snapshot bakes
+  # in an out-of-date field) and then sit unnoticed on main for weeks until the
+  # next `generate` run re-emits the transformation as a spurious "new"
+  # migration. That happened with the request_type enum: it drifted in the
+  # 0018/0019 snapshots and only surfaced when PR #845 generated 0020, an exact
+  # duplicate of 0017. This job catches that class of drift at PR time instead.
+  db-schema-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Regenerate migrations and diff against what's committed
+        working-directory: packages/db
+        run: |
+          # A rename-shaped change (column/table/enum) needs drizzle-kit to
+          # disambiguate rename-vs-drop+create interactively. In CI's non-TTY
+          # shell that prompt throws instead -- but only to stderr, with exit
+          # 0 and no file written, so a plain exit-code/git-status check goes
+          # green while the migration silently never gets generated. Catch
+          # both: a real crash, and this silent-success-with-stderr shape.
+          if ! pnpm exec drizzle-kit generate 2>drizzle-kit-stderr.log; then
+            cat drizzle-kit-stderr.log >&2
+            echo "::error::drizzle-kit generate exited non-zero"
+            exit 1
+          fi
+          if [ -s drizzle-kit-stderr.log ]; then
+            echo "::error::drizzle-kit generate wrote to stderr but reported success (exit 0). This happens when it needs an interactive prompt (e.g. disambiguating a column/table/enum rename) that CI's non-TTY shell can't answer. Resolve the rename locally, where drizzle-kit can prompt you, then commit the generated migration."
+            cat drizzle-kit-stderr.log >&2
+            exit 1
+          fi
+          rm -f drizzle-kit-stderr.log
+          if [ -n "$(git status --porcelain -- drizzle)" ]; then
+            echo "::error::drizzle-kit generate produced migration/snapshot output that doesn't match what's committed under packages/db/drizzle. This usually means schema.ts changed without regenerating migrations, or a stale local snapshot got committed on an earlier PR. Run 'pnpm --filter @acme/db generate' on a branch rebased on latest main, review the diff, and commit the result."
+            git status --porcelain -- drizzle
+            # Intent-to-add so brand-new migration files (the most likely
+            # failure shape - see #862) show their full content below instead
+            # of being silently omitted: `git diff` skips untracked files.
+            git add -N -- drizzle
+            git --no-pager diff -- drizzle
+            exit 1
+          fi
+
   build:
     runs-on: ubuntu-latest
     steps:
@@ -305,7 +352,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:18.4-trixie@sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a
+        image: postgres:18.4-trixie@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres

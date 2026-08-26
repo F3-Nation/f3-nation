@@ -7,6 +7,7 @@ import { router } from "@acme/api";
 import { API_PREFIX_V1 } from "@acme/shared/app/constants";
 import { Client, Header } from "@acme/shared/common/enums";
 
+import { getBaseUrl } from "~/lib/get-base-url";
 import { logError } from "~/lib/logging";
 
 const corsPlugin = new CORSPlugin({
@@ -38,16 +39,7 @@ const openAPIHandler = new OpenAPIHandler(router, {
 async function handleRequest(request: Request) {
   // Redirect to /docs if the request is for /
   if (new URL(request.url).pathname === "/") {
-    const envBase = process.env.NEXT_PUBLIC_API_URL ?? undefined;
-    const forwardedProto =
-      request.headers.get("x-forwarded-proto") ?? undefined;
-    const forwardedHost = request.headers.get("x-forwarded-host") ?? undefined;
-    const url = new URL(request.url);
-    const host = forwardedHost ?? request.headers.get("host") ?? url.host;
-    const proto = forwardedProto ?? url.protocol.replace(":", "");
-    const derivedBase = `${proto}://${host}`;
-    const baseUrl = (envBase ?? derivedBase).replace(/\/$/, "");
-    return Response.redirect(`${baseUrl}/docs`);
+    return Response.redirect(`${getBaseUrl(request)}/docs`);
   }
 
   // Check if this is an oRPC client request.
