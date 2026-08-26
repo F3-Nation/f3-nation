@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import duckdb
@@ -99,7 +99,7 @@ def test_areas_and_sectors_keep_inactive_rows_and_order_nested_values():
 def test_aos_observe_only_active_non_null_pax_events_and_has_nested_schema():
     db = fixture()
     row = run(db, "pv_aos.sql")[0]
-    assert row[0].isoformat() == "2026-08-26T07:00:00-05:00"
+    assert row[0] == datetime(2026, 8, 26, 12, tzinfo=timezone.utc)
     assert row[1:7] == (905, "AO", 903, "Region", "ao-logo", False)
     assert row[7] == [
         {"type_id": 3, "type_name": "Jog"},
@@ -120,7 +120,7 @@ def test_upcoming_uses_strict_date_cutoff_and_ordered_q_list():
     rows_600 = [row for row in rows if row[1] == date(2026, 8, 27)]
     assert {row[9] for row in rows_600} == {"first_f", "second_f"}
     row = next(row for row in rows_600 if row[9] == "first_f")
-    assert row[0].isoformat() == "2026-08-26T07:00:00-05:00"
+    assert row[0] == datetime(2026, 8, 26, 12, tzinfo=timezone.utc)
     assert row[1:] == (
         date(2026, 8, 27),
         "06:00",
