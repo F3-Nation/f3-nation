@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 
 from google.api_core.exceptions import NotFound, PreconditionFailed
 
+from .materializations import MATERIALIZATIONS_BY_NAME, Materialization
 from .settings import Settings
 
 
@@ -55,16 +56,17 @@ def _metadata(blob: Any, bucket: str, name: str) -> ObjectMetadata:
 
 
 class GcsPublisher:
-    def __init__(self, client: Any, settings: Settings) -> None:
+    def __init__(self, client: Any, settings: Settings, materialization: Materialization) -> None:
         self.client = client
-        self.bucket_name, self.prefix = _prefix_parts(settings.gcs_prefix)
+        self.materialization = materialization
+        self.bucket_name, self.prefix = _prefix_parts(settings.target(materialization)[0])
         self.bucket = client.bucket(self.bucket_name)
 
     def _name(self, run_id: str, filename: str) -> str:
         return f"{self.prefix}/{run_id}/{filename}"
 
     def upload_parquet(self, run_id: str, path: Path) -> ObjectMetadata:
-        name = self._name(run_id, "regions.parquet")
+        name = self._name(run_id, self.materialization.output_filename)
         blob = self.bucket.blob(name)
         blob.upload_from_filename(str(path), if_generation_match=0, checksum="crc32c")
         return _metadata(blob, self.bucket_name, name)
@@ -104,9 +106,10 @@ class GcsPublisher:
 
 
 class BigQueryPublisher:
-    def __init__(self, client: Any, settings: Settings) -> None:
+    def __init__(self, client: Any, settings: Settings, materialization: Materialization) -> None:
         self.client = client
-        self.table = settings.bigquery_table
+        self.materialization = materialization
+        self.table = settings.target(materialization)[1]
 
     def update_external_table(self, parquet_uri: str) -> str | None:
         project, dataset, table = self.table.split(".")
@@ -126,10 +129,13 @@ def build_manifest(
     row_count: int,
     source_read_at: str,
     published_at: str,
+    materialization: Materialization,
 ) -> dict[str, Any]:
+    if MATERIALIZATIONS_BY_NAME.get(materialization.name) is not materialization:
+        raise ValueError("materialization is not in the approved registry")
     committed_run_prefix = parquet.uri.rsplit("/", 1)[0]
     return {
-        "schema_version": "pv_regions.v1",
+        "schema_version": materialization.schema_version,
         "run_id": run_id,
         "committed_run_prefix": committed_run_prefix,
         "file_count": 1,
@@ -164,17 +170,26 @@ def publish(
     row_count: int,
     source_read_at: str,
     published_at: str,
+    materialization: Materialization,
     emit: Callable[[str, dict[str, Any]], None] | None = None,
 ) -> PublicationStatus:
     started = time.perf_counter()
+    if (
+        MATERIALIZATIONS_BY_NAME.get(materialization.name) is not materialization
+        or gcs.materialization is not materialization
+        or bigquery.materialization is not materialization
+    ):
+        raise ValueError("publication components use different materialization definitions")
+    definition = materialization
     parquet = gcs.upload_parquet(run_id, parquet_path)
-    manifest = build_manifest(run_id, parquet, row_count, source_read_at, published_at)
+    manifest = build_manifest(run_id, parquet, row_count, source_read_at, published_at, definition)
     manifest_object = gcs.upload_manifest(run_id, manifest)
     if emit is not None:
         emit(
             "analytics.etl.gcs_committed",
             {
                 "run_id": run_id,
+                "materialization": definition.name,
                 "file_count": manifest["file_count"],
                 "byte_count": manifest["byte_count"],
                 "duration_ms": round((time.perf_counter() - started) * 1000, 3),
@@ -185,7 +200,7 @@ def publish(
     if emit is not None:
         emit(
             "analytics.etl.bigquery_updated",
-            {"run_id": run_id, "job_id": bigquery_job_id},
+            {"run_id": run_id, "job_id": bigquery_job_id, "materialization": definition.name},
         )
     try:
         pointer = gcs.advance_current(manifest_object, expected_generation)
@@ -194,6 +209,7 @@ def publish(
                 "analytics.etl.pointer_advanced",
                 {
                     "run_id": run_id,
+                    "materialization": definition.name,
                     "pointer_generation": pointer.generation,
                     "expected_pointer_generation": expected_generation,
                 },
@@ -203,6 +219,7 @@ def publish(
         raise PointerConflictError(
             {
                 "stage": "pointer_update",
+                "materialization": definition.name,
                 "run_id": run_id,
                 "parquet_uri": parquet.uri,
                 "parquet_generation": parquet.generation,

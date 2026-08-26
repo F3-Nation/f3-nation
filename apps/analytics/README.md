@@ -9,10 +9,9 @@ precondition; this is intentionally not a cross-service atomic transaction.
 DuckDB's PostgreSQL extension is loaded from an explicit prebundled path; the
 runtime never runs `INSTALL`.
 
-Runtime targets are deliberately limited to two environments. `nonprod` uses
-`gs://f3-analytics-nonprod/parquets/pv_regions` and
-`f3data.paxVaultDuckStaging.pv_regions`; `production` uses
-`gs://analytics/parquets/pv_regions` and `f3data.paxVaultDuck.pv_regions`.
+Runtime targets are deliberately limited to two environments. Approved GCS
+prefixes and BigQuery tables are selected from the immutable materialization
+registry; they are never accepted as environment or CLI output targets.
 `local` and `test` are explicit nonprod aliases only. Cloud Run uses the
 matching Cloud SQL Unix socket; an approved local run may instead use the
 documented proxy at `localhost` on a developer-chosen port.

@@ -6,6 +6,7 @@ from pathlib import Path
 import duckdb
 import pytest
 
+from analytics.materializations import MATERIALIZATION_REGISTRY
 from analytics.source import materialize
 
 
@@ -22,13 +23,11 @@ def make_source() -> duckdb.DuckDBPyConnection:
         "is_active BOOLEAN, pax_count INTEGER, meta JSON)"
     )
     connection.execute(
-        "CREATE TABLE pg.public.event_instances_x_event_types "
-        "(event_instance_id INTEGER, event_type_id INTEGER)"
+        "CREATE TABLE pg.public.event_instances_x_event_types (event_instance_id INTEGER, event_type_id INTEGER)"
     )
     connection.execute("CREATE TABLE pg.public.event_types (id INTEGER, name VARCHAR)")
     connection.execute(
-        "CREATE TABLE pg.public.event_tags_x_event_instances "
-        "(event_instance_id INTEGER, event_tag_id INTEGER)"
+        "CREATE TABLE pg.public.event_tags_x_event_instances (event_instance_id INTEGER, event_tag_id INTEGER)"
     )
     connection.execute("CREATE TABLE pg.public.event_tags (id INTEGER, name VARCHAR)")
     connection.executemany(
@@ -64,7 +63,12 @@ def make_source() -> duckdb.DuckDBPyConnection:
 def test_region_materialization_semantics_and_nested_lists(tmp_path: Path):
     connection = make_source()
     output = tmp_path / "regions.parquet"
-    assert materialize(connection, output, "2026-01-01T00:00:00+00:00") == 3
+    assert (
+        materialize(
+            connection, output, MATERIALIZATION_REGISTRY["pv_regions"], "2026-01-01T00:00:00+00:00", "2026-01-01"
+        )
+        == 3
+    )
     rows = connection.execute("SELECT * FROM read_parquet(?) ORDER BY region_id", [str(output)]).fetchall()
     assert [row[0] for row in rows] == [1, 2, 3]
     assert rows[0][0:5] == (1, "Region One", 10, "Area", "https://logo")
@@ -97,7 +101,13 @@ def test_malformed_exclusion_flag_fails_in_materialization(tmp_path: Path):
         [json.dumps({"exclude_from_pax_vault": "yes"})],
     )
     with pytest.raises(Exception, match="exclude_from_pax_vault"):
-        materialize(connection, tmp_path / "malformed.parquet", "2026-01-01T00:00:00+00:00")
+        materialize(
+            connection,
+            tmp_path / "malformed.parquet",
+            MATERIALIZATION_REGISTRY["pv_regions"],
+            "2026-01-01T00:00:00+00:00",
+            "2026-01-01",
+        )
 
 
 def test_malformed_flag_on_an_ineligible_event_does_not_fail(tmp_path: Path):
@@ -106,4 +116,13 @@ def test_malformed_flag_on_an_ineligible_event_does_not_fail(tmp_path: Path):
         "UPDATE pg.public.event_instances SET meta = ? WHERE id = 4",
         [json.dumps({"exclude_from_pax_vault": "yes"})],
     )
-    assert materialize(connection, tmp_path / "regions.parquet", "2026-01-01T00:00:00+00:00") == 3
+    assert (
+        materialize(
+            connection,
+            tmp_path / "regions.parquet",
+            MATERIALIZATION_REGISTRY["pv_regions"],
+            "2026-01-01T00:00:00+00:00",
+            "2026-01-01",
+        )
+        == 3
+    )

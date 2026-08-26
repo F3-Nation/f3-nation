@@ -10,7 +10,8 @@ from google.api_core.exceptions import NotFound, PreconditionFailed
 import analytics.pipeline as pipeline_module
 from analytics.lease import GcsLease, LeaseActiveError
 from analytics.logging import JsonLogger
-from analytics.pipeline import run
+from analytics.materializations import MATERIALIZATION_REGISTRY
+from analytics.pipeline import BatchRunError, run
 from analytics.settings import Settings
 
 
@@ -66,8 +67,6 @@ def make_settings(tmp_path):
             "ANALYTICS_POSTGRES_USER": "analytics",
             "ANALYTICS_POSTGRES_PASSWORD": "password",
             "ANALYTICS_POSTGRES_DATABASE": "f3_staging",
-            "ANALYTICS_GCS_PREFIX": "gs://f3-analytics-nonprod/parquets/pv_regions",
-            "ANALYTICS_BIGQUERY_TABLE": "f3data.paxVaultDuckStaging.pv_regions",
         }
     )
 
@@ -77,7 +76,7 @@ def test_lease_acquire_rejects_active_and_takes_over_expired(tmp_path):
     LeaseBlob.next_generation = 0
     storage = LeaseStorage()
     settings = make_settings(tmp_path)
-    lease = GcsLease(storage, settings)
+    lease = GcsLease(storage, settings, MATERIALIZATION_REGISTRY["pv_regions"])
     now = datetime(2026, 1, 1, tzinfo=timezone.utc)
     first = lease.acquire(settings, "run-a", {"job": "job", "execution": "exec"}, now)
     with pytest.raises(LeaseActiveError):
@@ -93,7 +92,7 @@ def test_lease_release_is_conditional_state_update_not_delete(tmp_path):
     LeaseBlob.objects.clear()
     LeaseBlob.next_generation = 0
     settings = make_settings(tmp_path)
-    lease = GcsLease(LeaseStorage(), settings)
+    lease = GcsLease(LeaseStorage(), settings, MATERIALIZATION_REGISTRY["pv_regions"])
     handle = lease.acquire(settings, "run-a", {}, datetime(2026, 1, 1, tzinfo=timezone.utc))
     released = lease.release(handle, datetime(2026, 1, 1, 1, tzinfo=timezone.utc))
     payload = json.loads(LeaseBlob.objects["parquets/pv_regions/lease.json"].content)
@@ -106,7 +105,7 @@ def test_active_lease_rejection_happens_before_source_connection(tmp_path):
     LeaseBlob.objects.clear()
     LeaseBlob.next_generation = 0
     settings = make_settings(tmp_path)
-    lease = GcsLease(LeaseStorage(), settings)
+    lease = GcsLease(LeaseStorage(), settings, MATERIALIZATION_REGISTRY["pv_regions"])
     lease.acquire(settings, "existing", {}, datetime.now(timezone.utc))
     called = []
 
@@ -114,14 +113,16 @@ def test_active_lease_rejection_happens_before_source_connection(tmp_path):
         called.append(True)
         raise AssertionError("source connection must not be opened")
 
-    with pytest.raises(LeaseActiveError):
+    with pytest.raises(BatchRunError) as raised:
         run(
             settings,
             LeaseStorage(),
             object(),
             connection_factory=connection_factory,
             run_id="blocked",
+            materializations=("pv_regions",),
         )
+    assert isinstance(raised.value.failures["pv_regions"], LeaseActiveError)
     assert called == []
 
 
@@ -137,6 +138,7 @@ def test_cleanup_failures_are_logged_without_masking_primary_failure(monkeypatch
             raise RuntimeError("close failed")
 
     monkeypatch.setattr(pipeline_module, "attach_postgres", lambda connection, settings: None)
+
     def fail_materialize(*args):
         raise ValueError("source failed")
 
@@ -145,7 +147,7 @@ def test_cleanup_failures_are_logged_without_masking_primary_failure(monkeypatch
 
     monkeypatch.setattr(pipeline_module, "materialize", fail_materialize)
     monkeypatch.setattr(pipeline_module.GcsLease, "release", fail_release)
-    with pytest.raises(ValueError, match="source failed"):
+    with pytest.raises(BatchRunError) as raised:
         run(
             settings,
             LeaseStorage(),
@@ -154,6 +156,8 @@ def test_cleanup_failures_are_logged_without_masking_primary_failure(monkeypatch
             logger=logger,
             run_id="cleanup-run",
         )
+    assert isinstance(raised.value.failures["pv_regions"], ValueError)
+    assert str(raised.value.failures["pv_regions"]) == "source failed"
     records = [json.loads(line) for line in stream.getvalue().splitlines()]
     cleanup_records = [record for record in records if record["event"] == "analytics.etl.cleanup_failed"]
     assert {record["context"]["cleanup"] for record in cleanup_records} == {"connection_close", "lease_release"}

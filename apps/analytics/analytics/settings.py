@@ -7,24 +7,18 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from .materializations import MATERIALIZATIONS_BY_NAME, Materialization
+
 
 class SettingsError(ValueError):
     """Raised when required analytics configuration is invalid."""
 
 
 _ENVIRONMENT = re.compile(r"^(?:nonprod|production|local|test)$")
-_GCS_PREFIX = re.compile(r"^gs://([a-z0-9][a-z0-9._-]{1,61}[a-z0-9])/(?!/)[^\s]+$")
-_BQ_IDENTIFIER = re.compile(r"^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$")
 _PG_DATABASE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$")
 _PG_SOCKET = re.compile(r"^/cloudsql/f3data:us-central1:f3data(?:-nonprod)?$")
 _PG_PORT = re.compile(r"^[0-9]+$")
 
-APPROVED_GCS_PREFIX = "gs://analytics/parquets/pv_regions"
-APPROVED_BIGQUERY_TABLE = "f3data.paxVaultDuck.pv_regions"
-APPROVED_TARGETS = {
-    "nonprod": ("gs://f3-analytics-nonprod/parquets/pv_regions", "f3data.paxVaultDuckStaging.pv_regions"),
-    "production": (APPROVED_GCS_PREFIX, APPROVED_BIGQUERY_TABLE),
-}
 APPROVED_DATABASES = {"nonprod": "f3_staging", "production": "f3_prod"}
 _ENVIRONMENT_ALIASES = {"local": "nonprod", "test": "nonprod"}
 
@@ -40,8 +34,11 @@ class Settings:
     postgres_user: str
     postgres_password: str
     postgres_database: str
-    gcs_prefix: str
-    bigquery_table: str
+
+    def target(self, materialization: Materialization) -> tuple[str, str]:
+        if MATERIALIZATIONS_BY_NAME.get(materialization.name) is not materialization:
+            raise SettingsError("materialization is not in the approved registry")
+        return materialization.target(self.environment)
 
     @classmethod
     def from_env(cls, environ: dict[str, str] | None = None) -> "Settings":
@@ -55,8 +52,6 @@ class Settings:
         postgres_user = values.get("ANALYTICS_POSTGRES_USER", "").strip()
         postgres_password = values.get("ANALYTICS_POSTGRES_PASSWORD", "")
         postgres_database = values.get("ANALYTICS_POSTGRES_DATABASE", "").strip()
-        gcs_prefix = values.get("ANALYTICS_GCS_PREFIX", "").strip()
-        bigquery_table = values.get("ANALYTICS_BIGQUERY_TABLE", "").strip()
         if not _ENVIRONMENT.fullmatch(environment):
             raise SettingsError("ANALYTICS_ENVIRONMENT must be a safe token")
         if not extension_directory:
@@ -67,17 +62,7 @@ class Settings:
             raise SettingsError("all ANALYTICS_POSTGRES_* connection values are required")
         if not _PG_DATABASE.fullmatch(postgres_database):
             raise SettingsError("ANALYTICS_POSTGRES_DATABASE must be a safe database component")
-        if not _GCS_PREFIX.fullmatch(gcs_prefix):
-            raise SettingsError("ANALYTICS_GCS_PREFIX must be a valid gs:// bucket prefix")
-        if not _BQ_IDENTIFIER.fullmatch(bigquery_table):
-            raise SettingsError("ANALYTICS_BIGQUERY_TABLE must be project.dataset.table")
-        if environment not in APPROVED_TARGETS:
-            target_environment = _ENVIRONMENT_ALIASES[environment]
-        else:
-            target_environment = environment
-        expected_gcs, expected_bigquery = APPROVED_TARGETS[target_environment]
-        if (gcs_prefix, bigquery_table) != (expected_gcs, expected_bigquery):
-            raise SettingsError(f"publication targets do not match {target_environment}")
+        target_environment = _ENVIRONMENT_ALIASES.get(environment, environment)
 
         tcp_configured = bool(postgres_host or postgres_port)
         if environment != "local" and tcp_configured:
@@ -138,6 +123,4 @@ class Settings:
             postgres_user,
             postgres_password,
             postgres_database,
-            gcs_prefix,
-            bigquery_table,
         )

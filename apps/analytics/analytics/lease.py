@@ -9,6 +9,7 @@ from typing import Any, Mapping
 
 from google.api_core.exceptions import NotFound, PreconditionFailed
 
+from .materializations import Materialization
 from .settings import Settings
 
 LEASE_TTL = timedelta(minutes=90)
@@ -25,6 +26,10 @@ class LeaseActiveError(RuntimeError):
 class LeaseConflictError(RuntimeError):
     """A conditional lease operation lost a race."""
 
+    def __init__(self, message: str, metadata: dict[str, Any] | None = None) -> None:
+        super().__init__(message)
+        self.metadata = metadata or {}
+
 
 @dataclass(frozen=True, slots=True)
 class LeaseHandle:
@@ -37,9 +42,10 @@ def _iso(value: datetime) -> str:
 
 
 class GcsLease:
-    def __init__(self, storage_client: Any, settings: Settings) -> None:
-        bucket_name = settings.gcs_prefix.removeprefix("gs://").split("/", 1)[0]
-        prefix = settings.gcs_prefix.split("/", 3)[-1]
+    def __init__(self, storage_client: Any, settings: Settings, materialization: Materialization) -> None:
+        self.materialization = materialization
+        bucket_name = settings.target(materialization)[0].removeprefix("gs://").split("/", 1)[0]
+        prefix = settings.target(materialization)[0].split("/", 3)[-1]
         self.blob = storage_client.bucket(bucket_name).blob(f"{prefix}/lease.json")
 
     @staticmethod
@@ -72,7 +78,10 @@ class GcsLease:
             try:
                 return self._write(payload, 0)
             except PreconditionFailed as error:
-                raise LeaseConflictError("publication lease acquisition raced") from error
+                raise LeaseConflictError(
+                    "publication lease acquisition raced",
+                    {"stage": "lease_acquire", "materialization": self.materialization.name, "attempt_run_id": run_id},
+                ) from error
 
         current = json.loads(self.blob.download_as_text())
         expires_at = datetime.fromisoformat(current["expires_at"].replace("Z", "+00:00"))
@@ -81,15 +90,19 @@ class GcsLease:
                 {
                     "stage": "lease_acquire",
                     "environment": current.get("environment"),
-                    "run_id": current.get("run_id"),
+                    "lease_owner_run_id": current.get("run_id"),
                     "expires_at": current.get("expires_at"),
                     "generation": str(self.blob.generation),
+                    "materialization": self.materialization.name,
                 }
             )
         try:
             return self._write(payload, int(self.blob.generation))
         except PreconditionFailed as error:
-            raise LeaseConflictError("expired publication lease takeover raced") from error
+            raise LeaseConflictError(
+                "expired publication lease takeover raced",
+                {"stage": "lease_acquire", "materialization": self.materialization.name, "attempt_run_id": run_id},
+            ) from error
 
     def release(self, handle: LeaseHandle, now: datetime) -> LeaseHandle:
         released = dict(handle.payload)
@@ -97,7 +110,9 @@ class GcsLease:
         try:
             return self._write(released, int(handle.generation))
         except (NotFound, PreconditionFailed) as error:
-            raise LeaseConflictError("publication lease release lost its generation race") from error
+            raise LeaseConflictError(
+                "publication lease release lost its generation race", {"materialization": self.materialization.name}
+            ) from error
 
 
 def cloud_run_context(environ: Mapping[str, str]) -> dict[str, str]:

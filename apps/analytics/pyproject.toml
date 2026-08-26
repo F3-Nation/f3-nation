@@ -8,6 +8,7 @@ dependencies = [
     "duckdb==1.4.3",
     "google-cloud-bigquery>=3.25.0,<4.0.0",
     "google-cloud-storage>=2.18.0,<3.0.0",
+    "pytz>=2024.1,<2027.0",
 ]
 
 [dependency-groups]
@@ -37,3 +38,6 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["analytics*"]
+
+[tool.setuptools.package-data]
+analytics = ["sql/*.sql"]

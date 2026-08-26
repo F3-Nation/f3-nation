@@ -27,8 +27,6 @@ def extension_env(tmp_path):
         "ANALYTICS_POSTGRES_USER": "analytics",
         "ANALYTICS_POSTGRES_PASSWORD": "password",
         "ANALYTICS_POSTGRES_DATABASE": "f3_staging",
-        "ANALYTICS_GCS_PREFIX": "gs://f3-analytics-nonprod/parquets/pv_regions",
-        "ANALYTICS_BIGQUERY_TABLE": "f3data.paxVaultDuckStaging.pv_regions",
     }
 
 
@@ -65,11 +63,15 @@ def test_settings_reject_adversarial_postgres_components(tmp_path):
         values = extension_env(tmp_path)
 
 
-def test_settings_pin_publication_targets(tmp_path):
+def test_settings_derive_publication_targets_from_registry(tmp_path):
     values = extension_env(tmp_path)
-    values["ANALYTICS_GCS_PREFIX"] += "/other"
-    with pytest.raises(SettingsError):
-        Settings.from_env(values)
+    settings = Settings.from_env(values)
+    from analytics.materializations import MATERIALIZATION_REGISTRY
+
+    assert settings.target(MATERIALIZATION_REGISTRY["pv_regions"]) == (
+        "gs://f3-analytics-nonprod/parquets/pv_regions",
+        "f3data.paxVaultDuckStaging.pv_regions",
+    )
 
 
 def local_tcp_env(tmp_path):
@@ -83,8 +85,7 @@ def local_tcp_env(tmp_path):
 
 def test_local_tcp_endpoint_is_accepted_and_quoted(tmp_path):
     settings = Settings.from_env(
-        local_tcp_env(tmp_path)
-        | {"ANALYTICS_POSTGRES_PASSWORD": "p'a;ss", "ANALYTICS_POSTGRES_PORT": "15432"}
+        local_tcp_env(tmp_path) | {"ANALYTICS_POSTGRES_PASSWORD": "p'a;ss", "ANALYTICS_POSTGRES_PORT": "15432"}
     )
     assert settings.postgres_host == "localhost"
     assert settings.postgres_port == 15432
@@ -134,8 +135,6 @@ def test_production_rejects_tcp_configuration(tmp_path):
         {
             "ANALYTICS_ENVIRONMENT": "production",
             "ANALYTICS_POSTGRES_DATABASE": "f3_prod",
-            "ANALYTICS_GCS_PREFIX": "gs://analytics/parquets/pv_regions",
-            "ANALYTICS_BIGQUERY_TABLE": "f3data.paxVaultDuck.pv_regions",
             "ANALYTICS_POSTGRES_HOST": "localhost",
             "ANALYTICS_POSTGRES_PORT": "5433",
         }
@@ -152,8 +151,6 @@ def test_production_target_is_distinct_and_socket_pinned(tmp_path):
             "ANALYTICS_ENVIRONMENT": "production",
             "ANALYTICS_POSTGRES_SOCKET_DIR": "/cloudsql/f3data:us-central1:f3data",
             "ANALYTICS_POSTGRES_DATABASE": "f3_prod",
-            "ANALYTICS_GCS_PREFIX": "gs://analytics/parquets/pv_regions",
-            "ANALYTICS_BIGQUERY_TABLE": "f3data.paxVaultDuck.pv_regions",
         }
     )
     assert Settings.from_env(values).environment == "production"
@@ -269,8 +266,6 @@ def test_cli_success_returns_zero(monkeypatch, tmp_path, capsys):
     monkeypatch.setenv("ANALYTICS_POSTGRES_USER", "analytics")
     monkeypatch.setenv("ANALYTICS_POSTGRES_PASSWORD", "password")
     monkeypatch.setenv("ANALYTICS_POSTGRES_DATABASE", "f3_staging")
-    monkeypatch.setenv("ANALYTICS_GCS_PREFIX", "gs://f3-analytics-nonprod/parquets/pv_regions")
-    monkeypatch.setenv("ANALYTICS_BIGQUERY_TABLE", "f3data.paxVaultDuckStaging.pv_regions")
     monkeypatch.setenv("DUCKDB_EXTENSION_DIR", str(tmp_path))
     extension = tmp_path / "postgres_scanner.duckdb_extension"
     extension.touch()
