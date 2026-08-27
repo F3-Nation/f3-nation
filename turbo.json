@@ -1,9 +1,9 @@
 {
   "$schema": "https://turborepo.org/schema.json",
   "globalDependencies": ["**/.env"],
-  "globalPassThroughEnv": ["UV_PYTHON"],
   "globalEnv": [
     "CI",
+    "UV_PYTHON",
     "NODE_ENV",
     "LOG_LEVEL",
     "SKIP_ENV_VALIDATION",
