@@ -81,6 +81,13 @@ export const authOptions: NextAuthConfig = {
         token.userId = Number(user.id);
         token.email = user.email ?? undefined;
         token.name = user.name;
+        // Stamped only on the actual sign-in call (user is only present
+        // here, never on later session-check calls that re-decode an
+        // existing token) — so this is the one true original-login
+        // timestamp for the session's whole lifetime, not "now" on every
+        // request. See types/next-auth.d.ts for why this matters for OIDC
+        // auth_time.
+        token.authTime = new Date().toISOString();
       }
 
       // Enrich with fresh DB data on each request
@@ -121,6 +128,7 @@ export const authOptions: NextAuthConfig = {
       return {
         ...session,
         onboardingCompleted: !!token.onboardingCompleted,
+        authTime: token.authTime,
       };
     },
   },

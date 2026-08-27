@@ -4,7 +4,7 @@ import type { RequestHeadersPluginContext } from "@orpc/server/plugins";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 
 import type { Session } from "@acme/auth";
-import { auth } from "@acme/auth";
+import { getSessionFromHeaders } from "@acme/auth";
 import { and, eq, gt, isNull, or, schema, sql } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 import { db } from "@acme/db/client";
@@ -46,7 +46,7 @@ const getDevMockSession = (): Session => ({
 // Effective limit = RATE_LIMIT_MAX_REQUESTS * number_of_instances.
 // For true distributed rate limiting, use Redis/Upstash instead.
 const RATE_LIMIT_WINDOW_MS = 60000; // 60 seconds
-const RATE_LIMIT_MAX_REQUESTS = isDevelopment ? 10000 : 200;
+const RATE_LIMIT_MAX_REQUESTS = isDevelopment ? 10000 : 500;
 
 // Keep expiry checks anchored to one canonical DB clock source to avoid
 // app-server clock skew and cross-check inconsistencies.
@@ -172,12 +172,12 @@ export const nationAdminProcedure = withSessionAndDb.use(
 const getSession = async ({ context }: { context: BaseContext }) => {
   let session: Session | null = null;
 
-  // Skip auth() call for SSG requests to allow static generation
+  // Skip session resolution for SSG requests to allow static generation
   // The SSG client uses API key auth instead of session auth
   const isSSGRequest =
     context.reqHeaders?.get(Header.Client) === Client.ORPC_SSG;
   if (!isSSGRequest) {
-    session = await auth();
+    session = await getSessionFromHeaders(context.reqHeaders ?? new Headers());
     if (session) return session;
   }
 

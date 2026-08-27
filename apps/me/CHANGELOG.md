@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.2.2](https://github.com/F3-Nation/f3-nation/compare/me@2.2.1...me@2.2.2) (2026-08-25)
+
+
+### Bug Fixes
+
+* **me:** move proxy.ts to src/ so Next.js actually loads it ([#866](https://github.com/F3-Nation/f3-nation/issues/866)) ([531bdd0](https://github.com/F3-Nation/f3-nation/commit/531bdd097e65abe6d583ae4e73dfe9495e5abb59))
+
+## [2.2.1](https://github.com/F3-Nation/f3-nation/compare/me@2.2.0...me@2.2.1) (2026-08-18)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.7.0
+    * @f3nation/sso-next bumped to 0.2.1
+  * devDependencies
+    * @f3nation/sso bumped to 0.4.0
+
 ## [2.2.0](https://github.com/F3-Nation/f3-nation/compare/me@2.1.4...me@2.2.0) (2026-08-12)
 
 
