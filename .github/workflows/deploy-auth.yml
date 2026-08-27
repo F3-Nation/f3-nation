@@ -31,7 +31,7 @@ jobs:
       dockerfile: apps/auth/Dockerfile
       staging_environment: auth-staging
       prod_environment: auth-production
-      staging_url: https://staging.auth.f3nation.com
+      staging_url: https://staging.auth2.f3nation.com
       prod_url: https://auth.f3nation.com
       smoke_test_app: auth
       app_label: "app: auth"
