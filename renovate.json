@@ -49,6 +49,7 @@
       "groupName": "Python dependencies (non-major)",
       "groupSlug": "python-non-major",
       "matchManagers": ["pep621"],
+      "rangeStrategy": "pin",
       "matchUpdateTypes": ["minor", "patch"]
     },
     {
