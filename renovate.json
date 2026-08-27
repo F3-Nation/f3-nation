@@ -39,12 +39,17 @@
       "enabled": false
     },
     {
-      "description": "Group Python (uv/pyproject.toml) minor and patch updates into one PR, separate from the npm non-major group — different lockfile, keeps uv.lock churn reviewable on its own. Never upgrade python runtime.",
+      "description": "Do not automatically upgrade the Python runtime requirement",
+      "matchManagers": ["pep621"],
+      "matchDepTypes": ["requires-python"],
+      "enabled": false
+    },
+    {
+      "description": "Group Python (uv/pyproject.toml) minor and patch updates into one PR, separate from the npm non-major group — different lockfile, keeps uv.lock churn reviewable on its own",
       "groupName": "Python dependencies (non-major)",
       "groupSlug": "python-non-major",
       "matchManagers": ["pep621"],
-      "matchUpdateTypes": ["minor", "patch"],
-      "excludeDepTypes": ["requires-python"]
+      "matchUpdateTypes": ["minor", "patch"]
     },
     {
       "description": "Do not auto-update the Python base image; adopt interpreter upgrades manually",
