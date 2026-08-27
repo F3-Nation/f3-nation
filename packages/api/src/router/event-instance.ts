@@ -133,8 +133,18 @@ export const eventInstanceRouter = {
           aoOrgId: z.coerce.number().optional(),
           regionOrgIds: z.array(z.coerce.number()).optional(),
           aoOrgIds: z.array(z.coerce.number()).optional(),
-          startDate: z.string().optional(),
-          startDateTo: z.string().optional(),
+          startDate: z
+            .string()
+            .optional()
+            .describe(
+              "Inclusive lower bound on the instance start date (YYYY-MM-DD). Only instances starting on or after this date are returned.",
+            ),
+          startDateTo: z
+            .string()
+            .optional()
+            .describe(
+              "Inclusive upper bound on the instance start date (YYYY-MM-DD). Only instances starting on or before this date are returned.",
+            ),
           seriesId: z.coerce.number().optional(),
           onlyStandalone: z.coerce.boolean().optional(), // Only instances without a series
         })
@@ -324,7 +334,9 @@ export const eventInstanceRouter = {
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
         : await query.orderBy(...sortedColumns).limit(limit);
 
-      const instancesWithLocation = instances.map((instance) => {
+      // Every instance is returned; `location` is a display label that falls back
+      // to the formatted address, and is null when neither is set.
+      const instancesWithLocationLabel = instances.map((instance) => {
         const locationName = instance.locationName?.trim() ?? "";
         return {
           ...instance,
@@ -334,7 +346,7 @@ export const eventInstanceRouter = {
       });
 
       return {
-        eventInstances: instancesWithLocation,
+        eventInstances: instancesWithLocationLabel,
         totalCount: instanceCount?.count ?? 0,
       };
     }),
