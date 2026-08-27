@@ -208,13 +208,16 @@ def test_pipeline_continues_after_each_dataset_failure(monkeypatch, tmp_path, fa
 
     monkeypatch.setattr(pipeline_module, "GcsLease", Lease)
     monkeypatch.setattr(pipeline_module, "attach_postgres", lambda *_args: None)
-    monkeypatch.setattr(pipeline_module, "connect", lambda _settings: Connection())
     monkeypatch.setattr(
         pipeline_module,
         "materialize",
-        lambda _c, _p, definition, *_args: _materialize(definition, failure_stage),
+        lambda _c, _p, definition, *_args: _materialize(definition, first, failure_stage),
     )
-    monkeypatch.setattr(pipeline_module, "publish", lambda *args, **kwargs: _publish(args, failure_stage))
+    monkeypatch.setattr(
+        pipeline_module,
+        "publish",
+        lambda gcs, _bigquery, *_args, **_kwargs: _publish(gcs.materialization, first, failure_stage),
+    )
 
     with pytest.raises(BatchRunError) as raised:
         run(configured, _Storage(), _BigQuery(), connection_factory=lambda _settings: Connection(), run_id="synthetic")
@@ -224,17 +227,16 @@ def test_pipeline_continues_after_each_dataset_failure(monkeypatch, tmp_path, fa
     assert len(closed) == (1 if failure_stage == "lease" else 2)
 
 
-def _materialize(definition, failure_stage):
-    if definition.name == "pv_regions" and failure_stage == "source":
+def _materialize(definition, selected_definition, failure_stage):
+    if definition is selected_definition and failure_stage == "source":
         raise RuntimeError("first source failed")
     return 1
 
 
-def _publish(args, failure_stage):
-    definition = args[7]
-    if definition.name == "pv_regions" and failure_stage == "pointer":
+def _publish(definition, selected_definition, failure_stage):
+    if definition is selected_definition and failure_stage == "pointer":
         raise PointerConflictError({"stage": "pointer_update"})
-    if definition.name == "pv_regions" and failure_stage == "bigquery":
+    if definition is selected_definition and failure_stage == "bigquery":
         raise RuntimeError(f"first {failure_stage} failed")
     return object()
 

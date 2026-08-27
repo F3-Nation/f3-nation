@@ -17,7 +17,7 @@ The runtime identities are separate (`analytics-etl-nonprod@f3data...` and
 
 ## Local testing and live end-to-end runs
 
-The default local test path is offline and safe. It needs Python 3.12+, `uv`,
+The default local test path is offline and safe. It needs Python 3.13, `uv`,
 and the repository checkout, but no cloud credentials, Google ADC, database,
 Cloud SQL socket, or DuckDB extension. From the repository root:
 

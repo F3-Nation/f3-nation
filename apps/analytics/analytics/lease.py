@@ -10,6 +10,7 @@ from typing import Any, Mapping
 from google.api_core.exceptions import NotFound, PreconditionFailed
 
 from .materializations import Materialization
+from .publication import _prefix_parts
 from .settings import Settings
 
 LEASE_TTL = timedelta(minutes=90)
@@ -44,8 +45,7 @@ def _iso(value: datetime) -> str:
 class GcsLease:
     def __init__(self, storage_client: Any, settings: Settings, materialization: Materialization) -> None:
         self.materialization = materialization
-        bucket_name = settings.target(materialization)[0].removeprefix("gs://").split("/", 1)[0]
-        prefix = settings.target(materialization)[0].split("/", 3)[-1]
+        bucket_name, prefix = _prefix_parts(settings.target(materialization)[0])
         self.blob = storage_client.bucket(bucket_name).blob(f"{prefix}/lease.json")
 
     @staticmethod
@@ -84,8 +84,16 @@ class GcsLease:
                 ) from error
 
         current = json.loads(self.blob.download_as_text())
-        expires_at = datetime.fromisoformat(current["expires_at"].replace("Z", "+00:00"))
-        if current.get("state") == "active" and expires_at > now:
+        raw_expiry = current.get("expires_at")
+        expires_at: datetime | None = None
+        if isinstance(raw_expiry, str):
+            try:
+                parsed = datetime.fromisoformat(raw_expiry.replace("Z", "+00:00"))
+            except ValueError:
+                parsed = None
+            if parsed is not None and parsed.tzinfo is not None:
+                expires_at = parsed
+        if current.get("state") == "active" and expires_at is not None and expires_at > now:
             raise LeaseActiveError(
                 {
                     "stage": "lease_acquire",

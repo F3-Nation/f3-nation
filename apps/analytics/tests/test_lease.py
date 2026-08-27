@@ -155,6 +155,7 @@ def test_cleanup_failures_are_logged_without_masking_primary_failure(monkeypatch
             connection_factory=lambda _settings: BrokenConnection(),
             logger=logger,
             run_id="cleanup-run",
+            materializations=("pv_regions",),
         )
     assert isinstance(raised.value.failures["pv_regions"], ValueError)
     assert str(raised.value.failures["pv_regions"]) == "source failed"

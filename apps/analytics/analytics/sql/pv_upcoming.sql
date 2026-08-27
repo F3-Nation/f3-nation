@@ -11,6 +11,13 @@ upcoming AS (
     LEFT JOIN pg.public.orgs region ON region.id = ao.parent_id AND region.org_type = 'region'
     CROSS JOIN params p
     WHERE ei.is_active = true AND ei.start_date > p.as_of_date
+      AND CASE
+        WHEN json_type(CAST(ei.meta AS JSON), '$.exclude_from_pax_vault') IS NULL THEN false
+        WHEN json_type(CAST(ei.meta AS JSON), '$.exclude_from_pax_vault') = 'NULL' THEN false
+        WHEN json_type(CAST(ei.meta AS JSON), '$.exclude_from_pax_vault') <> 'BOOLEAN'
+          THEN error('exclude_from_pax_vault must be boolean')
+        ELSE COALESCE(json_extract(CAST(ei.meta AS JSON), '$.exclude_from_pax_vault')::BOOLEAN, false)
+      END = false
 ),
 event_types AS (
     SELECT eit.event_instance_id,

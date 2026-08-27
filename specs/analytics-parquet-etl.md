@@ -34,12 +34,12 @@ publication conflict must not change the publication state of another dataset.
 
 Production targets are, for each `<name>` in the approved list:
 
-- GCS: `gs://analytics/parquets/pv_<name>`
+- GCS: `gs://analytics/parquets/<name>`
 - BigQuery external table: `f3data.paxVaultDuck.pv_<name>`
 
 Nonproduction targets are:
 
-- GCS: `gs://f3-analytics-nonprod/parquets/pv_<name>`
+- GCS: `gs://f3-analytics-nonprod/parquets/<name>`
 - BigQuery external table: `f3data.paxVaultDuckStaging.pv_<name>`
 
 The job runs in project `f3data`, region `us-central1`. Production uses Cloud

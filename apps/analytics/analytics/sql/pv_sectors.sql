@@ -17,5 +17,5 @@ sector_values AS (
     FROM sector_rows s
 )
 SELECT sector_id, sector_name, logo_url, is_active, areas
-FROM sector_values
+FROM sector_values CROSS JOIN params
 ORDER BY sector_name, sector_id

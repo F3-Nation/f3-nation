@@ -51,14 +51,16 @@ region_values AS (
                 FROM (SELECT DISTINCT et.id, COALESCE(et.name, CAST(et.id AS VARCHAR)) AS display_name
                       FROM region_events re
                       JOIN pg.public.event_instances_x_event_types x ON x.event_instance_id = re.event_id
-                      JOIN pg.public.event_types et ON et.id = x.event_type_id WHERE re.region_id = r.region_id) x),
+                      JOIN pg.public.event_types et ON et.id = x.event_type_id
+                      WHERE re.region_id = r.region_id) x),
                []::STRUCT(type_id INTEGER, type_name VARCHAR)[]) AS types,
       COALESCE((SELECT list(struct_pack(tag_id := x.id, tag_name := x.display_name)
                             ORDER BY x.display_name, x.id)
                 FROM (SELECT DISTINCT t.id, COALESCE(t.name, CAST(t.id AS VARCHAR)) AS display_name
                       FROM region_events re
                       JOIN pg.public.event_tags_x_event_instances x ON x.event_instance_id = re.event_id
-                      JOIN pg.public.event_tags t ON t.id = x.event_tag_id WHERE re.region_id = r.region_id) x),
+                      JOIN pg.public.event_tags t ON t.id = x.event_tag_id
+                      WHERE re.region_id = r.region_id) x),
                []::STRUCT(tag_id INTEGER, tag_name VARCHAR)[]) AS tags
     FROM region_base r
 )

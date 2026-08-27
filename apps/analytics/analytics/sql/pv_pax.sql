@@ -27,6 +27,13 @@ eligible_events AS (
     JOIN pg.public.orgs direct ON direct.id = ei.org_id
     LEFT JOIN pg.public.orgs parent ON parent.id = direct.parent_id
     WHERE ei.is_active = true AND ei.pax_count IS NOT NULL
+      AND CASE
+        WHEN json_type(CAST(ei.meta AS JSON), '$.exclude_from_pax_vault') IS NULL THEN false
+        WHEN json_type(CAST(ei.meta AS JSON), '$.exclude_from_pax_vault') = 'NULL' THEN false
+        WHEN json_type(CAST(ei.meta AS JSON), '$.exclude_from_pax_vault') <> 'BOOLEAN'
+          THEN error('exclude_from_pax_vault must be boolean')
+        ELSE COALESCE(json_extract(CAST(ei.meta AS JSON), '$.exclude_from_pax_vault')::BOOLEAN, false)
+      END = false
 ),
 observed AS (
     SELECT DISTINCT a.user_id, e.event_id, e.region_id, e.ao_id, e.ao_name
@@ -55,12 +62,14 @@ SELECT p.refreshed_at, r.user_id, r.f3_name, r.home_region_id, r.home_region_nam
        COALESCE((SELECT list(struct_pack(type_id := x.id, type_name := x.name) ORDER BY x.name, x.id)
                  FROM (SELECT DISTINCT et.id, COALESCE(et.name, CAST(et.id AS VARCHAR)) AS name
                        FROM observed o JOIN pg.public.event_instances_x_event_types xt ON xt.event_instance_id = o.event_id
-                       JOIN pg.public.event_types et ON et.id = xt.event_type_id WHERE o.user_id = r.user_id) x),
+                       JOIN pg.public.event_types et ON et.id = xt.event_type_id
+                       WHERE o.user_id = r.user_id) x),
                 []::STRUCT(type_id INTEGER, type_name VARCHAR)[]) AS types,
        COALESCE((SELECT list(struct_pack(tag_id := x.id, tag_name := x.name) ORDER BY x.name, x.id)
                  FROM (SELECT DISTINCT t.id, COALESCE(t.name, CAST(t.id AS VARCHAR)) AS name
                        FROM observed o JOIN pg.public.event_tags_x_event_instances xt ON xt.event_instance_id = o.event_id
-                       JOIN pg.public.event_tags t ON t.id = xt.event_tag_id WHERE o.user_id = r.user_id) x),
+                       JOIN pg.public.event_tags t ON t.id = xt.event_tag_id
+                       WHERE o.user_id = r.user_id) x),
                 []::STRUCT(tag_id INTEGER, tag_name VARCHAR)[]) AS tags
 FROM region_values r CROSS JOIN params p
 ORDER BY r.f3_name, r.user_id

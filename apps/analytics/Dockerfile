@@ -34,5 +34,11 @@ RUN mkdir -p "$DUCKDB_EXTENSION_DIR" && \
     echo "0cde6a6b625ef16e1b024dac373206a0d3f97bd45533aa7b81b548901f0d2c00  $DUCKDB_POSTGRES_EXTENSION_PATH" | sha256sum --check --status && \
     chmod 0555 "$DUCKDB_POSTGRES_EXTENSION_PATH"
 
+RUN groupadd --gid 1000 analytics && \
+    useradd --uid 1000 --gid analytics --home-dir /nonexistent --no-create-home --shell /usr/sbin/nologin analytics && \
+    chown -R root:root /app /opt/duckdb/extensions && \
+    chmod -R a-w /app /opt/duckdb/extensions
+
 WORKDIR /app/apps/analytics
+USER analytics
 CMD ["sh", "-c", "ANALYTICS_POSTGRES_PASSWORD=preflight-placeholder exec analytics-etl preflight"]

@@ -5,9 +5,11 @@ params AS (
 event_source AS (
     SELECT ei.*,
            CASE
-             WHEN json_type(CAST(ei.meta AS JSON), '$.exclude_from_pax_vault') IN ('BOOLEAN', 'NULL')
-               THEN COALESCE(json_extract(CAST(ei.meta AS JSON), '$.exclude_from_pax_vault')::BOOLEAN, false)
-             ELSE false
+             WHEN json_type(CAST(ei.meta AS JSON), '$.exclude_from_pax_vault') IS NULL THEN false
+             WHEN json_type(CAST(ei.meta AS JSON), '$.exclude_from_pax_vault') = 'NULL' THEN false
+             WHEN json_type(CAST(ei.meta AS JSON), '$.exclude_from_pax_vault') <> 'BOOLEAN'
+               THEN error('exclude_from_pax_vault must be boolean')
+             ELSE COALESCE(json_extract(CAST(ei.meta AS JSON), '$.exclude_from_pax_vault')::BOOLEAN, false)
            END AS excluded
     FROM pg.public.event_instances ei
     WHERE ei.is_active = true AND ei.pax_count IS NOT NULL
