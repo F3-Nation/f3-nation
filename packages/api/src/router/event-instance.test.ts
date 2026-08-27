@@ -1275,6 +1275,95 @@ describe("Event Instance Router", () => {
       expect(linkRecords[0]?.eventTagId).toBe(eventTag.id);
     });
 
+    it("should default isActive/highlight/isPrivate when creating a new event instance", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      const client = createTestClient();
+      const result = await client.eventInstance.crupdate({
+        name: `New Event ${uniqueId()}`,
+        orgId: ao.id,
+        startDate: new Date().toISOString().split("T")[0]!,
+      });
+
+      expect(result).toBeDefined();
+      expect(result.isActive).toBe(true);
+      expect(result.highlight).toBe(false);
+      expect(result.isPrivate).toBe(false);
+
+      if (result.id) {
+        createdEventInstanceIds.push(result.id);
+      }
+    });
+
+    it("should preserve isActive/highlight/isPrivate when omitted on update", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      const eventInstance = await createTestEventInstance(ao.id);
+      if (!eventInstance) return;
+
+      // Push the row to non-default values so a silent reset is detectable.
+      await db
+        .update(schema.eventInstances)
+        .set({ isActive: false, highlight: true, isPrivate: true })
+        .where(eq(schema.eventInstances.id, eventInstance.id));
+
+      const client = createTestClient();
+      const updatedName = `Partially Updated Event ${uniqueId()}`;
+      const result = await client.eventInstance.crupdate({
+        id: eventInstance.id,
+        name: updatedName,
+        orgId: ao.id,
+        startDate: eventInstance.startDate,
+      });
+
+      expect(result.name).toBe(updatedName);
+      expect(result.isActive).toBe(false);
+      expect(result.highlight).toBe(true);
+      expect(result.isPrivate).toBe(true);
+    });
+
+    it("should update isActive/highlight/isPrivate when explicitly provided", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      const eventInstance = await createTestEventInstance(ao.id);
+      if (!eventInstance) return;
+
+      const client = createTestClient();
+      const result = await client.eventInstance.crupdate({
+        id: eventInstance.id,
+        orgId: ao.id,
+        startDate: eventInstance.startDate,
+        isActive: false,
+        highlight: true,
+        isPrivate: true,
+      });
+
+      expect(result.isActive).toBe(false);
+      expect(result.highlight).toBe(true);
+      expect(result.isPrivate).toBe(true);
+    });
+
     it("should require editor role", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);

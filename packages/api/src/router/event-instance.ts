@@ -496,7 +496,11 @@ export const eventInstanceRouter = {
         id: z.coerce.number().optional(),
         name: z.string().optional(),
         description: z.string().nullish(),
-        isActive: z.boolean().optional().default(true),
+        // No .default() here: a default fills in a value even when the
+        // caller omits the field, which would silently overwrite an
+        // existing row's value on update. Omitted-vs-explicit is handled
+        // below — real defaults only apply when creating a new row.
+        isActive: z.boolean().optional(),
         locationId: z.coerce.number().nullish(),
         orgId: z.coerce.number(),
         seriesId: z.coerce.number().nullish(), // Link to series if this is a series instance
@@ -505,9 +509,9 @@ export const eventInstanceRouter = {
         endDate: z.string().nullish(),
         startTime: z.string().nullish(),
         endTime: z.string().nullish(),
-        highlight: z.boolean().optional().default(false),
+        highlight: z.boolean().optional(),
         meta: z.record(z.string(), z.unknown()).nullish(),
-        isPrivate: z.boolean().optional().default(false),
+        isPrivate: z.boolean().optional(),
         eventTypeId: z.coerce.number().optional(),
         eventTagId: z.coerce.number().nullish(),
         preblast: z.string().nullish(),
@@ -582,13 +586,25 @@ export const eventInstanceRouter = {
       const shouldUpdateEventTag = "eventTagId" in input;
       const { eventTypeId, eventTagId, name: _inputName, ...eventData } = input;
 
+      // `eventData` only contains keys the caller actually sent (Zod drops
+      // `.optional()` fields entirely when absent, rather than setting them
+      // to undefined), so spreading it into `set` already leaves every
+      // omitted column untouched on update — the same mechanism the
+      // eventTagId join-table handling below relies on. isActive/highlight/
+      // isPrivate are NOT NULL columns with no DB default though, so a new
+      // row still needs real values even when the caller omits them.
+      const insertValues = {
+        ...eventData,
+        name,
+        isActive: eventData.isActive ?? true,
+        highlight: eventData.highlight ?? false,
+        isPrivate: eventData.isPrivate ?? false,
+      };
+
       // Create or update the event instance
       const [result] = await ctx.db
         .insert(schema.eventInstances)
-        .values({
-          ...eventData,
-          name,
-        })
+        .values(insertValues)
         .onConflictDoUpdate({
           target: [schema.eventInstances.id],
           set: { ...eventData, name },
