@@ -18,6 +18,7 @@ export default {
         "auth",
 
         // packages
+        "better-auth-spike",
         "db",
         "env",
         "health",

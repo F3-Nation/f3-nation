@@ -1,0 +1,36 @@
+{
+  "name": "@f3nation/better-auth-spike",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-or-later",
+  "scripts": {
+    "clean": "rm -rf .turbo node_modules",
+    "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
+    "lint": "eslint .",
+    "test": "vitest --run --coverage",
+    "test:watch": "vitest -w",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@better-auth/core": "^1.7.2",
+    "@better-auth/oauth-provider": "^1.7.2",
+    "@f3nation/sso": "workspace:*",
+    "better-auth": "^1.7.2",
+    "jose": "^6.2.8"
+  },
+  "devDependencies": {
+    "@acme/eslint-config": "workspace:*",
+    "@acme/prettier-config": "workspace:*",
+    "@acme/tsconfig": "workspace:*",
+    "@acme/vitest-config": "workspace:*",
+    "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "eslint": "catalog:",
+    "prettier": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  },
+  "prettier": "@acme/prettier-config"
+}
