@@ -45,6 +45,11 @@ const config: KnipConfig = {
       // internal call; no static import exists for knip to trace.
       ignoreDependencies: ["@f3nation/sso"],
     },
+    "apps/slackbot": {
+      // Graph-only edge mirroring apps/slackbot/pyproject.toml so Turbo can see
+      // the Python workspace; no TypeScript imports it.
+      ignoreDependencies: ["f3-data-models"],
+    },
   },
 };
 
