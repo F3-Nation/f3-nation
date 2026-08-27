@@ -1,6 +1,7 @@
 {
   "$schema": "https://turborepo.org/schema.json",
   "globalDependencies": ["**/.env"],
+  "globalPassThroughEnv": ["UV_PYTHON"],
   "globalEnv": [
     "CI",
     "NODE_ENV",
