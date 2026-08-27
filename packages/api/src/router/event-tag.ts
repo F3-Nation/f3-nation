@@ -16,7 +16,7 @@ import {
 } from "@acme/db";
 import { IsActiveStatus } from "@acme/shared/app/enums";
 import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
-import { EventTagInsertSchema } from "@acme/validators";
+import { EventTagInsertSchema, EventTagSelectSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { editorProcedure, protectedProcedure } from "../shared";
@@ -49,6 +49,33 @@ export const eventTagRouter = {
       description:
         "Get a paginated list of event tags with optional filtering by organization",
     })
+    .output(
+      z.object({
+        eventTags: z.array(
+          z.object({
+            id: z.number().describe("Event tag ID"),
+            name: z.string().describe("Event tag name"),
+            description: z
+              .string()
+              .nullable()
+              .describe("Event tag description"),
+            color: z.string().nullable().describe("Event tag color"),
+            specificOrgId: z
+              .number()
+              .nullable()
+              .describe("Org this tag is specific to, if any"),
+            specificOrgName: z
+              .string()
+              .nullable()
+              .describe("Name of the org this tag is specific to, if any"),
+            isActive: z.boolean().describe("Whether the event tag is active"),
+          }),
+        ),
+        totalCount: z
+          .number()
+          .describe("Total number of event tags matching the filter"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const limit = input?.pageSize ?? 10;
       const offset = (input?.pageIndex ?? 0) * limit;
@@ -142,6 +169,11 @@ export const eventTagRouter = {
       summary: "Get event tags by organization",
       description: "Retrieve all event tags for a specific organization",
     })
+    .output(
+      z.object({
+        eventTags: z.array(EventTagSelectSchema),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const eventTags = await ctx.db
         .select()
@@ -166,6 +198,11 @@ export const eventTagRouter = {
       summary: "Get event tag by ID",
       description: "Retrieve detailed information about a specific event tag",
     })
+    .output(
+      z.object({
+        eventTag: EventTagSelectSchema,
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const [result] = await ctx.db
         .select()
@@ -189,6 +226,11 @@ export const eventTagRouter = {
       summary: "Create or update event tag",
       description: "Create a new event tag or update an existing one",
     })
+    .output(
+      z.object({
+        eventTag: z.array(EventTagSelectSchema),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const [existingEventTag] = input.id
         ? await ctx.db
@@ -271,6 +313,7 @@ export const eventTagRouter = {
       summary: "Delete event tag",
       description: "Soft delete an event tag by marking it as inactive",
     })
+    .output(z.void())
     .handler(async ({ context: ctx, input }) => {
       const [existingEventTag] = await ctx.db
         .select()
