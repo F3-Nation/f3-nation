@@ -57,13 +57,27 @@ Git history needed for the comparison. Setup pins Turbo's affected calculation
 to the pull request's exact base and head SHAs, while the tasks themselves run
 against GitHub's checked-out synthetic merge commit. Pushes to `main` omit the
 flag and validate the full workspace from a shallow checkout. Setup also runs
-the full workspace when Turbo maps a pull request to zero workspaces, selects
-no runnable task for the specific gate, receives no task name, cannot inspect
-the comparison, or sees Python/global files outside Turbo's package graph. Each
-gate therefore verifies that it schedules at least one task before
-`--affected` is enabled. The non-Turbo safeguards in the `lint` job (`lint:ws`,
-coverage-threshold validation, Python task validation, Turbo scope-selection
-validation, and `lint:unused`) remain repository-wide on every run.
+the full workspace when Turbo selects no runnable task for the specific gate,
+receives no task name, or cannot calculate the affected set. Each gate
+therefore verifies that it schedules at least one task before `--affected` is
+enabled. The non-Turbo safeguards in the `lint` job (`lint:ws`,
+coverage-threshold validation, Python task validation, and `lint:unused`)
+remain repository-wide on every run.
+
+Two pieces of Turbo configuration keep that selection honest, so CI needs no
+blocklist of its own:
+
+- `packages/db-python` carries a `package.json` and `apps/slackbot` depends on
+  it, mirroring the `f3-data-models` edge already declared in
+  `apps/slackbot/pyproject.toml`. Without it Turbo cannot see the Python
+  workspace, and a change touching both Python and TypeScript would schedule
+  the TypeScript gates while silently dropping ruff, mypy, pytest, and the
+  Python formatter.
+- `globalDependencies` in `turbo.json` lists the root files Turbo cannot
+  attribute to any package (`.gitignore`, `.prettierignore`,
+  `.python-version`, `pyproject.toml`, `uv.lock`, and
+  `scripts/python-task.sh`). It feeds affected selection as well as cache
+  hashing, so changing any of them marks every workspace affected.
 
 This deliberately changes the PR guarantee: a green PR proves the workspaces
 selected by Turbo's declared dependency graph, not every workspace in the
