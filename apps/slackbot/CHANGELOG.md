@@ -2,6 +2,13 @@
 
 <!-- version list -->
 
+## [2.3.2](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.3.1...slackbot@2.3.2) (2026-08-27)
+
+
+### Bug Fixes
+
+* **slackbot:** fixing HC button on non-default channel posting ([#895](https://github.com/F3-Nation/f3-nation/issues/895)) ([aa3fac7](https://github.com/F3-Nation/f3-nation/commit/aa3fac7eebacfe764cb035a9d37ecb516cd798f1))
+
 ## [2.3.1](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.3.0...slackbot@2.3.1) (2026-08-25)
 
 
