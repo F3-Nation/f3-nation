@@ -590,9 +590,10 @@ export const eventInstanceRouter = {
       // `.optional()` fields entirely when absent, rather than setting them
       // to undefined), so spreading it into `set` already leaves every
       // omitted column untouched on update — the same mechanism the
-      // eventTagId join-table handling below relies on. isActive/highlight/
-      // isPrivate are NOT NULL columns with no DB default though, so a new
-      // row still needs real values even when the caller omits them.
+      // eventTagId join-table handling below relies on. isActive/highlight
+      // are NOT NULL columns with no DB default though, so a new row still
+      // needs real values even when the caller omits them — isPrivate does
+      // have a DB default, but is set explicitly here too for consistency.
       const insertValues = {
         ...eventData,
         name,
