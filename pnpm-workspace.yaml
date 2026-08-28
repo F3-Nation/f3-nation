@@ -150,6 +150,7 @@ overrides:
   # and excluded from the prod audit via tooling/eslint devDependencies instead.
   "brace-expansion@<1.1.16": "2.1.4" # GHSA-3jxr-9vmj-r5cp (DoS)
   "brace-expansion@>=3.0.0 <5.0.9": "5.0.9" # GHSA-rgw5-rvv9-x895 (DoS)
+  "fast-uri@<3.1.5": "3.1.6" # host confusion via failed backslash authority introducer
   "sharp@<0.35.0": "0.35.3" # inherited libvips vulnerabilities
   "next@>=16.0.0 <16.3.0": "16.3.2" # GHSA-89xv-2m56-2m9x / GHSA-p9j2-gv94-2wf4 (SSRF in rewrites); covers transitive geist>next & @scalar>next. Keep in lockstep with the `next` catalog entry: a second `next` version forks next-auth's peer instance and detaches the type-extensions augmentation.
   "postcss@<8.5.12": "^8.5.26" # GHSA-6g55-p6wh-862q (sourceMappingURL arbitrary file read)
