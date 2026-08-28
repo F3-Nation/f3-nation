@@ -48,8 +48,17 @@ def source() -> duckdb.DuckDBPyConnection:
     )
     db.executemany(
         "INSERT INTO pg.public.attendance VALUES (?, ?, ?)",
-        [(1, 1, False), (1, 2, False), (1, 3, False), (1, 4, False),
-         (1, 5, False), (1, 6, False), (1, 1, True), (3, 1, False), (5, 8, False)],
+        [
+            (1, 1, False),
+            (1, 2, False),
+            (1, 3, False),
+            (1, 4, False),
+            (1, 5, False),
+            (1, 6, False),
+            (1, 1, True),
+            (3, 1, False),
+            (5, 8, False),
+        ],
     )
     return db
 
@@ -65,8 +74,18 @@ def test_exact_contract_and_bestie_shape():
     result = rows(db)
     row = next(row for row in result if row[0] == 1)
     assert row == (
-        1, 1, "1", "drop.png", "New PAX Drop", 4, "2026-07-01", 15,
-        "2026-08-11", "Bestie workout", "AO", 10,
+        1,
+        1,
+        "1",
+        "drop.png",
+        "New PAX Drop",
+        4,
+        "2026-07-01",
+        15,
+        "2026-08-11",
+        "Bestie workout",
+        "AO",
+        10,
         [{"user_id": 4, "f3_name": "Bestie", "avatar_url": "bestie.png", "co_attendance_count": 1}],
     )
     solo = next(row for row in result if row[0] == 5)
@@ -83,8 +102,17 @@ def test_parquet_schema_is_exact_contract(tmp_path: Path):
     )
     columns = db.execute("DESCRIBE SELECT * FROM read_parquet(?)", [str(parquet)]).fetchall()
     assert [column[0] for column in columns] == [
-        "user_id", "home_region_id", "f3_name", "avatar_url", "kotter_status",
-        "total_events", "first_event_date", "days_since_last_event",
-        "last_event_date", "last_event_name", "last_event_ao_name",
-        "last_event_ao_org_id", "bestie_list",
+        "user_id",
+        "home_region_id",
+        "f3_name",
+        "avatar_url",
+        "kotter_status",
+        "total_events",
+        "first_event_date",
+        "days_since_last_event",
+        "last_event_date",
+        "last_event_name",
+        "last_event_ao_name",
+        "last_event_ao_org_id",
+        "bestie_list",
     ]

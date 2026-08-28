@@ -276,9 +276,11 @@ def test_pipeline_records_lease_constructor_failure_and_continues(monkeypatch, t
     monkeypatch.setattr(
         pipeline_module,
         "GcsLease",
-        lambda _storage, _settings, definition: (_ for _ in ()).throw(RuntimeError("bucket failed"))
-        if definition is first
-        else _TestLease(constructed, definition),
+        lambda _storage, _settings, definition: (
+            (_ for _ in ()).throw(RuntimeError("bucket failed"))
+            if definition is first
+            else _TestLease(constructed, definition)
+        ),
     )
     monkeypatch.setattr(pipeline_module, "attach_postgres", lambda *_args: None)
     monkeypatch.setattr(pipeline_module, "materialize", lambda *_args: 1)

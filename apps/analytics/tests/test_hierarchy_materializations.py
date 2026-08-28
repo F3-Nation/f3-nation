@@ -90,10 +90,14 @@ def test_areas_and_sectors_keep_inactive_rows_and_order_nested_values():
         {"region_id": 903, "region_name": "Region", "is_active": True},
     ]
     assert areas[1][6] == []
-    assert run(db, "pv_sectors.sql")[0][2:5] == ("sector-logo", True, [
-        {"area_id": 901, "area_name": "Area", "is_active": False},
-        {"area_id": 902, "area_name": "Other Area", "is_active": True},
-    ])
+    assert run(db, "pv_sectors.sql")[0][2:5] == (
+        "sector-logo",
+        True,
+        [
+            {"area_id": 901, "area_name": "Area", "is_active": False},
+            {"area_id": 902, "area_name": "Other Area", "is_active": True},
+        ],
+    )
 
 
 def test_aos_observe_only_active_non_null_pax_events_and_has_nested_schema():

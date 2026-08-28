@@ -67,6 +67,8 @@ class Settings:
         tcp_configured = bool(postgres_host or postgres_port)
         if environment != "local" and tcp_configured:
             raise SettingsError("TCP PostgreSQL configuration is allowed only for local")
+        socket_endpoint: str | None
+        tcp_endpoint: tuple[str | None, int | None]
         if environment == "local":
             if postgres_socket_dir and tcp_configured:
                 raise SettingsError("configure either a PostgreSQL socket or TCP endpoint, not both")

@@ -17,9 +17,7 @@ def source():
         "fng_count INTEGER, meta JSON, name VARCHAR, start_date DATE, end_date DATE, "
         "highlight BOOLEAN, is_private BOOLEAN)"
     )
-    c.execute(
-        "CREATE TABLE pg.public.event_instances_x_event_types(event_instance_id INTEGER, event_type_id INTEGER)"
-    )
+    c.execute("CREATE TABLE pg.public.event_instances_x_event_types(event_instance_id INTEGER, event_type_id INTEGER)")
     c.execute(
         "CREATE TABLE pg.public.event_types(id INTEGER, name VARCHAR, description VARCHAR, event_category VARCHAR)"
     )
@@ -60,8 +58,15 @@ def source():
     )
     c.executemany(
         "INSERT INTO pg.public.attendance VALUES (?, ?, ?, ?)",
-        [(1, 1, 1, True), (2, 1, 1, False), (3, 1, 2, False), (4, 1, 3, False),
-         (5, 2, 1, True), (6, 3, 1, True), (7, 3, 2, False)],
+        [
+            (1, 1, 1, True),
+            (2, 1, 1, False),
+            (3, 1, 2, False),
+            (4, 1, 3, False),
+            (5, 2, 1, True),
+            (6, 3, 1, True),
+            (7, 3, 2, False),
+        ],
     )
     c.executemany("INSERT INTO pg.public.attendance_types VALUES (?, ?)", [(2, "Q"), (3, "Co-Q")])
     c.executemany("INSERT INTO pg.public.attendance_x_attendance_types VALUES (?, ?)", [(1, 2), (2, 3)])
@@ -74,25 +79,54 @@ def test_events_contract_and_materialization(tmp_path: Path):
     c.execute("COPY (" + SQL + ") TO ? (FORMAT PARQUET)", [str(out), "2026-01-03T00:00:00Z", "2026-01-03"])
     columns = c.execute("DESCRIBE SELECT * FROM read_parquet(?)", [str(out)]).fetchall()
     assert [column[0] for column in columns] == [
-        "refreshed_at", "event_id", "event_date", "event_name", "pax_count", "fng_count",
-        "ao_org_id", "ao_name", "region_org_id", "region_name", "area_org_id", "area_name",
-        "sector_org_id", "sector_name", "first_f_ind", "second_f_ind", "third_f_ind", "types", "tags", "attendance",
+        "refreshed_at",
+        "event_id",
+        "event_date",
+        "event_name",
+        "pax_count",
+        "fng_count",
+        "ao_org_id",
+        "ao_name",
+        "region_org_id",
+        "region_name",
+        "area_org_id",
+        "area_name",
+        "sector_org_id",
+        "sector_name",
+        "first_f_ind",
+        "second_f_ind",
+        "third_f_ind",
+        "types",
+        "tags",
+        "attendance",
     ]
     row = c.execute("SELECT * FROM read_parquet(?) WHERE event_id = 1", [str(out)]).fetchone()
-    assert row[1:17] == (
-        1, date(2026, 1, 1), "Workout", 10, 2, 4, "AO", 3, "Region", 2, "Area", 1, "Sector", 1, 0, 1
-    )
-    assert row[17] == [{"id": 2, "name": "Bible", "description": "Study", "event_category": "third_f"},
-                       {"id": 1, "name": "Run", "description": "Running", "event_category": "first_f"}]
+    assert row[1:17] == (1, date(2026, 1, 1), "Workout", 10, 2, 4, "AO", 3, "Region", 2, "Area", 1, "Sector", 1, 0, 1)
+    assert row[17] == [
+        {"id": 2, "name": "Bible", "description": "Study", "event_category": "third_f"},
+        {"id": 1, "name": "Run", "description": "Running", "event_category": "first_f"},
+    ]
     assert row[18] == [{"id": 7, "name": "Morning", "description": "Morning workout"}]
     assert row[19] == [
         {
-            "user_id": 1, "f3_name": "Alpha", "q_ind": 0, "coq_ind": 1, "avatar_url": "alpha.png",
-            "attended": True, "ghost": False, "fartsack": False,
+            "user_id": 1,
+            "f3_name": "Alpha",
+            "q_ind": 0,
+            "coq_ind": 1,
+            "avatar_url": "alpha.png",
+            "attended": True,
+            "ghost": False,
+            "fartsack": False,
         },
         {
-            "user_id": 2, "f3_name": "Bravo", "q_ind": 0, "coq_ind": 0, "avatar_url": "bravo.png",
-            "attended": True, "ghost": True, "fartsack": False,
+            "user_id": 2,
+            "f3_name": "Bravo",
+            "q_ind": 0,
+            "coq_ind": 0,
+            "avatar_url": "bravo.png",
+            "attended": True,
+            "ghost": True,
+            "fartsack": False,
         },
     ]
     assert c.execute("SELECT count(*) FROM read_parquet(?) WHERE event_id = 2", [str(out)]).fetchone()[0] == 1
@@ -108,6 +142,6 @@ def test_events_contract_and_materialization(tmp_path: Path):
 
 def test_malformed_exclusion_flag_is_strict():
     c = source()
-    c.execute("UPDATE pg.public.event_instances SET meta = '{\"exclude_from_pax_vault\":\"yes\"}' WHERE id = 1")
+    c.execute('UPDATE pg.public.event_instances SET meta = \'{"exclude_from_pax_vault":"yes"}\' WHERE id = 1')
     with pytest.raises(Exception, match="exclude_from_pax_vault"):
         c.execute(SQL, ["2026-01-03T00:00:00Z", "2026-01-03"])

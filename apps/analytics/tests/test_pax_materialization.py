@@ -44,11 +44,25 @@ def test_pax_materialization_contract(tmp_path: Path):
             (2, "No", "Show", "bad", None, None, None, "inactive", "{}"),
             (3, None, None, "solo@example.test", None, 99, None, "active", "{}"),
             (
-                4, "Object", "Value", "object@example.test", None, None, None, "active",
+                4,
+                "Object",
+                "Value",
+                "object@example.test",
+                None,
+                None,
+                None,
+                "active",
                 '{"start_date_override":{"date":"2025-01-01"}}',
             ),
             (
-                5, "Array", "Value", "array@example.test", None, None, None, "active",
+                5,
+                "Array",
+                "Value",
+                "array@example.test",
+                None,
+                None,
+                None,
+                "active",
                 '{"start_date_override":["2025-01-01"]}',
             ),
             (6, "Null", "Value", "null@example.test", None, None, None, "active", '{"start_date_override":null}'),
@@ -86,8 +100,18 @@ def test_pax_materialization_contract(tmp_path: Path):
         assert by_id[user_id][7] is None
     columns = db.execute("DESCRIBE SELECT * FROM read_parquet(?)", [str(output)]).fetchall()
     assert [column[0] for column in columns] == [
-        "refreshed_at", "user_id", "f3_name", "home_region_id", "home_region_name", "avatar_url", "status",
-        "start_date_override", "regions", "aos", "types", "tags",
+        "refreshed_at",
+        "user_id",
+        "f3_name",
+        "home_region_id",
+        "home_region_name",
+        "avatar_url",
+        "status",
+        "start_date_override",
+        "regions",
+        "aos",
+        "types",
+        "tags",
     ]
     assert columns[8][1] == "STRUCT(region_org_id INTEGER, region_name VARCHAR)[]"
     assert columns[9][1] == "STRUCT(ao_org_id INTEGER, ao_name VARCHAR)[]"

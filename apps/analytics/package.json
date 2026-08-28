@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "test": "uv run pytest",
-    "lint": "bash ./scripts/lint.sh"
+    "test": "bash ../../scripts/python-task.sh test analytics uv run pytest",
+    "lint": "bash ../../scripts/python-task.sh lint analytics uv run ruff check .",
+    "format": "bash ../../scripts/python-task.sh format analytics bash ./scripts/format.sh",
+    "typecheck": "bash ../../scripts/python-task.sh typecheck analytics uv run mypy"
   }
 }

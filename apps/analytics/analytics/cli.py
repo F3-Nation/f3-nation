@@ -30,7 +30,7 @@ def main() -> int:
             logger.info("analytics.etl.preflight_succeeded", run_id=str(run_id), environment=settings.environment)
         else:
             from google.cloud import bigquery
-            from google.cloud.storage import Client as StorageClient
+            from google.cloud.storage import Client as StorageClient  # type: ignore[import-untyped]
 
             run(
                 settings,

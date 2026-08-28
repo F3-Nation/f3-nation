@@ -3,7 +3,7 @@ name = "f3-nation-analytics"
 version = "0.1.0"
 description = "Foundation for the F3 Nation analytics Parquet ETL"
 readme = "README.md"
-requires-python = ">=3.12,<4.0"
+requires-python = ">=3.13,<3.14"
 dependencies = [
     "duckdb==1.4.3",
     "google-cloud-bigquery>=3.25.0,<4.0.0",
@@ -12,17 +12,19 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = [
-    "pytest>=9.0.3,<10.0.0",
-    "ruff>=0.14.0,<1.0.0",
-]
+dev = ["pytest>=9.0.3,<10.0.0", "ruff>=0.14.0,<1.0.0"]
 
 [project.scripts]
 analytics-etl = "analytics.cli:main"
 
 [tool.ruff]
 line-length = 120
-target-version = "py312"
+
+[tool.mypy]
+python_version = "3.13"
+files = ["analytics"]
+warn_unused_ignores = true
+warn_redundant_casts = true
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "C", "B"]
