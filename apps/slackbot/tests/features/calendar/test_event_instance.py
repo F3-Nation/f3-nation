@@ -258,7 +258,7 @@ class ApiEventInstanceRepositoryTest(unittest.TestCase):
 
         self.client.get.assert_called_once_with(
             "/v1/event-instance",
-            params={"regionOrgId": 10, "startDate": "2026-06-01"},
+            params={"regionOrgId": 10, "startDate": "2026-06-01", "pageSize": 100, "pageIndex": 0},
         )
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].id, 1)
