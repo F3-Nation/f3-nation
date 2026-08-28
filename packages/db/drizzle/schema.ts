@@ -1227,3 +1227,350 @@ export const emailMfaCodes = authProviderSchema.table("email_mfa_codes", {
     .default(sql`timezone('utc'::text, now())`)
     .notNull(),
 });
+
+// ---------------------------------------------------------------------------
+// Better Auth tables (Phase 3, #876) — DRAFTED, NOT APPLIED.
+//
+// This is a new migration. Per docs/AI_GUARDRAILS.md ("Never ship a schema
+// migration without explicit human sign-off"), it must not be applied to any
+// database — local, staging, or prod — without that sign-off. It is included
+// here so the shape can be reviewed alongside the code that depends on it;
+// nothing above this point is touched, and the existing oauth_* tables keep
+// serving the hand-rolled OAuth server unchanged regardless of whether this
+// migration is ever applied.
+//
+// Field shapes were not hand-derived from docs — they're the literal output
+// of `getAuthTables()` (from @better-auth/core/db) run against this app's
+// actual plugin stack (emailOTP + jwt + oauthProvider + bearer), so this
+// schema matches exactly what the adapter in
+// apps/auth/src/lib/better-auth.ts will read and write, not a guess at it.
+//
+// `betterAuthUser.id` deliberately holds the existing `users.id`, cast to
+// text, rather than a separately-generated id. See the
+// `databaseHooks.user.create.before` bridge in apps/auth/src/lib/
+// better-auth.ts — that's what keeps `sub` on a Better Auth-issued access
+// token equal to the same numeric user id every existing verifier
+// (packages/sso's isAccessTokenPayload, apps/auth's own /userinfo, etc.)
+// already expects, instead of minting a second, unrelated identity space
+// that nothing downstream knows how to resolve.
+// ---------------------------------------------------------------------------
+
+export const betterAuthUser = authProviderSchema.table(
+  "better_auth_user",
+  {
+    id: text().primaryKey().notNull(), // == users.id as a string, see block comment above
+    name: text().notNull(),
+    email: text().notNull(),
+    emailVerified: boolean("email_verified").default(false).notNull(),
+    image: text(),
+    createdAt: timestamp("created_at", { mode: "string" })
+      .default(sql`timezone('utc'::text, now())`)
+      .notNull(),
+    updatedAt: timestamp("updated_at", { mode: "string" })
+      .default(sql`timezone('utc'::text, now())`)
+      .notNull(),
+  },
+  (table) => [unique("better_auth_user_email_key").on(table.email)],
+);
+
+export const betterAuthSession = authProviderSchema.table(
+  "better_auth_session",
+  {
+    id: text().primaryKey().notNull(),
+    expiresAt: timestamp("expires_at", { mode: "string" }).notNull(),
+    token: text().notNull(),
+    createdAt: timestamp("created_at", { mode: "string" })
+      .default(sql`timezone('utc'::text, now())`)
+      .notNull(),
+    updatedAt: timestamp("updated_at", { mode: "string" })
+      .default(sql`timezone('utc'::text, now())`)
+      .notNull(),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    userId: text("user_id")
+      .notNull()
+      .references(() => betterAuthUser.id, { onDelete: "cascade" }),
+  },
+  (table) => [unique("better_auth_session_token_key").on(table.token)],
+);
+
+// Part of Better Auth's core schema unconditionally (present regardless of
+// which plugins are enabled) even though this app's plugin stack — emailOTP
+// only, no social login, no email/password — never writes to it today.
+export const betterAuthAccount = authProviderSchema.table(
+  "better_auth_account",
+  {
+    id: text().primaryKey().notNull(),
+    issuer: text().notNull(),
+    accountId: text("account_id").notNull(),
+    providerId: text("provider_id").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => betterAuthUser.id, { onDelete: "cascade" }),
+    accessToken: text("access_token"),
+    refreshToken: text("refresh_token"),
+    idToken: text("id_token"),
+    accessTokenExpiresAt: timestamp("access_token_expires_at", {
+      mode: "string",
+    }),
+    refreshTokenExpiresAt: timestamp("refresh_token_expires_at", {
+      mode: "string",
+    }),
+    scope: text(),
+    password: text(),
+    createdAt: timestamp("created_at", { mode: "string" })
+      .default(sql`timezone('utc'::text, now())`)
+      .notNull(),
+    updatedAt: timestamp("updated_at", { mode: "string" })
+      .default(sql`timezone('utc'::text, now())`)
+      .notNull(),
+  },
+);
+
+// Backs the emailOTP plugin's one-time codes (this app's Better Auth
+// equivalent of the existing email_mfa_codes table above — kept separate
+// rather than reusing it, since Better Auth owns this table's shape).
+export const betterAuthVerification = authProviderSchema.table(
+  "better_auth_verification",
+  {
+    id: text().primaryKey().notNull(),
+    identifier: text().notNull(),
+    value: text().notNull(),
+    expiresAt: timestamp("expires_at", { mode: "string" }).notNull(),
+    createdAt: timestamp("created_at", { mode: "string" })
+      .default(sql`timezone('utc'::text, now())`)
+      .notNull(),
+    updatedAt: timestamp("updated_at", { mode: "string" })
+      .default(sql`timezone('utc'::text, now())`)
+      .notNull(),
+  },
+);
+
+// Backs the jwt plugin's RS256 signing key. Whether this ends up being the
+// live signing key (self-generated here) or a wrapper around the existing
+// AUTH_JWT_PRIVATE_KEY / fixed "f3-auth-1" kid the hand-rolled server uses
+// today is an open Phase 3/4 question (JWKS continuity across the two
+// issuers) — flagged in the PR description, not resolved by this schema.
+export const betterAuthJwks = authProviderSchema.table("better_auth_jwks", {
+  id: text().primaryKey().notNull(),
+  publicKey: text("public_key").notNull(),
+  privateKey: text("private_key").notNull(),
+  createdAt: timestamp("created_at", { mode: "string" })
+    .default(sql`timezone('utc'::text, now())`)
+    .notNull(),
+  expiresAt: timestamp("expires_at", { mode: "string" }),
+  alg: text(),
+  crv: text(),
+});
+
+// The oauthProvider plugin's own client registry — deliberately separate
+// from oauth_clients above rather than a reshape of it. oauth_clients keeps
+// serving the hand-rolled server unmodified; migrating existing client rows
+// (admin, me, Digital Weinke) into this table is a one-time data migration
+// script, not a schema change — see apps/auth/scripts/migrate-oauth-clients-
+// to-better-auth.ts. Team decision (#876 thread, 2026-08-28): confidential
+// clients' secrets are NOT migrated — Better Auth's own default secret
+// hashing is preferred over matching oauth_clients.client_secret_hash's
+// sha256 scheme, so admin/me need a new secret issued at cutover (open
+// question, see that script's file comment).
+export const betterAuthOauthClient = authProviderSchema.table(
+  "better_auth_oauth_client",
+  {
+    id: text().primaryKey().notNull(),
+    clientId: text("client_id").notNull(),
+    clientSecret: text("client_secret"),
+    clientDiscoveryId: text("client_discovery_id"),
+    disabled: boolean(),
+    skipConsent: boolean("skip_consent"),
+    enableEndSession: boolean("enable_end_session"),
+    subjectType: text("subject_type"),
+    scopes: text().array(),
+    clientCredentialsScopes: text("client_credentials_scopes").array(),
+    userId: text("user_id").references(() => betterAuthUser.id),
+    createdAt: timestamp("created_at", { mode: "string" }),
+    updatedAt: timestamp("updated_at", { mode: "string" }),
+    name: text(),
+    uri: text(),
+    icon: text(),
+    contacts: text().array(),
+    tos: text(),
+    policy: text(),
+    softwareId: text("software_id"),
+    softwareVersion: text("software_version"),
+    softwareStatement: text("software_statement"),
+    redirectUris: text("redirect_uris").array().notNull(),
+    postLogoutRedirectUris: text("post_logout_redirect_uris").array(),
+    backchannelLogoutUri: text("backchannel_logout_uri"),
+    backchannelLogoutSessionRequired: boolean(
+      "backchannel_logout_session_required",
+    ),
+    tokenEndpointAuthMethod: text("token_endpoint_auth_method"),
+    applicationType: text("application_type"),
+    jwks: text(),
+    jwksUri: text("jwks_uri"),
+    grantTypes: text("grant_types").array(),
+    responseTypes: text("response_types").array(),
+    // Every client mapped from oauth_clients gets requirePKCE: true
+    // regardless of confidential/public, matching the hand-rolled server's
+    // current behavior (validateCodeVerifier is enforced unconditionally in
+    // apps/auth/src/lib/oauth.ts, stricter than plain OAuth 2.1's
+    // public-clients-only baseline) — this column is where that decision is
+    // actually recorded per client, not assumed globally.
+    requirePKCE: boolean("require_pkce"),
+    dpopBoundAccessTokens: boolean("dpop_bound_access_tokens"),
+    referenceId: text("reference_id"),
+    metadata: jsonb(),
+  },
+  (table) => [
+    unique("better_auth_oauth_client_client_id_key").on(table.clientId),
+  ],
+);
+
+// The oauthProvider plugin's protected-resource registry. This app registers
+// exactly one resource (the auth server's own issuer URL) with
+// signingAlgorithm: "RS256" — without a registered resource, oauth-provider
+// issues opaque reference access tokens instead of self-contained JWTs (see
+// apps/auth/src/lib/better-auth.ts), and the hand-rolled server has always
+// issued JWT access tokens.
+export const betterAuthOauthResource = authProviderSchema.table(
+  "better_auth_oauth_resource",
+  {
+    id: text().primaryKey().notNull(),
+    identifier: text().notNull(),
+    name: text().notNull(),
+    accessTokenTtl: integer("access_token_ttl"),
+    refreshTokenTtl: integer("refresh_token_ttl"),
+    signingAlgorithm: text("signing_algorithm"),
+    signingKeyId: text("signing_key_id"),
+    allowedScopes: text("allowed_scopes").array(),
+    customClaims: jsonb("custom_claims"),
+    dpopBoundAccessTokensRequired: boolean("dpop_bound_access_tokens_required"),
+    disabled: boolean(),
+    createdAt: timestamp("created_at", { mode: "string" }),
+    updatedAt: timestamp("updated_at", { mode: "string" }),
+    policyVersion: integer("policy_version"),
+    metadata: jsonb(),
+  },
+  (table) => [
+    unique("better_auth_oauth_resource_identifier_key").on(table.identifier),
+  ],
+);
+
+export const betterAuthOauthClientResource = authProviderSchema.table(
+  "better_auth_oauth_client_resource",
+  {
+    id: text().primaryKey().notNull(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => betterAuthOauthClient.clientId, {
+        onDelete: "cascade",
+      }),
+    resourceId: text("resource_id")
+      .notNull()
+      .references(() => betterAuthOauthResource.identifier, {
+        onDelete: "cascade",
+      }),
+    metadata: jsonb(),
+    createdAt: timestamp("created_at", { mode: "string" }),
+  },
+);
+
+export const betterAuthOauthRefreshToken = authProviderSchema.table(
+  "better_auth_oauth_refresh_token",
+  {
+    id: text().primaryKey().notNull(),
+    token: text().notNull(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => betterAuthOauthClient.clientId),
+    sessionId: text("session_id").references(() => betterAuthSession.id, {
+      onDelete: "set null",
+    }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => betterAuthUser.id),
+    referenceId: text("reference_id"),
+    authorizationCodeId: text("authorization_code_id"),
+    resources: text().array(),
+    requestedUserInfoClaims: text("requested_user_info_claims").array(),
+    expiresAt: timestamp("expires_at", { mode: "string" }),
+    createdAt: timestamp("created_at", { mode: "string" }),
+    revoked: timestamp({ mode: "string" }),
+    rotatedAt: timestamp("rotated_at", { mode: "string" }),
+    rotationReplayResponse: text("rotation_replay_response"),
+    rotationReplayExpiresAt: timestamp("rotation_replay_expires_at", {
+      mode: "string",
+    }),
+    authTime: timestamp("auth_time", { mode: "string" }),
+    confirmation: jsonb(),
+    scopes: text().array().notNull(),
+  },
+  (table) => [
+    unique("better_auth_oauth_refresh_token_token_key").on(table.token),
+  ],
+);
+
+export const betterAuthOauthAccessToken = authProviderSchema.table(
+  "better_auth_oauth_access_token",
+  {
+    id: text().primaryKey().notNull(),
+    // Nullable: with a registered resource + signingAlgorithm, oauth-provider
+    // issues a self-contained JWT access token and this row is bookkeeping
+    // (for revocation/introspection), not the token's source of truth — the
+    // hand-rolled server's own oauth_access_tokens table is documented as
+    // similarly vestigial for the same reason.
+    token: text(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => betterAuthOauthClient.clientId),
+    sessionId: text("session_id").references(() => betterAuthSession.id, {
+      onDelete: "set null",
+    }),
+    userId: text("user_id").references(() => betterAuthUser.id),
+    referenceId: text("reference_id"),
+    authorizationCodeId: text("authorization_code_id"),
+    resources: text().array(),
+    requestedUserInfoClaims: text("requested_user_info_claims").array(),
+    refreshId: text("refresh_id").references(
+      () => betterAuthOauthRefreshToken.id,
+    ),
+    expiresAt: timestamp("expires_at", { mode: "string" }),
+    createdAt: timestamp("created_at", { mode: "string" }),
+    revoked: timestamp({ mode: "string" }),
+    confirmation: jsonb(),
+    scopes: text().array().notNull(),
+  },
+  (table) => [
+    unique("better_auth_oauth_access_token_token_key").on(table.token),
+  ],
+);
+
+export const betterAuthOauthConsent = authProviderSchema.table(
+  "better_auth_oauth_consent",
+  {
+    id: text().primaryKey().notNull(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => betterAuthOauthClient.clientId),
+    userId: text("user_id").references(() => betterAuthUser.id),
+    referenceId: text("reference_id"),
+    resources: text().array(),
+    requestedUserInfoClaims: text("requested_user_info_claims").array(),
+    scopes: text().array().notNull(),
+    createdAt: timestamp("created_at", { mode: "string" }),
+    updatedAt: timestamp("updated_at", { mode: "string" }),
+  },
+);
+
+// Backs the private_key_jwt client-authentication method's replay
+// protection (RFC 7523). Unused today — every client mapped from
+// oauth_clients uses client_secret_basic or none (public/PKCE), never
+// private_key_jwt — kept only because oauth-provider's core schema requires
+// it unconditionally.
+export const betterAuthOauthClientAssertion = authProviderSchema.table(
+  "better_auth_oauth_client_assertion",
+  {
+    id: text().primaryKey().notNull(),
+    expiresAt: timestamp("expires_at", { mode: "string" }).notNull(),
+  },
+);
