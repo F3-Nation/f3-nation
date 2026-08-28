@@ -10492,6 +10492,270 @@
         ]
       }
     },
+    "/v1/oauth-client": {
+      "get": {
+        "description": "List every OAuth client registered against the auth server (apps/auth). Requires admin role.",
+        "operationId": "oauthClient.list",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "clients": {
+                      "items": {
+                        "properties": {
+                          "clientId": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "disabled": {
+                            "anyOf": [
+                              {
+                                "type": "boolean"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "isPublic": {
+                            "type": "boolean"
+                          },
+                          "name": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "redirectUris": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "scopes": {
+                            "anyOf": [
+                              {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "updatedAt": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "clientId",
+                          "name",
+                          "redirectUris",
+                          "scopes",
+                          "isPublic",
+                          "disabled",
+                          "createdAt",
+                          "updatedAt"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "clients"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "List OAuth clients",
+        "tags": [
+          "oauth-client"
+        ]
+      },
+      "post": {
+        "description": "Register a new OAuth client against the auth server. The response includes the client_secret exactly once, for confidential clients — it is never retrievable again after this call. Requires admin role.",
+        "operationId": "oauthClient.create",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "isPublic": {
+                    "description": "Public (PKCE-only, no secret — native/mobile apps) vs confidential (client_secret_basic)",
+                    "type": "boolean"
+                  },
+                  "name": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "redirectUris": {
+                    "items": {
+                      "format": "uri",
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  "scope": {
+                    "default": "openid profile email",
+                    "description": "Space-separated scopes",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "redirectUris",
+                  "isPublic"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "client": {
+                      "additionalProperties": {},
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "client"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Create an OAuth client",
+        "tags": [
+          "oauth-client"
+        ]
+      }
+    },
+    "/v1/oauth-client/{clientId}": {
+      "patch": {
+        "description": "Update an OAuth client's name, redirect URIs, scope, or enabled state. Requires admin role.",
+        "operationId": "oauthClient.update",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "in": "path",
+            "name": "clientId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "disabled": {
+                    "description": "Enable/disable — the only supported way to deactivate a client. There is no delete: docs/AI_GUARDRAILS.md requires a soft delete when one exists.",
+                    "type": "boolean"
+                  },
+                  "name": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "redirectUris": {
+                    "items": {
+                      "format": "uri",
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  "scope": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "updated": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "updated"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Update an OAuth client",
+        "tags": [
+          "oauth-client"
+        ]
+      }
+    },
     "/v1/org": {
       "get": {
         "description": "Get a paginated list of organizations (regions, areas, AOs, etc.) filtered by type, status, and other criteria. Supports searching, sorting, and pagination. Organizations are organized hierarchically.",
