@@ -32,6 +32,7 @@ import { toast } from "@acme/ui/toast";
 import { EventTypeInsertSchema } from "@acme/validators";
 
 import gte from "lodash/gte";
+import { client } from "~/orpc/client";
 import {
   invalidateQueries,
   orpc,
@@ -46,6 +47,7 @@ import {
   ModalType,
   openModal,
 } from "~/utils/store/modal";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 
 type EventTypeInsertFormType = z.infer<typeof EventTypeInsertSchema>;
@@ -62,8 +64,20 @@ export default function AdminEventTypesModal({
     }),
   );
   const eventType = eventTypeResponse?.eventType;
-  const { data: regions } = useQuery(
-    orpc.org.accessible.queryOptions({ input: { orgTypes: ["region"] } }),
+  const { data: regionOrgs } = useFetchAllPages({
+    queryKey: ["org.accessible.adminEventTypesModal"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.accessible({
+        orgTypes: ["region"],
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+  });
+  const regions = useMemo(
+    () => (regionOrgs ? { orgs: regionOrgs } : undefined),
+    [regionOrgs],
   );
   const sortedRegions = useMemo(() => {
     return regions?.orgs.sort((a, b) => {

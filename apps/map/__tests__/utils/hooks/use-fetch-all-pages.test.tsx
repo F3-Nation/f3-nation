@@ -7,7 +7,7 @@ import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 
 // getQueryClient() only returns a stable singleton in a browser-like
 // environment (jsdom, per vitest.config.ts) — see __tests__/orpc/react.test.ts.
-function wrapper({ children }: { children: React.ReactNode }) {
+function Wrapper({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={getQueryClient()}>
       {children}
@@ -32,7 +32,7 @@ describe("useFetchAllPages", () => {
           queryKey: ["single-page-test"],
           fetchPage,
         }),
-      { wrapper },
+      { wrapper: Wrapper },
     );
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -55,7 +55,7 @@ describe("useFetchAllPages", () => {
           queryKey: ["multi-page-test"],
           fetchPage,
         }),
-      { wrapper },
+      { wrapper: Wrapper },
     );
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -82,7 +82,7 @@ describe("useFetchAllPages", () => {
           fetchPage,
           enabled: false,
         }),
-      { wrapper },
+      { wrapper: Wrapper },
     );
 
     expect(fetchPage).not.toHaveBeenCalled();

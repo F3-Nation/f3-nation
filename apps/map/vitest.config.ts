@@ -18,10 +18,15 @@ export default defineConfig({
       exclude: coverageExclude,
       thresholds: {
         autoUpdate: true,
-        statements: 19.19,
-        branches: 16.87,
-        functions: 13.57,
-        lines: 19.59,
+        // Small buffer below the exact local `pnpm test` figure
+        // (19.19/16.87/13.57/19.59) -- see apps/admin/vitest.config.ts for
+        // why (CI's coverage count has a few hundredths of a percent of
+        // run-to-run jitter; this app's own committed threshold flaked once
+        // already on this PR at a razor-thin margin).
+        statements: 19.05,
+        branches: 16.72,
+        functions: 13.42,
+        lines: 19.44,
       },
     },
     exclude: [

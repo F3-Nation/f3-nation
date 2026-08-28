@@ -222,22 +222,29 @@ export const eventInstanceRouter = {
         )
         .where(where);
 
-      const sortedColumns = input?.sorting?.map((sorting) => {
-        const direction = sorting.desc ? desc : asc;
-        switch (sorting.id) {
-          case "startDate":
-            return direction(schema.eventInstances.startDate);
-          case "startTime":
-            return direction(schema.eventInstances.startTime);
-          case "name":
-            return direction(schema.eventInstances.name);
-          default:
-            return direction(schema.eventInstances.startDate);
-        }
-      }) ?? [
-        asc(schema.eventInstances.startDate),
-        asc(schema.eventInstances.startTime),
-      ];
+      // asc(id) is appended as a final tiebreaker so instances sharing the
+      // same startDate/startTime (or whatever sort field ties) still get a
+      // total order -- without one, offset pagination can return the same
+      // row on two pages or skip one entirely, since the DB is free to break
+      // ties differently between the count query and each page's query.
+      const sortedColumns = (
+        input?.sorting?.map((sorting) => {
+          const direction = sorting.desc ? desc : asc;
+          switch (sorting.id) {
+            case "startDate":
+              return direction(schema.eventInstances.startDate);
+            case "startTime":
+              return direction(schema.eventInstances.startTime);
+            case "name":
+              return direction(schema.eventInstances.name);
+            default:
+              return direction(schema.eventInstances.startDate);
+          }
+        }) ?? [
+          asc(schema.eventInstances.startDate),
+          asc(schema.eventInstances.startTime),
+        ]
+      ).concat(asc(schema.eventInstances.id));
 
       const query = ctx.db
         .select(select)

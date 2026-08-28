@@ -12,8 +12,9 @@ import {
 } from "@acme/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@acme/ui/popover";
 
+import { client } from "~/orpc/client";
 import type { RouterOutputs } from "~/orpc/types";
-import { orpc, useQuery } from "~/orpc/react";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 
 type Org = RouterOutputs["org"]["accessible"]["orgs"][number];
 
@@ -24,13 +25,17 @@ export const OrgFilter = ({
   onOrgSelect: (org: Org) => void;
   selectedOrgs: Org[];
 }) => {
-  const { data: accessibleOrgs } = useQuery(
-    orpc.org.accessible.queryOptions({
-      input: { orgTypes: ["area", "sector", "region", "nation"] },
-    }),
-  );
-
-  const orgs = accessibleOrgs?.orgs;
+  const { data: orgs } = useFetchAllPages({
+    queryKey: ["org.accessible.eventTypesOrgFilter"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs: page, total } = await client.org.accessible({
+        orgTypes: ["area", "sector", "region", "nation"],
+        pageIndex,
+        pageSize,
+      });
+      return { items: page, total };
+    },
+  });
   const [open, setOpen] = useState(false);
 
   return (

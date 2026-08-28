@@ -2,7 +2,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 
 import { EVENT_CATEGORY_LABEL_MAP, Z_INDEX } from "@acme/shared/app/constants";
@@ -88,15 +88,48 @@ export default function AdminWorkoutsModal({
 }: {
   data: DataType[ModalType.ADMIN_EVENTS];
 }) {
-  const { data: regions } = useQuery(
-    orpc.org.all.queryOptions({ input: { orgTypes: ["region"] } }),
+  const { data: regionOrgs } = useFetchAllPages({
+    queryKey: ["org.all.everyRegion", "adminWorkoutsModal"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.all({
+        orgTypes: ["region"],
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+  });
+  const regions = useMemo(
+    () => (regionOrgs ? { orgs: regionOrgs } : undefined),
+    [regionOrgs],
   );
-  const { data: locations } = useQuery(
-    orpc.location.all.queryOptions({ input: { statuses: ["active"] } }),
+  const { data: activeLocations } = useFetchAllPages({
+    queryKey: ["location.all.everyActive"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { locations: items, totalCount } = await client.location.all({
+        statuses: ["active"],
+        pageIndex,
+        pageSize,
+      });
+      return { items, total: totalCount };
+    },
+  });
+  const locations = useMemo(
+    () => (activeLocations ? { locations: activeLocations } : undefined),
+    [activeLocations],
   );
-  const { data: aos } = useQuery(
-    orpc.org.all.queryOptions({ input: { orgTypes: ["ao"] } }),
-  );
+  const { data: aoOrgs } = useFetchAllPages({
+    queryKey: ["org.all.everyAo"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.all({
+        orgTypes: ["ao"],
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+  });
+  const aos = useMemo(() => (aoOrgs ? { orgs: aoOrgs } : undefined), [aoOrgs]);
   const { data: eventResponse, isLoading: isLoadingEvent } = useQuery(
     orpc.event.byId.queryOptions({
       input: { id: data.id ?? -1 },

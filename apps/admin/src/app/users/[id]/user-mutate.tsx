@@ -51,7 +51,7 @@ export default function UserMutate({
     },
   });
   const sortedRegions = useMemo(() => {
-    return regions?.sort((a, b) => a.name.localeCompare(b.name)) ?? [];
+    return [...(regions ?? [])].sort((a, b) => a.name.localeCompare(b.name));
   }, [regions]);
 
   const form = useForm({

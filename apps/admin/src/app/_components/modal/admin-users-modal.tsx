@@ -90,12 +90,20 @@ export default function UserModal({
   });
 
   // Get orgs where user has admin role (required to manage access)
-  const { data: accessibleOrgsData } = useQuery(
-    orpc.org.accessible.queryOptions({
-      input: {
+  const { data: accessibleOrgs } = useFetchAllPages({
+    queryKey: ["org.accessible.adminUsersModal"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.accessible({
         orgTypes: ["region", "area", "sector", "nation"],
-      },
-    }),
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+  });
+  const accessibleOrgsData = useMemo(
+    () => (accessibleOrgs ? { orgs: accessibleOrgs } : undefined),
+    [accessibleOrgs],
   );
 
   // Filter to only orgs where user is admin (or all orgs if nation admin - roles will be empty)
