@@ -42,7 +42,7 @@
 import readline from "readline";
 
 import { drizzle } from "drizzle-orm/postgres-js";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import postgres from "postgres";
 
 import * as _schema from "@acme/db/schema/schema";
@@ -187,27 +187,38 @@ async function main() {
     };
   });
 
+  // Computed once, ahead of both branches, so the dry-run count matches what
+  // --confirm will actually insert -- rows already present get skipped in
+  // both modes instead of being counted as "would be inserted" here.
+  const alreadyPresent = await db
+    .select({ clientId: betterAuthOauthClient.clientId })
+    .from(betterAuthOauthClient)
+    .where(
+      inArray(
+        betterAuthOauthClient.clientId,
+        rows.map((row) => row.clientId),
+      ),
+    );
+  const alreadyPresentIds = new Set(alreadyPresent.map((row) => row.clientId));
+  const newRows = rows.filter((row) => !alreadyPresentIds.has(row.clientId));
+  for (const row of rows) {
+    if (alreadyPresentIds.has(row.clientId)) {
+      console.log(
+        `  Skipping ${row.clientId} — already present in better_auth_oauth_client.`,
+      );
+    }
+  }
+
   if (!confirmed) {
     console.log(
-      `\nDry run only — ${rows.length} row(s) would be inserted into better_auth_oauth_client.`,
+      `\nDry run only — ${newRows.length} row(s) would be inserted into better_auth_oauth_client.`,
     );
     console.log("Re-run with --confirm to actually write.");
     await sql.end();
     return;
   }
 
-  for (const row of rows) {
-    const [existing] = await db
-      .select({ clientId: betterAuthOauthClient.clientId })
-      .from(betterAuthOauthClient)
-      .where(eq(betterAuthOauthClient.clientId, row.clientId))
-      .limit(1);
-    if (existing) {
-      console.log(
-        `  Skipping ${row.clientId} — already present in better_auth_oauth_client.`,
-      );
-      continue;
-    }
+  for (const row of newRows) {
     await db.insert(betterAuthOauthClient).values(row);
     console.log(`  Migrated ${row.clientId}.`);
   }

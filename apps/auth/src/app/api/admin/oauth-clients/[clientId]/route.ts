@@ -34,7 +34,16 @@ export async function PATCH(
   if (unauthorized) return unauthorized;
 
   const { clientId } = await params;
-  const body = (await request.json()) as UpdateOAuthClientBody;
+  let parsedBody: unknown;
+  try {
+    parsedBody = await request.json();
+  } catch {
+    return NextResponse.json({ error: "invalid_json" }, { status: 400 });
+  }
+  if (typeof parsedBody !== "object" || parsedBody === null) {
+    return NextResponse.json({ error: "invalid_body" }, { status: 400 });
+  }
+  const body = parsedBody as UpdateOAuthClientBody;
 
   const [existing] = await db
     .select({ clientId: betterAuthOauthClient.clientId })
@@ -80,10 +89,15 @@ export async function PATCH(
   // when other fields are also present in the same request, so a caller
   // doesn't need two round-trips to rename a client and disable it at once.
   if (typeof body.disabled === "boolean") {
-    await db
-      .update(betterAuthOauthClient)
-      .set({ disabled: body.disabled, updatedAt: new Date().toISOString() })
-      .where(eq(betterAuthOauthClient.clientId, clientId));
+    try {
+      await db
+        .update(betterAuthOauthClient)
+        .set({ disabled: body.disabled, updatedAt: new Date().toISOString() })
+        .where(eq(betterAuthOauthClient.clientId, clientId));
+    } catch (err) {
+      logError("auth.admin.oauth_client_disable_failed", { clientId }, err);
+      return NextResponse.json({ error: "server_error" }, { status: 500 });
+    }
   }
 
   return NextResponse.json({ updated: true });

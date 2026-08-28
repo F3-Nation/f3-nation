@@ -41,6 +41,13 @@ function makeRequest(body?: unknown): NextRequest {
   } as unknown as NextRequest;
 }
 
+function makeInvalidJsonRequest(): NextRequest {
+  return {
+    headers: new Headers(),
+    json: () => Promise.reject(new SyntaxError("Unexpected end of JSON input")),
+  } as unknown as NextRequest;
+}
+
 function makeContext(clientId: string) {
   return { params: Promise.resolve({ clientId }) };
 }
@@ -58,6 +65,23 @@ describe("PATCH /api/admin/oauth-clients/[clientId]", () => {
       new Response(null, { status: 401 }) as never,
     );
     await PATCH(makeRequest({}), makeContext("existing-client"));
+    expect(dbMock.select).not.toHaveBeenCalled();
+  });
+
+  it("400s on malformed JSON instead of throwing", async () => {
+    const res = await PATCH(
+      makeInvalidJsonRequest(),
+      makeContext("existing-client"),
+    );
+
+    expect(res.status).toBe(400);
+    expect(dbMock.select).not.toHaveBeenCalled();
+  });
+
+  it("400s on a null body instead of throwing on property access", async () => {
+    const res = await PATCH(makeRequest(null), makeContext("existing-client"));
+
+    expect(res.status).toBe(400);
     expect(dbMock.select).not.toHaveBeenCalled();
   });
 
@@ -109,6 +133,24 @@ describe("PATCH /api/admin/oauth-clients/[clientId]", () => {
         update: { scope: "openid profile" },
       },
     });
+  });
+
+  it("500s and logs when the disabled DB write throws", async () => {
+    dbMock.update.mockImplementation(() => {
+      throw new Error("connection lost");
+    });
+
+    const res = await PATCH(
+      makeRequest({ disabled: true }),
+      makeContext("existing-client"),
+    );
+
+    expect(res.status).toBe(500);
+    expect(logErrorMock).toHaveBeenCalledWith(
+      "auth.admin.oauth_client_disable_failed",
+      { clientId: "existing-client" },
+      expect.any(Error),
+    );
   });
 
   it("500s and logs when adminUpdateOAuthClient throws", async () => {
