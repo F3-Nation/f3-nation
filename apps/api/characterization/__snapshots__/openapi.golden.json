@@ -4063,6 +4063,7 @@
             "in": "query",
             "name": "startDate",
             "schema": {
+              "description": "Inclusive lower bound on the instance start date (YYYY-MM-DD). Only instances starting on or after this date are returned.",
               "type": "string"
             }
           },
@@ -4072,6 +4073,7 @@
             "in": "query",
             "name": "startDateTo",
             "schema": {
+              "description": "Inclusive upper bound on the instance start date (YYYY-MM-DD). Only instances starting on or before this date are returned.",
               "type": "string"
             }
           },
