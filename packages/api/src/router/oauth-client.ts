@@ -42,6 +42,10 @@ function authBaseUrl(): string {
   return env.NEXT_PUBLIC_AUTH_URL;
 }
 
+// Bounds how long an admin request can hang on the auth server before
+// failing — without it a hung server blocks the request thread indefinitely.
+const AUTH_SERVER_TIMEOUT_MS = 10_000;
+
 function authAdminHeaders(): HeadersInit {
   if (!env.SUPER_ADMIN_API_KEY) {
     throw new ORPCError("INTERNAL_SERVER_ERROR", {
@@ -81,6 +85,7 @@ export const oauthClientRouter = {
       try {
         res = await fetch(`${authBaseUrl()}/api/admin/oauth-clients`, {
           headers: authAdminHeaders(),
+          signal: AbortSignal.timeout(AUTH_SERVER_TIMEOUT_MS),
         });
       } catch (error) {
         logError("api.oauth_client.list_unreachable", {}, error);
@@ -131,6 +136,7 @@ export const oauthClientRouter = {
           method: "POST",
           headers: authAdminHeaders(),
           body: JSON.stringify(input),
+          signal: AbortSignal.timeout(AUTH_SERVER_TIMEOUT_MS),
         });
       } catch (error) {
         logError(
@@ -188,6 +194,7 @@ export const oauthClientRouter = {
             method: "PATCH",
             headers: authAdminHeaders(),
             body: JSON.stringify(update),
+            signal: AbortSignal.timeout(AUTH_SERVER_TIMEOUT_MS),
           },
         );
       } catch (error) {

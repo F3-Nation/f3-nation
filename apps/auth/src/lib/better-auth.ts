@@ -269,6 +269,12 @@ export async function getAuth() {
   const { env } = await import("~/env");
   const { sendBetterAuthOtpEmail } = await import("~/lib/better-auth-email");
 
+  if (!env.BETTER_AUTH_SECRET) {
+    throw new Error(
+      "BETTER_AUTH_SECRET is not configured — required to turn on AUTH_USE_BETTER_AUTH.",
+    );
+  }
+
   const basePath = "/api/auth2";
   // Distinct from NEXT_PUBLIC_AUTH_URL alone (the legacy issuer) so a token
   // from this isolated, pre-cutover instance can never be mistaken for one
@@ -279,7 +285,9 @@ export async function getAuth() {
   _auth = createAuthInstance({
     baseURL: env.NEXT_PUBLIC_AUTH_URL,
     basePath,
-    secret: env.AUTH_SECRET,
+    // Deliberately separate from AUTH_SECRET (NextAuth's own signing key) —
+    // see env.ts's comment on BETTER_AUTH_SECRET.
+    secret: env.BETTER_AUTH_SECRET,
     issuer,
     database: drizzleAdapter(db, {
       provider: "pg",

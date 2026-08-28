@@ -45,16 +45,11 @@ export async function PATCH(
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
-  // Enable/disable is a direct DB flip — see file comment. Applied even
-  // when other fields are also present in the same request, so a caller
-  // doesn't need two round-trips to rename a client and disable it at once.
-  if (typeof body.disabled === "boolean") {
-    await db
-      .update(betterAuthOauthClient)
-      .set({ disabled: body.disabled, updatedAt: new Date().toISOString() })
-      .where(eq(betterAuthOauthClient.clientId, clientId));
-  }
-
+  // Field update (via Better Auth, can fail) runs before the disabled flip
+  // (a direct DB write that can't fail the same way) — otherwise a request
+  // that renames and disables a client in one call could commit the disable
+  // and then 500 on the rename, leaving the client disabled despite the
+  // caller seeing a failure.
   const hasFieldUpdate =
     body.name !== undefined ||
     body.redirectUris !== undefined ||
@@ -79,6 +74,16 @@ export async function PATCH(
       logError("auth.admin.oauth_client_update_failed", { clientId }, err);
       return NextResponse.json({ error: "server_error" }, { status: 500 });
     }
+  }
+
+  // Enable/disable is a direct DB flip — see file comment. Applied even
+  // when other fields are also present in the same request, so a caller
+  // doesn't need two round-trips to rename a client and disable it at once.
+  if (typeof body.disabled === "boolean") {
+    await db
+      .update(betterAuthOauthClient)
+      .set({ disabled: body.disabled, updatedAt: new Date().toISOString() })
+      .where(eq(betterAuthOauthClient.clientId, clientId));
   }
 
   return NextResponse.json({ updated: true });

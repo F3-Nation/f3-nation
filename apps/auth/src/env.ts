@@ -14,6 +14,13 @@ export const env = createEnv({
     // deploy without it configured just has these routes always reject,
     // rather than failing env validation outright.
     SUPER_ADMIN_API_KEY: z.string().min(1).optional(),
+    // Better Auth's own session-signing secret (#876 Phase 3) — deliberately
+    // separate key material from AUTH_SECRET, which stays exclusively
+    // NextAuth's. Optional here (checked at the point of use in
+    // apps/auth/src/lib/better-auth.ts's getAuth()) for the same reason
+    // SUPER_ADMIN_API_KEY is: a deploy that hasn't set it just can't turn on
+    // AUTH_USE_BETTER_AUTH, rather than failing env validation outright.
+    BETTER_AUTH_SECRET: z.string().min(1).optional(),
     // #876 Phase 3 kill switch. Off by default: mounts the Better Auth
     // instance (apps/auth/src/lib/better-auth.ts) at the isolated
     // /api/auth2/* path so it can be exercised without touching any of the

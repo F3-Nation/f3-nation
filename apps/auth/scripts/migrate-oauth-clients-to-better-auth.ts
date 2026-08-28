@@ -76,10 +76,15 @@ async function main() {
   }
 
   const { config } = await import("dotenv");
-  if (targetEnv === "local") {
-    config({ path: "../../.env" });
-  } else {
-    config({ path: `.env.${targetEnv}` });
+  const envPath = targetEnv === "local" ? "../../.env" : `.env.${targetEnv}`;
+  // override: true so --env's file always wins over whatever DATABASE_* the
+  // calling shell already has set (e.g. a leftover prod export) — without
+  // it, dotenv only fills in variables that aren't already present, so
+  // --env local could silently connect using ambient prod credentials.
+  const result = config({ path: envPath, override: true });
+  if (result.error) {
+    console.error(`Could not load ${envPath}: ${result.error.message}`);
+    process.exit(1);
   }
 
   const databaseHost = process.env.DATABASE_HOST;
@@ -109,6 +114,9 @@ async function main() {
     user: databaseUser,
     password: databasePassword,
     database: databaseName,
+    // Matches packages/db/src/utils/functions.ts's existing ssl convention —
+    // required for any non-local target.
+    ssl: targetEnv === "local" ? false : "require",
   });
   const db = drizzle(sql);
 
@@ -133,16 +141,29 @@ async function main() {
   const rows = clients.map((client) => {
     let redirectUris: string[];
     try {
-      redirectUris = JSON.parse(client.redirectUris) as string[];
+      const parsed: unknown = JSON.parse(client.redirectUris);
+      if (
+        !Array.isArray(parsed) ||
+        !parsed.every((uri): uri is string => typeof uri === "string")
+      ) {
+        throw new Error("not a string array");
+      }
+      redirectUris = parsed;
     } catch {
       throw new Error(
-        `oauth_clients.redirect_uris for "${client.id}" is not valid JSON — fix that row before migrating.`,
+        `oauth_clients.redirect_uris for "${client.id}" is not a valid JSON string array — fix that row before migrating.`,
       );
     }
 
     console.log(
       `  ${client.id} (${client.name}) — ${client.isPublic ? "public" : "confidential, migrating DISABLED — needs a secret issued before use, see file comment"}`,
     );
+
+    const trimmedScopes = client.scopes?.trim();
+    const scopeString =
+      trimmedScopes && trimmedScopes.length > 0
+        ? trimmedScopes
+        : "openid profile email";
 
     return {
       id: crypto.randomUUID(),
@@ -157,7 +178,7 @@ async function main() {
       applicationType: client.isPublic ? ("native" as const) : ("web" as const),
       requirePKCE: true, // matches the hand-rolled server's unconditional PKCE requirement
       redirectUris,
-      scopes: (client.scopes ?? "openid profile email").split(" "),
+      scopes: scopeString.split(/\s+/),
       name: client.name,
       grantTypes: ["authorization_code", "refresh_token"],
       responseTypes: ["code" as const],
