@@ -75,15 +75,15 @@ export default function AdminEventTypesModal({
       return { items: orgs, total };
     },
   });
-  const regions = useMemo(
-    () => (regionOrgs ? { orgs: regionOrgs } : undefined),
-    [regionOrgs],
-  );
   const sortedRegions = useMemo(() => {
-    return regions?.orgs.sort((a, b) => {
-      return a.orgType.localeCompare(b.orgType) || a.name.localeCompare(b.name);
-    });
-  }, [regions]);
+    return regionOrgs
+      ? [...regionOrgs].sort((a, b) => {
+          return (
+            a.orgType.localeCompare(b.orgType) || a.name.localeCompare(b.name)
+          );
+        })
+      : undefined;
+  }, [regionOrgs]);
   const router = useRouter();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
