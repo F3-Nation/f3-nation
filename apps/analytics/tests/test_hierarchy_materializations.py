@@ -18,7 +18,7 @@ def fixture() -> duckdb.DuckDBPyConnection:
     db.execute(
         "CREATE TABLE pg.public.event_instances ("
         "id INTEGER, series_id INTEGER, org_id INTEGER, location_id INTEGER, "
-        "is_active BOOLEAN, start_date DATE, start_time VARCHAR, name VARCHAR, pax_count INTEGER)"
+        "is_active BOOLEAN, start_date DATE, start_time VARCHAR, name VARCHAR, pax_count INTEGER, meta JSON)"
     )
     db.execute("CREATE TABLE pg.public.events (id INTEGER, name VARCHAR)")
     db.execute("CREATE TABLE pg.public.locations (id INTEGER, name VARCHAR)")
@@ -55,12 +55,12 @@ def fixture() -> duckdb.DuckDBPyConnection:
         [(1, "Run", "first_f"), (2, "Q", "second_f"), (3, "Jog", "first_f")],
     )
     db.executemany(
-        "INSERT INTO pg.public.event_instances VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO pg.public.event_instances VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
-            (600, 700, 905, 800, True, "2026-08-27", "06:00", "Workout", 10),
-            (601, 700, 905, 800, True, "2026-08-26", "06:00", "Workout", 10),
-            (602, 700, 905, 800, False, "2026-09-01", "06:00", "Workout", 10),
-            (603, 700, 905, 800, True, "2026-09-01", "06:00", "Workout", None),
+            (600, 700, 905, 800, True, "2026-08-27", "06:00", "Workout", 10, "{}"),
+            (601, 700, 905, 800, True, "2026-08-26", "06:00", "Workout", 10, "{}"),
+            (602, 700, 905, 800, False, "2026-09-01", "06:00", "Workout", 10, "{}"),
+            (603, 700, 905, 800, True, "2026-09-01", "06:00", "Workout", None, "{}"),
         ],
     )
     db.executemany(
@@ -138,8 +138,8 @@ def test_upcoming_uses_strict_date_cutoff_and_ordered_q_list():
 def test_upcoming_keeps_standalone_instance_without_series_or_ao():
     db = fixture()
     db.execute(
-        "INSERT INTO pg.public.event_instances VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (604, 999, 999, 800, True, "2026-09-02", "07:00", "Standalone", 10),
+        "INSERT INTO pg.public.event_instances VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (604, 999, 999, 800, True, "2026-09-02", "07:00", "Standalone", 10, "{}"),
     )
     db.execute("INSERT INTO pg.public.event_instances_x_event_types VALUES (604, 1)")
 
@@ -158,8 +158,8 @@ def test_upcoming_keeps_standalone_instance_without_series_or_ao():
     )
 
     db.execute(
-        "INSERT INTO pg.public.event_instances VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (605, 700, 906, 800, True, "2026-09-03", "07:00", None, 10),
+        "INSERT INTO pg.public.event_instances VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (605, 700, 906, 800, True, "2026-09-03", "07:00", None, 10, "{}"),
     )
     db.execute("INSERT INTO pg.public.event_instances_x_event_types VALUES (605, 1)")
     row = run(db, "pv_upcoming.sql")[-1]
