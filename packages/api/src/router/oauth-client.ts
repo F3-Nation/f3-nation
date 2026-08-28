@@ -1,0 +1,208 @@
+import { ORPCError } from "@orpc/server";
+import { z } from "zod";
+
+import { env } from "@acme/env";
+
+import { logError } from "../logger";
+import { adminProcedure } from "../shared";
+
+/**
+ * Admin UI for apps/auth's OAuth client registrations (#876 Phase 3) — the
+ * "similar to what we were doing with Logto" ask: list every registered
+ * client, create one, edit it, enable/disable it, from apps/admin instead
+ * of the CLI-only apps/auth/scripts/add-client.ts.
+ *
+ * Unlike every other router in this package, the data doesn't live in this
+ * app's own DB — it lives in apps/auth's Better Auth instance, a separate
+ * deployed app. So every handler here is a server-to-server fetch to
+ * apps/auth/src/app/api/admin/oauth-clients/*, authenticated with
+ * SUPER_ADMIN_API_KEY (the same shared secret packages/api/src/shared.ts's
+ * revalidateAuthProcedure already uses for this exact pattern), never
+ * exposed to the browser — the browser only ever talks to adminProcedure
+ * here, which enforces its own session-based admin role check first.
+ *
+ * Can't be exercised end-to-end yet: apps/auth's Better Auth instance
+ * (AUTH_USE_BETTER_AUTH) isn't deployed anywhere live, and the
+ * better_auth_* migration it depends on hasn't been applied — see
+ * packages/db/drizzle/schema.ts's "DRAFTED, NOT APPLIED" comment. This
+ * router is shaped and ready for when it is.
+ */
+
+function authBaseUrl(): string {
+  if (!env.NEXT_PUBLIC_AUTH_URL) {
+    throw new ORPCError("INTERNAL_SERVER_ERROR", {
+      message: "NEXT_PUBLIC_AUTH_URL is not configured",
+    });
+  }
+  return env.NEXT_PUBLIC_AUTH_URL;
+}
+
+function authAdminHeaders(): HeadersInit {
+  if (!env.SUPER_ADMIN_API_KEY) {
+    throw new ORPCError("INTERNAL_SERVER_ERROR", {
+      message: "SUPER_ADMIN_API_KEY is not configured",
+    });
+  }
+  return {
+    "Content-Type": "application/json",
+    "x-api-key": env.SUPER_ADMIN_API_KEY,
+  };
+}
+
+const oauthClientSchema = z.object({
+  clientId: z.string(),
+  name: z.string().nullable(),
+  redirectUris: z.array(z.string()),
+  scopes: z.array(z.string()).nullable(),
+  isPublic: z.boolean(),
+  disabled: z.boolean().nullable(),
+  createdAt: z.string().nullable(),
+  updatedAt: z.string().nullable(),
+});
+
+export const oauthClientRouter = {
+  list: adminProcedure
+    .route({
+      method: "GET",
+      path: "/",
+      tags: ["oauth-client"],
+      summary: "List OAuth clients",
+      description:
+        "List every OAuth client registered against the auth server (apps/auth). Requires admin role.",
+    })
+    .output(z.object({ clients: z.array(oauthClientSchema) }))
+    .handler(async () => {
+      let res: Response;
+      try {
+        res = await fetch(`${authBaseUrl()}/api/admin/oauth-clients`, {
+          headers: authAdminHeaders(),
+        });
+      } catch (error) {
+        logError("api.oauth_client.list_unreachable", {}, error);
+        throw new ORPCError("INTERNAL_SERVER_ERROR", {
+          message: "Unable to reach the auth server",
+        });
+      }
+      if (!res.ok) {
+        logError("api.oauth_client.list_failed", { status: res.status });
+        throw new ORPCError("INTERNAL_SERVER_ERROR", {
+          message: "Failed to list OAuth clients",
+        });
+      }
+      return (await res.json()) as {
+        clients: z.infer<typeof oauthClientSchema>[];
+      };
+    }),
+
+  create: adminProcedure
+    .input(
+      z.object({
+        name: z.string().min(1),
+        redirectUris: z.array(z.url()).min(1),
+        scope: z
+          .string()
+          .default("openid profile email")
+          .describe("Space-separated scopes"),
+        isPublic: z
+          .boolean()
+          .describe(
+            "Public (PKCE-only, no secret — native/mobile apps) vs confidential (client_secret_basic)",
+          ),
+      }),
+    )
+    .route({
+      method: "POST",
+      path: "/",
+      tags: ["oauth-client"],
+      summary: "Create an OAuth client",
+      description:
+        "Register a new OAuth client against the auth server. The response includes the client_secret exactly once, for confidential clients — it is never retrievable again after this call. Requires admin role.",
+    })
+    .output(z.object({ client: z.record(z.string(), z.unknown()) }))
+    .handler(async ({ input }) => {
+      let res: Response;
+      try {
+        res = await fetch(`${authBaseUrl()}/api/admin/oauth-clients`, {
+          method: "POST",
+          headers: authAdminHeaders(),
+          body: JSON.stringify(input),
+        });
+      } catch (error) {
+        logError(
+          "api.oauth_client.create_unreachable",
+          { name: input.name },
+          error,
+        );
+        throw new ORPCError("INTERNAL_SERVER_ERROR", {
+          message: "Unable to reach the auth server",
+        });
+      }
+      if (!res.ok) {
+        logError("api.oauth_client.create_failed", {
+          name: input.name,
+          status: res.status,
+        });
+        throw new ORPCError("INTERNAL_SERVER_ERROR", {
+          message: "Failed to create OAuth client",
+        });
+      }
+      return (await res.json()) as { client: Record<string, unknown> };
+    }),
+
+  update: adminProcedure
+    .input(
+      z.object({
+        clientId: z.string(),
+        name: z.string().min(1).optional(),
+        redirectUris: z.array(z.url()).min(1).optional(),
+        scope: z.string().optional(),
+        disabled: z
+          .boolean()
+          .optional()
+          .describe(
+            "Enable/disable — the only supported way to deactivate a client. There is no delete: docs/AI_GUARDRAILS.md requires a soft delete when one exists.",
+          ),
+      }),
+    )
+    .route({
+      method: "PATCH",
+      path: "/{clientId}",
+      tags: ["oauth-client"],
+      summary: "Update an OAuth client",
+      description:
+        "Update an OAuth client's name, redirect URIs, scope, or enabled state. Requires admin role.",
+    })
+    .output(z.object({ updated: z.boolean() }))
+    .handler(async ({ input }) => {
+      const { clientId, ...update } = input;
+      let res: Response;
+      try {
+        res = await fetch(
+          `${authBaseUrl()}/api/admin/oauth-clients/${encodeURIComponent(clientId)}`,
+          {
+            method: "PATCH",
+            headers: authAdminHeaders(),
+            body: JSON.stringify(update),
+          },
+        );
+      } catch (error) {
+        logError("api.oauth_client.update_unreachable", { clientId }, error);
+        throw new ORPCError("INTERNAL_SERVER_ERROR", {
+          message: "Unable to reach the auth server",
+        });
+      }
+      if (res.status === 404) {
+        throw new ORPCError("NOT_FOUND");
+      }
+      if (!res.ok) {
+        logError("api.oauth_client.update_failed", {
+          clientId,
+          status: res.status,
+        });
+        throw new ORPCError("INTERNAL_SERVER_ERROR", {
+          message: "Failed to update OAuth client",
+        });
+      }
+      return (await res.json()) as { updated: boolean };
+    }),
+};
