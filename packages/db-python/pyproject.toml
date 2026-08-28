@@ -23,7 +23,12 @@ Documentation = "https://github.io/F3-Nation/f3-data-models"
 [dependency-groups]
 dev = [
     "poethepoet>=0.34.0,<0.35.0",
+    "pytest>=9.0.3,<9.1.0",
+    "ruff>=0.14.0,<1.0.0",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 120
