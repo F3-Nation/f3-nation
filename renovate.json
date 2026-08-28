@@ -45,6 +45,11 @@
       "enabled": false
     },
     {
+      "description": "Pin Python (uv/pyproject.toml) dependencies to exact versions on every update, instead of a range. Required for minimumReleaseAge to actually work with uv: Renovate can only stop `uv lock` from grabbing a too-new version if the version in pyproject.toml is an exact pin, not a range (see renovatebot/renovate#41624). Must stay its own rule — rangeStrategy can't be combined with matchUpdateTypes in one packageRule, because rangeStrategy is evaluated before Renovate knows the update type.",
+      "matchManagers": ["pep621"],
+      "rangeStrategy": "pin"
+    },
+    {
       "description": "Group Python (uv/pyproject.toml) minor and patch updates into one PR, separate from the npm non-major group — different lockfile, keeps uv.lock churn reviewable on its own",
       "groupName": "Python dependencies (non-major)",
       "groupSlug": "python-non-major",
