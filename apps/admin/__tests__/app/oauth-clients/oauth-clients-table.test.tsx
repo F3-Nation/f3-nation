@@ -28,6 +28,19 @@ describe("OauthClientsTable", () => {
     expect(container.querySelector(".animate-spin")).not.toBeNull();
   });
 
+  it("shows an error state instead of the empty state when the query fails", () => {
+    useQueryMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+    });
+
+    render(<OauthClientsTable />);
+
+    expect(screen.getByText("Unable to load OAuth clients.")).toBeTruthy();
+    expect(screen.queryByText("No OAuth clients yet.")).toBeNull();
+  });
+
   it("shows an empty state when there are no clients", () => {
     useQueryMock.mockReturnValue({ data: { clients: [] }, isLoading: false });
 

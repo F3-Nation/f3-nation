@@ -62,8 +62,17 @@ export default function AdminOauthClientsModal({
   const isEditing = !!clientId;
   const [createdSecret, setCreatedSecret] = useState<string | null>(null);
 
-  const { data: clientsData } = useQuery(orpc.oauthClient.list.queryOptions());
+  const {
+    data: clientsData,
+    isLoading: isClientsLoading,
+    isError: isClientsError,
+  } = useQuery(orpc.oauthClient.list.queryOptions());
   const existing = clientsData?.clients.find((c) => c.clientId === clientId);
+  // Only meaningful once the list query has actually resolved (unsuccessfully
+  // or successfully-without-a-match) — checked in that order in the render
+  // below so we don't flash "not found" while the query is still in flight.
+  const isEditTargetUnavailable =
+    isEditing && !isClientsLoading && (isClientsError || !existing);
 
   const form = useForm({
     schema: OauthClientFormSchema,
@@ -175,6 +184,21 @@ export default function AdminOauthClientsModal({
                 <Button onClick={() => closeModal()}>Done</Button>
               </div>
             </>
+          ) : isEditing && isClientsLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Spinner className="h-5 w-5" />
+            </div>
+          ) : isEditTargetUnavailable ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-10 text-center text-sm text-muted-foreground">
+              <p>
+                {isClientsError
+                  ? "Unable to load this client. Please try again."
+                  : "This client could not be found."}
+              </p>
+              <Button variant="outline" onClick={() => closeModal()}>
+                Close
+              </Button>
+            </div>
           ) : (
             <Form {...form}>
               <form

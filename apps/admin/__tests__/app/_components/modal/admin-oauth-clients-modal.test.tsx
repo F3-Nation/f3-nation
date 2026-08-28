@@ -128,6 +128,45 @@ describe("AdminOauthClientsModal", () => {
     expect(publicCheckbox.getAttribute("data-disabled")).not.toBeNull();
   });
 
+  it("shows a loading spinner in edit mode while the client list is still loading, instead of a blank form", () => {
+    useQueryMock.mockReturnValue({ data: undefined, isLoading: true });
+
+    render(<AdminOauthClientsModal data={{ clientId: "paxvault-client" }} />);
+
+    // Dialog content renders into a document.body portal, not the render()
+    // container, so the spinner has to be queried from the document.
+    expect(document.querySelector(".animate-spin")).not.toBeNull();
+    expect(screen.queryByLabelText("Name")).toBeNull();
+  });
+
+  it("shows an error state in edit mode when the client list query fails, instead of a blank form", () => {
+    useQueryMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+    });
+
+    render(<AdminOauthClientsModal data={{ clientId: "paxvault-client" }} />);
+
+    expect(
+      screen.getByText("Unable to load this client. Please try again."),
+    ).toBeTruthy();
+    expect(screen.queryByLabelText("Name")).toBeNull();
+  });
+
+  it("shows a not-found state in edit mode when the target client isn't in the loaded list, instead of a blank form", () => {
+    useQueryMock.mockReturnValue({
+      data: { clients: [] },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<AdminOauthClientsModal data={{ clientId: "missing-client" }} />);
+
+    expect(screen.getByText("This client could not be found.")).toBeTruthy();
+    expect(screen.queryByLabelText("Name")).toBeNull();
+  });
+
   it("submits a new client with offline_access on and reveals the generated secret on success", async () => {
     useQueryMock.mockReturnValue({ data: { clients: [] } });
     createMutateAsync.mockResolvedValue({
