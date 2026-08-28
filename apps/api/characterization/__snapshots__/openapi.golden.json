@@ -10494,7 +10494,7 @@
     },
     "/v1/oauth-client": {
       "get": {
-        "description": "List every OAuth client registered against the auth server (apps/auth). Requires admin role.",
+        "description": "List every OAuth client registered against the auth server (apps/auth). Requires F3 Nation admin role.",
         "operationId": "oauthClient.list",
         "parameters": [
           {
@@ -10607,7 +10607,7 @@
         ]
       },
       "post": {
-        "description": "Register a new OAuth client against the auth server. The response includes the client_secret exactly once, for confidential clients — it is never retrievable again after this call. Requires admin role.",
+        "description": "Register a new OAuth client against the auth server. The response includes the client_secret exactly once, for confidential clients — it is never retrievable again after this call. Requires F3 Nation admin role.",
         "operationId": "oauthClient.create",
         "parameters": [
           {
@@ -10684,7 +10684,7 @@
     },
     "/v1/oauth-client/{clientId}": {
       "patch": {
-        "description": "Update an OAuth client's name, redirect URIs, scope, or enabled state. Requires admin role.",
+        "description": "Update an OAuth client's name, redirect URIs, scope, or enabled state. Requires F3 Nation admin role.",
         "operationId": "oauthClient.update",
         "parameters": [
           {

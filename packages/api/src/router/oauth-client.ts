@@ -4,7 +4,7 @@ import { z } from "zod";
 import { env } from "@acme/env";
 
 import { logError } from "../logger";
-import { adminProcedure } from "../shared";
+import { nationAdminProcedure } from "../shared";
 
 /**
  * Admin UI for apps/auth's OAuth client registrations (#876 Phase 3) — the
@@ -18,8 +18,13 @@ import { adminProcedure } from "../shared";
  * apps/auth/src/app/api/admin/oauth-clients/*, authenticated with
  * SUPER_ADMIN_API_KEY (the same shared secret packages/api/src/shared.ts's
  * revalidateAuthProcedure already uses for this exact pattern), never
- * exposed to the browser — the browser only ever talks to adminProcedure
- * here, which enforces its own session-based admin role check first.
+ * exposed to the browser — the browser only ever talks to
+ * nationAdminProcedure here, which enforces its own session-based
+ * nation-admin check first. Plain adminProcedure isn't enough: it only
+ * checks for an "admin" role name with no org scoping, so any org's admin
+ * would qualify for what's meant to be nation-wide SSO client
+ * administration — the same distinction packages/api/src/router/mail.ts
+ * already makes for its own nation-wide operations.
  *
  * Can't be exercised end-to-end yet: apps/auth's Better Auth instance
  * (AUTH_USE_BETTER_AUTH) isn't deployed anywhere live, and the
@@ -61,14 +66,14 @@ const oauthClientSchema = z.object({
 });
 
 export const oauthClientRouter = {
-  list: adminProcedure
+  list: nationAdminProcedure
     .route({
       method: "GET",
       path: "/",
       tags: ["oauth-client"],
       summary: "List OAuth clients",
       description:
-        "List every OAuth client registered against the auth server (apps/auth). Requires admin role.",
+        "List every OAuth client registered against the auth server (apps/auth). Requires F3 Nation admin role.",
     })
     .output(z.object({ clients: z.array(oauthClientSchema) }))
     .handler(async () => {
@@ -94,7 +99,7 @@ export const oauthClientRouter = {
       };
     }),
 
-  create: adminProcedure
+  create: nationAdminProcedure
     .input(
       z.object({
         name: z.string().min(1),
@@ -116,7 +121,7 @@ export const oauthClientRouter = {
       tags: ["oauth-client"],
       summary: "Create an OAuth client",
       description:
-        "Register a new OAuth client against the auth server. The response includes the client_secret exactly once, for confidential clients — it is never retrievable again after this call. Requires admin role.",
+        "Register a new OAuth client against the auth server. The response includes the client_secret exactly once, for confidential clients — it is never retrievable again after this call. Requires F3 Nation admin role.",
     })
     .output(z.object({ client: z.record(z.string(), z.unknown()) }))
     .handler(async ({ input }) => {
@@ -149,7 +154,7 @@ export const oauthClientRouter = {
       return (await res.json()) as { client: Record<string, unknown> };
     }),
 
-  update: adminProcedure
+  update: nationAdminProcedure
     .input(
       z.object({
         clientId: z.string(),
@@ -170,7 +175,7 @@ export const oauthClientRouter = {
       tags: ["oauth-client"],
       summary: "Update an OAuth client",
       description:
-        "Update an OAuth client's name, redirect URIs, scope, or enabled state. Requires admin role.",
+        "Update an OAuth client's name, redirect URIs, scope, or enabled state. Requires F3 Nation admin role.",
     })
     .output(z.object({ updated: z.boolean() }))
     .handler(async ({ input }) => {
