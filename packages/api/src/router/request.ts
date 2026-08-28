@@ -537,7 +537,7 @@ export const requestRouter = {
 
       const requests = usePagination
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
-        : await query.orderBy(...sortedColumns);
+        : await query.orderBy(...sortedColumns).limit(limit);
 
       return { requests, totalCount: totalCount?.count ?? 0 };
     }),

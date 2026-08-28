@@ -2,8 +2,9 @@ import { Controller, useFormContext } from "react-hook-form";
 
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 
-import { orpc, useQuery } from "~/orpc/react";
+import { client } from "~/orpc/client";
 import { useOptions } from "~/utils/use-options";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 
 interface InRegionFormValues {
   originalRegionId?: number | null;
@@ -13,12 +14,20 @@ interface InRegionFormValues {
 export const InRegionForm = () => {
   const form = useFormContext<InRegionFormValues>();
 
-  const { data: regions } = useQuery(
-    orpc.org.all.queryOptions({ input: { orgTypes: ["region"] } }),
-  );
+  const { data: regions } = useFetchAllPages({
+    queryKey: ["org.all.everyRegion"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.all({
+        orgTypes: ["region"],
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+  });
 
   const regionOptions = useOptions(
-    regions?.orgs,
+    regions,
     (r) => r.name,
     (r) => r.id.toString(),
   );
@@ -43,7 +52,7 @@ export const InRegionForm = () => {
                   options={regionOptions}
                   value={field.value?.toString()}
                   onSelect={(item) => {
-                    const region = regions?.orgs.find(
+                    const region = regions?.find(
                       (region) => region.id.toString() === item,
                     );
                     // Never write null — the request schemas require a

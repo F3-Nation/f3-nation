@@ -209,7 +209,7 @@ export const eventTypeRouter = {
 
       const eventTypes = usePagination
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
-        : await query.orderBy(...sortedColumns);
+        : await query.orderBy(...sortedColumns).limit(limit);
 
       return { eventTypes, totalCount };
     }),

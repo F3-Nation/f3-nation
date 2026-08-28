@@ -322,7 +322,7 @@ export const orgRouter = {
 
       const orgs_untyped = usePagination
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
-        : await query.orderBy(...sortedColumns);
+        : await query.orderBy(...sortedColumns).limit(limit);
 
       // Something is broken with org to org types
       return { orgs: orgs_untyped, total };
@@ -469,7 +469,7 @@ export const orgRouter = {
               offset,
               limit,
             )
-          : await baseQuery.orderBy(...sortedColumns);
+          : await baseQuery.orderBy(...sortedColumns).limit(limit);
 
         return {
           orgs: allOrgs.map((org) => ({
@@ -600,7 +600,7 @@ export const orgRouter = {
       const total = sortedOrgs.length;
       const paginatedOrgs = usePagination
         ? sortedOrgs.slice(offset, offset + limit)
-        : sortedOrgs;
+        : sortedOrgs.slice(0, limit);
 
       return {
         orgs: paginatedOrgs,

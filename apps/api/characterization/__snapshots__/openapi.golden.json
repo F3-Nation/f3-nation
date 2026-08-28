@@ -3050,7 +3050,7 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns all matching events unpaginated (unchanged default).",
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both still returns a single default-sized page of events, not every matching row.",
               "maximum": 100000,
               "minimum": 0,
               "type": "integer"
@@ -3062,8 +3062,8 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "description": "Number of events per page (max 10000). Supplying this (or pageIndex) opts into paginated results; omitting both returns all matching events unpaginated (unchanged default).",
-              "maximum": 10000,
+              "description": "Number of events per page (max 100). Supplying this (or pageIndex) opts into paginated results; omitting both still returns a single default-sized page of events, not every matching row.",
+              "maximum": 100,
               "minimum": -9007199254740991,
               "type": "integer"
             }
@@ -3937,7 +3937,7 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns all matching event instances unpaginated (unchanged default).",
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both still returns a single default-sized page of event instances, not every matching row.",
               "maximum": 100000,
               "minimum": 0,
               "type": "integer"
@@ -3949,8 +3949,8 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "description": "Number of event instances per page (max 10000). Supplying this (or pageIndex) opts into paginated results; omitting both returns all matching event instances unpaginated (unchanged default).",
-              "maximum": 10000,
+              "description": "Number of event instances per page (max 100). Supplying this (or pageIndex) opts into paginated results; omitting both still returns a single default-sized page of event instances, not every matching row.",
+              "maximum": 100,
               "minimum": -9007199254740991,
               "type": "integer"
             }
@@ -4826,7 +4826,7 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns all matching event tags unpaginated (unchanged default).",
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both still returns a single default-sized page of event tags, not every matching row.",
               "maximum": 100000,
               "minimum": 0,
               "type": "integer"
@@ -4838,8 +4838,8 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "description": "Number of event tags per page (max 10000). Supplying this (or pageIndex) opts into paginated results; omitting both returns all matching event tags unpaginated (unchanged default).",
-              "maximum": 10000,
+              "description": "Number of event tags per page (max 100). Supplying this (or pageIndex) opts into paginated results; omitting both still returns a single default-sized page of event tags, not every matching row.",
+              "maximum": 100,
               "minimum": -9007199254740991,
               "type": "integer"
             }
@@ -5181,7 +5181,7 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns all matching event types unpaginated (unchanged default).",
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both still returns a single default-sized page of event types, not every matching row.",
               "maximum": 100000,
               "minimum": 0,
               "type": "integer"
@@ -5193,8 +5193,8 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "description": "Number of event types per page (max 10000). Supplying this (or pageIndex) opts into paginated results; omitting both returns all matching event types unpaginated (unchanged default).",
-              "maximum": 10000,
+              "description": "Number of event types per page (max 100). Supplying this (or pageIndex) opts into paginated results; omitting both still returns a single default-sized page of event types, not every matching row.",
+              "maximum": 100,
               "minimum": -9007199254740991,
               "type": "integer"
             }
@@ -6390,7 +6390,7 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns all matching locations unpaginated (unchanged default).",
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both still returns a single default-sized page of locations, not every matching row.",
               "maximum": 100000,
               "minimum": 0,
               "type": "integer"
@@ -6402,8 +6402,8 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "description": "Number of locations per page (max 10000). Supplying this (or pageIndex) opts into paginated results; omitting both returns all matching locations unpaginated (unchanged default).",
-              "maximum": 10000,
+              "description": "Number of locations per page (max 100). Supplying this (or pageIndex) opts into paginated results; omitting both still returns a single default-sized page of locations, not every matching row.",
+              "maximum": 100,
               "minimum": -9007199254740991,
               "type": "integer"
             }
@@ -7992,7 +7992,7 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns all matching events unpaginated (unchanged default).",
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both still returns a single default-sized page of events, not every matching row.",
               "maximum": 100000,
               "minimum": 0,
               "type": "integer"
@@ -8004,8 +8004,8 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "description": "Number of events per page (max 10000). Supplying this (or pageIndex) opts into paginated results; omitting both returns all matching events unpaginated (unchanged default).",
-              "maximum": 10000,
+              "description": "Number of events per page (max 100). Supplying this (or pageIndex) opts into paginated results; omitting both still returns a single default-sized page of events, not every matching row.",
+              "maximum": 100,
               "minimum": -9007199254740991,
               "type": "integer"
             }
@@ -10615,7 +10615,7 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns all matching organizations unpaginated (unchanged default).",
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both still returns a single default-sized page of organizations, not every matching row.",
               "maximum": 100000,
               "minimum": 0,
               "type": "integer"
@@ -10627,8 +10627,8 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "description": "Number of organizations per page (max 10000). Supplying this (or pageIndex) opts into paginated results; omitting both returns all matching organizations unpaginated (unchanged default).",
-              "maximum": 10000,
+              "description": "Number of organizations per page (max 100). Supplying this (or pageIndex) opts into paginated results; omitting both still returns a single default-sized page of organizations, not every matching row.",
+              "maximum": 100,
               "minimum": -9007199254740991,
               "type": "integer"
             }
@@ -11824,7 +11824,7 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns all matching organizations unpaginated (unchanged default).",
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both still returns a single default-sized page of organizations, not every matching row.",
               "maximum": 100000,
               "minimum": 0,
               "type": "integer"
@@ -11836,8 +11836,8 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "description": "Number of organizations per page (max 10000). Supplying this (or pageIndex) opts into paginated results; omitting both returns all matching organizations unpaginated (unchanged default).",
-              "maximum": 10000,
+              "description": "Number of organizations per page (max 100). Supplying this (or pageIndex) opts into paginated results; omitting both still returns a single default-sized page of organizations, not every matching row.",
+              "maximum": 100,
               "minimum": -9007199254740991,
               "type": "integer"
             }
@@ -12631,7 +12631,7 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns all matching positions unpaginated (unchanged default).",
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both still returns a single default-sized page of positions, not every matching row.",
               "maximum": 100000,
               "minimum": 0,
               "type": "integer"
@@ -12643,8 +12643,8 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "description": "Number of positions per page (max 10000). Supplying this (or pageIndex) opts into paginated results; omitting both returns all matching positions unpaginated (unchanged default).",
-              "maximum": 10000,
+              "description": "Number of positions per page (max 100). Supplying this (or pageIndex) opts into paginated results; omitting both still returns a single default-sized page of positions, not every matching row.",
+              "maximum": 100,
               "minimum": -9007199254740991,
               "type": "integer"
             }
@@ -13871,7 +13871,7 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns all matching requests unpaginated (unchanged default).",
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both still returns a single default-sized page of requests, not every matching row.",
               "maximum": 100000,
               "minimum": 0,
               "type": "integer"
@@ -13883,8 +13883,8 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "description": "Number of requests per page (max 10000). Supplying this (or pageIndex) opts into paginated results; omitting both returns all matching requests unpaginated (unchanged default).",
-              "maximum": 10000,
+              "description": "Number of requests per page (max 100). Supplying this (or pageIndex) opts into paginated results; omitting both still returns a single default-sized page of requests, not every matching row.",
+              "maximum": 100,
               "minimum": -9007199254740991,
               "type": "integer"
             }
@@ -18440,7 +18440,7 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns all matching users unpaginated (unchanged default).",
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both still returns a single default-sized page of users, not every matching row.",
               "maximum": 100000,
               "minimum": 0,
               "type": "integer"
@@ -18452,8 +18452,8 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "description": "Number of users per page (max 10000). Supplying this (or pageIndex) opts into paginated results; omitting both returns all matching users unpaginated (unchanged default).",
-              "maximum": 10000,
+              "description": "Number of users per page (max 100). Supplying this (or pageIndex) opts into paginated results; omitting both still returns a single default-sized page of users, not every matching row.",
+              "maximum": 100,
               "minimum": -9007199254740991,
               "type": "integer"
             }
@@ -20218,7 +20218,7 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns all matching users unpaginated (unchanged default).",
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both still returns a single default-sized page of users, not every matching row.",
               "maximum": 100000,
               "minimum": 0,
               "type": "integer"
@@ -20230,8 +20230,8 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "description": "Number of users per page (max 10000). Supplying this (or pageIndex) opts into paginated results; omitting both returns all matching users unpaginated (unchanged default).",
-              "maximum": 10000,
+              "description": "Number of users per page (max 100). Supplying this (or pageIndex) opts into paginated results; omitting both still returns a single default-sized page of users, not every matching row.",
+              "maximum": 100,
               "minimum": -9007199254740991,
               "type": "integer"
             }

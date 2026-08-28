@@ -49,6 +49,7 @@ import {
 } from "@acme/validators";
 
 import gte from "lodash/gte";
+import { client } from "~/orpc/client";
 import {
   invalidateQueries,
   orpc,
@@ -57,6 +58,7 @@ import {
   useQuery,
 } from "~/orpc/react";
 import type { DataType } from "~/utils/store/modal";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import {
   closeModal,
   DeleteType,
@@ -118,18 +120,23 @@ export default function AdminWorkoutsModal({
   // Watch regionId from form to filter event types
   const formRegionId = form.watch("regionId");
 
-  const { data: eventTypes } = useQuery(
-    orpc.eventType.all.queryOptions({
-      input: {
-        // Unpaginated on purpose: this dropdown needs every matching event
-        // type. (pageSize alone now opts into pagination, so the old inert
-        // `pageSize: 200` would cap the list.)
-        // When region is selected: filter to that region's types + Nation types
-        // When no region selected: show all event types (pass undefined to get all)
+  // This dropdown needs every matching event type, not one page of them —
+  // eventType.all is capped server-side (see pagination.ts), so page
+  // through it instead of relying on an unbounded "omit both params"
+  // request.
+  // When region is selected: filter to that region's types + Nation types
+  // When no region selected: show all event types (pass undefined to get all)
+  const { data: eventTypes } = useFetchAllPages({
+    queryKey: ["eventType.all.everyMatching", formRegionId],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { eventTypes: items, totalCount } = await client.eventType.all({
         orgIds: formRegionId ? [formRegionId] : undefined,
-      },
-    }),
-  );
+        pageIndex,
+        pageSize,
+      });
+      return { items, total: totalCount };
+    },
+  });
 
   useEffect(() => {
     form.reset({
@@ -503,7 +510,7 @@ export default function AdminWorkoutsModal({
                             String,
                           )}
                           options={
-                            eventTypes?.eventTypes.map((type) => ({
+                            eventTypes?.map((type) => ({
                               value: type.id.toString(),
                               label: type.eventCategory
                                 ? `${type.name} (${EVENT_CATEGORY_LABEL_MAP[type.eventCategory] ?? type.eventCategory})`

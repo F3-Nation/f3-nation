@@ -31,16 +31,16 @@ export function resolvePagination(params: {
 }
 
 /**
- * Sanity bound on `pageSize`. Deliberately generous: it exists to keep
- * `pageIndex * pageSize` far from Number.MAX_SAFE_INTEGER (see
- * MAX_PAGE_INDEX), not to shape API usage — real callers request pages of
- * 500-10000 today, and omitting both fields still returns everything, so a
- * tight cap here would only push callers back to the unpaginated path.
- * Tightening this to a real product limit (router/user.ts uses 100) is a
- * deliberate contract change for a follow-up, alongside bounding the
- * unpaginated branch.
+ * Product limit on `pageSize`, not just an overflow guard. No internal
+ * caller in this repo requests more than this per page (verified directly
+ * against the codebase, not assumed) — the two admin dropdowns that used to
+ * request 200/1000 "everything in one page" now page through results via
+ * `useFetchAllPages` (apps/admin, apps/map) instead, which itself fetches in
+ * pages of exactly this size, so the two must stay in sync. Also matches
+ * MAX_PAGE_INDEX in keeping `pageIndex * pageSize` far from
+ * Number.MAX_SAFE_INTEGER.
  */
-export const MAX_PAGE_SIZE = 10_000;
+export const MAX_PAGE_SIZE = 100;
 
 /**
  * Upper bound on `pageIndex`. Generous relative to any real dataset (even at
@@ -65,7 +65,7 @@ export function paginationFields(entityPlural: string) {
       .max(MAX_PAGE_INDEX)
       .optional()
       .describe(
-        `Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns all matching ${entityPlural} unpaginated (unchanged default).`,
+        `Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both still returns a single default-sized page of ${entityPlural}, not every matching row.`,
       ),
     pageSize: z.coerce
       .number()
@@ -73,7 +73,7 @@ export function paginationFields(entityPlural: string) {
       .max(MAX_PAGE_SIZE)
       .optional()
       .describe(
-        `Number of ${entityPlural} per page (max ${MAX_PAGE_SIZE}). Supplying this (or pageIndex) opts into paginated results; omitting both returns all matching ${entityPlural} unpaginated (unchanged default).`,
+        `Number of ${entityPlural} per page (max ${MAX_PAGE_SIZE}). Supplying this (or pageIndex) opts into paginated results; omitting both still returns a single default-sized page of ${entityPlural}, not every matching row.`,
       ),
   };
 }
