@@ -490,6 +490,8 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "poethepoet" },
+    { name = "pytest" },
+    { name = "ruff" },
 ]
 
 [package.metadata]
@@ -504,7 +506,11 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-dev = [{ name = "poethepoet", specifier = ">=0.34.0,<0.35.0" }]
+dev = [
+    { name = "poethepoet", specifier = ">=0.34.0,<0.35.0" },
+    { name = "pytest", specifier = ">=9.0.3,<9.1.0" },
+    { name = "ruff", specifier = ">=0.14.0,<1.0.0" },
+]
 
 [[package]]
 name = "f3-nation-python-workspace"
