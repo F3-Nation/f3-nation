@@ -157,13 +157,15 @@ export default function AdminWorkoutsModal({
   // eventType.all is capped server-side (see pagination.ts), so page
   // through it instead of relying on an unbounded "omit both params"
   // request.
-  // When region is selected: filter to that region's types + Nation types
-  // When no region selected: show all event types (pass undefined to get all)
+  // The event-type selector below is disabled until a region is picked
+  // (disabled={!formRegionId}), so there's no reason to fetch anything
+  // before then -- only fetch once a region is selected, scoped to it.
   const { data: eventTypes } = useFetchAllPages({
     queryKey: ["eventType.all.everyMatching", formRegionId],
+    enabled: !!formRegionId,
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { eventTypes: items, totalCount } = await client.eventType.all({
-        orgIds: formRegionId ? [formRegionId] : undefined,
+        orgIds: [formRegionId],
         pageIndex,
         pageSize,
       });
