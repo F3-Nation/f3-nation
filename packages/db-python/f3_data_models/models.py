@@ -73,12 +73,10 @@ class User_Status(enum.Enum):
     Attributes:
         active
         inactive
-        deleted
     """
 
     active = 1
     inactive = 2
-    deleted = 3
 
 
 class Region_Role(enum.Enum):
@@ -210,32 +208,61 @@ class Request_Type(enum.Enum):
     """
     Enum representing the type of request.
 
+    Mirrors the Postgres ``request_type`` enum, which is generated from
+    ``ActiveRequestType`` in ``packages/shared/src/app/enums.ts``. Keep the
+    member names (they are what SQLAlchemy persists) and their order in sync
+    with that list; ``edit`` is a legacy value kept only for existing rows.
+
     Attributes:
-        create_location
+        create_ao_and_location_and_event
         create_event
-        edit
+        edit_event
+        edit_ao_and_location
+        move_ao_to_different_region
+        move_ao_to_new_location
+        move_ao_to_different_location
+        move_event_to_different_ao
+        move_event_to_new_location
+        move_event_to_new_ao
         delete_event
+        delete_ao
+        edit
     """
 
-    create_location = 1
+    create_ao_and_location_and_event = 1
     create_event = 2
-    edit = 3
-    delete_event = 4
+    edit_event = 3
+    edit_ao_and_location = 4
+    move_ao_to_different_region = 5
+    move_ao_to_new_location = 6
+    move_ao_to_different_location = 7
+    move_event_to_different_ao = 8
+    move_event_to_new_location = 9
+    move_event_to_new_ao = 10
+    delete_event = 11
+    delete_ao = 12
+    edit = 13
 
 
 class Series_Exception(enum.Enum):
     """
     Enum representing exceptions to an event series.
 
+    Unlike the other enums here, the members carry their Postgres value rather
+    than an ordinal: ``different-time`` is hyphenated in the database and so
+    cannot be a Python member name. Columns typed with this enum must therefore
+    be mapped with ``values_callable`` so SQLAlchemy persists the value instead
+    of the member name.
+
     Attributes:
-        none
-        skip
-        reschedule
+        closed
+        different_time
+        miscellaneous
     """
 
-    closed = 1
-    different_time = 2
-    miscellaneous = 3
+    closed = "closed"
+    different_time = "different-time"
+    miscellaneous = "miscellaneous"
 
 
 class Base(DeclarativeBase):
@@ -878,7 +905,9 @@ class EventInstance(Base):
     preblast_ts: Mapped[Optional[float]]
     backblast_ts: Mapped[Optional[float]]
     is_private: Mapped[bool] = mapped_column(Boolean, server_default="false", nullable=False)
-    series_exception: Mapped[Optional[Series_Exception]]
+    series_exception: Mapped[Optional[Series_Exception]] = mapped_column(
+        Enum(Series_Exception, values_callable=lambda enum_cls: [member.value for member in enum_cls])
+    )
     meta: Mapped[Optional[Dict[str, Any]]]
     created: Mapped[dt_create]
     updated: Mapped[dt_update]
