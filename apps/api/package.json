@@ -19,12 +19,12 @@
   "dependencies": {
     "@acme/api": "workspace:*",
     "@acme/logger": "workspace:*",
+    "@acme/observability": "workspace:*",
     "@acme/shared": "workspace:*",
     "@orpc/openapi": "catalog:",
     "@orpc/server": "catalog:",
     "@orpc/zod": "catalog:",
     "@scalar/nextjs-api-reference": "catalog:",
-    "@sentry/nextjs": "catalog:",
     "@t3-oss/env-core": "catalog:",
     "dotenv-cli": "catalog:",
     "next": "catalog:",

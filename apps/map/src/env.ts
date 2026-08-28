@@ -35,13 +35,23 @@ export const env = createEnv({
    * Specify your client-side environment variables schema here.
    * For them to be exposed to the client, prefix them with `NEXT_PUBLIC_`.
    */
-  client: {},
+  client: {
+    // PostHog error tracking + analytics. Optional: absence disables all
+    // PostHog capture (client and server) without crashing anything.
+    NEXT_PUBLIC_POSTHOG_KEY: z.string().optional(),
+    // Session recording is opt-in — only "true" turns it on (never in
+    // previews/sandbox).
+    NEXT_PUBLIC_POSTHOG_SESSION_RECORDING: z.enum(["true", "false"]).optional(),
+  },
   /**
    * Destructure all variables from `process.env` to make sure they aren't tree-shaken away.
    */
   experimental__runtimeEnv: {
     NODE_ENV: process.env.NODE_ENV,
     NEXT_PUBLIC_GA_MEASUREMENT_ID: process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID,
+    NEXT_PUBLIC_POSTHOG_KEY: process.env.NEXT_PUBLIC_POSTHOG_KEY,
+    NEXT_PUBLIC_POSTHOG_SESSION_RECORDING:
+      process.env.NEXT_PUBLIC_POSTHOG_SESSION_RECORDING,
   },
   skipValidation:
     !!process.env.CI ||

@@ -41,7 +41,17 @@
     ENV NODE_ENV=production
     ENV CI=true
     ENV SKIP_ENV_VALIDATION=true
-    
+
+    # Next.js inlines NEXT_PUBLIC_* at `next build` time into BOTH the client
+    # bundle and the standalone server output — a Cloud Run runtime env var
+    # for a NEXT_PUBLIC_* name does nothing on its own. These must be present
+    # during the image build. Defaults empty: keyless builds succeed and
+    # client PostHog is simply disabled (see instrumentation-client.ts).
+    ARG NEXT_PUBLIC_POSTHOG_KEY
+    ENV NEXT_PUBLIC_POSTHOG_KEY=$NEXT_PUBLIC_POSTHOG_KEY
+    ARG NEXT_PUBLIC_POSTHOG_SESSION_RECORDING
+    ENV NEXT_PUBLIC_POSTHOG_SESSION_RECORDING=$NEXT_PUBLIC_POSTHOG_SESSION_RECORDING
+
     # `turbo prune` copies the full catalog into pnpm-workspace.yaml but only this
     # app's subset into the pruned lockfile. pnpm's verify-deps-before-run check (run
     # by `pnpm run build`) flags that as catalog drift under strict catalogMode and

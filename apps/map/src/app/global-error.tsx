@@ -3,7 +3,9 @@
 
 import { useEffect } from "react";
 import NextError from "next/error";
-import * as Sentry from "@sentry/nextjs";
+import posthog from "posthog-js";
+
+import { env } from "~/env";
 
 export default function GlobalError({
   error,
@@ -11,7 +13,21 @@ export default function GlobalError({
   error: Error & { digest?: string };
 }) {
   useEffect(() => {
-    Sentry.captureException(error);
+    // Gate on the env flag (the same stable signal instrumentation-client.ts
+    // uses to decide whether to init), not posthog.__loaded — that's an
+    // internal SDK flag, not a documented readiness contract, and can be
+    // false/undefined during early app startup, dropping early error reports.
+    if (env.NEXT_PUBLIC_POSTHOG_KEY) {
+      // This is the last-resort fallback UI — no error boundary above it. If
+      // captureException itself throws (e.g. the ingest host is blocked by
+      // an ad-blocker/privacy list), the throw must not be allowed to bubble
+      // out here with nowhere left to go.
+      try {
+        posthog.captureException(error);
+      } catch (reportErr) {
+        console.error("posthog.capture_exception_failed", reportErr);
+      }
+    }
   }, [error]);
 
   return (
