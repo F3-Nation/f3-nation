@@ -10,9 +10,15 @@ from application.attendance import CO_Q_TYPE_ID, HC_TYPE_ID, Q_TYPE_ID, Attendan
 from application.event_instance import EventInstanceData
 from application.preblast.service import PreblastService
 from features.calendar import get_preblast_action_blocks
-from features.calendar.event_preblast import build_preblast_info, handle_event_preblast_edit
+from features.calendar.event_preblast import (
+    PreblastInfo,
+    build_preblast_info,
+    get_preblast_channel,
+    handle_event_preblast_edit,
+)
 from features.calendar.preblast_views import PREBLAST_CHANNEL_SELECTOR, PreblastViews
 from utilities import constants
+from utilities.database.orm import SlackSettings
 from utilities.slack import actions
 from utilities.slack.sdk_orm import SdkBlockView
 
@@ -66,6 +72,26 @@ class PreblastViewsTest(unittest.TestCase):
             existing_preblast_ts=existing_preblast_ts,
             **kw,
         )
+
+    def test_get_preblast_channel_prefers_persisted_event_channel(self):
+        event = _event(meta={"preblast_channel_id": "CPOST", "slack_channel_id": "CEVENT"})
+        region = MagicMock(spec=SlackSettings)
+        region.default_preblast_destination = constants.CONFIG_DESTINATION_SPECIFIED["value"]
+        region.preblast_destination_channel = "CDEFAULT"
+
+        info = PreblastInfo(event_record=event, attendance_records=[], preblast_blocks=[], action_blocks=[])
+
+        self.assertEqual(get_preblast_channel(region, info), "CPOST")
+
+    def test_get_preblast_channel_uses_existing_fallbacks_without_persisted_channel(self):
+        event = _event(meta={"slack_channel_id": "CEVENT"})
+        region = MagicMock(spec=SlackSettings)
+        region.default_preblast_destination = constants.CONFIG_DESTINATION_SPECIFIED["value"]
+        region.preblast_destination_channel = "CDEFAULT"
+
+        info = PreblastInfo(event_record=event, attendance_records=[], preblast_blocks=[], action_blocks=[])
+
+        self.assertEqual(get_preblast_channel(region, info), "CEVENT")
 
     def test_build_preblast_form_returns_sdk_block_view(self):
         event = _event()
