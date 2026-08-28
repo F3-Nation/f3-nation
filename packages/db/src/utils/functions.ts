@@ -6,6 +6,11 @@ import { env } from "@acme/env";
 import { isTest } from "@acme/shared/common/constants";
 
 import { schema } from "..";
+import { withQueryTimeout } from "./query-timeout";
+
+// postgres-js has no bound on how long a query waits behind a saturated
+// connection pool -- see withQueryTimeout's docstring and #905.
+const QUERY_TIMEOUT_MS = 5_000;
 
 const getDatabaseNameFromUri = (uri: string) => {
   const databaseNameRegex = /\/([^/?]+)(\?|$)/;
@@ -26,6 +31,7 @@ export const createDbClient = () => {
   const { databaseUrl, useSsl } = getDbUrl();
   const sslOptions = useSsl ? { ssl: "require" as const } : undefined;
   const client = postgres(databaseUrl, sslOptions);
+  withQueryTimeout(client, QUERY_TIMEOUT_MS);
   return { db: drizzle(client, { schema }), close: () => client.end() };
 };
 
