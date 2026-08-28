@@ -520,7 +520,13 @@ export const orgRouter = {
           ? await getDescendantOrgIds(ctx.db, directEditableIds)
           : [];
 
-      // Query full org details for all editable orgs
+      // Query full org details for all editable orgs. orderBy(id) makes this
+      // deterministic across separate requests -- without it, Postgres is
+      // free to return these rows in a different order each time (no
+      // guaranteed order without ORDER BY), which would let the in-memory
+      // sort below break ties differently per page request and duplicate or
+      // drop orgs when a caller (e.g. useFetchAllPages) pages through this
+      // route across multiple requests.
       const editableOrgsData = await ctx.db
         .select({
           id: schema.orgs.id,
@@ -536,7 +542,8 @@ export const orgRouter = {
               ? inArray(schema.orgs.orgType, input.orgTypes)
               : undefined,
           ),
-        );
+        )
+        .orderBy(schema.orgs.id);
 
       const allAssignedOrgs = editableOrgsData.map((org) => ({
         id: org.id,
