@@ -81,10 +81,16 @@ export const oauthClientRouter = {
     })
     .output(z.object({ clients: z.array(oauthClientSchema) }))
     .handler(async () => {
+      // Computed before the try block so a missing-env-var ORPCError from
+      // either helper propagates with its own accurate message, instead of
+      // being caught below and relabeled as "unable to reach the auth
+      // server" when the auth server was never actually contacted.
+      const url = `${authBaseUrl()}/api/admin/oauth-clients`;
+      const headers = authAdminHeaders();
       let res: Response;
       try {
-        res = await fetch(`${authBaseUrl()}/api/admin/oauth-clients`, {
-          headers: authAdminHeaders(),
+        res = await fetch(url, {
+          headers,
           signal: AbortSignal.timeout(AUTH_SERVER_TIMEOUT_MS),
         });
       } catch (error) {
@@ -130,11 +136,13 @@ export const oauthClientRouter = {
     })
     .output(z.object({ client: z.record(z.string(), z.unknown()) }))
     .handler(async ({ input }) => {
+      const url = `${authBaseUrl()}/api/admin/oauth-clients`;
+      const headers = authAdminHeaders();
       let res: Response;
       try {
-        res = await fetch(`${authBaseUrl()}/api/admin/oauth-clients`, {
+        res = await fetch(url, {
           method: "POST",
-          headers: authAdminHeaders(),
+          headers,
           body: JSON.stringify(input),
           signal: AbortSignal.timeout(AUTH_SERVER_TIMEOUT_MS),
         });
@@ -186,17 +194,16 @@ export const oauthClientRouter = {
     .output(z.object({ updated: z.boolean() }))
     .handler(async ({ input }) => {
       const { clientId, ...update } = input;
+      const url = `${authBaseUrl()}/api/admin/oauth-clients/${encodeURIComponent(clientId)}`;
+      const headers = authAdminHeaders();
       let res: Response;
       try {
-        res = await fetch(
-          `${authBaseUrl()}/api/admin/oauth-clients/${encodeURIComponent(clientId)}`,
-          {
-            method: "PATCH",
-            headers: authAdminHeaders(),
-            body: JSON.stringify(update),
-            signal: AbortSignal.timeout(AUTH_SERVER_TIMEOUT_MS),
-          },
-        );
+        res = await fetch(url, {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify(update),
+          signal: AbortSignal.timeout(AUTH_SERVER_TIMEOUT_MS),
+        });
       } catch (error) {
         logError("api.oauth_client.update_unreachable", { clientId }, error);
         throw new ORPCError("INTERNAL_SERVER_ERROR", {

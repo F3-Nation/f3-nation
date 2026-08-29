@@ -41,7 +41,7 @@ function pkcePair() {
 // databaseHooks.user.create.before allow the sign-in through at all (see
 // apps/auth/src/lib/better-auth.ts's comment on why this can't be
 // emailOTP's own disableSignUp).
-function createTestAuth(f3UserId: number) {
+function createTestAuth(f3UserId: number | null) {
   const memoryDb: MemoryDB = {};
   const options = {
     baseURL: BASE_URL,
@@ -227,5 +227,21 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
     expect(payload.sub).toBe("9001");
     expect(payload.email).toBe(email);
     expect(tokenBody.id_token).toBeTruthy();
+  });
+
+  it("refuses to create a Better Auth user for an email with no real F3 users row", async () => {
+    // The core security invariant this design is built around (see
+    // findF3UserId's doc comment): a bare MFA code should never be able to
+    // conjure a new identity on its own. Unlike the two tests above,
+    // findF3UserId resolves null here — no real users row for this email.
+    const email = "phase3-unregistered@f3nation.test";
+    const auth = createTestAuth(null);
+
+    const otp = await auth.api.createVerificationOTP({
+      body: { email, type: "sign-in" },
+    });
+    await expect(
+      auth.api.signInEmailOTP({ body: { email, otp } }),
+    ).rejects.toThrow();
   });
 });

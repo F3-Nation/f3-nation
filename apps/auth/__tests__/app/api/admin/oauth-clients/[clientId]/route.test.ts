@@ -153,6 +153,18 @@ describe("PATCH /api/admin/oauth-clients/[clientId]", () => {
     );
   });
 
+  it("does not flip disabled when a combined field update fails", async () => {
+    adminUpdateOAuthClientMock.mockRejectedValue(new Error("boom"));
+
+    const res = await PATCH(
+      makeRequest({ name: "Renamed", disabled: true }),
+      makeContext("existing-client"),
+    );
+
+    expect(res.status).toBe(500);
+    expect(dbMock.update).not.toHaveBeenCalled();
+  });
+
   it("500s and logs when adminUpdateOAuthClient throws", async () => {
     adminUpdateOAuthClientMock.mockRejectedValue(new Error("boom"));
 
