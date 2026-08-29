@@ -1369,10 +1369,14 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) {
+        throw new Error("Failed to create test region");
+      }
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) {
+        throw new Error("Failed to create test AO");
+      }
 
       const client = createTestClient();
       const result = await client.eventInstance.crupdate({
