@@ -2,9 +2,13 @@
   "$schema": "https://turborepo.org/schema.json",
   "globalDependencies": [
     "**/.env",
-    "uv.lock",
+    ".gitignore",
+    ".nvmrc",
+    ".prettierignore",
+    ".python-version",
     "pyproject.toml",
-    ".python-version"
+    "uv.lock",
+    "scripts/python-task.sh"
   ],
   "globalEnv": [
     "CI",
