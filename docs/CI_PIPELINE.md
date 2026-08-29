@@ -79,9 +79,9 @@ cache budget. The pnpm store remains a smaller co-tenant with Turbo artifacts
 in that budget and is still subject to GitHub's normal least-recently-used eviction. Cache
 adapter startup is non-blocking: if it fails, Turbo runs without remote caching
 rather than failing a required check and emits a workflow warning. `GITHUB_SHA`
-is intentionally excluded from Turbo's global hash inputs: the only consumer is
-the CI-factory command outside the Turbo graph, while hashing each commit SHA
-would prevent cross-commit cache hits.
+is intentionally passed through without joining Turbo's global hash inputs: its
+runtime consumer is the CI-factory command, while hashing each commit SHA would
+prevent cross-commit cache hits for every task.
 
 Remote caching is enabled only for the five required CI checks during this
 rollout. Preview and deploy workflows continue to build without this adapter so
