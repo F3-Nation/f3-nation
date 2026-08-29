@@ -3,6 +3,7 @@
   "globalDependencies": [
     "**/.env",
     ".gitignore",
+    ".nvmrc",
     ".prettierignore",
     ".python-version",
     "pyproject.toml",
