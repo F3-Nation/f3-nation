@@ -39,6 +39,16 @@ function authBaseUrl(): string {
       message: "NEXT_PUBLIC_AUTH_URL is not configured",
     });
   }
+  const url = new URL(env.NEXT_PUBLIC_AUTH_URL);
+  // SUPER_ADMIN_API_KEY is attached to every request this router makes —
+  // never send it over plaintext HTTP except to localhost, which is what
+  // apps/api/.env.example's NEXT_PUBLIC_AUTH_URL uses for local dev.
+  const isLocalhost = ["localhost", "127.0.0.1"].includes(url.hostname);
+  if (url.protocol !== "https:" && !isLocalhost) {
+    throw new ORPCError("INTERNAL_SERVER_ERROR", {
+      message: "NEXT_PUBLIC_AUTH_URL must use https",
+    });
+  }
   return env.NEXT_PUBLIC_AUTH_URL;
 }
 

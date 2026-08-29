@@ -68,7 +68,7 @@ export const OauthClientsTable = () => {
           <div className="flex items-center justify-center py-12">
             <Spinner className="h-5 w-5" />
           </div>
-        ) : isError ? (
+        ) : isError && !data ? (
           <div className="flex flex-col items-center justify-center gap-2 py-10 text-center text-sm text-muted-foreground">
             <p>Unable to load OAuth clients.</p>
             <p>Please try again.</p>

@@ -154,6 +154,31 @@ describe("AdminOauthClientsModal", () => {
     expect(screen.queryByLabelText("Name")).toBeNull();
   });
 
+  it("still renders the edit form from cached data when a background refetch fails", () => {
+    useQueryMock.mockReturnValue({
+      data: {
+        clients: [
+          {
+            clientId: "paxvault-client",
+            name: "Paxvault",
+            redirectUris: ["https://paxvault.example.com/callback"],
+            scopes: ["openid", "profile", "email"],
+            isPublic: false,
+          },
+        ],
+      },
+      isLoading: false,
+      isError: true,
+    });
+
+    render(<AdminOauthClientsModal data={{ clientId: "paxvault-client" }} />);
+
+    expect(screen.getByDisplayValue("Paxvault")).toBeTruthy();
+    expect(
+      screen.queryByText("Unable to load this client. Please try again."),
+    ).toBeNull();
+  });
+
   it("shows a not-found state in edit mode when the target client isn't in the loaded list, instead of a blank form", () => {
     useQueryMock.mockReturnValue({
       data: { clients: [] },

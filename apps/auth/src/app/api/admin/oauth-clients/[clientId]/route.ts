@@ -40,7 +40,11 @@ export async function PATCH(
   } catch {
     return NextResponse.json({ error: "invalid_json" }, { status: 400 });
   }
-  if (typeof parsedBody !== "object" || parsedBody === null) {
+  if (
+    typeof parsedBody !== "object" ||
+    parsedBody === null ||
+    Array.isArray(parsedBody)
+  ) {
     return NextResponse.json({ error: "invalid_body" }, { status: 400 });
   }
   const body = parsedBody as UpdateOAuthClientBody;

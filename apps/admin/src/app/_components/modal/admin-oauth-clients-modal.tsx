@@ -68,11 +68,14 @@ export default function AdminOauthClientsModal({
     isError: isClientsError,
   } = useQuery(orpc.oauthClient.list.queryOptions());
   const existing = clientsData?.clients.find((c) => c.clientId === clientId);
-  // Only meaningful once the list query has actually resolved (unsuccessfully
-  // or successfully-without-a-match) — checked in that order in the render
+  // Gated on !existing rather than isClientsError directly: a background
+  // refetch error still leaves clientsData holding the last successful
+  // fetch's cached clients, and existing should still resolve from that
+  // cached list rather than being treated as unavailable. Only meaningful
+  // once the list query has actually resolved (unsuccessfully, or
+  // successfully-without-a-match) — checked in that order in the render
   // below so we don't flash "not found" while the query is still in flight.
-  const isEditTargetUnavailable =
-    isEditing && !isClientsLoading && (isClientsError || !existing);
+  const isEditTargetUnavailable = isEditing && !isClientsLoading && !existing;
 
   const form = useForm({
     schema: OauthClientFormSchema,

@@ -41,6 +41,30 @@ describe("OauthClientsTable", () => {
     expect(screen.queryByText("No OAuth clients yet.")).toBeNull();
   });
 
+  it("keeps showing cached rows, not the error state, when a background refetch fails", () => {
+    useQueryMock.mockReturnValue({
+      data: {
+        clients: [
+          {
+            clientId: "paxvault-client",
+            name: "Paxvault",
+            redirectUris: ["https://paxvault.example.com/callback"],
+            isPublic: false,
+            disabled: false,
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+      },
+      isLoading: false,
+      isError: true,
+    });
+
+    render(<OauthClientsTable />);
+
+    expect(screen.getByText("Paxvault")).toBeTruthy();
+    expect(screen.queryByText("Unable to load OAuth clients.")).toBeNull();
+  });
+
   it("shows an empty state when there are no clients", () => {
     useQueryMock.mockReturnValue({ data: { clients: [] }, isLoading: false });
 

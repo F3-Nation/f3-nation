@@ -85,6 +85,13 @@ describe("PATCH /api/admin/oauth-clients/[clientId]", () => {
     expect(dbMock.select).not.toHaveBeenCalled();
   });
 
+  it("400s on an array body instead of silently no-oping", async () => {
+    const res = await PATCH(makeRequest([]), makeContext("existing-client"));
+
+    expect(res.status).toBe(400);
+    expect(dbMock.select).not.toHaveBeenCalled();
+  });
+
   it("404s when the client does not exist", async () => {
     dbMock.select.mockReturnValue(chain([]));
 
