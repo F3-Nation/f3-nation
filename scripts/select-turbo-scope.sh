@@ -35,20 +35,22 @@ if ! task_json="$("$turbo_bin" run "$TURBO_SCOPE_TASK" --affected --dry-run=json
   use_full_workspace "Unable to calculate affected ${TURBO_SCOPE_TASK} tasks"
 fi
 
-if ! task_count="$(
+if ! runnable_task_count="$(
   printf '%s' "$task_json" |
     node -e 'const t = JSON.parse(
       require("fs").readFileSync(0, "utf8")).tasks;
-      if (!Array.isArray(t)) process.exit(1);
-      process.stdout.write(String(t.length));'
+      if (!Array.isArray(t) ||
+          !t.every((task) => typeof task?.command === "string")) process.exit(1);
+      process.stdout.write(String(
+        t.filter((task) => task.command !== "<NONEXISTENT>").length));'
 )"; then
   echo "::warning::Turbo returned invalid affected-task JSON."
   use_full_workspace "Unable to parse affected ${TURBO_SCOPE_TASK} tasks"
 fi
 
-if [[ "$task_count" -eq 0 ]]; then
-  use_full_workspace "Turbo selected no affected ${TURBO_SCOPE_TASK} tasks"
+if [[ "$runnable_task_count" -eq 0 ]]; then
+  use_full_workspace "Turbo selected no runnable affected ${TURBO_SCOPE_TASK} tasks"
 fi
 
 echo "TURBO_RUN_ARGS=--affected" >>"$github_env"
-echo "Selected ${task_count} affected ${TURBO_SCOPE_TASK} task(s)."
+echo "Selected ${runnable_task_count} runnable affected ${TURBO_SCOPE_TASK} task(s)."
