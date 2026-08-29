@@ -8,5 +8,8 @@
     "test": "bash ../../scripts/python-task.sh test slackbot uv run pytest",
     "lint": "bash ../../scripts/python-task.sh lint slackbot uv run ruff check .",
     "typecheck": "bash ../../scripts/python-task.sh typecheck slackbot uv run mypy"
+  },
+  "dependencies": {
+    "f3-data-models": "workspace:*"
   }
 }
