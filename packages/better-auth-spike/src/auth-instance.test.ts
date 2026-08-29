@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { decodeJwt, decodeProtectedHeader } from "jose";
+import { createLocalJWKSet, decodeProtectedHeader, jwtVerify } from "jose";
+import type { JSONWebKeySet } from "jose";
 import { isAccessTokenPayload } from "@f3nation/sso";
 
 import { createSpikeAuthInstance, SPIKE_RESOURCE } from "./auth-instance";
@@ -128,8 +129,25 @@ describe("Better Auth OAuth provider — access token claim shape (#876 Phase 1)
     };
 
     const accessToken = tokenBody.access_token;
-    const payload = decodeJwt(accessToken);
     const header = decodeProtectedHeader(accessToken);
+
+    // Real signature + issuer verification, not a bare decode -- the
+    // production path (@f3nation/sso's verifyJwtWithJwks) does both before
+    // ever reaching isAccessTokenPayload's structural check below, via
+    // createRemoteJWKSet fetching over real HTTP. This spike's auth
+    // instance isn't listening on a real socket, so it fetches the same
+    // JWKS response through auth.handler() and verifies against a local
+    // JWK set instead -- same cryptographic verification, no network hop.
+    const jwksResponse = await auth.handler(
+      new Request("http://localhost:3999/api/auth/jwks"),
+    );
+    const jwks = (await jwksResponse.json()) as JSONWebKeySet;
+    const localJwks = createLocalJWKSet(jwks);
+    const { payload } = await jwtVerify(accessToken, localJwks, {
+      // Better Auth's oauth-provider stamps the issuer as baseURL + the
+      // auth mount path (verified empirically), not bare baseURL.
+      issuer: "http://localhost:3999/api/auth",
+    });
 
     // The real production verifier -- @f3nation/sso/token-verification --
     // not a reimplementation. This is the actual parity question #876
