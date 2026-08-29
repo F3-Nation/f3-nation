@@ -72,10 +72,23 @@ task validation, Turbo scope-selection validation, and `lint:unused`) remain
 repository-wide on every run.
 
 The Turbo cache adapter runs on localhost within each job and stores task
-artifacts in GitHub Actions cache. Relative cache paths keep cache versions
-consistent across runners, allowing jobs and reruns to reuse the same task
-hashes without Vercel credentials. Docker layers live separately in GHCR so
-they do not compete with Turbo artifacts for the Actions cache budget.
+artifacts in GitHub Actions cache. Relative cache paths make cache versions
+portable across runners whose temporary checkout paths differ. Docker layers
+live separately in GHCR, so they do not compete with Turbo artifacts for the
+Actions cache budget. The pnpm store remains a smaller co-tenant in that budget
+and is still subject to GitHub's normal least-recently-used eviction. Cache
+adapter startup is non-blocking: if it fails, Turbo runs without remote caching
+rather than failing a required check and emits a workflow warning. `GITHUB_SHA`
+is intentionally excluded from Turbo's global hash inputs: the only consumer is
+the CI-factory command outside the Turbo graph, while hashing each commit SHA
+would prevent cross-commit cache hits.
+
+Remote caching is enabled only for the five required CI checks during this
+rollout. Preview and deploy workflows continue to build without this adapter so
+their behavior is unchanged. A matching successful `test` task may be replayed
+instead of re-executed; that is standard Turbo cache behavior, so post-rollout
+validation should confirm useful hit rates and continue treating flaky tests as
+test defects rather than relying on reruns.
 
 Two pieces of Turbo configuration keep that selection honest, so CI needs no
 blocklist of its own:

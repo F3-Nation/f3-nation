@@ -65,10 +65,17 @@ runs:
       run: bash scripts/select-turbo-scope.sh
 
     - name: Configure Turbo cache
+      id: turbo_cache
       if: inputs.enable-turbo-cache == 'true'
+      continue-on-error: true
       uses: rharkor/caching-for-turbo@2238fae6eb9a9936f92356f54cb3660200d105e7 # v2.5.1
       with:
         provider: github
         cache-prefix: turbo-
         use-relative-cache-path: "true"
         server-port: "0"
+
+    - name: Warn if Turbo cache setup failed
+      if: inputs.enable-turbo-cache == 'true' && steps.turbo_cache.outcome == 'failure'
+      shell: bash
+      run: echo "::warning::Turbo remote cache setup failed; tasks will run without remote caching."
