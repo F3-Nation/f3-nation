@@ -29,15 +29,21 @@ function sanitizeValue(value: unknown, seen: WeakSet<object>): unknown {
   if (value === null || typeof value !== "object") return value;
   if (seen.has(value)) return "[circular]";
   seen.add(value);
-  if (Array.isArray(value)) {
-    return value.map((item) => sanitizeValue(item, seen));
+  try {
+    if (Array.isArray(value)) {
+      return value.map((item) => sanitizeValue(item, seen));
+    }
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, val]) => [
+        key,
+        SENSITIVE_KEY_PATTERN.test(key)
+          ? "[redacted]"
+          : sanitizeValue(val, seen),
+      ]),
+    );
+  } finally {
+    seen.delete(value);
   }
-  return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>).map(([key, val]) => [
-      key,
-      SENSITIVE_KEY_PATTERN.test(key) ? "[redacted]" : sanitizeValue(val, seen),
-    ]),
-  );
 }
 
 function sanitizeSentryContext(ctx: LogContext): LogContext {
