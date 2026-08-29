@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { StandardHandlerInterceptorOptions } from "@orpc/server/standard";
+
 import { Client, Header } from "@acme/shared/common/enums";
 
 // Hoisted mocks shared between the vi.mock factories and the test bodies.
@@ -46,13 +48,19 @@ vi.mock("@orpc/openapi/fetch", () => ({
   },
 }));
 
-// Shape of the interceptor's options as oRPC actually calls it:
-// StandardLazyRequest carries `url` as a parsed URL and `method` as a string,
-// not a raw Request.
+// Derived from oRPC's own exported type (not hand-rolled) so a future change
+// to StandardLazyRequest's shape is caught here instead of silently drifting.
+// Picked down to just the fields this suite reads, rather than the full
+// StandardLazyRequest (which also requires headers/body/signal).
+type InterceptorRequest = Pick<
+  StandardHandlerInterceptorOptions<never>["request"],
+  "url" | "method"
+>;
+
 interface Interceptors {
   interceptors: ((
     error: unknown,
-    options: { request: { url: URL; method: string } },
+    options: { request: InterceptorRequest },
   ) => void)[];
 }
 
