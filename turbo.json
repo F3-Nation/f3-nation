@@ -64,7 +64,8 @@
     "CI_FACTORY_INFERENCE_API_KEY",
     "CI_FACTORY_INFERENCE_BASE_URL",
     "CI_FACTORY_INFERENCE_MODEL",
-    "GITHUB_SHA"
+    "GITHUB_SHA",
+    "UV_PYTHON"
   ],
   "tasks": {
     "topo": {
