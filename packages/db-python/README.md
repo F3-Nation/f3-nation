@@ -5,6 +5,23 @@ This package includes `sqlalchemy` ORM models that mirror those used by `drizzle
 > [!NOTE]
 > This package used to be used to migrate the database; going forward, all migrations should be done via drizzle (with corresponding model changes here)
 
+# Tests
+
+```bash
+pnpm --filter f3-data-models test   # or: uv run pytest
+```
+
+`tests/test_enum_parity.py` compares every `enum.Enum` in `models.py` against
+the Postgres enum of the same name in the latest drizzle migration snapshot
+(`packages/db/drizzle/meta`), including value order. Drizzle owns those types —
+they are declared in `packages/shared/src/app/enums.ts` — so when a migration
+adds, removes, renames, or reorders an enum value, update the matching class
+here and this suite will confirm the two agree. A value that is not a valid
+Python identifier (e.g. `different-time`) must be carried as the member's
+_value_, with the column mapped via `Enum(..., values_callable=...)` so
+SQLAlchemy persists the value rather than the member name; see
+`Series_Exception`.
+
 # Optional BigQuery Sessions
 
 The default database session path is PostgreSQL. To explicitly request a BigQuery session, pass the optional `backend` argument:

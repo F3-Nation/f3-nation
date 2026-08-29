@@ -1,0 +1,8 @@
+{
+  "name": "f3-data-models",
+  "private": true,
+  "scripts": {
+    "test": "bash ../../scripts/python-task.sh test db-python uv run pytest",
+    "lint": "bash ../../scripts/python-task.sh lint db-python uv run ruff check ."
+  }
+}
