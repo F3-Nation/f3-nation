@@ -147,6 +147,9 @@ describe("Better Auth OAuth provider — access token claim shape (#876 Phase 1)
       // Better Auth's oauth-provider stamps the issuer as baseURL + the
       // auth mount path (verified empirically), not bare baseURL.
       issuer: "http://localhost:3999/api/auth",
+      // jose only validates `aud` when this option is passed -- without it,
+      // a token issued for a different resource would still verify here.
+      audience: SPIKE_RESOURCE,
     });
 
     // The real production verifier -- @f3nation/sso/token-verification --

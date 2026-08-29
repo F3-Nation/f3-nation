@@ -38,6 +38,23 @@ only ever break this package's own typecheck, never the real auth service
 or anything else in the repo. Nothing here imports from or is imported by
 `apps/auth`.
 
+## Findings, for whoever picks up #876 Phase 2+
+
+- Access tokens are **opaque by default** — getting a self-contained JWT
+  (required for parity with `apps/auth`'s current `signAccessToken`)
+  requires registering a `resources: [{ identifier, signingAlgorithm }]`
+  entry on the `oauthProvider()` config and passing `resource=` on both the
+  authorize and token requests.
+- The plugin's `claims.accessToken` extension point can't be set directly
+  on `oauthProvider()` — it's additive-only and must be registered from a
+  _companion_ plugin's own `init()` hook via `extendOAuthProvider()`,
+  registered after `oauthProvider()` in the `plugins` array. That's how
+  this spike stamps `token_use: "access"` and `email` to match
+  `apps/auth`'s exact claim shape.
+- `oauth2Authorize`/`oauth2Consent` need a real Fetch `Request` (they read
+  `ctx.request` directly) — must be invoked via `auth.handler(new
+Request(...))`, not the `auth.api.*` convenience wrapper.
+
 ## What happens to this package
 
 Once Phase 1's parity question is answered, this package is deleted. It is
