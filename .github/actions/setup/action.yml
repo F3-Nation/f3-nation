@@ -8,16 +8,21 @@ description: >-
 inputs:
   select-turbo-affected:
     description: >-
-      On pull requests, restrict Turbo to affected workspaces. Files Turbo
-      cannot attribute to a package are listed in turbo.json's
-      globalDependencies, which marks every workspace affected.
+      On pull requests, restrict Turbo to affected workspaces. Falls back to
+      the full workspace when the comparison SHAs are unavailable, detection
+      fails, or Turbo selects no runnable task. Files Turbo cannot attribute
+      to a package are listed in turbo.json's globalDependencies, which marks
+      every workspace affected.
     required: false
     default: "false"
   turbo-task:
     description: >-
-      Turbo task the calling job will run. Exports TURBO_RUN_ARGS plus the
-      pinned TURBO_SCM_BASE/TURBO_SCM_HEAD through GITHUB_ENV; the caller must
-      append ${TURBO_RUN_ARGS:+"$TURBO_RUN_ARGS"} to its Turbo command.
+      Turbo task the calling job will run. Used to confirm affected selection
+      schedules at least one task before enabling --affected. When affected
+      selection is enabled, setup exports TURBO_RUN_ARGS and the pinned
+      TURBO_SCM_BASE/TURBO_SCM_HEAD through GITHUB_ENV; the caller must
+      append ${TURBO_RUN_ARGS:+"$TURBO_RUN_ARGS"} to its Turbo command. An
+      empty task falls back to the full workspace.
     required: false
     default: ""
 
@@ -53,35 +58,4 @@ runs:
         TURBO_SCM_BASE: ${{ github.event.pull_request.base.sha }}
         TURBO_SCM_HEAD: ${{ github.event.pull_request.head.sha }}
         TURBO_SCOPE_TASK: ${{ inputs.turbo-task }}
-      run: |
-        set -uo pipefail
-
-        full_workspace() {
-          echo "TURBO_RUN_ARGS=" >>"$GITHUB_ENV"
-          echo "::notice::${1}; running the full workspace instead."
-          exit 0
-        }
-
-        {
-          echo "TURBO_SCM_BASE=${TURBO_SCM_BASE}"
-          echo "TURBO_SCM_HEAD=${TURBO_SCM_HEAD}"
-        } >>"$GITHUB_ENV"
-
-        [ -n "${TURBO_SCOPE_TASK}" ] ||
-          full_workspace "No Turbo task was supplied"
-
-        plan="$(./node_modules/.bin/turbo run "${TURBO_SCOPE_TASK}" \
-          --affected --dry-run=json)" ||
-          full_workspace "Unable to calculate affected ${TURBO_SCOPE_TASK} tasks"
-
-        count="$(printf '%s' "$plan" | node -e 'const t = JSON.parse(
-          require("fs").readFileSync(0, "utf8")).tasks;
-          if (!Array.isArray(t)) process.exit(1);
-          process.stdout.write(String(t.length));')" ||
-          full_workspace "Unable to parse affected ${TURBO_SCOPE_TASK} tasks"
-
-        [ "$count" -gt 0 ] ||
-          full_workspace "Turbo selected no affected ${TURBO_SCOPE_TASK} tasks"
-
-        echo "TURBO_RUN_ARGS=--affected" >>"$GITHUB_ENV"
-        echo "Selected ${count} affected ${TURBO_SCOPE_TASK} task(s)."
+      run: bash scripts/select-turbo-scope.sh
