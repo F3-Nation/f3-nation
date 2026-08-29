@@ -45,10 +45,12 @@ tag push (e.g. map@1.2.3) → deploy-<app>.yml → _deploy-cloudrun.yml
 
 The required checks run on `pull_request` (any target branch) and on `push` to
 `main`. Every job checks out with `persist-credentials: false`; Node-based jobs
-use the shared `.github/actions/setup` for pnpm and Node from `.nvmrc`.
-Third-party actions are SHA-pinned. The advisory Docker path is event-specific:
-PRs validate images with read-only access to the GHCR cache, while a separate
-`main`-only job refreshes it with package-write permission.
+use the shared `.github/actions/setup` for pnpm and Node from `.nvmrc`. The five
+Turbo-backed jobs enable that action's GitHub Actions-backed remote cache;
+unrelated setup callers do not start the cache server. Third-party actions are
+SHA-pinned. The advisory Docker path is event-specific: PRs validate images with
+read-only access to the GHCR cache, while a separate `main`-only job refreshes
+it with package-write permission.
 
 The five Turbo-backed required checks (`format-check`, `lint`, `typecheck`,
 `build`, and `test-coverage`) add `--affected` on pull requests, selecting
@@ -68,6 +70,12 @@ schedules at least one task before `--affected` is enabled. The non-Turbo
 safeguards in the `lint` job (`lint:ws`, coverage-threshold validation, Python
 task validation, Turbo scope-selection validation, and `lint:unused`) remain
 repository-wide on every run.
+
+The Turbo cache adapter runs on localhost within each job and stores task
+artifacts in GitHub Actions cache. Relative cache paths keep cache versions
+consistent across runners, allowing jobs and reruns to reuse the same task
+hashes without Vercel credentials. Docker layers live separately in GHCR so
+they do not compete with Turbo artifacts for the Actions cache budget.
 
 Two pieces of Turbo configuration keep that selection honest, so CI needs no
 blocklist of its own:

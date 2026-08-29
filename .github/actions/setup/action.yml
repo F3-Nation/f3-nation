@@ -25,6 +25,10 @@ inputs:
       empty task falls back to the full workspace.
     required: false
     default: ""
+  enable-turbo-cache:
+    description: Configure the GitHub Actions-backed Turborepo remote cache.
+    required: false
+    default: "false"
 
 runs:
   using: composite
@@ -59,3 +63,12 @@ runs:
         TURBO_SCM_HEAD: ${{ github.event.pull_request.head.sha }}
         TURBO_SCOPE_TASK: ${{ inputs.turbo-task }}
       run: bash scripts/select-turbo-scope.sh
+
+    - name: Configure Turbo cache
+      if: inputs.enable-turbo-cache == 'true'
+      uses: rharkor/caching-for-turbo@2238fae6eb9a9936f92356f54cb3660200d105e7 # v2.5.1
+      with:
+        provider: github
+        cache-prefix: turbo-
+        use-relative-cache-path: "true"
+        server-port: "0"
