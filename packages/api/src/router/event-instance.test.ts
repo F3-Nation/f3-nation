@@ -6,6 +6,7 @@
  * - Test database to be seeded with test data
  */
 
+import type * as apiLogger from "../logger";
 import { vi } from "vitest";
 
 // Use vi.hoisted to ensure mockLimit is available when vi.mock runs (mocks are hoisted)
@@ -17,9 +18,15 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   }),
 }));
 
+vi.mock("../logger", async (importOriginal) => ({
+  ...(await importOriginal<typeof apiLogger>()),
+  logWarn: vi.fn(),
+}));
+
 import { eq, schema } from "@acme/db";
 import type { SeriesException } from "@acme/shared/app/enums";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { logWarn } from "../logger";
 import {
   cleanup,
   createAdminSession,
@@ -35,7 +42,9 @@ describe("Event Instance Router", () => {
   const createdEventInstanceIds: number[] = [];
   const createdOrgIds: number[] = [];
   const createdEventTypeIds: number[] = [];
+  const createdEventTagIds: number[] = [];
   const createdLocationIds: number[] = [];
+  const createdSlackSpaceIds: number[] = [];
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -87,6 +96,18 @@ describe("Event Instance Router", () => {
         // Ignore errors during cleanup
       }
     }
+    for (const eventTagId of createdEventTagIds.reverse()) {
+      try {
+        await db
+          .delete(schema.eventTagsXEventInstances)
+          .where(eq(schema.eventTagsXEventInstances.eventTagId, eventTagId));
+        await db
+          .delete(schema.eventTags)
+          .where(eq(schema.eventTags.id, eventTagId));
+      } catch {
+        // Ignore errors during cleanup
+      }
+    }
     for (const locationId of createdLocationIds.reverse()) {
       try {
         await cleanup.location(locationId);
@@ -96,7 +117,22 @@ describe("Event Instance Router", () => {
     }
     for (const orgId of createdOrgIds.reverse()) {
       try {
+        await db
+          .delete(schema.orgsXSlackSpaces)
+          .where(eq(schema.orgsXSlackSpaces.orgId, orgId));
         await cleanup.org(orgId);
+      } catch {
+        // Ignore errors during cleanup
+      }
+    }
+    for (const slackSpaceId of createdSlackSpaceIds.reverse()) {
+      try {
+        await db
+          .delete(schema.orgsXSlackSpaces)
+          .where(eq(schema.orgsXSlackSpaces.slackSpaceId, slackSpaceId));
+        await db
+          .delete(schema.slackSpaces)
+          .where(eq(schema.slackSpaces.id, slackSpaceId));
       } catch {
         // Ignore errors during cleanup
       }
@@ -104,7 +140,7 @@ describe("Event Instance Router", () => {
   }, 30000); // 30 second timeout for cleanup
 
   // Helper to create a test region
-  const createTestRegion = async () => {
+  const createTestRegion = async (options?: { isActive?: boolean }) => {
     const nationOrg = await getOrCreateF3NationOrg();
     const [region] = await db
       .insert(schema.orgs)
@@ -112,7 +148,7 @@ describe("Event Instance Router", () => {
         name: `Test Region ${uniqueId()}`,
         orgType: "region",
         parentId: nationOrg.id,
-        isActive: true,
+        isActive: options?.isActive ?? true,
       })
       .returning();
 
@@ -122,8 +158,29 @@ describe("Event Instance Router", () => {
     return region;
   };
 
+  const createTestNonRegionOrg = async () => {
+    const nationOrg = await getOrCreateF3NationOrg();
+    const [org] = await db
+      .insert(schema.orgs)
+      .values({
+        name: `Test Other Org ${uniqueId()}`,
+        orgType: "nation",
+        parentId: nationOrg.id,
+        isActive: true,
+      })
+      .returning();
+
+    if (org) {
+      createdOrgIds.push(org.id);
+    }
+    return org;
+  };
+
   // Helper to create a test AO under a region
-  const createTestAO = async (regionId: number) => {
+  const createTestAO = async (
+    regionId: number,
+    meta?: Record<string, unknown>,
+  ) => {
     const [ao] = await db
       .insert(schema.orgs)
       .values({
@@ -131,6 +188,7 @@ describe("Event Instance Router", () => {
         orgType: "ao",
         parentId: regionId,
         isActive: true,
+        meta,
       })
       .returning();
 
@@ -142,23 +200,25 @@ describe("Event Instance Router", () => {
 
   // Helper to create a test event instance
   const createTestEventInstance = async (
-    aoId: number,
+    orgId: number,
     options?: {
       name?: string;
       startDate?: string;
       seriesException?: SeriesException;
+      meta?: Record<string, unknown>;
     },
   ) => {
     const [eventInstance] = await db
       .insert(schema.eventInstances)
       .values({
         name: options?.name ?? `Test Event ${uniqueId()}`,
-        orgId: aoId,
+        orgId,
         startDate:
           options?.startDate ?? new Date().toISOString().split("T")[0]!,
         isActive: true,
         highlight: false,
         seriesException: options?.seriesException ?? null,
+        meta: options?.meta,
       })
       .returning();
 
@@ -167,6 +227,49 @@ describe("Event Instance Router", () => {
     }
     return eventInstance;
   };
+
+  const createTestEventTag = async () => {
+    const [eventTag] = await db
+      .insert(schema.eventTags)
+      .values({
+        name: `Test Event Tag ${uniqueId()}`,
+        color: "#FF0000",
+        isActive: true,
+      })
+      .returning();
+
+    if (eventTag) {
+      createdEventTagIds.push(eventTag.id);
+    }
+    return eventTag;
+  };
+
+  const linkSlackSettingsToRegion = async (
+    regionId: number,
+    settings: Record<string, unknown>,
+  ) => {
+    const [slackSpace] = await db
+      .insert(schema.slackSpaces)
+      .values({
+        teamId: `T${uniqueId()}`,
+        workspaceName: `Workspace ${uniqueId()}`,
+        settings,
+      })
+      .returning();
+
+    if (!slackSpace) return null;
+
+    createdSlackSpaceIds.push(slackSpace.id);
+    await db.insert(schema.orgsXSlackSpaces).values({
+      orgId: regionId,
+      slackSpaceId: slackSpace.id,
+    });
+
+    return slackSpace;
+  };
+
+  const getSlackChannels = (result: unknown) =>
+    (result as { slackChannels?: unknown } | null)?.slackChannels;
 
   describe("all", () => {
     it("should return a list of event instances", async () => {
@@ -404,6 +507,415 @@ describe("Event Instance Router", () => {
       expect(result).not.toBeNull();
       expect(result?.id).toBe(eventInstance.id);
       expect(result?.name).toBe(eventInstance.name);
+    });
+
+    it("should not include slackChannels when includeSlackChannelId is omitted", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id, {
+        slack_channel_id: "C_AO_DEFAULT",
+      });
+      if (!ao) return;
+
+      const eventInstance = await createTestEventInstance(ao.id, {
+        meta: { slack_channel_id: "C_INSTANCE" },
+      });
+      if (!eventInstance) return;
+
+      await linkSlackSettingsToRegion(region.id, {
+        default_preblast_destination: "specified_channel",
+        preblast_destination_channel: "C_REGION_PRE",
+        default_backblast_destination: "specified_channel",
+        backblast_destination_channel: "C_REGION_BACK",
+      });
+
+      const client = createTestClient();
+      const result = await client.eventInstance.byId({ id: eventInstance.id });
+
+      expect(result).not.toBeNull();
+      expect(result).not.toHaveProperty("slackChannels");
+    });
+
+    it("should not include slackChannels when includeSlackChannelId is false", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id, {
+        slack_channel_id: "C_AO_DEFAULT",
+      });
+      if (!ao) return;
+
+      const eventInstance = await createTestEventInstance(ao.id);
+      if (!eventInstance) return;
+
+      const client = createTestClient();
+      const explicitFalse = await client.eventInstance.byId({
+        id: eventInstance.id,
+        includeSlackChannelId: false,
+      });
+      const stringFalse = await client.eventInstance.byId({
+        id: eventInstance.id,
+        includeSlackChannelId: "false",
+      });
+
+      expect(explicitFalse).not.toHaveProperty("slackChannels");
+      expect(stringFalse).not.toHaveProperty("slackChannels");
+    });
+
+    it("should trim returned channel IDs", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id, { slack_channel_id: " C_AO " });
+      if (!ao) return;
+
+      const eventInstance = await createTestEventInstance(ao.id, {
+        meta: { slack_channel_id: " C_INSTANCE " },
+      });
+      if (!eventInstance) return;
+
+      const client = createTestClient();
+      const result = await client.eventInstance.byId({
+        id: eventInstance.id,
+        includeSlackChannelId: true,
+      });
+
+      expect(getSlackChannels(result)).toEqual({
+        preblast: { channelId: "C_INSTANCE", source: "event_instance_meta" },
+        backblast: { channelId: "C_INSTANCE", source: "event_instance_meta" },
+      });
+    });
+
+    it("should use event instance meta slack channel for preblast and backblast", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id, {
+        slack_channel_id: "C_AO_DEFAULT",
+      });
+      if (!ao) return;
+
+      await linkSlackSettingsToRegion(region.id, {
+        default_preblast_destination: "specified_channel",
+        preblast_destination_channel: "C_REGION_PRE",
+        default_backblast_destination: "specified_channel",
+        backblast_destination_channel: "C_REGION_BACK",
+      });
+
+      const eventInstance = await createTestEventInstance(ao.id, {
+        meta: { slack_channel_id: "C_INSTANCE" },
+      });
+      if (!eventInstance) return;
+
+      const client = createTestClient();
+      const result = await client.eventInstance.byId({
+        id: eventInstance.id,
+        includeSlackChannelId: true,
+      });
+
+      expect(getSlackChannels(result)).toEqual({
+        preblast: { channelId: "C_INSTANCE", source: "event_instance_meta" },
+        backblast: { channelId: "C_INSTANCE", source: "event_instance_meta" },
+      });
+    });
+
+    it("should use region specified channels before AO meta", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id, { slack_channel_id: "C_AO" });
+      if (!ao) return;
+
+      await linkSlackSettingsToRegion(region.id, {
+        default_preblast_destination: "specified_channel",
+        preblast_destination_channel: "C_REGION_PRE",
+        default_backblast_destination: "specified_channel",
+        backblast_destination_channel: "C_REGION_BACK",
+        bot_token: "bot-token-secret-should-not-leak",
+      });
+
+      const eventInstance = await createTestEventInstance(ao.id);
+      if (!eventInstance) return;
+
+      const client = createTestClient();
+      const result = await client.eventInstance.byId({
+        id: eventInstance.id,
+        includeSlackChannelId: true,
+      });
+
+      expect(getSlackChannels(result)).toEqual({
+        preblast: { channelId: "C_REGION_PRE", source: "region_settings" },
+        backblast: { channelId: "C_REGION_BACK", source: "region_settings" },
+      });
+      expect(JSON.stringify(result)).not.toContain(
+        "bot-token-secret-should-not-leak",
+      );
+      expect(result).not.toHaveProperty("settings");
+    });
+
+    it("should return CONFLICT for duplicate region Slack mappings", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      await linkSlackSettingsToRegion(region.id, {
+        default_preblast_destination: "specified_channel",
+        preblast_destination_channel: "C_REGION_PRE_1",
+      });
+      await linkSlackSettingsToRegion(region.id, {
+        default_preblast_destination: "specified_channel",
+        preblast_destination_channel: "C_REGION_PRE_2",
+      });
+
+      const eventInstance = await createTestEventInstance(ao.id);
+      if (!eventInstance) return;
+
+      const client = createTestClient();
+      await expect(
+        client.eventInstance.byId({
+          id: eventInstance.id,
+          includeSlackChannelId: true,
+        }),
+      ).rejects.toThrow(/Multiple Slack spaces/);
+    });
+
+    it("should not use region settings fallback for inactive region", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion({ isActive: false });
+      if (!region) return;
+
+      const ao = await createTestAO(region.id, { slack_channel_id: "C_AO" });
+      if (!ao) return;
+
+      await linkSlackSettingsToRegion(region.id, {
+        default_preblast_destination: "specified_channel",
+        preblast_destination_channel: "C_REGION_PRE",
+        default_backblast_destination: "specified_channel",
+        backblast_destination_channel: "C_REGION_BACK",
+      });
+
+      const eventInstance = await createTestEventInstance(ao.id);
+      if (!eventInstance) return;
+
+      const client = createTestClient();
+      const result = await client.eventInstance.byId({
+        id: eventInstance.id,
+        includeSlackChannelId: true,
+      });
+
+      expect(getSlackChannels(result)).toEqual({
+        preblast: { channelId: "C_AO", source: "ao_org_meta" },
+        backblast: { channelId: "C_AO", source: "ao_org_meta" },
+      });
+    });
+
+    it("should not use region settings fallback when AO parent is not a region", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const nonRegionParent = await createTestNonRegionOrg();
+      if (!nonRegionParent) return;
+
+      const ao = await createTestAO(nonRegionParent.id, {
+        slack_channel_id: "C_AO",
+      });
+      if (!ao) return;
+
+      await linkSlackSettingsToRegion(nonRegionParent.id, {
+        default_preblast_destination: "specified_channel",
+        preblast_destination_channel: "C_PARENT_PRE",
+        default_backblast_destination: "specified_channel",
+        backblast_destination_channel: "C_PARENT_BACK",
+      });
+
+      const eventInstance = await createTestEventInstance(ao.id);
+      if (!eventInstance) return;
+
+      const client = createTestClient();
+      const result = await client.eventInstance.byId({
+        id: eventInstance.id,
+        includeSlackChannelId: true,
+      });
+
+      expect(getSlackChannels(result)).toEqual({
+        preblast: { channelId: "C_AO", source: "ao_org_meta" },
+        backblast: { channelId: "C_AO", source: "ao_org_meta" },
+      });
+    });
+
+    it("should report specified destinations with null or blank channels as misconfigured", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id, { slack_channel_id: "C_AO" });
+      if (!ao) return;
+
+      await linkSlackSettingsToRegion(region.id, {
+        default_preblast_destination: "specified_channel",
+        preblast_destination_channel: "   ",
+        default_backblast_destination: "specified_channel",
+        backblast_destination_channel: null,
+      });
+
+      const eventInstance = await createTestEventInstance(ao.id);
+      if (!eventInstance) return;
+
+      const client = createTestClient();
+      const result = await client.eventInstance.byId({
+        id: eventInstance.id,
+        includeSlackChannelId: true,
+      });
+
+      expect(getSlackChannels(result)).toEqual({
+        preblast: {
+          channelId: null,
+          source: "region_settings_misconfigured",
+        },
+        backblast: {
+          channelId: null,
+          source: "region_settings_misconfigured",
+        },
+      });
+      expect(logWarn).toHaveBeenCalledWith(
+        "api.event_instance.slack_channel_misconfigured",
+        { kind: "preblast" },
+      );
+      expect(logWarn).toHaveBeenCalledWith(
+        "api.event_instance.slack_channel_misconfigured",
+        { kind: "backblast" },
+      );
+    });
+
+    it("should use AO org meta fallback", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id, { slack_channel_id: "C_AO" });
+      if (!ao) return;
+
+      const eventInstance = await createTestEventInstance(ao.id);
+      if (!eventInstance) return;
+
+      const client = createTestClient();
+      const result = await client.eventInstance.byId({
+        id: eventInstance.id,
+        includeSlackChannelId: true,
+      });
+
+      expect(getSlackChannels(result)).toEqual({
+        preblast: { channelId: "C_AO", source: "ao_org_meta" },
+        backblast: { channelId: "C_AO", source: "ao_org_meta" },
+      });
+    });
+
+    it("should return none when no slack channel can be resolved", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      const eventInstance = await createTestEventInstance(ao.id);
+      if (!eventInstance) return;
+
+      const client = createTestClient();
+      const result = await client.eventInstance.byId({
+        id: eventInstance.id,
+        includeSlackChannelId: true,
+      });
+
+      expect(getSlackChannels(result)).toEqual({
+        preblast: { channelId: null, source: "none" },
+        backblast: { channelId: null, source: "none" },
+      });
+    });
+
+    it("should use region settings for region-owned event without AO fallback", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      await linkSlackSettingsToRegion(region.id, {
+        default_preblast_destination: "specified_channel",
+        preblast_destination_channel: "C_REGION_PRE",
+        default_backblast_destination: "ao_channel",
+      });
+
+      const eventInstance = await createTestEventInstance(region.id);
+      if (!eventInstance) return;
+
+      const client = createTestClient();
+      const result = await client.eventInstance.byId({
+        id: eventInstance.id,
+        includeSlackChannelId: true,
+      });
+
+      expect(result?.org).toBeNull();
+      expect(getSlackChannels(result)).toEqual({
+        preblast: { channelId: "C_REGION_PRE", source: "region_settings" },
+        backblast: { channelId: null, source: "none" },
+      });
+    });
+
+    it("should ignore invalid or non-string event instance meta slack channel", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id, { slack_channel_id: "C_AO" });
+      if (!ao) return;
+
+      const eventInstance = await createTestEventInstance(ao.id, {
+        meta: { slack_channel_id: 123 },
+      });
+      if (!eventInstance) return;
+
+      const client = createTestClient();
+      const result = await client.eventInstance.byId({
+        id: eventInstance.id,
+        includeSlackChannelId: true,
+      });
+
+      expect(getSlackChannels(result)).toEqual({
+        preblast: { channelId: "C_AO", source: "ao_org_meta" },
+        backblast: { channelId: "C_AO", source: "ao_org_meta" },
+      });
     });
 
     it("should return null for non-existent event instance", async () => {
@@ -648,6 +1160,119 @@ describe("Event Instance Router", () => {
         expect(linkRecord).toBeDefined();
         expect(linkRecord?.eventTypeId).toBe(eventType.id);
       }
+    });
+
+    it("should create event instance with event tag", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      const eventTag = await createTestEventTag();
+      if (!eventTag) return;
+
+      const client = createTestClient();
+      const result = await client.eventInstance.crupdate({
+        name: `Event With Tag ${uniqueId()}`,
+        orgId: ao.id,
+        startDate: new Date().toISOString().split("T")[0]!,
+        eventTagId: eventTag.id,
+      });
+
+      expect(result).toBeDefined();
+
+      if (result.id) {
+        createdEventInstanceIds.push(result.id);
+
+        const [linkRecord] = await db
+          .select()
+          .from(schema.eventTagsXEventInstances)
+          .where(
+            eq(schema.eventTagsXEventInstances.eventInstanceId, result.id),
+          );
+
+        expect(linkRecord).toBeDefined();
+        expect(linkRecord?.eventTagId).toBe(eventTag.id);
+      }
+    });
+
+    it("should clear event tag when eventTagId is null", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      const eventInstance = await createTestEventInstance(ao.id);
+      const eventTag = await createTestEventTag();
+      if (!eventInstance || !eventTag) return;
+
+      await db.insert(schema.eventTagsXEventInstances).values({
+        eventInstanceId: eventInstance.id,
+        eventTagId: eventTag.id,
+      });
+
+      const client = createTestClient();
+      await client.eventInstance.crupdate({
+        id: eventInstance.id,
+        orgId: ao.id,
+        startDate: eventInstance.startDate,
+        eventTagId: null,
+      });
+
+      const linkRecords = await db
+        .select()
+        .from(schema.eventTagsXEventInstances)
+        .where(
+          eq(schema.eventTagsXEventInstances.eventInstanceId, eventInstance.id),
+        );
+
+      expect(linkRecords).toHaveLength(0);
+    });
+
+    it("should preserve event tag when eventTagId is omitted", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      const eventInstance = await createTestEventInstance(ao.id);
+      const eventTag = await createTestEventTag();
+      if (!eventInstance || !eventTag) return;
+
+      await db.insert(schema.eventTagsXEventInstances).values({
+        eventInstanceId: eventInstance.id,
+        eventTagId: eventTag.id,
+      });
+
+      const client = createTestClient();
+      await client.eventInstance.crupdate({
+        id: eventInstance.id,
+        name: `Updated Event ${uniqueId()}`,
+        orgId: ao.id,
+        startDate: eventInstance.startDate,
+      });
+
+      const linkRecords = await db
+        .select()
+        .from(schema.eventTagsXEventInstances)
+        .where(
+          eq(schema.eventTagsXEventInstances.eventInstanceId, eventInstance.id),
+        );
+
+      expect(linkRecords).toHaveLength(1);
+      expect(linkRecords[0]?.eventTagId).toBe(eventTag.id);
     });
 
     it("should require editor role", async () => {

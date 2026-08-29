@@ -27,20 +27,28 @@ section-order = [
 ]
 known-first-party = []
 
+[tool.mypy]
+python_version = "3.13"
+# Scoped to the two layers that are well-tested and already near type-clean;
+# `features/` and `utilities/` are explicitly out of scope.
+files = ["application", "infrastructure"]
+warn_unused_ignores = true
+warn_redundant_casts = true
+
 [project]
 name = "f3-nation-slack-bot"
-version = "2.0.3"
+version = "2.3.2"
 description = ""
 authors = [{ name = "Evan Petzoldt", email = "evan.petzoldt@protonmail.com" }]
 readme = "README.md"
-requires-python = ">=3.12,<4.0"
+requires-python = ">=3.13,<3.14"
 dependencies = [
     "slack-bolt>=1.18.1,<2.0.0",
     "cryptography>=46.0.5",
     "sqlalchemy>=2.0.28,<3.0.0",
     "requests>=2.31.0,<3.0.0",
     "requests-oauthlib>=1.3.1,<2.0.0",
-    "sqlalchemy-utils>=0.41.1,<0.42.0",
+    "sqlalchemy-utils>=0.42.1,<0.43.0",
     "psycopg2-binary>=2.9.9,<3.0.0",
     "functions-framework>=3.8.1,<4.0.0",
     "pg8000>=1.31.5,<2.0.0",
@@ -48,7 +56,7 @@ dependencies = [
     "google-cloud-logging>=3.11.0,<4.0.0",
     "f3-data-models",
     "pillow>=12.2.0",
-    "pillow-heif>=0.15.0,<0.16.0",
+    "pillow-heif>=1.5.0,<1.6.0",
     "watchfiles>=1.1.1,<2.0.0",
     "python-dotenv>=1.2.1,<2.0.0",
     "sendgrid>=6.11.0,<7.0.0",
@@ -57,10 +65,10 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "pytest>=8.4.2,<9.0.0",
+    "pytest>=9.1.1,<9.2.0",
     "debugpy>=1.8.17,<2.0.0",
-    "pre-commit>=4.2.0,<5.0.0",
     "ruff>=0.14.0,<1.0.0",
+    "mypy>=1.14.0,<2.0.0",
 ]
 scripts = [
     "mplcyberpunk>=0.7.6,<0.8.0",

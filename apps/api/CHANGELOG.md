@@ -1,5 +1,90 @@
 # Changelog
 
+## [6.4.0](https://github.com/F3-Nation/f3-nation/compare/api@6.3.0...api@6.4.0) (2026-08-18)
+
+
+### Features
+
+* **auth:** issue an id_token on the authorization_code and refresh_token grants ([#749](https://github.com/F3-Nation/f3-nation/issues/749)) ([0a8a25d](https://github.com/F3-Nation/f3-nation/commit/0a8a25d635d618383d57669eff4415b32b6e3fef))
+
+
+### Bug Fixes
+
+* **api:** raise per-IP rate limit to 500 ([#850](https://github.com/F3-Nation/f3-nation/issues/850)) ([b8e320a](https://github.com/F3-Nation/f3-nation/commit/b8e320a30a6be2f8f79c912a6ae3cf3dedf86c91))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.7.0
+  * devDependencies
+    * @acme/auth bumped to 0.2.2
+    * @acme/db bumped to 0.4.1
+
+## [6.3.0](https://github.com/F3-Nation/f3-nation/compare/api@6.2.0...api@6.3.0) (2026-08-12)
+
+
+### Features
+
+* **health:** add /status to homepage and introduce shared package for reporting ([#657](https://github.com/F3-Nation/f3-nation/issues/657)) ([88e7547](https://github.com/F3-Nation/f3-nation/commit/88e754751e25461e25c7361c878c78e3902daad4))
+* **map:** add start date column to workouts table ([#807](https://github.com/F3-Nation/f3-nation/issues/807)) ([c49b48d](https://github.com/F3-Nation/f3-nation/commit/c49b48d6131e13454425d3ce0660e02093bba175))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.6.0
+  * devDependencies
+    * @acme/db bumped to 0.4.0
+
+## [6.2.0](https://github.com/F3-Nation/f3-nation/compare/api@6.1.3...api@6.2.0) (2026-08-05)
+
+
+### Features
+
+* **api:** adding routes for slack settings and channels ([#693](https://github.com/F3-Nation/f3-nation/issues/693)) ([d6d43e4](https://github.com/F3-Nation/f3-nation/commit/d6d43e47503cf7d65cfcae4b5c6877d5f1a994a8))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.5.0
+  * devDependencies
+    * @acme/db bumped to 0.3.0
+
+## [6.1.3](https://github.com/F3-Nation/f3-nation/compare/api@6.1.2...api@6.1.3) (2026-07-26)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.4.1
+  * devDependencies
+    * @acme/db bumped to 0.2.0
+
+## [6.1.2](https://github.com/F3-Nation/f3-nation/compare/api@6.1.1...api@6.1.2) (2026-07-23)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.4.0
+
+## [6.1.1](https://github.com/F3-Nation/f3-nation/compare/api@6.1.0...api@6.1.1) (2026-07-14)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.3.1
+    * @acme/shared bumped to 0.1.3
+
 ## [6.1.0](https://github.com/F3-Nation/f3-nation/compare/api@6.0.5...api@6.1.0) (2026-07-08)
 
 

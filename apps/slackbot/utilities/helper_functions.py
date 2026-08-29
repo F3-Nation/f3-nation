@@ -919,3 +919,52 @@ def sort_by_name(extractor):
         return folded
 
     return key
+
+
+def extract_state_values(body: dict) -> dict[str, Any]:
+    """Extracts the state values from a Slack view submission payload.
+
+    Args:
+        body (dict): The Slack view submission payload.
+
+    Returns:
+        dict: A dictionary containing the state values.
+    """
+
+    # Extract form values from body
+    state_values = safe_get(body, "view", "state", "values") or {}
+    form_data: dict[str, Any] = {}
+    for block_id, block_values in state_values.items():
+        for _, state in block_values.items():
+            element_type = state.get("type")
+            if element_type in (
+                "plain_text_input",
+                "email_text_input",
+                "url_text_input",
+                "number_input",
+            ):
+                form_data[block_id] = state.get("value")
+            # Pickers carry selected_date/selected_time, not value.
+            elif element_type == "datepicker":
+                form_data[block_id] = state.get("selected_date")
+            elif element_type == "timepicker":
+                form_data[block_id] = state.get("selected_time")
+            elif element_type in ("users_select", "conversations_select", "channels_select"):
+                form_data[block_id] = (
+                    state.get("selected_user") or state.get("selected_conversation") or state.get("selected_channel")
+                )
+            elif element_type in ("multi_users_select", "multi_conversations_select", "multi_channels_select"):
+                form_data[block_id] = (
+                    state.get("selected_users") or state.get("selected_conversations") or state.get("selected_channels")
+                )
+            elif element_type in ("static_select", "external_select", "radio_buttons"):
+                form_data[block_id] = (
+                    (state.get("selected_option") or {}).get("value") if state.get("selected_option") else None
+                )
+            elif element_type in ("multi_static_select", "multi_external_select", "checkboxes"):
+                form_data[block_id] = [o.get("value") for o in state.get("selected_options", [])]
+            elif element_type == "rich_text_input":
+                form_data[block_id] = state.get("rich_text_value")
+            elif element_type == "file_input":
+                form_data[block_id] = state.get("files")
+    return form_data

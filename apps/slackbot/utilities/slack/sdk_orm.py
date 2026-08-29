@@ -1,4 +1,5 @@
 import json
+import logging
 from typing import Any, Dict, List
 
 from slack_sdk.models.blocks import Block, ImageBlock, InputBlock, SectionBlock
@@ -56,7 +57,11 @@ class SdkBlockView:
         for block in self.blocks:
             if isinstance(block, InputBlock) and block.block_id in values:
                 if hasattr(block.element, "initial_value"):
-                    if block.element.type == "number_input":
+                    if block.element.type == "rich_text_input":
+                        # Rich text initial_value must be a rich text object (dict),
+                        # not a string. Assign directly without str() conversion.
+                        block.element.initial_value = values[block.block_id]
+                    elif block.element.type == "number_input":
                         if isinstance(values[block.block_id], str):
                             try:
                                 values[block.block_id] = float(values[block.block_id])
@@ -66,7 +71,10 @@ class SdkBlockView:
                             values[block.block_id] = round(values[block.block_id], 4)
                         else:
                             values[block.block_id] = int(values[block.block_id])
-                    block.element.initial_value = str(values[block.block_id])
+                        block.element.initial_value = str(values[block.block_id])
+                    else:
+                        # plain_text_input and other text-like elements
+                        block.element.initial_value = str(values[block.block_id])
                 elif block.element.type in ["multi_static_select", "checkboxes"]:
                     block.element.initial_options = []
                     for value in values[block.block_id]:
@@ -153,10 +161,13 @@ class SdkBlockView:
                     "email_text_input",
                     "url_text_input",
                     "number_input",
-                    "datepicker",
-                    "timepicker",
                 ]:
                     value = state.get("value")
+                # Pickers carry selected_date/selected_time, not value.
+                elif element_type == "datepicker":
+                    value = state.get("selected_date")
+                elif element_type == "timepicker":
+                    value = state.get("selected_time")
                 elif element_type in ["users_select", "conversations_select", "channels_select"]:
                     value = (
                         state.get("selected_user")
@@ -248,6 +259,6 @@ class SdkBlockView:
                 return client.views_update(external_id=external_id, view=view.to_dict())
             else:
                 return client.views_update(view_id=view_id, view=view.to_dict())
-        except Exception:
+        except Exception as e:
             # TODO: handle "not found" errors; post new instead of update?
-            pass
+            logging.getLogger(__name__).error("SdkBlockView.update_modal failed for view_id=%s: %s", view_id, e)

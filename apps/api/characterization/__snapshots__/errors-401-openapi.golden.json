@@ -1,0 +1,15 @@
+{
+  "body": {
+    "code": "UNAUTHORIZED",
+    "defined": false,
+    "message": "Unauthorized",
+    "status": 401
+  },
+  "headers": {
+    "access-control-allow-credentials": "true",
+    "access-control-allow-origin": "",
+    "content-type": "application/json",
+    "vary": "Origin"
+  },
+  "status": 401
+}

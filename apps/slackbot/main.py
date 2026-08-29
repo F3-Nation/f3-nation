@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import re
@@ -15,6 +14,7 @@ from google.cloud.logging_v2.handlers import StructuredLogHandler, setup_logging
 from slack_bolt import Ack, App
 from slack_bolt.adapter.google_cloud_functions import SlackRequestHandler
 from slack_bolt.adapter.socket_mode import SocketModeHandler
+from slack_sdk.errors import SlackApiError
 from slack_sdk.web import WebClient
 
 import scripts
@@ -24,7 +24,7 @@ from infrastructure.api_client.exceptions import (
     F3ApiError,
     F3ApiNotFoundError,
 )
-from utilities.builders import add_debug_form, add_loading_form, send_error_response
+from utilities.builders import SUBMISSION_WAIT_VIEW, add_debug_form, add_loading_form, send_error_response
 from utilities.constants import ENABLE_DEBUGGING, LOCAL_DEVELOPMENT, SOCKET_MODE
 from utilities.database.orm import SlackSettings
 from utilities.helper_functions import (
@@ -64,10 +64,7 @@ def get_user_facing_error_message(exc: Exception) -> str:
     if isinstance(exc, F3ApiNotFoundError):
         return "The requested F3 Nation resource could not be found."
     if isinstance(exc, F3ApiError):
-        return (
-            "Something went wrong while contacting the F3 Nation API. "
-            "Please try again later."
-        )
+        return "Something went wrong while contacting the F3 Nation API. Please try again later."
     return "Something went wrong. Please try again later."
 
 
@@ -82,16 +79,49 @@ else:
     handler = StructuredLogHandler()
     setup_logging(handler, log_level=logging_level)
 
-try:
-    app = App(
-        process_before_response=process_before_response,
-        oauth_settings=get_oauth_settings(),
-    )
-except Exception as exc:
-    raise RuntimeError(
-        "Error initializing Slackbot: you may need to set up your .env file with the appropriate Slack credentials. "
-        f"Exception: {exc}"
-    ) from exc
+_app = None
+_app_lock = threading.Lock()
+
+
+def create_slack_app() -> App:
+    try:
+        slack_app = App(
+            process_before_response=process_before_response,
+            oauth_settings=get_oauth_settings(),
+        )
+    except Exception as exc:
+        raise RuntimeError(
+            "Error initializing Slackbot: you may need to set up your .env file with the appropriate Slack "
+            "credentials. "
+            f"Exception: {exc}"
+        ) from exc
+
+    try:
+        args = [main_response]
+        lazy_kwargs = {}
+
+        match_all_pattern = re.compile(".*")
+        slack_app.action(match_all_pattern)(*args, **lazy_kwargs)
+        slack_app.view(match_all_pattern)(*args, **lazy_kwargs)
+        slack_app.command(match_all_pattern)(*args, **lazy_kwargs)
+        slack_app.view_closed(match_all_pattern)(*args, **lazy_kwargs)
+        slack_app.event(match_all_pattern)(*args, **lazy_kwargs)
+        slack_app.options(match_all_pattern)(*args, **lazy_kwargs)
+        slack_app.shortcut(match_all_pattern)(*args, **lazy_kwargs)
+    except Exception:
+        pass
+
+    return slack_app
+
+
+def get_slack_app() -> App:
+    global _app
+    if _app is None:
+        with _app_lock:
+            if _app is None:
+                _app = create_slack_app()
+    return _app
+
 
 # ----------------------------------------
 # Production Mode: Google Cloud Function HTTP Handler
@@ -113,7 +143,7 @@ if not LOCAL_DEVELOPMENT:
             logging.info(f"Request body: {request.get_data(as_text=True)}")
             return strava.strava_exchange_token(request)
         elif request.path[:6] == "/slack":
-            slack_handler = SlackRequestHandler(app=app)
+            slack_handler = SlackRequestHandler(app=get_slack_app())
             return slack_handler.handle(request)
         elif request.path == "/hourly-runner-complete":
             update_local_region_records()
@@ -125,25 +155,36 @@ if not LOCAL_DEVELOPMENT:
 def main_response(body: dict, logger: logging.Logger, client: WebClient, ack: Ack, context: dict):
     request_type, request_id = get_request_type(body)
 
-    if LOCAL_DEVELOPMENT:
-        logger.info(json.dumps(body, indent=4))
-    else:
-        logger.info(body)
+    logger.info("slack.request.received type=%s", request_type)
 
     team_id = safe_get(body, "team_id") or safe_get(body, "team", "id")
 
     lookup: Tuple[Callable, bool] = safe_get(safe_get(MAIN_MAPPER, request_type), request_id)
 
     if lookup:
-        run_function, add_loading = lookup
+        run_function, add_loading, has_submission_ack = lookup
+        if request_type not in ("block_suggestion", "view_submission"):
+            ack()
+
         if ENABLE_DEBUGGING and request_type != "view_submission":
             body[LOADING_ID] = add_debug_form(body=body, client=client)
             # NOTE: do not put debugging breakpoints above this line
         elif add_loading:
             body[LOADING_ID] = add_loading_form(body=body, client=client)
 
-        if request_type != "block_suggestion":
-            ack()
+        if request_type == "view_submission":
+            submission_view_id = safe_get(body, "view", "id")
+            if submission_view_id:
+                body["submission_view_id"] = submission_view_id
+
+            if has_submission_ack:
+                logger.info("View submission received, sending loading modal...")
+                ack(
+                    response_action="update",
+                    view=SUBMISSION_WAIT_VIEW,
+                )
+            else:
+                ack()
 
         try:
             try:
@@ -177,28 +218,21 @@ def main_response(body: dict, logger: logging.Logger, client: WebClient, ack: Ac
             )
             if isinstance(exc, F3ApiError):
                 logger.error(f"F3 API detail: {exc.detail}")
-            logger.error(tb_str)
+            if isinstance(exc, SlackApiError):
+                logger.error(
+                    "slack.api.handler_failed type=%s handler=%s error=%s",
+                    request_type,
+                    getattr(run_function, "__name__", type(run_function).__name__),
+                    exc.response.get("error"),
+                )
+            else:
+                logger.error(tb_str)
     else:
         ack()
         logger.warning(
             f"no handler for path: "
             f"{safe_get(safe_get(MAIN_MAPPER, request_type), request_id) or request_type + ', ' + request_id}"
         )
-
-try:
-    ARGS = [main_response]
-    LAZY_KWARGS = {}
-
-    MATCH_ALL_PATTERN = re.compile(".*")
-    app.action(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
-    app.view(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
-    app.command(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
-    app.view_closed(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
-    app.event(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
-    app.options(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
-    app.shortcut(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
-except Exception:
-    pass
 
 
 def start_local_health_server(port: int):
@@ -218,6 +252,7 @@ def start_local_health_server(port: int):
     thread.start()
     return server
 
+
 if __name__ == "__main__":
     port = 8080
     local_http_port = int(os.environ.get("LOCAL_HTTP_PORT", "3006"))
@@ -228,14 +263,12 @@ if __name__ == "__main__":
     # Ensure SLACK_APP_TOKEN is present
     app_token = os.environ.get("SLACK_APP_TOKEN")
     if not app_token:
-        logging.getLogger().error(
-            "SLACK_APP_TOKEN is required to run the Slackbot. Please set it in your .env file."
-        )
+        logging.getLogger().error("SLACK_APP_TOKEN is required to run the Slackbot. Please set it in your .env file.")
         exit(1)
 
     if not SOCKET_MODE:
         try:
-            app.start(port=port)
+            get_slack_app().start(port=port)
             update_local_region_records()
         except KeyboardInterrupt:
             # graceful shutdown during auto-reload
@@ -247,5 +280,5 @@ if __name__ == "__main__":
 
         logging.getLogger().info("Running in local Socket Mode.")
 
-        handler = SocketModeHandler(app, app_token)
+        handler = SocketModeHandler(get_slack_app(), app_token)
         handler.start()

@@ -92,7 +92,7 @@ Preview email: https://ethereal.email/message/abc123...
 
 That URL is publicly fetchable with `curl` and contains the full email HTML -- both the **6-digit code** and a magic link. Headless QA pulls the **code** out of that HTML and POSTs it to NextAuth's standard `/api/auth/callback/credentials` endpoint to complete sign-in.
 
-> Note: a raw `curl` of the magic link does **not** complete sign-in. The verify page (`/login/email/verify`) is a client component that calls `signIn("email-mfa", ...)` from a `useEffect`. Hitting the URL with `curl -L` only returns HTML -- the cookie jar gets no session. Use the CSRF + callback recipe below for headless flows, or drive the magic link from a JS-capable browser (Playwright, CDP) for browser-based regression testing.
+> Note: a raw `curl` of the magic link does **not** complete sign-in. The verify page (`/login/email/verify`) is a client component that calls `signIn("email-mfa", ...)` from a `useEffect`. Hitting the URL with `curl -L` only returns HTML -- the cookie jar gets no session. Use the CSRF + callback recipe below for headless flows, or drive the magic link from a JS-capable browser (CDP) for browser-based regression testing.
 
 In dev (`NODE_ENV !== "production"`), `/api/verify-email`'s 10-requests-per-minute-per-IP rate limit is bypassed -- the email transport is Ethereal, so there is no real inbox to bomb. Production traffic remains capped.
 
@@ -441,6 +441,24 @@ The CLI prompts for:
 - **Scopes**: defaults to `openid profile email`
 
 Production modifications require explicit confirmation. The plaintext secret is displayed once and cannot be retrieved later.
+
+#### Public clients (native / mobile apps)
+
+Native apps (iOS/Android) cannot keep a `client_secret` confidential — anyone
+can extract it from the compiled binary. Per RFC 8252, register these as
+**public clients**: answer `y` to the "Public client?" prompt. For public
+clients:
+
+- No `client_secret` is issued or accepted. The authorization-code grant is
+  protected by **PKCE** (S256), which is already mandatory for all clients;
+  the refresh-token grant is protected by single-use rotation of the (opaque)
+  refresh token. Neither grant consults a secret for a public client.
+- Redirect URIs may additionally use a reverse-domain custom scheme with no
+  authority component (e.g. `com.example.app:/oauth2redirect`, per RFC 8252
+  §7.1) alongside HTTPS/localhost.
+
+Confidential (server-side) clients are unchanged and still require the
+secret.
 
 ### Programmatic Registration
 

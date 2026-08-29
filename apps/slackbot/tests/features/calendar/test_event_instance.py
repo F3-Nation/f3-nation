@@ -2,6 +2,7 @@ import os
 import sys
 import unittest
 from datetime import date
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
@@ -9,8 +10,20 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 from application.event_instance import EventInstanceData
 from application.event_instance.service import EventInstanceService
 from features.calendar.event_instance import (
+    CALENDAR_ADD_EVENT_INSTANCE_AO,
+    CALENDAR_ADD_EVENT_INSTANCE_END_TIME,
+    CALENDAR_ADD_EVENT_INSTANCE_LOCATION,
+    CALENDAR_ADD_EVENT_INSTANCE_NAME,
+    CALENDAR_ADD_EVENT_INSTANCE_PREBLAST,
+    CALENDAR_ADD_EVENT_INSTANCE_PREBLAST_CHANNEL,
+    CALENDAR_ADD_EVENT_INSTANCE_START_DATE,
+    CALENDAR_ADD_EVENT_INSTANCE_START_TIME,
+    CALENDAR_ADD_EVENT_INSTANCE_TYPE,
+    META_PREBLAST_CHANNEL_ID,
     _build_event_instance_service,
+    build_event_instance_add_form,
     build_event_instance_list_form,
+    handle_event_instance_add,
     handle_event_instance_close,
     handle_event_instance_edit_delete,
     manage_event_instances,
@@ -35,6 +48,7 @@ def _make_instance(
     meta: dict | None = None,
     is_private: bool = False,
     highlight: bool = False,
+    preblast_ts: int | float | None = None,
 ) -> EventInstanceData:
     return EventInstanceData(
         id=id,
@@ -49,6 +63,7 @@ def _make_instance(
         meta=meta,
         is_private=is_private,
         highlight=highlight,
+        preblast_ts=preblast_ts,
     )
 
 
@@ -146,6 +161,19 @@ class EventInstanceServiceTest(unittest.TestCase):
         self.assertEqual(kwargs["instance_id"], 5)
         self.assertEqual(kwargs["name"], "Updated")
 
+    def test_persist_posted_preblast_delegates(self):
+        repo = self._mock_repo()
+        repo.persist_posted_preblast.return_value = _make_instance(id=5, preblast_ts=1234567890)
+        service = EventInstanceService(repository=repo)
+        result = service.persist_posted_preblast(5, preblast_ts=1234567890, preblast_post_channel_id="C123")
+        repo.persist_posted_preblast.assert_called_once_with(
+            5,
+            preblast_ts=1234567890,
+            preblast_post_channel_id="C123",
+            existing_instance=None,
+        )
+        self.assertEqual(result.preblast_ts, 1234567890)
+
     def test_close_instance_fetches_meta_and_closes(self):
         repo = self._mock_repo()
         existing = _make_instance(id=3, meta={"existing_key": "val"})
@@ -220,6 +248,8 @@ class ApiEventInstanceRepositoryTest(unittest.TestCase):
             "eventTypes": [{"eventTypeId": 5}],
             "eventTags": [],
             "seriesException": series_exception,
+            "preblastTs": 1234567890,
+            "seriesId": 22,
         }
 
     def test_get_list_builds_correct_params(self):
@@ -261,6 +291,8 @@ class ApiEventInstanceRepositoryTest(unittest.TestCase):
         self.assertEqual(result.id, 5)
         self.assertEqual(result.start_date, date(2026, 6, 1))
         self.assertEqual(result.event_type_ids, [5])
+        self.assertEqual(result.preblast_ts, 1234567890)
+        self.assertEqual(result.series_id, 22)
 
     def test_get_by_id_returns_none_on_not_found(self):
         self.client.get.side_effect = F3ApiNotFoundError(404, "not found")
@@ -286,11 +318,15 @@ class ApiEventInstanceRepositoryTest(unittest.TestCase):
             "highlight": False,
             "event_types": [],
             "event_tags": [],
+            "preblast_ts": 42,
+            "series_id": 9,
         }
         self.client.get.return_value = {"eventInstance": raw}
         result = self.repo.get_by_id(1)
         self.assertEqual(result.start_time, "0530")
         self.assertEqual(result.org_id, 10)
+        self.assertEqual(result.preblast_ts, 42)
+        self.assertEqual(result.series_id, 9)
 
     def test_parse_instance_handles_singular_event_type_id(self):
         """API returns singular eventTypeId / eventTagId (not arrays)."""
@@ -364,6 +400,118 @@ class ApiEventInstanceRepositoryTest(unittest.TestCase):
         self.assertEqual(kwargs["json"]["name"], "Updated")
         self.assertEqual(kwargs["json"]["eventTypeId"], 1)
         self.assertNotIn("eventTagId", kwargs["json"])  # empty list → omitted
+
+    def test_update_writes_numeric_preblast_ts(self):
+        self.client.post.return_value = {"eventInstance": self._raw_instance(id=5)}
+        self.repo.update(
+            instance_id=5,
+            name="Updated",
+            org_id=10,
+            start_date=date(2026, 7, 4),
+            start_time="0600",
+            end_time="0700",
+            description=None,
+            location_id=None,
+            event_type_ids=[1],
+            event_tag_ids=[],
+            is_active=True,
+            is_private=False,
+            meta=None,
+            highlight=False,
+            preblast_rich=None,
+            preblast=None,
+            preblast_ts=987654321,
+        )
+        _, kwargs = self.client.post.call_args
+        self.assertEqual(kwargs["json"]["preblastTs"], 987654321)
+
+    def test_update_preblast_fields_merges_meta_and_preserves_required_fields(self):
+        self.client.get.return_value = {"eventInstance": {**self._raw_instance(id=10), "meta": {"keep": "yes"}}}
+        self.client.post.return_value = {"eventInstance": self._raw_instance(id=10)}
+        result = self.repo.update_preblast_fields(
+            10,
+            name="New Title",
+            preblast="pb",
+            meta_updates={"new": "value"},
+            preblast_channel_id="CDEST",
+        )
+        _, kwargs = self.client.post.call_args
+        self.assertEqual(kwargs["json"]["id"], 10)
+        self.assertEqual(kwargs["json"]["name"], "New Title")
+        self.assertEqual(kwargs["json"]["meta"], {"keep": "yes", "new": "value", "preblast_channel_id": "CDEST"})
+        self.assertEqual(result.id, 10)
+        self.assertEqual(self.client.get.call_count, 1)  # fetch before update; POST response supplies result
+
+    def test_update_preblast_fields_can_reuse_existing_instance(self):
+        existing = _make_instance(id=10, meta={"keep": "yes"})
+        self.client.post.return_value = {"eventInstance": self._raw_instance(id=10)}
+        result = self.repo.update_preblast_fields(
+            10,
+            name="New Title",
+            meta_updates={"new": "value"},
+            existing_instance=existing,
+        )
+        self.client.get.assert_not_called()
+        _, kwargs = self.client.post.call_args
+        self.assertEqual(kwargs["json"]["name"], "New Title")
+        self.assertEqual(kwargs["json"]["meta"], {"keep": "yes", "new": "value"})
+        self.assertEqual(result.id, 10)
+
+    def test_update_preblast_fields_can_clear_location(self):
+        self.client.get.return_value = {"eventInstance": {**self._raw_instance(id=10), "locationId": 99}}
+        self.client.post.return_value = {"success": True}
+        self.repo.update_preblast_fields(10, clear_location_id=True)
+        _, kwargs = self.client.post.call_args
+        self.assertIn("locationId", kwargs["json"])
+        self.assertIsNone(kwargs["json"]["locationId"])
+
+    def test_update_preblast_fields_preserves_location_when_not_clearing(self):
+        self.client.get.return_value = {"eventInstance": {**self._raw_instance(id=10), "locationId": 99}}
+        self.client.post.return_value = {"success": True}
+        self.repo.update_preblast_fields(10)
+        _, kwargs = self.client.post.call_args
+        self.assertEqual(kwargs["json"]["locationId"], 99)
+
+    def test_update_preblast_fields_raises_without_event_type(self):
+        self.client.get.return_value = {"eventInstance": {**self._raw_instance(id=10), "eventTypes": []}}
+        with self.assertRaisesRegex(ValueError, "missing required field 'event_type_ids'"):
+            self.repo.update_preblast_fields(10)
+        self.client.post.assert_not_called()
+
+    def test_update_preblast_fields_can_clear_event_tag(self):
+        self.client.get.return_value = {
+            "eventInstance": {**self._raw_instance(id=10), "eventTags": [{"eventTagId": 7}]}
+        }
+        self.client.post.return_value = {"eventInstance": self._raw_instance(id=10)}
+        self.repo.update_preblast_fields(10, event_tag_ids=[])
+        _, kwargs = self.client.post.call_args
+        self.assertIn("eventTagId", kwargs["json"])
+        self.assertIsNone(kwargs["json"]["eventTagId"])
+
+    def test_persist_posted_preblast_merges_post_channel(self):
+        self.client.get.return_value = {"eventInstance": {**self._raw_instance(id=11), "meta": {"keep": "yes"}}}
+        self.client.post.return_value = {"eventInstance": self._raw_instance(id=11)}
+        result = self.repo.persist_posted_preblast(11, preblast_ts=222, preblast_post_channel_id="CPOST")
+        _, kwargs = self.client.post.call_args
+        self.assertEqual(kwargs["json"]["preblastTs"], 222)
+        self.assertEqual(kwargs["json"]["meta"], {"keep": "yes", "preblast_post_channel_id": "CPOST"})
+        self.assertEqual(result.id, 11)
+        self.assertEqual(self.client.get.call_count, 1)
+
+    def test_persist_posted_preblast_can_reuse_existing_instance(self):
+        existing = _make_instance(id=11, meta={"keep": "yes"})
+        self.client.post.return_value = {"eventInstance": self._raw_instance(id=11)}
+        result = self.repo.persist_posted_preblast(
+            11,
+            preblast_ts=222,
+            preblast_post_channel_id="CPOST",
+            existing_instance=existing,
+        )
+        self.client.get.assert_not_called()
+        _, kwargs = self.client.post.call_args
+        self.assertEqual(kwargs["json"]["preblastTs"], 222)
+        self.assertEqual(kwargs["json"]["meta"], {"keep": "yes", "preblast_post_channel_id": "CPOST"})
+        self.assertEqual(result.id, 11)
 
     def test_close_posts_correct_payload(self):
         instance = _make_instance(id=3, meta={"existing_key": "val"})
@@ -535,6 +683,127 @@ class HandleEventInstanceEditDeleteTest(unittest.TestCase):
         # Close action opens the close-reason modal — views_update IS called, close_instance is NOT
         client.views_update.assert_called_once()
         mock_service.close_instance.assert_not_called()
+
+
+class EventInstancePreblastChannelTest(unittest.TestCase):
+    def _region_record(self):
+        r = MagicMock()
+        r.org_id = 10
+        return r
+
+    @patch("features.calendar.event_instance._build_event_tag_service")
+    @patch("features.calendar.event_instance._build_event_type_service")
+    @patch("features.calendar.event_instance._build_location_service")
+    @patch("features.calendar.event_instance._build_ao_service")
+    def test_unscheduled_preblast_form_includes_channel_selector(
+        self,
+        mock_build_ao,
+        mock_build_location,
+        mock_build_event_type,
+        mock_build_event_tag,
+    ):
+        mock_build_ao.return_value.get_region_aos.return_value = [SimpleNamespace(id=10, name="Alpha")]
+        mock_build_location.return_value.get_org_locations.return_value = []
+        mock_build_event_type.return_value.get_all_event_types_for_org.return_value = [
+            SimpleNamespace(id=5, name="Bootcamp")
+        ]
+        mock_build_event_tag.return_value.get_all_tags_for_org.return_value = []
+
+        client = MagicMock()
+        body = {"trigger_id": "T1", "view": {"private_metadata": "{}"}}
+        build_event_instance_add_form(body, client, MagicMock(), {}, self._region_record(), new_preblast=True)
+
+        view = client.views_push.call_args.kwargs["view"]
+        channel_block = next(
+            b for b in view["blocks"] if b.get("block_id") == CALENDAR_ADD_EVENT_INSTANCE_PREBLAST_CHANNEL
+        )
+        self.assertEqual(channel_block["element"]["type"], "channels_select")
+        self.assertTrue(channel_block["optional"])
+
+    @patch("features.calendar.event_instance.event_preblast.send_preblast")
+    @patch("features.calendar.event_instance.get_user")
+    @patch("features.calendar.event_instance.DbManager.create_record")
+    @patch("features.calendar.event_instance._build_event_instance_service")
+    def test_unscheduled_preblast_channel_saved_to_meta(
+        self,
+        mock_build_service,
+        mock_create_record,
+        mock_get_user,
+        mock_send_preblast,
+    ):
+        service = MagicMock()
+        service.create_instance.return_value = _make_instance(id=42)
+        mock_build_service.return_value = service
+        mock_get_user.return_value = SimpleNamespace(user_id=99)
+
+        body = {
+            "user": {"id": "U123"},
+            "view": {
+                "private_metadata": '{"is_preblast": "True"}',
+                "blocks": [
+                    {"block_id": CALENDAR_ADD_EVENT_INSTANCE_LOCATION, "element": {}},
+                    {"block_id": CALENDAR_ADD_EVENT_INSTANCE_TYPE, "element": {}},
+                ],
+                "state": {
+                    "values": {
+                        CALENDAR_ADD_EVENT_INSTANCE_AO: {
+                            CALENDAR_ADD_EVENT_INSTANCE_AO: {
+                                "type": "static_select",
+                                "selected_option": {"value": "10"},
+                            }
+                        },
+                        CALENDAR_ADD_EVENT_INSTANCE_LOCATION: {
+                            CALENDAR_ADD_EVENT_INSTANCE_LOCATION: {
+                                "type": "static_select",
+                                "selected_option": {"value": "20"},
+                            }
+                        },
+                        CALENDAR_ADD_EVENT_INSTANCE_TYPE: {
+                            CALENDAR_ADD_EVENT_INSTANCE_TYPE: {
+                                "type": "static_select",
+                                "selected_option": {"value": "5"},
+                            }
+                        },
+                        CALENDAR_ADD_EVENT_INSTANCE_START_DATE: {
+                            CALENDAR_ADD_EVENT_INSTANCE_START_DATE: {
+                                "type": "datepicker",
+                                "selected_date": "2026-07-25",
+                            }
+                        },
+                        CALENDAR_ADD_EVENT_INSTANCE_START_TIME: {
+                            CALENDAR_ADD_EVENT_INSTANCE_START_TIME: {"type": "timepicker", "selected_time": "06:00"}
+                        },
+                        CALENDAR_ADD_EVENT_INSTANCE_END_TIME: {
+                            CALENDAR_ADD_EVENT_INSTANCE_END_TIME: {"type": "timepicker", "selected_time": "07:00"}
+                        },
+                        CALENDAR_ADD_EVENT_INSTANCE_NAME: {
+                            CALENDAR_ADD_EVENT_INSTANCE_NAME: {"type": "plain_text_input", "value": "Pop Up"}
+                        },
+                        CALENDAR_ADD_EVENT_INSTANCE_PREBLAST: {
+                            CALENDAR_ADD_EVENT_INSTANCE_PREBLAST: {
+                                "type": "rich_text_input",
+                                "rich_text_value": {"elements": []},
+                            }
+                        },
+                        CALENDAR_ADD_EVENT_INSTANCE_PREBLAST_CHANNEL: {
+                            CALENDAR_ADD_EVENT_INSTANCE_PREBLAST_CHANNEL: {
+                                "type": "channels_select",
+                                "selected_channel": "CSELECTED",
+                            }
+                        },
+                    }
+                },
+            },
+        }
+
+        handle_event_instance_add(body, MagicMock(), MagicMock(), {}, self._region_record())
+
+        self.assertEqual(
+            service.create_instance.call_args.kwargs["meta"],
+            {META_PREBLAST_CHANNEL_ID: "CSELECTED"},
+        )
+        mock_create_record.assert_called_once()
+        mock_send_preblast.assert_called_once()
 
 
 class HandleEventInstanceCloseTest(unittest.TestCase):

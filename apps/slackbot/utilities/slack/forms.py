@@ -97,7 +97,7 @@ BACKBLAST_FORM = orm.BlockView(
             label="Total PAX Count",
             action=actions.BACKBLAST_COUNT,
             optional=True,
-            element=orm.PlainTextInputElement(placeholder="Total PAX count including FNGs"),
+            element=orm.NumberInputElement(placeholder="Total PAX count including FNGs", is_decimal_allowed=False),
             hint="If left blank, this will be calculated automatically from the fields above.",
         ),
         orm.InputBlock(
@@ -216,44 +216,37 @@ PREBLAST_FORM = orm.BlockView(
 
 CONFIG_FORM = orm.BlockView(
     [
+        orm.HeaderBlock(label="Calendar Management"),
         orm.ActionsBlock(
             elements=[
                 orm.ButtonElement(
-                    label=":date: Calendar Settings",
+                    label=":date: Manage Schedules & Events",
                     action=actions.CONFIG_CALENDAR,
                 ),
+                orm.ButtonElement(
+                    label=":gear: General Calendar Settings",
+                    action=actions.CALENDAR_CONFIG_GENERAL,
+                ),
+            ],
+        ),
+        orm.DividerBlock(),
+        orm.HeaderBlock(label="Region Management"),
+        orm.ActionsBlock(
+            elements=[
                 orm.ButtonElement(
                     label=":world_map: Region Info",
                     action=actions.REGION_INFO_BUTTON,
                 ),
                 orm.ButtonElement(
-                    label=":bust_in_silhouette: User Settings",
-                    action=actions.CONFIG_USER_SETTINGS,
-                ),
-                orm.ButtonElement(
-                    label=":hospital: Emergency Info Access",
-                    action=actions.CONFIG_EMERGENCY_INFO,
-                ),
-                orm.ButtonElement(
-                    label=":grey_question: Help Menu",
-                    action=actions.CONFIG_HELP_MENU,
-                ),
-                orm.ButtonElement(
-                    label=":speech_balloon: Welcomebot Settings",
-                    action=actions.CONFIG_WELCOME_MESSAGE,
-                ),
-                orm.ButtonElement(
-                    label=":chart_with_upwards_trend: Reporting Settings",
-                    action=actions.CONFIG_REPORTING,
-                ),
-                # orm.ButtonElement(
-                #     label=":newspaper: Region Canvas Settings",
-                #     action=actions.CONFIG_SPECIAL_EVENTS,
-                # ),
-                orm.ButtonElement(
                     label=":classical_building: SLT Settings",
                     action=actions.CONFIG_SLT,
                 ),
+            ],
+        ),
+        orm.DividerBlock(),
+        orm.HeaderBlock(label="Blast Management"),
+        orm.ActionsBlock(
+            elements=[
                 orm.ButtonElement(
                     label=":gear: Backblast & Preblast Settings",
                     action=actions.CONFIG_GENERAL,
@@ -266,13 +259,49 @@ CONFIG_FORM = orm.BlockView(
                     label=":bar_chart: Custom Field Settings",
                     action=actions.CONFIG_CUSTOM_FIELDS,
                 ),
+            ],
+        ),
+        orm.DividerBlock(),
+        orm.HeaderBlock(label="Bot Management"),
+        orm.ActionsBlock(
+            elements=[
                 orm.ButtonElement(
-                    label=":computer: Paxminer Mapping",
-                    action=actions.PAXMINER_MAPPING,
+                    label=":speech_balloon: Welcomebot Settings",
+                    action=actions.CONFIG_WELCOME_MESSAGE,
+                ),
+                orm.ButtonElement(
+                    label=":chart_with_upwards_trend: Reporting Settings",
+                    action=actions.CONFIG_REPORTING,
+                ),
+                orm.ButtonElement(
+                    label=":memo: Kotter Reports",
+                    action=actions.CONFIG_KOTTER_REPORTS,
                 ),
                 orm.ButtonElement(
                     label=":airplane: Downrange",
                     action=actions.CONFIG_DOWNRANGE,
+                ),
+                orm.ButtonElement(
+                    label=":computer: Paxminer Mapping",
+                    action=actions.PAXMINER_MAPPING,
+                ),
+            ],
+        ),
+        orm.DividerBlock(),
+        orm.HeaderBlock(label="User Settings"),
+        orm.ActionsBlock(
+            elements=[
+                orm.ButtonElement(
+                    label=":bust_in_silhouette: User Settings",
+                    action=actions.CONFIG_USER_SETTINGS,
+                ),
+                orm.ButtonElement(
+                    label=":hospital: Emergency Info Access",
+                    action=actions.CONFIG_EMERGENCY_INFO,
+                ),
+                orm.ButtonElement(
+                    label=":grey_question: Help Menu",
+                    action=actions.CONFIG_HELP_MENU,
                 ),
             ],
         ),
@@ -403,6 +432,7 @@ CONFIG_GENERAL_FORM = orm.BlockView(
                 initial_value="no",
                 options=orm.as_selector_options(names=["Yes", "No"], values=["yes", "no"]),
             ),
+            hint="If enabled, only Qs, CoQs, Site-Q, AOQs, or admins can edit backblasts.",  # noqa: E501
         ),
         orm.DividerBlock(),
         orm.InputBlock(
@@ -724,70 +754,130 @@ ACHIEVEMENT_FORM = orm.BlockView(
     ]
 )
 
-WEASELBOT_CONFIG_FORM = orm.BlockView(
+KOTTER_REPORT_CONFIG_FORM = orm.BlockView(
     blocks=[
+        orm.SectionBlock(label="*Overall schedule*", action="kotter_report_schedule_heading"),
         orm.InputBlock(
-            label="Which Weaselbot features should be enabled?",
-            action=actions.WEASELBOT_ENABLE_FEATURES,
-            element=orm.CheckboxInputElement(
+            label="Enable weekly Kotter Reports?",
+            action=actions.KOTTER_REPORT_ENABLE,
+            optional=False,
+            element=orm.RadioButtonsElement(
+                initial_value="disable",
+                options=orm.as_selector_options(names=["Enable", "Disable"], values=["enable", "disable"]),
+            ),
+            hint="Defaults: Monday at 8 CST when day/hour are not specified.",
+        ),
+        orm.InputBlock(
+            label="Weekly send day",
+            action=actions.KOTTER_REPORT_DAY,
+            optional=False,
+            element=orm.StaticSelectElement(
+                initial_value="0",
                 options=orm.as_selector_options(
-                    names=["Achievements", "Kotter Reports"],
-                    values=["achievements", "kotter_reports"],
-                )
+                    names=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+                    values=["0", "1", "2", "3", "4", "5", "6"],
+                ),
             ),
         ),
         orm.InputBlock(
-            label="Which channel should achievements be posted to?",
-            action=actions.WEASELBOT_ACHIEVEMENT_CHANNEL,
-            optional=True,
-            element=orm.ChannelsSelectElement(placeholder="Select the channel..."),
+            label="Weekly send hour CST",
+            action=actions.KOTTER_REPORT_HOUR_CST,
+            optional=False,
+            element=orm.NumberInputElement(is_decimal_allowed=False, min_value=0, max_value=23),
         ),
-        orm.InputBlock(
-            label="Which user or channel should Kotter Reports be posted to?",
-            action=actions.WEASELBOT_KOTTER_CHANNEL,
-            optional=True,
-            element=orm.ConversationsSelectElement(placeholder="Select the user or channel..."),
-            hint="Please note that Weaselbot will need to be manually added to private channels if selected.",
-        ),
-        orm.InputBlock(
-            label="How many weeks of no posting should put a PAX on the Kotter Report?",
-            action=actions.WEASELBOT_KOTTER_WEEKS,
-            optional=True,
-            element=orm.NumberInputElement(placeholder="Enter the number of weeks...", is_decimal_allowed=False),
-        ),
-        orm.InputBlock(
-            label="After how many weeks of no posting should a PAX be removed from the Kotter Report?",
-            action=actions.WEASELBOT_KOTTER_REMOVE_WEEKS,
-            optional=True,
-            element=orm.NumberInputElement(placeholder="Enter the number of weeks...", is_decimal_allowed=False),
-        ),
-        orm.InputBlock(
-            label="How many weeks of activity should be used to base a PAX's home AO?",
-            action=actions.WEASELBOT_HOME_AO_WEEKS,
-            optional=True,
-            element=orm.NumberInputElement(placeholder="Enter the number of weeks...", is_decimal_allowed=False),
-        ),
-        orm.InputBlock(
-            label="After how many weeks of no Qing should a PAX be put on the Q list?",
-            action=actions.WEASELBOT_Q_WEEKS,
-            optional=True,
-            element=orm.NumberInputElement(placeholder="Enter the number of weeks...", is_decimal_allowed=False),
-        ),
-        orm.InputBlock(
-            label="What should be the minimum number of posts over that time to be eligible for the Q list?",
-            action=actions.WEASELBOT_Q_POSTS,
-            optional=True,
-            element=orm.NumberInputElement(placeholder="Enter the number of posts...", is_decimal_allowed=False),
-        ),
-    ]
-)
-
-
-NO_WEASELBOT_CONFIG_FORM = orm.BlockView(
-    blocks=[
+        orm.DividerBlock(),
         orm.SectionBlock(
-            label="Weaselbot and / or PAXMiner doesn't appear to be configured for this Slack workspace. Please follow <https://github.com/F3Nation-Community/weaselbot|these instructions> to get started!",  # noqa: E501
-        )
+            label=(
+                "*AO reports*\n"
+                "When enabled, AO-specific reports are sent automatically to matching Site Qs based on Home AO. "
+            ),
+            action="kotter_report_ao_heading",
+        ),
+        orm.InputBlock(
+            label="Enable AO reports to Site Qs?",
+            action=actions.KOTTER_REPORT_INCLUDE_SITE_QS,
+            optional=False,
+            element=orm.RadioButtonsElement(
+                initial_value="no",
+                options=orm.as_selector_options(names=["Yes", "No"], values=["yes", "no"]),
+            ),
+            hint=(
+                "AO reports go only to matching Site Qs based on the AO the Kotter posts at the most; rows without a "
+                "Site Q match are not sent as AO reports."
+            ),
+        ),
+        orm.DividerBlock(),
+        orm.SectionBlock(
+            label="*Full list report*\nThe full list is sent only when admins and/or explicit users are selected.",
+            action="kotter_report_full_list_heading",
+        ),
+        orm.InputBlock(
+            label="Send mode",
+            action=actions.KOTTER_REPORT_SEND_MODE,
+            optional=False,
+            element=orm.RadioButtonsElement(
+                initial_value="group",
+                options=orm.as_selector_options(names=["Group", "Individual"], values=["group", "individual"]),
+            ),
+            hint=(
+                "Defaults to group. Group sends one shared DM/MPIM to all selected users; Individual sends "
+                "one separate DM to each recipient. The full list only sends when admins or explicit users "
+                "are selected below."
+            ),
+        ),
+        orm.InputBlock(
+            label="Send full list to admins?",
+            action=actions.KOTTER_REPORT_INCLUDE_ADMINS,
+            optional=False,
+            element=orm.RadioButtonsElement(
+                initial_value="no",
+                options=orm.as_selector_options(names=["Yes", "No"], values=["yes", "no"]),
+            ),
+        ),
+        orm.InputBlock(
+            label="Other full list recipient users",
+            action=actions.KOTTER_REPORT_RECIPIENT_USERS,
+            optional=True,
+            element=orm.MultiUsersSelectElement(placeholder="Select users..."),
+        ),
+        orm.DividerBlock(),
+        orm.SectionBlock(label="*Thresholds*", action="kotter_report_thresholds_heading"),
+        orm.InputBlock(
+            label="No-post threshold weeks",
+            action=actions.KOTTER_REPORT_NO_POST_WEEKS,
+            optional=True,
+            element=orm.NumberInputElement(is_decimal_allowed=False, min_value=0),
+            hint="The number of weeks of no-post activity before triggering the report. Defaults to 2 weeks.",
+        ),
+        orm.InputBlock(
+            label="Remove-after weeks",
+            action=actions.KOTTER_REPORT_REMOVE_WEEKS,
+            optional=True,
+            element=orm.NumberInputElement(is_decimal_allowed=False, min_value=0),
+            hint="The number of weeks after the no-post threshold before removing a user. "
+            "Disabled/unbounded unless set beyond the no-post threshold.",
+        ),
+        orm.InputBlock(
+            label="Home AO capture weeks",
+            action=actions.KOTTER_REPORT_HOME_AO_WEEKS,
+            optional=True,
+            element=orm.NumberInputElement(is_decimal_allowed=False, min_value=0),
+            hint="The number of weeks used to determine home AO. Defaults to 8 weeks.",
+        ),
+        orm.InputBlock(
+            label="No-Q threshold weeks",
+            action=actions.KOTTER_REPORT_NO_Q_WEEKS,
+            optional=True,
+            element=orm.NumberInputElement(is_decimal_allowed=False, min_value=0),
+            hint="The number of weeks of no-Q activity before triggering the report. Defaults to 12 weeks.",
+        ),
+        orm.InputBlock(
+            label="No-Q minimum posts",
+            action=actions.KOTTER_REPORT_NO_Q_POSTS,
+            optional=True,
+            element=orm.NumberInputElement(is_decimal_allowed=False, min_value=0),
+            hint="The number of posts required to avoid triggering the Q report. Defaults to 4 posts.",
+        ),
     ]
 )
 

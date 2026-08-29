@@ -123,6 +123,7 @@ git is how you interact with GitHub from your instance of the code. You often al
 You will need a code editor in order to edit code! The instructions assume you will be using VS Code. If you have a different IDE, you'll have to adjust accordingly.
 
 1. Go to <https://code.visualstudio.com/download> and download the correct version.
+
 </details>
 
 <details>
@@ -399,11 +400,11 @@ All inserts use `onConflictDoNothing()`, so re-running the seed won't duplicate 
 
 ## GCS emulator
 
-Logo uploads in the Map app are handled by the GCS emulator (`fake-gcs-server`) running at `http://localhost:9023`.
+Logo uploads in the Admin app are handled by the GCS emulator (`fake-gcs-server`) running at `http://localhost:9023`. (Logo uploads have been removed from the Map app; AO logos are managed exclusively in Admin.)
 
 ### How it works
 
-1. When you upload a logo, the Map app sends the image to its `/api/upload-logo` route
+1. When you upload a logo, the Admin app sends the image to its `/api/upload-logo` route
 2. The route detects `GCS_EMULATOR_HOST` in the env and calls the emulator instead of real GCS
 3. The emulator stores the file in the `f3-public-images-staging` bucket (local `F3_CHANNEL`)
 4. The returned public URL points to `http://localhost:9023/f3-public-images-staging/org-logos/<orgId>.jpg`

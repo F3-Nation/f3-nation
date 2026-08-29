@@ -19,7 +19,9 @@ export default {
 
         // packages
         "db",
+        "db-python",
         "env",
+        "health",
         "mail",
         "shared",
         "sso",
@@ -29,11 +31,14 @@ export default {
 
         // tooling
         "eslint",
+        "playwright",
         "prettier",
         "tsconfig",
+        "ci-factory",
         "scripts",
         "github",
         "tailwind",
+        "vitest",
 
         // cross-cutting
         "deps",

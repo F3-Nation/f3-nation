@@ -1,6 +1,15 @@
 {
   "$schema": "https://turborepo.org/schema.json",
-  "globalDependencies": ["**/.env"],
+  "globalDependencies": [
+    "**/.env",
+    ".gitignore",
+    ".nvmrc",
+    ".prettierignore",
+    ".python-version",
+    "pyproject.toml",
+    "uv.lock",
+    "scripts/python-task.sh"
+  ],
   "globalEnv": [
     "CI",
     "NODE_ENV",
@@ -15,6 +24,12 @@
     "DATABASE_NAME",
     "TEST_DATABASE_URL",
     "SKIP_RESET_TEST_DB",
+    "E2E_BASE_URL",
+    "E2E_API_URL",
+    "CHAR_TEST_TARGET",
+    "CHAR_TEST_BASE_URL",
+    "CHAR_TEST_SIGNING_JWK",
+    "SUPER_ADMIN_API_KEY",
     "EMAIL_ADMIN_DESTINATIONS",
     "EMAIL_FROM",
     "EMAIL_SERVER",
@@ -23,6 +38,7 @@
     "AUTH_PROVIDER_URL",
     "AUTH_REDIRECT_PROXY_URL",
     "AUTH_SECRET",
+    "AUTH_JWT_PRIVATE_KEY",
     "OAUTH_CLIENT_ID",
     "OAUTH_CLIENT_SECRET",
     "OAUTH_REDIRECT_URI",
@@ -44,7 +60,12 @@
     "NEXT_PUBLIC_CHANNEL",
     "GCS_CREDENTIALS",
     "GCS_EMULATOR_HOST",
-    "NODE_TLS_REJECT_UNAUTHORIZED"
+    "NODE_TLS_REJECT_UNAUTHORIZED",
+    "CI_FACTORY_INFERENCE_API_KEY",
+    "CI_FACTORY_INFERENCE_BASE_URL",
+    "CI_FACTORY_INFERENCE_MODEL",
+    "GITHUB_SHA",
+    "UV_PYTHON"
   ],
   "tasks": {
     "topo": {
@@ -78,8 +99,12 @@
       "dependsOn": ["^topo"]
     },
     "test": {
-      "dependsOn": ["^topo", "reset-test-db", "^reset-test-db"],
+      "dependsOn": ["^topo"],
       "outputs": ["coverage/**"]
+    },
+    "test:characterization": {
+      "dependsOn": ["^topo", "reset-test-db", "^reset-test-db", "test"],
+      "cache": false
     },
     "clean": {
       "cache": false

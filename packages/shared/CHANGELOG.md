@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/F3-Nation/f3-nation/compare/pkg-shared@0.1.2...pkg-shared@0.1.3) (2026-07-14)
+
+
+### Bug Fixes
+
+* **map,shared:** consolidate search trigger to 3 chars, label panel close button ([#607](https://github.com/F3-Nation/f3-nation/issues/607)) ([f1e7751](https://github.com/F3-Nation/f3-nation/commit/f1e7751cb45c8edf82d3a6673d1d02d0a704409e))
+
 ## [0.1.2](https://github.com/F3-Nation/f3-nation/compare/pkg-shared@0.1.1...pkg-shared@0.1.2) (2026-07-08)
 
 

@@ -1,0 +1,551 @@
+name: Preview Environment
+
+# Per-PR Cloud Run preview environments (AI-SDLC sandbox pilot, F3-56 + F3-57).
+# - Opt-in: PRs only get an environment while they carry the `preview` label.
+# - Stack per PR: pr-<n>-api (api app + seeded Postgres sidecar on localhost,
+#   F3-57), pr-<n>-auth (SSO/OIDC server + its own copy of the seeded
+#   Postgres sidecar) and pr-<n>-map pointed at them. Scale-to-zero, max 1
+#   instance. Sessions cross run.app hosts via bearer JWTs / server-side
+#   cookie forwarding, never shared cookies — see docs/PREVIEW_AUTH.md.
+# - The DB is baked at deploy time: drizzle migrations + the deterministic
+#   local seed (packages/db/src/local-seed.ts) are dumped into a postgres
+#   image; PGDATA lives on an in-memory volume, so every cold start restores
+#   the identical dataset. Ephemeral by design — E2E needs determinism.
+# - Torn down when the PR closes or merges; a daily reaper deletes any
+#   preview service older than 7 days as a backstop.
+# - Nothing is lost on teardown: previews are fully derived state. Remove and
+#   re-add the `preview` label (or push a commit) to recreate one at the same
+#   URLs; exact old builds stay in Artifact Registry tagged pr-<n>-<sha>.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, closed]
+  schedule:
+    - cron: "17 7 * * *" # daily TTL reaper
+  workflow_dispatch: # manual reaper run
+
+permissions:
+  contents: read
+
+concurrency:
+  group: preview-env-${{ github.event.pull_request.number || 'reaper' }}
+  cancel-in-progress: false
+
+env:
+  REGION: us-central1
+  PROJECT: f3-nation-dev
+  AR_REPO: cloud-run-builds
+  RUNTIME_SA: preview-runtime@f3-nation-dev.iam.gserviceaccount.com
+  # Browser Maps key (referrer-locked, Maps JS + Places only). Google ignores
+  # mid-hostname wildcards at enforcement time, so each job syncs the key's
+  # allowed-referrer list to exactly the live preview services.
+  MAPS_KEY_NAME: projects/163365835674/locations/global/keys/07ac2c96-432e-4c37-9496-cd10beef5deb
+
+jobs:
+  deploy:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.action != 'closed' &&
+      contains(github.event.pull_request.labels.*.name, 'preview') &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    outputs:
+      url_map: ${{ steps.meta.outputs.url_map }}
+      url_api: ${{ steps.meta.outputs.url_api }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup
+
+      # Preview infra runs in the Mountain-Dev-owned f3-nation-dev sandbox, so it
+      # uses its OWN WIF vars (PREVIEW_WIF_*) — deliberately separate from the
+      # repo/org WIF_PROVIDER used by the production deploy workflows, so the two
+      # never collide.
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.PREVIEW_WIF_PROVIDER }}
+          service_account: ${{ vars.PREVIEW_WIF_SA }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Authorize Docker to Artifact Registry
+        run: gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
+
+      - name: Compute image + service names
+        id: meta
+        env:
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          PROJECT_NUMBER=$(gcloud projects describe "${PROJECT}" --format 'value(projectNumber)')
+          TAG="pr-${PR}-${SHA::7}"
+          {
+            echo "service_map=pr-${PR}-map"
+            echo "service_api=pr-${PR}-api"
+            echo "service_auth=pr-${PR}-auth"
+            echo "image_map=${REGION}-docker.pkg.dev/${PROJECT}/${AR_REPO}/f3-map:${TAG}"
+            echo "image_api=${REGION}-docker.pkg.dev/${PROJECT}/${AR_REPO}/f3-api:${TAG}"
+            echo "image_auth=${REGION}-docker.pkg.dev/${PROJECT}/${AR_REPO}/f3-auth:${TAG}"
+            echo "image_db=${REGION}-docker.pkg.dev/${PROJECT}/${AR_REPO}/f3-preview-db:${TAG}"
+            # Cloud Run URLs are deterministic, so services can know their own
+            # public URLs before they exist.
+            echo "url_map=https://pr-${PR}-map-${PROJECT_NUMBER}.${REGION}.run.app"
+            echo "url_api=https://pr-${PR}-api-${PROJECT_NUMBER}.${REGION}.run.app"
+            echo "url_auth=https://pr-${PR}-auth-${PROJECT_NUMBER}.${REGION}.run.app"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build seeded database dump
+        run: |
+          docker run -d --name seed-pg \
+            -e POSTGRES_USER=f3local -e POSTGRES_PASSWORD=f3local -e POSTGRES_DB=f3nation \
+            -p 5433:5432 postgres:18.0
+          until docker exec seed-pg pg_isready -U f3local -d f3nation >/dev/null 2>&1; do sleep 1; done
+          # db scripts load env via dotenv from packages/env/.env
+          echo 'DATABASE_URL=postgresql://f3local:f3local@localhost:5433/f3nation' > packages/env/.env
+          # CI= re-enables migrate.ts (it no-ops when CI is set);
+          # SKIP_ENV_VALIDATION keeps @acme/env from demanding the full var set.
+          CI= SKIP_ENV_VALIDATION=1 pnpm db:migrate
+          CI= SKIP_ENV_VALIDATION=1 pnpm db:seed:local
+          # Preview-only E2E auth fixtures (docs/PREVIEW_AUTH.md). Previews
+          # have no SMTP, so the auth app's email-MFA send path can't work;
+          # instead pre-provision deterministic MFA codes (the plainly-fake
+          # code 424242, stored as its SHA-256 like apps/auth does) for the
+          # seeded dev users, and mark them onboarded so /api/oauth/authorize
+          # doesn't bounce them to /onboarding. Codes are consume-once, so
+          # seed a stack of 40 per user; the in-memory DB restores all of
+          # them on every cold start.
+          docker exec -i seed-pg psql -U f3local -d f3nation -v ON_ERROR_STOP=1 <<'SQL'
+            UPDATE users
+            SET meta = (coalesce(meta::jsonb, '{}'::jsonb)
+                        || '{"onboarding_completed": true}'::jsonb)::json
+            WHERE email LIKE 'dev-%@f3local.dev';
+            INSERT INTO auth.email_mfa_codes (id, email, code_hash, expires_at)
+            SELECT gen_random_uuid()::text,
+                   u.email,
+                   -- SHA-256 of "424242"
+                   '833dfc7e3eb11230369904322cc8481b2b9a166d965557f97d4832cd92e072af',
+                   '2099-01-01 00:00:00'
+            FROM users u, generate_series(1, 40)
+            WHERE u.email LIKE 'dev-%@f3local.dev';
+          SQL
+          docker exec seed-pg pg_dump -U f3local --no-owner --no-privileges f3nation \
+            > .github/preview/seed.sql
+          docker rm -f seed-pg
+          wc -l .github/preview/seed.sql
+
+      - name: Build and push images
+        run: |
+          TURBO_VERSION=$(grep '^  turbo:' pnpm-workspace.yaml | awk '{print $2}')
+          docker build --platform=linux/amd64 \
+            --file .github/preview/preview-db.Dockerfile \
+            --tag "${{ steps.meta.outputs.image_db }}" \
+            .github/preview
+          docker build --platform=linux/amd64 \
+            --file apps/api/Dockerfile \
+            --build-arg TURBO_VERSION="${TURBO_VERSION}" \
+            --build-arg NEXT_PUBLIC_POSTHOG_KEY="${{ secrets.PREVIEW_POSTHOG_KEY }}" \
+            --tag "${{ steps.meta.outputs.image_api }}" \
+            .
+          docker build --platform=linux/amd64 \
+            --file apps/auth/Dockerfile \
+            --build-arg TURBO_VERSION="${TURBO_VERSION}" \
+            --tag "${{ steps.meta.outputs.image_auth }}" \
+            .
+          docker build --platform=linux/amd64 \
+            --file apps/map/Dockerfile \
+            --build-arg TURBO_VERSION="${TURBO_VERSION}" \
+            --build-arg NEXT_PUBLIC_POSTHOG_KEY="${{ secrets.PREVIEW_POSTHOG_KEY }}" \
+            --tag "${{ steps.meta.outputs.image_map }}" \
+            .
+          docker push "${{ steps.meta.outputs.image_db }}"
+          docker push "${{ steps.meta.outputs.image_api }}"
+          docker push "${{ steps.meta.outputs.image_auth }}"
+          docker push "${{ steps.meta.outputs.image_map }}"
+
+      - name: Deploy api + DB sidecar
+        env:
+          SERVICE_API: ${{ steps.meta.outputs.service_api }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          API_IMAGE: ${{ steps.meta.outputs.image_api }}
+          DB_IMAGE: ${{ steps.meta.outputs.image_db }}
+          API_URL: ${{ steps.meta.outputs.url_api }}
+          MAP_URL: ${{ steps.meta.outputs.url_map }}
+          AUTH_URL: ${{ steps.meta.outputs.url_auth }}
+          NEXT_PUBLIC_POSTHOG_KEY: ${{ secrets.PREVIEW_POSTHOG_KEY }}
+        run: |
+          envsubst '${SERVICE_API} ${PR_NUMBER} ${RUNTIME_SA} ${API_IMAGE} ${DB_IMAGE} ${API_URL} ${MAP_URL} ${AUTH_URL} ${NEXT_PUBLIC_POSTHOG_KEY}' \
+            < .github/preview/api-service.template.yaml > /tmp/api-service.yaml
+          gcloud run services replace /tmp/api-service.yaml \
+            --region "${REGION}" --project "${PROJECT}" --quiet
+          gcloud run services add-iam-policy-binding "${SERVICE_API}" \
+            --region "${REGION}" --project "${PROJECT}" \
+            --member=allUsers --role=roles/run.invoker --quiet
+          # services replace returns before the revision is ready — poll.
+          for i in $(seq 1 60); do
+            READY=$(gcloud run services describe "${SERVICE_API}" \
+              --region "${REGION}" --project "${PROJECT}" \
+              --format 'value(status.conditions[0].status)')
+            [ "${READY}" = "True" ] && break
+            [ "$i" = "60" ] && { echo "api service never became ready"; exit 1; }
+            sleep 5
+          done
+
+      - name: Deploy auth + DB sidecar
+        env:
+          SERVICE_AUTH: ${{ steps.meta.outputs.service_auth }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          AUTH_IMAGE: ${{ steps.meta.outputs.image_auth }}
+          DB_IMAGE: ${{ steps.meta.outputs.image_db }}
+          API_URL: ${{ steps.meta.outputs.url_api }}
+          AUTH_URL: ${{ steps.meta.outputs.url_auth }}
+        run: |
+          # Throwaway RS256 signing key, generated fresh per deploy — never a
+          # real credential (mirrors the FAKE_GCS approach: nothing worth
+          # protecting, and nothing committed that could trip secret
+          # scanners). Flattened to one line with literal \n escapes;
+          # apps/auth/src/lib/jwt.ts converts them back before importPKCS8.
+          # The api verifies tokens against the matching public key served at
+          # ${AUTH_URL}/.well-known/jwks.json, so no key material is shared.
+          AUTH_JWT_PRIVATE_KEY=$(openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 2>/dev/null \
+            | awk 'NR>1 {printf "\\n"} {printf "%s", $0}')
+          export AUTH_JWT_PRIVATE_KEY
+          envsubst '${SERVICE_AUTH} ${PR_NUMBER} ${RUNTIME_SA} ${AUTH_IMAGE} ${DB_IMAGE} ${API_URL} ${AUTH_URL} ${AUTH_JWT_PRIVATE_KEY}' \
+            < .github/preview/auth-service.template.yaml > /tmp/auth-service.yaml
+          gcloud run services replace /tmp/auth-service.yaml \
+            --region "${REGION}" --project "${PROJECT}" --quiet
+          gcloud run services add-iam-policy-binding "${SERVICE_AUTH}" \
+            --region "${REGION}" --project "${PROJECT}" \
+            --member=allUsers --role=roles/run.invoker --quiet
+          # services replace returns before the revision is ready — poll.
+          for i in $(seq 1 60); do
+            READY=$(gcloud run services describe "${SERVICE_AUTH}" \
+              --region "${REGION}" --project "${PROJECT}" \
+              --format 'value(status.conditions[0].status)')
+            [ "${READY}" = "True" ] && break
+            [ "$i" = "60" ] && { echo "auth service never became ready"; exit 1; }
+            sleep 5
+          done
+
+      - name: Deploy map + DB sidecar
+        env:
+          SERVICE_MAP: ${{ steps.meta.outputs.service_map }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          MAP_IMAGE: ${{ steps.meta.outputs.image_map }}
+          DB_IMAGE: ${{ steps.meta.outputs.image_db }}
+          API_URL: ${{ steps.meta.outputs.url_api }}
+          MAP_URL: ${{ steps.meta.outputs.url_map }}
+          AUTH_URL: ${{ steps.meta.outputs.url_auth }}
+          NEXT_PUBLIC_POSTHOG_KEY: ${{ secrets.PREVIEW_POSTHOG_KEY }}
+          # Browser Maps key — safe to embed by design: referrer-locked to
+          # pr-*-map-<project>.run.app, API-restricted to Maps JS + Places,
+          # and living in the budget-capped sandbox project.
+          MAPS_KEY: ${{ secrets.PREVIEW_GOOGLE_MAPS_API_KEY }}
+        run: |
+          # GCS_CREDENTIALS must be non-empty to satisfy env validation, but
+          # previews never touch GCS. Built here from plainly fake JSON so
+          # secret scanners (and humans) can see there is nothing real —
+          # committing the equivalent base64 blob trips high-entropy
+          # detectors (GitGuardian, 2026-07-06).
+          FAKE_GCS=$(printf '{"client_email":"fake-not-a-real-credential@preview.invalid","private_key":"THIS-IS-A-FAKE-PLACEHOLDER-FOR-PREVIEW-ENVS"}' | base64 -w0)
+          export FAKE_GCS
+          # The map runs a DB sidecar (like api/auth) because @acme/auth reaches
+          # the database during signed-in SSR — see docs/PREVIEW_AUTH.md.
+          envsubst '${SERVICE_MAP} ${PR_NUMBER} ${RUNTIME_SA} ${MAP_IMAGE} ${DB_IMAGE} ${API_URL} ${MAP_URL} ${AUTH_URL} ${MAPS_KEY} ${NEXT_PUBLIC_POSTHOG_KEY} ${FAKE_GCS}' \
+            < .github/preview/map-service.template.yaml > /tmp/map-service.yaml
+          gcloud run services replace /tmp/map-service.yaml \
+            --region "${REGION}" --project "${PROJECT}" --quiet
+          gcloud run services add-iam-policy-binding "${SERVICE_MAP}" \
+            --region "${REGION}" --project "${PROJECT}" \
+            --member=allUsers --role=roles/run.invoker --quiet
+          # services replace returns before the revision is ready — poll.
+          for i in $(seq 1 60); do
+            READY=$(gcloud run services describe "${SERVICE_MAP}" \
+              --region "${REGION}" --project "${PROJECT}" \
+              --format 'value(status.conditions[0].status)')
+            [ "${READY}" = "True" ] && break
+            [ "$i" = "60" ] && { echo "map service never became ready"; exit 1; }
+            sleep 5
+          done
+
+      - name: Smoke test
+        run: |
+          # api liveness (root redirects to /docs). Scale-to-zero, so the first
+          # hit may cold-start; retry, and FAIL on any non-2xx/3xx (a 5xx or 000
+          # must not pass silently — matching the auth/map checks below).
+          for i in $(seq 1 10); do
+            API_CODE=$(curl -sS -o /dev/null -w '%{http_code}' -L "${{ steps.meta.outputs.url_api }}/")
+            echo "api / -> ${API_CODE} (attempt $i)"
+            case "${API_CODE}" in
+              2*|3*) break ;;
+            esac
+            [ "$i" = "10" ] && { echo "api never returned a healthy status (last: ${API_CODE})"; exit 1; }
+            sleep 5
+          done
+          # auth: /api/health checks the DB sidecar and the JWKS key; first
+          # hit may be a cold start, so retry until 200.
+          for i in $(seq 1 10); do
+            AUTH_CODE=$(curl -sS -o /dev/null -w '%{http_code}' "${{ steps.meta.outputs.url_auth }}/api/health")
+            echo "auth /api/health -> ${AUTH_CODE} (attempt $i)"
+            [ "${AUTH_CODE}" = "200" ] && break
+            [ "$i" = "10" ] && { echo "auth never returned 200"; exit 1; }
+            sleep 5
+          done
+          # map: first hit may serve the (empty) build-time ISR page and
+          # trigger regeneration against the live api; retry until 200.
+          for i in $(seq 1 10); do
+            MAP_CODE=$(curl -sS -o /dev/null -w '%{http_code}' "${{ steps.meta.outputs.url_map }}/")
+            echo "map / -> ${MAP_CODE} (attempt $i)"
+            [ "${MAP_CODE}" = "200" ] && exit 0
+            sleep 5
+          done
+          echo "map never returned 200"
+          exit 1
+
+      - name: Upsert PR comment with preview URLs
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          URL_MAP: ${{ steps.meta.outputs.url_map }}
+          URL_API: ${{ steps.meta.outputs.url_api }}
+          URL_AUTH: ${{ steps.meta.outputs.url_auth }}
+        with:
+          script: |
+            const marker = '<!-- preview-env -->';
+            const body = `${marker}\n### 🚀 Preview environment\n\n| App | URL |\n| --- | --- |\n| map | ${process.env.URL_MAP} |\n| api | ${process.env.URL_API} |\n| auth | ${process.env.URL_AUTH} |\n\nDeployed from ${context.payload.pull_request.head.sha.slice(0, 7)} with a seeded ephemeral database (deterministic; resets on cold start). Scale-to-zero; torn down on close or after 7 days. Signed-in/RBAC E2E: see \`docs/PREVIEW_AUTH.md\`.\n\n> Torn down and need it back? Remove and re-add the \`preview\` label (or push a commit) — previews are fully derived state and rebuild identically at the same URLs.`;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+            const existing = comments.find((c) => c.body?.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+  # Two-tier E2E model (F3-59/F3-60, docs/E2E_TIERS.md):
+  #   - e2e-blocking: small, must-never-break suite. Red means no merge.
+  #   - e2e-advisory: everything else. Runs and reports, never blocks
+  #     (continue-on-error at the job level); failures are triage input
+  #     (F3-61 auto-triage will consume them).
+  e2e-blocking:
+    # Blocking-tier Playwright suite (F3-59) against the freshly deployed
+    # preview environment. Same gating as deploy: PRs from this repo carrying
+    # the `preview` label, never on close. Also needs sync-maps-key so the
+    # browser Maps key allows this preview's referrer before the suite loads it.
+    needs: [deploy, sync-maps-key]
+    # Explicit result checks + !cancelled(): sync-maps-key runs via !cancelled()
+    # with skipped upstreams (teardown/reaper), which poisons the implicit
+    # success() gate GitHub would otherwise apply and wrongly skips this job.
+    if: >-
+      !cancelled() &&
+      needs.deploy.result == 'success' &&
+      needs.sync-maps-key.result == 'success' &&
+      github.event_name == 'pull_request' &&
+      github.event.action != 'closed' &&
+      contains(github.event.pull_request.labels.*.name, 'preview') &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup
+
+      - name: Install Playwright Chromium
+        run: pnpm -F f3-map exec playwright install --with-deps chromium
+
+      - name: Run blocking-tier E2E suite
+        env:
+          E2E_BASE_URL: ${{ needs.deploy.outputs.url_map }}
+          # Direct-api RBAC suite (rbac.spec.ts) — seeded API-key bearer auth,
+          # recipe 1 in docs/PREVIEW_AUTH.md.
+          E2E_API_URL: ${{ needs.deploy.outputs.url_api }}
+        run: pnpm -F f3-map... test:e2e
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-blocking-artifacts-pr-${{ github.event.pull_request.number }}
+          path: |
+            apps/map/playwright-report/
+            apps/map/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  e2e-advisory:
+    # Advisory-tier Playwright suite (F3-60). continue-on-error keeps the
+    # check (and the whole run) green even when it fails — failures are
+    # surfaced via the uploaded artifacts and triaged, never merge-blocking.
+    # Needs sync-maps-key too (see e2e-blocking) so the Maps referrer is set.
+    needs: [deploy, sync-maps-key]
+    # Explicit result checks + !cancelled() — see e2e-blocking: avoids the
+    # implicit success() gate wrongly skipping this after sync-maps-key runs
+    # via !cancelled() with skipped teardown/reaper upstreams.
+    if: >-
+      !cancelled() &&
+      needs.deploy.result == 'success' &&
+      needs.sync-maps-key.result == 'success' &&
+      github.event_name == 'pull_request' &&
+      github.event.action != 'closed' &&
+      contains(github.event.pull_request.labels.*.name, 'preview') &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup
+
+      - name: Install Playwright Chromium
+        run: pnpm -F f3-map exec playwright install --with-deps chromium
+
+      - name: Run advisory-tier E2E suite
+        env:
+          E2E_BASE_URL: ${{ needs.deploy.outputs.url_map }}
+        run: pnpm -F f3-map... test:e2e:advisory
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-advisory-artifacts-pr-${{ github.event.pull_request.number }}
+          path: |
+            apps/map/playwright-report/
+            apps/map/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  teardown:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.PREVIEW_WIF_PROVIDER }}
+          service_account: ${{ vars.PREVIEW_WIF_SA }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Delete preview services (if any)
+        env:
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          for SERVICE in "pr-${PR}-map" "pr-${PR}-api" "pr-${PR}-auth"; do
+            if gcloud run services describe "${SERVICE}" --region "${REGION}" --project "${PROJECT}" --format 'value(metadata.name)' >/dev/null 2>&1; then
+              gcloud run services delete "${SERVICE}" --region "${REGION}" --project "${PROJECT}" --quiet
+              echo "Deleted ${SERVICE}"
+            else
+              echo "No preview service ${SERVICE} to delete"
+            fi
+          done
+
+  reaper:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.PREVIEW_WIF_PROVIDER }}
+          service_account: ${{ vars.PREVIEW_WIF_SA }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Delete preview services older than 7 days
+        run: |
+          CUTOFF=$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          gcloud run services list \
+            --region "${REGION}" --project "${PROJECT}" \
+            --filter "metadata.labels.preview-env=true AND metadata.creationTimestamp<${CUTOFF}" \
+            --format 'value(metadata.name)' |
+          while read -r SERVICE; do
+            [ -z "${SERVICE}" ] && continue
+            gcloud run services delete "${SERVICE}" --region "${REGION}" --project "${PROJECT}" --quiet
+            echo "Reaped ${SERVICE}"
+          done
+
+  # Single, serialized reconcile of the shared Maps API key's allowed-referrer
+  # list — replaces the three inline copies that previously ran in deploy /
+  # teardown / reaper. Runs only when one of those paths actually succeeded
+  # (never on a non-preview PR where all three skip), and the fixed
+  # `preview-maps-key` concurrency group serializes it across ALL preview-env
+  # runs so concurrent deploys/teardowns can't clobber each other's referrer
+  # list. Idempotent: it rebuilds the full list from the live preview map
+  # services. e2e-blocking/e2e-advisory depend on it so the browser Maps key
+  # allows the new preview before the suites load it.
+  sync-maps-key:
+    needs: [deploy, teardown, reaper]
+    if: >-
+      !cancelled() &&
+      (needs.deploy.result == 'success' ||
+      needs.teardown.result == 'success' ||
+      needs.reaper.result == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: preview-maps-key
+      cancel-in-progress: false
+    steps:
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.PREVIEW_WIF_PROVIDER }}
+          service_account: ${{ vars.PREVIEW_WIF_SA }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Reconcile Maps key referrers to live previews
+        run: |
+          PROJECT_NUMBER=$(gcloud projects describe "${PROJECT}" --format 'value(projectNumber)')
+          # Placeholder keeps the restriction list non-empty (an empty list
+          # would make the key unrestricted).
+          LIST="https://placeholder.invalid/*"
+          for S in $(gcloud run services list --region "${REGION}" --project "${PROJECT}" \
+              --filter "metadata.labels.preview-env=true" --format 'value(metadata.name)' | grep -- '-map$'); do
+            LIST="${LIST},https://${S}-${PROJECT_NUMBER}.${REGION}.run.app/*"
+          done
+          gcloud services api-keys update "${MAPS_KEY_NAME}" --project "${PROJECT}" \
+            --allowed-referrers="${LIST}" --quiet

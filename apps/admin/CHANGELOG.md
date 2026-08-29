@@ -1,5 +1,85 @@
 # Changelog
 
+## [2.3.1](https://github.com/F3-Nation/f3-nation/compare/admin@2.3.0...admin@2.3.1) (2026-08-18)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.7.0
+    * @acme/validators bumped to 0.3.1
+    * @f3nation/sso-next bumped to 0.2.1
+  * devDependencies
+    * @f3nation/sso bumped to 0.4.0
+
+## [2.3.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.2.0...admin@2.3.0) (2026-08-12)
+
+
+### Features
+
+* **map:** add start date column to workouts table ([#807](https://github.com/F3-Nation/f3-nation/issues/807)) ([c49b48d](https://github.com/F3-Nation/f3-nation/commit/c49b48d6131e13454425d3ce0660e02093bba175))
+* **sso:** new next wrapper for sso, partially completed ([#688](https://github.com/F3-Nation/f3-nation/issues/688)) ([8555b36](https://github.com/F3-Nation/f3-nation/commit/8555b3687808c26713f9b7b524e65296756d4504))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.6.0
+    * @acme/validators bumped to 0.3.0
+    * @f3nation/sso-next bumped to 0.2.0
+  * devDependencies
+    * @f3nation/sso bumped to 0.3.0
+
+## [2.2.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.1.3...admin@2.2.0) (2026-08-05)
+
+
+### Features
+
+* **admin,map:** enhance invalidateQueries to match nested router paths by segment name ([#701](https://github.com/F3-Nation/f3-nation/issues/701)) ([b5600ed](https://github.com/F3-Nation/f3-nation/commit/b5600edd2228a11dcf80988c46d9be935731606c))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.5.0
+    * @acme/validators bumped to 0.2.1
+
+## [2.1.3](https://github.com/F3-Nation/f3-nation/compare/admin@2.1.2...admin@2.1.3) (2026-07-26)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.4.1
+    * @acme/validators bumped to 0.2.0
+
+## [2.1.2](https://github.com/F3-Nation/f3-nation/compare/admin@2.1.1...admin@2.1.2) (2026-07-23)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.4.0
+
+## [2.1.1](https://github.com/F3-Nation/f3-nation/compare/admin@2.1.0...admin@2.1.1) (2026-07-14)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.3.1
+    * @acme/shared bumped to 0.1.3
+    * @acme/sso bumped to 0.2.1
+    * @acme/tailwind-config bumped to 0.1.3
+    * @acme/ui bumped to 0.1.3
+    * @acme/validators bumped to 0.1.3
+
 ## [2.1.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.0.5...admin@2.1.0) (2026-07-08)
 
 

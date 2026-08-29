@@ -23,6 +23,24 @@ from application.event_instance import EventInstanceData
 from infrastructure.api_client.client import F3ApiClient, get_f3_api_client
 from infrastructure.api_client.exceptions import F3ApiNotFoundError
 
+PREBLAST_CHANNEL_META_KEY = "preblast_channel_id"
+PREBLAST_POST_CHANNEL_META_KEY = "preblast_post_channel_id"
+
+
+def _resolve_and_validate_existing(
+    repo: ApiEventInstanceRepository,
+    instance_id: int,
+    existing_instance: EventInstanceData | None,
+) -> EventInstanceData:
+    existing = existing_instance or repo.get_by_id(instance_id)
+    if existing is None:
+        raise ValueError(f"Event instance {instance_id} was not found")
+    if existing.id != instance_id:
+        raise ValueError(f"Existing event instance {existing.id} does not match requested id {instance_id}")
+    if not existing.event_type_ids:
+        raise ValueError(f"Event instance {instance_id} is missing required field 'event_type_ids'")
+    return existing
+
 
 def _parse_instance(raw: dict) -> EventInstanceData:
     """Convert a raw API response dict to an ``EventInstanceData`` object."""
@@ -57,6 +75,33 @@ def _parse_instance(raw: dict) -> EventInstanceData:
     else:
         start_date = None
 
+    # Extract nested display data from by-id API response
+    org_raw = raw.get("org")
+    org_name = None
+    org_meta = None
+    if org_raw and isinstance(org_raw, dict):
+        org_name = org_raw.get("name")
+        org_meta = org_raw.get("meta")
+
+    location_raw = raw.get("location")
+    location_name = None
+    location_latitude = None
+    location_longitude = None
+    if location_raw and isinstance(location_raw, dict):
+        location_name = location_raw.get("locationName", location_raw.get("name"))
+        location_latitude = location_raw.get("latitude")
+        location_longitude = location_raw.get("longitude")
+
+    # Extract event type names from nested objects
+    event_type_names: list[str] = []
+    if event_types_raw and isinstance(event_types_raw[0], dict):
+        event_type_names = [t.get("eventTypeName", t.get("name", "")) for t in event_types_raw]
+
+    # Extract event tag names from nested objects
+    event_tag_names: list[str] = []
+    if event_tags_raw and isinstance(event_tags_raw[0], dict):
+        event_tag_names = [t.get("eventTagName", t.get("name", "")) for t in event_tags_raw]
+
     return EventInstanceData(
         id=raw["id"],
         name=raw.get("name"),
@@ -74,7 +119,16 @@ def _parse_instance(raw: dict) -> EventInstanceData:
         highlight=raw.get("highlight", False),
         preblast_rich=raw.get("preblastRich", raw.get("preblast_rich")),
         preblast=raw.get("preblast"),
+        preblast_ts=raw.get("preblastTs", raw.get("preblast_ts")),
+        series_id=raw.get("seriesId", raw.get("series_id")),
         series_exception=raw.get("seriesException", raw.get("series_exception")),
+        org_name=org_name,
+        org_meta=org_meta,
+        location_name=location_name,
+        location_latitude=location_latitude,
+        location_longitude=location_longitude,
+        event_type_names=event_type_names,
+        event_tag_names=event_tag_names,
     )
 
 
@@ -94,6 +148,7 @@ def _build_crupdate_payload(
     highlight: bool,
     preblast_rich: Any | None,
     preblast: str | None,
+    preblast_ts: int | float | None = None,
 ) -> dict:
     # The API accepts a single eventTypeId and eventTagId (not arrays).
     payload: dict = {
@@ -119,7 +174,37 @@ def _build_crupdate_payload(
         payload["preblastRich"] = preblast_rich
     if preblast is not None:
         payload["preblast"] = preblast
+    if preblast_ts is not None:
+        payload["preblastTs"] = preblast_ts
     return payload
+
+
+def _merged_meta(existing: dict | None, updates: dict | None = None) -> dict:
+    meta = dict(existing or {})
+    if updates:
+        meta.update(updates)
+    return meta
+
+
+def _require_start_date(instance: EventInstanceData) -> date:
+    if instance.start_date is None:
+        raise ValueError(f"Event instance {instance.id} is missing required field 'start_date'")
+    return instance.start_date
+
+
+def _parse_mutation_response(result: dict, fallback: EventInstanceData) -> EventInstanceData:
+    """Parse a crupdate response, falling back to the locally computed update.
+
+    The event-instance API normally returns the updated object.  Some tests and
+    older API shapes only return an acknowledgement, so callers provide a
+    best-effort fallback to avoid an extra GET after every POST.
+    """
+    raw = result.get("eventInstance") or result.get("result")
+    if raw is None and result.get("id") is not None:
+        raw = result
+    if isinstance(raw, dict) and raw.get("id") is not None:
+        return _parse_instance(raw)
+    return fallback
 
 
 def _build_state_change_payload(
@@ -157,6 +242,7 @@ def _build_state_change_payload(
         highlight=instance.highlight,
         preblast_rich=instance.preblast_rich,
         preblast=instance.preblast,
+        preblast_ts=instance.preblast_ts,
     )
     payload["id"] = instance.id
     payload["seriesException"] = series_exception
@@ -210,6 +296,7 @@ class ApiEventInstanceRepository:
         highlight: bool,
         preblast_rich: Any | None,
         preblast: str | None,
+        preblast_ts: int | float | None = None,
     ) -> EventInstanceData:
         payload = _build_crupdate_payload(
             name=name,
@@ -227,6 +314,7 @@ class ApiEventInstanceRepository:
             highlight=highlight,
             preblast_rich=preblast_rich,
             preblast=preblast,
+            preblast_ts=preblast_ts,
         )
         result = self._client.post("/v1/event-instance", json=payload)
         raw = result.get("eventInstance") or result.get("result") or result
@@ -250,6 +338,7 @@ class ApiEventInstanceRepository:
         highlight: bool,
         preblast_rich: Any | None,
         preblast: str | None,
+        preblast_ts: int | float | None = None,
     ) -> EventInstanceData:
         payload = _build_crupdate_payload(
             name=name,
@@ -267,6 +356,7 @@ class ApiEventInstanceRepository:
             highlight=highlight,
             preblast_rich=preblast_rich,
             preblast=preblast,
+            preblast_ts=preblast_ts,
         )
         payload["id"] = instance_id
         result = self._client.post("/v1/event-instance", json=payload)
@@ -290,6 +380,106 @@ class ApiEventInstanceRepository:
     def delete(self, instance_id: int) -> None:
         """Hard-delete an event instance."""
         self._client.delete(f"/v1/event-instance/id/{instance_id}")
+
+    def update_preblast_fields(
+        self,
+        instance_id: int,
+        *,
+        name: str | None = None,
+        preblast_rich: Any | None = None,
+        preblast: str | None = None,
+        location_id: int | None = None,
+        clear_location_id: bool = False,
+        start_date: date | None = None,
+        start_time: str | None = None,
+        event_tag_ids: list[int] | None = None,
+        meta_updates: dict | None = None,
+        preblast_channel_id: str | None = None,
+        existing_instance: EventInstanceData | None = None,
+    ) -> EventInstanceData:
+        existing = _resolve_and_validate_existing(self, instance_id, existing_instance)
+        meta_updates = _merged_meta(
+            meta_updates,
+            {PREBLAST_CHANNEL_META_KEY: preblast_channel_id} if preblast_channel_id else None,
+        )
+        tag_ids = event_tag_ids if event_tag_ids is not None else existing.event_tag_ids
+        resolved_location_id = None if clear_location_id else location_id
+        if not clear_location_id and location_id is None:
+            resolved_location_id = existing.location_id
+        payload = _build_crupdate_payload(
+            name=name if name is not None else existing.name or "",
+            org_id=existing.org_id,
+            start_date=start_date or _require_start_date(existing),
+            start_time=start_time or existing.start_time or "",
+            end_time=existing.end_time or "",
+            description=existing.description,
+            location_id=resolved_location_id,
+            event_type_id=existing.event_type_ids[0],
+            event_tag_id=tag_ids[0] if tag_ids else None,
+            is_active=existing.is_active,
+            is_private=existing.is_private,
+            meta=_merged_meta(existing.meta, meta_updates),
+            highlight=existing.highlight,
+            preblast_rich=preblast_rich if preblast_rich is not None else existing.preblast_rich,
+            preblast=preblast if preblast is not None else existing.preblast,
+            preblast_ts=existing.preblast_ts,
+        )
+        payload["id"] = instance_id
+        if event_tag_ids is not None and not event_tag_ids:
+            payload["eventTagId"] = None
+        if clear_location_id:
+            payload["locationId"] = None
+        result = self._client.post("/v1/event-instance", json=payload)
+        fallback = existing.model_copy(
+            update={
+                "name": payload["name"],
+                "start_date": start_date or existing.start_date,
+                "start_time": payload["startTime"],
+                "location_id": resolved_location_id,
+                "event_tag_ids": tag_ids,
+                "meta": payload.get("meta"),
+                "preblast_rich": payload.get("preblastRich", existing.preblast_rich),
+                "preblast": payload.get("preblast", existing.preblast),
+            }
+        )
+        return _parse_mutation_response(result, fallback)
+
+    def persist_posted_preblast(
+        self,
+        instance_id: int,
+        *,
+        preblast_ts: int | float,
+        preblast_post_channel_id: str,
+        existing_instance: EventInstanceData | None = None,
+    ) -> EventInstanceData:
+        existing = _resolve_and_validate_existing(self, instance_id, existing_instance)
+        payload = _build_crupdate_payload(
+            name=existing.name or "",
+            org_id=existing.org_id,
+            start_date=_require_start_date(existing),
+            start_time=existing.start_time or "",
+            end_time=existing.end_time or "",
+            description=existing.description,
+            location_id=existing.location_id,
+            event_type_id=existing.event_type_ids[0],
+            event_tag_id=existing.event_tag_ids[0] if existing.event_tag_ids else None,
+            is_active=existing.is_active,
+            is_private=existing.is_private,
+            meta=_merged_meta(existing.meta, {PREBLAST_POST_CHANNEL_META_KEY: preblast_post_channel_id}),
+            highlight=existing.highlight,
+            preblast_rich=existing.preblast_rich,
+            preblast=existing.preblast,
+            preblast_ts=preblast_ts,
+        )
+        payload["id"] = instance_id
+        result = self._client.post("/v1/event-instance", json=payload)
+        fallback = existing.model_copy(
+            update={
+                "meta": payload.get("meta"),
+                "preblast_ts": preblast_ts,
+            }
+        )
+        return _parse_mutation_response(result, fallback)
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,90 @@
 # Changelog
 
+## [2.2.2](https://github.com/F3-Nation/f3-nation/compare/me@2.2.1...me@2.2.2) (2026-08-25)
+
+
+### Bug Fixes
+
+* **me:** move proxy.ts to src/ so Next.js actually loads it ([#866](https://github.com/F3-Nation/f3-nation/issues/866)) ([531bdd0](https://github.com/F3-Nation/f3-nation/commit/531bdd097e65abe6d583ae4e73dfe9495e5abb59))
+
+## [2.2.1](https://github.com/F3-Nation/f3-nation/compare/me@2.2.0...me@2.2.1) (2026-08-18)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.7.0
+    * @f3nation/sso-next bumped to 0.2.1
+  * devDependencies
+    * @f3nation/sso bumped to 0.4.0
+
+## [2.2.0](https://github.com/F3-Nation/f3-nation/compare/me@2.1.4...me@2.2.0) (2026-08-12)
+
+
+### Features
+
+* **health:** add /status to homepage and introduce shared package for reporting ([#657](https://github.com/F3-Nation/f3-nation/issues/657)) ([88e7547](https://github.com/F3-Nation/f3-nation/commit/88e754751e25461e25c7361c878c78e3902daad4))
+* **me:** adding version, env, and changelog ([#790](https://github.com/F3-Nation/f3-nation/issues/790)) ([dfb9956](https://github.com/F3-Nation/f3-nation/commit/dfb99560fa1a4109884f0261910d4398a0531732))
+* **sso:** new next wrapper for sso, partially completed ([#688](https://github.com/F3-Nation/f3-nation/issues/688)) ([8555b36](https://github.com/F3-Nation/f3-nation/commit/8555b3687808c26713f9b7b524e65296756d4504))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.6.0
+    * @f3nation/health bumped to 1.1.0
+    * @f3nation/sso-next bumped to 0.2.0
+  * devDependencies
+    * @f3nation/sso bumped to 0.3.0
+
+## [2.1.4](https://github.com/F3-Nation/f3-nation/compare/me@2.1.3...me@2.1.4) (2026-08-05)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.5.0
+
+## [2.1.3](https://github.com/F3-Nation/f3-nation/compare/me@2.1.2...me@2.1.3) (2026-07-26)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.4.1
+
+## [2.1.2](https://github.com/F3-Nation/f3-nation/compare/me@2.1.1...me@2.1.2) (2026-07-23)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.4.0
+
+## [2.1.1](https://github.com/F3-Nation/f3-nation/compare/me@2.1.0...me@2.1.1) (2026-07-14)
+
+
+### Bug Fixes
+
+* **api,me:** require filters and cap results on me.users ([#662](https://github.com/F3-Nation/f3-nation/issues/662)) ([70375fc](https://github.com/F3-Nation/f3-nation/commit/70375fc0b396b9f8f0aefd74b407a4ba9aae3b7f))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.3.1
+    * @acme/shared bumped to 0.1.3
+    * @acme/sso bumped to 0.2.1
+    * @acme/ui bumped to 0.1.3
+  * devDependencies
+    * @acme/tailwind-config bumped to 0.1.3
+
 ## [2.1.0](https://github.com/F3-Nation/f3-nation/compare/me@2.0.5...me@2.1.0) (2026-07-08)
 
 

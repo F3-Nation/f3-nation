@@ -1,6 +1,7 @@
 import baseConfig from "@acme/eslint-config/base";
 import nextConfig from "@acme/eslint-config/nextjs";
 import reactConfig from "@acme/eslint-config/react";
+import vitestConfig from "@acme/vitest-config/eslint";
 
 export default [
   {
@@ -9,4 +10,5 @@ export default [
   ...baseConfig,
   ...nextConfig,
   ...reactConfig,
+  ...vitestConfig,
 ];

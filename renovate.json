@@ -5,7 +5,8 @@
     "github-actions",
     "npm",
     "docker-compose",
-    "dockerfile"
+    "dockerfile",
+    "pep621"
   ],
   "timezone": "America/New_York",
   "schedule": ["before 9am on Monday"],
@@ -38,10 +39,52 @@
       "enabled": false
     },
     {
+      "description": "Do not automatically upgrade the Python runtime requirement",
+      "matchManagers": ["pep621"],
+      "matchDepTypes": ["requires-python"],
+      "enabled": false
+    },
+    {
+      "description": "Pin Python (uv/pyproject.toml) dependencies to exact versions on every update, instead of a range. Required for minimumReleaseAge to actually work with uv: Renovate can only stop `uv lock` from grabbing a too-new version if the version in pyproject.toml is an exact pin, not a range (see renovatebot/renovate#41624). Must stay its own rule — rangeStrategy can't be combined with matchUpdateTypes in one packageRule, because rangeStrategy is evaluated before Renovate knows the update type.",
+      "matchManagers": ["pep621"],
+      "rangeStrategy": "pin"
+    },
+    {
+      "description": "Group Python (uv/pyproject.toml) minor and patch updates into one PR, separate from the npm non-major group — different lockfile, keeps uv.lock churn reviewable on its own",
+      "groupName": "Python dependencies (non-major)",
+      "groupSlug": "python-non-major",
+      "matchManagers": ["pep621"],
+      "matchUpdateTypes": ["minor", "patch"]
+    },
+    {
       "description": "Do not auto-update the Python base image; adopt interpreter upgrades manually",
       "matchDatasources": ["docker"],
       "matchPackageNames": ["python"],
       "enabled": false
+    },
+    {
+      "description": "Hold TypeScript at 6.x: 7.0 is the native (Go) port and is too new to adopt. Renovate rolls all 7.x into one \"to v7\" upgrade, so raise this to <7.2.0 (or drop the rule) when ready to migrate rather than closing the PR.",
+      "matchDatasources": ["npm"],
+      "matchPackageNames": ["typescript"],
+      "allowedVersions": "<7.0.0"
+    },
+    {
+      "description": "Hold at <1.9.0: 1.9.0 rewired AdvancedMarker onClick to the gmp-click DOM event (upstream PR #997), dropping event.stop()/event.latLng. Shipped as a minor but breaks marker clicks at runtime. Remove this rule with the migration.",
+      "matchDatasources": ["npm"],
+      "matchPackageNames": ["@vis.gl/react-google-maps"],
+      "allowedVersions": "<1.9.0"
+    },
+    {
+      "description": "Hold the brace-expansion@<1.1.16 override at <3.0.0: minimatch@3.1.5 (pulled in by eslint-plugin-react, eslint-plugin-jsx-a11y, and commitizen's glob@7.2.3) does `require('brace-expansion')` and calls the result directly. 1.x/2.x still export a callable default (`module.exports = expandTop`); 3.0.0 switched to ESM-only, and 4.x/5.x ship a dual build whose CJS side exports only a named `expand` — either way minimatch@3.1.5 throws `TypeError: expand is not a function` the first time a brace-containing glob reaches it. See pnpm-workspace.yaml's matching override comment. Does not affect the separate `brace-expansion@>=3.0.0 <5.0.9` override, which feeds modern minimatch@10.x and is fine at 5.x. Remove this rule only once minimatch@3.1.5 is gone from the dependency tree (i.e. those three packages upgrade past it).",
+      "matchDatasources": ["npm"],
+      "matchDepNames": ["brace-expansion@<1.1.16"],
+      "allowedVersions": "<3.0.0"
+    },
+    {
+      "description": "Hold the fast-uri@<3.1.5 override at <4.0.0: its sole consumer, ajv@8.20.0, declares `fast-uri: ^3.0.1` and has never adopted fast-uri 4.x. Forcing the override past ajv's own declared range risks the same class of break as the brace-expansion@<1.1.16 rule above (an unverified major-version jump on a transitive dep the direct dependent never opted into). See pnpm-workspace.yaml's matching override comment. Remove this rule only once ajv (or whatever supersedes it here) adopts fast-uri 4.x.",
+      "matchDatasources": ["npm"],
+      "matchDepNames": ["fast-uri@<3.1.5"],
+      "allowedVersions": "<4.0.0"
     }
   ]
 }

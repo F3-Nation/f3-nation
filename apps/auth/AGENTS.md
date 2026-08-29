@@ -12,7 +12,7 @@ Before any Next.js work, find and read the relevant doc in `node_modules/next/di
 
 The two most useful things to know up front:
 
-1. **In local development the auth server already uses [Ethereal](https://ethereal.email/) -- a free, no-auth SMTP relay that publishes a public preview URL for every message.** No real inbox is involved, no SendGrid credentials are needed, and no email account has to be polled.
+1. **In local development all outbound mail is caught by [Mailpit](https://mailpit.axllent.org/), started for you by `pnpm docker:up`.** Nothing leaves your machine, no SendGrid credentials are needed, and no real inbox has to be polled. Read messages at `http://localhost:8025` -- web UI for humans, REST API on the same port for agents.
 2. **Sign-in completes via NextAuth's standard CSRF + Credentials callback flow.** A `curl` of the magic link does **not** complete sign-in (the verify page is a client component that calls `signIn()` from a `useEffect`). For headless automation, POST `email + code` to `/api/auth/callback/credentials` with a CSRF token. See the recipe below.
 
 If you only read this section, you have enough to drive the auth flow programmatically. The rest of this doc is the recipe.
@@ -23,20 +23,14 @@ If you only read this section, you have enough to drive the auth flow programmat
 
 `apps/auth` is the F3 OAuth 2.0 / OpenID Connect server. Other apps in the monorepo (apps/me, apps/map, pax-vault, the-codex, ...) authenticate users by redirecting to `apps/auth`, which authenticates the user via **email-based MFA** (a 6-digit code plus a magic link, both delivered in the same email), then redirects back with an authorization code that the calling app exchanges for tokens.
 
-The MFA logic lives in `apps/auth/src/lib/email-mfa.ts`. The transport switches on `NODE_ENV`:
+The MFA logic lives in `apps/auth/src/lib/email-mfa.ts`. There is **no environment branching in the transport** -- it is a single nodemailer transport built from the `EMAIL_SERVER` connection string, so which mail server receives a message is purely a matter of configuration:
 
-| `NODE_ENV`    | SMTP transport                                                       | Preview URL?             | Real inbox involved? |
-| ------------- | -------------------------------------------------------------------- | ------------------------ | -------------------- |
-| `production`  | `smtp.sendgrid.net:587` (SendGrid)                                   | No                       | Yes                  |
-| anything else | `smtp.ethereal.email:587` (Ethereal test account, fresh per process) | Yes -- printed to stdout | No                   |
+| Environment | `EMAIL_SERVER`                    | Where the mail lands                          |
+| ----------- | --------------------------------- | --------------------------------------------- |
+| Local dev   | `smtp://localhost:1025` (default) | Mailpit -- read it at `http://localhost:8025` |
+| Production  | SendGrid SMTP credentials         | The recipient's real inbox                    |
 
-In dev, every send is followed by:
-
-```ts
-console.log("Preview email:", previewUrl);
-```
-
-...where `previewUrl` is something like `https://ethereal.email/message/abc123...`. That URL is **publicly accessible without authentication**, returns the email's HTML body, and contains both the 6-digit code and the magic link.
+`smtp://localhost:1025` is the default in `apps/auth/.env.example`, and port 1025 is Mailpit's SMTP listener in `docker-compose.yml`. **Nothing is logged when a message is sent** -- retrieve mail from Mailpit, never from the auth server's stdout.
 
 ---
 
@@ -65,8 +59,8 @@ The dev email (`apps/auth/src/lib/email-mfa.ts`) renders this HTML:
 
 The two extraction targets for an automation agent are:
 
-1. **6-digit code** -- the `<p style="...letter-spacing: 8px;">` element. Use this for headless flows: feed it to `/api/auth/callback/credentials` with a CSRF token (recipe below). **This is the canonical path for autonomous QA.**
-2. **Magic link** -- `<a href="${authUrl}/login/email/verify?email=<urlencoded>&code=<6 digits>">...</a>`. The page at that URL is a **client component** -- it calls `signIn("email-mfa", ...)` from a React `useEffect`. A raw `curl` GET only returns HTML and never executes the sign-in. Use this only when driving a JS-capable browser (Playwright, CDP).
+1. **6-digit code** -- present twice: in the `<p style="...letter-spacing: 8px;">` element and as the `code=` parameter of the magic link. The `code=` parameter is the easier grep target. Use this for headless flows: feed it to `/api/auth/callback/credentials` with a CSRF token (recipe below). **This is the canonical path for autonomous QA.**
+2. **Magic link** -- `<a href="${authUrl}/login/email/verify?email=<urlencoded>&code=<6 digits>">...</a>`. The page at that URL is a **client component** -- it calls `signIn("email-mfa", ...)` from a React `useEffect`. A raw `curl` GET only returns HTML and never executes the sign-in. Use this only when driving a JS-capable browser (e.g. CDP).
 
 Both are stable across dev runs. Neither depends on parsing arbitrary email-rendering quirks.
 
@@ -74,7 +68,7 @@ Both are stable across dev runs. Neither depends on parsing arbitrary email-rend
 
 ## Rate limiting
 
-`/api/verify-email` enforces a 10-requests-per-minute-per-IP cap **in production only**. Under `NODE_ENV !== "production"` (local dev, CI, preview environments) the limit is bypassed -- the email transport is Ethereal, so there is no real inbox to bomb. This bypass is what makes parallel agent QA viable without 429s.
+`/api/verify-email` enforces a 10-requests-per-minute-per-IP cap **in production only**. Under `NODE_ENV !== "production"` (local dev, CI, preview environments) the limit is bypassed -- mail is caught by Mailpit, so there is no real inbox to bomb. This bypass is what makes parallel agent QA viable without 429s.
 
 `/api/auth/callback/credentials` (the NextAuth Credentials POST endpoint) has no application-level rate limit in any environment.
 
@@ -94,11 +88,11 @@ pnpm dev   # turbo dev --parallel -- starts apps/auth, apps/api, apps/me, apps/m
 
 Or run only what you need (see `docs/LOCAL_DEV_SETUP.md` for the minimum stack per app). For an apps/me QA run you need at least `apps/auth` (`:3004`) and `apps/api` (`:3001`) plus a Postgres DB.
 
-Capture `apps/auth`'s stdout to a file you can grep later:
+Make sure the Docker services are up, since Mailpit is the only place sent mail can be read:
 
 ```bash
-pnpm --filter f3-auth dev > /tmp/f3-auth.log 2>&1 &
-echo $! > /tmp/f3-auth.pid
+pnpm docker:up
+curl -sf http://localhost:8025/api/v1/messages >/dev/null && echo "Mailpit is up"
 ```
 
 ### 1. Get a CSRF token
@@ -129,16 +123,25 @@ curl -sb /tmp/jar -X POST -H 'Content-Type: application/json' \
   'http://localhost:3004/api/verify-email?action=send'
 ```
 
-Either way, `sendEmailCode()` runs and the auth log gets a new `Preview email:` line.
+Either way, `sendEmailCode()` runs and a new message appears in Mailpit.
 
-### 3. Pull the code from the latest preview email
+### 3. Pull the code from the newest Mailpit message
+
+Mailpit's REST API lists messages newest-first, so read the newest ID and grep the `code=` parameter out of its HTML body:
 
 ```bash
-CODE=$(scripts/qa/extract-mfa-link.sh --code)
+ID=$(curl -s http://localhost:8025/api/v1/messages | jq -r '.messages[0].ID')
+CODE=$(curl -s "http://localhost:8025/api/v1/message/$ID" \
+  | jq -r '.HTML' \
+  | grep -oE 'code=[0-9]{6}' | head -1 | cut -d= -f2)
 echo "MFA code: $CODE"
 ```
 
-The helper enforces consume-once semantics by default: if the latest preview URL matches the one it returned last time (i.e., no fresh send happened), it exits non-zero with a clear error. That catches the most common silent failure mode -- retries that quietly reuse already-consumed codes. Pass `--allow-reuse` if you really want the same URL twice (rare).
+Codes are single-use, and each new send invalidates the previous code for that address -- so reusing a stale message is the most common silent failure. The cheapest guard is to empty the mailbox before triggering the send, which makes "newest message" unambiguous:
+
+```bash
+curl -s -X DELETE http://localhost:8025/api/v1/messages
+```
 
 ### 4. POST the code to NextAuth's Credentials callback
 
@@ -170,27 +173,28 @@ curl -sb /tmp/jar http://localhost:3003/api/auth/me
 # -> {"user":{"id":...,"email":"qa-bot@f3nation.test",...}}
 ```
 
-### Form mode -- submit the code through the verify page UI (Playwright/CDP)
+### Form mode -- submit the code through the verify page UI (browser automation / CDP)
 
 When you're driving a real browser and want to exercise the verify form's UI itself:
 
 ```bash
 # Drive the browser to /login/email, submit the email
-playwright_navigate "http://localhost:3004/login/email"
-playwright_fill "[name=email]" "qa-bot@f3nation.test"
-playwright_click "[type=submit]"
+browser_navigate "http://localhost:3004/login/email"
+browser_fill "[name=email]" "qa-bot@f3nation.test"
+browser_click "[type=submit]"
 
-# Pull the code and submit it to the form
-CODE=$(scripts/qa/extract-mfa-link.sh --code)
-playwright_fill "[name=code]" "$CODE"
-playwright_click "[type=submit]"
+# Pull the code (step 3 above) and submit it to the form
+browser_fill "[name=code]" "$CODE"
+browser_click "[type=submit]"
 ```
 
 Or exercise the magic link in a JS-capable browser:
 
 ```bash
-MAGIC_LINK=$(scripts/qa/extract-mfa-link.sh)
-playwright_navigate "$MAGIC_LINK"
+MAGIC_LINK=$(curl -s "http://localhost:8025/api/v1/message/$ID" \
+  | jq -r '.HTML' \
+  | grep -oE 'http://localhost:3004/login/email/verify\?[^"]+' | head -1)
+browser_navigate "$MAGIC_LINK"
 # -> page renders, useEffect fires signIn("email-mfa", ...), session cookie is set
 ```
 
@@ -200,45 +204,28 @@ Form/magic-link modes are slower and only needed if you specifically want to QA 
 
 ## Helper script
 
-A ready-made wrapper lives at `scripts/qa/extract-mfa-link.sh`. It reads a captured auth log (default `/tmp/f3-auth.log`), fetches the latest Ethereal preview URL, and prints the magic link (default) or the 6-digit code (`--code`). See `--help`.
-
-```bash
-# Just the code -- the canonical input to the headless callback recipe
-scripts/qa/extract-mfa-link.sh --code
-# -> 482719
-
-# Magic link (only useful for browser-driven flows)
-scripts/qa/extract-mfa-link.sh
-# -> http://localhost:3004/login/email/verify?email=qa-bot%40f3nation.test&code=482719
-
-# Read a different log
-scripts/qa/extract-mfa-link.sh --log /tmp/turbo.log --code
-
-# Skip the consume-once check (rare)
-scripts/qa/extract-mfa-link.sh --code --allow-reuse
-```
+> **Do not use `scripts/qa/extract-mfa-link.sh`.** It scrapes an Ethereal preview URL out of a captured auth log, and the auth server no longer uses Ethereal or logs anything on send -- so it can only ever find nothing. Use the Mailpit `curl` in step 3 instead.
 
 ---
 
 ## Failure modes worth knowing
 
-- **`grep` returns no preview URL.** Either the auth server hasn't been started yet (check `tail /tmp/f3-auth.log`), or `NODE_ENV=production` is leaking into local dev (the SendGrid branch wouldn't print a preview URL). Verify with `pnpm --filter f3-auth exec env | grep NODE_ENV`.
-- **`extract-mfa-link.sh` exits with "stale URL".** This is the consume-once guard. The latest preview URL in your log is the one the script already returned -- meaning no fresh email arrived since the last call. Trigger another send and retry, or pass `--allow-reuse` if you really want the same URL.
+- **Mailpit's message list is empty.** Either the send never happened, or the mail went somewhere else. Check that Mailpit is running (`docker ps | grep f3-mailpit`, or `pnpm docker:up`) and that `EMAIL_SERVER` in `apps/auth/.env` is `smtp://localhost:1025` -- a stale value pointed at SendGrid will fail or, worse, deliver to a real address.
+- **You extracted a code but it's rejected.** You probably read a stale message. Codes are single-use and each send invalidates the prior one, so `.messages[0]` may be a previous run's email. Empty the mailbox (`curl -s -X DELETE http://localhost:8025/api/v1/messages`) before triggering the send.
 - **CSRF callback returns 200 but no session cookie is set.** `verifyEmailCode()` returned null -- likely the user doesn't exist (new user flow), the code was already consumed, or the code expired. Codes have a 10-minute TTL (`CODE_TTL_MINUTES` in `email-mfa.ts`). Each new send invalidates older codes for the same email. To unblock new-user testing, seed the user before driving the flow.
 - **CSRF callback redirects to `/login?error=...`.** Add `--data-urlencode "json=true"` to the curl invocation; without it, NextAuth returns an HTTP redirect instead of JSON, and `curl -L` may follow that redirect into the error page. With JSON mode you can inspect the body directly.
 - **Magic link "works" in a browser but `curl` gets HTML and no session.** Expected -- `/login/email/verify` is a client component. Use the CSRF + callback recipe instead. If you must exercise the magic link, drive a real browser.
-- **Ethereal preview URL works but the page is blank in your browser.** Ethereal renders the raw email HTML; it doesn't run JS. `curl` against the same URL returns the same body -- that's what the recipe relies on.
-- **You see emails for the wrong recipient.** Each `nodemailer.createTestAccount()` call returns a fresh Ethereal user, but the **preview URLs are global** -- anyone who happens to have the URL can see the email content. That's fine for ephemeral CI emails. Don't put real PII in test emails.
+- **You see emails for the wrong recipient.** Mailpit is a shared local mailbox -- every address delivers into the same inbox, so a parallel agent's message can be `.messages[0]`. Filter by recipient (`/api/v1/search?query=to:qa-bot@f3nation.test`) or use a distinct address per run.
 
 ---
 
 ## Production safety
 
-The Ethereal branch only runs when `NODE_ENV !== "production"`. There's no way to accidentally route a production email through Ethereal unless `NODE_ENV` is misconfigured, in which case the auth server has bigger problems (SendGrid creds wouldn't be available either).
+Because the transport is just `EMAIL_SERVER`, local safety comes from configuration rather than a code branch: `apps/auth/.env.example` ships `smtp://localhost:1025`, so a default local checkout can only ever deliver into Mailpit. Nothing is logged on send, so no message content or recipient reaches stdout in any environment.
 
-The dev preview-URL log line (`console.log("Preview email:", previewUrl)`) is also gated by `NODE_ENV !== "production"` and never fires in prod, so log scrapers/SIEMs won't see a phantom Ethereal URL pattern in production audit logs.
+The one thing to be careful about is the inverse of the old risk: a local `.env` that carries real SendGrid credentials **will** send real email to real addresses, because nothing gates it on `NODE_ENV`. Keep `EMAIL_SERVER` pointed at Mailpit locally.
 
-The `/api/verify-email` rate-limit bypass is gated by the same `NODE_ENV !== "production"` check; production traffic remains capped at 10 requests per minute per IP.
+`/api/verify-email` enforces its 10-requests-per-minute-per-IP cap only when `NODE_ENV === "production"`; production traffic remains capped.
 
 ---
 
@@ -246,6 +233,6 @@ The `/api/verify-email` rate-limit bypass is gated by the same `NODE_ENV !== "pr
 
 - [`apps/auth/README.md`](README.md) -- full architecture, deployment, OAuth client registration
 - [`docs/LOCAL_DEV_SETUP.md`](../../docs/LOCAL_DEV_SETUP.md) -- monorepo-wide environment and credential bootstrap
-- [`docs/QA_LOCAL_AUTH.md`](../../docs/QA_LOCAL_AUTH.md) -- the recipe above in a more cookbook format, cross-referenced from every consuming app
+- [`docs/LOCAL_DEV_DOCKER.md`](../../docs/LOCAL_DEV_DOCKER.md) -- bringing up Mailpit and the rest of the Docker stack
 - [`apps/auth/src/lib/email-mfa.ts`](src/lib/email-mfa.ts) -- the source of truth for what gets emailed
 - [`apps/auth/src/lib/auth-options.ts`](src/lib/auth-options.ts) -- the NextAuth Credentials provider that the callback flow drives

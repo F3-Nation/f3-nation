@@ -10,20 +10,45 @@ const config: KnipConfig = {
     "packages/db/src/**",
     "packages/shared/src/app/constants.ts",
     ".claude/scripts/sync-agent-skills.mjs",
-    "tooling/typescript/type-extensions.d.ts",
+    ".github/scripts/code-scanning-issue.cjs",
     "turbo/generators/config.ts",
+    // AI-SDLC factory tooling (fork-only). Its entry points are CI workflows
+    // (e2e-triage / adversarial-review) invoking `tsx src/review-pr.ts` /
+    // `triage-e2e-failure.ts`, so knip can't trace usage across the workflow
+    // boundary and reports internal helpers as unused. It carries its own
+    // vitest suite; follow-up to configure knip entries properly.
+    "tooling/ci-factory/**",
   ],
-  ignoreDependencies: [
-    "@turbo/gen",
-    "dayjs",
-    "dotenv",
-    "esbuild-register",
-    "tsx",
-  ],
+  ignoreDependencies: ["@turbo/gen", "dotenv"],
   ignoreBinaries: ["uv"],
   workspaces: {
-    "tooling/scripts": {
-      entry: ["src/notify-outstanding-requests.ts", "src/script.ts"],
+    ".": {
+      // scripts/lint-staged.mjs spawns the eslint binary by path, so the root
+      // devDependency is never a static import knip can follow.
+      ignoreDependencies: ["eslint"],
+    },
+    "apps/api": {
+      // The characterization suite runs under its own vitest config,
+      // which the vitest plugin does not discover from the default name.
+      vitest: ["vitest.config.ts", "vitest.characterization.config.ts"],
+      // Wired in by resolve.alias rather than an import, so it is not
+      // reachable through the module graph.
+      entry: ["characterization/next-headers-shim.ts"],
+    },
+    "apps/admin": {
+      // vi.mock("@f3nation/sso") in auth-login tests intercepts handleLoginRoute's
+      // internal call; no static import exists for knip to trace.
+      ignoreDependencies: ["@f3nation/sso"],
+    },
+    "apps/me": {
+      // vi.mock("@f3nation/sso") in auth-login tests intercepts handleLoginRoute's
+      // internal call; no static import exists for knip to trace.
+      ignoreDependencies: ["@f3nation/sso"],
+    },
+    "apps/slackbot": {
+      // Graph-only edge mirroring apps/slackbot/pyproject.toml so Turbo can see
+      // the Python workspace; no TypeScript imports it.
+      ignoreDependencies: ["f3-data-models"],
     },
   },
 };

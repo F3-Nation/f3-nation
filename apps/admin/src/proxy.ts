@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { verifyAccessToken, AuthError } from "@f3nation/sso-next";
 
 import { routes } from "@acme/shared/app/constants";
 
@@ -9,8 +10,9 @@ import {
   REFRESH_TOKEN_COOKIE_NAME,
   REFRESH_TOKEN_MAX_AGE,
 } from "~/lib/auth/constants";
-import { refreshToken } from "~/lib/auth/oauth";
-import { verifyAccessTokenPayload } from "~/lib/auth/tokens";
+import { sso } from "~/lib/auth/oauth";
+import { env } from "~/env";
+import { logDebug, logWarn } from "~/lib/logging";
 
 const PUBLIC_PATHS = ["/auth/sign-in", routes.admin.noAccess.__path];
 const STATIC_ASSET_PATTERN =
@@ -144,9 +146,38 @@ export async function proxy(request: NextRequest) {
     REFRESH_TOKEN_COOKIE_NAME,
   )?.value;
 
+  async function checkToken(token: string) {
+    const result = await verifyAccessToken(
+      token,
+      env.AUTH_PROVIDER_URL,
+      env.OAUTH_CLIENT_ID,
+      true,
+    );
+    if (!result.ok) {
+      if (result.code === "expired") {
+        logDebug("admin.auth.access_token_expired", {});
+      } else {
+        logWarn("admin.auth.access_token_verify_failed", {
+          code: result.code,
+          message: result.error,
+        });
+      }
+    }
+    return result;
+  }
+
   if (accessToken) {
-    const payload = await verifyAccessTokenPayload(accessToken);
-    if (payload) {
+    const tokenResult = await checkToken(accessToken);
+    if (tokenResult.ok) {
+      return NextResponse.next({
+        request: { headers: getRequestHeadersWithPath(request) },
+      });
+    }
+    // When JWKS is unavailable the token may be valid — the auth server is
+    // temporarily unreachable. Falling through to the refresh/clear path would
+    // fail for the same reason and log users out. Preserve the session and let
+    // the server component surface the outage instead.
+    if (tokenResult.code === "jwks_unavailable") {
       return NextResponse.next({
         request: { headers: getRequestHeadersWithPath(request) },
       });
@@ -163,28 +194,57 @@ export async function proxy(request: NextRequest) {
       request.headers.get("sec-fetch-mode") === "navigate";
 
     try {
-      const tokens = await refreshToken({ refreshToken: refreshTokenCookie });
-      if (tokens.accessToken) {
-        const payload = await verifyAccessTokenPayload(tokens.accessToken);
-        if (payload) {
-          const requestHeaders = withRefreshedCookieHeader(
-            request,
-            tokens.accessToken,
-            tokens.refreshToken,
-          );
-          const response = NextResponse.next({
-            request: { headers: requestHeaders },
-          });
-          setRefreshedCookies(
-            response,
-            tokens.accessToken,
-            tokens.expiresIn,
-            tokens.refreshToken,
-          );
-          return response;
-        }
+      const tokens = await sso.refreshToken({
+        refreshToken: refreshTokenCookie,
+      });
+      if (!tokens.accessToken) {
+        throw new Error("Refreshed access token missing");
       }
-    } catch {
+
+      // Verify without logging — the catch below emits a single coherent
+      // "refresh_failed" record. Using checkToken here would emit a duplicate
+      // (and produce a contradictory debug+warn pair for an expired refreshed token).
+      const refreshedVerify = await verifyAccessToken(
+        tokens.accessToken,
+        env.AUTH_PROVIDER_URL,
+        env.OAUTH_CLIENT_ID,
+        true,
+      );
+      if (!refreshedVerify.ok) {
+        throw new Error("Refreshed access token verification failed");
+      }
+
+      const requestHeaders = withRefreshedCookieHeader(
+        request,
+        tokens.accessToken,
+        tokens.refreshToken,
+      );
+      const response = NextResponse.next({
+        request: { headers: requestHeaders },
+      });
+      setRefreshedCookies(
+        response,
+        tokens.accessToken,
+        tokens.expiresIn,
+        tokens.refreshToken,
+      );
+      return response;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      const isExpectedRotationLoss =
+        !isNavigationRequest &&
+        err instanceof AuthError &&
+        err.code === "invalid_grant";
+
+      if (isExpectedRotationLoss) {
+        logDebug("admin.auth.refresh_invalid_grant", { isNavigationRequest });
+      } else {
+        logWarn("admin.auth.refresh_failed", {
+          isNavigationRequest,
+          errorMessage,
+        });
+      }
+
       // Non-navigation requests (API, prefetch): return 401 without touching
       // cookies so the winning rotation's Set-Cookie headers are not clobbered.
       if (!isNavigationRequest) {

@@ -6,10 +6,10 @@
   "engines": {
     "node": ">=24.18.0 <25"
   },
-  "packageManager": "pnpm@11.11.0+sha512.4463f65fd80ed80d69bc1d4bf163ee94f605c7380fc318bb5b2ebe15f8cd12d49c51a4d59e951b401e764d3b6ca751cbf51bc50ed7001a6bcb4935e684c34882",
+  "packageManager": "pnpm@11.22.0+sha512.1ff870c4c6133dfd88fb2afc46dd13d47f09c9794b438c6fdb47ca98caf3bc16381ee0be93a091b8e3824cf01f889f46d7d9e20910fb0be1ab0fb5baa80dd621",
   "scripts": {
     "build": "turbo build",
-    "ci:local": "pnpm format && pnpm lint && pnpm typecheck && pnpm build && pnpm test",
+    "ci:local": "pnpm format && pnpm lint && pnpm lint:unused && pnpm typecheck && pnpm build && pnpm test",
     "clean:workspaces": "turbo clean && pnpm clean",
     "clean": "rm -rf .turbo node_modules",
     "commit": "cz",
@@ -40,12 +40,13 @@
     "lint:fix": "turbo lint --continue -- --fix --cache --cache-location node_modules/.cache/.eslintcache",
     "lint:ws": "pnpm dlx sherif@1.1.0",
     "lint:unused": "SKIP_ENV_VALIDATION=true DATABASE_URL=placeholder knip",
-    "lint": "turbo run lint --continue -- --cache --cache-location node_modules/.cache/.eslintcache; pnpm run lint:ws",
+    "lint": "bash scripts/lint.sh",
     "local:setup": "bash scripts/local-setup.sh",
     "postinstall": "bash scripts/postinstall-uv-sync.sh",
     "python:install": "uv sync --all-packages",
     "reset-test-db": "turbo run reset-test-db",
     "test": "turbo test",
+    "test:characterization": "turbo test:characterization",
     "typecheck": "turbo typecheck",
     "with-env": "dotenv -e .env --"
   },

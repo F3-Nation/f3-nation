@@ -9,6 +9,7 @@ from slack_sdk.web import WebClient
 
 from features import db_admin
 from utilities import constants
+from utilities.builders import update_submission_wait_view
 from utilities.constants import ALL_USERS_ARE_ADMINS
 from utilities.database.orm import SlackSettings
 from utilities.database.special_queries import get_admin_users, make_user_admin
@@ -140,6 +141,113 @@ def build_config_general_form(
         callback_id=actions.CONFIG_GENERAL_CALLBACK_ID,
         title_text="General Settings",
         new_or_add="add",
+    )
+
+
+def _kotter_enabled(region_record: SlackSettings) -> bool:
+    if region_record.kotter_reports_enabled is not None:
+        return bool(region_record.kotter_reports_enabled)
+    return bool(region_record.send_aoq_reports)
+
+
+def _kotter_include_admins(region_record: SlackSettings) -> bool:
+    return region_record.kotter_report_include_admins is not None and bool(region_record.kotter_report_include_admins)
+
+
+def _kotter_ao_reports_enabled(region_record: SlackSettings) -> bool:
+    if region_record.kotter_report_include_site_qs is not None:
+        return bool(region_record.kotter_report_include_site_qs)
+    if region_record.kotter_report_split_site_qs is not None:
+        return bool(region_record.kotter_report_split_site_qs)
+    return bool(region_record.kotter_reports_enabled is None and region_record.send_aoq_reports)
+
+
+def build_kotter_report_config_form(
+    body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings
+):
+    config_form = copy.deepcopy(forms.KOTTER_REPORT_CONFIG_FORM)
+
+    config_form.set_initial_values(
+        {
+            actions.KOTTER_REPORT_ENABLE: "enable" if _kotter_enabled(region_record) else "disable",
+            actions.KOTTER_REPORT_NO_POST_WEEKS: region_record.NO_POST_THRESHOLD,
+            actions.KOTTER_REPORT_REMOVE_WEEKS: region_record.REMINDER_WEEKS,
+            actions.KOTTER_REPORT_HOME_AO_WEEKS: region_record.HOME_AO_CAPTURE,
+            actions.KOTTER_REPORT_NO_Q_WEEKS: region_record.NO_Q_THRESHOLD_WEEKS,
+            actions.KOTTER_REPORT_NO_Q_POSTS: region_record.NO_Q_THRESHOLD_POSTS,
+            actions.KOTTER_REPORT_RECIPIENT_USERS: region_record.kotter_report_recipient_users or [],
+            actions.KOTTER_REPORT_INCLUDE_ADMINS: "yes" if _kotter_include_admins(region_record) else "no",
+            actions.KOTTER_REPORT_INCLUDE_SITE_QS: "yes" if _kotter_ao_reports_enabled(region_record) else "no",
+            actions.KOTTER_REPORT_SEND_MODE: region_record.kotter_report_send_mode or "group",
+            actions.KOTTER_REPORT_DAY: str(
+                region_record.kotter_report_day if region_record.kotter_report_day is not None else 0
+            ),
+            actions.KOTTER_REPORT_HOUR_CST: region_record.kotter_report_hour_cst
+            if region_record.kotter_report_hour_cst is not None
+            else 8,
+        }
+    )
+
+    config_form.post_modal(
+        client=client,
+        trigger_id=safe_get(body, "trigger_id"),
+        callback_id=actions.KOTTER_REPORT_CONFIG_CALLBACK_ID,
+        title_text="Kotter Reports",
+        new_or_add="add",
+    )
+
+
+def handle_kotter_report_config_post(
+    body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings
+):
+    config_data = forms.KOTTER_REPORT_CONFIG_FORM.get_selected_values(body)
+    submission_view_id = safe_get(body, "submission_view_id") or safe_get(body, "view", "id")
+
+    enabled = safe_get(config_data, actions.KOTTER_REPORT_ENABLE) == "enable"
+    recipient_users = safe_get(config_data, actions.KOTTER_REPORT_RECIPIENT_USERS) or []
+    include_admins = safe_get(config_data, actions.KOTTER_REPORT_INCLUDE_ADMINS) == "yes"
+    include_site_qs = safe_get(config_data, actions.KOTTER_REPORT_INCLUDE_SITE_QS) == "yes"
+
+    if enabled and not include_site_qs and not include_admins and not recipient_users:
+        update_submission_wait_view(
+            client=client,
+            title="Destination required",
+            text="Select at least one delivery destination before enabling Kotter Reports.",
+            level=constants.AlertLevel.ERROR,
+            logger=logger,
+            view_id=submission_view_id,
+        )
+        return
+
+    region_record.kotter_reports_enabled = enabled
+    region_record.send_aoq_reports = 1 if enabled else 0
+    region_record.kotter_report_recipient_users = recipient_users
+    region_record.kotter_report_include_admins = include_admins
+    region_record.kotter_report_include_site_qs = include_site_qs
+    region_record.kotter_report_send_mode = safe_get(config_data, actions.KOTTER_REPORT_SEND_MODE) or "group"
+    region_record.kotter_report_split_site_qs = False
+    region_record.kotter_report_day = safe_convert(safe_get(config_data, actions.KOTTER_REPORT_DAY), int)
+    region_record.kotter_report_hour_cst = safe_convert(safe_get(config_data, actions.KOTTER_REPORT_HOUR_CST), int)
+    region_record.NO_POST_THRESHOLD = safe_convert(safe_get(config_data, actions.KOTTER_REPORT_NO_POST_WEEKS), int)
+    region_record.REMINDER_WEEKS = safe_convert(safe_get(config_data, actions.KOTTER_REPORT_REMOVE_WEEKS), int)
+    region_record.HOME_AO_CAPTURE = safe_convert(safe_get(config_data, actions.KOTTER_REPORT_HOME_AO_WEEKS), int)
+    region_record.NO_Q_THRESHOLD_WEEKS = safe_convert(safe_get(config_data, actions.KOTTER_REPORT_NO_Q_WEEKS), int)
+    region_record.NO_Q_THRESHOLD_POSTS = safe_convert(safe_get(config_data, actions.KOTTER_REPORT_NO_Q_POSTS), int)
+
+    DbManager.update_records(
+        cls=SlackSpace,
+        filters=[SlackSpace.team_id == region_record.team_id],
+        fields={SlackSpace.settings: region_record.__dict__},
+    )
+
+    update_local_region_records()
+    update_submission_wait_view(
+        client=client,
+        title="Complete!",
+        text="Kotter Reports settings saved successfully!",
+        level=constants.AlertLevel.SUCCESS,
+        logger=logger,
+        view_id=submission_view_id,
     )
 
 

@@ -1,7 +1,7 @@
 import copy
 import time
 from logging import Logger
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from slack_sdk.models.blocks import (
     ContextBlock,
@@ -17,7 +17,68 @@ from utilities.database.orm import SlackSettings
 from utilities.helper_functions import safe_get
 from utilities.slack import actions, forms
 
-# from pymysql.err import ProgrammingError
+SUBMISSION_WAIT_VIEW = View(
+    type="modal",
+    title="Submitting...",
+    blocks=[
+        {
+            "type": "alert",
+            "text": {
+                "type": "mrkdwn",
+                "text": "Submitting your form, please wait... :hourglass_flowing_sand:",
+                "verbatim": False,
+            },
+            "level": "info",
+        },
+        {"type": "divider"},
+        {
+            "type": "context",
+            "elements": [
+                {
+                    "type": "mrkdwn",
+                    "text": "If this takes longer than 10 seconds, please check back later or contact support.",
+                }
+            ],
+        },
+    ],
+)
+
+
+def update_submission_wait_view(
+    client: WebClient,
+    logger: Logger,
+    title: str,
+    level: constants.AlertLevel,
+    text: str,
+    view_id: Optional[str] = None,
+) -> None:
+    """
+    Update the submission wait view with a new title, level, and text.
+    """
+    # truncate text to 200 characters
+    if len(text) > 200:
+        text = text[:197] + "..."
+
+    view = View(
+        type="modal",
+        title=title,
+        blocks=[
+            {"type": "alert", "text": {"type": "mrkdwn", "text": text, "verbatim": False}, "level": level.value},
+            {"type": "divider"},
+            {"type": "context", "elements": [{"type": "mrkdwn", "text": "You can close this form now."}]},
+        ],
+    )
+    if not view_id:
+        logger.error("Failed to update submission wait view: missing view_id")
+        return
+
+    try:
+        client.views_update(
+            view_id=view_id,
+            view=view,
+        )
+    except Exception as e:
+        logger.error(f"Failed to update submission wait view: {e}")
 
 
 def submit_modal() -> Dict[str, Any]:
@@ -99,7 +160,7 @@ def add_loading_form(body: dict, client: WebClient, new_or_add: str = "new") -> 
             callback_id="loading-id",
             new_or_add=new_or_add,
         )
-    # wait 0.1 seconds
+    # wait 0.3 seconds
     time.sleep(0.3)
     return safe_get(loading_form_response, "view", "id")
 
@@ -145,15 +206,24 @@ def send_error_response(body: dict, client: WebClient, error: str) -> None:
     error_msg = constants.ERROR_FORM_MESSAGE_TEMPLATE.format(error=error)
     error_form.set_initial_values({actions.ERROR_FORM_MESSAGE: error_msg})
 
-    # if safe_get(body, actions.LOADING_ID):
-    #     update_view_id = safe_get(body, actions.LOADING_ID)
-    #     error_form.update_modal(
-    #         client=client,
-    #         view_id=update_view_id,
-    #         title_text="F3 Nation Error",
-    #         submit_button_text="None",
-    #         callback_id="error-id",
-    #     )
-    # else:
+    loading_view_id = safe_get(body, actions.LOADING_ID)
+    if loading_view_id:
+        try:
+            error_form.update_modal(
+                client=client,
+                view_id=loading_view_id,
+                title_text="F3 Nation Error",
+                submit_button_text="None",
+                callback_id="error-id",
+                raise_on_error=True,
+            )
+            current_view_id = safe_get(body, "view", "id")
+            if current_view_id is None or current_view_id == loading_view_id:
+                return
+        except Exception:
+            # BlockView.update_modal records a sanitized failure. Fall through to a DM.
+            pass
+
     blocks = [block.as_form_field() for block in error_form.blocks]
-    client.chat_postMessage(channel=safe_get(body, "user", "id"), text=error, blocks=blocks)
+    user_id = safe_get(body, "user", "id") or safe_get(body, "user_id")
+    client.chat_postMessage(channel=user_id, text=error, blocks=blocks)

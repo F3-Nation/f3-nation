@@ -1,0 +1,40 @@
+# How to contribute
+
+F3 Nation is a volunteer organization invigorating male community leadership in our local communities (https://f3nation.com). Since its start in 2001, it has grown to thousands of weekly workouts affecting tens of thousands of men. From the beginning enterprising men started building technology to support the mission in their area. A lot of great apps and content were generated. Around 2024, a concerted effort was started to consolidate some of the enterprise-minded apps into a holistic ecosystem. And here we are.
+
+F3 is free. All the contributors are volunteers. Reviews will be slower than you'd like. We're glad you're here!
+
+We expect everyone here — contributors, reviewers, and maintainers alike — to communicate with respect and good faith. If you experience or witness behavior that doesn't meet that bar, reach out to a codeowner.
+
+## Local Development
+
+All the apps in this monorepo can be developed and tested locally. See [LOCAL_DEV_DOCKER.md](LOCAL_DEV_DOCKER.md) for instructions on how to set up a local environment. Coding conventions, commands, and the full contributor reference live in [AGENTS.md](../AGENTS.md).
+
+## Submitting Changes
+
+1. Fork the repository into your own account, then create a branch from `main`.
+1. Make something awesome. Commit messages must follow [Conventional Commits](https://www.conventionalcommits.org/) (`type(scope): subject`) — see [AGENTS.md](../AGENTS.md#commit-message-convention) for allowed types and scopes. This is enforced locally by a commit hook.
+1. Submit a PR against the F3-Nation `main` branch in **DRAFT**. Your PR title must also follow Conventional Commits format (`type(scope): subject`) — it's checked by [pr-title.yml](../.github/workflows/pr-title.yml), since our release process parses the title rather than individual commits. Fill in the PR template with a plain-language summary up top — many reviewers are volunteers without deep context on your change.
+1. Run `pnpm ci:local` locally — it chains the same steps CI runs — then make sure all Checks pass once pushed. Catching issues locally is faster than waiting on CI.
+1. Mark the PR as **Ready for review**. At this point, a number of AI bots will run and provide feedback (see "Use of AI" below).
+1. Address all review comments. Reply to each comment stating what you did to fix it or why you're not going to fix it.
+1. If AI suggests something that is out of the scope of the PR, create an Issue to track it, add the Issue number to the comment reply, and resolve it.
+1. Once all comments are resolved, add the `ready for human review` label. A Codeowner will review.
+
+## Use of AI
+
+AI tools are welcome for writing code, tests, and PR descriptions. You're responsible for understanding, testing, and reviewing anything AI-generated before you submit it. See [AI_DEVELOPMENT_GUIDE.md](AI_DEVELOPMENT_GUIDE.md) and [AI_GUARDRAILS.md](AI_GUARDRAILS.md) for the guardrails our own AI agents follow.
+
+## Choosing which Issues to work on
+
+Short answer: work on whatever interests you. Any improvement you can make will be appreciated, even if there's not a current Issue for it.
+
+New to the project? Issues labeled [`good first issue`](https://github.com/F3-Nation/f3-nation/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22) are a good place to start; [`help wanted`](https://github.com/F3-Nation/f3-nation/issues?q=is%3Aopen+is%3Aissue+label%3A%22help+wanted%22) issues are ones we'd love a hand with.
+
+If you're looking to drive along the roadmap with us, check out the Issues project board: https://github.com/orgs/F3-Nation/projects/4
+
+The board is organized by Priority and then Effort. Priority options are Urgent, High, Medium, and Low. The higher on the list you can work, the more impactful it could be.
+
+## Slack for F3 Developers
+
+We have a Slack workspace for F3 developers to discuss topics and issues. If you would like an invite, reach out to a codeowner and we can send you an invite.

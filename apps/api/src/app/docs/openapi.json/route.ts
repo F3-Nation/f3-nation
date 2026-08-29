@@ -3,6 +3,7 @@ import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
 
 import { router } from "@acme/api";
 import { Client, Header } from "@acme/shared/common/enums";
+import { getBaseUrl } from "~/lib/get-base-url";
 import packageJson from "../../../../package.json";
 
 // OpenAPI types for spec manipulation
@@ -40,20 +41,14 @@ interface OpenAPISpec {
 }
 
 export async function GET(request: Request) {
-  const url = new URL(request.url);
-  const envBase = process.env.NEXT_PUBLIC_API_URL ?? undefined;
-  const forwardedProto = request.headers.get("x-forwarded-proto") ?? undefined;
-  const forwardedHost = request.headers.get("x-forwarded-host") ?? undefined;
-  const host = forwardedHost ?? request.headers.get("host") ?? url.host;
-  const proto = forwardedProto ?? url.protocol.replace(":", "");
-  const derivedBase = `${proto}://${host}`;
-  const baseUrl = (envBase ?? derivedBase).replace(/\/$/, "");
+  const baseUrl = getBaseUrl(request);
 
   const generator = new OpenAPIGenerator({
     schemaConverters: [new ZodToJsonSchemaConverter()],
   });
 
   const spec = (await generator.generate(router, {
+    filter: () => true,
     info: {
       title: "F3 Nation API",
       version: packageJson.version,
@@ -82,7 +77,7 @@ The \`Client\` header must be present and contain a string that identifies your 
 ## Getting Started
 
 ### Step 1: Generate an API Key
-Navigate to **https://map.f3nation.com/admin/api-keys** if you are an admin on a specific region or the F3 Nation organization. You can:
+Navigate to **https://admin.f3nation.com/api-keys** if you are an admin on a specific region or the F3 Nation organization. You can:
 - Create new API keys
 - Set expiration dates for security
 - View and revoke keys
@@ -118,7 +113,7 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
 
 - **401 Unauthorized**: Missing, invalid, revoked, or expired API key
 - **403 Forbidden**: Valid API key but insufficient permissions for the requested resource
-- **429 Too Many Requests**: Rate limit exceeded (200 requests per 60 seconds)`,
+- **429 Too Many Requests**: Rate limit exceeded (500 requests per 60 seconds)`,
       contact: {
         name: "F3 Nation",
         url: "https://f3nation.com",
@@ -160,6 +155,10 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
       {
         name: "Slack",
         tags: ["slack"],
+      },
+      {
+        name: "Status",
+        tags: ["status"],
       },
     ],
     tags: [
@@ -212,6 +211,10 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
         description:
           "Slack and F3 Nation Slack app integration endpoints for managing content",
       },
+      {
+        name: "status",
+        description: "Service status and health check endpoints",
+      },
     ],
 
     components: {
@@ -252,7 +255,9 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
   spec.components.parameters ??= {};
   spec.components.parameters.ClientHeader = clientHeaderParam;
 
-  // Add the Client header parameter reference to all operations
+  // Add the Client header parameter reference to all operations except public ones.
+  // /v1/status is unauthenticated — it overrides global bearer security with security: [].
+  const PUBLIC_PATHS = new Set(["/v1/status"]);
   const httpMethods = [
     "get",
     "post",
@@ -264,15 +269,20 @@ As of February 1, 2026, regional admins can only create read-only API keys. If y
   ] as const;
 
   if (spec.paths) {
-    for (const pathItem of Object.values(spec.paths)) {
+    for (const [path, pathItem] of Object.entries(spec.paths)) {
       for (const method of httpMethods) {
         const operation = pathItem[method];
         if (operation) {
-          operation.parameters ??= [];
-          // Add reference to the Client header parameter
-          operation.parameters.unshift({
-            $ref: "#/components/parameters/ClientHeader",
-          } as unknown as OpenAPIParameter);
+          if (PUBLIC_PATHS.has(path)) {
+            // Public endpoint: strip auth requirements so docs are accurate.
+            operation.security = [];
+          } else {
+            operation.parameters ??= [];
+            // Add reference to the Client header parameter
+            operation.parameters.unshift({
+              $ref: "#/components/parameters/ClientHeader",
+            } as unknown as OpenAPIParameter);
+          }
         }
       }
     }

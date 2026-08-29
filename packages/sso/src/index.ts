@@ -1,3 +1,5 @@
+export * from "./token-verification";
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -136,6 +138,14 @@ export class AuthClient {
       );
     }
 
+    if (!data.access_token) {
+      throw new AuthError(
+        "Token response missing access_token",
+        "invalid_response",
+        res.status,
+      );
+    }
+
     return {
       accessToken: data.access_token as string,
       refreshToken: data.refresh_token as string | undefined,
@@ -168,6 +178,14 @@ export class AuthClient {
           (data.error as string) ??
           "Token refresh failed",
         (data.error as string) ?? "unknown",
+        res.status,
+      );
+    }
+
+    if (!data.access_token) {
+      throw new AuthError(
+        "Token response missing access_token",
+        "invalid_response",
         res.status,
       );
     }
@@ -355,7 +373,7 @@ export function isOAuthStateExpired(
   maxAgeMs = 600_000,
   nowMs = Date.now(),
 ): boolean {
-  return nowMs - state.timestamp > maxAgeMs;
+  return nowMs - state.timestamp >= maxAgeMs;
 }
 
 export async function createOAuthLoginFlowArtifacts(params: {

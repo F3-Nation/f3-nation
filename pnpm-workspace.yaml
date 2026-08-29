@@ -4,82 +4,86 @@ packages:
   - tooling/*
 
 catalog:
-  "@auth/core": 0.41.2
-  "@commitlint/cli": ^21.1.0
-  "@commitlint/config-conventional": ^21.1.0
-  "@commitlint/cz-commitlint": ^21.1.0
+  "@auth/core": 0.41.3
+  "@commitlint/cli": ^21.2.2
+  "@commitlint/config-conventional": ^21.2.2
+  "@commitlint/cz-commitlint": ^21.2.2
   '@commitlint/types': ^21.2.0
-  "@faker-js/faker": ^10.5.0
-  "@google-cloud/storage": ^7.21.0
-  "@hookform/resolvers": ^5.4.0
+  "@faker-js/faker": ^10.6.0
+  "@google-cloud/storage": ^8.0.1
+  "@hookform/resolvers": ^5.9.1
   "@ianvs/prettier-plugin-sort-imports": ^4.7.1
-  "@next/eslint-plugin-next": ^16.2.9
-  "@orpc/client": ^1.14.6
-  "@orpc/experimental-ratelimit": ^1.14.6
-  "@orpc/openapi": ^1.14.6
-  "@orpc/server": ^1.14.6
-  "@orpc/tanstack-query": ^1.14.6
-  "@orpc/zod": ^1.14.6
-  "@radix-ui/react-alert-dialog": ^1.1.17
-  "@radix-ui/react-avatar": ^1.2.0
-  "@radix-ui/react-checkbox": ^1.3.5
-  "@radix-ui/react-context-menu": ^2.3.1
-  "@radix-ui/react-dialog": ^1.1.17
-  "@radix-ui/react-dropdown-menu": ^2.1.18
-  "@radix-ui/react-hover-card": ^1.1.17
+  "@next/eslint-plugin-next": ^16.3.2
+  "@orpc/client": ^1.15.0
+  "@orpc/experimental-ratelimit": ^1.15.0
+  "@orpc/openapi": ^1.15.0
+  "@orpc/server": ^1.15.0
+  "@orpc/tanstack-query": ^1.15.0
+  "@orpc/zod": ^1.15.0
+  "@playwright/test": ^1.62.1
+  "@radix-ui/react-alert-dialog": ^1.1.23
+  "@radix-ui/react-avatar": ^1.2.6
+  "@radix-ui/react-checkbox": ^1.3.11
+  "@radix-ui/react-context-menu": ^2.3.7
+  "@radix-ui/react-dialog": ^1.1.23
+  "@radix-ui/react-dropdown-menu": ^2.1.24
+  "@radix-ui/react-hover-card": ^1.1.23
   "@radix-ui/react-icons": ^1.3.2
-  "@radix-ui/react-label": ^2.1.10
-  "@radix-ui/react-navigation-menu": ^1.2.16
-  "@radix-ui/react-popover": ^1.1.17
-  "@radix-ui/react-progress": ^1.1.10
-  "@radix-ui/react-radio-group": ^1.4.1
-  "@radix-ui/react-select": ^2.3.1
-  "@radix-ui/react-separator": ^1.1.10
-  "@radix-ui/react-slider": ^1.4.1
-  "@radix-ui/react-slot": ^1.3.0
-  "@radix-ui/react-switch": ^1.3.1
-  "@radix-ui/react-tabs": ^1.1.15
-  "@radix-ui/react-tooltip": ^1.2.10
+  "@radix-ui/react-label": ^2.1.15
+  "@radix-ui/react-navigation-menu": ^1.2.22
+  "@radix-ui/react-popover": ^1.1.23
+  "@radix-ui/react-progress": ^1.1.16
+  "@radix-ui/react-radio-group": ^1.4.7
+  "@radix-ui/react-select": ^2.3.7
+  "@radix-ui/react-separator": ^1.1.15
+  "@radix-ui/react-slider": ^1.4.7
+  "@radix-ui/react-slot": ^1.3.3
+  "@radix-ui/react-switch": ^1.3.7
+  "@radix-ui/react-tabs": ^1.1.21
+  "@radix-ui/react-tooltip": ^1.2.16
   "@react-hook/window-size": ^3.1.1
-  "@scalar/nextjs-api-reference": ^0.11.7
-  "@sentry/nextjs": ^10.62.0
+  "@scalar/nextjs-api-reference": ^0.11.16
+  "@sentry/nextjs": ^10.70.0
+  "@t3-oss/env-core": ^0.13.11
   "@t3-oss/env-nextjs": ^0.13.11
-  "@tailwindcss/postcss": ^4.3.1
-  "@tanstack/react-query": 5.101.2
-  "@tanstack/react-query-devtools": 5.101.2
+  "@tailwindcss/postcss": ^4.3.3
+  "@tanstack/react-query": 5.101.4
+  "@tanstack/react-query-devtools": 5.101.4
   "@tanstack/react-table": ^8.21.3
-  "@tanstack/react-virtual": ^3.14.4
+  "@tanstack/react-virtual": ^3.14.10
   "@tanstack/table-core": ^8.21.3
-  "@testing-library/jest-dom": ^6.9.1
+  "@testing-library/jest-dom": ^7.0.1
   "@testing-library/react": ^16.3.2
-  "@testing-library/user-event": ^14.6.1
-  "@turbo/gen": ^2.10.0
+  "@testing-library/user-event": ^14.6.5
+  "@turbo/gen": ^2.10.11
   "@types/geojson": ^7946.0.16
-  "@types/google.maps": ^3.65.2
-  "@types/lodash": ^4.17.24
-  "@types/node": ^24.13.2
+  "@types/google.maps": ^3.65.5
+  "@types/lodash": ^4.17.25
+  "@types/node": ^24.13.3
   "@types/nodemailer": ^8.0.1
-  "@types/pg": ^8.20.0
-  "@types/react": ^19.2.17
-  "@types/react-dom": ^19.2.3
+  "@types/pg": ^8.23.1
+  "@types/react": ^19.2.18
+  "@types/react-dom": ^19.2.4
   "@types/supercluster": ^7.1.3
-  "@vis.gl/react-google-maps": ^1.8.3
-  "@vitejs/plugin-react": ^6.0.3
-  "@vitest/coverage-v8": ^4.1.9
+  "@vis.gl/react-google-maps": ~1.8.3
+  "@vitejs/plugin-react": ^6.1.0
+  "@vitest/coverage-v8": ^4.1.11
+  "@vitest/eslint-plugin": ^1.6.27
   class-variance-authority: ^0.7.1
   clsx: ^2.1.1
   cmdk: ^1.1.1
   commitizen: ^4.3.2
-  dayjs: ^1.11.21
-  dompurify: ^3.4.9
+  dayjs: ^1.11.23
+  dompurify: ^3.4.14
   dotenv: ^17.4.2
   dotenv-cli: ^11.0.0
   drizzle-kit: ^0.31.10
   drizzle-orm: ^0.45.2
   drizzle-zod: ^0.8.3
   esbuild-register: ^3.6.0
-  eslint: ^10.6.0
-  eslint-config-turbo: ^2.10.0
+  eslint: ^10.8.1
+  eslint-config-turbo: ^2.10.11
+  eslint-plugin-drizzle: ^0.2.3
   eslint-plugin-import-x: ^4.17.1
   eslint-plugin-jsx-a11y: ^6.10.2
   eslint-plugin-react: ^7.37.5
@@ -87,55 +91,71 @@ catalog:
   geist: ^1.7.2
   inquirer: ^12.11.1
   jiti: ^2.7.0
-  jose: ^6.2.3
-  jsdom: ^29.1.1
-  knip: ^6.23.0
-  lefthook: ^2.1.9
-  libphonenumber-js: ^1.13.7
+  jose: ^6.2.9
+  jsdom: ^30.0.1
+  knip: ^6.32.2
+  lefthook: ^2.1.10
+  libphonenumber-js: ^1.13.11
   lodash: ^4.18.1
-  lottie-react: ^2.4.1
-  lucide-react: ^1.22.0
-  next: ^16.2.9
-  next-auth: 5.0.0-beta.31
+  lottie-react: ^2.4.2
+  lucide-react: ^1.33.0
+  next: ^16.3.2
+  next-auth: 5.0.0-beta.32
   next-themes: ^0.4.6
-  nodemailer: ^9.0.1
-  pg: ^8.22.0
+  nodemailer: ^9.0.5
+  pg: ^8.23.0
   pg-connection-string: ^2.14.0
   pino: ^10.3.1
   pino-pretty: ^13.1.3
-  postcss: ^8.5.16
+  postcss: ^8.5.26
   postcss-load-config: ^6.0.1
   postgres: ^3.4.9
-  prettier: ^3.9.3
-  prettier-plugin-tailwindcss: ^0.8.0
-  react: ^19.2.7
-  react-dom: ^19.2.7
-  react-hook-form: ^7.80.0
-  react-phone-number-input: ^3.4.17
+  prettier: ^3.9.6
+  prettier-plugin-tailwindcss: ^0.8.1
+  react: ^19.2.8
+  react-dom: ^19.2.8
+  react-hook-form: ^7.85.0
+  react-phone-number-input: ^3.4.18
   react-qr-code: ^2.2.0
   react-responsive: ^10.0.1
   server-only: ^0.0.1
-  sharp: ^0.35.2
-  sonner: ^2.0.7
+  sharp: ^0.35.3
+  sonner: ^2.0.8
   supercluster: ^8.0.1
   tailwind-merge: ^3.6.0
-  tailwindcss: ^4.3.1
-  tsx: ^4.22.4
-  turbo: ^2.10.0
+  tailwindcss: ^4.3.3
+  tsx: ^4.23.12
+  turbo: ^2.10.11
   tw-animate-css: ^1.4.0
   typescript: ^6.0.3
-  typescript-eslint: ^8.62.0
+  typescript-eslint: ^8.67.0
+  uuid: ^11.1.1
   # Vitest 4 requires Vite >= 6. Vite is otherwise only a transitive (auto-installed
   # peer) dep, which pnpm won't reliably bump from the locked v5; declaring it
   # explicitly in each vitest package pins a compatible Vite deterministically.
-  vite: ^8.1.0
-  vitest: ^4.1.9
-  vitest-canvas-mock: ^1.1.4
+  vite: ^8.2.2
+  vitest: ^4.1.11
+  vitest-canvas-mock: ^1.1.5
   zod: ^4.4.3
-  zustand: ^5.0.14
+  zustand: ^5.0.15
 overrides:
   "form-data@>=2.0.0 <2.5.6": "^4.0.6"
-  "@auth/core": "0.41.2"
+  "@auth/core": "0.41.3" # GHSA-7rqj-j65f-68wh / GHSA-xmf8-cvqr-rfgj (Auth.js email normalizer & getToken DoS)
+  # Force patched versions of transitive deps flagged by `pnpm audit --prod
+  # --audit-level=high`. Scoped to the vulnerable ranges so unaffected
+  # consumers are untouched. Remove an entry once every dependent has upgraded.
+  # 1.x cannot be forced to 5.x: minimatch@3 does `require('brace-expansion')()`
+  # and v5 exports only a named `expand`. No 1.x/2.x/3.x/4.x backport exists for
+  # GHSA-mh99-v99m-4gvg, so the two eslint-plugin paths on minimatch@3 are dev-only
+  # and excluded from the prod audit via tooling/eslint devDependencies instead.
+  "brace-expansion@<1.1.16": "2.1.4" # GHSA-3jxr-9vmj-r5cp (DoS)
+  "brace-expansion@>=3.0.0 <5.0.9": "5.0.9" # GHSA-rgw5-rvv9-x895 (DoS)
+  "fast-uri@<3.1.5": "3.1.6" # host confusion via failed backslash authority introducer
+  "sharp@<0.35.0": "0.35.3" # inherited libvips vulnerabilities
+  "next@>=16.0.0 <16.3.0": "16.3.2" # GHSA-89xv-2m56-2m9x / GHSA-p9j2-gv94-2wf4 (SSRF in rewrites); covers transitive geist>next & @scalar>next. Keep in lockstep with the `next` catalog entry: a second `next` version forks next-auth's peer instance and detaches the type-extensions augmentation.
+  "postcss@<8.5.12": "^8.5.26" # GHSA-6g55-p6wh-862q (sourceMappingURL arbitrary file read)
+  "nanoid@<3.3.17": "^3.3.18" # GHSA-2v37-7h3g-55p8
+  "nanoid@>=4.0.0 <5.1.16": "^5.1.16" # GHSA-28wg-ghj8-5hjv
 peerDependencyRules:
   allowedVersions:
     eslint-plugin-react>eslint: "10"

@@ -1,5 +1,68 @@
 # Changelog
 
+## [2.2.0](https://github.com/F3-Nation/f3-nation/compare/auth@2.1.0...auth@2.2.0) (2026-08-18)
+
+
+### Features
+
+* **auth:** issue an id_token on the authorization_code and refresh_token grants ([#749](https://github.com/F3-Nation/f3-nation/issues/749)) ([0a8a25d](https://github.com/F3-Nation/f3-nation/commit/0a8a25d635d618383d57669eff4415b32b6e3fef))
+
+
+### Bug Fixes
+
+* **auth:** persist nonce, auth_time, and refresh-token scopes on OAuth id_tokens ([#845](https://github.com/F3-Nation/f3-nation/issues/845)) ([4703c9b](https://github.com/F3-Nation/f3-nation/commit/4703c9baa135b043f94e2c4d4752d76966fd3f09))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.4.1
+
+## [2.1.0](https://github.com/F3-Nation/f3-nation/compare/auth@2.0.9...auth@2.1.0) (2026-08-12)
+
+
+### Features
+
+* **auth:** support public OAuth clients (PKCE-only, RFC 8252) for native apps ([#692](https://github.com/F3-Nation/f3-nation/issues/692)) ([a19a9df](https://github.com/F3-Nation/f3-nation/commit/a19a9df5ce8ec14732825d4aaf84ce8c81292722))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.4.0
+
+## [2.0.9](https://github.com/F3-Nation/f3-nation/compare/auth@2.0.8...auth@2.0.9) (2026-08-05)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.3.0
+
+## [2.0.8](https://github.com/F3-Nation/f3-nation/compare/auth@2.0.7...auth@2.0.8) (2026-07-26)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.2.0
+
+## [2.0.7](https://github.com/F3-Nation/f3-nation/compare/auth@2.0.6...auth@2.0.7) (2026-07-14)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.1.3
+    * @acme/shared bumped to 0.1.3
+  * devDependencies
+    * @acme/tailwind-config bumped to 0.1.3
+
 ## [2.0.6](https://github.com/F3-Nation/f3-nation/compare/auth@2.0.5...auth@2.0.6) (2026-07-08)
 
 

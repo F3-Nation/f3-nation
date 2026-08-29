@@ -1,7 +1,7 @@
 {
   "name": "f3-homepage",
   "type": "module",
-  "version": "1.2.3",
+  "version": "1.4.0",
   "private": true,
   "scripts": {
     "dev": "next dev --port 3005",
@@ -10,9 +10,13 @@
     "lint": "eslint . --max-warnings 0",
     "format:check": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
     "format": "prettier --write . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
+    "test": "vitest --run --coverage",
+    "test:watch": "vitest -w",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@acme/ui": "workspace:*",
+    "@f3nation/health": "workspace:*",
     "next": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:"
@@ -22,15 +26,23 @@
     "@acme/prettier-config": "workspace:*",
     "@acme/tailwind-config": "workspace:*",
     "@acme/tsconfig": "workspace:*",
+    "@acme/vitest-config": "workspace:*",
     "@tailwindcss/postcss": "catalog:",
+    "@testing-library/jest-dom": "catalog:",
+    "@testing-library/react": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
     "eslint": "catalog:",
+    "jsdom": "catalog:",
     "postcss": "catalog:",
     "postcss-load-config": "catalog:",
     "prettier": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
   },
   "prettier": "@acme/prettier-config"
 }

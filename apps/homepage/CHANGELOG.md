@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.4.0](https://github.com/F3-Nation/f3-nation/compare/homepage@1.3.0...homepage@1.4.0) (2026-08-12)
+
+
+### Features
+
+* **health:** add /status to homepage and introduce shared package for reporting ([#657](https://github.com/F3-Nation/f3-nation/issues/657)) ([88e7547](https://github.com/F3-Nation/f3-nation/commit/88e754751e25461e25c7361c878c78e3902daad4))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @f3nation/health bumped to 1.1.0
+
+## [1.3.0](https://github.com/F3-Nation/f3-nation/compare/homepage@1.2.3...homepage@1.3.0) (2026-07-14)
+
+
+### Features
+
+* **homepage:** adding syncbot to the admin section ([#630](https://github.com/F3-Nation/f3-nation/issues/630)) ([755ebb9](https://github.com/F3-Nation/f3-nation/commit/755ebb9429659839c3ad6e869435a638247343bc))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @acme/tailwind-config bumped to 0.1.3
+
 ## [1.2.3](https://github.com/F3-Nation/f3-nation/compare/homepage@1.2.2...homepage@1.2.3) (2026-07-08)
 
 

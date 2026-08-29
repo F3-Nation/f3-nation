@@ -59,7 +59,10 @@ export const LocationSelectSchema = createSelectSchema(locations);
 
 // EVENT TYPE SCHEMA
 export const EventTypeInsertSchema = createInsertSchema(eventTypes, {
-  name: (s: z.ZodString) => s.min(1, { error: "Required" }),
+  id: z.coerce.number().optional(),
+  specificOrgId: z.coerce.number().nullish(),
+  isActive: z.coerce.boolean().optional(),
+  name: (s: z.ZodString) => s.min(1, { message: "Required" }),
 });
 export const EventTypeSelectSchema = createSelectSchema(eventTypes);
 
@@ -84,6 +87,12 @@ export const EventInsertSchema = createInsertSchema(events, {
     s.regex(/^\d{4}$/, {
       error: "End time must be in 24hr format (HHmm)",
     }),
+  startDate: () =>
+    z.iso.date({ error: "Start date must be in ISO format (YYYY-MM-DD)" }),
+  endDate: () =>
+    z.iso
+      .date({ error: "End date must be in ISO format (YYYY-MM-DD)" })
+      .optional(),
 })
   .extend({
     regionId: z.number(),
@@ -97,6 +106,37 @@ export const EventInsertSchema = createInsertSchema(events, {
   .omit({
     orgId: true,
   });
+
+const isoDateOnly = z.iso.date();
+
+export const EVENT_DATE_ORDER_MESSAGE =
+  "End date must be on or after start date";
+
+export const isEndDateBeforeStartDate = (
+  startDate: unknown,
+  endDate: unknown,
+): boolean => {
+  const start = isoDateOnly.safeParse(startDate);
+  const end = isoDateOnly.safeParse(endDate);
+  return start.success && end.success && end.data < start.data;
+};
+
+export const checkEventDateOrder = (
+  data: { startDate?: unknown; endDate?: unknown },
+  ctx: z.RefinementCtx,
+) => {
+  if (isEndDateBeforeStartDate(data.startDate, data.endDate)) {
+    ctx.addIssue({
+      code: "custom",
+      message: EVENT_DATE_ORDER_MESSAGE,
+      path: ["endDate"],
+    });
+  }
+};
+
+export const EventCrupdateSchema = EventInsertSchema.partial({
+  id: true,
+}).superRefine(checkEventDateOrder);
 
 export const EventSelectSchema = createSelectSchema(events);
 
@@ -356,25 +396,19 @@ export const OrgInsertSchema = createInsertSchema(orgs, {
 });
 export const OrgSelectSchema = createSelectSchema(orgs);
 
-export const DeleteRequestSchema = z.object({
-  eventId: z.number(),
-  eventName: z.string(),
-  regionId: z.number(),
-  submittedBy: z.string(),
-});
-
-// REQUEST UPDATE SCHEMA
 export const RequestInsertSchema = createInsertSchema(updateRequests, {
   eventTypeIds: (s: z.ZodArray<z.ZodNumber>) =>
     s.min(1, { error: "Please select at least one event type" }),
   eventName: (s: z.ZodString) =>
     s.min(1, { error: "Workout name is required" }),
   // We don't want to require an event description
-  // eventDescription: (s) => s.min(1, { error: "Description is required" }),
-  eventDayOfWeek: z.enum(DayOfWeek, {
-    error: "Day of the week is required",
-  }),
-  aoName: (s: z.ZodString) => s.min(1, { error: "AO name is required" }),
+  // eventDescription: (s) => s.min(1, { message: "Description is required" }),
+  eventDayOfWeek: z
+    .enum(DayOfWeek, {
+      message: "Day of the week is required",
+    })
+    .nullish(),
+  aoName: (s: z.ZodString) => s.min(1, { message: "AO name is required" }),
   // Location fields are optional
   // locationAddress: (s) => s.min(1, { error: "Location address is required" }),
   // locationCity: (s) => s.min(1, { error: "Location city is required" }),
@@ -395,6 +429,8 @@ export const RequestInsertSchema = createInsertSchema(updateRequests, {
   id: z.string(),
   eventMeta: z.record(z.string(), z.unknown()).optional(),
 });
+
+export type RequestInsertType = z.infer<typeof RequestInsertSchema>;
 
 export const UpdateRequestSelectSchema = createSelectSchema(updateRequests);
 

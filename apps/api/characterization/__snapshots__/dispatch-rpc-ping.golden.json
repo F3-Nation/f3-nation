@@ -1,0 +1,21 @@
+{
+  "body": {
+    "json": {
+      "alive": true,
+      "timestamp": "<TIMESTAMP>"
+    },
+    "meta": [
+      [
+        1,
+        "timestamp"
+      ]
+    ]
+  },
+  "headers": {
+    "access-control-allow-credentials": "true",
+    "access-control-allow-origin": "",
+    "content-type": "application/json",
+    "vary": "Origin"
+  },
+  "status": 200
+}

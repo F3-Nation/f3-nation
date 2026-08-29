@@ -1,9 +1,9 @@
 {
   "name": "@acme/shared",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "type": "module",
   "private": true,
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "exports": {
     "./app/*": [
       "./src/app/*.ts",

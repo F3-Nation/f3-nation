@@ -2,15 +2,17 @@
   "name": "@acme/eslint-config",
   "version": "0.2.0",
   "private": true,
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "type": "module",
   "files": [
     "./base.js",
+    "./drizzle.js",
     "./nextjs.js",
     "./react.js"
   ],
   "exports": {
     "./base": "./base.js",
+    "./drizzle": "./drizzle.js",
     "./react": "./react.js",
     "./nextjs": "./nextjs.js"
   },
@@ -20,21 +22,20 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
+  "devDependencies": {
+    "@acme/prettier-config": "workspace:*",
+    "@acme/tsconfig": "workspace:*",
     "@next/eslint-plugin-next": "catalog:",
+    "eslint": "catalog:",
     "eslint-config-turbo": "catalog:",
+    "eslint-plugin-drizzle": "catalog:",
     "eslint-plugin-import-x": "catalog:",
     "eslint-plugin-jsx-a11y": "catalog:",
     "eslint-plugin-react": "catalog:",
     "eslint-plugin-react-hooks": "catalog:",
-    "typescript-eslint": "catalog:"
-  },
-  "devDependencies": {
-    "@acme/prettier-config": "workspace:*",
-    "@acme/tsconfig": "workspace:*",
-    "eslint": "catalog:",
     "prettier": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "typescript-eslint": "catalog:"
   },
   "prettier": "@acme/prettier-config"
 }
