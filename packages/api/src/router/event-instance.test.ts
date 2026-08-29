@@ -1364,6 +1364,36 @@ describe("Event Instance Router", () => {
       expect(result.isPrivate).toBe(true);
     });
 
+    it("should apply explicit isActive/highlight/isPrivate on create, not just the insert defaults", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      const client = createTestClient();
+      const result = await client.eventInstance.crupdate({
+        name: `New Event ${uniqueId()}`,
+        orgId: ao.id,
+        startDate: new Date().toISOString().split("T")[0]!,
+        isActive: false,
+        highlight: true,
+        isPrivate: true,
+      });
+
+      expect(result).toBeDefined();
+      expect(result.isActive).toBe(false);
+      expect(result.highlight).toBe(true);
+      expect(result.isPrivate).toBe(true);
+
+      if (result.id) {
+        createdEventInstanceIds.push(result.id);
+      }
+    });
+
     it("should require editor role", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
