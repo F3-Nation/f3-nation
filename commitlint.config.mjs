@@ -20,6 +20,7 @@ export default {
         // packages
         "better-auth-spike",
         "db",
+        "db-python",
         "env",
         "health",
         "mail",
