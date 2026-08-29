@@ -9,7 +9,7 @@ authors = [{name = "Evan Petzoldt", email = "evan.petzoldt@protonmail.com"}]
 dependencies = [
     "sqlalchemy>=2.0.36,<3.0.0",
     "psycopg2-binary>=2.9.10,<3.0.0",
-    "sqlmodel>=0.0.22,<0.0.23",
+    "sqlmodel>=0.0.39,<0.0.40",
     "sqlalchemy-citext>=1.8.0,<2.0.0",
     "pg8000>=1.31.5,<2.0.0",
     "cloud-sql-python-connector>=1.20.0,<2.0.0",
@@ -22,8 +22,13 @@ Documentation = "https://github.io/F3-Nation/f3-data-models"
 
 [dependency-groups]
 dev = [
-    "poethepoet>=0.34.0,<0.35.0",
+    "poethepoet>=0.48.0,<0.49.0",
+    "pytest>=9.1.1,<9.2.0",
+    "ruff>=0.14.0,<1.0.0",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 120
