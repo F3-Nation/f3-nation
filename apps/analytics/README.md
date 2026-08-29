@@ -230,11 +230,14 @@ discovered paths after sourcing so the file cannot silently replace working
 exports:
 
 ```bash
-cp apps/analytics/.env.example /tmp/analytics.env
-# Edit /tmp/analytics.env; set the two absolute DuckDB paths from above,
+umask 077
+ANALYTICS_ENV_FILE="$(mktemp "${TMPDIR:-/tmp}/analytics.env.XXXXXX")"
+trap 'rm -f "$ANALYTICS_ENV_FILE"' EXIT
+cp apps/analytics/.env.example "$ANALYTICS_ENV_FILE"
+# Edit "$ANALYTICS_ENV_FILE"; set the two absolute DuckDB paths from above,
 # set the approved nonprod values, and do not commit this file.
 unset ANALYTICS_POSTGRES_SOCKET_DIR
-set -a; . /tmp/analytics.env; set +a
+set -a; . "$ANALYTICS_ENV_FILE"; set +a
 unset ANALYTICS_POSTGRES_SOCKET_DIR
 export DUCKDB_EXTENSION_DIR="$EXT_DIR"
 export DUCKDB_POSTGRES_EXTENSION_PATH="$EXT_PATH"

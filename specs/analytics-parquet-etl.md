@@ -40,7 +40,7 @@ Production targets are, for each `<name>` in the approved list:
 Nonproduction targets are:
 
 - GCS: `gs://f3-analytics-nonprod/parquets/<name>`
-- BigQuery external table: `f3data.paxVaultDuckStaging.pv_<name>`
+- BigQuery external table: `f3data.paxVaultDuckStaging.<name>`
 
 The job runs in project `f3data`, region `us-central1`. Production uses Cloud
 SQL instance `f3data`; nonproduction uses `f3data-nonprod`. Cloud Run uses Cloud

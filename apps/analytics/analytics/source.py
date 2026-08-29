@@ -55,7 +55,7 @@ def materialize(
     query = load_sql(materialization)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     connection.execute(
-        f"COPY ({query}) TO ? (FORMAT PARQUET, COMPRESSION SNAPPY)",
-        [str(output_path), refreshed_at, as_of_date],
+        f"COPY ({query}) TO {_sql_literal(str(output_path))} (FORMAT PARQUET, COMPRESSION SNAPPY)",
+        [refreshed_at, as_of_date],
     )
     return int(connection.execute("SELECT count(*) FROM read_parquet(?)", [str(output_path)]).fetchone()[0])
