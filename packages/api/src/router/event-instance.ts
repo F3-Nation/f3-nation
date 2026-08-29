@@ -582,15 +582,10 @@ export const eventInstanceRouter = {
       const shouldUpdateEventTag = "eventTagId" in input;
       const { eventTypeId, eventTagId, name: _inputName, ...eventData } = input;
 
-      // `eventData` only contains keys the caller actually sent (Zod drops
-      // `.optional()` fields entirely when absent, rather than setting them
-      // to undefined), so spreading it into `set` already leaves every
-      // omitted column untouched on update — the same mechanism the
-      // eventTagId join-table handling below relies on. isActive/highlight
-      // are NOT NULL columns with no DB default though, so a new row still
-      // needs real values even when the caller omits them — isPrivate does
-      // have a DB default, but is set explicitly here too for consistency.
-      const insertValues = {
+      // isActive/highlight are NOT NULL with no DB default, so insert must
+      // supply a value even when the caller omits the field — unlike the
+      // update branch below, which can safely spread `eventData` as-is.
+      const insertValues: typeof schema.eventInstances.$inferInsert = {
         ...eventData,
         name,
         isActive: eventData.isActive ?? true,
