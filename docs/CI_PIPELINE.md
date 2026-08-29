@@ -74,9 +74,9 @@ repository-wide on every run.
 The Turbo cache adapter runs on localhost within each job and stores task
 artifacts in GitHub Actions cache. Relative cache paths make cache versions
 portable across runners whose temporary checkout paths differ. Docker layers
-live separately in GHCR, so they do not compete with Turbo artifacts for the
-Actions cache budget. The pnpm store remains a smaller co-tenant in that budget
-and is still subject to GitHub's normal least-recently-used eviction. Cache
+for these CI jobs live separately in GHCR, so they do not consume the Actions
+cache budget. The pnpm store remains a smaller co-tenant with Turbo artifacts
+in that budget and is still subject to GitHub's normal least-recently-used eviction. Cache
 adapter startup is non-blocking: if it fails, Turbo runs without remote caching
 rather than failing a required check and emits a workflow warning. `GITHUB_SHA`
 is intentionally excluded from Turbo's global hash inputs: the only consumer is

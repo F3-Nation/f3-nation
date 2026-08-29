@@ -68,6 +68,9 @@ runs:
       id: turbo_cache
       if: inputs.enable-turbo-cache == 'true'
       continue-on-error: true
+      # The pinned GitHub provider uses @actions/cache save/restore with the
+      # runner's cache-service credentials. It has no github-token input and
+      # does not call the Actions Cache REST list/delete APIs.
       uses: rharkor/caching-for-turbo@2238fae6eb9a9936f92356f54cb3660200d105e7 # v2.5.1
       with:
         provider: github
