@@ -496,10 +496,6 @@ export const eventInstanceRouter = {
         id: z.coerce.number().optional(),
         name: z.string().optional(),
         description: z.string().nullish(),
-        // No .default() here: a default fills in a value even when the
-        // caller omits the field, which would silently overwrite an
-        // existing row's value on update. Omitted-vs-explicit is handled
-        // below — real defaults only apply when creating a new row.
         isActive: z.boolean().optional(),
         locationId: z.coerce.number().nullish(),
         orgId: z.coerce.number(),
