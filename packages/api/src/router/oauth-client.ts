@@ -101,6 +101,10 @@ export const oauthClientRouter = {
       try {
         res = await fetch(url, {
           headers,
+          // A redirect response would otherwise carry x-api-key to wherever
+          // it points, including an untrusted origin if the auth server (or
+          // something in front of it) is misconfigured.
+          redirect: "error",
           signal: AbortSignal.timeout(AUTH_SERVER_TIMEOUT_MS),
         });
       } catch (error) {
@@ -154,6 +158,7 @@ export const oauthClientRouter = {
           method: "POST",
           headers,
           body: JSON.stringify(input),
+          redirect: "error",
           signal: AbortSignal.timeout(AUTH_SERVER_TIMEOUT_MS),
         });
       } catch (error) {
@@ -212,6 +217,7 @@ export const oauthClientRouter = {
           method: "PATCH",
           headers,
           body: JSON.stringify(update),
+          redirect: "error",
           signal: AbortSignal.timeout(AUTH_SERVER_TIMEOUT_MS),
         });
       } catch (error) {

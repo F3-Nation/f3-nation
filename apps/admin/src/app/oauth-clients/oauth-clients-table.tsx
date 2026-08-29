@@ -30,11 +30,8 @@ import { ModalType, openModal } from "~/utils/store/modal";
 
 const formatDateTime = (value?: string | null) => {
   if (!value) return "—";
-  try {
-    return new Date(value).toLocaleString();
-  } catch {
-    return value;
-  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 };
 
 export const OauthClientsTable = () => {

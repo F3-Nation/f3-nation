@@ -10,6 +10,7 @@
  */
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { z } from "zod";
 
 import { eq } from "@acme/db";
 import { betterAuthOauthClient } from "@acme/db/schema/schema";
@@ -19,12 +20,12 @@ import { getAuth } from "~/lib/better-auth";
 import { logError } from "~/lib/logging";
 import { requireSuperAdminApiKey } from "~/lib/require-super-admin";
 
-interface UpdateOAuthClientBody {
-  name?: string;
-  redirectUris?: string[];
-  scope?: string;
-  disabled?: boolean;
-}
+const updateOAuthClientBodySchema = z.object({
+  name: z.string().min(1).optional(),
+  redirectUris: z.array(z.url()).min(1).optional(),
+  scope: z.string().optional(),
+  disabled: z.boolean().optional(),
+});
 
 export async function PATCH(
   request: NextRequest,
@@ -40,14 +41,11 @@ export async function PATCH(
   } catch {
     return NextResponse.json({ error: "invalid_json" }, { status: 400 });
   }
-  if (
-    typeof parsedBody !== "object" ||
-    parsedBody === null ||
-    Array.isArray(parsedBody)
-  ) {
+  const result = updateOAuthClientBodySchema.safeParse(parsedBody);
+  if (!result.success) {
     return NextResponse.json({ error: "invalid_body" }, { status: 400 });
   }
-  const body = parsedBody as UpdateOAuthClientBody;
+  const body = result.data;
 
   const [existing] = await db
     .select({ clientId: betterAuthOauthClient.clientId })
