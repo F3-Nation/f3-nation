@@ -45,6 +45,11 @@
       "enabled": false
     },
     {
+      "description": "Pin Python (uv/pyproject.toml) dependencies to exact versions on every update, instead of a range. Required for minimumReleaseAge to actually work with uv: Renovate can only stop `uv lock` from grabbing a too-new version if the version in pyproject.toml is an exact pin, not a range (see renovatebot/renovate#41624). Must stay its own rule — rangeStrategy can't be combined with matchUpdateTypes in one packageRule, because rangeStrategy is evaluated before Renovate knows the update type.",
+      "matchManagers": ["pep621"],
+      "rangeStrategy": "pin"
+    },
+    {
       "description": "Group Python (uv/pyproject.toml) minor and patch updates into one PR, separate from the npm non-major group — different lockfile, keeps uv.lock churn reviewable on its own",
       "groupName": "Python dependencies (non-major)",
       "groupSlug": "python-non-major",
@@ -74,6 +79,12 @@
       "matchDatasources": ["npm"],
       "matchDepNames": ["brace-expansion@<1.1.16"],
       "allowedVersions": "<3.0.0"
+    },
+    {
+      "description": "Hold the fast-uri@<3.1.5 override at <4.0.0: its sole consumer, ajv@8.20.0, declares `fast-uri: ^3.0.1` and has never adopted fast-uri 4.x. Forcing the override past ajv's own declared range risks the same class of break as the brace-expansion@<1.1.16 rule above (an unverified major-version jump on a transitive dep the direct dependent never opted into). See pnpm-workspace.yaml's matching override comment. Remove this rule only once ajv (or whatever supersedes it here) adopts fast-uri 4.x.",
+      "matchDatasources": ["npm"],
+      "matchDepNames": ["fast-uri@<3.1.5"],
+      "allowedVersions": "<4.0.0"
     }
   ]
 }
