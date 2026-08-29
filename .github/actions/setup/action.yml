@@ -8,17 +8,19 @@ description: >-
 inputs:
   select-turbo-affected:
     description: >-
-      On pull requests, select affected Turbo workspaces. Falls back to the
-      full workspace when detection fails, Turbo finds no affected package or
-      runnable task, or the diff touches files outside Turbo's package graph.
+      On pull requests, restrict Turbo to affected workspaces. Falls back to
+      the full workspace when the comparison SHAs are unavailable, detection
+      fails, or Turbo selects no runnable task. Files Turbo cannot attribute
+      to a package are listed in turbo.json's globalDependencies, which marks
+      every workspace affected.
     required: false
     default: "false"
   turbo-task:
     description: >-
-      Turbo task the calling job will run. Used to ensure affected selection
+      Turbo task the calling job will run. Used to confirm affected selection
       schedules at least one task before enabling --affected. When affected
       selection is enabled, setup exports TURBO_RUN_ARGS and the pinned
-      TURBO_SCM_BASE/TURBO_SCM_HEAD values through GITHUB_ENV; the caller must
+      TURBO_SCM_BASE/TURBO_SCM_HEAD through GITHUB_ENV; the caller must
       append ${TURBO_RUN_ARGS:+"$TURBO_RUN_ARGS"} to its Turbo command. An
       empty task falls back to the full workspace.
     required: false
@@ -46,6 +48,9 @@ runs:
       shell: bash
       run: pnpm install --frozen-lockfile
 
+    # A required check must never report success having run nothing, so
+    # --affected is enabled only once Turbo confirms it schedules a task.
+    # Anything else falls back to the full workspace.
     - name: Select Turbo scope
       if: inputs.select-turbo-affected == 'true' && github.event_name == 'pull_request'
       shell: bash

@@ -25,8 +25,8 @@ if [ "$vitest_thresholds_status" -ne 0 ]; then
   exit "$vitest_thresholds_status"
 fi
 
-if [ "$turbo_scope_status" -ne 0 ]; then
-  exit "$turbo_scope_status"
+if [ "$python_task_status" -ne 0 ]; then
+  exit "$python_task_status"
 fi
 
-exit "$python_task_status"
+exit "$turbo_scope_status"

@@ -57,13 +57,33 @@ Git history needed for the comparison. Setup pins Turbo's affected calculation
 to the pull request's exact base and head SHAs, while the tasks themselves run
 against GitHub's checked-out synthetic merge commit. Pushes to `main` omit the
 flag and validate the full workspace from a shallow checkout. Setup also runs
-the full workspace when Turbo maps a pull request to zero workspaces, selects
-no runnable task for the specific gate, receives no task name, cannot inspect
-the comparison, or sees Python/global files outside Turbo's package graph. Each
-gate therefore verifies that it schedules at least one task before
-`--affected` is enabled. The non-Turbo safeguards in the `lint` job (`lint:ws`,
-coverage-threshold validation, Python task validation, Turbo scope-selection
-validation, and `lint:unused`) remain repository-wide on every run.
+the full workspace when the pull request's base/head SHAs are unavailable,
+Turbo selects no runnable task for the specific gate, receives no task name,
+or fails to calculate or parse the affected set — `scripts/select-turbo-scope.sh`
+implements these fallbacks and `scripts/select-turbo-scope.test.sh` (run from
+the `lint` job) covers each one, including that a missing SHA is caught before
+Turbo ever runs rather than silently falling through to Turbo's own
+default `main`-vs-`HEAD` comparison. Each gate therefore verifies that it
+schedules at least one task before `--affected` is enabled. The non-Turbo
+safeguards in the `lint` job (`lint:ws`, coverage-threshold validation, Python
+task validation, Turbo scope-selection validation, and `lint:unused`) remain
+repository-wide on every run.
+
+Two pieces of Turbo configuration keep that selection honest, so CI needs no
+blocklist of its own:
+
+- `packages/db-python` carries a `package.json` and `apps/slackbot` depends on
+  it, mirroring the `f3-data-models` edge already declared in
+  `apps/slackbot/pyproject.toml`. Without it Turbo cannot see the Python
+  workspace, and a change touching both Python and TypeScript would schedule
+  the TypeScript gates while silently dropping ruff, mypy, pytest, and the
+  Python formatter.
+- `globalDependencies` in `turbo.json` lists the root files Turbo cannot
+  attribute to any package (`.gitignore`, `.nvmrc`, `.prettierignore`,
+  `.python-version`, `pyproject.toml`, `uv.lock`, and
+  `scripts/python-task.sh`). It feeds affected selection as well as cache
+  hashing, so changing any of them marks every workspace affected — `.nvmrc`
+  is included because every affected job takes its Node version from it.
 
 This deliberately changes the PR guarantee: a green PR proves the workspaces
 selected by Turbo's declared dependency graph, not every workspace in the
