@@ -51,24 +51,18 @@ export const eventTagRouter = {
     })
     .output(
       z.object({
+        // Derived from EventTagSelectSchema (same as byOrgId/byId/crupdate
+        // below) rather than hand-duplicated, so a column added to eventTags
+        // - or a change to how drizzle-zod maps an existing one - shows up
+        // here automatically instead of silently drifting out of sync.
+        // specificOrgName is the one genuinely bespoke field, a joined
+        // column with no place on the base table schema.
         eventTags: z.array(
-          z.object({
-            id: z.number().describe("Event tag ID"),
-            name: z.string().describe("Event tag name"),
-            description: z
-              .string()
-              .nullable()
-              .describe("Event tag description"),
-            color: z.string().nullable().describe("Event tag color"),
-            specificOrgId: z
-              .number()
-              .nullable()
-              .describe("Org this tag is specific to, if any"),
+          EventTagSelectSchema.omit({ created: true, updated: true }).extend({
             specificOrgName: z
               .string()
               .nullable()
               .describe("Name of the org this tag is specific to, if any"),
-            isActive: z.boolean().describe("Whether the event tag is active"),
           }),
         ),
         totalCount: z
@@ -313,7 +307,13 @@ export const eventTagRouter = {
       summary: "Delete event tag",
       description: "Soft delete an event tag by marking it as inactive",
     })
-    .output(z.void())
+    .output(
+      z.object({
+        eventTagId: z.coerce
+          .number()
+          .describe("The unique identifier of the event tag that was deleted"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const [existingEventTag] = await ctx.db
         .select()
@@ -347,5 +347,7 @@ export const eventTagRouter = {
         .update(schema.eventTags)
         .set({ isActive: false })
         .where(eq(schema.eventTags.id, input.id));
+
+      return { eventTagId: input.id };
     }),
 };
