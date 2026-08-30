@@ -112,12 +112,16 @@ jobs:
       contents: read
       checks: read
     steps:
+      # lint-title is deliberately excluded: it only runs on `pull_request`
+      # (pr-title.yml has no `push` trigger), so it never has a check-run
+      # against a commit reached via tag push -- waiting on it here would
+      # hang until timeout, not deploy.
       - name: Wait for CI to pass
         uses: lewagon/wait-on-check-action@369769072fe522a3a8a85c03c96af1e5242a1994 # v1.9.1
         with:
           ref: ${{ github.sha }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-          check-regexp: "^(build|lint|typecheck|format-check|test-coverage)$"
+          check-regexp: "^(build|lint|typecheck|format-check|test-coverage|security-audit|db-schema-sync)$"
           wait-interval: 15
           allowed-conclusions: success
 
