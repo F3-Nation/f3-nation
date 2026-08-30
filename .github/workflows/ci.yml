@@ -16,12 +16,6 @@ permissions:
 
 env:
   CI: true
-  # Turborepo Remote Cache. TURBO_TOKEN is a secret; TURBO_TEAM is the
-  # remote-cache team slug (repo variable). With both set, every job/run/rerun
-  # shares task outputs, so unchanged work short-circuits to FULL TURBO.
-  # Absent (e.g. fork PRs without secrets) Turbo silently falls back to local-only caching.
-  TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-  TURBO_TEAM: ${{ vars.TURBO_TEAM }}
   TURBO_TELEMETRY_DISABLED: 1
   # Database (for test jobs - matches PostgreSQL service)
   DATABASE_URL: postgres://postgres:postgres@localhost:5432/f3_test
@@ -53,6 +47,7 @@ jobs:
           fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
       - uses: ./.github/actions/setup
         with:
+          enable-turbo-cache: "true"
           select-turbo-affected: "true"
           turbo-task: format
       - run: pnpm format ${TURBO_RUN_ARGS:+"$TURBO_RUN_ARGS"}
@@ -286,6 +281,7 @@ jobs:
           fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
       - uses: ./.github/actions/setup
         with:
+          enable-turbo-cache: "true"
           select-turbo-affected: "true"
           turbo-task: lint
       - run: pnpm lint ${TURBO_RUN_ARGS:+"$TURBO_RUN_ARGS"}
@@ -300,6 +296,7 @@ jobs:
           fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
       - uses: ./.github/actions/setup
         with:
+          enable-turbo-cache: "true"
           select-turbo-affected: "true"
           turbo-task: typecheck
       - run: pnpm typecheck ${TURBO_RUN_ARGS:+"$TURBO_RUN_ARGS"}
@@ -360,6 +357,7 @@ jobs:
           fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
       - uses: ./.github/actions/setup
         with:
+          enable-turbo-cache: "true"
           select-turbo-affected: "true"
           turbo-task: build
       - run: pnpm build ${TURBO_RUN_ARGS:+"$TURBO_RUN_ARGS"}
@@ -387,6 +385,7 @@ jobs:
           fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
       - uses: ./.github/actions/setup
         with:
+          enable-turbo-cache: "true"
           select-turbo-affected: "true"
           turbo-task: test
       # GCS_CREDENTIALS must exist with client_email/private_key fields, but
