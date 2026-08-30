@@ -79,11 +79,12 @@ cache budget. The pnpm store remains a smaller co-tenant with Turbo artifacts
 in that budget and is still subject to GitHub's normal least-recently-used
 eviction. Cache adapter startup is non-blocking: if it fails, Turbo runs without
 remote caching rather than failing a required check and emits a workflow
-warning. `GITHUB_SHA` remains declared as a pass-through variable so workspace
-linting accepts the CI-factory reference without joining Turbo's global hash
-inputs. The CI-factory review and triage commands run outside `turbo run`, while
-hashing each commit SHA would prevent cross-commit cache hits for every Turbo
-task.
+warning. `GITHUB_SHA` remains declared as a pass-through variable because the
+shared `eslint-config-turbo` rule `turbo/no-undeclared-env-vars` validates the
+CI-factory reference. The CI-factory review and triage commands run directly
+outside `turbo run`, so they inherit the runner-provided value normally, while
+excluding the SHA from Turbo's global hash inputs preserves cross-commit cache
+hits for every Turbo task.
 
 Remote caching is enabled only for the five required CI checks during this
 rollout. Preview and deploy workflows continue to build without this adapter so
