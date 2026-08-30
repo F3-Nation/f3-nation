@@ -36,7 +36,9 @@ jobs:
   reconcile:
     runs-on: ubuntu-latest
     permissions:
-      contents: read # check out the shared script; read branch rules
+      contents: read # check out the shared script
+      # (branch-rules reads ride on GITHUB_TOKEN's always-on metadata:read;
+      # no explicit grant exists for it)
       pull-requests: write # list PRs, read/write the label
       checks: read # read check-run conclusions
     steps:
