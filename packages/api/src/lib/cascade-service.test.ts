@@ -21,12 +21,14 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   }),
 }));
 
-import { and, eq, gte, schema } from "@acme/db";
+import { and, eq, gte, inArray, schema } from "@acme/db";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { db, getOrCreateF3NationOrg, uniqueId } from "../__tests__/test-utils";
 import type { SeriesData } from "./cascade-service";
 import {
   createEventInstancesForSeries,
+  createEventInstancesForSeriesReturningIds,
+  prepareEventInstanceRecords,
   deleteFutureInstancesForSeries,
   isStructuralChange,
   recreateFutureInstances,
@@ -309,6 +311,69 @@ describe("Cascade Service", () => {
     });
   });
 
+  describe("prepareEventInstanceRecords", () => {
+    it("uses legacy weekly defaults for null recurrence fields", () => {
+      const records = prepareEventInstanceRecords(
+        {
+          id: 1,
+          orgId: 1,
+          locationId: null,
+          name: "series",
+          description: null,
+          startDate: "2026-04-01",
+          endDate: "2026-04-15",
+          startTime: null,
+          endTime: null,
+          dayOfWeek: "wednesday",
+          recurrencePattern: null,
+          recurrenceInterval: null,
+          indexWithinInterval: null,
+          isActive: true,
+          isPrivate: false,
+          highlight: false,
+          meta: null,
+        },
+        4,
+        "2026-04-01",
+      );
+
+      expect(records.map((record) => record.startDate)).toEqual([
+        "2026-04-01",
+        "2026-04-08",
+        "2026-04-15",
+      ]);
+    });
+
+    it("returns the same intended rows used by the creation path", () => {
+      const records = prepareEventInstanceRecords(
+        {
+          id: 2,
+          orgId: 1,
+          locationId: null,
+          name: "series",
+          description: null,
+          startDate: "2026-04-01",
+          endDate: "2026-04-30",
+          startTime: null,
+          endTime: null,
+          dayOfWeek: "friday",
+          recurrencePattern: "weekly",
+          recurrenceInterval: 2,
+          indexWithinInterval: 1,
+          isActive: true,
+          isPrivate: false,
+          highlight: false,
+          meta: null,
+        },
+        4,
+        "2026-04-01",
+      );
+
+      expect(records).toHaveLength(2);
+      expect(records.every((record) => record.seriesId === 2)).toBe(true);
+    });
+  });
+
   // --- Database integration tests ---
 
   describe("createEventInstancesForSeries", () => {
@@ -458,6 +523,36 @@ describe("Cascade Service", () => {
         .map((j) => j.eventInstanceId);
 
       expect(joinInstanceIds.length).toBe(instances.length);
+    });
+
+    it("returns created IDs and associates every ID with each event type", async () => {
+      const region = await createTestRegion();
+      const ao = await createTestAO(region.id);
+      const firstType = await createTestEventType();
+      const secondType = await createTestEventType();
+      const series = await createTestSeries(ao.id, null, {
+        dayOfWeek: "friday",
+        startDate: "2026-04-01",
+        endDate: "2026-04-30",
+        eventTypeIds: [firstType.id, secondType.id],
+      });
+
+      const ids = await createEventInstancesForSeriesReturningIds(
+        db,
+        series,
+        4,
+        "2026-04-01",
+      );
+      const joins = await db
+        .select()
+        .from(schema.eventInstancesXEventTypes)
+        .where(inArray(schema.eventInstancesXEventTypes.eventInstanceId, ids));
+
+      expect(ids.length).toBeGreaterThan(0);
+      expect(joins).toHaveLength(ids.length * 2);
+      expect(new Set(joins.map((join) => join.eventInstanceId)).size).toBe(
+        ids.length,
+      );
     });
 
     it("should not create instances past the endDate", async () => {

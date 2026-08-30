@@ -76,3 +76,6 @@ pr.md
 
 # A spot to keep scripts, skills, and docs just for you
 .personal/
+
+# Local operator artifacts (for example, maintenance-script rollback journals)
+.local/

@@ -224,9 +224,28 @@ export async function createEventInstancesForSeries(
   yearsAhead = 4,
   fromDate?: string,
 ): Promise<number> {
+  const created = await createEventInstancesForSeriesReturningIds(
+    db,
+    series,
+    yearsAhead,
+    fromDate,
+  );
+  return created.length;
+}
+
+/**
+ * Prepare the exact rows used by instance creation without touching the DB.
+ * This is also used by the backfill dry-run to keep its count identical to the
+ * creation path.
+ */
+export function prepareEventInstanceRecords(
+  series: SeriesData,
+  yearsAhead = 4,
+  fromDate?: string,
+): (typeof schema.eventInstances.$inferInsert)[] {
   if (!series.dayOfWeek) {
     // Not a valid recurring series
-    return 0;
+    return [];
   }
 
   const seriesStartDate = parseDate(series.startDate);
@@ -313,9 +332,23 @@ export async function createEventInstancesForSeries(
     }
   }
 
-  if (instanceRecords.length === 0) {
-    return 0;
-  }
+  return instanceRecords;
+}
+
+/** Create instances and return their IDs for controlled operator workflows. */
+export async function createEventInstancesForSeriesReturningIds(
+  db: AppDb,
+  series: SeriesData,
+  yearsAhead = 4,
+  fromDate?: string,
+): Promise<number[]> {
+  const instanceRecords = prepareEventInstanceRecords(
+    series,
+    yearsAhead,
+    fromDate,
+  );
+
+  if (instanceRecords.length === 0) return [];
 
   // Batch insert all instances
   const created = await db
@@ -346,7 +379,7 @@ export async function createEventInstancesForSeries(
   //   );
   // }
 
-  return created.length;
+  return created.map((instance) => instance.id);
 }
 
 /**

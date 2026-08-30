@@ -13,6 +13,8 @@
     "lint:fix": "pnpm lint --fix",
     "format": "prettier --check . --ignore-path .gitignore --ignore-path .prettierignore",
     "notify-outstanding-requests": "pnpm with-env tsx ./src/notify-outstanding-requests.ts",
+    "orphaned-event-series-backfill": "pnpm with-env tsx ./src/orphaned-event-series-backfill.ts",
+    "test": "pnpm with-env vitest run",
     "script": "pnpm with-env tsx ./src/script.ts",
     "typecheck": "tsc --noEmit",
     "with-env": "dotenv -e ../../.env --"
@@ -31,7 +33,8 @@
     "eslint": "catalog:",
     "prettier": "catalog:",
     "tsx": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "prettier": "@acme/prettier-config"
 }
