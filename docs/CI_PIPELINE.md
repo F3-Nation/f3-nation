@@ -76,19 +76,25 @@ artifacts in GitHub Actions cache. Relative cache paths make cache versions
 portable across runners whose temporary checkout paths differ. Docker layers
 for these CI jobs live separately in GHCR, so they do not consume the Actions
 cache budget. The pnpm store remains a smaller co-tenant with Turbo artifacts
-in that budget and is still subject to GitHub's normal least-recently-used eviction. Cache
-adapter startup is non-blocking: if it fails, Turbo runs without remote caching
-rather than failing a required check and emits a workflow warning. `GITHUB_SHA`
-is intentionally passed through without joining Turbo's global hash inputs: its
-runtime consumer is the CI-factory command, while hashing each commit SHA would
-prevent cross-commit cache hits for every task.
+in that budget and is still subject to GitHub's normal least-recently-used
+eviction. Cache adapter startup is non-blocking: if it fails, Turbo runs without
+remote caching rather than failing a required check and emits a workflow
+warning. `GITHUB_SHA` remains declared as a pass-through variable so workspace
+linting accepts the CI-factory reference without joining Turbo's global hash
+inputs. The CI-factory review and triage commands run outside `turbo run`, while
+hashing each commit SHA would prevent cross-commit cache hits for every Turbo
+task.
 
 Remote caching is enabled only for the five required CI checks during this
 rollout. Preview and deploy workflows continue to build without this adapter so
 their behavior is unchanged. A matching successful `test` task may be replayed
 instead of re-executed; that is standard Turbo cache behavior, so post-rollout
 validation should confirm useful hit rates and continue treating flaky tests as
-test defects rather than relying on reruns.
+test defects rather than relying on reruns. It should also inspect Actions cache
+usage and key composition, confirm Turbo artifacts do not repeatedly evict the
+pnpm store, and watch for upload throttling or rapid least-recently-used churn.
+Legacy Docker cache entries from before the GHCR migration should age out; they
+can be deleted manually if they create capacity pressure during the transition.
 
 Two pieces of Turbo configuration keep that selection honest, so CI needs no
 blocklist of its own:
