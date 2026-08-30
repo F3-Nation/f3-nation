@@ -16,6 +16,7 @@ from analytics.materializations import (
 from analytics.pipeline import BatchRunError, run
 from analytics.publication import GcsPublisher, PointerConflictError, publish
 from analytics.settings import Settings, SettingsError
+from analytics.source import MaterializationArtifacts
 
 
 def _settings(tmp_path: Path) -> Settings:
@@ -115,42 +116,44 @@ def test_two_definitions_are_isolated_in_publication(tmp_path):
     configured = _settings(tmp_path)
     statuses = []
     for definition in MATERIALIZATIONS[:2]:
-        parquet = tmp_path / definition.output_filename
+        root = tmp_path / definition.name
+        root.mkdir()
+        parquet = root / definition.output_filename
         parquet.write_bytes(definition.name.encode())
         gcs = GcsPublisher(_Storage(), configured, definition)
         statuses.append(
             publish(
                 gcs,
                 "shared-run",
-                parquet,
-                1,
+                MaterializationArtifacts(root, (parquet,), 1),
                 "source",
                 "published",
                 definition,
             )
         )
     first, second = statuses
-    assert first.parquet.uri != second.parquet.uri
+    assert first.parquet_files[0].uri != second.parquet_files[0].uri
     assert first.manifest_object.uri != second.manifest_object.uri
     assert first.pointer.uri != second.pointer.uri
     assert first.manifest["schema_version"] == "pv_regions.v1"
     assert second.manifest["schema_version"] == "pv_pax.v1"
-    assert first.parquet.uri.endswith("pv_regions.parquet")
-    assert second.parquet.uri.endswith("pv_pax.parquet")
+    assert first.parquet_files[0].uri.endswith("pv_regions.parquet")
+    assert second.parquet_files[0].uri.endswith("pv_pax.parquet")
 
 
 def test_mismatched_publication_definitions_do_not_upload(tmp_path):
     _Blob.objects.clear()
     configured = _settings(tmp_path)
     first, second = MATERIALIZATIONS[:2]
-    parquet = tmp_path / first.output_filename
+    root = tmp_path / "root"
+    root.mkdir()
+    parquet = root / first.output_filename
     parquet.write_bytes(b"synthetic")
     with pytest.raises(ValueError, match="different materialization"):
         publish(
             GcsPublisher(_Storage(), configured, second),
             "mismatch-run",
-            parquet,
-            1,
+            MaterializationArtifacts(root, (parquet,), 1),
             "source",
             "published",
             first,
@@ -211,7 +214,7 @@ def test_pipeline_continues_after_each_dataset_failure(monkeypatch, tmp_path, fa
 def _materialize(definition, selected_definition, failure_stage):
     if definition is selected_definition and failure_stage == "source":
         raise RuntimeError("first source failed")
-    return 1
+    return MaterializationArtifacts(Path("/tmp"), (), 1)
 
 
 def _publish(definition, selected_definition, failure_stage):
@@ -350,14 +353,15 @@ def test_pipeline_propagates_cancellation_without_later_dataset(monkeypatch, tmp
 
 def test_publication_events_include_materialization(tmp_path):
     definition = MATERIALIZATION_REGISTRY["pv_regions"]
-    parquet = tmp_path / definition.output_filename
+    root = tmp_path / "root"
+    root.mkdir()
+    parquet = root / definition.output_filename
     parquet.write_bytes(b"synthetic")
     events = []
     publish(
         GcsPublisher(_Storage(), _settings(tmp_path), definition),
         "events-run",
-        parquet,
-        1,
+        MaterializationArtifacts(root, (parquet,), 1),
         "source",
         "published",
         definition,

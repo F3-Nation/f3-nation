@@ -13,6 +13,7 @@ from google.api_core.exceptions import NotFound, PreconditionFailed
 
 from .materializations import MATERIALIZATIONS_BY_NAME, Materialization
 from .settings import Settings
+from .source import MaterializationArtifacts
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,7 +27,7 @@ class ObjectMetadata:
 @dataclass(frozen=True, slots=True)
 class PublicationStatus:
     manifest: dict[str, Any]
-    parquet: ObjectMetadata
+    parquet_files: tuple[ObjectMetadata, ...]
     manifest_object: ObjectMetadata
     pointer: ObjectMetadata
     expected_pointer_generation: str | None
@@ -60,8 +61,36 @@ class GcsPublisher:
     def _name(self, run_id: str, filename: str) -> str:
         return f"{self.prefix}/{run_id}/{filename}"
 
+    def run_prefix(self, run_id: str) -> str:
+        return f"gs://{self.bucket_name}/{self.prefix}/{run_id}"
+
     def upload_parquet(self, run_id: str, path: Path) -> ObjectMetadata:
-        name = self._name(run_id, self.materialization.output_filename)
+        name = self._name(run_id, path.name)
+        blob = self.bucket.blob(name)
+        blob.upload_from_filename(str(path), if_generation_match=0, checksum="crc32c")
+        return _metadata(blob, self.bucket_name, name)
+
+    def upload_parquet_files(self, run_id: str, artifacts: MaterializationArtifacts) -> tuple[ObjectMetadata, ...]:
+        root = artifacts.root.resolve()
+        if not root.is_dir():
+            raise ValueError("artifact root must be a directory")
+        relative_paths = []
+        for path in artifacts.sorted_parquet_files:
+            resolved = path.resolve()
+            try:
+                relative = resolved.relative_to(root)
+            except ValueError as error:
+                raise ValueError("artifact is outside its root") from error
+            if path.is_symlink() or not resolved.is_file():
+                raise ValueError("artifact must be a regular file")
+            relative_paths.append(relative.as_posix())
+        if len(set(relative_paths)) != len(relative_paths):
+            raise ValueError("artifact paths must be unique")
+        ordered = sorted(zip(relative_paths, artifacts.sorted_parquet_files, strict=True))
+        return tuple(self._upload_relative(run_id, path, relative_path) for relative_path, path in ordered)
+
+    def _upload_relative(self, run_id: str, path: Path, relative_path: str) -> ObjectMetadata:
+        name = self._name(run_id, relative_path)
         blob = self.bucket.blob(name)
         blob.upload_from_filename(str(path), if_generation_match=0, checksum="crc32c")
         return _metadata(blob, self.bucket_name, name)
@@ -102,7 +131,8 @@ class GcsPublisher:
 
 def build_manifest(
     run_id: str,
-    parquet: ObjectMetadata,
+    parquet_files: tuple[ObjectMetadata, ...],
+    committed_run_prefix: str,
     row_count: int,
     source_read_at: str,
     published_at: str,
@@ -110,21 +140,21 @@ def build_manifest(
 ) -> dict[str, Any]:
     if MATERIALIZATIONS_BY_NAME.get(materialization.name) is not materialization:
         raise ValueError("materialization is not in the approved registry")
-    committed_run_prefix = parquet.uri.rsplit("/", 1)[0]
+    if not parquet_files:
+        raise ValueError("publication requires parquet files")
+    objects = [
+        {"uri": item.uri, "generation": item.generation, "size": item.size, "crc32c": item.crc32c}
+        for item in parquet_files
+    ]
     return {
         "schema_version": materialization.schema_version,
         "run_id": run_id,
+        "dataset": materialization.name,
+        "run_prefix": committed_run_prefix,
         "committed_run_prefix": committed_run_prefix,
-        "file_count": 1,
-        "byte_count": parquet.size,
-        "objects": [
-            {
-                "uri": parquet.uri,
-                "generation": parquet.generation,
-                "size": parquet.size,
-                "crc32c": parquet.crc32c,
-            }
-        ],
+        "file_count": len(objects),
+        "byte_count": sum(item["size"] for item in objects),
+        "objects": objects,
         "row_count": row_count,
         "source_read_timestamp": source_read_at,
         "publication_timestamp": published_at,
@@ -142,8 +172,7 @@ class PointerConflictError(RuntimeError):
 def publish(
     gcs: GcsPublisher,
     run_id: str,
-    parquet_path: Path,
-    row_count: int,
+    artifacts: MaterializationArtifacts,
     source_read_at: str,
     published_at: str,
     materialization: Materialization,
@@ -156,8 +185,16 @@ def publish(
     ):
         raise ValueError("publication components use different materialization definitions")
     definition = materialization
-    parquet = gcs.upload_parquet(run_id, parquet_path)
-    manifest = build_manifest(run_id, parquet, row_count, source_read_at, published_at, definition)
+    parquet_files = gcs.upload_parquet_files(run_id, artifacts)
+    manifest = build_manifest(
+        run_id,
+        parquet_files,
+        gcs.run_prefix(run_id),
+        artifacts.row_count,
+        source_read_at,
+        published_at,
+        definition,
+    )
     manifest_object = gcs.upload_manifest(run_id, manifest)
     if emit is not None:
         emit(
@@ -190,8 +227,8 @@ def publish(
                 "stage": "pointer_update",
                 "materialization": definition.name,
                 "run_id": run_id,
-                "parquet_uri": parquet.uri,
-                "parquet_generation": parquet.generation,
+                "parquet_uris": [item.uri for item in parquet_files],
+                "parquet_generations": [item.generation for item in parquet_files],
                 "manifest_uri": manifest_object.uri,
                 "manifest_generation": manifest_object.generation,
                 "expected_pointer_generation": expected_generation,
@@ -200,7 +237,7 @@ def publish(
         ) from error
     return PublicationStatus(
         manifest=manifest,
-        parquet=parquet,
+        parquet_files=parquet_files,
         manifest_object=manifest_object,
         pointer=pointer,
         expected_pointer_generation=expected_generation,

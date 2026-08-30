@@ -67,20 +67,19 @@ def run(
             attach_postgres(connection, settings)
             with tempfile.TemporaryDirectory(prefix="analytics-") as workspace:
                 source_started = time.perf_counter()
-                parquet_path = Path(workspace) / definition.output_filename
-                row_count = materialize(connection, parquet_path, definition, refreshed_at, as_of_date)
+                root = Path(workspace) / definition.name
+                artifacts = materialize(connection, root, definition, refreshed_at, as_of_date)
                 log.info(
                     "analytics.etl.source_read_completed",
                     run_id=run_id_value,
                     materialization=definition.name,
-                    row_count=row_count,
+                    row_count=artifacts.row_count,
                     duration_ms=round((time.perf_counter() - source_started) * 1000, 3),
                 )
                 results[definition.name] = publish(
                     GcsPublisher(storage_client, settings, definition),
                     run_id_value,
-                    parquet_path,
-                    row_count,
+                    artifacts,
                     refreshed_at,
                     clock().isoformat(),
                     definition,

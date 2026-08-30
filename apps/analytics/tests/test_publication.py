@@ -9,6 +9,7 @@ from google.api_core.exceptions import PreconditionFailed
 from analytics.materializations import MATERIALIZATION_REGISTRY
 from analytics.publication import GcsPublisher, PointerConflictError, publish
 from analytics.settings import Settings
+from analytics.source import MaterializationArtifacts
 
 
 def settings(tmp_path: Path) -> Settings:
@@ -74,9 +75,13 @@ def test_publication_durably_writes_manifest_before_pointer(tmp_path):
     Blob.objects.clear()
     definition = MATERIALIZATION_REGISTRY["pv_regions"]
     publisher = GcsPublisher(Storage(), settings(tmp_path), definition)
-    parquet = tmp_path / "regions.parquet"
+    root = tmp_path / "root"
+    root.mkdir()
+    parquet = root / "regions.parquet"
     parquet.write_bytes(b"parquet")
-    status = publish(publisher, "run-1", parquet, 2, "source", "published", definition)
+    status = publish(
+        publisher, "run-1", MaterializationArtifacts(root, (parquet,), 2), "source", "published", definition
+    )
     assert status.manifest_object.uri.endswith("run-1/manifest.json")
     assert status.pointer.uri.endswith("current.json")
     stored = json.loads(Blob.objects["parquets/pv_regions/run-1/manifest.json"].content)
@@ -89,13 +94,14 @@ def test_publication_emits_only_gcs_phase_events(tmp_path):
     Blob.objects.clear()
     events = []
     definition = MATERIALIZATION_REGISTRY["pv_regions"]
-    parquet = tmp_path / "regions.parquet"
+    root = tmp_path / "root"
+    root.mkdir()
+    parquet = root / "regions.parquet"
     parquet.write_bytes(b"parquet")
     publish(
         GcsPublisher(Storage(), settings(tmp_path), definition),
         "run-events",
-        parquet,
-        4,
+        MaterializationArtifacts(root, (parquet,), 4),
         "source",
         "published",
         definition,
@@ -108,12 +114,41 @@ def test_pointer_conflict_leaves_durable_manifest_and_is_observable(tmp_path):
     Blob.objects.clear()
     definition = MATERIALIZATION_REGISTRY["pv_regions"]
     publisher = GcsPublisher(Storage(), settings(tmp_path), definition)
-    parquet = tmp_path / "regions.parquet"
+    root = tmp_path / "root"
+    root.mkdir()
+    parquet = root / "regions.parquet"
     parquet.write_bytes(b"parquet")
     publisher.advance_current = lambda *args, **kwargs: (_ for _ in ()).throw(PreconditionFailed("conflict"))
     with pytest.raises(PointerConflictError) as raised:
-        publish(publisher, "run-3", parquet, 1, "source", "published", definition)
+        publish(publisher, "run-3", MaterializationArtifacts(root, (parquet,), 1), "source", "published", definition)
     assert raised.value.metadata["stage"] == "pointer_update"
     assert raised.value.metadata["manifest_uri"].endswith("run-3/manifest.json")
     assert "parquets/pv_regions/run-3/manifest.json" in Blob.objects
     assert "parquets/pv_regions/current.json" not in Blob.objects
+
+
+def test_publication_uploads_sorted_nested_artifacts_and_exact_manifest(tmp_path):
+    Blob.objects.clear()
+    definition = MATERIALIZATION_REGISTRY["pv_events"]
+    root = tmp_path / "events"
+    (root / "region_org_id=2").mkdir(parents=True)
+    (root / "region_org_id=1").mkdir()
+    first = root / "region_org_id=2" / "data_1.parquet"
+    second = root / "region_org_id=1" / "data_0.parquet"
+    first.write_bytes(b"one")
+    second.write_bytes(b"two!!")
+    artifacts = MaterializationArtifacts(root, (first, second), 7)
+
+    status = publish(
+        GcsPublisher(Storage(), settings(tmp_path), definition), "multi", artifacts, "source", "published", definition
+    )
+
+    assert [item.uri for item in status.parquet_files] == [
+        "gs://f3-analytics-nonprod/parquets/pv_events/multi/region_org_id=1/data_0.parquet",
+        "gs://f3-analytics-nonprod/parquets/pv_events/multi/region_org_id=2/data_1.parquet",
+    ]
+    assert status.manifest["run_prefix"] == "gs://f3-analytics-nonprod/parquets/pv_events/multi"
+    assert status.manifest["dataset"] == "pv_events"
+    assert status.manifest["file_count"] == 2
+    assert status.manifest["byte_count"] == 8
+    assert [item["uri"] for item in status.manifest["objects"]] == [item.uri for item in status.parquet_files]

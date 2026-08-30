@@ -15,6 +15,8 @@ class Materialization:
     nonprod_prefix: str
     production_prefix: str
     sql_reference: str
+    partition_by: tuple[str, ...] = ()
+    sort_by: tuple[str, ...] = ()
 
     @property
     def query_reference(self) -> str:
@@ -41,6 +43,8 @@ def _definition(name: str) -> Materialization:
         f"gs://f3-analytics-nonprod/parquets/{name}",
         f"gs://analytics/parquets/{name}",
         f"sql/{name}.sql",
+        partition_by=("region_org_id",) if name == "pv_events" else (),
+        sort_by=("event_date", "event_id") if name == "pv_events" else (),
     )
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,21 @@ from urllib.parse import quote
 
 from .materializations import MATERIALIZATIONS_BY_NAME, Materialization
 from .settings import Settings
+
+
+@dataclass(frozen=True, slots=True)
+class MaterializationArtifacts:
+    root: Path
+    sorted_parquet_files: tuple[Path, ...]
+    row_count: int
+
+    @property
+    def parquet_files(self) -> tuple[Path, ...]:
+        return self.sorted_parquet_files
+
+
+ArtifactSet = MaterializationArtifacts
+MaterializationArtifactSet = MaterializationArtifacts
 
 
 def _sql_literal(value: str) -> str:
@@ -47,15 +63,34 @@ def load_sql(materialization: Materialization) -> str:
 
 def materialize(
     connection: Any,
-    output_path: Path,
+    root: Path,
     materialization: Materialization,
     refreshed_at: str,
     as_of_date: str,
-) -> int:
+) -> MaterializationArtifacts:
     query = load_sql(materialization)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    root.mkdir(parents=True, exist_ok=True)
+    output_path = root / materialization.output_filename
+    identifiers = (*materialization.partition_by, *materialization.sort_by)
+    if any(not identifier.isidentifier() for identifier in identifiers):
+        raise ValueError("materialization contains an unsafe identifier")
+    order = ", ".join(f'"{identifier}"' for identifier in materialization.sort_by)
+    ordered_query = f"SELECT * FROM ({query}) AS materialized"
+    if order:
+        ordered_query += f" ORDER BY {order}"
+    options = "FORMAT PARQUET, COMPRESSION SNAPPY"
+    if materialization.partition_by:
+        partitions = ", ".join(f'"{identifier}"' for identifier in materialization.partition_by)
+        options += f", PARTITION_BY ({partitions}), WRITE_PARTITION_COLUMNS"
+    destination = root if materialization.partition_by else output_path
     connection.execute(
-        f"COPY ({query}) TO {_sql_literal(str(output_path))} (FORMAT PARQUET, COMPRESSION SNAPPY)",
+        f"COPY ({ordered_query}) TO {_sql_literal(str(destination))} ({options})",
         [refreshed_at, as_of_date],
     )
-    return int(connection.execute("SELECT count(*) FROM read_parquet(?)", [str(output_path)]).fetchone()[0])
+    generated = tuple(sorted(root.rglob("*.parquet"))) if materialization.partition_by else (output_path,)
+    if not generated or any(not path.is_file() for path in generated):
+        raise RuntimeError("materialization did not produce parquet files")
+    row_count = sum(
+        int(connection.execute("SELECT count(*) FROM read_parquet(?)", [str(path)]).fetchone()[0]) for path in generated
+    )
+    return MaterializationArtifacts(root, generated, row_count)

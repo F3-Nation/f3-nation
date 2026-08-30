@@ -62,11 +62,12 @@ def make_source() -> duckdb.DuckDBPyConnection:
 
 def test_region_materialization_semantics_and_nested_lists(tmp_path: Path):
     connection = make_source()
-    output = tmp_path / "regions.parquet"
+    root = tmp_path / "root"
+    output = root / MATERIALIZATION_REGISTRY["pv_regions"].output_filename
     assert (
         materialize(
-            connection, output, MATERIALIZATION_REGISTRY["pv_regions"], "2026-01-01T00:00:00+00:00", "2026-01-01"
-        )
+            connection, root, MATERIALIZATION_REGISTRY["pv_regions"], "2026-01-01T00:00:00+00:00", "2026-01-01"
+        ).row_count
         == 3
     )
     rows = connection.execute("SELECT * FROM read_parquet(?) ORDER BY region_id", [str(output)]).fetchall()
@@ -103,7 +104,7 @@ def test_malformed_exclusion_flag_fails_in_materialization(tmp_path: Path):
     with pytest.raises(Exception, match="exclude_from_pax_vault"):
         materialize(
             connection,
-            tmp_path / "malformed.parquet",
+            tmp_path / "malformed",
             MATERIALIZATION_REGISTRY["pv_regions"],
             "2026-01-01T00:00:00+00:00",
             "2026-01-01",
@@ -119,10 +120,10 @@ def test_malformed_flag_on_an_ineligible_event_does_not_fail(tmp_path: Path):
     assert (
         materialize(
             connection,
-            tmp_path / "regions.parquet",
+            tmp_path / "regions",
             MATERIALIZATION_REGISTRY["pv_regions"],
             "2026-01-01T00:00:00+00:00",
             "2026-01-01",
-        )
+        ).row_count
         == 3
     )

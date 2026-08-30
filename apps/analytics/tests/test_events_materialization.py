@@ -4,6 +4,9 @@ from pathlib import Path
 import duckdb
 import pytest
 
+from analytics.materializations import MATERIALIZATION_REGISTRY
+from analytics.source import materialize
+
 SQL = (Path(__file__).parents[1] / "analytics" / "sql" / "pv_events.sql").read_text()
 
 
@@ -145,3 +148,33 @@ def test_malformed_exclusion_flag_is_strict():
     c.execute('UPDATE pg.public.event_instances SET meta = \'{"exclude_from_pax_vault":"yes"}\' WHERE id = 1')
     with pytest.raises(Exception, match="exclude_from_pax_vault"):
         c.execute(SQL, ["2026-01-03T00:00:00Z", "2026-01-03"])
+
+
+def test_events_materialization_partitions_and_orders_files(tmp_path: Path):
+    c = source()
+    c.execute("INSERT INTO pg.public.orgs VALUES (5, 2, 'Region Two', 'region'), (6, 5, 'AO Two', 'ao')")
+    c.execute(
+        "INSERT INTO pg.public.event_instances VALUES "
+        "(4, 6, true, 3, 1, '{}', 'Later', '2026-01-04', NULL, true, false)"
+    )
+    root = tmp_path / "events"
+    artifacts = materialize(c, root, MATERIALIZATION_REGISTRY["pv_events"], "2026-01-05T00:00:00Z", "2026-01-05")
+
+    assert artifacts.row_count == 4
+    assert [path.relative_to(root).parts[0] for path in artifacts.sorted_parquet_files] == [
+        "region_org_id=3",
+        "region_org_id=5",
+    ]
+    columns = [
+        row[0]
+        for row in c.execute(
+            "DESCRIBE SELECT * FROM read_parquet(?)", [str(artifacts.sorted_parquet_files[0])]
+        ).fetchall()
+    ]
+    assert "region_org_id" in columns
+    rows = [
+        c.execute("SELECT region_org_id, event_date FROM read_parquet(?)", [str(path)]).fetchall()
+        for path in artifacts.sorted_parquet_files
+    ]
+    assert sum(len(partition) for partition in rows) == 4
+    assert all([row[1] for row in partition] == sorted(row[1] for row in partition) for partition in rows)
