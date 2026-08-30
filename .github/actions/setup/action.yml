@@ -2,8 +2,29 @@ name: Setup Node, pnpm, Python, and uv
 description: >-
   Install Python and uv, then pnpm and Node (pinned via .nvmrc), restore the
   pnpm store cache, and install workspace dependencies from the frozen
-  lockfile. Shared by every CI job so the toolchain setup can never drift
-  between jobs.
+  lockfile. Shared by Node-based workflow jobs so the toolchain setup cannot
+  drift between callers.
+
+inputs:
+  select-turbo-affected:
+    description: >-
+      On pull requests, restrict Turbo to affected workspaces. Falls back to
+      the full workspace when the comparison SHAs are unavailable, detection
+      fails, or Turbo selects no runnable task. Files Turbo cannot attribute
+      to a package are listed in turbo.json's globalDependencies, which marks
+      every workspace affected.
+    required: false
+    default: "false"
+  turbo-task:
+    description: >-
+      Turbo task the calling job will run. Used to confirm affected selection
+      schedules at least one task before enabling --affected. When affected
+      selection is enabled, setup exports TURBO_RUN_ARGS and the pinned
+      TURBO_SCM_BASE/TURBO_SCM_HEAD through GITHUB_ENV; the caller must
+      append ${TURBO_RUN_ARGS:+"$TURBO_RUN_ARGS"} to its Turbo command. An
+      empty task falls back to the full workspace.
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -26,3 +47,15 @@ runs:
     - name: Install dependencies
       shell: bash
       run: pnpm install --frozen-lockfile
+
+    # A required check must never report success having run nothing, so
+    # --affected is enabled only once Turbo confirms it schedules a task.
+    # Anything else falls back to the full workspace.
+    - name: Select Turbo scope
+      if: inputs.select-turbo-affected == 'true' && github.event_name == 'pull_request'
+      shell: bash
+      env:
+        TURBO_SCM_BASE: ${{ github.event.pull_request.base.sha }}
+        TURBO_SCM_HEAD: ${{ github.event.pull_request.head.sha }}
+        TURBO_SCOPE_TASK: ${{ inputs.turbo-task }}
+      run: bash scripts/select-turbo-scope.sh

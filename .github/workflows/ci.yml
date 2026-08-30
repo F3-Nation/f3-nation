@@ -50,8 +50,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
       - uses: ./.github/actions/setup
-      - run: pnpm format
+        with:
+          select-turbo-affected: "true"
+          turbo-task: format
+      - run: pnpm format ${TURBO_RUN_ARGS:+"$TURBO_RUN_ARGS"}
 
   security-audit:
     runs-on: ubuntu-latest
@@ -279,8 +283,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
       - uses: ./.github/actions/setup
-      - run: pnpm lint
+        with:
+          select-turbo-affected: "true"
+          turbo-task: lint
+      - run: pnpm lint ${TURBO_RUN_ARGS:+"$TURBO_RUN_ARGS"}
       - run: pnpm lint:unused
 
   typecheck:
@@ -289,8 +297,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
       - uses: ./.github/actions/setup
-      - run: pnpm typecheck
+        with:
+          select-turbo-affected: "true"
+          turbo-task: typecheck
+      - run: pnpm typecheck ${TURBO_RUN_ARGS:+"$TURBO_RUN_ARGS"}
 
   # Regenerates Drizzle migrations from packages/db/drizzle/schema.ts and fails
   # if the output differs from what's committed. Exists because a snapshot can
@@ -345,8 +357,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
       - uses: ./.github/actions/setup
-      - run: pnpm build
+        with:
+          select-turbo-affected: "true"
+          turbo-task: build
+      - run: pnpm build ${TURBO_RUN_ARGS:+"$TURBO_RUN_ARGS"}
 
   test-coverage:
     runs-on: ubuntu-latest
@@ -368,30 +384,38 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
       - uses: ./.github/actions/setup
+        with:
+          select-turbo-affected: "true"
+          turbo-task: test
       # GCS_CREDENTIALS must exist with client_email/private_key fields, but
       # nothing real is needed. Built here from plainly fake JSON — a committed
       # base64 blob trips generic high-entropy secret scanners.
       - name: Set mock GCS credentials
         run: echo "GCS_CREDENTIALS=$(printf '{\"client_email\":\"fake-not-a-real-credential@ci.invalid\",\"private_key\":\"THIS-IS-A-FAKE-PLACEHOLDER-FOR-CI\"}' | base64 -w0)" >> "$GITHUB_ENV"
-      - run: pnpm test
+      - run: pnpm test ${TURBO_RUN_ARGS:+"$TURBO_RUN_ARGS"}
       # The apps/api characterization matrix — the parity gate for the Hono
       # port. Runs in this job, sequentially after pnpm test and never
       # concurrent with it, because both suites mutate f3_test. Needs no extra
       # env: global-setup.ts stands up its own JWKS server and signing key, and
       # SUPER_ADMIN_API_KEY is already in the workflow env above.
-      - run: pnpm turbo run test:characterization
+      - run: pnpm turbo run test:characterization --filter=f3-api
 
   # Builds each app's deploy image the same way the release pipeline does
-  # (turbo prune -> frozen install -> turbo build). The `build` job above only
-  # covers the full-workspace `pnpm build`; it cannot catch breakage that is
-  # specific to the pruned Docker context (e.g. catalog mismatches or deps that
-  # resolve transitively in the full install but not under the isolated linker).
-  # This surfaces those at PR time instead of at release. No push — building the
-  # image is the validation. buildx layer cache (scoped per app) keeps the heavy
-  # pnpm install layer warm between runs.
+  # (turbo prune -> frozen install -> turbo build). The `build` job above is
+  # affected-scoped on PRs; it cannot catch breakage that is specific to the
+  # pruned Docker context (e.g. catalog mismatches or deps that resolve
+  # transitively in the workspace install but not under the isolated linker).
+  # This surfaces those at PR time instead of at release. No image push —
+  # building the image is the validation. PRs import the per-app GHCR layer
+  # cache read-only; docker-cache-refresh updates it only from main.
   docker-build:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
     strategy:
       fail-fast: false
       matrix:
@@ -401,7 +425,28 @@ jobs:
         with:
           persist-credentials: false
       - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - name: Set GHCR cache reference
+        id: cache
+        env:
+          APP: ${{ matrix.app }}
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          repository_name="${GITHUB_REPOSITORY#*/}"
+          repository_name="${repository_name,,}"
+          echo "ref=ghcr.io/${owner}/${repository_name}-ci-cache-${APP}" >> "$GITHUB_OUTPUT"
+      - name: Log in to GHCR
+        id: login
+        continue-on-error: true
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Warn if GHCR login failed
+        if: steps.login.outcome == 'failure'
+        run: echo "::warning::GHCR login failed; Docker will build without the shared cache."
       - id: build
+        if: steps.login.outcome == 'success'
         continue-on-error: true
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
@@ -411,18 +456,113 @@ jobs:
           # pin --platform (BuildKit lint), so the target arch is set here.
           platforms: linux/amd64
           push: false
-          cache-from: type=gha,scope=docker-${{ matrix.app }}
-          cache-to: type=gha,mode=max,scope=docker-${{ matrix.app }},ignore-error=true
-      # Fallback: GitHub evicts individual GHA cache blobs (LRU / 7-day) while
-      # leaving the index manifest behind, so cache-from can hit a dangling
-      # reference and fail with `BlobNotFound`. Retry without cache-from so the
-      # build still passes; cache-to rewrites a fresh index, re-warming the
-      # cache for the next run.
-      - if: steps.build.outcome == 'failure'
+          cache-from: type=registry,ref=${{ steps.cache.outputs.ref }}
+      - name: Warn if the registry cache could not be used
+        if: steps.login.outcome == 'success' && steps.build.outcome == 'failure'
+        run: echo "::warning::Cached Docker validation failed; retrying without the shared cache."
+      # Registry cache availability is an optimization, not a correctness
+      # requirement. Login failure skips the cache attempt entirely.
+      - name: Validate image without registry cache
+        if: steps.login.outcome == 'failure'
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           file: apps/${{ matrix.app }}/Dockerfile
           platforms: linux/amd64
           push: false
-          cache-to: type=gha,mode=max,scope=docker-${{ matrix.app }},ignore-error=true
+      # A cache import failure must not prevent an otherwise valid image build.
+      - name: Retry without registry cache
+        if: steps.login.outcome == 'success' && steps.build.outcome == 'failure'
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          platforms: linux/amd64
+          push: false
+
+  # Only trusted main-branch code may update the shared registry cache. Keeping
+  # this separate from docker-build gives pull_request jobs packages:read and
+  # prevents branches from racing to overwrite the same mutable cache tag. The
+  # workflow-level concurrency group also serializes writers on main.
+  docker-cache-refresh:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [admin, api, auth, map, me, slackbot]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - name: Set GHCR cache reference
+        id: cache
+        env:
+          APP: ${{ matrix.app }}
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          repository_name="${GITHUB_REPOSITORY#*/}"
+          repository_name="${repository_name,,}"
+          echo "ref=ghcr.io/${owner}/${repository_name}-ci-cache-${APP}" >> "$GITHUB_OUTPUT"
+      - name: Log in to GHCR
+        id: login
+        continue-on-error: true
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Warn if GHCR login failed
+        if: steps.login.outcome == 'failure'
+        run: echo "::warning::GHCR login failed; Docker will build without refreshing the shared cache."
+      - id: build
+        if: steps.login.outcome == 'success'
+        continue-on-error: true
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          platforms: linux/amd64
+          push: false
+          cache-from: type=registry,ref=${{ steps.cache.outputs.ref }}
+          cache-to: type=registry,ref=${{ steps.cache.outputs.ref }},mode=max,oci-mediatypes=true,image-manifest=true
+      # Login failure disables the registry optimization, but must not skip the
+      # image validation performed by this job.
+      - name: Validate image without registry cache
+        if: steps.login.outcome == 'failure'
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          platforms: linux/amd64
+          push: false
+      # A cached build or export failure must not prevent image validation.
+      # Retry without importing the stale cache, but attempt to export the clean
+      # build so later runs can use it. A failed repair remains non-blocking only
+      # after a final uncached build proves the image itself is valid.
+      - name: Repair cache without importing it
+        id: repair
+        if: steps.login.outcome == 'success' && steps.build.outcome == 'failure'
+        continue-on-error: true
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          platforms: linux/amd64
+          push: false
+          cache-to: type=registry,ref=${{ steps.cache.outputs.ref }},mode=max,oci-mediatypes=true,image-manifest=true
+      - name: Warn if the shared cache was not refreshed
+        if: steps.login.outcome == 'success' && steps.build.outcome == 'failure' && steps.repair.outcome == 'failure'
+        run: echo "::warning::GHCR cache export failed; validating the image without cache before continuing."
+      - name: Validate image after cache refresh failure
+        if: steps.login.outcome == 'success' && steps.build.outcome == 'failure' && steps.repair.outcome == 'failure'
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          platforms: linux/amd64
+          push: false
