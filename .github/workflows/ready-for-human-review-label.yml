@@ -41,6 +41,7 @@ jobs:
       # no explicit grant exists for it)
       pull-requests: write # list PRs, read/write the label
       checks: read # read check-run conclusions
+      statuses: read # read legacy commit-status conclusions (distinct scope from checks)
     steps:
       - name: Check out the shared script
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -90,10 +91,16 @@ jobs:
             //
             // The endpoint returns every applicable rule across every ruleset
             // that targets the branch, not just one -- `flatMap` over all
-            // matching rules rather than taking the first. An empty result (no
-            // rule found at all) throws rather than treating "nothing
-            // required" as green: this must fail closed the same way an unmet
-            // context does, not silently pass every PR.
+            // matching rules rather than taking the first. It also returns
+            // `[]` for a branch no ruleset targets at all (e.g. this repo's
+            // ruleset targets only `main`) -- that's a legitimate, cacheable
+            // answer, not an error, so it doesn't throw. Every PR here
+            // targets `main` today, but a stacked PR against another base
+            // would otherwise throw here on every scheduled run and fail the
+            // *entire* run via `core.setFailed`, not just that one PR. An
+            // empty result still fails closed: the caller treats zero
+            // required contexts as `checksGreen = false` for that PR, not as
+            // vacuously green.
             const requiredContextsByBase = new Map();
             const requiredContextsFor = async (base) => {
               if (requiredContextsByBase.has(base)) return requiredContextsByBase.get(base);
@@ -104,9 +111,9 @@ jobs:
               const requiredContexts = rules
                 .filter((r) => r.type === 'required_status_checks')
                 .flatMap((r) => r.parameters?.required_status_checks ?? [])
-                .map((c) => c.context);
+                .map((c) => ({ context: c.context, integrationId: c.integration_id ?? null }));
               if (requiredContexts.length === 0) {
-                throw new Error(`No required_status_checks rule found for base branch "${base}"`);
+                core.warning(`No required_status_checks rule for base branch "${base}"; treating as not green.`);
               }
               requiredContextsByBase.set(base, requiredContexts);
               return requiredContexts;
@@ -179,18 +186,21 @@ jobs:
                   // A required context can also be satisfied via the legacy
                   // Commit Status API (some third-party integrations still
                   // post statuses rather than registering check-runs) --
-                  // merge both so a status-only context isn't read as "never
-                  // started". getCombinedStatusForRef already coalesces to
-                  // the latest status per context.
+                  // evaluated independently from check runs so a passing
+                  // record in one API can't mask a failing record in the
+                  // other. getCombinedStatusForRef already coalesces to the
+                  // latest status per context, capped at per_page (max 100,
+                  // which every realistic context count here is well under).
                   const { data: combinedStatus } = await github.rest.repos.getCombinedStatusForRef({
-                    owner, repo, ref: pr.head.sha,
+                    owner, repo, ref: pr.head.sha, per_page: 100,
                   });
                   const statusRuns = combinedStatus.statuses.map((status) => ({
                     id: status.id,
                     name: status.context,
                     conclusion: status.state === 'success' ? 'success' : status.state,
                   }));
-                  const checksGreen = requiredChecksGreen(requiredContexts, [...checkRuns, ...statusRuns]);
+                  const checksGreen = requiredContexts.length > 0
+                    && requiredChecksGreen(requiredContexts, checkRuns, statusRuns);
                   result.checks = checksGreen ? 'green' : 'not green';
 
                   const threads = await fetchReviewThreads(pr.number);
@@ -257,13 +267,21 @@ jobs:
                     `${aborted.status ?? 'no status'} ${aborted.message}\n`,
                 );
               }
-              await report
-                .addTable(
-                  rows.length > 1
-                    ? rows
-                    : [...rows, ['—', '—', '—', '—', 'nothing to do']],
-                )
-                .write();
+              // In its own try/catch so a summary-write hiccup (job-summary
+              // API error, oversized payload) can't clobber a pending
+              // `aborted` error being re-thrown above -- standard
+              // finally-overrides-throw hazard.
+              try {
+                await report
+                  .addTable(
+                    rows.length > 1
+                      ? rows
+                      : [...rows, ['—', '—', '—', '—', 'nothing to do']],
+                  )
+                  .write();
+              } catch (writeError) {
+                core.warning(`Failed to write job summary: ${writeError.message}`);
+              }
             }
 
             if (failures > 0) {

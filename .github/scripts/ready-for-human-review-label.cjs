@@ -29,18 +29,52 @@ const BOT_LOGINS = [
   "qodo-free-for-open-source-projects",
 ];
 
+// GitHub reports a skipped job's conclusion as "skipped", and a job-level
+// `if:` that never runs a required job also lands here as "skipped" or
+// "neutral" -- both merge like "success" per GitHub's own docs. No required
+// context in this repo has a job-level `if:` today, so this is latent, but
+// `pr-title.yml`'s "gate the step, not the job" comment exists precisely
+// because a naive job-level skip would otherwise silently disagree with
+// branch protection.
+const PASSING_CONCLUSIONS = new Set(["success", "skipped", "neutral"]);
+
 /**
- * True when every required context's most recent check run (by run id, since
- * a re-run creates a new, higher-numbered run rather than mutating the old
- * one) concluded in success. A context with no matching run at all -- never
- * started -- is not green.
+ * Most recent (by id) check run or status matching `name` -- optionally also
+ * matching `integrationId`, the GitHub App a ruleset pinned this context to.
+ * A re-run creates a new, higher-numbered run rather than mutating the old
+ * one, so "most recent" is "highest id" within the matching set.
  */
-function requiredChecksGreen(requiredContexts, checkRuns) {
-  return requiredContexts.every((contextName) => {
-    const runs = checkRuns
-      .filter((run) => run.name === contextName)
-      .sort((a, b) => b.id - a.id);
-    return runs[0]?.conclusion === "success";
+function latestRun(runs, name, integrationId) {
+  return runs
+    .filter(
+      (run) =>
+        run.name === name &&
+        (integrationId == null || run.app?.id === integrationId),
+    )
+    .sort((a, b) => b.id - a.id)[0];
+}
+
+/**
+ * True when every required context is satisfied by both the Checks API and
+ * the legacy Commit Status API, evaluated independently -- GitHub requires
+ * both to pass when a context has entries in both systems, so a passing
+ * check run can't mask a failing status (or vice versa) the way merging the
+ * two arrays before sorting by id would (check-run ids and status ids are
+ * unrelated id spaces). A context with no matching run in either system --
+ * never started -- is not green. `requiredContexts` entries carry
+ * `integrationId` (nullable) so a same-named check from an unpinned or
+ * different GitHub App can't satisfy a context the ruleset pinned to a
+ * specific app; legacy statuses have no equivalent app-identity field to
+ * check.
+ */
+function requiredChecksGreen(requiredContexts, checkRuns, statusRuns) {
+  return requiredContexts.every(({ context, integrationId }) => {
+    const check = latestRun(checkRuns, context, integrationId);
+    const status = latestRun(statusRuns, context, null);
+    if (!check && !status) return false;
+    if (check && !PASSING_CONCLUSIONS.has(check.conclusion)) return false;
+    if (status && status.conclusion !== "success") return false;
+    return true;
   });
 }
 
