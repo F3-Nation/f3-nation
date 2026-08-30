@@ -19,6 +19,10 @@ const LABEL = "ready for human review";
 // GraphQL, where `Bot.login` never carries it (`coderabbitai`). Using the
 // REST form here would silently match nothing and leave condition 3 always
 // vacuously true.
+//
+// This list is not kept in sync automatically: if a review bot is added,
+// removed, or its account changes, update it here by hand, or its threads
+// go unnoticed by condition 3.
 const BOT_LOGINS = [
   "coderabbitai",
   "greptile-apps",

@@ -83,7 +83,10 @@ jobs:
             // Uses the raw route rather than a named octokit method: "get rules
             // for a branch" is new enough that relying on a specific plugin
             // version exposing a matching `rest.repos.*` wrapper felt riskier
-            // than hitting the documented endpoint directly.
+            // than hitting the documented endpoint directly. It's a paginated
+            // list endpoint (default 30/page) like everything else here, so it
+            // goes through `paginate` too -- a single unpaginated call would
+            // silently truncate a branch with many applicable rulesets.
             //
             // The endpoint returns every applicable rule across every ruleset
             // that targets the branch, not just one -- `flatMap` over all
@@ -94,9 +97,9 @@ jobs:
             const requiredContextsByBase = new Map();
             const requiredContextsFor = async (base) => {
               if (requiredContextsByBase.has(base)) return requiredContextsByBase.get(base);
-              const { data: rules } = await github.request(
+              const rules = await github.paginate(
                 'GET /repos/{owner}/{repo}/rules/branches/{branch}',
-                { owner, repo, branch: base },
+                { owner, repo, branch: base, per_page: 100 },
               );
               const requiredContexts = rules
                 .filter((r) => r.type === 'required_status_checks')
@@ -140,10 +143,24 @@ jobs:
               return threads;
             };
 
-            // Row is pre-shaped before work starts so a throw still lands a
-            // result in the summary table, same as code-scanning-issue.yml.
+            // Deliberately not a fourth condition: merge-conflict/mergeable
+            // state against `main` is not checked. Checks run against
+            // `pr.head.sha`, which doesn't move when `main` does, so a PR can
+            // stay "green" here after it's actually gone unmergeable.
+            // Issue #932 scoped this label to exactly three conditions and
+            // didn't name mergeability either way; GitHub's own UI already
+            // surfaces a conflict independently of this label. Revisit as a
+            // follow-up if that gap turns out to matter in practice.
+            //
+            // Result is pre-shaped before work starts, and mutated by field
+            // name rather than array index, so a throw still lands a result
+            // in the summary table (same as code-scanning-issue.yml) without
+            // requiring every write site to agree on a column number.
             const reconcilePr = async (pr) => {
-              const row = [`#${pr.number}`, pr.draft ? 'yes' : 'no', '—', '—', ''];
+              const result = {
+                pr: `#${pr.number}`, draft: pr.draft ? 'yes' : 'no',
+                checks: '—', threads: '—', outcome: '',
+              };
               try {
                 const hasLabel = pr.labels.some((label) => label.name === LABEL);
 
@@ -152,55 +169,69 @@ jobs:
                 // below short-circuits on `!pr.draft` before either matters.
                 let desired = false;
                 if (pr.draft) {
-                  row[2] = 'skipped (draft)';
-                  row[3] = 'skipped (draft)';
+                  result.checks = 'skipped (draft)';
+                  result.threads = 'skipped (draft)';
                 } else {
                   const requiredContexts = await requiredContextsFor(pr.base.ref);
                   const checkRuns = await github.paginate(github.rest.checks.listForRef, {
                     owner, repo, ref: pr.head.sha, per_page: 100,
                   });
-                  const checksGreen = requiredChecksGreen(requiredContexts, checkRuns);
-                  row[2] = checksGreen ? 'green' : 'not green';
+                  // A required context can also be satisfied via the legacy
+                  // Commit Status API (some third-party integrations still
+                  // post statuses rather than registering check-runs) --
+                  // merge both so a status-only context isn't read as "never
+                  // started". getCombinedStatusForRef already coalesces to
+                  // the latest status per context.
+                  const { data: combinedStatus } = await github.rest.repos.getCombinedStatusForRef({
+                    owner, repo, ref: pr.head.sha,
+                  });
+                  const statusRuns = combinedStatus.statuses.map((status) => ({
+                    id: status.id,
+                    name: status.context,
+                    conclusion: status.state === 'success' ? 'success' : status.state,
+                  }));
+                  const checksGreen = requiredChecksGreen(requiredContexts, [...checkRuns, ...statusRuns]);
+                  result.checks = checksGreen ? 'green' : 'not green';
 
                   const threads = await fetchReviewThreads(pr.number);
                   const threadsResolved = botThreadsResolved(threads);
-                  row[3] = threadsResolved ? 'resolved' : 'unresolved';
+                  result.threads = threadsResolved ? 'resolved' : 'unresolved';
 
                   desired = checksGreen && threadsResolved;
                 }
 
                 if (desired === hasLabel) {
-                  row[4] = hasLabel ? 'already labeled' : 'already unlabeled';
+                  result.outcome = hasLabel ? 'already labeled' : 'already unlabeled';
                 } else if (dryRun) {
-                  row[4] = desired ? 'would add' : 'would remove';
+                  result.outcome = desired ? 'would add' : 'would remove';
                 } else if (desired) {
                   await github.rest.issues.addLabels({
                     owner, repo, issue_number: pr.number, labels: [LABEL],
                   });
-                  row[4] = 'added';
+                  result.outcome = 'added';
                 } else {
                   try {
                     await github.rest.issues.removeLabel({
                       owner, repo, issue_number: pr.number, name: LABEL,
                     });
-                    row[4] = 'removed';
+                    result.outcome = 'removed';
                   } catch (error) {
                     // 404 => already removed by a concurrent run or a maintainer.
                     if (error?.status !== 404) throw error;
-                    row[4] = 'already unlabeled';
+                    result.outcome = 'already unlabeled';
                   }
                 }
               } catch (error) {
                 failures += 1;
-                row[4] = `FAILED — ${error.status ?? 'no status'} ${error.message}`;
-                core.warning(`PR #${pr.number}: ${row[4]}`);
+                result.outcome = `FAILED — ${error.status ?? 'no status'} ${error.message}`;
+                core.warning(`PR #${pr.number}: ${result.outcome}`);
               } finally {
                 // In `finally` so failures are paced too -- the secondary rate
                 // limit is precisely the failure that would otherwise skip it.
                 await settle();
               }
-              core.info(`PR #${pr.number}: ${row[4]}`);
-              rows.push(row);
+              core.info(`PR #${pr.number}: ${result.outcome}`);
+              rows.push([result.pr, result.draft, result.checks, result.threads, result.outcome]);
             };
 
             let aborted = null;
