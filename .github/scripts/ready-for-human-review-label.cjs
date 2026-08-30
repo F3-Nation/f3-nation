@@ -64,12 +64,15 @@ function latestRun(runs, name, integrationId) {
  * never started -- is not green. `requiredContexts` entries carry
  * `integrationId` (nullable) so a same-named check from an unpinned or
  * different GitHub App can't satisfy a context the ruleset pinned to a
- * specific app; legacy statuses have no equivalent app-identity field to
- * check.
+ * specific app. Legacy statuses have no equivalent app-identity field, so a
+ * pinned context with no matching check run is rejected outright rather than
+ * falling back to a same-named status -- otherwise an unrelated integration
+ * could impersonate the pinned check by posting a status with the same name.
  */
 function requiredChecksGreen(requiredContexts, checkRuns, statusRuns) {
   return requiredContexts.every(({ context, integrationId }) => {
     const check = latestRun(checkRuns, context, integrationId);
+    if (integrationId != null && !check) return false;
     const status = latestRun(statusRuns, context, null);
     if (!check && !status) return false;
     if (check && !PASSING_CONCLUSIONS.has(check.conclusion)) return false;
