@@ -1,4 +1,4 @@
-"""Dependency-injected GCS and BigQuery publication boundaries."""
+"""Dependency-injected GCS publication boundaries."""
 
 from __future__ import annotations
 
@@ -30,16 +30,11 @@ class PublicationStatus:
     manifest_object: ObjectMetadata
     pointer: ObjectMetadata
     expected_pointer_generation: str | None
-    bigquery_job_id: str | None
 
 
 def _prefix_parts(prefix: str) -> tuple[str, str]:
     parsed = urlparse(prefix)
     return parsed.netloc, parsed.path.lstrip("/")
-
-
-def _sql_literal(value: str) -> str:
-    return "'" + value.replace("'", "''") + "'"
 
 
 def _metadata(blob: Any, bucket: str, name: str) -> ObjectMetadata:
@@ -105,24 +100,6 @@ class GcsPublisher:
         return _metadata(blob, self.bucket_name, name)
 
 
-class BigQueryPublisher:
-    def __init__(self, client: Any, settings: Settings, materialization: Materialization) -> None:
-        self.client = client
-        self.materialization = materialization
-        self.table = settings.target(materialization)[1]
-
-    def update_external_table(self, parquet_uri: str) -> str | None:
-        project, dataset, table = self.table.split(".")
-        identifier = f"`{project}.{dataset}.{table}`"
-        query = (
-            f"CREATE OR REPLACE EXTERNAL TABLE {identifier} "
-            f"OPTIONS (format = 'PARQUET', uris = [{_sql_literal(parquet_uri)}])"
-        )
-        job = self.client.query(query)
-        job.result()
-        return getattr(job, "job_id", None)
-
-
 def build_manifest(
     run_id: str,
     parquet: ObjectMetadata,
@@ -164,7 +141,6 @@ class PointerConflictError(RuntimeError):
 
 def publish(
     gcs: GcsPublisher,
-    bigquery: BigQueryPublisher,
     run_id: str,
     parquet_path: Path,
     row_count: int,
@@ -177,7 +153,6 @@ def publish(
     if (
         MATERIALIZATIONS_BY_NAME.get(materialization.name) is not materialization
         or gcs.materialization is not materialization
-        or bigquery.materialization is not materialization
     ):
         raise ValueError("publication components use different materialization definitions")
     definition = materialization
@@ -196,12 +171,6 @@ def publish(
             },
         )
     expected_generation = gcs.current_generation()
-    bigquery_job_id = bigquery.update_external_table(parquet.uri)
-    if emit is not None:
-        emit(
-            "analytics.etl.bigquery_updated",
-            {"run_id": run_id, "job_id": bigquery_job_id, "materialization": definition.name},
-        )
     try:
         pointer = gcs.advance_current(manifest_object, expected_generation)
         if emit is not None:
@@ -227,7 +196,6 @@ def publish(
                 "manifest_generation": manifest_object.generation,
                 "expected_pointer_generation": expected_generation,
                 "current_pointer_generation": current_generation,
-                "bigquery_job_id": bigquery_job_id,
             }
         ) from error
     return PublicationStatus(
@@ -236,5 +204,4 @@ def publish(
         manifest_object=manifest_object,
         pointer=pointer,
         expected_pointer_generation=expected_generation,
-        bigquery_job_id=bigquery_job_id,
     )

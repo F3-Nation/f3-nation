@@ -14,7 +14,7 @@ from analytics.materializations import (
     select_materializations,
 )
 from analytics.pipeline import BatchRunError, run
-from analytics.publication import BigQueryPublisher, GcsPublisher, PointerConflictError, publish
+from analytics.publication import GcsPublisher, PointerConflictError, publish
 from analytics.settings import Settings, SettingsError
 
 
@@ -40,11 +40,11 @@ def _settings(tmp_path: Path) -> Settings:
 def test_registry_has_exact_environment_targets(definition):
     assert definition.target("nonprod") == (
         f"gs://f3-analytics-nonprod/parquets/{definition.name}",
-        f"f3data.paxVaultDuckStaging.{definition.name}",
+        "",
     )
     assert definition.target("production") == (
         f"gs://analytics/parquets/{definition.name}",
-        f"f3data.paxVaultDuck.{definition.name}",
+        "",
     )
     assert definition.schema_version == f"{definition.name}.v1"
     assert definition.output_filename == f"{definition.name}.parquet"
@@ -109,25 +109,10 @@ class _Storage:
         return _Bucket()
 
 
-class _Job:
-    def result(self):
-        return None
-
-
-class _BigQuery:
-    def __init__(self):
-        self.queries = []
-
-    def query(self, query):
-        self.queries.append(query)
-        return _Job()
-
-
 def test_two_definitions_are_isolated_in_publication(tmp_path):
     _Blob.objects.clear()
     _Blob.generation = 0
     configured = _settings(tmp_path)
-    bq = _BigQuery()
     statuses = []
     for definition in MATERIALIZATIONS[:2]:
         parquet = tmp_path / definition.output_filename
@@ -136,7 +121,6 @@ def test_two_definitions_are_isolated_in_publication(tmp_path):
         statuses.append(
             publish(
                 gcs,
-                BigQueryPublisher(bq, configured, definition),
                 "shared-run",
                 parquet,
                 1,
@@ -153,8 +137,6 @@ def test_two_definitions_are_isolated_in_publication(tmp_path):
     assert second.manifest["schema_version"] == "pv_pax.v1"
     assert first.parquet.uri.endswith("pv_regions.parquet")
     assert second.parquet.uri.endswith("pv_pax.parquet")
-    assert "paxVaultDuckStaging.pv_regions" in bq.queries[0]
-    assert "paxVaultDuckStaging.pv_pax" in bq.queries[1]
 
 
 def test_mismatched_publication_definitions_do_not_upload(tmp_path):
@@ -165,8 +147,7 @@ def test_mismatched_publication_definitions_do_not_upload(tmp_path):
     parquet.write_bytes(b"synthetic")
     with pytest.raises(ValueError, match="different materialization"):
         publish(
-            GcsPublisher(_Storage(), configured, first),
-            BigQueryPublisher(_BigQuery(), configured, second),
+            GcsPublisher(_Storage(), configured, second),
             "mismatch-run",
             parquet,
             1,
@@ -177,7 +158,7 @@ def test_mismatched_publication_definitions_do_not_upload(tmp_path):
     assert _Blob.objects == {}
 
 
-@pytest.mark.parametrize("failure_stage", ("lease", "source", "bigquery", "pointer"))
+@pytest.mark.parametrize("failure_stage", ("lease", "source", "pointer"))
 def test_pipeline_continues_after_each_dataset_failure(monkeypatch, tmp_path, failure_stage):
     configured = _settings(tmp_path)
     first, second = MATERIALIZATIONS[:2]
@@ -216,11 +197,11 @@ def test_pipeline_continues_after_each_dataset_failure(monkeypatch, tmp_path, fa
     monkeypatch.setattr(
         pipeline_module,
         "publish",
-        lambda gcs, _bigquery, *_args, **_kwargs: _publish(gcs.materialization, first, failure_stage),
+        lambda gcs, *_args, **_kwargs: _publish(gcs.materialization, first, failure_stage),
     )
 
     with pytest.raises(BatchRunError) as raised:
-        run(configured, _Storage(), _BigQuery(), connection_factory=lambda _settings: Connection(), run_id="synthetic")
+        run(configured, _Storage(), connection_factory=lambda _settings: Connection(), run_id="synthetic")
     assert set(raised.value.failures) == {first.name}
     assert second.name not in raised.value.failures
     assert second.name in acquired
@@ -236,8 +217,6 @@ def _materialize(definition, selected_definition, failure_stage):
 def _publish(definition, selected_definition, failure_stage):
     if definition is selected_definition and failure_stage == "pointer":
         raise PointerConflictError({"stage": "pointer_update"})
-    if definition is selected_definition and failure_stage == "bigquery":
-        raise RuntimeError(f"first {failure_stage} failed")
     return object()
 
 
@@ -264,7 +243,7 @@ def test_pipeline_aggregates_all_named_failures(monkeypatch, tmp_path):
     monkeypatch.setattr(pipeline_module, "attach_postgres", lambda *_args: None)
     monkeypatch.setattr(pipeline_module, "materialize", lambda *_args: (_ for _ in ()).throw(RuntimeError("failed")))
     with pytest.raises(BatchRunError) as raised:
-        run(configured, _Storage(), _BigQuery(), connection_factory=lambda _settings: Connection(), run_id="all-failed")
+        run(configured, _Storage(), connection_factory=lambda _settings: Connection(), run_id="all-failed")
     assert set(raised.value.failures) == {definition.name for definition in definitions}
 
 
@@ -289,7 +268,6 @@ def test_pipeline_records_lease_constructor_failure_and_continues(monkeypatch, t
         run(
             configured,
             _Storage(),
-            _BigQuery(),
             connection_factory=lambda _settings: _TestConnection(),
             run_id="constructor",
         )
@@ -364,7 +342,6 @@ def test_pipeline_propagates_cancellation_without_later_dataset(monkeypatch, tmp
         run(
             configured,
             _Storage(),
-            _BigQuery(),
             connection_factory=lambda _settings: _TestConnection(),
             run_id="cancel",
         )
@@ -378,7 +355,6 @@ def test_publication_events_include_materialization(tmp_path):
     events = []
     publish(
         GcsPublisher(_Storage(), _settings(tmp_path), definition),
-        BigQueryPublisher(_BigQuery(), _settings(tmp_path), definition),
         "events-run",
         parquet,
         1,

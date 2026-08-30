@@ -2,7 +2,7 @@
 
 > **Approved by the user: 2026-08-26.** This document is the contract for the
 > eight approved materializations. It describes the intended capability; it does
-> not claim that live database, GCS, BigQuery, IAM, or production validation has
+> not claim that live database, GCS, IAM, or production validation has
 > been performed.
 
 ## 1. Summary
@@ -27,20 +27,18 @@ The eight materializations are exactly:
 8. `pv_events`
 
 Each dataset has an independent immutable run path, manifest, current pointer,
-publication lease, and BigQuery external-table target. A dataset's failure or
-publication conflict must not change the publication state of another dataset.
+and publication lease. A dataset's failure or publication conflict must not
+change the publication state of another dataset.
 
 ## 2. Environment targets and operation
 
 Production targets are, for each `<name>` in the approved list:
 
 - GCS: `gs://analytics/parquets/<name>`
-- BigQuery external table: `f3data.paxVaultDuck.pv_<name>`
 
 Nonproduction targets are:
 
 - GCS: `gs://f3-analytics-nonprod/parquets/<name>`
-- BigQuery external table: `f3data.paxVaultDuckStaging.<name>`
 
 The job runs in project `f3data`, region `us-central1`. Production uses Cloud
 SQL instance `f3data`; nonproduction uses `f3data-nonprod`. Cloud Run uses Cloud
@@ -66,7 +64,7 @@ cadences, and arbitrary query-driven selection require a new approval.
 - Before publication, generated files are checked for readable valid Parquet,
   expected schema, completeness, counts, and integrity metadata. Missing,
   malformed, duplicate, or schema-invalid data fails that dataset before its
-  pointer or BigQuery target is changed.
+  pointer is changed.
 - A dataset manifest is the commit record and includes at least dataset name,
   run ID, exact committed directory, complete object list, checksums or
   equivalent integrity values, row/file/byte counts, schema version,
@@ -74,11 +72,6 @@ cadences, and arbitrary query-driven selection require a new approval.
 - The dataset's current pointer is advanced only after all its objects and
   manifest are durable, using a generation-conditional/concurrency-safe update.
   Readers resolve one pointer and consume only that generation.
-- After GCS commit, the corresponding BigQuery external table is updated to the
-  exact committed run directory, never to a wildcard spanning runs. The update
-  is atomic from the consumer's perspective, or the previous definition stays
-  in place. A BigQuery failure leaves the GCS commit recoverable, marks the
-  dataset and batch unsuccessful, and does not silently publish a partial table.
 - A prior known-good publication remains consumable on failure. Retries create
   distinct run IDs and never overwrite committed objects. Lease takeover,
   pointer recovery, rollback, garbage collection, retention, and alert
@@ -186,8 +179,8 @@ This is a backend publication capability with no oRPC procedure, end-user
 trigger, download, query, or edit action. Production and nonproduction use
 separate runtime identities; the Scheduler identity is invoker-only and GitHub
 WIF is the deployment identity. End users and application identities cannot
-invoke the job, read PostgreSQL, read the ETL bucket, mutate manifests/pointers,
-or alter the named BigQuery tables.
+invoke the job, read PostgreSQL, read the ETL bucket, or mutate committed
+objects, manifests, or pointers.
 
 The `pv_pax`, `pv_kotter`, and `pv_events` outputs are sensitive PAX/Kotter/events
 data and their inclusion is explicitly authorized by this approval. Access is
@@ -202,7 +195,7 @@ logs/metrics contain no row-level sensitive data.
 
 Each materialization acquires and releases its own 90-minute generation-conditional
 lease and owns its own publication lifecycle. Lease conflicts, source/query,
-validation, upload, pointer, and BigQuery errors are classified per dataset.
+validation, upload, and pointer errors are classified per dataset.
 The runner continues after ordinary exceptions, records all failed names and
 recovery metadata, then returns a nonzero/unsuccessful batch result. Process
 cancellation is not treated as an ordinary dataset failure.
@@ -213,7 +206,7 @@ directory, outcome, pointer age, publication lag, retry count, and error class.
 Use the approved logging abstraction rather than `console.*`; never emit
 credentials, tokens, connection strings, PII, or raw rows. Alert on missed daily
 execution, stale pointers, SLO/freshness breaches, repeated failures,
-validation drift, permission failures, and GCS/BigQuery mismatches.
+validation drift, and permission failures.
 
 ## 7. Human release gates and ownership
 
@@ -235,15 +228,15 @@ performed and recorded by the responsible humans during release.
 
 1. The default daily run selects exactly the eight names in the stated sequential
    order and records a traceable batch/run ID.
-2. Each selected dataset has isolated path, manifest, pointer, lease, and
-   BigQuery target; no dataset can publish to another's target.
+2. Each selected dataset has an isolated path, manifest, pointer, and lease; no
+   dataset can publish to another's path or pointer.
 3. Valid output satisfies its contract above and is immutable, readable Parquet
    under a new run directory.
 4. Validation or ordinary publication failure leaves that dataset's prior
-   pointer/table consumable, while later datasets still run; any failure makes
-   the batch unsuccessful.
-5. Successful publication advances only the matching pointer and exact
-   BigQuery run-directory definition after durable GCS commit.
+   pointer consumable, while later datasets still run; any failure makes the
+   batch unsuccessful.
+5. Successful publication advances only the matching generation-protected
+   current pointer after durable GCS commit.
 6. Retry and concurrent-publisher handling cannot overwrite committed objects or
    create a mixed-generation dataset.
 7. Read-only database permissions, sensitive-output authorization, secret

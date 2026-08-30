@@ -1,36 +1,34 @@
 # Analytics region-roster ETL
 
-Phase 3 materializes only the approved region roster/vocabulary dataset. It
-reads the six PostgreSQL base tables through DuckDB's read-only PostgreSQL
-attachment, writes one local Snappy Parquet file, and publishes an immutable
-run object plus manifest to GCS before updating the configured BigQuery
-external table. The current pointer is advanced last with a GCS generation
-precondition; this is intentionally not a cross-service atomic transaction.
+The analytics job reads PostgreSQL through DuckDB's read-only PostgreSQL
+attachment, writes Parquet, and publishes immutable run-scoped objects plus a
+manifest to GCS. The generation-protected current pointer is advanced only
+after the run artifacts are durable; readers consume the generation named by
+that pointer.
 DuckDB's PostgreSQL extension is loaded from an explicit prebundled path; the
 runtime never runs `INSTALL`.
 
 Runtime targets are deliberately limited to two environments. Approved GCS
-prefixes and BigQuery tables are selected from the immutable materialization
-registry; they are never accepted as environment or CLI output targets.
+prefixes are selected from the immutable materialization registry; they are
+never accepted as environment or CLI output targets.
 `local` and `test` are explicit nonprod aliases only. Cloud Run uses the
-matching Cloud SQL Unix socket; an approved local run may instead use the
-documented proxy at `localhost` on a developer-chosen port.
+matching Cloud SQL Unix socket; local connectivity requires separate operator
+approval.
 
 Each publication acquires a 90-minute generation-conditional GCS lease before
 reading PostgreSQL. Active leases reject the run; expired leases may be taken
 over. Leases are released by a generation-conditional state update, never by
 deletion.
 
-If BigQuery succeeds but the pointer generation conflicts, the safe recovery is
-to rerun the complete ETL after concurrent publishers quiesce. There is no
-pointer-only retry API; the rerun creates a new immutable run and realigns the
-external table and current pointer.
+If pointer publication conflicts or a run fails, retain the prior known-good
+pointer and rerun the complete ETL after concurrent publishers quiesce. A rerun
+creates a new immutable run; committed artifacts are never overwritten.
 
 ## Local testing (safe and offline by default)
 
 The normal local path does not need cloud credentials, a database, Cloud SQL,
 Google ADC, or a DuckDB extension. It uses synthetic DuckDB fixtures and
-mocked GCS/BigQuery clients. Prerequisites are Python 3.12+, `uv`, and a
+mocked GCS client. Prerequisites are Python 3.12+, `uv`, and a
 checkout of this repository. From the repository root, install dependencies and
 run the unit tests and lint:
 
@@ -48,91 +46,24 @@ does not make live cloud or database calls. Do not create or populate an
 
 This is a publication test, not a harmless sandbox run. A local CLI `run`
 reads the approved nonprod database and publishes to the approved nonprod GCS
-prefix and BigQuery external table. Run it only with explicit approval from
+prefix. Run it only with explicit approval from
 the responsible security/platform and analytics operators. It requires real
-read-only PostgreSQL credentials, a running Cloud SQL Auth Proxy, a real signed
+read-only PostgreSQL credentials, approved database connectivity, a real signed
 DuckDB 1.4.3 `postgres_scanner` extension at the configured version/platform
 path, and Google Application Default Credentials (ADC) with the narrowly
 scoped nonprod permissions. An empty extension placeholder is not valid. Never
 use production targets or put credentials in logs or source control.
 
-Read [`docs/LOCAL_DEV_SETUP.md`](../../docs/LOCAL_DEV_SETUP.md) first. Start the
-documented proxy in a separate terminal:
-
-```bash
-PROXY_PORT=5433  # choose a free local port, then use the same value below
-cloud-sql-proxy f3data:us-central1:f3data-nonprod --port "$PROXY_PORT"
-```
-
-Keep the proxy running for the entire local run. Set
-`ANALYTICS_POSTGRES_HOST=localhost` and
-`ANALYTICS_POSTGRES_PORT="$PROXY_PORT"` in the local env file; the port must
-match the `--port` value exactly. Cloud Run continues to use its Unix socket,
-with no deployment change. Sign in for
+Read [`docs/LOCAL_DEV_SETUP.md`](../../docs/LOCAL_DEV_SETUP.md) first. Use the
+operator-approved database connectivity. Cloud Run continues to use its Unix
+socket. Sign in for
 both ordinary gcloud access and ADC, then request the approved least-privilege
-database, storage, BigQuery, and Cloud SQL access from the platform/security
+database, GCS, and Cloud SQL access from the platform/security
 owners:
 
 ```bash
 gcloud auth login
 gcloud auth application-default login
-```
-
-### Platform-owner IAM template (do not run without approval)
-
-This is a review template, not an approved grant. Platform/security owners
-must first check custom-role support, IAM condition compatibility, organization
-policy inheritance, and table/permission behavior. They must also use Policy
-Troubleshooter before approval. Do not substitute broader predefined roles or
-real account identifiers for the placeholders without that review.
-
-The template creates separate custom roles for the narrowly described
-permissions and binds them only to the requested resources. It uses no actual
-account email. The Storage role grants object get/create/update only; no list
-permission is granted:
-
-```bash
-MEMBER="user:YOUR_EMAIL"
-ANALYTICS_PROJECT_ID="f3data"
-CLOUD_SQL_PROJECT_ID="f3data"
-BUCKET="f3-analytics-nonprod"
-
-gcloud iam roles create analyticsNonprodStorageObjects \
-  --project="$ANALYTICS_PROJECT_ID" \
-  --title="Analytics nonprod storage objects" \
-  --permissions="storage.objects.get,storage.objects.create,storage.objects.update" \
-  --stage="GA"
-gcloud iam roles create analyticsNonprodBigQueryTable \
-  --project="$ANALYTICS_PROJECT_ID" \
-  --title="Analytics nonprod BigQuery table" \
-  --permissions="bigquery.tables.create,bigquery.tables.get,bigquery.tables.update,bigquery.tables.updateData" \
-  --stage="GA"
-gcloud iam roles create analyticsNonprodBigQueryJobs \
-  --project="$ANALYTICS_PROJECT_ID" \
-  --title="Analytics nonprod BigQuery jobs" \
-  --permissions="bigquery.jobs.create" \
-  --stage="GA"
-gcloud iam roles create analyticsNonprodCloudSqlConnect \
-  --project="$CLOUD_SQL_PROJECT_ID" \
-  --title="Analytics nonprod Cloud SQL connect" \
-  --permissions="cloudsql.instances.connect,cloudsql.instances.get" \
-  --stage="GA"
-
-gcloud storage buckets add-iam-policy-binding "gs://$BUCKET" \
-  --member="$MEMBER" \
-  --role="projects/$ANALYTICS_PROJECT_ID/roles/analyticsNonprodStorageObjects" \
-  --condition="title=analytics-prefix,expression=(resource.type == 'storage.googleapis.com/Object' && resource.name.startsWith('projects/_/buckets/$BUCKET/objects/parquets/pv_regions/')),description=approved nonprod parquet prefix only"
-gcloud projects add-iam-policy-binding "$ANALYTICS_PROJECT_ID" \
-  --member="$MEMBER" \
-  --role="projects/$ANALYTICS_PROJECT_ID/roles/analyticsNonprodBigQueryTable" \
-  --condition="title=analytics-table,expression=resource.service == 'bigquery.googleapis.com' && resource.type == 'bigquery.googleapis.com/Table' && resource.name == 'projects/f3data/datasets/paxVaultDuckStaging/tables/pv_regions',description=approved nonprod table only"
-gcloud projects add-iam-policy-binding "$ANALYTICS_PROJECT_ID" \
-  --member="$MEMBER" \
-  --role="projects/$ANALYTICS_PROJECT_ID/roles/analyticsNonprodBigQueryJobs"
-gcloud projects add-iam-policy-binding "$CLOUD_SQL_PROJECT_ID" \
-  --member="$MEMBER" \
-  --role="projects/$CLOUD_SQL_PROJECT_ID/roles/analyticsNonprodCloudSqlConnect" \
-  --condition="title=analytics-instance,expression=resource.type == 'sqladmin.googleapis.com/Instance' && resource.name == 'projects/f3data/instances/f3data-nonprod',description=approved nonprod instance only"
 ```
 
 ### Obtain and verify the local DuckDB extension
@@ -225,7 +156,7 @@ Copy the example only for an approved live run. After the extension step above,
 replace the two blank DuckDB values in the copied file with the exact absolute
 `EXT_DIR` and `EXT_PATH` values discovered above. Do not use Docker's `/opt`
 paths. Leave `ANALYTICS_POSTGRES_SOCKET_DIR` unset; the local endpoint is only
-`localhost` and the chosen proxy port. Then source the completed file and explicitly re-assert the
+the approved database endpoint. Then source the completed file and explicitly re-assert the
 discovered paths after sourcing so the file cannot silently replace working
 exports:
 
@@ -285,12 +216,12 @@ Before enabling production:
 
 1. Run `actionlint` for the deployment workflows.
 2. Create the approved nonprod/production runtime identities, Scheduler invoker
-   identity, read-only database roles, Secret Manager versions, and bucket/
-   BigQuery IAM bindings. See
+   identity, read-only database roles, Secret Manager versions, and narrowly
+   scoped GCS IAM bindings. See
    [`docs/ANALYTICS_ETL_OPERATIONS.md`](../../docs/ANALYTICS_ETL_OPERATIONS.md).
 3. Deploy and manually execute `analytics-etl-nonprod`; verify Unix-socket
-   access, database write denial, immutable GCS objects and lease behavior,
-   BigQuery replacement, and pointer/table agreement.
+   access, database write denial, immutable GCS objects, generation-protected
+   pointer behavior, and lease behavior.
 4. Verify failure, stale-pointer, and alert handling with the configured log
    alerts before approving production.
 5. Provision the production Scheduler at `0 6 * * *` UTC with

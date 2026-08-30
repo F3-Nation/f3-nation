@@ -534,7 +534,6 @@ version = "0.1.0"
 source = { editable = "apps/analytics" }
 dependencies = [
     { name = "duckdb" },
-    { name = "google-cloud-bigquery" },
     { name = "google-cloud-storage" },
     { name = "pytz" },
 ]
@@ -549,7 +548,6 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "duckdb", specifier = "==1.4.3" },
-    { name = "google-cloud-bigquery", specifier = ">=3.25.0,<4.0.0" },
     { name = "google-cloud-storage", specifier = ">=2.18.0,<3.0.0" },
     { name = "pytz", specifier = ">=2024.1,<2027.0" },
 ]

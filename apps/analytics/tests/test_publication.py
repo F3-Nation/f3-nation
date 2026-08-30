@@ -7,13 +7,13 @@ import pytest
 from google.api_core.exceptions import PreconditionFailed
 
 from analytics.materializations import MATERIALIZATION_REGISTRY
-from analytics.publication import BigQueryPublisher, GcsPublisher, PointerConflictError, publish
+from analytics.publication import GcsPublisher, PointerConflictError, publish
 from analytics.settings import Settings
 
 
 def settings(tmp_path: Path) -> Settings:
     extension_dir = tmp_path / "extensions"
-    extension_dir.mkdir(exist_ok=True)
+    extension_dir.mkdir()
     extension = extension_dir / "postgres_scanner.duckdb_extension"
     extension.touch()
     return Settings.from_env(
@@ -48,10 +48,7 @@ class Blob:
         if actual != expected:
             raise PreconditionFailed("generation conflict")
         Blob.generation_counter += 1
-        self.generation = Blob.generation_counter
-        self.size = len(value)
-        self.crc32c = "crc"
-        self.content = value
+        self.generation, self.size, self.crc32c, self.content = Blob.generation_counter, len(value), "crc", value
         Blob.objects[self.name] = self
 
     def reload(self):
@@ -73,64 +70,29 @@ class Storage:
         return Bucket()
 
 
-class Job:
-    def result(self):
-        return None
-
-
-class BigQuery:
-    def __init__(self, order):
-        self.order = order
-        self.query_text = ""
-
-    def query(self, query):
-        self.order.append("bigquery")
-        self.query_text = query
-        return Job()
-
-
-def test_publication_orders_bigquery_before_pointer_and_emits_manifest(tmp_path):
+def test_publication_durably_writes_manifest_before_pointer(tmp_path):
     Blob.objects.clear()
-    order = []
-    bq = BigQuery(order)
     definition = MATERIALIZATION_REGISTRY["pv_regions"]
-    gcs = GcsPublisher(Storage(), settings(tmp_path), definition)
-    original = gcs.advance_current
-    gcs.advance_current = lambda *args, **kwargs: (order.append("pointer"), original(*args, **kwargs))[1]
+    publisher = GcsPublisher(Storage(), settings(tmp_path), definition)
     parquet = tmp_path / "regions.parquet"
     parquet.write_bytes(b"parquet")
-    status = publish(
-        gcs,
-        BigQueryPublisher(bq, settings(tmp_path), definition),
-        "run-1",
-        parquet,
-        2,
-        "source",
-        "published",
-        definition,
-    )
-    assert order == ["bigquery", "pointer"]
-    assert status.manifest["objects"][0]["uri"].endswith("run-1/pv_regions.parquet")
-    assert status.manifest["committed_run_prefix"].endswith("run-1")
-    assert status.manifest["file_count"] == 1
-    assert status.manifest["byte_count"] == 7
-    stored_manifest = json.loads(Blob.objects["parquets/pv_regions/run-1/manifest.json"].content)
-    assert stored_manifest["row_count"] == 2
-    assert "manifest_uri" not in stored_manifest
-    assert "CREATE OR REPLACE EXTERNAL TABLE `f3data.paxVaultDuckStaging.pv_regions`" in bq.query_text
+    status = publish(publisher, "run-1", parquet, 2, "source", "published", definition)
+    assert status.manifest_object.uri.endswith("run-1/manifest.json")
+    assert status.pointer.uri.endswith("current.json")
+    stored = json.loads(Blob.objects["parquets/pv_regions/run-1/manifest.json"].content)
+    assert stored["row_count"] == 2
+    pointer = json.loads(Blob.objects["parquets/pv_regions/current.json"].content)
+    assert pointer["manifest_uri"] == status.manifest_object.uri
 
 
-def test_publication_emits_fixed_phase_events_with_safe_counts(tmp_path):
+def test_publication_emits_only_gcs_phase_events(tmp_path):
     Blob.objects.clear()
     events = []
     definition = MATERIALIZATION_REGISTRY["pv_regions"]
-    gcs = GcsPublisher(Storage(), settings(tmp_path), definition)
-    bq = BigQueryPublisher(BigQuery([]), settings(tmp_path), definition)
     parquet = tmp_path / "regions.parquet"
     parquet.write_bytes(b"parquet")
     publish(
-        gcs,
-        bq,
+        GcsPublisher(Storage(), settings(tmp_path), definition),
         "run-events",
         parquet,
         4,
@@ -139,121 +101,19 @@ def test_publication_emits_fixed_phase_events_with_safe_counts(tmp_path):
         definition,
         emit=lambda event, context: events.append((event, context)),
     )
-    assert [event for event, _ in events] == [
-        "analytics.etl.gcs_committed",
-        "analytics.etl.bigquery_updated",
-        "analytics.etl.pointer_advanced",
-    ]
-    assert events[0][1]["run_id"] == "run-events"
-    assert events[0][1]["file_count"] == 1
-    assert events[0][1]["byte_count"] == 7
-    assert events[0][1]["duration_ms"] >= 0
+    assert [event for event, _ in events] == ["analytics.etl.gcs_committed", "analytics.etl.pointer_advanced"]
 
 
-def test_bigquery_failure_does_not_advance_pointer(tmp_path):
-    Blob.objects.clear()
-    order = []
-
-    class FailingBigQuery(BigQuery):
-        def query(self, query):
-            self.order.append("bigquery")
-            raise RuntimeError("query failed")
-
-    definition = MATERIALIZATION_REGISTRY["pv_regions"]
-    gcs = GcsPublisher(Storage(), settings(tmp_path), definition)
-    parquet = tmp_path / "regions.parquet"
-    parquet.write_bytes(b"parquet")
-    with pytest.raises(RuntimeError):
-        publish(
-            gcs,
-            BigQueryPublisher(FailingBigQuery(order), settings(tmp_path), definition),
-            "run-2",
-            parquet,
-            1,
-            "source",
-            "published",
-            definition,
-        )
-    assert "parquets/pv_regions/current.json" not in Blob.objects
-
-
-def test_pointer_conflict_is_observable(tmp_path):
+def test_pointer_conflict_leaves_durable_manifest_and_is_observable(tmp_path):
     Blob.objects.clear()
     definition = MATERIALIZATION_REGISTRY["pv_regions"]
-    gcs = GcsPublisher(Storage(), settings(tmp_path), definition)
+    publisher = GcsPublisher(Storage(), settings(tmp_path), definition)
     parquet = tmp_path / "regions.parquet"
     parquet.write_bytes(b"parquet")
-
-    def conflict(*args, **kwargs):
-        raise PreconditionFailed("conflict")
-
-    gcs.advance_current = conflict
+    publisher.advance_current = lambda *args, **kwargs: (_ for _ in ()).throw(PreconditionFailed("conflict"))
     with pytest.raises(PointerConflictError) as raised:
-        publish(
-            gcs,
-            BigQueryPublisher(BigQuery([]), settings(tmp_path), definition),
-            "run-3",
-            parquet,
-            1,
-            "source",
-            "published",
-            definition,
-        )
-    assert raised.value.metadata["run_id"] == "run-3"
+        publish(publisher, "run-3", parquet, 1, "source", "published", definition)
     assert raised.value.metadata["stage"] == "pointer_update"
-    assert raised.value.metadata["parquet_uri"].endswith("run-3/pv_regions.parquet")
-    assert set(raised.value.metadata) == {
-        "stage",
-        "run_id",
-        "parquet_uri",
-        "parquet_generation",
-        "manifest_uri",
-        "manifest_generation",
-        "expected_pointer_generation",
-        "current_pointer_generation",
-        "bigquery_job_id",
-        "materialization",
-    }
-
-
-def test_complete_retry_realigns_bigquery_and_pointer(tmp_path):
-    Blob.objects.clear()
-    definition = MATERIALIZATION_REGISTRY["pv_regions"]
-    gcs = GcsPublisher(Storage(), settings(tmp_path), definition)
-    parquet = tmp_path / "regions.parquet"
-    parquet.write_bytes(b"parquet")
-    original = gcs.advance_current
-    attempts = [True]
-
-    def conflict_once(*args, **kwargs):
-        if attempts:
-            attempts.pop()
-            raise PreconditionFailed("conflict")
-        return original(*args, **kwargs)
-
-    gcs.advance_current = conflict_once
-    bq = BigQuery([])
-    with pytest.raises(PointerConflictError):
-        publish(
-            gcs,
-            BigQueryPublisher(bq, settings(tmp_path), definition),
-            "run-4a",
-            parquet,
-            1,
-            "source",
-            "published",
-            definition,
-        )
-    status = publish(
-        gcs,
-        BigQueryPublisher(bq, settings(tmp_path), definition),
-        "run-4b",
-        parquet,
-        1,
-        "source",
-        "published",
-        definition,
-    )
-    pointer = json.loads(Blob.objects["parquets/pv_regions/current.json"].content)
-    assert pointer["manifest_uri"] == status.manifest_object.uri
-    assert bq.query_text.endswith("run-4b/pv_regions.parquet'])")
+    assert raised.value.metadata["manifest_uri"].endswith("run-3/manifest.json")
+    assert "parquets/pv_regions/run-3/manifest.json" in Blob.objects
+    assert "parquets/pv_regions/current.json" not in Blob.objects

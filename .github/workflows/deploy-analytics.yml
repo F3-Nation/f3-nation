@@ -41,7 +41,7 @@ jobs:
         --task-timeout=60m
         --command=analytics-etl
         --args=run
-        --set-env-vars=ANALYTICS_ENVIRONMENT=nonprod,ANALYTICS_POSTGRES_SOCKET_DIR=/cloudsql/f3data:us-central1:f3data-nonprod,ANALYTICS_POSTGRES_DATABASE=f3_staging,ANALYTICS_GCS_PREFIX=gs://f3-analytics-nonprod/parquets/pv_regions,ANALYTICS_BIGQUERY_TABLE=f3data.paxVaultDuckStaging.pv_regions
+        --set-env-vars=ANALYTICS_ENVIRONMENT=nonprod,ANALYTICS_POSTGRES_SOCKET_DIR=/cloudsql/f3data:us-central1:f3data-nonprod,ANALYTICS_POSTGRES_DATABASE=f3_staging,ANALYTICS_GCS_PREFIX=gs://f3-analytics-nonprod/parquets/pv_regions
         --set-secrets=ANALYTICS_POSTGRES_USER=analytics-etl-nonprod-database-user:latest,ANALYTICS_POSTGRES_PASSWORD=analytics-etl-nonprod-database-password:latest
       prod_flags: >-
         --set-cloudsql-instances=f3data:us-central1:f3data
@@ -51,5 +51,5 @@ jobs:
         --task-timeout=60m
         --command=analytics-etl
         --args=run
-        --set-env-vars=ANALYTICS_ENVIRONMENT=production,ANALYTICS_POSTGRES_SOCKET_DIR=/cloudsql/f3data:us-central1:f3data,ANALYTICS_POSTGRES_DATABASE=f3_prod,ANALYTICS_GCS_PREFIX=gs://analytics/parquets/pv_regions,ANALYTICS_BIGQUERY_TABLE=f3data.paxVaultDuck.pv_regions
+        --set-env-vars=ANALYTICS_ENVIRONMENT=production,ANALYTICS_POSTGRES_SOCKET_DIR=/cloudsql/f3data:us-central1:f3data,ANALYTICS_POSTGRES_DATABASE=f3_prod,ANALYTICS_GCS_PREFIX=gs://analytics/parquets/pv_regions
         --set-secrets=ANALYTICS_POSTGRES_USER=analytics-etl-database-user:latest,ANALYTICS_POSTGRES_PASSWORD=analytics-etl-database-password:latest

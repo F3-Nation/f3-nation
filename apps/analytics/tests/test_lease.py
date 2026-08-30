@@ -117,7 +117,6 @@ def test_active_lease_rejection_happens_before_source_connection(tmp_path):
         run(
             settings,
             LeaseStorage(),
-            object(),
             connection_factory=connection_factory,
             run_id="blocked",
             materializations=("pv_regions",),
@@ -151,7 +150,6 @@ def test_cleanup_failures_are_logged_without_masking_primary_failure(monkeypatch
         run(
             settings,
             LeaseStorage(),
-            object(),
             connection_factory=lambda _settings: BrokenConnection(),
             logger=logger,
             run_id="cleanup-run",

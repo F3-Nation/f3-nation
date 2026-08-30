@@ -13,7 +13,6 @@ from .lease import GcsLease, LeaseActiveError, LeaseConflictError, LeaseHandle
 from .logging import JsonLogger
 from .materializations import select_materializations
 from .publication import (
-    BigQueryPublisher,
     GcsPublisher,
     PointerConflictError,
     PublicationStatus,
@@ -35,7 +34,6 @@ class BatchRunError(RuntimeError):
 def run(
     settings: Settings,
     storage_client: Any,
-    bigquery_client: Any,
     connection_factory: Callable[[Settings], Any] = connect,
     logger: JsonLogger | None = None,
     now: Callable[[], datetime] | None = None,
@@ -80,7 +78,6 @@ def run(
                 )
                 results[definition.name] = publish(
                     GcsPublisher(storage_client, settings, definition),
-                    BigQueryPublisher(bigquery_client, settings, definition),
                     run_id_value,
                     parquet_path,
                     row_count,

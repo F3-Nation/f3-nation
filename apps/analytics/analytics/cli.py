@@ -29,13 +29,11 @@ def main() -> int:
             connection.close()
             logger.info("analytics.etl.preflight_succeeded", run_id=str(run_id), environment=settings.environment)
         else:
-            from google.cloud import bigquery
             from google.cloud.storage import Client as StorageClient  # type: ignore[import-untyped]
 
             run(
                 settings,
                 StorageClient(),
-                bigquery.Client(),
                 logger=logger,
                 run_id=str(run_id),
                 execution_context=cloud_run_context(os.environ),

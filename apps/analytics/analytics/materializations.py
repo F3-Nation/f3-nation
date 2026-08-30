@@ -14,8 +14,6 @@ class Materialization:
     output_filename: str
     nonprod_prefix: str
     production_prefix: str
-    nonprod_table: str
-    production_table: str
     sql_reference: str
 
     @property
@@ -26,9 +24,9 @@ class Materialization:
         if environment in ("local", "test"):
             environment = "nonprod"
         if environment == "nonprod":
-            return self.nonprod_prefix, self.nonprod_table
+            return self.nonprod_prefix, ""
         if environment == "production":
-            return self.production_prefix, self.production_table
+            return self.production_prefix, ""
         raise ValueError("unsupported analytics environment")
 
 
@@ -42,8 +40,6 @@ def _definition(name: str) -> Materialization:
         f"{name}.parquet",
         f"gs://f3-analytics-nonprod/parquets/{name}",
         f"gs://analytics/parquets/{name}",
-        f"f3data.paxVaultDuckStaging.{name}",
-        f"f3data.paxVaultDuck.{name}",
         f"sql/{name}.sql",
     )
 

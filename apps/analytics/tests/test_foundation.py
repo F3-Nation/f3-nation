@@ -70,7 +70,7 @@ def test_settings_derive_publication_targets_from_registry(tmp_path):
 
     assert settings.target(MATERIALIZATION_REGISTRY["pv_regions"]) == (
         "gs://f3-analytics-nonprod/parquets/pv_regions",
-        "f3data.paxVaultDuckStaging.pv_regions",
+        "",
     )
 
 

@@ -3,11 +3,10 @@
 ## Deployment contract
 
 Both jobs are in project `f3data`, region `us-central1`. `analytics-etl-nonprod`
-uses `f3data-nonprod`, bucket `gs://f3-analytics-nonprod/parquets/pv_regions`, and
-table `f3data.paxVaultDuckStaging.pv_regions`. `analytics-etl` uses `f3data`,
-bucket `gs://analytics/parquets/pv_regions`, and
-`f3data.paxVaultDuck.pv_regions`. The image is built once and deployed by
-digest. Each job has one task and parallelism, no task retries, and a 60-minute
+uses `f3data-nonprod` and bucket `gs://f3-analytics-nonprod/parquets/pv_regions`;
+`analytics-etl` uses `f3data` and bucket `gs://analytics/parquets/pv_regions`.
+The image is built once and deployed by digest. Each job has one task and
+parallelism, no task retries, and a 60-minute
 timeout. Deployment does not create IAM grants or schedules.
 
 GitHub environments `analytics-nonprod` and `analytics-production` hold the WIF
@@ -27,13 +26,13 @@ uv --directory apps/analytics run pytest
 uv --directory apps/analytics run ruff check .
 ```
 
-The tests use synthetic DuckDB fixtures and mocked GCS/BigQuery clients; they
+The tests use synthetic DuckDB fixtures and mocked GCS clients; they
 do not access live cloud or database resources.
 
 A live local CLI run is separate and optional. It is not a sandbox: it reads
 the approved nonprod PostgreSQL database and publishes to
-`gs://f3-analytics-nonprod/parquets/pv_regions` and
-`f3data.paxVaultDuckStaging.pv_regions`. It requires explicit human approval,
+`gs://f3-analytics-nonprod/parquets/pv_regions`.
+It requires explicit human approval,
 real read-only database credentials, access to
 `/cloudsql/f3data:us-central1:f3data-nonprod`, a real signed DuckDB 1.4.3
 `postgres_scanner` extension in the configured absolute version/platform path,
@@ -73,18 +72,18 @@ is manual only; this command does not create or enable a scheduler.
 The following is the minimum matrix to approve and grant, with resource-level
 conditions where supported:
 
-| Identity              | Permission                                                                                                                                  | Resource                                                                                                               | Explicitly not granted                                                           |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| GitHub WIF deployer   | Artifact Registry write/read; Cloud Run Job deploy; service-account use                                                                     | `f3data` AR and the two named jobs                                                                                     | Runtime data, scheduler administration, broad project owner/editor               |
-| Nonprod runtime SA    | `roles/cloudsql.client`; `roles/secretmanager.secretAccessor`; object create/read plus pointer update; named BigQuery table metadata update | Nonprod secrets, `f3data-nonprod`, `f3-analytics-nonprod/parquets/pv_regions`, `f3data.paxVaultDuckStaging.pv_regions` | Database writes/DDL/admin, committed-object deletion, unrelated buckets/datasets |
-| Production runtime SA | Same narrowly scoped roles as nonprod, restricted to production resources                                                                   | Production secrets, `f3data`, `analytics/parquets/pv_regions`, `f3data.paxVaultDuck.pv_regions`                        | Nonprod resources, database writes/DDL/admin, unrelated resources                |
-| Scheduler SA          | `roles/run.invoker` only                                                                                                                    | `analytics-etl`                                                                                                        | Secret, storage, BigQuery, deploy, and scheduler administration                  |
-| PAX Vault consumer    | GCS object read only                                                                                                                        | Approved published prefix                                                                                              | Write, pointer mutation, direct end-user access                                  |
+| Identity              | Permission                                                                                            | Resource                                                                      | Explicitly not granted                                                           |
+| --------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| GitHub WIF deployer   | Artifact Registry write/read; Cloud Run Job deploy; service-account use                               | `f3data` AR and the two named jobs                                            | Runtime data, scheduler administration, broad project owner/editor               |
+| Nonprod runtime SA    | `roles/cloudsql.client`; `roles/secretmanager.secretAccessor`; object create/read plus pointer update | Nonprod secrets, `f3data-nonprod`, `f3-analytics-nonprod/parquets/pv_regions` | Database writes/DDL/admin, committed-object deletion, unrelated buckets/datasets |
+| Production runtime SA | Same narrowly scoped roles as nonprod, restricted to production resources                             | Production secrets, `f3data`, `analytics/parquets/pv_regions`                 | Nonprod resources, database writes/DDL/admin, unrelated resources                |
+| Scheduler SA          | `roles/run.invoker` only                                                                              | `analytics-etl`                                                               | Secret, storage, deploy, and scheduler administration                            |
+| PAX Vault consumer    | GCS object read only                                                                                  | Approved published prefix                                                     | Write, pointer mutation, direct end-user access                                  |
 
 Security/platform owners must approve the exact predefined service-account
 bindings, database read-only role, secret versions, bucket conditions, and
-BigQuery metadata scope before granting them. The runtime identities must not
-receive `roles/editor`, project-wide BigQuery admin, bucket admin, or database
+GCS object/pointer scope before granting them. The runtime identities must not
+receive `roles/editor`, bucket admin, or database
 write/DDL privileges. Secret values never belong in workflow files.
 
 ## Scheduler policy and provisioning
@@ -127,11 +126,10 @@ lease expires, a new run may take it over conditionally using the observed
 generation. Never delete the current pointer or committed output to recover a
 stale lease. On any partial failure, retain the last known-good pointer and
 perform a full ETL rerun; a manifest alone is not a resumable publication.
-A BigQuery mismatch means the GCS pointer and external table disagree: stop
-consumers, compare the exact run directory and manifest, restore the last
-known-good table definition, then perform a full ETL rerun and record the
-incident. Never wildcard multiple runs or treat a manifest as a pointer-only
-repair mechanism.
+If the pointer or manifest is inconsistent, stop consumers, compare the exact
+run directory and manifest, retain the last known-good pointer, then perform a
+full ETL rerun and record the incident. Never wildcard multiple runs or treat a
+manifest as a pointer-only repair mechanism.
 
 After a secret rotation, create a new Secret Manager version, verify the
 runtime identity can access it, run nonprod manually, then approve production;
