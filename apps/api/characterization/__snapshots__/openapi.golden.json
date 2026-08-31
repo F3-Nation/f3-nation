@@ -3937,7 +3937,7 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns all matching event instances unpaginated (unchanged default).",
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns a single default-sized page of up to 40 event instances (not every matching row).",
               "maximum": 100000,
               "minimum": 0,
               "type": "integer"
@@ -3949,7 +3949,7 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "description": "Number of event instances per page (max 10000). Supplying this (or pageIndex) opts into paginated results; omitting both returns all matching event instances unpaginated (unchanged default).",
+              "description": "Number of event instances per page (max 10000). Supplying this (or pageIndex) opts into paginated results; omitting both returns a single default-sized page of up to 40 event instances (not every matching row).",
               "maximum": 10000,
               "minimum": -9007199254740991,
               "type": "integer"

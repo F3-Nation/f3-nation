@@ -55,8 +55,17 @@ export const MAX_PAGE_INDEX = 100_000;
  * should spread into its input schema — the single source of truth these
  * fields validate against, so a test importing it (rather than a hand-copied
  * mirror) actually exercises what each route runs.
+ *
+ * `unpaginatedBehavior` lets a route override the default "returns
+ * everything" description when its own unpaginated branch doesn't actually
+ * do that (event-instance.ts caps at 40 rows either way) — the published
+ * OpenAPI contract should describe what the route does, not what most
+ * routes do.
  */
-export function paginationFields(entityPlural: string) {
+export function paginationFields(
+  entityPlural: string,
+  unpaginatedBehavior = `returns all matching ${entityPlural} unpaginated (unchanged default)`,
+) {
   return {
     pageIndex: z.coerce
       .number()
@@ -65,7 +74,7 @@ export function paginationFields(entityPlural: string) {
       .max(MAX_PAGE_INDEX)
       .optional()
       .describe(
-        `Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both returns all matching ${entityPlural} unpaginated (unchanged default).`,
+        `Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both ${unpaginatedBehavior}.`,
       ),
     pageSize: z.coerce
       .number()
@@ -73,7 +82,7 @@ export function paginationFields(entityPlural: string) {
       .max(MAX_PAGE_SIZE)
       .optional()
       .describe(
-        `Number of ${entityPlural} per page (max ${MAX_PAGE_SIZE}). Supplying this (or pageIndex) opts into paginated results; omitting both returns all matching ${entityPlural} unpaginated (unchanged default).`,
+        `Number of ${entityPlural} per page (max ${MAX_PAGE_SIZE}). Supplying this (or pageIndex) opts into paginated results; omitting both ${unpaginatedBehavior}.`,
       ),
   };
 }
