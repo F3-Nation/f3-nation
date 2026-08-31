@@ -275,6 +275,10 @@ export const orgRouter = {
         isNationAdmin,
       });
 
+      // asc(id) is appended as a final tiebreaker -- a caller-supplied
+      // custom sort isn't guaranteed unique, so without one, offset
+      // pagination across separate requests (e.g. useFetchAllPages) could
+      // return the same org on two pages or skip one entirely.
       const sortedColumns = getSortingColumns(
         input.sorting,
         {
@@ -288,7 +292,7 @@ export const orgRouter = {
         },
         "id",
         new Set(["parentOrgName", "lastAnnualReview"] as const),
-      );
+      ).concat(asc(org.id));
 
       const total = await getOrgCount({ db: ctx.db, where });
 
