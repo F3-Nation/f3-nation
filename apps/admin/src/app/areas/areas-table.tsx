@@ -17,8 +17,10 @@ import { MDTable, usePagination } from "@acme/ui/md-table";
 import { Cell, Header } from "@acme/ui/table";
 
 import { orpc, useQuery } from "~/orpc/react";
+import { client } from "~/orpc/client";
 import type { RouterOutputs } from "~/orpc/types";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import { MobileFilterSheet } from "../_components/mobile-filter-sheet";
 import { ResetFilter } from "../_components/reset-filter";
 import { StatusFilter } from "../_components/status-filter";
@@ -36,15 +38,20 @@ export const AreasTable = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [sorting, setSorting] = useState<SortingSchema>([]);
 
-  const { data: sectorsData } = useQuery(
-    orpc.org.all.queryOptions({
-      input: {
+  // Exhaustive, not the default single-page org.all response -- used to
+  // map every area's parentId to a sector name below, so a sector outside
+  // the first page would otherwise show as missing.
+  const { data: sectors } = useFetchAllPages({
+    queryKey: ["org.all.everySector"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.all({
         orgTypes: ["sector"],
-      },
-    }),
-  );
-
-  const sectors = sectorsData?.orgs;
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+  });
 
   // Compute parentOrgIds for filtering areas by selected sectors
   const parentOrgIds = useMemo(() => {
