@@ -595,7 +595,20 @@ export const eventInstanceRouter = {
         highlight: z.boolean().optional(),
         meta: z.record(z.string(), z.unknown()).nullish(),
         isPrivate: z.boolean().optional(),
-        eventTypeIds: z.array(z.coerce.number()).optional(),
+        eventTypeIds: z
+          .array(z.coerce.number())
+          .optional()
+          .describe(
+            "Event types to associate. An empty array clears the association; omit the field to leave it untouched.",
+          ),
+        // Legacy single-event-type field. The Slackbot (and any other existing
+        // API client) still posts `eventTypeId`, so keep accepting it — dropping
+        // it silently leaves the instance with no event type at all. A falsy id
+        // means "not provided", matching the pre-`eventTypeIds` behaviour.
+        eventTypeId: z.coerce
+          .number()
+          .optional()
+          .describe("Deprecated: use `eventTypeIds`. A single event type id."),
         eventTagId: z.coerce.number().nullish(),
         preblast: z.string().nullish(),
         preblastRich: z.record(z.string(), z.unknown()).nullish(),
@@ -685,6 +698,21 @@ export const eventInstanceRouter = {
         }
       }
 
+      // `eventTypeIds` is authoritative when present — presence of the key, not
+      // truthiness of the value, decides whether the association is rewritten,
+      // so an empty array can clear it. Older clients (the Slackbot) post the
+      // singular `eventTypeId` instead; a falsy id there means "not provided".
+      // Read before destructuring, which would lose the key/value distinction.
+      const legacyEventTypeId =
+        input.eventTypeId != null && input.eventTypeId > 0
+          ? input.eventTypeId
+          : null;
+      const shouldUpdateEventType =
+        "eventTypeIds" in input || legacyEventTypeId != null;
+      const resolvedEventTypeIds =
+        input.eventTypeIds ??
+        (legacyEventTypeId != null ? [legacyEventTypeId] : []);
+
       // Generate a default name if not provided or empty
       let name = input.name;
       if (!name || name.trim() === "") {
@@ -702,7 +730,7 @@ export const eventInstanceRouter = {
           const aoName = ao?.name ?? "Workout";
 
           let eventTypeName = "Event";
-          const firstEventTypeId = input.eventTypeIds?.[0];
+          const firstEventTypeId = resolvedEventTypeIds[0];
           if (firstEventTypeId != null) {
             const [eventType] = await ctx.db
               .select({ name: schema.eventTypes.name })
@@ -720,12 +748,12 @@ export const eventInstanceRouter = {
       const isPrivate = input.isPrivate ?? existingIsPrivate ?? false;
 
       // Presence of the key — not truthiness of the value — decides whether the
-      // association is rewritten, so an empty array can clear it. Must be read
+      // association is rewritten, so an explicit null can clear it. Must be read
       // before destructuring, which would lose the distinction.
-      const shouldUpdateEventType = "eventTypeIds" in input;
       const shouldUpdateEventTag = "eventTagId" in input;
       const {
-        eventTypeIds,
+        eventTypeIds: _inputEventTypeIds,
+        eventTypeId: _inputEventTypeId,
         eventTagId,
         name: _inputName,
         isActive: _inputIsActive,
@@ -767,7 +795,7 @@ export const eventInstanceRouter = {
 
           // Duplicates in the payload would violate the join table's primary
           // key, so collapse them before inserting.
-          const uniqueEventTypeIds = [...new Set(eventTypeIds)];
+          const uniqueEventTypeIds = [...new Set(resolvedEventTypeIds)];
           if (uniqueEventTypeIds.length > 0) {
             await tx.insert(schema.eventInstancesXEventTypes).values(
               uniqueEventTypeIds.map((id) => ({

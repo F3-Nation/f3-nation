@@ -1848,6 +1848,80 @@ describe("Event Instance Router", () => {
       expect(await readAssociations()).toEqual([]);
     });
 
+    // Regression: the Slackbot — the only production writer of event instances
+    // before the admin UI existed — posts the singular `eventTypeId`. When
+    // `eventTypeIds` replaced it, zod stripped the unknown key and every
+    // Slackbot-created instance landed with no event type at all.
+    it("should honour the legacy singular eventTypeId", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create region");
+
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create AO");
+
+      const first = await createTestEventType();
+      const second = await createTestEventType();
+      if (!first || !second) throw new Error("Failed to create event types");
+
+      const client = createTestClient();
+
+      const readAssociations = async (instanceId: number) =>
+        (
+          await db
+            .select({
+              eventTypeId: schema.eventInstancesXEventTypes.eventTypeId,
+            })
+            .from(schema.eventInstancesXEventTypes)
+            .where(
+              eq(schema.eventInstancesXEventTypes.eventInstanceId, instanceId),
+            )
+        ).map((row) => row.eventTypeId);
+
+      // Create the way the Slackbot does: singular id, no `eventTypeIds`.
+      const created = await client.eventInstance.crupdate({
+        name: `Legacy Event ${uniqueId()}`,
+        orgId: ao.id,
+        startDate: "2030-01-07",
+        startTime: "0530",
+        endTime: "0615",
+        eventTypeId: first.id,
+      });
+      const instanceId = created.id;
+      expect(await readAssociations(instanceId)).toEqual([first.id]);
+
+      // A legacy update replaces the association.
+      await client.eventInstance.crupdate({
+        id: instanceId,
+        orgId: ao.id,
+        startDate: created.startDate,
+        eventTypeId: second.id,
+      });
+      expect(await readAssociations(instanceId)).toEqual([second.id]);
+
+      // The Slackbot sends `eventTypeId: 0` when it has no event type to send.
+      // That is "not provided", not "clear it" — 0 is not a valid FK.
+      await client.eventInstance.crupdate({
+        id: instanceId,
+        orgId: ao.id,
+        startDate: created.startDate,
+        eventTypeId: 0,
+      });
+      expect(await readAssociations(instanceId)).toEqual([second.id]);
+
+      // `eventTypeIds` wins when a client sends both.
+      await client.eventInstance.crupdate({
+        id: instanceId,
+        orgId: ao.id,
+        startDate: created.startDate,
+        eventTypeId: second.id,
+        eventTypeIds: [first.id],
+      });
+      expect(await readAssociations(instanceId)).toEqual([first.id]);
+    });
+
     // Regression: the association is rewritten as DELETE-then-INSERT. A bogus
     // eventTypeId violates event_instances_x_event_types_event_type_id_fkey on
     // the INSERT — i.e. after the DELETE has already run. Without a surrounding

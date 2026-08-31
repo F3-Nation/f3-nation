@@ -4208,7 +4208,12 @@
                       }
                     ]
                   },
+                  "eventTypeId": {
+                    "description": "Deprecated: use `eventTypeIds`. A single event type id.",
+                    "type": "number"
+                  },
                   "eventTypeIds": {
+                    "description": "Event types to associate. An empty array clears the association; omit the field to leave it untouched.",
                     "items": {
                       "type": "number"
                     },
