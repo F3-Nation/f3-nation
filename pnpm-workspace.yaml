@@ -8,9 +8,10 @@ catalog:
   "@commitlint/cli": ^21.2.2
   "@commitlint/config-conventional": ^21.2.2
   "@commitlint/cz-commitlint": ^21.2.2
-  '@commitlint/types': ^21.2.0
+  "@commitlint/types": ^21.2.0
   "@faker-js/faker": ^10.6.0
   "@google-cloud/storage": ^8.0.1
+  "@hono/node-server": ^2.1.1
   "@hookform/resolvers": ^5.9.1
   "@ianvs/prettier-plugin-sort-imports": ^4.7.1
   "@next/eslint-plugin-next": ^16.3.2
@@ -42,8 +43,10 @@ catalog:
   "@radix-ui/react-tabs": ^1.1.21
   "@radix-ui/react-tooltip": ^1.2.16
   "@react-hook/window-size": ^3.1.1
+  "@scalar/hono-api-reference": ^0.11.16
   "@scalar/nextjs-api-reference": ^0.11.16
   "@sentry/nextjs": ^10.70.0
+  "@sentry/node": ^10.70.0
   "@t3-oss/env-core": ^0.13.11
   "@t3-oss/env-nextjs": ^0.13.11
   "@tailwindcss/postcss": ^4.3.3
@@ -89,6 +92,7 @@ catalog:
   eslint-plugin-react: ^7.37.5
   eslint-plugin-react-hooks: ^7.1.1
   geist: ^1.7.2
+  hono: ^4.13.4
   inquirer: ^12.11.1
   jiti: ^2.7.0
   jose: ^6.2.9

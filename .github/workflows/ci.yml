@@ -401,6 +401,48 @@ jobs:
       # SUPER_ADMIN_API_KEY is already in the workflow env above.
       - run: pnpm turbo run test:characterization --filter=f3-api
 
+  # Same characterization suite as test-coverage above, but dispatched through
+  # the Hono app.fetch entry instead of the Next in-process target. A
+  # separate job (own Postgres service) so it runs in parallel with
+  # test-coverage rather than lengthening that job's critical path — its own
+  # DB never touches the other job's f3_test. Identical frozen goldens either
+  # way: any diff here is a Hono-port parity bug, not a suite difference.
+  # `test:characterization` depends on `reset-test-db` and `test` in turbo.json,
+  # so `pnpm turbo run test:characterization` alone drives the same DB-reset +
+  # test chain the "next" leg relies on. `CHAR_TEST_TARGET` is in turbo.json's
+  # globalEnv, so setting it to "hono" here changes every task's cache key —
+  # this job always re-runs the full suite from scratch, it can't share a
+  # cache hit on `test` with test-coverage's run.
+  test-coverage-hono:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18.4-trixie@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: f3_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      # GCS_CREDENTIALS must exist with client_email/private_key fields, but
+      # nothing real is needed. Built here from plainly fake JSON — a committed
+      # base64 blob trips generic high-entropy secret scanners.
+      - name: Set mock GCS credentials
+        run: echo "GCS_CREDENTIALS=$(printf '{\"client_email\":\"fake-not-a-real-credential@ci.invalid\",\"private_key\":\"THIS-IS-A-FAKE-PLACEHOLDER-FOR-CI\"}' | base64 -w0)" >> "$GITHUB_ENV"
+      - run: pnpm turbo run test:characterization
+        env:
+          CHAR_TEST_TARGET: hono
+
   # Builds each app's deploy image the same way the release pipeline does
   # (turbo prune -> frozen install -> turbo build). The `build` job above is
   # affected-scoped on PRs; it cannot catch breakage that is specific to the
