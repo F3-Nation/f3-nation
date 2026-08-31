@@ -19,6 +19,7 @@ export default {
 
         // packages
         "db",
+        "db-python",
         "env",
         "health",
         "mail",
