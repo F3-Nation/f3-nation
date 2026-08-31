@@ -95,6 +95,11 @@ export const RegionsTable = () => {
         onlyMine: onlyMine || undefined,
         parentOrgIds: parentOrgIds.length > 0 ? parentOrgIds : undefined,
       },
+      // While sectors are selected but `areas` hasn't resolved yet,
+      // parentOrgIds falls back to [] (unfiltered) -- without this guard
+      // the table would briefly show regions outside the selected
+      // sector until every area page finishes loading.
+      enabled: selectedSectors.length === 0 || areas !== undefined,
     }),
   );
 
