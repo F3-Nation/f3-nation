@@ -17,9 +17,9 @@ const dbMock = {
 };
 vi.mock("~/lib/db", () => ({ db: dbMock }));
 
-const requireSuperAdminApiKeyMock = vi.fn(() => null);
-vi.mock("~/lib/require-super-admin", () => ({
-  requireSuperAdminApiKey: requireSuperAdminApiKeyMock,
+const requireNationAdminApiKeyMock = vi.fn(() => null);
+vi.mock("~/lib/require-nation-admin-api-key", () => ({
+  requireNationAdminApiKey: requireNationAdminApiKeyMock,
 }));
 
 const adminUpdateOAuthClientMock = vi.fn();
@@ -54,14 +54,14 @@ function makeContext(clientId: string) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  requireSuperAdminApiKeyMock.mockReturnValue(null);
+  requireNationAdminApiKeyMock.mockReturnValue(null);
   dbMock.select.mockReturnValue(chain([{ clientId: "existing-client" }]));
   dbMock.update.mockReturnValue(chain(undefined));
 });
 
 describe("PATCH /api/admin/oauth-clients/[clientId]", () => {
   it("rejects an unauthorized caller before touching the database", async () => {
-    requireSuperAdminApiKeyMock.mockReturnValue(
+    requireNationAdminApiKeyMock.mockReturnValue(
       new Response(null, { status: 401 }) as never,
     );
     await PATCH(makeRequest({}), makeContext("existing-client"));

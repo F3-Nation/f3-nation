@@ -1,7 +1,7 @@
 /**
  * Admin CRUD surface for OAuth client registrations (#876 Phase 3 admin
  * UI) — the "similar to Logto's Applications screen" ask. Gated by
- * requireSuperAdminApiKey, called server-to-server from apps/admin's own
+ * requireNationAdminApiKey, called server-to-server from apps/admin's own
  * oRPC backend (packages/api/src/router/oauth-client.ts), never directly
  * from a browser.
  *
@@ -23,10 +23,10 @@ import { betterAuthOauthClient } from "@acme/db/schema/schema";
 import { db } from "~/lib/db";
 import { getAuth } from "~/lib/better-auth";
 import { logError } from "~/lib/logging";
-import { requireSuperAdminApiKey } from "~/lib/require-super-admin";
+import { requireNationAdminApiKey } from "~/lib/require-nation-admin-api-key";
 
 export async function GET(request: NextRequest) {
-  const unauthorized = requireSuperAdminApiKey(request);
+  const unauthorized = await requireNationAdminApiKey(request);
   if (unauthorized) return unauthorized;
 
   const clients = await db
@@ -62,7 +62,7 @@ interface CreateOAuthClientBody {
 }
 
 export async function POST(request: NextRequest) {
-  const unauthorized = requireSuperAdminApiKey(request);
+  const unauthorized = await requireNationAdminApiKey(request);
   if (unauthorized) return unauthorized;
 
   const body = (await request.json()) as CreateOAuthClientBody;

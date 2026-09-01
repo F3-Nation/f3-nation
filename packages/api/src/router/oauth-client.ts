@@ -16,9 +16,17 @@ import { nationAdminProcedure } from "../shared";
  * app's own DB — it lives in apps/auth's Better Auth instance, a separate
  * deployed app. So every handler here is a server-to-server fetch to
  * apps/auth/src/app/api/admin/oauth-clients/*, authenticated with
- * SUPER_ADMIN_API_KEY (the same shared secret packages/api/src/shared.ts's
- * revalidateAuthProcedure already uses for this exact pattern), never
- * exposed to the browser — the browser only ever talks to
+ * AUTH_ADMIN_API_KEY — a real, revocable database-backed API key (created
+ * via apps/admin's own API Keys page, granted the nation-admin role at the
+ * F3 Nation org) rather than a shared env-var secret. apps/auth verifies it
+ * the same way packages/api verifies any other API key: a DB lookup against
+ * api_keys/roles_x_api_keys_x_org, not a string compare — see
+ * apps/auth/src/lib/require-nation-admin-api-key.ts. This deliberately
+ * avoids adding SUPER_ADMIN_API_KEY as a fourth consumer of that one
+ * shared secret (#736 is already retiring it from its existing three) and
+ * gets this router the properties #736 wants generally: revocable without
+ * a redeploy, scoped narrowly, and auditable via lastUsedAt — never
+ * exposed to the browser either way. The browser only ever talks to
  * nationAdminProcedure here, which enforces its own session-based
  * nation-admin check first. Plain adminProcedure isn't enough: it only
  * checks for an "admin" role name with no org scoping, so any org's admin
@@ -40,7 +48,7 @@ function authBaseUrl(): string {
     });
   }
   const url = new URL(env.NEXT_PUBLIC_AUTH_URL);
-  // SUPER_ADMIN_API_KEY is attached to every request this router makes —
+  // AUTH_ADMIN_API_KEY is attached to every request this router makes —
   // never send it over plaintext HTTP except to localhost, which is what
   // apps/api/.env.example's NEXT_PUBLIC_AUTH_URL uses for local dev.
   const isLocalhost = ["localhost", "127.0.0.1"].includes(url.hostname);
@@ -57,14 +65,14 @@ function authBaseUrl(): string {
 const AUTH_SERVER_TIMEOUT_MS = 10_000;
 
 function authAdminHeaders(): HeadersInit {
-  if (!env.SUPER_ADMIN_API_KEY) {
+  if (!env.AUTH_ADMIN_API_KEY) {
     throw new ORPCError("INTERNAL_SERVER_ERROR", {
-      message: "SUPER_ADMIN_API_KEY is not configured",
+      message: "AUTH_ADMIN_API_KEY is not configured",
     });
   }
   return {
     "Content-Type": "application/json",
-    "x-api-key": env.SUPER_ADMIN_API_KEY,
+    Authorization: `Bearer ${env.AUTH_ADMIN_API_KEY}`,
   };
 }
 
@@ -101,9 +109,9 @@ export const oauthClientRouter = {
       try {
         res = await fetch(url, {
           headers,
-          // A redirect response would otherwise carry x-api-key to wherever
-          // it points, including an untrusted origin if the auth server (or
-          // something in front of it) is misconfigured.
+          // A redirect response would otherwise carry the Authorization
+          // header to wherever it points, including an untrusted origin if
+          // the auth server (or something in front of it) is misconfigured.
           redirect: "error",
           signal: AbortSignal.timeout(AUTH_SERVER_TIMEOUT_MS),
         });

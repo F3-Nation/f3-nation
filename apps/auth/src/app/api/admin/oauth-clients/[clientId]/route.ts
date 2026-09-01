@@ -18,7 +18,7 @@ import { betterAuthOauthClient } from "@acme/db/schema/schema";
 import { db } from "~/lib/db";
 import { getAuth } from "~/lib/better-auth";
 import { logError } from "~/lib/logging";
-import { requireSuperAdminApiKey } from "~/lib/require-super-admin";
+import { requireNationAdminApiKey } from "~/lib/require-nation-admin-api-key";
 
 const updateOAuthClientBodySchema = z
   .object({
@@ -35,7 +35,7 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ clientId: string }> },
 ) {
-  const unauthorized = requireSuperAdminApiKey(request);
+  const unauthorized = await requireNationAdminApiKey(request);
   if (unauthorized) return unauthorized;
 
   const { clientId } = await params;

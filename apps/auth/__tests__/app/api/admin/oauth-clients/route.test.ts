@@ -14,9 +14,9 @@ function chain<T>(result: T) {
 const dbMock = { select: vi.fn(() => chain([])) };
 vi.mock("~/lib/db", () => ({ db: dbMock }));
 
-const requireSuperAdminApiKeyMock = vi.fn(() => null);
-vi.mock("~/lib/require-super-admin", () => ({
-  requireSuperAdminApiKey: requireSuperAdminApiKeyMock,
+const requireNationAdminApiKeyMock = vi.fn(() => null);
+vi.mock("~/lib/require-nation-admin-api-key", () => ({
+  requireNationAdminApiKey: requireNationAdminApiKeyMock,
 }));
 
 const adminCreateOAuthClientMock = vi.fn();
@@ -40,12 +40,12 @@ function makeRequest(body?: unknown): NextRequest {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  requireSuperAdminApiKeyMock.mockReturnValue(null);
+  requireNationAdminApiKeyMock.mockReturnValue(null);
 });
 
 describe("GET /api/admin/oauth-clients", () => {
   it("rejects an unauthorized caller before touching the database", async () => {
-    requireSuperAdminApiKeyMock.mockReturnValue(
+    requireNationAdminApiKeyMock.mockReturnValue(
       new Response(null, { status: 401 }) as never,
     );
     await GET(makeRequest());
@@ -78,7 +78,7 @@ describe("GET /api/admin/oauth-clients", () => {
 
 describe("POST /api/admin/oauth-clients", () => {
   it("rejects an unauthorized caller before touching Better Auth", async () => {
-    requireSuperAdminApiKeyMock.mockReturnValue(
+    requireNationAdminApiKeyMock.mockReturnValue(
       new Response(null, { status: 401 }) as never,
     );
     await POST(makeRequest({ name: "x", redirectUris: ["https://x"] }));
