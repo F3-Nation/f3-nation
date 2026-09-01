@@ -78,7 +78,7 @@ def materialize(
     ordered_query = f"SELECT * FROM ({query}) AS materialized"
     if order:
         ordered_query += f" ORDER BY {order}"
-    options = "FORMAT PARQUET, COMPRESSION ZSTID"
+    options = "FORMAT PARQUET, COMPRESSION ZSTD"
     if materialization.partition_by:
         partitions = ", ".join(f'"{identifier}"' for identifier in materialization.partition_by)
         options += f", PARTITION_BY ({partitions}), WRITE_PARTITION_COLUMNS"
