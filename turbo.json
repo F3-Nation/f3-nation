@@ -1,6 +1,16 @@
 {
   "$schema": "https://turborepo.org/schema.json",
-  "globalDependencies": ["**/.env"],
+  "globalDependencies": [
+    "**/.env",
+    ".gitignore",
+    ".nvmrc",
+    ".prettierignore",
+    ".python-version",
+    "pyproject.toml",
+    "uv.lock",
+    "scripts/python-task.sh"
+  ],
+  "globalPassThroughEnv": ["GITHUB_SHA"],
   "globalEnv": [
     "CI",
     "NODE_ENV",

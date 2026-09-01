@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import re
@@ -15,6 +14,7 @@ from google.cloud.logging_v2.handlers import StructuredLogHandler, setup_logging
 from slack_bolt import Ack, App
 from slack_bolt.adapter.google_cloud_functions import SlackRequestHandler
 from slack_bolt.adapter.socket_mode import SocketModeHandler
+from slack_sdk.errors import SlackApiError
 from slack_sdk.web import WebClient
 
 import scripts
@@ -155,10 +155,7 @@ if not LOCAL_DEVELOPMENT:
 def main_response(body: dict, logger: logging.Logger, client: WebClient, ack: Ack, context: dict):
     request_type, request_id = get_request_type(body)
 
-    if LOCAL_DEVELOPMENT:
-        logger.info(json.dumps(body, indent=4))
-    else:
-        logger.info(body)
+    logger.info("slack.request.received type=%s", request_type)
 
     team_id = safe_get(body, "team_id") or safe_get(body, "team", "id")
 
@@ -221,7 +218,15 @@ def main_response(body: dict, logger: logging.Logger, client: WebClient, ack: Ac
             )
             if isinstance(exc, F3ApiError):
                 logger.error(f"F3 API detail: {exc.detail}")
-            logger.error(tb_str)
+            if isinstance(exc, SlackApiError):
+                logger.error(
+                    "slack.api.handler_failed type=%s handler=%s error=%s",
+                    request_type,
+                    getattr(run_function, "__name__", type(run_function).__name__),
+                    exc.response.get("error"),
+                )
+            else:
+                logger.error(tb_str)
     else:
         ack()
         logger.warning(

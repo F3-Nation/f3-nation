@@ -500,7 +500,7 @@ export const eventInstanceRouter = {
         id: z.coerce.number().optional(),
         name: z.string().optional(),
         description: z.string().nullish(),
-        isActive: z.boolean().optional().default(true),
+        isActive: z.boolean().optional(),
         locationId: z.coerce.number().nullish(),
         orgId: z.coerce.number(),
         seriesId: z.coerce.number().nullish(), // Link to series if this is a series instance
@@ -509,9 +509,9 @@ export const eventInstanceRouter = {
         endDate: z.string().nullish(),
         startTime: z.string().nullish(),
         endTime: z.string().nullish(),
-        highlight: z.boolean().optional().default(false),
+        highlight: z.boolean().optional(),
         meta: z.record(z.string(), z.unknown()).nullish(),
-        isPrivate: z.boolean().optional().default(false),
+        isPrivate: z.boolean().optional(),
         eventTypeId: z.coerce.number().optional(),
         eventTagId: z.coerce.number().nullish(),
         preblast: z.string().nullish(),
@@ -586,13 +586,21 @@ export const eventInstanceRouter = {
       const shouldUpdateEventTag = "eventTagId" in input;
       const { eventTypeId, eventTagId, name: _inputName, ...eventData } = input;
 
+      // isActive/highlight are NOT NULL with no DB default, so insert must
+      // supply a value even when the caller omits the field — unlike the
+      // update branch below, which can safely spread `eventData` as-is.
+      const insertValues: typeof schema.eventInstances.$inferInsert = {
+        ...eventData,
+        name,
+        isActive: eventData.isActive ?? true,
+        highlight: eventData.highlight ?? false,
+        isPrivate: eventData.isPrivate ?? false,
+      };
+
       // Create or update the event instance
       const [result] = await ctx.db
         .insert(schema.eventInstances)
-        .values({
-          ...eventData,
-          name,
-        })
+        .values(insertValues)
         .onConflictDoUpdate({
           target: [schema.eventInstances.id],
           set: { ...eventData, name },
