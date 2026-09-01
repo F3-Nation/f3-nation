@@ -20,12 +20,16 @@ import { getAuth } from "~/lib/better-auth";
 import { logError } from "~/lib/logging";
 import { requireSuperAdminApiKey } from "~/lib/require-super-admin";
 
-const updateOAuthClientBodySchema = z.object({
-  name: z.string().min(1).optional(),
-  redirectUris: z.array(z.url()).min(1).optional(),
-  scope: z.string().optional(),
-  disabled: z.boolean().optional(),
-});
+const updateOAuthClientBodySchema = z
+  .object({
+    name: z.string().min(1).optional(),
+    redirectUris: z.array(z.url()).min(1).optional(),
+    scope: z.string().optional(),
+    disabled: z.boolean().optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, {
+    message: "at least one field must be provided",
+  });
 
 export async function PATCH(
   request: NextRequest,
