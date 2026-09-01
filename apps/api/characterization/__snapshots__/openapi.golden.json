@@ -4170,18 +4170,15 @@
                     ]
                   },
                   "highlight": {
-                    "default": false,
                     "type": "boolean"
                   },
                   "id": {
                     "type": "number"
                   },
                   "isActive": {
-                    "default": true,
                     "type": "boolean"
                   },
                   "isPrivate": {
-                    "default": false,
                     "type": "boolean"
                   },
                   "locationId": {
