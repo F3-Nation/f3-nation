@@ -79,7 +79,7 @@ describe("docs openapi route", () => {
   it("uses NEXT_PUBLIC_API_URL when set and injects ClientHeader for operations", async () => {
     process.env.NEXT_PUBLIC_API_URL = "https://api.f3nation.com/";
 
-    const { GET } = await import("../src/app/docs/openapi.json/route");
+    const { openApiJson: GET } = await import("../src/docs");
 
     const response = await GET(
       new Request("https://ignored.example.com/docs/openapi.json"),
@@ -115,7 +115,7 @@ describe("docs openapi route", () => {
   it("derives base URL from forwarded headers when env base URL is missing", async () => {
     delete process.env.NEXT_PUBLIC_API_URL;
 
-    const { GET } = await import("../src/app/docs/openapi.json/route");
+    const { openApiJson: GET } = await import("../src/docs");
 
     const response = await GET(
       new Request("http://internal.local/docs/openapi.json", {
@@ -134,7 +134,7 @@ describe("docs openapi route", () => {
   it("handles generated specs without paths", async () => {
     omitGeneratedPaths = true;
 
-    const { GET } = await import("../src/app/docs/openapi.json/route");
+    const { openApiJson: GET } = await import("../src/docs");
 
     const response = await GET(
       new Request("https://api.example.com/docs/openapi.json"),
@@ -159,7 +159,7 @@ describe("docs openapi route", () => {
       },
     } as never);
 
-    const { GET } = await import("../src/app/docs/openapi.json/route");
+    const { openApiJson: GET } = await import("../src/docs");
     const response = await GET(
       new Request("https://api.f3nation.com/docs/openapi.json"),
     );
