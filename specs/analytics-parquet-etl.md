@@ -210,6 +210,25 @@ validation drift, and permission failures.
 
 ## 7. Human release gates and ownership
 
+### Local-only export authorization
+
+The repository may provide an explicitly named `analytics-etl export-local`
+command for approved nonproduction local analysis only. It is not a
+publication path, does not authorize access to any database or output, and does
+not grant or imply human approval. A security owner and the responsible
+analytics/platform operator must approve each use of a real nonproduction
+database and its destination before execution. Production settings and
+production data are prohibited.
+
+The operator must use a private, access-controlled local destination with
+restrictive permissions, sufficient capacity, and an agreed retention period.
+Outputs must not be copied to shared locations or committed to source control.
+After the approved analysis, the operator must securely remove the export and
+any failed/intermediate files according to the approved retention and cleanup
+procedure. The implementation must stage below the chosen destination and
+atomically finalize one run directory only after every selected materialization
+succeeds; failed runs must leave no final run directory.
+
 - **Nonproduction query gate:** before release, a human must inspect PostgreSQL
   query plans and measured read volume for all eight datasets against approved
   nonproduction data. The human gate must establish that sequential execution,
@@ -244,3 +263,13 @@ performed and recorded by the responsible humans during release.
 8. The nonproduction PostgreSQL plan/read-volume human gate and the
    production IAM/load/freshness human gates are documented as release blockers;
    this document does not claim they have passed.
+9. `analytics-etl export-local` accepts only validated local/nonproduction
+   configuration and registry-validated selections; it cannot create a GCS
+   client or invoke publication, lease, pointer, or publisher code.
+10. Local export requires an existing safe destination, creates a unique private
+    staging directory, atomically finalizes only after all selected datasets
+    succeed, and removes failed staging output without replacing the primary
+    failure.
+11. Local export documentation requires per-use security/operator approval,
+    restricted access, explicit retention, and secure cleanup; these are
+    operational gates and are not granted by the code.

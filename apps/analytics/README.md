@@ -42,6 +42,31 @@ These commands are offline-safe: they do not publish data and the test suite
 does not make live cloud or database calls. Do not create or populate an
 `.env` file just to run them.
 
+## Local-only export
+
+`export-local` is the non-publication procedure for an approved local database
+connection. It requires `ANALYTICS_ENVIRONMENT=local`, a validated local
+PostgreSQL configuration, and an existing absolute output directory that is
+not a symlink. Each invocation creates a unique persistent run directory below
+that directory; `--materialization` may be repeated and is registry-validated.
+It never creates a GCS client, lease, publisher, pointer, or publication.
+The destination must have no group or other permissions (`chmod 700`); the CLI
+rejects permissive directories.
+
+```bash
+umask 077
+mkdir -p "$HOME/.local/share/f3-analytics/exports"
+ANALYTICS_ENVIRONMENT=local \
+  uv --directory apps/analytics run analytics-etl export-local \
+  --output-dir "$HOME/.local/share/f3-analytics/exports" \
+  --materialization pv_regions
+```
+
+This writes sensitive analytics data locally. Obtain explicit approval from the
+responsible security/platform and analytics operators before connecting to any
+real database or sharing the resulting files. This procedure is not approval
+to run the publishing `run` command.
+
 ## Optional live end-to-end run
 
 This is a publication test, not a harmless sandbox run. A local CLI `run`

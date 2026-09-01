@@ -19,7 +19,7 @@ _PG_DATABASE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$")
 _PG_SOCKET = re.compile(r"^/cloudsql/f3data:us-central1:f3data(?:-nonprod)?$")
 _PG_PORT = re.compile(r"^[0-9]+$")
 
-APPROVED_DATABASES = {"nonprod": "f3_staging", "production": "f3_prod"}
+APPROVED_DATABASES = {"nonprod": "f3_prod", "production": "f3_prod"}
 _ENVIRONMENT_ALIASES = {"local": "nonprod", "test": "nonprod"}
 
 
