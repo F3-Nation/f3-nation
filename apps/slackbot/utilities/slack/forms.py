@@ -274,6 +274,10 @@ CONFIG_FORM = orm.BlockView(
                     action=actions.CONFIG_REPORTING,
                 ),
                 orm.ButtonElement(
+                    label=":tada: F3versary Announcements",
+                    action=actions.CONFIG_F3VERSARY_ANNOUNCEMENTS,
+                ),
+                orm.ButtonElement(
                     label=":memo: Kotter Reports",
                     action=actions.CONFIG_KOTTER_REPORTS,
                 ),
