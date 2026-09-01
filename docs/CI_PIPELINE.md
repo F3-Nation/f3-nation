@@ -45,10 +45,12 @@ tag push (e.g. map@1.2.3) → deploy-<app>.yml → _deploy-cloudrun.yml
 
 The required checks run on `pull_request` (any target branch) and on `push` to
 `main`. Every job checks out with `persist-credentials: false`; Node-based jobs
-use the shared `.github/actions/setup` for pnpm and Node from `.nvmrc`.
-Third-party actions are SHA-pinned. The advisory Docker path is event-specific:
-PRs validate images with read-only access to the GHCR cache, while a separate
-`main`-only job refreshes it with package-write permission.
+use the shared `.github/actions/setup` for pnpm and Node from `.nvmrc`. The five
+Turbo-backed jobs enable that action's GitHub Actions-backed remote cache;
+unrelated setup callers do not start the cache server. Third-party actions are
+SHA-pinned. The advisory Docker path is event-specific: PRs validate images with
+read-only access to the GHCR cache, while a separate `main`-only job refreshes
+it with package-write permission.
 
 The five Turbo-backed required checks (`format-check`, `lint`, `typecheck`,
 `build`, and `test-coverage`) add `--affected` on pull requests, selecting
@@ -68,6 +70,32 @@ schedules at least one task before `--affected` is enabled. The non-Turbo
 safeguards in the `lint` job (`lint:ws`, coverage-threshold validation, Python
 task validation, Turbo scope-selection validation, and `lint:unused`) remain
 repository-wide on every run.
+
+The Turbo cache adapter runs on localhost within each job and stores task
+artifacts in GitHub Actions cache. Relative cache paths make cache versions
+portable across runners whose temporary checkout paths differ. Docker layers
+for these CI jobs live separately in GHCR, so they do not consume the Actions
+cache budget. The pnpm store remains a smaller co-tenant with Turbo artifacts
+in that budget and is still subject to GitHub's normal least-recently-used
+eviction. Cache adapter startup is non-blocking: if it fails, Turbo runs without
+remote caching rather than failing a required check and emits a workflow
+warning. `GITHUB_SHA` remains declared as a pass-through variable because the
+shared `eslint-config-turbo` rule `turbo/no-undeclared-env-vars` validates the
+CI-factory reference. The CI-factory review and triage commands run directly
+outside `turbo run`, so they inherit the runner-provided value normally, while
+excluding the SHA from Turbo's global hash inputs preserves cross-commit cache
+hits for every Turbo task.
+
+Remote caching is enabled only for the five required CI checks during this
+rollout. Preview and deploy workflows continue to build without this adapter so
+their behavior is unchanged. A matching successful `test` task may be replayed
+instead of re-executed; that is standard Turbo cache behavior, so post-rollout
+validation should confirm useful hit rates and continue treating flaky tests as
+test defects rather than relying on reruns. It should also inspect Actions cache
+usage and key composition, confirm Turbo artifacts do not repeatedly evict the
+pnpm store, and watch for upload throttling or rapid least-recently-used churn.
+Legacy Docker cache entries from before the GHCR migration should age out; they
+can be deleted manually if they create capacity pressure during the transition.
 
 Two pieces of Turbo configuration keep that selection honest, so CI needs no
 blocklist of its own:
