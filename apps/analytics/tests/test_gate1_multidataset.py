@@ -44,7 +44,7 @@ def test_registry_has_exact_environment_targets(definition):
         "",
     )
     assert definition.target("production") == (
-        f"gs://analytics/parquets/{definition.name}",
+        f"gs://f3-analytics/parquets/{definition.name}",
         "",
     )
     assert definition.schema_version == f"{definition.name}.v1"

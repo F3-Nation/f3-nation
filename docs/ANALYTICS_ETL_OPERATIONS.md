@@ -3,8 +3,10 @@
 ## Deployment contract
 
 Both jobs are in project `f3data`, region `us-central1`. `analytics-etl-nonprod`
-uses `f3data-nonprod` and bucket `gs://f3-analytics-nonprod/parquets/pv_regions`;
-`analytics-etl` uses `f3data` and bucket `gs://analytics/parquets/pv_regions`.
+uses `f3data-nonprod` and bucket prefix `gs://f3-analytics-nonprod/parquets/*`;
+`analytics-etl` uses `f3data` and bucket prefix `gs://f3-analytics/parquets/*`.
+The compiled materialization registry in the deployed image selects the approved
+dataset paths beneath these prefixes.
 The image is built once and deployed by digest. Each job has one task and
 parallelism, no task retries, and a 60-minute
 timeout. Deployment does not create IAM grants or schedules.
@@ -72,13 +74,13 @@ is manual only; this command does not create or enable a scheduler.
 The following is the minimum matrix to approve and grant, with resource-level
 conditions where supported:
 
-| Identity              | Permission                                                                                            | Resource                                                                      | Explicitly not granted                                                           |
-| --------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| GitHub WIF deployer   | Artifact Registry write/read; Cloud Run Job deploy; service-account use                               | `f3data` AR and the two named jobs                                            | Runtime data, scheduler administration, broad project owner/editor               |
-| Nonprod runtime SA    | `roles/cloudsql.client`; `roles/secretmanager.secretAccessor`; object create/read plus pointer update | Nonprod secrets, `f3data-nonprod`, `f3-analytics-nonprod/parquets/pv_regions` | Database writes/DDL/admin, committed-object deletion, unrelated buckets/datasets |
-| Production runtime SA | Same narrowly scoped roles as nonprod, restricted to production resources                             | Production secrets, `f3data`, `analytics/parquets/pv_regions`                 | Nonprod resources, database writes/DDL/admin, unrelated resources                |
-| Scheduler SA          | `roles/run.invoker` only                                                                              | `analytics-etl`                                                               | Secret, storage, deploy, and scheduler administration                            |
-| PAX Vault consumer    | GCS object read only                                                                                  | Approved published prefix                                                     | Write, pointer mutation, direct end-user access                                  |
+| Identity              | Permission                                                                                            | Resource                                                             | Explicitly not granted                                                           |
+| --------------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| GitHub WIF deployer   | Artifact Registry write/read; Cloud Run Job deploy; service-account use                               | `f3data` AR and the two named jobs                                   | Runtime data, scheduler administration, broad project owner/editor               |
+| Nonprod runtime SA    | `roles/cloudsql.client`; `roles/secretmanager.secretAccessor`; object create/read plus pointer update | Nonprod secrets, `f3data-nonprod`, `f3-analytics-nonprod/parquets/*` | Database writes/DDL/admin, committed-object deletion, unrelated buckets/datasets |
+| Production runtime SA | Same narrowly scoped roles as nonprod, restricted to production resources                             | Production secrets, `f3data`, `f3-analytics/parquets/*`              | Nonprod resources, database writes/DDL/admin, unrelated resources                |
+| Scheduler SA          | `roles/run.invoker` only                                                                              | `analytics-etl`                                                      | Secret, storage, deploy, and scheduler administration                            |
+| PAX Vault consumer    | GCS object read only                                                                                  | Approved published prefix                                            | Write, pointer mutation, direct end-user access                                  |
 
 Security/platform owners must approve the exact predefined service-account
 bindings, database read-only role, secret versions, bucket conditions, and

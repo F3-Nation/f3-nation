@@ -34,7 +34,7 @@ change the publication state of another dataset.
 
 Production targets are, for each `<name>` in the approved list:
 
-- GCS: `gs://analytics/parquets/<name>`
+- GCS: `gs://f3-analytics/parquets/<name>`
 
 Nonproduction targets are:
 

@@ -41,7 +41,7 @@ def _definition(name: str) -> Materialization:
         f"{name}.v1",
         f"{name}.parquet",
         f"gs://f3-analytics-nonprod/parquets/{name}",
-        f"gs://analytics/parquets/{name}",
+        f"gs://f3-analytics/parquets/{name}",
         f"sql/{name}.sql",
         partition_by=(),
         sort_by=("region_org_id", "event_date") if name == "pv_events" else (),
