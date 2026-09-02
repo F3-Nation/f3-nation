@@ -117,7 +117,7 @@ jobs:
         with:
           ref: ${{ github.sha }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-          check-regexp: "^(build|lint|typecheck|format-check|test-coverage)$"
+          check-regexp: "^(build|lint|typecheck|format-check|test-coverage|test-coverage-hono)$"
           wait-interval: 15
           allowed-conclusions: success
 

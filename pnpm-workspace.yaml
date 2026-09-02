@@ -5,15 +5,16 @@ packages:
 
 catalog:
   "@auth/core": 0.41.3
-  "@commitlint/cli": ^21.2.1
-  "@commitlint/config-conventional": ^21.2.0
-  "@commitlint/cz-commitlint": ^21.2.0
-  '@commitlint/types': ^21.2.0
-  "@faker-js/faker": ^10.5.0
-  "@google-cloud/storage": ^8.0.0
-  "@hookform/resolvers": ^5.7.1
+  "@commitlint/cli": ^21.2.2
+  "@commitlint/config-conventional": ^21.2.2
+  "@commitlint/cz-commitlint": ^21.2.2
+  "@commitlint/types": ^21.2.0
+  "@faker-js/faker": ^10.6.0
+  "@google-cloud/storage": ^8.0.1
+  "@hono/node-server": ^2.1.1
+  "@hookform/resolvers": ^5.9.1
   "@ianvs/prettier-plugin-sort-imports": ^4.7.1
-  "@next/eslint-plugin-next": ^16.3.0
+  "@next/eslint-plugin-next": ^16.3.2
   "@orpc/client": ^1.15.0
   "@orpc/experimental-ratelimit": ^1.15.0
   "@orpc/openapi": ^1.15.0
@@ -42,39 +43,41 @@ catalog:
   "@radix-ui/react-tabs": ^1.1.21
   "@radix-ui/react-tooltip": ^1.2.16
   "@react-hook/window-size": ^3.1.1
-  "@scalar/nextjs-api-reference": ^0.11.13
+  "@scalar/hono-api-reference": ^0.11.16
+  "@scalar/nextjs-api-reference": ^0.11.16
   "@sentry/nextjs": ^10.70.0
+  "@sentry/node": ^10.70.0
   "@t3-oss/env-core": ^0.13.11
   "@t3-oss/env-nextjs": ^0.13.11
   "@tailwindcss/postcss": ^4.3.3
   "@tanstack/react-query": 5.101.4
   "@tanstack/react-query-devtools": 5.101.4
   "@tanstack/react-table": ^8.21.3
-  "@tanstack/react-virtual": ^3.14.9
+  "@tanstack/react-virtual": ^3.14.10
   "@tanstack/table-core": ^8.21.3
   "@testing-library/jest-dom": ^7.0.1
   "@testing-library/react": ^16.3.2
-  "@testing-library/user-event": ^14.6.3
-  "@turbo/gen": ^2.10.9
+  "@testing-library/user-event": ^14.6.5
+  "@turbo/gen": ^2.10.11
   "@types/geojson": ^7946.0.16
   "@types/google.maps": ^3.65.5
   "@types/lodash": ^4.17.25
   "@types/node": ^24.13.3
   "@types/nodemailer": ^8.0.1
-  "@types/pg": ^8.21.0
+  "@types/pg": ^8.23.1
   "@types/react": ^19.2.18
   "@types/react-dom": ^19.2.4
   "@types/supercluster": ^7.1.3
   "@vis.gl/react-google-maps": ~1.8.3
-  "@vitejs/plugin-react": ^6.0.5
-  "@vitest/coverage-v8": ^4.1.10
+  "@vitejs/plugin-react": ^6.1.0
+  "@vitest/coverage-v8": ^4.1.11
   "@vitest/eslint-plugin": ^1.6.27
   class-variance-authority: ^0.7.1
   clsx: ^2.1.1
   cmdk: ^1.1.1
   commitizen: ^4.3.2
-  dayjs: ^1.11.21
-  dompurify: ^3.4.13
+  dayjs: ^1.11.23
+  dompurify: ^3.4.14
   dotenv: ^17.4.2
   dotenv-cli: ^11.0.0
   drizzle-kit: ^0.31.10
@@ -82,24 +85,25 @@ catalog:
   drizzle-zod: ^0.8.3
   esbuild-register: ^3.6.0
   eslint: ^10.8.1
-  eslint-config-turbo: ^2.10.9
+  eslint-config-turbo: ^2.10.11
   eslint-plugin-drizzle: ^0.2.3
   eslint-plugin-import-x: ^4.17.1
   eslint-plugin-jsx-a11y: ^6.10.2
   eslint-plugin-react: ^7.37.5
   eslint-plugin-react-hooks: ^7.1.1
   geist: ^1.7.2
+  hono: ^4.13.4
   inquirer: ^12.11.1
   jiti: ^2.7.0
-  jose: ^6.2.8
+  jose: ^6.2.9
   jsdom: ^30.0.1
-  knip: ^6.32.1
+  knip: ^6.32.2
   lefthook: ^2.1.10
-  libphonenumber-js: ^1.13.10
+  libphonenumber-js: ^1.13.11
   lodash: ^4.18.1
-  lottie-react: ^2.4.1
-  lucide-react: ^1.31.0
-  next: ^16.3.0
+  lottie-react: ^2.4.2
+  lucide-react: ^1.33.0
+  next: ^16.3.2
   next-auth: 5.0.0-beta.32
   next-themes: ^0.4.6
   nodemailer: ^9.0.5
@@ -115,7 +119,7 @@ catalog:
   react: ^19.2.8
   react-dom: ^19.2.8
   react-hook-form: ^7.85.0
-  react-phone-number-input: ^3.4.17
+  react-phone-number-input: ^3.4.18
   react-qr-code: ^2.2.0
   react-responsive: ^10.0.1
   server-only: ^0.0.1
@@ -125,7 +129,7 @@ catalog:
   tailwind-merge: ^3.6.0
   tailwindcss: ^4.3.3
   tsx: ^4.23.12
-  turbo: ^2.10.9
+  turbo: ^2.10.11
   tw-animate-css: ^1.4.0
   typescript: ^6.0.3
   typescript-eslint: ^8.67.0
@@ -133,11 +137,11 @@ catalog:
   # Vitest 4 requires Vite >= 6. Vite is otherwise only a transitive (auto-installed
   # peer) dep, which pnpm won't reliably bump from the locked v5; declaring it
   # explicitly in each vitest package pins a compatible Vite deterministically.
-  vite: ^8.2.1
-  vitest: ^4.1.10
-  vitest-canvas-mock: ^1.1.4
+  vite: ^8.2.2
+  vitest: ^4.1.11
+  vitest-canvas-mock: ^1.1.5
   zod: ^4.4.3
-  zustand: ^5.0.14
+  zustand: ^5.0.15
 overrides:
   "form-data@>=2.0.0 <2.5.6": "^4.0.6"
   "@auth/core": "0.41.3" # GHSA-7rqj-j65f-68wh / GHSA-xmf8-cvqr-rfgj (Auth.js email normalizer & getToken DoS)
@@ -148,14 +152,15 @@ overrides:
   # and v5 exports only a named `expand`. No 1.x/2.x/3.x/4.x backport exists for
   # GHSA-mh99-v99m-4gvg, so the two eslint-plugin paths on minimatch@3 are dev-only
   # and excluded from the prod audit via tooling/eslint devDependencies instead.
-  "brace-expansion@<1.1.16": "1.1.18" # GHSA-3jxr-9vmj-r5cp (DoS)
+  "brace-expansion@<1.1.16": "2.1.4" # GHSA-3jxr-9vmj-r5cp (DoS)
   "brace-expansion@>=3.0.0 <5.0.9": "5.0.9" # GHSA-rgw5-rvv9-x895 (DoS)
-  "fast-uri@<3.1.5": "3.1.5" # host confusion via failed backslash authority introducer
+  "fast-uri@<3.1.5": "3.1.6" # host confusion via failed backslash authority introducer
   "sharp@<0.35.0": "0.35.3" # inherited libvips vulnerabilities
-  "next@>=16.0.0 <16.3.0": "16.3.0" # GHSA-89xv-2m56-2m9x / GHSA-p9j2-gv94-2wf4 (SSRF in rewrites); covers transitive geist>next & @scalar>next. Keep in lockstep with the `next` catalog entry: a second `next` version forks next-auth's peer instance and detaches the type-extensions augmentation.
+  "next@>=16.0.0 <16.3.0": "16.3.2" # GHSA-89xv-2m56-2m9x / GHSA-p9j2-gv94-2wf4 (SSRF in rewrites); covers transitive geist>next & @scalar>next. Keep in lockstep with the `next` catalog entry: a second `next` version forks next-auth's peer instance and detaches the type-extensions augmentation.
   "postcss@<8.5.12": "^8.5.26" # GHSA-6g55-p6wh-862q (sourceMappingURL arbitrary file read)
   "nanoid@<3.3.17": "^3.3.18" # GHSA-2v37-7h3g-55p8
   "nanoid@>=4.0.0 <5.1.16": "^5.1.16" # GHSA-28wg-ghj8-5hjv
+  "browserslist@<=4.28.6": "4.28.7" # GHSA-c83g-rgw3-j3cx (unbounded memory growth) / GHSA-73wf-gq98-2v4g (prototype write crash via browserslist-stats.json)
 peerDependencyRules:
   allowedVersions:
     eslint-plugin-react>eslint: "10"
