@@ -1,23 +1,29 @@
-import { aliasedTable, and, eq, inArray, not, schema } from "@acme/db";
+import { eq, inArray, schema, sql } from "@acme/db";
 
 import type { OrgType } from "../../shared/src/app/enums";
-import { logDebug } from "./logger";
+import { logDebug, logWarn } from "./logger";
+import { ORG_TREE_MAX_DEPTH } from "./org-tree";
 import type { Context } from "./shared";
 
 /**
  * Get the organization IDs that a user can edit
  *
  * @param ctx - The ORPC context containing the database and session
- * @returns An object with editable region IDs and a flag indicating if user has nation-level admin privileges
+ * @returns Editable non-AO orgs, validated direct role roots, and the preserved nation-wide access flag
  */
 export const getEditableOrgIdsForUser = async (
   ctx: Context,
 ): Promise<{
   editableOrgs: { id: number; type: OrgType }[];
+  editableRootOrgIds: number[];
   isNationAdmin: boolean;
 }> => {
   if (!ctx.session?.user) {
-    return { editableOrgs: [], isNationAdmin: false };
+    return {
+      editableOrgs: [],
+      editableRootOrgIds: [],
+      isNationAdmin: false,
+    };
   }
 
   const userRoles = await ctx.db
@@ -35,8 +41,16 @@ export const getEditableOrgIdsForUser = async (
 
   if (rolesWithEditPermission.length === 0) {
     // No roles with edit permissions (neither admin nor editor)
-    return { editableOrgs: [], isNationAdmin: false };
+    return {
+      editableOrgs: [],
+      editableRootOrgIds: [],
+      isNationAdmin: false,
+    };
   }
+
+  const roleRootOrgIds = [
+    ...new Set(rolesWithEditPermission.map((role) => role.orgId)),
+  ];
 
   // First check if user is a nation admin - if so, we don't need to filter
   const nationOrgs = await ctx.db
@@ -49,7 +63,7 @@ export const getEditableOrgIdsForUser = async (
 
   const nationOrgIds = nationOrgs.map((org) => org.id);
 
-  // Check if the user has admin rights on any nation (must be admin, not just editor)
+  // Preserve existing nation-wide access for both admin and editor assignments.
   const isNationAdmin = rolesWithEditPermission.some(
     (role) =>
       (role.roleName === "admin" || role.roleName === "editor") &&
@@ -57,75 +71,70 @@ export const getEditableOrgIdsForUser = async (
   );
 
   if (isNationAdmin) {
-    // Nation admins can see all requests, so we don't need to filter by region
-    return { editableOrgs: [], isNationAdmin: true };
+    // Nation-level roles receive unfiltered results from scoped callers.
+    return { editableOrgs: [], editableRootOrgIds: [], isNationAdmin: true };
   }
 
-  // Get all org relationships to build a hierarchy
-  const level0Orgs = aliasedTable(schema.orgs, "level0_orgs");
-  const level1Orgs = aliasedTable(schema.orgs, "level1_orgs");
-  const level2Orgs = aliasedTable(schema.orgs, "level2_orgs");
-  // TS6.0: aliasedTable complex conditional types require explicit annotation
-  const allOrgs = (await ctx.db
-    .select({
-      level0OrgId: level0Orgs.id,
-      level0OrgType: level0Orgs.orgType,
-      level1OrgId: level1Orgs.id,
-      level1OrgType: level1Orgs.orgType,
-      level2OrgId: level2Orgs.id,
-      level2OrgType: level2Orgs.orgType,
-    })
-    .from(level0Orgs)
-    .leftJoin(
-      level1Orgs,
-      and(
-        eq(level0Orgs.id, level1Orgs.parentId),
-        not(eq(level1Orgs.orgType, "ao")),
-      ),
-    )
-    .leftJoin(
-      level2Orgs,
-      and(
-        eq(level1Orgs.id, level2Orgs.parentId),
-        not(eq(level2Orgs.orgType, "ao")),
-      ),
-    )
-    .where(
-      inArray(
-        level0Orgs.id,
-        rolesWithEditPermission.map((r) => r.orgId),
-      ),
-    )) as {
-    level0OrgId: number;
-    level0OrgType: OrgType;
-    level1OrgId: number | null;
-    level1OrgType: OrgType | null;
-    level2OrgId: number | null;
-    level2OrgType: OrgType | null;
-  }[];
+  const editableRows = await ctx.db.execute<{
+    id: number;
+    type: OrgType;
+    min_depth: number;
+  }>(sql`
+    WITH RECURSIVE editable_orgs(id, org_type, depth, path) AS (
+      SELECT
+        ${schema.orgs.id},
+        ${schema.orgs.orgType},
+        0,
+        ARRAY[${schema.orgs.id}]
+      FROM ${schema.orgs}
+      WHERE ${inArray(schema.orgs.id, roleRootOrgIds)}
 
-  const editableOrgs = allOrgs
-    .flatMap((orgData) => [
-      { id: orgData.level0OrgId, type: orgData.level0OrgType },
-      { id: orgData.level1OrgId, type: orgData.level1OrgType },
-      { id: orgData.level2OrgId, type: orgData.level2OrgType },
-    ])
-    .filter(
-      (org): org is { id: number; type: OrgType } =>
-        org.id !== null && org.type !== null,
+      UNION ALL
+
+      SELECT
+        child.${sql.identifier(schema.orgs.id.name)},
+        child.${sql.identifier(schema.orgs.orgType.name)},
+        editable_orgs.depth + 1,
+        editable_orgs.path || child.${sql.identifier(schema.orgs.id.name)}
+      FROM ${schema.orgs} AS child
+      INNER JOIN editable_orgs
+        ON child.${sql.identifier(schema.orgs.parentId.name)} = editable_orgs.id
+      WHERE editable_orgs.depth <= ${ORG_TREE_MAX_DEPTH}
+        AND child.${sql.identifier(schema.orgs.orgType.name)} <> ${"ao"}
+        AND NOT child.${sql.identifier(schema.orgs.id.name)} = ANY(editable_orgs.path)
     )
-    .filter((org, idx, arr) => {
-      const found = arr.findIndex((o) => o.id === org.id);
-      return found === idx;
+    SELECT
+      id,
+      org_type AS type,
+      min(depth)::integer AS min_depth
+    FROM editable_orgs
+    GROUP BY id, org_type
+  `);
+
+  if (editableRows.some((org) => org.min_depth > ORG_TREE_MAX_DEPTH)) {
+    logWarn("api.org_tree.depth_limit_reached", {
+      direction: "descendants",
+      maxDepth: ORG_TREE_MAX_DEPTH,
+      rootCount: roleRootOrgIds.length,
+      source: "editable_orgs",
     });
+  }
+
+  const withinDepthRows = editableRows.filter(
+    (org) => org.min_depth <= ORG_TREE_MAX_DEPTH,
+  );
+  const editableRootOrgIds = roleRootOrgIds.filter((rootId) =>
+    withinDepthRows.some((org) => org.id === rootId && org.min_depth === 0),
+  );
+  const editableOrgs = withinDepthRows.map(({ id, type }) => ({ id, type }));
 
   logDebug("api.get_editable_org_ids", {
-    editableOrgs,
     editableOrgsCount: editableOrgs.length,
   });
 
   return {
     editableOrgs,
+    editableRootOrgIds,
     isNationAdmin: false,
   };
 };

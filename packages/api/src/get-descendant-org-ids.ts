@@ -1,15 +1,16 @@
-import { aliasedTable, eq, inArray, schema } from "@acme/db";
+import { inArray, schema, sql } from "@acme/db";
 
+import { logWarn } from "./logger";
+import { ORG_TREE_MAX_DEPTH } from "./org-tree";
 import type { Context } from "./shared";
 
 /**
  * Get all descendant organization IDs for the given parent org IDs.
- * Uses a single query with self-joins to traverse the org hierarchy (up to 5 levels deep).
- * Similar approach to checkHasRoleOnOrg but going DOWN the tree instead of UP.
+ * Uses a recursive CTE to traverse the org hierarchy with a bounded depth.
  *
  * @param db - Database context
  * @param parentOrgIds - Array of parent organization IDs
- * @returns Array of all descendant org IDs (including the parent orgs themselves)
+ * @returns Array of descendant org IDs, including existing parent orgs, within the configured depth bound; order is unspecified
  */
 export const getDescendantOrgIds = async (
   db: Context["db"],
@@ -19,47 +20,44 @@ export const getDescendantOrgIds = async (
     return [];
   }
 
-  // Create aliased tables for each level of the hierarchy
-  // Level 0 = input parent orgs, then we join DOWN to find children
-  const level0 = aliasedTable(schema.orgs, "level_0"); // Parent orgs (input)
-  const level1 = aliasedTable(schema.orgs, "level_1"); // Direct children
-  const level2 = aliasedTable(schema.orgs, "level_2"); // Grandchildren
-  const level3 = aliasedTable(schema.orgs, "level_3"); // Great-grandchildren
-  const level4 = aliasedTable(schema.orgs, "level_4"); // Great-great-grandchildren
+  const descendants = await db.execute<{
+    id: number;
+    min_depth: number;
+  }>(sql`
+    WITH RECURSIVE descendants(id, depth, path) AS (
+      SELECT ${schema.orgs.id}, 0, ARRAY[${schema.orgs.id}]
+      FROM ${schema.orgs}
+      WHERE ${inArray(schema.orgs.id, parentOrgIds)}
 
-  // Single query to get all descendants up to 5 levels deep
-  // This mirrors the approach in checkHasRoleOnOrg but goes DOWN instead of UP
-  // TS6.0: aliasedTable complex conditional types require explicit annotation
-  const descendants = (await db
-    .select({
-      level0Id: level0.id,
-      level1Id: level1.id,
-      level2Id: level2.id,
-      level3Id: level3.id,
-      level4Id: level4.id,
-    })
-    .from(level0)
-    .leftJoin(level1, eq(level0.id, level1.parentId))
-    .leftJoin(level2, eq(level1.id, level2.parentId))
-    .leftJoin(level3, eq(level2.id, level3.parentId))
-    .leftJoin(level4, eq(level3.id, level4.parentId))
-    .where(inArray(level0.id, parentOrgIds))) as {
-    level0Id: number;
-    level1Id: number | null;
-    level2Id: number | null;
-    level3Id: number | null;
-    level4Id: number | null;
-  }[];
+      UNION ALL
 
-  // Collect all unique org IDs from all levels
-  const allOrgIds = new Set<number>();
-  for (const row of descendants) {
-    if (row.level0Id !== null) allOrgIds.add(row.level0Id);
-    if (row.level1Id !== null) allOrgIds.add(row.level1Id);
-    if (row.level2Id !== null) allOrgIds.add(row.level2Id);
-    if (row.level3Id !== null) allOrgIds.add(row.level3Id);
-    if (row.level4Id !== null) allOrgIds.add(row.level4Id);
+      SELECT
+        child.${sql.identifier(schema.orgs.id.name)},
+        descendants.depth + 1,
+        descendants.path || child.${sql.identifier(schema.orgs.id.name)}
+      FROM ${schema.orgs} AS child
+      INNER JOIN descendants
+        ON child.${sql.identifier(schema.orgs.parentId.name)} = descendants.id
+      WHERE descendants.depth <= ${ORG_TREE_MAX_DEPTH}
+        AND NOT child.${sql.identifier(schema.orgs.id.name)} = ANY(descendants.path)
+    )
+    SELECT
+      id,
+      min(depth)::integer AS min_depth
+    FROM descendants
+    GROUP BY id
+  `);
+
+  if (descendants.some((org) => org.min_depth > ORG_TREE_MAX_DEPTH)) {
+    logWarn("api.org_tree.depth_limit_reached", {
+      direction: "descendants",
+      maxDepth: ORG_TREE_MAX_DEPTH,
+      rootCount: parentOrgIds.length,
+      source: "descendant_orgs",
+    });
   }
 
-  return Array.from(allOrgIds);
+  return descendants
+    .filter((org) => org.min_depth <= ORG_TREE_MAX_DEPTH)
+    .map((org) => org.id);
 };
