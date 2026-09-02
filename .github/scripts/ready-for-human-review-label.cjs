@@ -39,7 +39,7 @@ const BOT_LOGINS = [
 const PASSING_CONCLUSIONS = new Set(["success", "skipped", "neutral"]);
 
 /**
- * Most recent (by id) check run or status matching `name` -- optionally also
+ * Most recent (by id) check run or status matching `name` -- if available also
  * matching `integrationId`, the GitHub App a ruleset pinned this context to.
  * A re-run creates a new, higher-numbered run rather than mutating the old
  * one, so "most recent" is "highest id" within the matching set.
