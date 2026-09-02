@@ -2,6 +2,7 @@ import { os } from "@orpc/server";
 import omit from "lodash/omit";
 import { z } from "zod";
 
+import type { AnyColumn } from "@acme/db";
 import {
   aliasedTable,
   and,
@@ -11,6 +12,7 @@ import {
   isNotNull,
   isNull,
   ne,
+  notExists,
   lte,
   or,
   schema,
@@ -22,6 +24,7 @@ import { isTruthy } from "@acme/shared/common/functions";
 import type { LowBandwidthF3Marker } from "@acme/validators";
 import { LowBandwidthF3Marker as LowBandwidthF3MarkerSchema } from "@acme/validators";
 
+import type { Context } from "../../shared";
 import { protectedProcedure } from "../../shared";
 
 /**
@@ -38,6 +41,51 @@ const withinCurrentEventDateWindow = () =>
       gte(schema.events.endDate, sql`CURRENT_DATE`),
     ),
   );
+
+/**
+ * True when every org *above* `orgIdColumn` in the hierarchy is active.
+ *
+ * `org.delete` only cascades to events and instances for AOs, so deactivating a
+ * region, area, sector, or nation leaves every descendant org, event, and
+ * instance active. Public read paths therefore have to walk the chain
+ * themselves or they keep serving pins, pin statuses, and workout details for a
+ * retired part of the tree. Four ancestor levels cover the deepest chain
+ * (AO -> region -> area -> sector -> nation), the same depth
+ * `checkHasRoleOnOrg` walks.
+ *
+ * Callers keep their own predicate on the org the column points at; a null
+ * `orgIdColumn`, or one with no matching org row, passes here.
+ */
+const ancestorOrgsAreActive = (db: Context["db"], orgIdColumn: AnyColumn) => {
+  const level1 = aliasedTable(schema.orgs, "ancestor_level_1");
+  const level2 = aliasedTable(schema.orgs, "ancestor_level_2");
+  const level3 = aliasedTable(schema.orgs, "ancestor_level_3");
+  const level4 = aliasedTable(schema.orgs, "ancestor_level_4");
+  const level5 = aliasedTable(schema.orgs, "ancestor_level_5");
+
+  return notExists(
+    db
+      .select({ inactive: sql`1` })
+      .from(level1)
+      .leftJoin(level2, eq(level2.id, level1.parentId))
+      .leftJoin(level3, eq(level3.id, level2.parentId))
+      .leftJoin(level4, eq(level4.id, level3.parentId))
+      .leftJoin(level5, eq(level5.id, level4.parentId))
+      .where(
+        and(
+          eq(level1.id, orgIdColumn),
+          // A level that does not exist joins to NULL, and `eq(..., false)` is
+          // NULL (not true) for it, so unresolved levels can't match.
+          or(
+            eq(level2.isActive, false),
+            eq(level3.isActive, false),
+            eq(level4.isActive, false),
+            eq(level5.isActive, false),
+          ),
+        ),
+      ),
+  );
+};
 
 export const mapLocationRouter = os.router({
   eventsAndLocations: protectedProcedure
@@ -127,10 +175,11 @@ export const mapLocationRouter = os.router({
         .where(
           and(
             eq(schema.locations.isActive, true),
-            // Deactivating a region does not cascade to child AOs or events, so
-            // the public map must hide them here.
+            // Deactivating an org does not cascade to child AOs or events, so
+            // the public map must hide them here: the event's own org, plus
+            // every level above it (region, area, sector, nation).
             or(isNull(aoOrg.id), eq(aoOrg.isActive, true)),
-            or(isNull(regionOrg.id), eq(regionOrg.isActive, true)),
+            ancestorOrgsAreActive(ctx.db, schema.events.orgId),
           ),
         )
         .groupBy(
@@ -287,7 +336,6 @@ export const mapLocationRouter = os.router({
     )
     .handler(async ({ context: ctx }) => {
       const aoOrg = aliasedTable(schema.orgs, "ao_org");
-      const regionOrg = aliasedTable(schema.orgs, "region_org");
       const seriesEvent = aliasedTable(schema.events, "series_event");
 
       const instances = await ctx.db
@@ -333,13 +381,6 @@ export const mapLocationRouter = os.router({
         )
         .leftJoin(aoOrg, eq(schema.eventInstances.orgId, aoOrg.id))
         .leftJoin(
-          regionOrg,
-          and(
-            eq(regionOrg.id, aoOrg.parentId),
-            eq(regionOrg.orgType, "region"),
-          ),
-        )
-        .leftJoin(
           seriesEvent,
           eq(seriesEvent.id, schema.eventInstances.seriesId),
         )
@@ -362,9 +403,10 @@ export const mapLocationRouter = os.router({
             eq(schema.eventInstances.isActive, true),
             eq(schema.eventInstances.isPrivate, false),
             eq(aoOrg.isActive, true),
-            // Child AOs stay active when a region is retired; exclude those
-            // instances from public markers and pin statuses.
-            or(isNull(regionOrg.id), eq(regionOrg.isActive, true)),
+            // Descendants stay active when a region, area, sector, or nation is
+            // retired; exclude their instances from public markers and pin
+            // statuses.
+            ancestorOrgsAreActive(ctx.db, schema.eventInstances.orgId),
             or(
               isNull(schema.eventInstances.seriesId),
               and(
@@ -657,7 +699,7 @@ export const mapLocationRouter = os.router({
               isNull(schema.events.id),
               and(
                 or(isNull(parentOrg.id), eq(parentOrg.isActive, true)),
-                or(isNull(regionOrg.id), eq(regionOrg.isActive, true)),
+                ancestorOrgsAreActive(ctx.db, schema.events.orgId),
               ),
             ),
           ),

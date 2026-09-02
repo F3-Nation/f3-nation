@@ -53,15 +53,37 @@ describe("Map Location Router", () => {
     }
   });
 
+  // Helper to create test area (sits between the nation and a region)
+  const createTestArea = async () => {
+    const nationOrg = await getOrCreateF3NationOrg();
+    const [area] = await db
+      .insert(schema.orgs)
+      .values({
+        name: `Test Area ${uniqueId()}`,
+        orgType: "area",
+        parentId: nationOrg.id,
+        isActive: true,
+      })
+      .returning();
+
+    if (area) {
+      createdOrgIds.push(area.id);
+    }
+    return area;
+  };
+
   // Helper to create test region
-  const createTestRegion = async (opts?: { logoUrl?: string | null }) => {
+  const createTestRegion = async (opts?: {
+    logoUrl?: string | null;
+    parentId?: number;
+  }) => {
     const nationOrg = await getOrCreateF3NationOrg();
     const [region] = await db
       .insert(schema.orgs)
       .values({
         name: `Test Region ${uniqueId()}`,
         orgType: "region",
-        parentId: nationOrg.id,
+        parentId: opts?.parentId ?? nationOrg.id,
         isActive: true,
         ...(opts?.logoUrl !== undefined ? { logoUrl: opts.logoUrl } : {}),
       })
@@ -1352,6 +1374,58 @@ describe("Map Location Router", () => {
         result.find((returned) => returned.id === instance.id),
       ).toBeUndefined();
     });
+
+    it("should exclude a qualifying instance whose area is inactive", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const area = await createTestArea();
+      if (!area) throw new Error("Failed to create test area");
+
+      const region = await createTestRegion({ parentId: area.id });
+      if (!region) throw new Error("Failed to create test region");
+
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create test AO");
+
+      const location = await createTestLocation(region.id);
+      if (!location) throw new Error("Failed to create test location");
+
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const startDate = tomorrow.toISOString().slice(0, 10);
+
+      // Deleting an area does not cascade below it, so the AO and its region
+      // both stay active — the retired grandparent is the only reason this
+      // instance must not surface as a public marker or pin status.
+      const [instance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: `Instance In Retired Area ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: location.id,
+          startDate,
+          startTime: "0600",
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+
+      if (!instance) throw new Error("Failed to create event instance");
+
+      await db
+        .update(schema.orgs)
+        .set({ isActive: false })
+        .where(eq(schema.orgs.id, area.id));
+
+      const client = createTestClient();
+      const result = await client.map.location.upcomingInstances();
+
+      expect(
+        result.find((returned) => returned.id === instance.id),
+      ).toBeUndefined();
+    });
   });
 
   /**
@@ -1554,6 +1628,49 @@ describe("Map Location Router", () => {
         .update(schema.orgs)
         .set({ isActive: false })
         .where(eq(schema.orgs.id, region.id));
+
+      const client = createTestClient();
+      const result = await client.map.location.eventsAndLocations();
+
+      expect(
+        result.find((loc: [number, ...unknown[]]) => loc[0] === location.id),
+      ).toBeUndefined();
+
+      const workout = await client.map.location.locationWorkout({
+        locationId: location.id,
+      });
+      expect(workout.location).toBeNull();
+      expect(workout.message).toBe("This workout is no longer scheduled.");
+    });
+
+    it("should hide markers and workout details when the area is inactive", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const today = await getDbCurrentDate();
+
+      const area = await createTestArea();
+      if (!area) throw new Error("Failed to create test area");
+      const region = await createTestRegion({ parentId: area.id });
+      if (!region) throw new Error("Failed to create test region");
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create test AO");
+      const location = await createTestLocation(region.id);
+      if (!location) throw new Error("Failed to create test location");
+
+      await createDatedEvent({
+        aoId: ao.id,
+        locationId: location.id,
+        label: "Event In Retired Area",
+        dayOfWeek: "monday",
+        startDate: shiftDays(today, -1),
+      });
+
+      // Only the area is retired; its region and AO stay active.
+      await db
+        .update(schema.orgs)
+        .set({ isActive: false })
+        .where(eq(schema.orgs.id, area.id));
 
       const client = createTestClient();
       const result = await client.map.location.eventsAndLocations();
