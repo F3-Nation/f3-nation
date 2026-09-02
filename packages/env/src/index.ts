@@ -32,14 +32,6 @@ export const env = createEnv({
     TEST_DATABASE_URL: z.string().min(1).optional(),
     API_KEY: z.string().min(1),
     SUPER_ADMIN_API_KEY: z.string().min(1).optional(),
-    // A real, revocable database-backed API key (apps/admin's API Keys
-    // page), granted the nation-admin role at the F3 Nation org — not a
-    // shared secret. Used by packages/api/src/router/oauth-client.ts's
-    // server-to-server calls to apps/auth's /api/admin/oauth-clients/*
-    // routes. Optional so a deploy without it configured just can't use
-    // that admin feature, rather than failing env validation outright —
-    // same convention SUPER_ADMIN_API_KEY above already uses.
-    AUTH_ADMIN_API_KEY: z.string().min(1).optional(),
     NOTIFY_WEBHOOK_URLS_COMMA_SEPARATED: z.string().optional(),
     GCS_EMULATOR_HOST: z.string().optional(),
   },

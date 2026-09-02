@@ -15,7 +15,6 @@ export enum ModalType {
   ADMIN_AOS = "ADMIN_AOS",
   ADMIN_POSITIONS = "ADMIN_POSITIONS",
   ADMIN_API_KEYS = "ADMIN_API_KEYS",
-  ADMIN_OAUTH_CLIENTS = "ADMIN_OAUTH_CLIENTS",
   ADMIN_EVENT_TYPES = "ADMIN_EVENT_TYPES",
   ADMIN_DELETE_CONFIRMATION = "ADMIN_DELETE_CONFIRMATION",
   DELETE_CONFIRMATION = "DELETE_CONFIRMATION",
@@ -74,9 +73,6 @@ export interface DataType {
     defaultOrgId?: number | null;
   };
   [ModalType.ADMIN_API_KEYS]: null;
-  [ModalType.ADMIN_OAUTH_CLIENTS]: {
-    clientId?: string;
-  } | null;
   [ModalType.ADMIN_DELETE_CONFIRMATION]: {
     id: number;
     type: DeleteType;

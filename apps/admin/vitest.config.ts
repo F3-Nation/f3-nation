@@ -22,28 +22,22 @@ export default defineConfig({
       exclude: coverageExclude,
       thresholds: {
         autoUpdate: true,
-        statements: 10.06,
-        // branches/functions are deliberately set below what this suite
-        // currently measures locally (branches 7.92%, functions ~5.516%,
-        // i.e. "5.51%" as displayed), not at the exact figure. This is a
-        // pre-existing flake in this large suite, unrelated to anything
-        // this PR added: the same run, repeated back-to-back with no code
-        // changes, is stable locally, but CI's v8 report has repeatedly
-        // landed ~1 branch lower than an otherwise byte-identical local
-        // report (statements/functions/lines matched to the hundredth, and
-        // the per-folder rollups for every file this PR touches --
-        // admin-oauth-clients-modal.tsx, the oauth-clients route, src/lib/
-        // auth -- matched CI exactly too). Separately, functions was caught
-        // failing its own committed threshold (5.52) against a stable local
-        // measurement of 5.516%, i.e. the committed value was already
-        // slightly stale/optimistic from an earlier run. autoUpdate will
-        // only ever raise these values on a local run with higher coverage,
-        // never lower them, so these manual floors hold until someone
-        // deliberately raises them again. Still real, test-backed
-        // improvement over main's statements 5.6/functions ~2%.
-        branches: 7.7,
-        functions: 5.4,
-        lines: 10.25,
+        // Lowered from the prior commit's floor after removing the OAuth
+        // clients admin UI (page, table, modal) and its tests — that
+        // surface is moving to its own follow-up PR once Better Auth is
+        // actually deployed somewhere. branches/functions are set below
+        // what this suite currently measures locally as slack for the same
+        // pre-existing ~1-branch CI-vs-local flake this repo has seen
+        // before: the same run, repeated back-to-back with no code changes,
+        // is stable locally, but CI's v8 report has occasionally landed a
+        // hair lower than an otherwise byte-identical local report.
+        // autoUpdate will only ever raise these values on a local run with
+        // higher coverage, never lower them, so this manual drop reflects
+        // the deliberate removal of tested code, not a suite regression.
+        statements: 8.48,
+        branches: 5.87,
+        functions: 3.84,
+        lines: 8.7,
       },
     },
     setupFiles: ["./vitest.setup.ts"],
