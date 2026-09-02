@@ -9,10 +9,11 @@ const LABEL = "ready for human review";
 
 // Review-thread authors this workflow treats as "bot reviewers" for condition
 // 3. Only these three are gated on -- a human reviewer's own unresolved
-// threads never affect this label. The label triggers the *first* Codeowner
-// review, at which point only bots have reviewed; checking every thread
-// instead would pull the label the moment a Codeowner leaves their own
-// review comment, which is backwards from what this label is for.
+// threads never affect this label. This label marks the point where a
+// Codeowner is expected to give the PR its first real look, which is
+// while only bots have reviewed it. Checking every thread instead would
+// pull the label the moment a Codeowner leaves their own review comment,
+// which is backwards from what this label is for.
 //
 // These are bare logins with no `[bot]` suffix. That suffix is a REST/UI
 // convention (`coderabbitai[bot]`) -- the workflow reads thread authors via
@@ -33,9 +34,9 @@ const BOT_LOGINS = [
 // `if:` that never runs a required job also lands here as "skipped" or
 // "neutral" -- both merge like "success" per GitHub's own docs. No required
 // context in this repo has a job-level `if:` today, so this is latent, but
-// `pr-title.yml`'s "gate the step, not the job" comment exists precisely
-// because a naive job-level skip would otherwise silently disagree with
-// branch protection.
+// gating a required job with a job-level `if:` (instead of gating the step
+// inside it) would let that job silently disagree with branch protection --
+// worth remembering if one is ever added.
 const PASSING_CONCLUSIONS = new Set(["success", "skipped", "neutral"]);
 
 /**
