@@ -11,6 +11,7 @@ const config: KnipConfig = {
     "packages/shared/src/app/constants.ts",
     ".claude/scripts/sync-agent-skills.mjs",
     ".github/scripts/code-scanning-issue.cjs",
+    ".github/scripts/ready-for-human-review-label.cjs",
     "turbo/generators/config.ts",
     // AI-SDLC factory tooling (fork-only). Its entry points are CI workflows
     // (e2e-triage / adversarial-review) invoking `tsx src/review-pr.ts` /
@@ -32,7 +33,9 @@ const config: KnipConfig = {
       // which the vitest plugin does not discover from the default name.
       vitest: ["vitest.config.ts", "vitest.characterization.config.ts"],
       // Wired in by resolve.alias rather than an import, so it is not
-      // reachable through the module graph.
+      // reachable through the module graph. (src/server.ts needs no entry
+      // here — knip's package.json plugin already discovers it via the
+      // dev:hono/start:hono scripts.)
       entry: ["characterization/next-headers-shim.ts"],
     },
     "apps/admin": {
@@ -44,6 +47,11 @@ const config: KnipConfig = {
       // vi.mock("@f3nation/sso") in auth-login tests intercepts handleLoginRoute's
       // internal call; no static import exists for knip to trace.
       ignoreDependencies: ["@f3nation/sso"],
+    },
+    "apps/slackbot": {
+      // Graph-only edge mirroring apps/slackbot/pyproject.toml so Turbo can see
+      // the Python workspace; no TypeScript imports it.
+      ignoreDependencies: ["f3-data-models"],
     },
   },
 };

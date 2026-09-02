@@ -2,10 +2,15 @@
   "$schema": "https://turborepo.org/schema.json",
   "globalDependencies": [
     "**/.env",
-    "uv.lock",
+    ".gitignore",
+    ".nvmrc",
+    ".prettierignore",
+    ".python-version",
     "pyproject.toml",
-    ".python-version"
+    "uv.lock",
+    "scripts/python-task.sh"
   ],
+  "globalPassThroughEnv": ["GITHUB_SHA"],
   "globalEnv": [
     "CI",
     "NODE_ENV",
@@ -60,7 +65,6 @@
     "CI_FACTORY_INFERENCE_API_KEY",
     "CI_FACTORY_INFERENCE_BASE_URL",
     "CI_FACTORY_INFERENCE_MODEL",
-    "GITHUB_SHA",
     "UV_PYTHON"
   ],
   "tasks": {
