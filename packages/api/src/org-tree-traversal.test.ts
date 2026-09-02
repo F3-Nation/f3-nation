@@ -14,7 +14,7 @@ import * as loggerModule from "./logger";
 
 vi.mock("./logger", { spy: true });
 
-const mockLogWarn = vi.mocked(loggerModule.logWarn);
+const mockLogError = vi.mocked(loggerModule.logError);
 
 import { db, getOrCreateRoles, uniqueId } from "./__tests__/test-utils";
 import { checkHasRoleOnOrg } from "./check-has-role-on-org";
@@ -36,7 +36,7 @@ describe("organization tree traversal", () => {
   let editorRoleId: number;
 
   beforeEach(() => {
-    mockLogWarn.mockClear();
+    mockLogError.mockClear();
   });
 
   beforeAll(async () => {
@@ -453,8 +453,8 @@ describe("organization tree traversal", () => {
         roleName: "editor",
       }),
     ).resolves.toMatchObject({ success: false });
-    expect(mockLogWarn).toHaveBeenCalledTimes(1);
-    expect(mockLogWarn).toHaveBeenLastCalledWith(
+    expect(mockLogError).toHaveBeenCalledTimes(1);
+    expect(mockLogError).toHaveBeenLastCalledWith(
       "api.org_tree.depth_limit_reached",
       {
         direction: "ancestors",
@@ -464,7 +464,7 @@ describe("organization tree traversal", () => {
       },
     );
 
-    mockLogWarn.mockClear();
+    mockLogError.mockClear();
     const ctx = await createDbRoleContext(root, "admin");
     const editableResult = await getEditableOrgIdsForUser(ctx);
     expect(editableResult.editableRootOrgIds).toEqual([root.id]);
@@ -472,8 +472,8 @@ describe("organization tree traversal", () => {
     expect(editableResult.editableOrgs.map((org) => org.id)).not.toContain(
       beyondGuard.id,
     );
-    expect(mockLogWarn).toHaveBeenCalledTimes(1);
-    expect(mockLogWarn).toHaveBeenLastCalledWith(
+    expect(mockLogError).toHaveBeenCalledTimes(1);
+    expect(mockLogError).toHaveBeenLastCalledWith(
       "api.org_tree.depth_limit_reached",
       {
         direction: "descendants",
@@ -485,15 +485,15 @@ describe("organization tree traversal", () => {
 
     // Production callers use the direct roots so the depth budget is applied
     // once instead of composing two independently bounded traversals.
-    mockLogWarn.mockClear();
+    mockLogError.mockClear();
     const descendants = await getDescendantOrgIds(
       db,
       editableResult.editableRootOrgIds,
     );
     expect(descendants).toHaveLength(ORG_TREE_MAX_DEPTH + 1);
     expect(descendants).not.toContain(beyondGuard.id);
-    expect(mockLogWarn).toHaveBeenCalledTimes(1);
-    expect(mockLogWarn).toHaveBeenLastCalledWith(
+    expect(mockLogError).toHaveBeenCalledTimes(1);
+    expect(mockLogError).toHaveBeenLastCalledWith(
       "api.org_tree.depth_limit_reached",
       {
         direction: "descendants",
@@ -505,13 +505,13 @@ describe("organization tree traversal", () => {
 
     // Every node is within the return boundary from at least one direct root,
     // even though the deepest node also has a path beyond the boundary.
-    mockLogWarn.mockClear();
+    mockLogError.mockClear();
     const overlappingDescendants = await getDescendantOrgIds(db, [
       root.id,
       chain[1]!.id,
     ]);
     expect(overlappingDescendants).toContain(beyondGuard.id);
-    expect(mockLogWarn).not.toHaveBeenCalled();
+    expect(mockLogError).not.toHaveBeenCalled();
 
     if (!ctx.session) throw new Error("Missing depth-guard session");
     await db.insert(schema.rolesXUsersXOrg).values({
@@ -523,7 +523,7 @@ describe("organization tree traversal", () => {
     expect(
       overlappingEditableResult.editableOrgs.map((org) => org.id),
     ).toContain(beyondGuard.id);
-    expect(mockLogWarn).not.toHaveBeenCalled();
+    expect(mockLogError).not.toHaveBeenCalled();
   });
 
   it("does not warn when a hierarchy ends exactly at the depth boundary", async () => {
@@ -548,16 +548,16 @@ describe("organization tree traversal", () => {
       db,
       roleName: "editor",
     });
-    expect(mockLogWarn).not.toHaveBeenCalled();
+    expect(mockLogError).not.toHaveBeenCalled();
 
     const ctx = await createDbRoleContext(root, "admin");
     const editableResult = await getEditableOrgIdsForUser(ctx);
     expect(editableResult.editableOrgs).toHaveLength(ORG_TREE_MAX_DEPTH + 1);
-    expect(mockLogWarn).not.toHaveBeenCalled();
+    expect(mockLogError).not.toHaveBeenCalled();
 
     const descendants = await getDescendantOrgIds(db, [root.id]);
     expect(descendants).toHaveLength(ORG_TREE_MAX_DEPTH + 1);
-    expect(mockLogWarn).not.toHaveBeenCalled();
+    expect(mockLogError).not.toHaveBeenCalled();
   });
 
   it("preserves AO roots, keeps descendant traversal through AOs, stops editable traversal below excluded AOs, and deduplicates overlapping role roots", async () => {
@@ -653,6 +653,6 @@ describe("organization tree traversal", () => {
     const descendants = await getDescendantOrgIds(db, [first.id]);
     expect(new Set(descendants)).toEqual(new Set([first.id, second.id]));
     expect(descendants).toHaveLength(2);
-    expect(mockLogWarn).not.toHaveBeenCalled();
+    expect(mockLogError).not.toHaveBeenCalled();
   });
 });

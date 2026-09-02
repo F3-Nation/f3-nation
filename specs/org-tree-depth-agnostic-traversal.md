@@ -49,8 +49,8 @@ a cycle.
 - **AC-4** — GIVEN a synthetic six-node hierarchy chain WHEN each traversal
   function runs THEN it reaches the sixth node in its traversal direction.
 - **AC-5** — GIVEN cyclic hierarchy data WHEN each traversal function runs THEN
-  it terminates at the configured maximum depth and returns only unique
-  organizations reachable within that bound.
+  its visited-path guard terminates the cycle, it returns only unique reachable
+  organizations, and it does not report that the depth limit was reached.
 - **AC-6** — GIVEN an organization-scoped list call in `location.ts`,
   `event.ts`, `position.ts`, `org.ts`, or `map/event.ts` WHEN editable scope is
   expanded THEN it traverses once from the user's direct editable roots, so the
@@ -117,7 +117,8 @@ is out of scope for #917.
 
 - Preserve the existing structured debug event names while retaining only safe
   aggregate context.
-- Emit `api.org_tree.depth_limit_reached` at warning level only when a node is
-  reachable one level beyond the configured return boundary. Include only
-  traversal direction, source, root count, and maximum depth; do not log
-  organization or user identifiers.
+- Emit `api.org_tree.depth_limit_reached` at error level only when a node is
+  reachable one level beyond the configured return boundary, so the event is
+  forwarded to the configured error reporter. Include only traversal direction,
+  source, root count, and maximum depth; do not log organization or user
+  identifiers.

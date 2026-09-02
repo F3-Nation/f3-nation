@@ -1,6 +1,6 @@
 import { inArray, schema, sql } from "@acme/db";
 
-import { logWarn } from "./logger";
+import { logError } from "./logger";
 import { ORG_TREE_MAX_DEPTH } from "./org-tree";
 import type { Context } from "./shared";
 
@@ -49,7 +49,7 @@ export const getDescendantOrgIds = async (
   `);
 
   if (descendants.some((org) => org.min_depth > ORG_TREE_MAX_DEPTH)) {
-    logWarn("api.org_tree.depth_limit_reached", {
+    logError("api.org_tree.depth_limit_reached", {
       direction: "descendants",
       maxDepth: ORG_TREE_MAX_DEPTH,
       rootCount: parentOrgIds.length,

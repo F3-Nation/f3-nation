@@ -1,7 +1,7 @@
 import { eq, inArray, schema, sql } from "@acme/db";
 
 import type { OrgType } from "../../shared/src/app/enums";
-import { logDebug, logWarn } from "./logger";
+import { logDebug, logError } from "./logger";
 import { ORG_TREE_MAX_DEPTH } from "./org-tree";
 import type { Context } from "./shared";
 
@@ -112,7 +112,7 @@ export const getEditableOrgIdsForUser = async (
   `);
 
   if (editableRows.some((org) => org.min_depth > ORG_TREE_MAX_DEPTH)) {
-    logWarn("api.org_tree.depth_limit_reached", {
+    logError("api.org_tree.depth_limit_reached", {
       direction: "descendants",
       maxDepth: ORG_TREE_MAX_DEPTH,
       rootCount: roleRootOrgIds.length,

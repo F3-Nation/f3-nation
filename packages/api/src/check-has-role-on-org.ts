@@ -3,7 +3,7 @@ import type { UserRole } from "@acme/shared/app/enums";
 import { schema, sql } from "@acme/db";
 import type { Context } from "./shared";
 
-import { logDebug, logWarn } from "./logger";
+import { logDebug, logError } from "./logger";
 import { ORG_TREE_MAX_DEPTH } from "./org-tree";
 
 export const checkHasRoleOnOrg = async ({
@@ -84,7 +84,7 @@ export const checkHasRoleOnOrg = async ({
   `);
 
   if (ancestors.some((org) => org.min_depth > ORG_TREE_MAX_DEPTH)) {
-    logWarn("api.org_tree.depth_limit_reached", {
+    logError("api.org_tree.depth_limit_reached", {
       direction: "ancestors",
       maxDepth: ORG_TREE_MAX_DEPTH,
       rootCount: 1,

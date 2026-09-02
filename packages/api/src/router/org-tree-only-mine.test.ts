@@ -381,15 +381,64 @@ describe("organization tree onlyMine router scoping", () => {
     expect(ids).not.toContain(beyondPositionId);
   });
 
-  it("fails closed when session roles have no database-backed editable scope", async () => {
+  it("fails closed across scoped list endpoints when session roles have no database-backed editable scope", async () => {
     await mockAuthWithSession(unbackedRoleSession);
-    const result = await createTestClient().position.all({
-      onlyMine: true,
-      searchTerm: prefix,
-      pageIndex: 0,
-      pageSize: 100,
-    });
-    expect(result).toEqual({ positions: [], totalCount: 0 });
+    const client = createTestClient();
+
+    await expect(
+      client.org.all({
+        orgTypes: ["region"],
+        onlyMine: true,
+        searchTerm: prefix,
+        pageIndex: 0,
+        pageSize: 100,
+      }),
+    ).resolves.toEqual({ orgs: [], total: 0 });
+
+    await expect(
+      client.location.all({
+        onlyMine: true,
+        searchTerm: prefix,
+        pageIndex: 0,
+        pageSize: 100,
+      }),
+    ).resolves.toEqual({ locations: [], totalCount: 0 });
+
+    await expect(
+      client.event.all({
+        onlyMine: true,
+        searchTerm: prefix,
+        pageIndex: 0,
+        pageSize: 100,
+      }),
+    ).resolves.toEqual({ events: [], totalCount: 0 });
+
+    await expect(
+      client.map.event.all({
+        onlyMine: true,
+        searchTerm: prefix,
+        pageIndex: 0,
+        pageSize: 100,
+      }),
+    ).resolves.toEqual({ events: [], totalCount: 0 });
+
+    await expect(
+      client.position.all({
+        onlyMine: true,
+        searchTerm: prefix,
+        pageIndex: 0,
+        pageSize: 100,
+      }),
+    ).resolves.toEqual({ positions: [], totalCount: 0 });
+
+    await expect(
+      client.request.all({
+        onlyMine: true,
+        searchTerm: prefix,
+        pageIndex: 0,
+        pageSize: 100,
+      }),
+    ).resolves.toEqual({ requests: [], totalCount: 0 });
   });
 
   it("keeps request scoping on deep non-AO editable organizations", async () => {
