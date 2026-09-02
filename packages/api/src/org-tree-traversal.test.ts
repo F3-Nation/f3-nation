@@ -560,7 +560,7 @@ describe("organization tree traversal", () => {
     expect(mockLogWarn).not.toHaveBeenCalled();
   });
 
-  it("preserves AO roots, stops below excluded AOs, and deduplicates overlapping role roots", async () => {
+  it("preserves AO roots, keeps descendant traversal through AOs, stops editable traversal below excluded AOs, and deduplicates overlapping role roots", async () => {
     const [region, ao, nestedRegion] = await createOrgChain([
       "region",
       "ao",
@@ -583,6 +583,12 @@ describe("organization tree traversal", () => {
     expect(new Set(aoResult.editableOrgs.map((org) => org.id))).toEqual(
       new Set([ao.id, nestedRegion.id]),
     );
+
+    const descendants = await getDescendantOrgIds(db, [region.id]);
+    expect(new Set(descendants)).toEqual(
+      new Set([region.id, ao.id, nestedRegion.id]),
+    );
+    expect(descendants).toHaveLength(3);
 
     const [root, child, grandchild] = await createOrgChain([
       "region",

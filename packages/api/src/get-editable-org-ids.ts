@@ -9,7 +9,7 @@ import type { Context } from "./shared";
  * Get the organization IDs that a user can edit
  *
  * @param ctx - The ORPC context containing the database and session
- * @returns Editable non-AO orgs, validated direct role roots, and the preserved nation-wide access flag
+ * @returns Editable orgs (including direct AO role roots), validated direct role roots, and the preserved nation-wide access flag
  */
 export const getEditableOrgIdsForUser = async (
   ctx: Context,
