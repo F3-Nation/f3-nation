@@ -4,6 +4,7 @@ import {
   START_END_TIME_DB_FORMAT,
   START_END_TIME_DISPLAY_FORMAT,
 } from "@acme/shared/app/constants";
+import type { SeriesException } from "@acme/shared/app/enums";
 import { cn } from "@acme/ui";
 
 import { dayjs } from "~/utils/frontendDayjs";
@@ -15,7 +16,7 @@ export interface UpdateInstance {
   id: number;
   startDate: string;
   startTime: string | null;
-  seriesException: string | null;
+  seriesException: SeriesException | null;
 }
 
 function formatUpdateRow(instance: UpdateInstance) {

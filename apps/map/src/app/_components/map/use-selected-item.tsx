@@ -8,6 +8,7 @@ import { RERENDER_LOGS } from "@acme/shared/common/constants";
 import { orpc, useQuery } from "~/orpc/react";
 import { dateToDayOfWeek } from "~/utils/date";
 import { findNextExceptionNotice } from "~/utils/event-status-map";
+import { useUpcomingInstances } from "~/utils/hooks/use-upcoming-instances";
 import { mapStore } from "~/utils/store/map";
 import { selectedItemStore } from "~/utils/store/selected-item";
 
@@ -29,11 +30,7 @@ export const useSelectedItem = () => {
     }),
   );
 
-  const { data: upcomingInstancesData } = useQuery(
-    orpc.map.location.upcomingInstances.queryOptions({
-      input: undefined,
-    }),
-  );
+  const { instances: upcomingInstancesData } = useUpcomingInstances();
 
   const selectedLocation = useMemo(() => {
     if (debouncedLocationId !== locationId) return undefined;

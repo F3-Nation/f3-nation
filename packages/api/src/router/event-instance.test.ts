@@ -30,6 +30,7 @@ import { logWarn } from "../logger";
 import {
   cleanup,
   createAdminSession,
+  createEditorSession,
   createTestClient,
   db,
   getOrCreateF3NationOrg,
@@ -40,6 +41,7 @@ import {
 describe("Event Instance Router", () => {
   // Track created resources for cleanup
   const createdEventInstanceIds: number[] = [];
+  const createdEventIds: number[] = [];
   const createdOrgIds: number[] = [];
   const createdEventTypeIds: number[] = [];
   const createdEventTagIds: number[] = [];
@@ -85,6 +87,15 @@ describe("Event Instance Router", () => {
         await db
           .delete(schema.eventInstances)
           .where(eq(schema.eventInstances.id, eventInstanceId));
+      } catch {
+        // Ignore errors during cleanup
+      }
+    }
+    // After the instances above (which reference events via seriesId) and
+    // before the orgs below (which events reference via orgId).
+    for (const eventId of createdEventIds.reverse()) {
+      try {
+        await cleanup.event(eventId);
       } catch {
         // Ignore errors during cleanup
       }
@@ -266,6 +277,30 @@ describe("Event Instance Router", () => {
       createdEventInstanceIds.push(eventInstance.id);
     }
     return eventInstance;
+  };
+
+  // Helper to create a series (parent event) that instances can link to via
+  // seriesId.
+  const createTestSeriesEvent = async (
+    orgId: number,
+    options?: { name?: string; locationId?: number | null },
+  ) => {
+    const [event] = await db
+      .insert(schema.events)
+      .values({
+        name: options?.name ?? `Test Series ${uniqueId()}`,
+        orgId,
+        locationId: options?.locationId ?? null,
+        isActive: true,
+        highlight: false,
+        startDate: new Date().toISOString().split("T")[0]!,
+      })
+      .returning();
+
+    if (event) {
+      createdEventIds.push(event.id);
+    }
+    return event;
   };
 
   const createTestEventType = async () => {
@@ -2507,6 +2542,238 @@ describe("Event Instance Router", () => {
       expect(persisted?.name).toBe(movedName);
     });
 
+    // `seriesId` decides which series a map pin reads its status from, so it is
+    // a write against the *series'* org — not only against the org named in
+    // `orgId`, which the three checks above already cover. Without this an
+    // editor of any org could file a "closed" exception against a stranger's
+    // series and grey out their pin, with the row sitting in their own admin
+    // table where the affected region could never find it.
+    it("should reject linking a new instance to a series in an org the editor has no role on", async () => {
+      const adminSession = await createAdminSession();
+      await mockAuthWithSession(adminSession);
+
+      // Separate regions, so no shared ancestor grants the editor a role on
+      // the victim org through the hierarchy walk.
+      const regionA = await createTestRegion();
+      if (!regionA) throw new Error("Failed to create region A");
+      const regionB = await createTestRegion();
+      if (!regionB) throw new Error("Failed to create region B");
+
+      const aoA = await createTestAO(regionA.id);
+      if (!aoA) throw new Error("Failed to create AO A");
+      const aoB = await createTestAO(regionB.id);
+      if (!aoB) throw new Error("Failed to create AO B");
+
+      const victimSeries = await createTestSeriesEvent(aoB.id);
+      if (!victimSeries) throw new Error("Failed to create series");
+
+      const editorARoles = [
+        { orgId: aoA.id, orgName: aoA.name, roleName: "editor" as const },
+      ];
+      const editorASession = {
+        id: 510,
+        email: "editor-a-series@example.com",
+        user: {
+          id: "510",
+          email: "editor-a-series@example.com",
+          name: "Editor A",
+          roles: editorARoles,
+        },
+        roles: editorARoles,
+        expires: new Date(Date.now() + 86_400_000).toISOString(),
+      };
+      await mockAuthWithSession(editorASession);
+
+      const client = createTestClient();
+      await expect(
+        client.eventInstance.crupdate({
+          // A legitimate org for this editor — every orgId-based check passes.
+          orgId: aoA.id,
+          seriesId: victimSeries.id,
+          seriesException: "closed",
+          name: `Hijack ${uniqueId()}`,
+          startDate: new Date().toISOString().split("T")[0]!,
+        }),
+      ).rejects.toThrow(/not authorized to link/i);
+
+      // Nothing was written under the victim's series.
+      const rows = await db
+        .select({ id: schema.eventInstances.id })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.seriesId, victimSeries.id));
+      expect(rows).toHaveLength(0);
+    });
+
+    it("should reject repointing an existing instance to a series in an unauthorized org", async () => {
+      const adminSession = await createAdminSession();
+      await mockAuthWithSession(adminSession);
+
+      const regionA = await createTestRegion();
+      if (!regionA) throw new Error("Failed to create region A");
+      const regionB = await createTestRegion();
+      if (!regionB) throw new Error("Failed to create region B");
+
+      const aoA = await createTestAO(regionA.id);
+      if (!aoA) throw new Error("Failed to create AO A");
+      const aoB = await createTestAO(regionB.id);
+      if (!aoB) throw new Error("Failed to create AO B");
+
+      const victimSeries = await createTestSeriesEvent(aoB.id);
+      if (!victimSeries) throw new Error("Failed to create series");
+
+      const instance = await createTestEventInstance(aoA.id);
+      if (!instance) throw new Error("Failed to create event instance");
+
+      const editorARoles = [
+        { orgId: aoA.id, orgName: aoA.name, roleName: "editor" as const },
+      ];
+      const editorASession = {
+        id: 511,
+        email: "editor-a-repoint@example.com",
+        user: {
+          id: "511",
+          email: "editor-a-repoint@example.com",
+          name: "Editor A",
+          roles: editorARoles,
+        },
+        roles: editorARoles,
+        expires: new Date(Date.now() + 86_400_000).toISOString(),
+      };
+      await mockAuthWithSession(editorASession);
+
+      const client = createTestClient();
+      await expect(
+        client.eventInstance.crupdate({
+          id: instance.id,
+          orgId: aoA.id,
+          seriesId: victimSeries.id,
+          seriesException: "closed",
+          name: instance.name,
+          startDate: instance.startDate,
+        }),
+      ).rejects.toThrow(/not authorized to link/i);
+
+      const [persisted] = await db
+        .select({ seriesId: schema.eventInstances.seriesId })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.id, instance.id));
+      expect(persisted?.seriesId).toBeNull();
+    });
+
+    // The counterpart the check must not break: a temporary AO change files an
+    // occurrence under a sibling AO while it keeps pointing at the original
+    // series, so the two orgIds legitimately differ. Authorizing by role on the
+    // series' org (rather than requiring orgId equality) keeps this working.
+    it("should allow linking to a sibling AO's series when the editor's role covers both", async () => {
+      const adminSession = await createAdminSession();
+      await mockAuthWithSession(adminSession);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create region");
+
+      const aoA = await createTestAO(region.id);
+      if (!aoA) throw new Error("Failed to create AO A");
+      const aoB = await createTestAO(region.id);
+      if (!aoB) throw new Error("Failed to create AO B");
+
+      const series = await createTestSeriesEvent(aoB.id);
+      if (!series) throw new Error("Failed to create series");
+
+      // Role held at the region, which is an ancestor of both AOs.
+      const regionEditorRoles = [
+        {
+          orgId: region.id,
+          orgName: region.name,
+          roleName: "editor" as const,
+        },
+      ];
+      const regionEditorSession = {
+        id: 512,
+        email: "editor-region@example.com",
+        user: {
+          id: "512",
+          email: "editor-region@example.com",
+          name: "Region Editor",
+          roles: regionEditorRoles,
+        },
+        roles: regionEditorRoles,
+        expires: new Date(Date.now() + 86_400_000).toISOString(),
+      };
+      await mockAuthWithSession(regionEditorSession);
+
+      const client = createTestClient();
+      const result = await client.eventInstance.crupdate({
+        orgId: aoA.id,
+        seriesId: series.id,
+        seriesException: "closed",
+        name: `Temporary AO Change ${uniqueId()}`,
+        startDate: new Date().toISOString().split("T")[0]!,
+      });
+      createdEventInstanceIds.push(result.id);
+
+      expect(result.orgId).toBe(aoA.id);
+      expect(result.seriesId).toBe(series.id);
+    });
+
+    // Only a *change* to seriesId is authorized. An instance whose link a
+    // region-level admin already established must stay editable by an
+    // AO-scoped editor, or routine edits (a backblast, a name) would start
+    // failing on every cross-AO instance.
+    it("should allow editing other fields without re-authorizing an unchanged series link", async () => {
+      const adminSession = await createAdminSession();
+      await mockAuthWithSession(adminSession);
+
+      const regionA = await createTestRegion();
+      if (!regionA) throw new Error("Failed to create region A");
+      const regionB = await createTestRegion();
+      if (!regionB) throw new Error("Failed to create region B");
+
+      const aoA = await createTestAO(regionA.id);
+      if (!aoA) throw new Error("Failed to create AO A");
+      const aoB = await createTestAO(regionB.id);
+      if (!aoB) throw new Error("Failed to create AO B");
+
+      const series = await createTestSeriesEvent(aoB.id);
+      if (!series) throw new Error("Failed to create series");
+
+      const instance = await createTestEventInstance(aoA.id);
+      if (!instance) throw new Error("Failed to create event instance");
+      await db
+        .update(schema.eventInstances)
+        .set({ seriesId: series.id })
+        .where(eq(schema.eventInstances.id, instance.id));
+
+      const editorARoles = [
+        { orgId: aoA.id, orgName: aoA.name, roleName: "editor" as const },
+      ];
+      const editorASession = {
+        id: 513,
+        email: "editor-a-unchanged@example.com",
+        user: {
+          id: "513",
+          email: "editor-a-unchanged@example.com",
+          name: "Editor A",
+          roles: editorARoles,
+        },
+        roles: editorARoles,
+        expires: new Date(Date.now() + 86_400_000).toISOString(),
+      };
+      await mockAuthWithSession(editorASession);
+
+      const client = createTestClient();
+      const renamed = `Renamed ${uniqueId()}`;
+      const result = await client.eventInstance.crupdate({
+        id: instance.id,
+        orgId: aoA.id,
+        seriesId: series.id,
+        name: renamed,
+        startDate: instance.startDate,
+      });
+
+      expect(result.name).toBe(renamed);
+      expect(result.seriesId).toBe(series.id);
+    });
+
     it("should allow in-place update by editor of the owning org", async () => {
       const adminSession = await createAdminSession();
       await mockAuthWithSession(adminSession);
@@ -2620,6 +2887,72 @@ describe("Event Instance Router", () => {
         .where(eq(schema.eventInstances.id, eventInstance.id));
 
       expect(deleted?.isActive).toBe(false);
+    });
+
+    // Deactivation is a soft delete: the same `isActive: false` write an editor
+    // can already make through `crupdate`'s Status field. The admin console's
+    // event-instances page is editor-gated, so an admin-only gate here would
+    // only break its "Deactivate" button for its primary audience.
+    it("should deactivate event instance with editor role on the org", async () => {
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      await mockAuthWithSession(
+        createEditorSession({ orgId: ao.id, orgName: ao.name ?? "Test AO" }),
+      );
+
+      const eventInstance = await createTestEventInstance(ao.id);
+      if (!eventInstance) return;
+
+      const client = createTestClient();
+      const result = await client.eventInstance.delete({
+        id: eventInstance.id,
+      });
+
+      expect(result).toEqual({ eventInstanceId: eventInstance.id });
+
+      const [deleted] = await db
+        .select()
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.id, eventInstance.id));
+
+      expect(deleted?.isActive).toBe(false);
+    });
+
+    it("should reject deactivation from a session with no role on the org", async () => {
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      const otherRegion = await createTestRegion();
+      if (!otherRegion) return;
+
+      await mockAuthWithSession(
+        createEditorSession({
+          orgId: otherRegion.id,
+          orgName: otherRegion.name ?? "Other Region",
+        }),
+      );
+
+      const eventInstance = await createTestEventInstance(ao.id);
+      if (!eventInstance) return;
+
+      const client = createTestClient();
+      await expect(
+        client.eventInstance.delete({ id: eventInstance.id }),
+      ).rejects.toThrow();
+
+      const [untouched] = await db
+        .select()
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.id, eventInstance.id));
+
+      expect(untouched?.isActive).toBe(true);
     });
 
     it("should throw NOT_FOUND for non-existent event instance", async () => {

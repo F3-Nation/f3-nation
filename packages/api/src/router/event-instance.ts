@@ -635,6 +635,7 @@ export const eventInstanceRouter = {
       let existingIsActive: boolean | null = null;
       let existingHighlight: boolean | null = null;
       let existingIsPrivate: boolean | null = null;
+      let existingSeriesId: number | null = null;
       if (input.id) {
         const [existing] = await ctx.db
           .select({
@@ -643,6 +644,7 @@ export const eventInstanceRouter = {
             isActive: schema.eventInstances.isActive,
             highlight: schema.eventInstances.highlight,
             isPrivate: schema.eventInstances.isPrivate,
+            seriesId: schema.eventInstances.seriesId,
           })
           .from(schema.eventInstances)
           .where(eq(schema.eventInstances.id, input.id));
@@ -684,6 +686,7 @@ export const eventInstanceRouter = {
         existingIsActive = existing.isActive;
         existingHighlight = existing.highlight;
         existingIsPrivate = existing.isPrivate;
+        existingSeriesId = existing.seriesId;
       } else {
         const createAuth = await checkHasRoleOnOrg({
           orgId: input.orgId,
@@ -698,11 +701,38 @@ export const eventInstanceRouter = {
         }
       }
 
-      // `eventTypeIds` is authoritative when present — presence of the key, not
-      // truthiness of the value, decides whether the association is rewritten,
-      // so an empty array can clear it. Older clients (the Slackbot) post the
-      // singular `eventTypeId` instead; a falsy id there means "not provided".
-      // Read before destructuring, which would lose the key/value distinction.
+      // Map status is keyed off `seriesId` alone, so a link writes against the
+      // series' org — authorize there. Cross-AO links are legitimate (temporary
+      // AO changes), so only check when the link actually changes.
+      if (input.seriesId != null && input.seriesId !== existingSeriesId) {
+        const [series] = await ctx.db
+          .select({ orgId: schema.events.orgId })
+          .from(schema.events)
+          .where(eq(schema.events.id, input.seriesId));
+
+        if (!series) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Series event not found",
+          });
+        }
+
+        const seriesAuth = await checkHasRoleOnOrg({
+          orgId: series.orgId,
+          session: ctx.session,
+          db: ctx.db,
+          roleName: "editor",
+        });
+        if (!seriesAuth.success) {
+          throw new ORPCError("UNAUTHORIZED", {
+            message:
+              "You are not authorized to link this event instance to the requested series",
+          });
+        }
+      }
+
+      // Key presence, not value, decides whether event types are rewritten, so
+      // an empty `eventTypeIds` clears them. Older clients (the Slackbot) send
+      // the singular `eventTypeId`, where a falsy id means "not provided".
       const legacyEventTypeId =
         input.eventTypeId != null && input.eventTypeId > 0
           ? input.eventTypeId
@@ -849,11 +879,13 @@ export const eventInstanceRouter = {
         });
       }
 
+      // Editor, not admin: this soft delete is the same `isActive: false` write
+      // `crupdate` already allows via its Status field.
       const roleCheckResult = await checkHasRoleOnOrg({
         orgId: instance.orgId,
         session: ctx.session,
         db: ctx.db,
-        roleName: "admin",
+        roleName: "editor",
       });
       if (!roleCheckResult.success) {
         throw new ORPCError("UNAUTHORIZED", {

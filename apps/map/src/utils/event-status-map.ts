@@ -1,5 +1,7 @@
 import dayjs from "dayjs";
 
+import type { SeriesException } from "@acme/shared/app/enums";
+
 import type { MapStatus } from "~/utils/types";
 import { sortUpcomingInstancesByDate } from "~/utils/date";
 
@@ -13,10 +15,23 @@ export interface StatusInstance {
   id: number;
   seriesId: number | null;
   locationId: number | null;
-  seriesException: string | null;
+  seriesException: SeriesException | null;
   startDate: string;
 }
 
+/** The per-series rows the status lookup carries. */
+export interface StatusInstanceSummary {
+  seriesException: SeriesException | null;
+  startDate: string;
+}
+
+/**
+ * Takes a bare `string` rather than `SeriesException`: this is the boundary
+ * where an exception value the frontend has never heard of — a pgEnum member
+ * added by a migration that ships ahead of this app — degrades to
+ * "miscellaneous" instead of going uncolored. The types describing API rows are
+ * narrow; only this ladder stays permissive.
+ */
 export function instanceMapStatus(
   seriesException: string | null,
 ): NonNullable<MapStatus> {
@@ -43,7 +58,7 @@ export interface ExceptionInstance {
   seriesId: number | null;
   startDate: string;
   startTime: string | null;
-  seriesException: string | null;
+  seriesException: SeriesException | null;
 }
 
 export interface ExceptionNotice {
@@ -133,10 +148,7 @@ export function buildEventStatusMap(
 ): Map<number, MapStatus> {
   const map = new Map<number, MapStatus>();
   const baseEventIds = new Set(baseEvents.map((event) => event.id));
-  const instancesBySeriesId = new Map<
-    number,
-    { seriesException: string | null; startDate: string }[]
-  >();
+  const instancesBySeriesId = new Map<number, StatusInstanceSummary[]>();
 
   for (const instance of instances) {
     const { seriesId } = instance;
@@ -173,10 +185,7 @@ export function buildEventStatusMap(
 
 export function getMapEventStatus(
   event: { id: number; startDate: string | null; endDate: string | null },
-  instanceLookup: ReadonlyMap<
-    number,
-    { seriesException: string | null; startDate: string }[]
-  >,
+  instanceLookup: ReadonlyMap<number, StatusInstanceSummary[]>,
   todayIso: string = dayjs().format("YYYY-MM-DD"),
 ): MapStatus {
   const horizonIso = dayjs(todayIso)

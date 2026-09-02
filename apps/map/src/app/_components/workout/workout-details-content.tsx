@@ -20,12 +20,14 @@ import {
   selectStatusInstances,
 } from "~/utils/event-status-map";
 import { getEndDateLabel } from "~/utils/get-end-date-label";
+import { useUpcomingInstances } from "~/utils/hooks/use-upcoming-instances";
 import { useUpdateEventSearchParams } from "~/utils/hooks/use-update-event-search-params";
 import { ModalType, openModal } from "~/utils/store/modal";
 import textLink from "~/utils/text-link";
 import { ContactLinks } from "../contact-links";
 import { ImageWithFallback } from "@acme/ui/image-with-fallback";
 import { EventChip } from "../map/event-chip";
+import { ScheduleChangesNotice } from "../map/schedule-changes-notice";
 import { WorkoutDetailsSkeleton } from "../modal/workout-details-skeleton";
 import { DeletedWorkoutWarning } from "./deleted-workout-warning";
 import { ExceptionNotice } from "./exception-notice";
@@ -78,11 +80,10 @@ export const WorkoutDetailsContent = ({
     }),
   );
 
-  const { data: upcomingInstancesData } = useQuery(
-    orpc.map.location.upcomingInstances.queryOptions({
-      input: undefined,
-    }),
-  );
+  const {
+    instances: upcomingInstancesData,
+    isUnavailable: isUpcomingInstancesError,
+  } = useUpcomingInstances();
 
   const selectedSeriesId = useMemo(() => {
     if (providedEventId == null) return null;
@@ -104,13 +105,6 @@ export const WorkoutDetailsContent = ({
       (instance) => instance.id === -selectedEventId,
     );
   }, [selectedEventId, upcomingInstancesData]);
-
-  const { data: parentEventResponse } = useQuery(
-    orpc.event.byId.queryOptions({
-      input: { id: selectedSeriesId ?? -1 },
-      enabled: (selectedSeriesId ?? 0) > 0,
-    }),
-  );
 
   const locationInstances = useMemo(() => {
     const currentLocation = results?.location;
@@ -188,6 +182,24 @@ export const WorkoutDetailsContent = ({
     return combined;
   }, [results, instanceEvents]);
 
+  // The parent-series lookup is a fallback, not a primary source: it only has
+  // something to add when the selected id is absent from the location's own
+  // event list (an instance whose series is already listed under its positive
+  // id, or a link to an event this location no longer carries). Gating on that
+  // absence — once the location query has settled, so the list is real and not
+  // merely unloaded — keeps a multi-join fetch off every panel open.
+  const needsParentEventFallback =
+    (selectedSeriesId ?? 0) > 0 &&
+    results?.location != null &&
+    !displayedEvents.some((e) => e.id === selectedEventId);
+
+  const { data: parentEventResponse, isError: isParentEventError } = useQuery(
+    orpc.event.byId.queryOptions({
+      input: { id: selectedSeriesId ?? -1 },
+      enabled: needsParentEventFallback,
+    }),
+  );
+
   const event = useMemo<WorkoutDetailsEvent | undefined>(() => {
     const displayedEvent = displayedEvents.find(
       (event) => event.id === selectedEventId,
@@ -216,6 +228,33 @@ export const WorkoutDetailsContent = ({
       aoWebsite: null,
     };
   }, [selectedEventId, displayedEvents, parentEventResponse]);
+
+  // `event` resolves from three async sources: the location's own events, the
+  // upcoming-instance list (a negative id is an instance), and the
+  // parent-series fallback. A missing event only means a broken link once every
+  // source that could still supply one has settled — otherwise the panel would
+  // flash the deleted-workout warning mid-fetch. A failed query counts as
+  // settled: the answer is never arriving.
+  const isResolvingEvent = useMemo(() => {
+    const needsInstanceList = providedEventId != null && providedEventId < 0;
+    if (
+      needsInstanceList &&
+      !upcomingInstancesData &&
+      !isUpcomingInstancesError
+    ) {
+      return true;
+    }
+    return (
+      needsParentEventFallback && !parentEventResponse && !isParentEventError
+    );
+  }, [
+    providedEventId,
+    upcomingInstancesData,
+    isUpcomingInstancesError,
+    needsParentEventFallback,
+    parentEventResponse,
+    isParentEventError,
+  ]);
 
   const location = useMemo(() => results?.location ?? null, [results]);
 
@@ -374,7 +413,8 @@ export const WorkoutDetailsContent = ({
       />
     );
   }
-  if (!event && location?.events.length === 0) {
+  // Dont provide a fallback. This is indicative of worse problems
+  if (!event && !isResolvingEvent) {
     return <DeletedWorkoutWarning text="Event is unavailable." />;
   }
 
@@ -412,6 +452,7 @@ export const WorkoutDetailsContent = ({
       </div>
 
       <UpdatesCallout instances={selectedEventUpdates} />
+      <ScheduleChangesNotice className="m-0 mt-2 w-full" />
 
       <div>
         {displayedEvents.length > 1 ? (
@@ -649,7 +690,7 @@ export const WorkoutDetailsContent = ({
         <div className="mt-6 flex justify-end">
           <button
             onClick={onCopyLink}
-            className="flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+            className="flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-xs transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"

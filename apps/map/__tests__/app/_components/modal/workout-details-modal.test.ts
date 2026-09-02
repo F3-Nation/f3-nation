@@ -3,11 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   isInstanceEventId,
   resolveAoId,
-} from "~/app/_components/map/location-edit-buttons";
-import {
   resolveEditableEventId,
-  resolveModalEventId,
-} from "~/app/_components/modal/workout-details-modal";
+} from "~/app/_components/map/location-edit-buttons";
+import { resolveModalEventId } from "~/app/_components/modal/workout-details-modal";
 
 describe("resolveModalEventId", () => {
   const events = [{ id: 10 }, { id: 20 }];
@@ -82,7 +80,7 @@ describe("resolveEditableEventId", () => {
   it("passes a series event id through untouched", () => {
     expect(
       resolveEditableEventId({
-        modalEventId: 20,
+        selectedEventId: 20,
         upcomingInstances: undefined,
         events,
       }),
@@ -92,7 +90,7 @@ describe("resolveEditableEventId", () => {
   it("resolves an instance id to its parent series event", () => {
     expect(
       resolveEditableEventId({
-        modalEventId: -42,
+        selectedEventId: -42,
         upcomingInstances: [{ id: 42, seriesId: 20 }],
         events,
       }),
@@ -102,7 +100,7 @@ describe("resolveEditableEventId", () => {
   it("returns null for a one-off instance with no parent series", () => {
     expect(
       resolveEditableEventId({
-        modalEventId: -42,
+        selectedEventId: -42,
         upcomingInstances: [{ id: 42, seriesId: null }],
         events,
       }),
@@ -114,7 +112,7 @@ describe("resolveEditableEventId", () => {
     // this location does not own would edit an unrelated workout.
     expect(
       resolveEditableEventId({
-        modalEventId: -42,
+        selectedEventId: -42,
         upcomingInstances: [{ id: 42, seriesId: 999 }],
         events,
       }),
@@ -124,7 +122,7 @@ describe("resolveEditableEventId", () => {
   it("returns null while the instances query is still loading", () => {
     expect(
       resolveEditableEventId({
-        modalEventId: -42,
+        selectedEventId: -42,
         upcomingInstances: undefined,
         events,
       }),
@@ -134,7 +132,7 @@ describe("resolveEditableEventId", () => {
   it("returns null when there is no selection", () => {
     expect(
       resolveEditableEventId({
-        modalEventId: null,
+        selectedEventId: null,
         upcomingInstances: [{ id: 42, seriesId: 20 }],
         events,
       }),

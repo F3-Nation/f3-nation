@@ -6,12 +6,16 @@ import { createContext, useContext, useMemo } from "react";
 import { DEFAULT_CENTER } from "@acme/shared/app/constants";
 import { RERENDER_LOGS } from "@acme/shared/common/constants";
 
+import type { SeriesException } from "@acme/shared/app/enums";
+
 import { groupMarkersByAo } from "~/utils/group-markers-by-ao";
 import type { MapStatus, SparseF3Marker } from "~/utils/types";
 import { orpc, useQuery } from "~/orpc/react";
 import { dateToDayOfWeek } from "~/utils/date";
+import type { StatusInstanceSummary } from "~/utils/event-status-map";
 import { getMapEventStatus, instanceMapStatus } from "~/utils/event-status-map";
 import { filterData } from "~/utils/filtered-data";
+import { useUpcomingInstances } from "~/utils/hooks/use-upcoming-instances";
 import { filterStore } from "~/utils/store/filter";
 import { mapStore } from "~/utils/store/map";
 
@@ -29,7 +33,7 @@ interface UpcomingMapInstance {
   locationId: number | null;
   startDate: string;
   startTime: string | null;
-  seriesException: string | null;
+  seriesException: SeriesException | null;
   name: string;
   lat: number | null;
   lon: number | null;
@@ -146,11 +150,7 @@ export const FilteredMapResultsProvider = (params: { children: ReactNode }) => {
     }),
   );
 
-  const { data: upcomingInstancesData } = useQuery(
-    orpc.map.location.upcomingInstances.queryOptions({
-      input: undefined,
-    }),
-  );
+  const { instances: upcomingInstancesData } = useUpcomingInstances();
 
   const filters = filterStore.useBoundStore();
 
@@ -160,10 +160,7 @@ export const FilteredMapResultsProvider = (params: { children: ReactNode }) => {
   const allLocationMarkersWithLatLngAndFilterData = useMemo(() => {
     if (!mapEventAndLocationData) return undefined;
 
-    const instancesBySeriesId = new Map<
-      number,
-      { seriesException: string | null; startDate: string }[]
-    >();
+    const instancesBySeriesId = new Map<number, StatusInstanceSummary[]>();
 
     if (upcomingInstancesData) {
       for (const instance of upcomingInstancesData) {

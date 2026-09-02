@@ -2,12 +2,15 @@
  * Covers the logic that lives inside `AdminEventInstancesModal` rather than in
  * an extracted helper: the cross-field form validation, the reset-on-load
  * effect that converts stored `HHmm` times into the `HH:mm` the inputs expect,
- * and the submit flow that trims and nulls optional fields before calling
- * `crupdate`.
+ * the submit flow that trims and nulls optional fields before calling
+ * `crupdate`, and the combobox `onSelect` handlers that keep region, AO,
+ * location, series and event types in step as the admin picks them.
  *
  * A flipped inequality in the date/time comparisons, or a broken `length === 5`
  * guard that stops times from being compared at all, would otherwise ship with
- * nothing failing.
+ * nothing failing. So would a cross-field handler that leaves the form holding
+ * a location in a region the instance no longer belongs to — the exact shape of
+ * "move this workout to a different AO for one day".
  */
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -30,6 +33,35 @@ const { toastMock, crupdateMutateAsync, instanceState } = vi.hoisted(() => ({
   instanceState: { current: null as Record<string, unknown> | null },
 }));
 
+/**
+ * The reference data the comboboxes offer. Two regions, each with its own AOs
+ * and locations, is the minimum that can tell "kept the current location"
+ * apart from "reset it to one in the new region".
+ */
+const REGIONS = [
+  { id: 3, name: "Metro" },
+  { id: 4, name: "Lakes" },
+];
+const AOS = [
+  { id: 42, name: "Alpha AO", parentId: 3 },
+  { id: 43, name: "Charlie AO", parentId: 3 },
+  { id: 55, name: "Bravo AO", parentId: 4 },
+];
+const LOCATIONS = [
+  { id: 11, regionId: 3, locationName: "The Park" },
+  { id: 12, regionId: 3, locationName: "The Track" },
+  { id: 21, regionId: 4, locationName: "Lakeside" },
+  { id: 22, regionId: 4, locationName: "Boat Ramp" },
+];
+const EVENT_TYPES = [
+  { id: 2, name: "Bootcamp", eventCategory: null },
+  { id: 5, name: "Ruck", eventCategory: null },
+];
+const SERIES = [
+  { id: 200, name: "Monday Bootcamp", highlight: true },
+  { id: 201, name: "Saturday Ruck", highlight: false },
+];
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn() }),
 }));
@@ -45,10 +77,63 @@ vi.mock("~/utils/store/modal", async (importOriginal) => ({
 }));
 
 // The real combobox virtualizes a popover list, which needs layout jsdom does
-// not do. These tests drive the form through the instance payload instead, so a
-// stub that renders nothing is enough.
+// not do. Rendering nothing would also stub out every `onSelect` handler in the
+// modal, so this keeps the part of the contract the modal depends on: one
+// clickable button per option, a clear button, and `onSelect` called with the
+// shape the real component sends — a bare string for single-select, the toggled
+// array for multi, an empty array on clear (see `handleSelect` and `onClear` in
+// `packages/ui/src/virtualized-combobox.tsx`).
 vi.mock("@acme/ui/virtualized-combobox", () => ({
-  VirtualizedCombobox: () => null,
+  VirtualizedCombobox: ({
+    value,
+    options,
+    searchPlaceholder,
+    onSelect,
+    isMulti,
+    disabled,
+  }: {
+    value?: string | string[];
+    options: { value: string; label: string }[];
+    searchPlaceholder?: string;
+    onSelect?: (items: string | string[]) => void;
+    isMulti?: boolean;
+    disabled?: boolean;
+  }) => {
+    // Derived from the prop rather than held in state, mirroring the effect
+    // that resyncs the real component's selection whenever `value` changes.
+    const selected = typeof value === "string" ? [value] : (value ?? []);
+    return (
+      <div data-testid={`combobox-${searchPlaceholder ?? ""}`}>
+        {options.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            disabled={disabled}
+            data-option={option.value}
+            data-testid={`option-${searchPlaceholder}-${option.value}`}
+            onClick={() =>
+              onSelect?.(
+                isMulti
+                  ? selected.includes(option.value)
+                    ? selected.filter((entry) => entry !== option.value)
+                    : [...selected, option.value]
+                  : option.value,
+              )
+            }
+          >
+            {option.label}
+          </button>
+        ))}
+        <button
+          type="button"
+          data-testid={`clear-${searchPlaceholder}`}
+          onClick={() => onSelect?.([])}
+        >
+          clear
+        </button>
+      </div>
+    );
+  },
 }));
 
 vi.mock("~/orpc/react", () => ({
@@ -64,23 +149,36 @@ vi.mock("~/orpc/react", () => ({
     if (options.queryKey.includes("eventInstance.byId")) {
       return { data: instanceState.current, isLoading: false };
     }
+    // The modal runs `org.all` twice — once for regions, once for AOs — so the
+    // key has to carry the requested orgType or both calls see one list.
     if (options.queryKey.includes("org.all")) {
-      return { data: { orgs: [] }, isLoading: false };
+      return {
+        data: {
+          orgs: options.queryKey.includes("region") ? REGIONS : AOS,
+        },
+        isLoading: false,
+      };
     }
     if (options.queryKey.includes("location.all")) {
-      return { data: { locations: [] }, isLoading: false };
+      return { data: { locations: LOCATIONS }, isLoading: false };
     }
     if (options.queryKey.includes("eventType.all")) {
-      return { data: { eventTypes: [] }, isLoading: false };
+      return { data: { eventTypes: EVENT_TYPES }, isLoading: false };
     }
     if (options.queryKey.includes("event.all")) {
-      return { data: { events: [] }, isLoading: false };
+      return { data: { events: SERIES }, isLoading: false };
     }
     return { data: undefined, isLoading: false };
   },
   useMutation: () => ({ mutateAsync: crupdateMutateAsync }),
   orpc: {
-    org: { all: { queryOptions: () => ({ queryKey: ["org.all"] }) } },
+    org: {
+      all: {
+        queryOptions: (options: { input: { orgTypes?: string[] } }) => ({
+          queryKey: ["org.all", ...(options.input.orgTypes ?? [])],
+        }),
+      },
+    },
     location: {
       all: { queryOptions: () => ({ queryKey: ["location.all"] }) },
     },
@@ -133,6 +231,34 @@ const timeField = (id: "startTime" | "endTime") => {
   const el = document.querySelector<HTMLInputElement>(`#${id}`);
   if (!el) throw new Error(`no #${id} input rendered`);
   return el;
+};
+
+// Each combobox is addressed by its search placeholder — the only prop that
+// distinguishes them from outside the component.
+const selectOption = (placeholder: string, value: string | number) =>
+  fireEvent.click(screen.getByTestId(`option-${placeholder}-${value}`));
+
+const clearSelection = (placeholder: string) =>
+  fireEvent.click(screen.getByTestId(`clear-${placeholder}`));
+
+const offeredOptions = (placeholder: string) =>
+  Array.from(
+    screen
+      .getByTestId(`combobox-${placeholder}`)
+      .querySelectorAll<HTMLButtonElement>("[data-option]"),
+  ).map((button) => button.dataset.option);
+
+const save = () =>
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+const submittedPayload = () =>
+  crupdateMutateAsync.mock.calls[0]?.[0] as Record<string, unknown>;
+
+const saved = async () => {
+  await waitFor(() => {
+    expect(crupdateMutateAsync).toHaveBeenCalledTimes(1);
+  });
+  return submittedPayload();
 };
 
 describe("EventInstanceFormSchema", () => {
@@ -320,12 +446,6 @@ describe("AdminEventInstancesModal", () => {
   });
 
   describe("submit", () => {
-    const save = () =>
-      fireEvent.click(screen.getByRole("button", { name: "Save" }));
-
-    const submittedPayload = () =>
-      crupdateMutateAsync.mock.calls[0]?.[0] as Record<string, unknown>;
-
     it("converts the form's HH:mm times back to stored HHmm", async () => {
       renderEditing();
       await waitFor(() => {
@@ -442,6 +562,154 @@ describe("AdminEventInstancesModal", () => {
         expect(screen.getByText("Select an organization")).toBeTruthy();
       });
       expect(crupdateMutateAsync).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * The comboboxes are not independent: picking one can rewrite the others, and
+   * those rewrites are the mechanics of relocating a single occurrence. The
+   * baseline instance is Alpha AO (region 3) at location 11 (region 3).
+   */
+  describe("cross-field selection", () => {
+    const loaded = () =>
+      waitFor(() => {
+        expect(field("Start date").value).toBe("2026-09-01");
+      });
+
+    /**
+     * Both lists are filtered to the form's region, which is what makes the AO
+     * and location handlers' "adopt the selected row's region, then reset a
+     * location that region cannot host" branches unreachable from the UI: every
+     * offered AO already has `parentId === regionId`, and every offered location
+     * already has `regionId === regionId`. Moving regions is the separate step
+     * below, and it clears the location before an AO is ever picked.
+     */
+    it("offers only the current region's AOs, and an AO switch keeps the location", async () => {
+      renderEditing();
+      await loaded();
+
+      // Region 4's Bravo AO (55) is deliberately absent.
+      expect(offeredOptions("Select an AO")).toEqual(["42", "43"]);
+
+      selectOption("Select an AO", 43);
+      save();
+
+      expect(await saved()).toMatchObject({ orgId: 43, locationId: 11 });
+    });
+
+    it("offers only the current region's locations", async () => {
+      renderEditing();
+      await loaded();
+
+      // Region 4's Lakeside (21) and Boat Ramp (22) are absent; the rest are
+      // sorted by name — The Park (11), then The Track (12).
+      expect(offeredOptions("Select a location")).toEqual(["11", "12"]);
+
+      selectOption("Select a location", 12);
+      save();
+
+      expect(await saved()).toMatchObject({ locationId: 12 });
+    });
+
+    it("clears the location without disturbing the region", async () => {
+      renderEditing();
+      await loaded();
+
+      clearSelection("Select a location");
+      save();
+
+      expect(await saved()).toMatchObject({ locationId: null });
+      expect(offeredOptions("Select an AO")).toEqual(["42", "43"]);
+    });
+
+    it("resets the AO, location, event types and series when the region changes", async () => {
+      renderEditing({ seriesId: 200 });
+      await loaded();
+
+      selectOption("Select a region", 4);
+      save();
+
+      // orgId falls back to the 0 placeholder, so the form has to refuse rather
+      // than send the old AO alongside the new region.
+      await waitFor(() => {
+        expect(screen.getByText("Select an organization")).toBeTruthy();
+      });
+      expect(crupdateMutateAsync).not.toHaveBeenCalled();
+
+      selectOption("Select an AO", 55);
+      save();
+
+      expect(await saved()).toMatchObject({
+        orgId: 55,
+        locationId: null,
+        eventTypeIds: [],
+        seriesId: null,
+      });
+    });
+
+    it("takes highlight from a selected series, overwriting the instance's own", async () => {
+      renderEditing({ highlight: false });
+      await loaded();
+
+      selectOption("Select a series", 200);
+      save();
+
+      expect(await saved()).toMatchObject({ seriesId: 200, highlight: true });
+    });
+
+    it("takes highlight false from a series that is not highlighted", async () => {
+      renderEditing({ highlight: true });
+      await loaded();
+
+      selectOption("Select a series", 201);
+      save();
+
+      expect(await saved()).toMatchObject({ seriesId: 201, highlight: false });
+    });
+
+    it("leaves highlight alone when the series is cleared", async () => {
+      renderEditing({ seriesId: 200, highlight: true });
+      await loaded();
+
+      clearSelection("Select a series");
+      save();
+
+      expect(await saved()).toMatchObject({ seriesId: null, highlight: true });
+    });
+
+    it("adds a toggled-on event type to the ids it submits", async () => {
+      renderEditing();
+      await loaded();
+
+      selectOption("Select event types", 5);
+      save();
+
+      expect(await saved()).toMatchObject({ eventTypeIds: [2, 5] });
+    });
+
+    it("removes an event type that is toggled off", async () => {
+      renderEditing();
+      await loaded();
+
+      selectOption("Select event types", 2);
+      save();
+
+      expect(await saved()).toMatchObject({ eventTypeIds: [] });
+    });
+
+    it("cannot pick event types before a region is chosen", async () => {
+      instanceState.current = null;
+      render(<AdminEventInstancesModal data={{}} />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Add Event Instance")).toBeTruthy();
+      });
+      // Event types are region-scoped, so the field stays disabled until the
+      // region query has something to scope to.
+      expect(
+        screen.getByTestId<HTMLButtonElement>("option-Select a region first-2")
+          .disabled,
+      ).toBe(true);
     });
   });
 });

@@ -1,5 +1,4 @@
 import { useWindowWidth } from "@react-hook/window-size";
-import { useMemo } from "react";
 
 import { BreakPoints, Z_INDEX } from "@acme/shared/app/constants";
 import { Dialog, DialogContent, DialogHeader } from "@acme/ui/dialog";
@@ -14,6 +13,7 @@ import {
   getShortDayOfWeek,
   LocationEditButtons,
   resolveAoId,
+  useEditableEventId,
 } from "../map/location-edit-buttons";
 import { WorkoutDetailsContent } from "../workout/workout-details-content";
 
@@ -30,27 +30,6 @@ export const resolveModalEventId = ({
   if (selectedEventId != null && selectedEventId < 0) return selectedEventId;
   if (events?.some((e) => e.id === selectedEventId)) return selectedEventId;
   return events?.[0]?.id ?? selectedEventId ?? null;
-};
-
-// Handle negative (instance-derived) eventIds by resolving them to their parent
-// series event. If no matching parent exists, return null—this hides the
-// workout menu but keeps AO actions.
-export const resolveEditableEventId = ({
-  modalEventId,
-  upcomingInstances,
-  events,
-}: {
-  modalEventId: number | null;
-  upcomingInstances: { id: number; seriesId: number | null }[] | undefined;
-  events: { id: number }[] | undefined;
-}): number | null => {
-  if (modalEventId == null) return null;
-  if (modalEventId > 0) return modalEventId;
-  const seriesId =
-    upcomingInstances?.find((instance) => instance.id === -modalEventId)
-      ?.seriesId ?? null;
-  if (seriesId == null) return null;
-  return events?.some((event) => event.id === seriesId) ? seriesId : null;
 };
 
 export const WorkoutDetailsModal = ({
@@ -79,21 +58,10 @@ export const WorkoutDetailsModal = ({
   });
   const modalAOIds = results?.location?.events.map((e) => e.aoId);
 
-  const { data: upcomingInstancesData } = useQuery(
-    orpc.map.location.upcomingInstances.queryOptions({
-      input: undefined,
-      enabled: mode === "edit" && (modalEventId ?? 0) < 0,
-    }),
-  );
-  const editableEventId = useMemo(
-    () =>
-      resolveEditableEventId({
-        modalEventId,
-        upcomingInstances: upcomingInstancesData,
-        events: location?.events,
-      }),
-    [modalEventId, upcomingInstancesData, location?.events],
-  );
+  const editableEventId = useEditableEventId({
+    selectedEventId: modalEventId,
+    events: location?.events,
+  });
 
   const width = useWindowWidth();
   const isLarge = width > Number(BreakPoints.LG);

@@ -1130,6 +1130,109 @@ describe("Map Location Router", () => {
       ).toBeUndefined();
     });
 
+    // A one-off instance is the row admins soft-delete (`eventInstance.delete`
+    // flips isActive) or hide, so these two flags carry the whole weight of
+    // "this occurrence is gone" — nothing upstream is also false to catch it.
+    // Both cases are standalone, which clears the outer predicate on the
+    // seriesId-is-null arm and leaves the instance's own flag as the sole
+    // disqualifier.
+    describe.each([
+      { label: "deactivated", flags: { isActive: false, isPrivate: false } },
+      { label: "private", flags: { isActive: true, isPrivate: true } },
+    ])("instance is $label", ({ label, flags }) => {
+      it("should exclude it from upcoming instances", async () => {
+        const session = await createAdminSession();
+        await mockAuthWithSession(session);
+
+        const region = await createTestRegion();
+        if (!region) throw new Error("Failed to create test region");
+
+        const ao = await createTestAO(region.id);
+        if (!ao) throw new Error("Failed to create test AO");
+
+        const location = await createTestLocation(region.id);
+        if (!location) throw new Error("Failed to create test location");
+
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const startDate = tomorrow.toISOString().slice(0, 10);
+
+        // Active AO, active region, active location, in-window date, no parent
+        // series to inherit anything from.
+        const [instance] = await db
+          .insert(schema.eventInstances)
+          .values({
+            name: `Hidden One-Off ${label} ${uniqueId()}`,
+            orgId: ao.id,
+            seriesId: null,
+            locationId: location.id,
+            startDate,
+            startTime: "0600",
+            endTime: "0700",
+            highlight: false,
+            ...flags,
+          })
+          .returning();
+
+        if (!instance) throw new Error("Failed to create event instance");
+
+        const client = createTestClient();
+        const result = await client.map.location.upcomingInstances();
+
+        expect(
+          result.find((returned) => returned.id === instance.id),
+        ).toBeUndefined();
+      });
+    });
+
+    // Guards the pair above: without it, a fixture that failed some *other*
+    // predicate would make them pass for the wrong reason.
+    it("should include the same one-off when it is active and public", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create test AO");
+
+      const location = await createTestLocation(region.id);
+      if (!location) throw new Error("Failed to create test location");
+
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const startDate = tomorrow.toISOString().slice(0, 10);
+
+      const [instance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: `Visible One-Off ${uniqueId()}`,
+          orgId: ao.id,
+          seriesId: null,
+          locationId: location.id,
+          startDate,
+          startTime: "0600",
+          endTime: "0700",
+          highlight: false,
+          isActive: true,
+          isPrivate: false,
+        })
+        .returning();
+
+      if (!instance) throw new Error("Failed to create event instance");
+
+      const client = createTestClient();
+      const result = await client.map.location.upcomingInstances();
+
+      expect(result.find((returned) => returned.id === instance.id)).toEqual(
+        expect.objectContaining({
+          id: instance.id,
+          seriesId: null,
+          locationId: location.id,
+        }),
+      );
+    });
     // A series' visibility and retirement are not copied down onto its
     // instances, so an instance can stay active and public after its parent is
     // hidden. It must still inherit the parent's state here, or a hidden

@@ -14,6 +14,7 @@ import type {
   ExceptionInstance,
   StatusBaseEvent,
   StatusInstance,
+  StatusInstanceSummary,
 } from "~/utils/event-status-map";
 import {
   buildEventStatusMap,
@@ -245,9 +246,8 @@ describe("getMapEventStatus", () => {
   const TODAY = "2026-08-05";
   const EVENT_ID = 100;
 
-  const lookup = (
-    instances: { seriesException: string | null; startDate: string }[],
-  ) => new Map([[EVENT_ID, instances]]);
+  const lookup = (instances: StatusInstanceSummary[]) =>
+    new Map([[EVENT_ID, instances]]);
 
   const event = (
     overrides: { startDate?: string | null; endDate?: string | null } = {},
