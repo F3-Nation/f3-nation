@@ -160,6 +160,7 @@ overrides:
   "postcss@<8.5.12": "^8.5.26" # GHSA-6g55-p6wh-862q (sourceMappingURL arbitrary file read)
   "nanoid@<3.3.17": "^3.3.18" # GHSA-2v37-7h3g-55p8
   "nanoid@>=4.0.0 <5.1.16": "^5.1.16" # GHSA-28wg-ghj8-5hjv
+  "browserslist@<=4.28.6": "4.28.7" # GHSA-c83g-rgw3-j3cx (unbounded memory growth) / GHSA-73wf-gq98-2v4g (prototype write crash via browserslist-stats.json)
 peerDependencyRules:
   allowedVersions:
     eslint-plugin-react>eslint: "10"
