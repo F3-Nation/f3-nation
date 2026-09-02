@@ -53,6 +53,14 @@ export async function requireNationAdminApiKey(
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
+  // Recorded as soon as the key itself is confirmed valid — matches what
+  // "used" means for the key as a credential, independent of whether the
+  // role check below then rejects this specific request.
+  await db
+    .update(schema.apiKeys)
+    .set({ lastUsedAt: DB_NOW })
+    .where(eq(schema.apiKeys.id, apiKeyRecord.apiKeyId));
+
   const orgRoles = await db
     .select({
       orgId: schema.orgs.id,
