@@ -3,12 +3,13 @@ from __future__ import annotations
 import io
 import json
 from datetime import datetime, timedelta, timezone
+from typing import Any, ClassVar
 
 import pytest
 from google.api_core.exceptions import NotFound, PreconditionFailed
 
 import analytics.pipeline as pipeline_module
-from analytics.lease import GcsLease, LeaseActiveError
+from analytics.lease import GcsLease, LeaseActiveError, LeaseConflictError
 from analytics.logging import JsonLogger
 from analytics.materializations import MATERIALIZATION_REGISTRY
 from analytics.pipeline import BatchRunError, run
@@ -18,6 +19,7 @@ from analytics.settings import Settings
 class LeaseBlob:
     objects = {}
     next_generation = 0
+    hooks: ClassVar[dict[str, Any]] = {"before_upload": None}
 
     def __init__(self, name):
         self.name = name
@@ -31,6 +33,10 @@ class LeaseBlob:
         return self.content.decode()
 
     def upload_from_string(self, content, **kwargs):
+        hook = type(self).hooks["before_upload"]
+        type(self).hooks["before_upload"] = None
+        if hook is not None:
+            hook()
         actual = self.objects.get(self.name)
         actual_generation = 0 if actual is None else actual.generation
         if actual_generation != kwargs["if_generation_match"]:
@@ -74,6 +80,7 @@ def make_settings(tmp_path):
 def test_lease_acquire_rejects_active_and_takes_over_expired(tmp_path):
     LeaseBlob.objects.clear()
     LeaseBlob.next_generation = 0
+    LeaseBlob.hooks["before_upload"] = None
     storage = LeaseStorage()
     settings = make_settings(tmp_path)
     lease = GcsLease(storage, settings, MATERIALIZATION_REGISTRY["pv_regions"])
@@ -86,6 +93,49 @@ def test_lease_acquire_rejects_active_and_takes_over_expired(tmp_path):
     payload = json.loads(LeaseBlob.objects["parquets/pv_regions/lease.json"].content)
     assert payload["run_id"] == "run-b"
     assert payload["state"] == "active"
+
+
+def test_first_lease_acquire_race_reports_lease_acquire_conflict(tmp_path):
+    LeaseBlob.objects.clear()
+    LeaseBlob.next_generation = 0
+    LeaseBlob.hooks["before_upload"] = None
+    settings = make_settings(tmp_path)
+    first = GcsLease(LeaseStorage(), settings, MATERIALIZATION_REGISTRY["pv_regions"])
+    winner = GcsLease(LeaseStorage(), settings, MATERIALIZATION_REGISTRY["pv_regions"])
+
+    def win_first_acquire():
+        winner.acquire(settings, "winning-run", {}, datetime(2026, 1, 1, tzinfo=timezone.utc))
+
+    LeaseBlob.hooks["before_upload"] = win_first_acquire
+    with pytest.raises(LeaseConflictError) as raised:
+        first.acquire(settings, "losing-run", {}, datetime(2026, 1, 1, tzinfo=timezone.utc))
+
+    assert raised.value.metadata["stage"] == "lease_acquire"
+
+
+def test_expired_lease_takeover_race_reports_lease_acquire_conflict(tmp_path):
+    LeaseBlob.objects.clear()
+    LeaseBlob.next_generation = 0
+    LeaseBlob.hooks["before_upload"] = None
+    settings = make_settings(tmp_path)
+    first = GcsLease(LeaseStorage(), settings, MATERIALIZATION_REGISTRY["pv_regions"])
+    winner = GcsLease(LeaseStorage(), settings, MATERIALIZATION_REGISTRY["pv_regions"])
+    first.acquire(settings, "expired-run", {}, datetime(2026, 1, 1, tzinfo=timezone.utc))
+    after_expiry = datetime(2026, 1, 1, 2, 31, tzinfo=timezone.utc)
+
+    def win_expired_takeover():
+        winner.acquire(settings, "winning-run", {}, after_expiry)
+
+    LeaseBlob.hooks["before_upload"] = win_expired_takeover
+    with pytest.raises(LeaseConflictError) as raised:
+        first.acquire(
+            settings,
+            "takeover-run",
+            {},
+            after_expiry,
+        )
+
+    assert raised.value.metadata["stage"] == "lease_acquire"
 
 
 def test_lease_release_is_conditional_state_update_not_delete(tmp_path):
@@ -158,6 +208,15 @@ def test_cleanup_failures_are_logged_without_masking_primary_failure(monkeypatch
     assert isinstance(raised.value.failures["pv_regions"], ValueError)
     assert str(raised.value.failures["pv_regions"]) == "source failed"
     records = [json.loads(line) for line in stream.getvalue().splitlines()]
-    cleanup_records = [record for record in records if record["event"] == "analytics.etl.cleanup_failed"]
+    cleanup_records = [
+        record
+        for record in records
+        if record["event"]
+        in {
+            "analytics.etl.connection_close_failed",
+            "analytics.etl.lease_release_failed",
+        }
+    ]
     assert {record["context"]["cleanup"] for record in cleanup_records} == {"connection_close", "lease_release"}
+    assert raised.value.cleanup_failures["pv_regions"].keys() == {"connection_close", "lease_release"}
     assert any(record["event"] == "analytics.etl.failed" for record in records)

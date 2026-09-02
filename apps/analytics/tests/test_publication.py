@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any, Callable, ClassVar
 
 import pytest
 from google.api_core.exceptions import PreconditionFailed
 
 from analytics.materializations import MATERIALIZATION_REGISTRY
-from analytics.publication import GcsPublisher, PointerConflictError, publish
+from analytics.publication import GcsPublisher, ObjectMetadata, PointerConflictError, publish
 from analytics.settings import Settings
 from analytics.source import MaterializationArtifacts
 
@@ -33,6 +34,7 @@ def settings(tmp_path: Path) -> Settings:
 class Blob:
     generation_counter = 0
     objects = {}
+    after_reload: ClassVar[Callable[[Any], None] | None] = None
 
     def __init__(self, name):
         self.name = name
@@ -59,6 +61,10 @@ class Blob:
 
             raise NotFound("missing")
         self.__dict__.update(current.__dict__)
+        hook = Blob.after_reload
+        Blob.after_reload = None
+        if hook is not None:
+            hook(self)
 
 
 class Bucket:
@@ -73,6 +79,7 @@ class Storage:
 
 def test_publication_durably_writes_manifest_before_pointer(tmp_path):
     Blob.objects.clear()
+    Blob.after_reload = None
     definition = MATERIALIZATION_REGISTRY["pv_regions"]
     publisher = GcsPublisher(Storage(), settings(tmp_path), definition)
     root = tmp_path / "root"
@@ -92,6 +99,7 @@ def test_publication_durably_writes_manifest_before_pointer(tmp_path):
 
 def test_publication_emits_only_gcs_phase_events(tmp_path):
     Blob.objects.clear()
+    Blob.after_reload = None
     events = []
     definition = MATERIALIZATION_REGISTRY["pv_regions"]
     root = tmp_path / "root"
@@ -112,6 +120,7 @@ def test_publication_emits_only_gcs_phase_events(tmp_path):
 
 def test_pointer_conflict_leaves_durable_manifest_and_is_observable(tmp_path):
     Blob.objects.clear()
+    Blob.after_reload = None
     definition = MATERIALIZATION_REGISTRY["pv_regions"]
     publisher = GcsPublisher(Storage(), settings(tmp_path), definition)
     root = tmp_path / "root"
@@ -125,6 +134,40 @@ def test_pointer_conflict_leaves_durable_manifest_and_is_observable(tmp_path):
     assert raised.value.metadata["manifest_uri"].endswith("run-3/manifest.json")
     assert "parquets/pv_regions/run-3/manifest.json" in Blob.objects
     assert "parquets/pv_regions/current.json" not in Blob.objects
+
+
+def test_pointer_race_reports_the_winning_generation(tmp_path):
+    Blob.objects.clear()
+    Blob.after_reload = None
+    definition = MATERIALIZATION_REGISTRY["pv_regions"]
+    publisher = GcsPublisher(Storage(), settings(tmp_path), definition)
+    first_manifest = ObjectMetadata("gs://bucket/manifest-1", "manifest-1", 1, "crc")
+    second_manifest = ObjectMetadata("gs://bucket/manifest-2", "manifest-2", 1, "crc")
+    publisher.advance_current(first_manifest, None)
+    captured_generation = publisher.current_generation()
+    publisher.advance_current(second_manifest, captured_generation)
+    winning_generation = publisher.current_generation()
+
+    root = tmp_path / "root"
+    root.mkdir()
+    parquet = root / "regions.parquet"
+    parquet.write_bytes(b"parquet")
+
+    def advance_after_read(blob):
+        if blob.name != "parquets/pv_regions/current.json":
+            Blob.after_reload = advance_after_read
+            return
+        publisher.advance_current(second_manifest, str(blob.generation))
+
+    Blob.after_reload = advance_after_read
+    with pytest.raises(PointerConflictError) as raised:
+        publish(publisher, "run-race", MaterializationArtifacts(root, (parquet,), 1), "source", "published", definition)
+
+    assert raised.value.metadata["stage"] == "pointer_update"
+    assert raised.value.metadata["expected_pointer_generation"] == winning_generation
+    assert raised.value.metadata["current_pointer_generation"] != winning_generation
+    current_pointer = Blob.objects["parquets/pv_regions/current.json"]
+    assert raised.value.metadata["current_pointer_generation"] == str(current_pointer.generation)
 
 
 def test_publication_uploads_sorted_nested_artifacts_and_exact_manifest(tmp_path):

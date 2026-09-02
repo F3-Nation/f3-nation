@@ -52,19 +52,39 @@ def main() -> int:
             from google.cloud.storage import Client as StorageClient  # type: ignore[import-untyped]
 
             from .lease import cloud_run_context
-            from .pipeline import run
+            from .pipeline import BatchRunError, run
 
-            run(
-                settings,
-                StorageClient(),
-                logger=logger,
-                run_id=str(run_id),
-                execution_context=cloud_run_context(os.environ),
-                materializations=tuple(item.name for item in selected),
-            )
+            try:
+                run(
+                    settings,
+                    StorageClient(),
+                    logger=logger,
+                    run_id=str(run_id),
+                    execution_context=cloud_run_context(os.environ),
+                    materializations=tuple(item.name for item in selected),
+                )
+            except BatchRunError as error:
+                dataset_failures = [
+                    {"materialization": name, "type": type(failure).__name__}
+                    for name, failure in sorted(error.failures.items())
+                ]
+                cleanup_failures = [
+                    {"materialization": name, "cleanup": cleanup, "type": type(failure).__name__}
+                    for name, cleanups in sorted(error.cleanup_failures.items())
+                    for cleanup, failure in sorted(cleanups.items())
+                ]
+                logger.error(
+                    "analytics.etl.cli_batch_failed",
+                    run_id=str(run_id),
+                    dataset_failure_count=len(dataset_failures),
+                    dataset_failures=dataset_failures,
+                    cleanup_failure_count=len(cleanup_failures),
+                    cleanup_failures=cleanup_failures,
+                )
+                return 1
         return 0
     except Exception as error:  # CLI boundary: report failure and return a shell-friendly status.
-        logger.error("analytics.etl.failed", error, run_id=str(run_id))
+        logger.error("analytics.etl.cli_failed", error, run_id=str(run_id))
         return 1
 
 

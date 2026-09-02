@@ -24,11 +24,16 @@ from .source import attach_postgres, materialize
 
 
 class BatchRunError(RuntimeError):
-    """Every ordinary dataset failure, retained by its registry name."""
+    """Primary dataset failures and cleanup failures retained by registry name."""
 
-    def __init__(self, failures: dict[str, BaseException]) -> None:
+    def __init__(
+        self,
+        failures: dict[str, BaseException],
+        cleanup_failures: dict[str, dict[str, BaseException]] | None = None,
+    ) -> None:
         super().__init__(f"analytics materializations failed: {', '.join(failures)}")
         self.failures = failures
+        self.cleanup_failures = cleanup_failures or {}
 
 
 def run(
@@ -45,10 +50,9 @@ def run(
     clock = now or (lambda: datetime.now(timezone.utc))
     definitions = select_materializations(materializations)
     run_id_value = run_id or RunId.create(clock()).value
-    refreshed_at = clock().isoformat()
-    as_of_date = clock().astimezone(timezone.utc).date().isoformat()
     results: dict[str, PublicationStatus] = {}
     failures: dict[str, BaseException] = {}
+    cleanup_failures: dict[str, dict[str, BaseException]] = {}
     started = time.perf_counter()
 
     def emit(event: str, context: dict[str, Any]) -> None:
@@ -68,6 +72,9 @@ def run(
             with tempfile.TemporaryDirectory(prefix="analytics-") as workspace:
                 source_started = time.perf_counter()
                 root = Path(workspace) / definition.name
+                source_timestamp = clock()
+                refreshed_at = source_timestamp.isoformat()
+                as_of_date = source_timestamp.astimezone(timezone.utc).date().isoformat()
                 artifacts = materialize(connection, root, definition, refreshed_at, as_of_date)
                 log.info(
                     "analytics.etl.source_read_completed",
@@ -106,9 +113,9 @@ def run(
                     lease.release(lease_handle, clock())
                     log.info("analytics.etl.lease_released", run_id=run_id_value, materialization=definition.name)
                 except Exception as error:
-                    failures.setdefault(definition.name, error)
+                    cleanup_failures.setdefault(definition.name, {})["lease_release"] = error
                     log.error(
-                        "analytics.etl.cleanup_failed",
+                        "analytics.etl.lease_release_failed",
                         error,
                         run_id=run_id_value,
                         materialization=definition.name,
@@ -118,9 +125,9 @@ def run(
                 try:
                     connection.close()
                 except Exception as error:
-                    failures.setdefault(definition.name, error)
+                    cleanup_failures.setdefault(definition.name, {})["connection_close"] = error
                     log.error(
-                        "analytics.etl.cleanup_failed",
+                        "analytics.etl.connection_close_failed",
                         error,
                         run_id=run_id_value,
                         materialization=definition.name,
@@ -134,7 +141,17 @@ def run(
             dataset_count=len(failures),
             duration_ms=round((time.perf_counter() - started) * 1000, 3),
         )
-        raise BatchRunError(failures)
+        raise BatchRunError(failures, cleanup_failures)
+    if cleanup_failures:
+        log.info(
+            "analytics.etl.succeeded_with_cleanup_failures",
+            run_id=run_id_value,
+            materialization="batch",
+            dataset_count=len(results),
+            cleanup_failure_count=sum(len(items) for items in cleanup_failures.values()),
+            duration_ms=round((time.perf_counter() - started) * 1000, 3),
+        )
+        return results
     log.info(
         "analytics.etl.succeeded",
         run_id=run_id_value,

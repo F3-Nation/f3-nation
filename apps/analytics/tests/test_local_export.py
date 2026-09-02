@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -70,6 +71,48 @@ def test_export_local_keeps_persistent_run_scoped_outputs(monkeypatch, tmp_path:
     assert closed == [True]
 
 
+def test_export_local_samples_each_materialization_independently(monkeypatch, tmp_path: Path):
+    settings = _settings(tmp_path)
+    output_dir = tmp_path / "exports"
+    output_dir.mkdir(mode=0o700)
+    definitions = (MATERIALIZATION_REGISTRY["pv_regions"], MATERIALIZATION_REGISTRY["pv_pax"])
+    sampled = []
+    timestamps = iter(
+        (
+            datetime(2026, 1, 2, 23, 30, tzinfo=timezone.utc),
+            datetime(2026, 1, 3, 0, 30, tzinfo=timezone.utc),
+        )
+    )
+
+    class Connection:
+        def close(self):
+            pass
+
+    def materialize_with_inputs(_connection, root, materialization, refreshed_at, as_of_date):
+        sampled.append((materialization.name, refreshed_at, as_of_date))
+        root.mkdir(parents=True)
+        parquet = root / materialization.output_filename
+        parquet.write_bytes(b"synthetic parquet")
+        return MaterializationArtifacts(root, (parquet,), 1)
+
+    monkeypatch.setattr(local_export_module, "select_materializations", lambda _names: definitions)
+    monkeypatch.setattr(local_export_module, "attach_postgres", lambda *_args: None)
+    monkeypatch.setattr(local_export_module, "materialize", materialize_with_inputs)
+    export_local(
+        settings,
+        output_dir,
+        tuple(definition.name for definition in definitions),
+        connection_factory=lambda _settings: Connection(),
+        now=lambda: next(timestamps),
+        run_id=_RUN_ONE,
+    )
+
+    assert sampled == [
+        ("pv_regions", "2026-01-02T23:30:00+00:00", "2026-01-02"),
+        ("pv_pax", "2026-01-03T00:30:00+00:00", "2026-01-03"),
+    ]
+
+
 def test_export_local_removes_staging_on_multi_materialization_failure(monkeypatch, tmp_path: Path):
     settings = _settings(tmp_path)
     output_dir = tmp_path / "exports"
@@ -133,6 +176,34 @@ def test_export_local_preserves_primary_failure_when_close_fails(monkeypatch, tm
         )
 
 
+def test_export_local_returns_finalized_output_when_close_fails(monkeypatch, tmp_path: Path):
+    output_dir = tmp_path / "exports"
+    output_dir.mkdir(mode=0o700)
+    definition = MATERIALIZATION_REGISTRY["pv_regions"]
+
+    class Connection:
+        def close(self):
+            raise RuntimeError("close failure")
+
+    def materialize_output(_connection, root, materialization, _refreshed_at, _as_of_date):
+        root.mkdir(parents=True)
+        parquet = root / materialization.output_filename
+        parquet.write_bytes(b"synthetic parquet")
+        return MaterializationArtifacts(root, (parquet,), 1)
+
+    monkeypatch.setattr(local_export_module, "attach_postgres", lambda *_args: None)
+    monkeypatch.setattr(local_export_module, "materialize", materialize_output)
+    results = export_local(
+        _settings(tmp_path),
+        output_dir,
+        (definition.name,),
+        connection_factory=lambda _settings: Connection(),
+        run_id=_RUN_TWO,
+    )
+    assert results[definition.name].root == output_dir / _RUN_TWO / definition.name
+    assert (results[definition.name].root / definition.output_filename).exists()
+
+
 @pytest.mark.parametrize("bad", ("relative", "missing", "link", "permissive"))
 def test_export_local_rejects_unsafe_output_directory(tmp_path: Path, bad: str):
     settings = _settings(tmp_path)
@@ -191,7 +262,7 @@ def test_cli_export_local_rejects_nonlocal_and_unsafe_paths(monkeypatch, tmp_pat
     monkeypatch.setattr("analytics.cli.Settings.from_env", lambda *_args, **_kwargs: settings)
     monkeypatch.setattr("sys.argv", ["analytics-etl", "export-local", "--output-dir", str(tmp_path)])
     assert main() == 1
-    assert "analytics.etl.failed" in capsys.readouterr().err
+    assert "analytics.etl.cli_failed" in capsys.readouterr().err
 
     monkeypatch.setattr("sys.argv", ["analytics-etl", "--output-dir", str(tmp_path), "export-local"])
     with pytest.raises(SystemExit, match="2"):
@@ -200,7 +271,7 @@ def test_cli_export_local_rejects_nonlocal_and_unsafe_paths(monkeypatch, tmp_pat
     monkeypatch.setattr("analytics.cli.Settings.from_env", lambda *_args, **_kwargs: _settings(tmp_path))
     monkeypatch.setattr("sys.argv", ["analytics-etl", "export-local", "--output-dir", str(tmp_path / "missing")])
     assert main() == 1
-    assert "analytics.etl.failed" in capsys.readouterr().err
+    assert "analytics.etl.cli_failed" in capsys.readouterr().err
 
 
 def test_cli_export_local_success_never_enters_gcs_branch(monkeypatch, tmp_path: Path):

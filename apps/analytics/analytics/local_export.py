@@ -59,16 +59,16 @@ def export_local(
     except FileExistsError as error:
         raise ValueError("output staging directory already exists") from error
     connection: Any | None = None
-    primary_error: BaseException | None = None
     started = time.perf_counter()
     log = logger or JsonLogger()
     try:
         connection = connection_factory(settings)
         attach_postgres(connection, settings)
-        refreshed_at = clock().isoformat()
-        as_of_date = clock().astimezone(timezone.utc).date().isoformat()
         results: dict[str, MaterializationArtifacts] = {}
         for definition in definitions:
+            source_timestamp = clock()
+            refreshed_at = source_timestamp.isoformat()
+            as_of_date = source_timestamp.astimezone(timezone.utc).date().isoformat()
             artifacts = materialize(connection, staging_root / definition.name, definition, refreshed_at, as_of_date)
             results[definition.name] = artifacts
             log.info(
@@ -93,8 +93,7 @@ def export_local(
             duration_ms=round((time.perf_counter() - started) * 1000, 3),
         )
         return results
-    except BaseException as error:
-        primary_error = error
+    except BaseException:
         try:
             rmtree(staging_root)
         except Exception as cleanup_error:
@@ -112,5 +111,3 @@ def export_local(
                 connection.close()
             except Exception as close_error:
                 log.error("analytics.etl.local_export_close_failed", close_error, run_id=run_id_value)
-                if primary_error is None:
-                    raise

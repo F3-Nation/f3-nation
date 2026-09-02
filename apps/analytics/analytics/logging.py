@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import sys
+import traceback
 from typing import Any, TextIO
 
 _EVENT = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$")
@@ -38,7 +40,19 @@ class JsonLogger:
             raise ValueError(f"invalid log event: {event}")
         record: dict[str, Any] = {"level": level, "event": event, "context": _safe(context)}
         if error is not None:
-            record["error"] = {"type": type(error).__name__}
+            error_record: dict[str, Any] = {
+                "type": type(error).__name__,
+                "module": type(error).__module__,
+            }
+            frames = traceback.extract_tb(error.__traceback__) if error.__traceback__ else ()
+            if frames:
+                frame = frames[-1]
+                error_record["origin"] = {
+                    "file": os.path.basename(frame.filename),
+                    "line": frame.lineno,
+                    "function": frame.name,
+                }
+            record["error"] = error_record
         stream = self._stream or (sys.stderr if level == "ERROR" else sys.stdout)
         stream.write(json.dumps(record, separators=(",", ":"), default=str) + "\n")
         stream.flush()

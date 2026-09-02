@@ -37,6 +37,8 @@ jobs:
         --set-cloudsql-instances=f3data:us-central1:f3data-nonprod
         --tasks=1
         --parallelism=1
+        --memory=4Gi
+        --cpu=2
         --max-retries=0
         --task-timeout=60m
         --command=analytics-etl
@@ -47,6 +49,8 @@ jobs:
         --set-cloudsql-instances=f3data:us-central1:f3data
         --tasks=1
         --parallelism=1
+        --memory=4Gi
+        --cpu=2
         --max-retries=0
         --task-timeout=60m
         --command=analytics-etl

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Ruff formatter entry point for the slackbot `format` turbo task.
+# Ruff formatter entry point for the analytics `format` turbo task.
 #
 # Mirrors the prettier `--check` / `--write` pair the JS workspaces use: the
 # task checks by default, and root `pnpm format:fix` appends `--write`, which

@@ -252,8 +252,10 @@ performed and recorded by the responsible humans during release.
 3. Valid output satisfies its contract above and is immutable, readable Parquet
    under a new run directory.
 4. Validation or ordinary publication failure leaves that dataset's prior
-   pointer consumable, while later datasets still run; any failure makes the
-   batch unsuccessful.
+   pointer consumable, while later datasets still run; those failures make the
+   batch unsuccessful. A post-commit lease-release or connection-close failure
+   is logged as a cleanup warning but does not invalidate published output or
+   make the batch unsuccessful.
 5. Successful publication advances only the matching generation-protected
    current pointer after durable GCS commit.
 6. Retry and concurrent-publisher handling cannot overwrite committed objects or

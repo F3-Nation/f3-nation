@@ -179,11 +179,33 @@ def test_logging_supports_exceptions():
     )
     record = json.loads(stream.getvalue())
     assert record["error"]["type"] == "RuntimeError"
-    assert set(record["error"]) == {"type"}
+    assert record["error"]["module"] == "builtins"
     assert record["context"]["dsn"] == "[REDACTED]"
     assert record["context"]["private_key"] == "[REDACTED]"
     assert "password" not in stream.getvalue()
     assert "postgres://" not in stream.getvalue()
+
+
+def test_logging_exception_origin_is_safe_and_terminal():
+    stream = io.StringIO()
+
+    def raise_error():
+        raise RuntimeError("dsn=postgres://user:password@example.test token=email@example.test")
+
+    with pytest.raises(RuntimeError):
+        raise_error()
+    try:
+        raise_error()
+    except RuntimeError as error:
+        JsonLogger(stream=stream).error("analytics.etl.failed", error)
+    record = json.loads(stream.getvalue())
+    assert record["error"]["origin"]["file"] == "test_foundation.py"
+    assert isinstance(record["error"]["origin"]["line"], int)
+    assert record["error"]["origin"]["function"] == "raise_error"
+    assert "postgres://" not in stream.getvalue()
+    assert "password" not in stream.getvalue()
+    assert "token" not in stream.getvalue()
+    assert "email@example.test" not in stream.getvalue()
 
 
 def test_run_ids_are_unique_and_stable_format():
@@ -257,7 +279,7 @@ def test_cli_failure_returns_nonzero(monkeypatch, capsys):
     monkeypatch.setenv("DUCKDB_POSTGRES_EXTENSION_PATH", "/missing/postgres_scanner.duckdb_extension")
     monkeypatch.setattr("sys.argv", ["analytics-etl", "preflight"])
     assert main() == 1
-    assert "analytics.etl.failed" in capsys.readouterr().err
+    assert "analytics.etl.cli_failed" in capsys.readouterr().err
 
 
 def test_cli_success_returns_zero(monkeypatch, tmp_path, capsys):
@@ -276,3 +298,35 @@ def test_cli_success_returns_zero(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr("sys.argv", ["analytics-etl", "preflight"])
     assert main() == 0
     assert "analytics.etl.preflight_succeeded" in capsys.readouterr().out
+
+
+def test_cli_batch_failure_has_deterministic_structured_event(monkeypatch, tmp_path, capsys):
+    from analytics.pipeline import BatchRunError
+
+    settings = Settings.from_env(extension_env(tmp_path))
+    monkeypatch.setattr("analytics.cli.Settings.from_env", lambda *_args, **_kwargs: settings)
+    monkeypatch.setattr("google.cloud.storage.Client", lambda: object())
+    monkeypatch.setattr(
+        "analytics.pipeline.run",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            BatchRunError(
+                {"pv_z": TypeError("ignored"), "pv_a": ValueError("ignored")},
+                {"pv_a": {"connection_close": RuntimeError("ignored")}},
+            )
+        ),
+    )
+    monkeypatch.setattr("sys.argv", ["analytics-etl", "run", "--materialization", "pv_regions"])
+
+    assert main() == 1
+    stderr = capsys.readouterr().err
+    records = [json.loads(line) for line in stderr.splitlines()]
+    batch_records = [record for record in records if record["event"] == "analytics.etl.cli_batch_failed"]
+    assert len(batch_records) == 1
+    context = batch_records[0]["context"]
+    assert context["dataset_failure_count"] == 2
+    assert [item["materialization"] for item in context["dataset_failures"]] == ["pv_a", "pv_z"]
+    assert context["cleanup_failure_count"] == 1
+    assert context["cleanup_failures"] == [
+        {"materialization": "pv_a", "cleanup": "connection_close", "type": "RuntimeError"}
+    ]
+    assert "ignored" not in stderr

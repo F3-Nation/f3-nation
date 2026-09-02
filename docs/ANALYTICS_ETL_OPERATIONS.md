@@ -128,6 +128,8 @@ lease expires, a new run may take it over conditionally using the observed
 generation. Never delete the current pointer or committed output to recover a
 stale lease. On any partial failure, retain the last known-good pointer and
 perform a full ETL rerun; a manifest alone is not a resumable publication.
+Timed-out runs leave active leases until the 90-minute TTL expires, so early
+reruns are expected to see `LeaseActiveError`.
 If the pointer or manifest is inconsistent, stop consumers, compare the exact
 run directory and manifest, retain the last known-good pointer, then perform a
 full ETL rerun and record the incident. Never wildcard multiple runs or treat a

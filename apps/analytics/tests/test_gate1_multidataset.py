@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -248,6 +250,121 @@ def test_pipeline_aggregates_all_named_failures(monkeypatch, tmp_path):
     with pytest.raises(BatchRunError) as raised:
         run(configured, _Storage(), connection_factory=lambda _settings: Connection(), run_id="all-failed")
     assert set(raised.value.failures) == {definition.name for definition in definitions}
+
+
+def test_pipeline_uses_one_source_timestamp_per_dataset_for_materialize_and_manifest(monkeypatch, tmp_path):
+    configured = _settings(tmp_path)
+    definitions = MATERIALIZATIONS[:2]
+    timestamps = iter(
+        (
+            datetime(2026, 1, 2, 0, tzinfo=timezone.utc),
+            datetime(2026, 1, 2, 1, tzinfo=timezone.utc),
+            datetime(2026, 1, 2, 10, tzinfo=timezone.utc),
+            datetime(2026, 1, 2, 11, tzinfo=timezone.utc),
+            datetime(2026, 1, 2, 12, tzinfo=timezone.utc),
+            datetime(2026, 1, 2, 2, tzinfo=timezone.utc),
+            datetime(2026, 1, 2, 20, tzinfo=timezone.utc),
+            datetime(2026, 1, 2, 21, tzinfo=timezone.utc),
+        )
+    )
+    seen = []
+
+    class Lease:
+        def __init__(self, *_args):
+            pass
+
+        def acquire(self, *_args):
+            return object()
+
+        def release(self, *_args):
+            pass
+
+    class Connection:
+        def close(self):
+            pass
+
+    def fake_materialize(_connection, _root, definition, refreshed_at, as_of_date):
+        seen.append((definition.name, refreshed_at, as_of_date))
+        return MaterializationArtifacts(Path("/tmp"), (), 1)
+
+    def fake_publish(_gcs, _run_id, _artifacts, source_read_at, *_args, **_kwargs):
+        seen[-1] = (*seen[-1], source_read_at)
+        return object()
+
+    monkeypatch.setattr(pipeline_module, "select_materializations", lambda _names: definitions)
+    monkeypatch.setattr(pipeline_module, "GcsLease", Lease)
+    monkeypatch.setattr(pipeline_module, "attach_postgres", lambda *_args: None)
+    monkeypatch.setattr(pipeline_module, "materialize", fake_materialize)
+    monkeypatch.setattr(pipeline_module, "publish", fake_publish)
+    run(
+        configured,
+        _Storage(),
+        connection_factory=lambda _settings: Connection(),
+        run_id="timestamps",
+        now=lambda: next(timestamps),
+    )
+    assert seen == [
+        ("pv_regions", "2026-01-02T01:00:00+00:00", "2026-01-02", "2026-01-02T01:00:00+00:00"),
+        ("pv_pax", "2026-01-02T02:00:00+00:00", "2026-01-02", "2026-01-02T02:00:00+00:00"),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("cleanup_failure", "expected_event"),
+    (
+        ("lease_release", "analytics.etl.lease_release_failed"),
+        ("connection_close", "analytics.etl.connection_close_failed"),
+    ),
+)
+def test_cleanup_only_failure_returns_results_and_has_distinct_outcome(
+    monkeypatch, tmp_path, cleanup_failure, expected_event
+):
+    configured = _settings(tmp_path)
+    definition = MATERIALIZATIONS[0]
+    events = []
+
+    class Lease(_TestLease):
+        def __init__(self, _storage, _settings, definition):
+            self.definition = definition
+
+        def release(self, *_args):
+            if cleanup_failure == "lease_release":
+                raise RuntimeError("release failed")
+
+    class Connection:
+        def close(self):
+            if cleanup_failure == "connection_close":
+                raise RuntimeError("close failed")
+
+    monkeypatch.setattr(pipeline_module, "select_materializations", lambda _names: (definition,))
+    monkeypatch.setattr(pipeline_module, "GcsLease", Lease)
+    monkeypatch.setattr(pipeline_module, "attach_postgres", lambda *_args: None)
+    monkeypatch.setattr(
+        pipeline_module,
+        "materialize",
+        lambda *_args: MaterializationArtifacts(Path("/tmp"), (), 1),
+    )
+    monkeypatch.setattr(pipeline_module, "publish", lambda *_args, **_kwargs: object())
+    result = run(
+        configured,
+        _Storage(),
+        connection_factory=lambda _settings: Connection(),
+        run_id="cleanup-only",
+        logger=cast(
+            Any,
+            type(
+                "Logger",
+                (),
+                {
+                    "info": lambda self, event, **context: events.append(event),
+                    "error": lambda self, event, *args, **kwargs: events.append(event),
+                },
+            )(),
+        ),
+    )
+    assert definition.name in result
+    assert "analytics.etl.succeeded_with_cleanup_failures" in events
+    assert expected_event in events
 
 
 def test_pipeline_records_lease_constructor_failure_and_continues(monkeypatch, tmp_path):
