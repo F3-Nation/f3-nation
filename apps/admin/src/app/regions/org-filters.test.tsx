@@ -341,6 +341,21 @@ describe("depth-agnostic admin organization filters", () => {
     expect(latestResultQuery()?.parentOrgIds).toEqual([secondSectorArea.id]);
   });
 
+  it("prunes an area using its refreshed ancestry after reparenting", () => {
+    const { rerender } = render(<RegionsTable />);
+
+    fireEvent.click(screen.getByTestId("select-first-two-sectors"));
+    fireEvent.click(screen.getByTestId(`area-${nestedArea.id}`));
+
+    mocks.hierarchyOrgs = mocks.hierarchyOrgs.map((org) =>
+      org.id === nestedArea.id ? { ...org, parentId: sectorTwo.id } : org,
+    );
+    rerender(<RegionsTable />);
+    fireEvent.click(screen.getByTestId(`sector-${sectorTwo.id}`));
+
+    expect(latestResultQuery()?.parentOrgIds).toEqual([directArea.id]);
+  });
+
   it("filters areas through a territory parent", () => {
     mocks.resultOrgs = [nestedArea];
     render(<AreasTable />);

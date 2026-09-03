@@ -80,9 +80,13 @@ const orgFilterReducer = (
     selectedAreas:
       selectedSectorIds.size === 0
         ? state.selectedAreas
-        : state.selectedAreas.filter((area) =>
-            isDescendantOfAny(area, selectedSectorIds, action.orgById),
-          ),
+        : state.selectedAreas.filter((area) => {
+            const currentArea = action.orgById.get(area.id);
+            return (
+              currentArea !== undefined &&
+              isDescendantOfAny(currentArea, selectedSectorIds, action.orgById)
+            );
+          }),
   };
 };
 
