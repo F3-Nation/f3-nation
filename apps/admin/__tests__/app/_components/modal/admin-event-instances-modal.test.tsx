@@ -17,6 +17,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type * as ModalStore from "~/utils/store/modal";
+import { closeModal } from "~/utils/store/modal";
 import AdminEventInstancesModal, {
   EventInstanceFormSchema,
   seriesExceptionOptions,
@@ -442,6 +443,82 @@ describe("AdminEventInstancesModal", () => {
       expect(field("Start date").value).toBe("");
       expect(field("Name (optional)").value).toBe("");
       expect(timeField("startTime").value).toBe("");
+    });
+  });
+
+  /**
+   * `byId` returning null (deleted row) or failing looks identical from here:
+   * `data` is nullish once loading settles. Edit mode has to survive it. When it
+   * was derived from the loaded instance instead of from `data.id`, the modal
+   * silently became an "Add" form and `crupdate` was called with no `id` — the
+   * row the admin opened stayed untouched and a duplicate was inserted from
+   * whatever the empty form held.
+   */
+  describe("when the instance fails to load", () => {
+    const renderFailedLoad = () => {
+      instanceState.current = null;
+      return render(<AdminEventInstancesModal data={{ id: 7 }} />);
+    };
+
+    it("stays in edit mode rather than falling back to Add", async () => {
+      renderFailedLoad();
+
+      await waitFor(() => {
+        expect(screen.getByText("Edit Event Instance")).toBeTruthy();
+      });
+      expect(screen.queryByText("Add Event Instance")).toBeNull();
+    });
+
+    it("shows the load error instead of the form", async () => {
+      renderFailedLoad();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(/Could not load this event instance/),
+        ).toBeTruthy();
+      });
+      expect(screen.queryByLabelText("Start date")).toBeNull();
+    });
+
+    it("offers no Save, so crupdate cannot be called without an id", async () => {
+      renderFailedLoad();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(/Could not load this event instance/),
+        ).toBeTruthy();
+      });
+      expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+      expect(crupdateMutateAsync).not.toHaveBeenCalled();
+    });
+
+    // "Cancel", not "Close": the Dialog primitive already renders an sr-only
+    // "Close" button, and two identically-named controls is a worse affordance
+    // than reusing the label the form itself uses.
+    it("closes from the error state", async () => {
+      renderFailedLoad();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(/Could not load this event instance/),
+        ).toBeTruthy();
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(vi.mocked(closeModal)).toHaveBeenCalled();
+    });
+
+    // A row that did load still submits with its id — the guard above must not
+    // block the ordinary edit path.
+    it("still sends the id when the instance did load", async () => {
+      renderEditing();
+      await waitFor(() => {
+        expect(field("Start date").value).toBe("2026-09-01");
+      });
+
+      save();
+
+      expect(await saved()).toMatchObject({ id: 7 });
     });
   });
 

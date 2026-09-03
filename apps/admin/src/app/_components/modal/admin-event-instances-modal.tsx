@@ -155,17 +155,20 @@ export default function AdminEventInstancesModal({
     orpc.location.all.queryOptions({ input: { statuses: ["active"] } }),
   );
 
+  const editingId = data.id != null && gte(data.id, 0) ? data.id : null;
+  const isEditMode = editingId != null;
+
   const { data: instanceResponse, isLoading: isLoadingInstance } = useQuery(
     orpc.eventInstance.byId.queryOptions({
-      input: { id: data.id ?? -1 },
-      enabled: gte(data.id, 0),
+      input: { id: editingId ?? -1 },
+      enabled: isEditMode,
     }),
   );
 
   const instance = instanceResponse ?? undefined;
-  const isEditing = !!instance;
-  const isLoading = gte(data.id, 0) && isLoadingInstance;
-  const showDeactivateButton = isEditing && instance?.isActive !== false;
+  const isLoading = isEditMode && isLoadingInstance;
+  const instanceLoadFailed = isEditMode && !isLoadingInstance && !instance;
+  const showDeactivateButton = !!instance && instance.isActive !== false;
 
   const form = useForm({
     schema: EventInstanceFormSchema,
@@ -229,7 +232,7 @@ export default function AdminEventInstancesModal({
         await invalidateQueries("map");
         closeModal();
         toast.success(
-          isEditing
+          isEditMode
             ? "Successfully updated event instance"
             : "Successfully created event instance",
         );
@@ -268,7 +271,7 @@ export default function AdminEventInstancesModal({
       const descTrim = formData.description?.trim();
       const endDateTrim = formData.endDate?.trim();
       await crupdateEventInstance.mutateAsync({
-        ...(isEditing && data.id != null ? { id: data.id } : {}),
+        ...(editingId != null ? { id: editingId } : {}),
         orgId: formData.orgId,
         startDate: formData.startDate,
         endDate: endDateTrim == null || endDateTrim === "" ? null : endDateTrim,
@@ -301,13 +304,28 @@ export default function AdminEventInstancesModal({
       >
         <DialogHeader>
           <DialogTitle className="text-center">
-            {isEditing ? "Edit" : "Add"} Event Instance
+            {isEditMode ? "Edit" : "Add"} Event Instance
           </DialogTitle>
         </DialogHeader>
 
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <Spinner className="size-8" />
+          </div>
+        ) : instanceLoadFailed ? (
+          <div className="flex flex-col gap-4 px-2 py-6">
+            <p className="text-center text-sm text-destructive">
+              Could not load this event instance. It may have been deleted, or
+              the request failed. Close this dialog and try again.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => closeModal()}
+              className="w-full"
+            >
+              Cancel
+            </Button>
           </div>
         ) : (
           <Form {...form}>

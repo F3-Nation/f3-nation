@@ -21,6 +21,9 @@ import {
 describe("Map Location Router", () => {
   // Track created entities for cleanup
   const createdEventIds: number[] = [];
+  // Standalone instances (no seriesId) are not reached by cleanup.event's
+  // cascade, and their location/org FKs would block the deletions below.
+  const createdEventInstanceIds: number[] = [];
   const createdLocationIds: number[] = [];
   const createdOrgIds: number[] = [];
 
@@ -33,6 +36,15 @@ describe("Map Location Router", () => {
     for (const eventId of createdEventIds.reverse()) {
       try {
         await cleanup.event(eventId);
+      } catch {
+        // Ignore errors during cleanup
+      }
+    }
+    for (const instanceId of createdEventInstanceIds.reverse()) {
+      try {
+        await db
+          .delete(schema.eventInstances)
+          .where(eq(schema.eventInstances.id, instanceId));
       } catch {
         // Ignore errors during cleanup
       }
@@ -165,6 +177,14 @@ describe("Map Location Router", () => {
       .toISOString()
       .split("T")[0]!;
   };
+
+  /**
+   * Tomorrow as the *database* reports it, so inclusion fixtures land inside
+   * the `CURRENT_DATE`..`CURRENT_DATE + 30 days` window the router filters on
+   * regardless of the test process's timezone.
+   */
+  const getDbTomorrow = async (): Promise<string> =>
+    shiftDays(await getDbCurrentDate(), 1);
 
   // Helper to create a test event with explicit start/end dates
   const createDatedEvent = async (opts: {
@@ -779,9 +799,7 @@ describe("Map Location Router", () => {
       if (!event) throw new Error("Failed to create roving series event");
       createdEventIds.push(event.id);
 
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const startDate = tomorrow.toISOString().slice(0, 10);
+      const startDate = await getDbTomorrow();
 
       await db.insert(schema.eventInstances).values({
         name: `Roving Instance ${uniqueId()}`,
@@ -849,9 +867,7 @@ describe("Map Location Router", () => {
       if (!event) throw new Error("Failed to create anchored series event");
       createdEventIds.push(event.id);
 
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const startDate = tomorrow.toISOString().slice(0, 10);
+      const startDate = await getDbTomorrow();
 
       await db.insert(schema.eventInstances).values({
         name: `Away Instance ${uniqueId()}`,
@@ -919,9 +935,7 @@ describe("Map Location Router", () => {
       if (!event) throw new Error("Failed to create series event");
       createdEventIds.push(event.id);
 
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const startDate = tomorrow.toISOString().slice(0, 10);
+      const startDate = await getDbTomorrow();
 
       await db.insert(schema.eventInstances).values({
         name: `Ordinary Instance ${uniqueId()}`,
@@ -982,9 +996,7 @@ describe("Map Location Router", () => {
       if (!event) throw new Error("Failed to create series event");
       createdEventIds.push(event.id);
 
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const startDate = tomorrow.toISOString().slice(0, 10);
+      const startDate = await getDbTomorrow();
 
       // A closure carries no location of its own — there is nowhere for it to
       // happen. It still has to reach the client, which uses it to mark the
@@ -1056,9 +1068,7 @@ describe("Map Location Router", () => {
       if (!event) throw new Error("Failed to create located series event");
       createdEventIds.push(event.id);
 
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const startDate = tomorrow.toISOString().slice(0, 10);
+      const startDate = await getDbTomorrow();
 
       await db.insert(schema.eventInstances).values({
         name: `Locationless Instance ${uniqueId()}`,
@@ -1121,9 +1131,7 @@ describe("Map Location Router", () => {
         throw new Error("Failed to create inactive location");
       createdLocationIds.push(inactiveLocation.id);
 
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const startDate = tomorrow.toISOString().slice(0, 10);
+      const startDate = await getDbTomorrow();
 
       // Standalone (no seriesId) so it clears the outer predicate, and flagged
       // as an exception too — the only reason to exclude it is the inactive
@@ -1143,6 +1151,7 @@ describe("Map Location Router", () => {
         .returning();
 
       if (!instance) throw new Error("Failed to create event instance");
+      createdEventInstanceIds.push(instance.id);
 
       const client = createTestClient();
       const result = await client.map.location.upcomingInstances();
@@ -1175,9 +1184,7 @@ describe("Map Location Router", () => {
         const location = await createTestLocation(region.id);
         if (!location) throw new Error("Failed to create test location");
 
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const startDate = tomorrow.toISOString().slice(0, 10);
+        const startDate = await getDbTomorrow();
 
         // Active AO, active region, active location, in-window date, no parent
         // series to inherit anything from.
@@ -1197,6 +1204,7 @@ describe("Map Location Router", () => {
           .returning();
 
         if (!instance) throw new Error("Failed to create event instance");
+        createdEventInstanceIds.push(instance.id);
 
         const client = createTestClient();
         const result = await client.map.location.upcomingInstances();
@@ -1222,9 +1230,7 @@ describe("Map Location Router", () => {
       const location = await createTestLocation(region.id);
       if (!location) throw new Error("Failed to create test location");
 
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const startDate = tomorrow.toISOString().slice(0, 10);
+      const startDate = await getDbTomorrow();
 
       const [instance] = await db
         .insert(schema.eventInstances)
@@ -1243,6 +1249,7 @@ describe("Map Location Router", () => {
         .returning();
 
       if (!instance) throw new Error("Failed to create event instance");
+      createdEventInstanceIds.push(instance.id);
 
       const client = createTestClient();
       const result = await client.map.location.upcomingInstances();
@@ -1293,9 +1300,7 @@ describe("Map Location Router", () => {
         if (!event) throw new Error("Failed to create hidden series event");
         createdEventIds.push(event.id);
 
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const startDate = tomorrow.toISOString().slice(0, 10);
+        const startDate = await getDbTomorrow();
 
         // The instance's own flags say "show me", and the exception clears the
         // outer predicate — the parent's state is the only disqualifier.
@@ -1340,9 +1345,7 @@ describe("Map Location Router", () => {
       const location = await createTestLocation(region.id);
       if (!location) throw new Error("Failed to create test location");
 
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const startDate = tomorrow.toISOString().slice(0, 10);
+      const startDate = await getDbTomorrow();
 
       // Standalone and public, AO still active — the retired region is the
       // only reason this must not become a public marker or pin status.
@@ -1361,6 +1364,7 @@ describe("Map Location Router", () => {
         .returning();
 
       if (!instance) throw new Error("Failed to create event instance");
+      createdEventInstanceIds.push(instance.id);
 
       await db
         .update(schema.orgs)
@@ -1391,9 +1395,7 @@ describe("Map Location Router", () => {
       const location = await createTestLocation(region.id);
       if (!location) throw new Error("Failed to create test location");
 
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const startDate = tomorrow.toISOString().slice(0, 10);
+      const startDate = await getDbTomorrow();
 
       // Deleting an area does not cascade below it, so the AO and its region
       // both stay active — the retired grandparent is the only reason this
@@ -1413,6 +1415,7 @@ describe("Map Location Router", () => {
         .returning();
 
       if (!instance) throw new Error("Failed to create event instance");
+      createdEventInstanceIds.push(instance.id);
 
       await db
         .update(schema.orgs)

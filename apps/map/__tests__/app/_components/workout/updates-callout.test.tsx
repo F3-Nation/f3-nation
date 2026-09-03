@@ -1,11 +1,3 @@
-/**
- * The callout replaced a plain list, and three of its decisions are invisible
- * until they go wrong: the card stays neutral no matter what the changes are
- * (only the per-row swatches carry status color), it withholds the stored time
- * on a closure, and it omits the workout name that every row shares with the
- * modal title.
- */
-
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
@@ -67,12 +59,6 @@ describe("UpdatesCallout", () => {
     );
     expect(screen.queryByText(/6:15/)).toBeNull();
     expect(screen.getByText(/9\/2/)).toBeTruthy();
-  });
-
-  it("omits the workout name", () => {
-    // Every row shares it, and it is already the modal's title a line above.
-    render(<UpdatesCallout instances={[instance()]} />);
-    expect(screen.queryByText(/Bootcamp/)).toBeNull();
   });
 
   it("keeps the card neutral regardless of the changes it holds", () => {

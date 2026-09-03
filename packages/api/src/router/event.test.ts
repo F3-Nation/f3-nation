@@ -280,6 +280,7 @@ describe("Event Router", () => {
 
       const client = createTestClient();
       const result = await client.map.event.all({
+        aoIds: [ao.id],
         pageIndex: 0,
         pageSize: 50,
         statuses: ["active"],

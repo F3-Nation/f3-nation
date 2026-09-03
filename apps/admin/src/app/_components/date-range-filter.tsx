@@ -2,7 +2,7 @@
 
 import dayjs from "dayjs";
 import { CalendarRange, ChevronsUpDown } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import { Button } from "@acme/ui/button";
 import { Input } from "@acme/ui/input";
@@ -33,6 +33,9 @@ export const DateRangeFilter = ({
   label?: string;
 }) => {
   const [open, setOpen] = useState(false);
+  const id = useId();
+  const fromId = `${id}-from`;
+  const toId = `${id}-to`;
   const hasRange = value.from.length > 0 || value.to.length > 0;
 
   return (
@@ -57,9 +60,9 @@ export const DateRangeFilter = ({
         <PopoverContent className="w-72 p-3">
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1">
-              <Label htmlFor="date-range-from">From</Label>
+              <Label htmlFor={fromId}>From</Label>
               <Input
-                id="date-range-from"
+                id={fromId}
                 type="date"
                 value={value.from}
                 // `max`/`min` keep the two inputs from crossing, which would
@@ -69,9 +72,9 @@ export const DateRangeFilter = ({
               />
             </div>
             <div className="flex flex-col gap-1">
-              <Label htmlFor="date-range-to">To</Label>
+              <Label htmlFor={toId}>To</Label>
               <Input
-                id="date-range-to"
+                id={toId}
                 type="date"
                 value={value.to}
                 min={value.from.length > 0 ? value.from : undefined}

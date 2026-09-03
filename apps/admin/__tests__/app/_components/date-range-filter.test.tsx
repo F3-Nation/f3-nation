@@ -122,6 +122,30 @@ describe("DateRangeFilter", () => {
     );
   });
 
+  it("gives each instance its own input ids so labels stay paired", () => {
+    // The events table renders a desktop and a mobile filter side by side.
+    render(
+      <>
+        <DateRangeFilter value={EMPTY_DATE_RANGE} onChange={vi.fn()} />
+        <DateRangeFilter value={EMPTY_DATE_RANGE} onChange={vi.fn()} />
+      </>,
+    );
+    // Only one popover stays open at a time, so collect each instance's ids
+    // while its own popover is the mounted one.
+    const ids: string[] = [];
+    for (const trigger of screen.getAllByRole("combobox")) {
+      fireEvent.click(trigger);
+      ids.push(
+        screen.getByLabelText("From").id,
+        screen.getByLabelText("To").id,
+      );
+      fireEvent.click(trigger);
+    }
+
+    expect(ids).toHaveLength(4);
+    expect(new Set(ids).size).toBe(4);
+  });
+
   it("clears both bounds", () => {
     const { onChange } = openFilter({
       value: { from: "2026-01-01", to: "2026-01-31" },

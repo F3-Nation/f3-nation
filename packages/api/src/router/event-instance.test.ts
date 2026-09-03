@@ -381,10 +381,10 @@ describe("Event Instance Router", () => {
     describe("status filter", () => {
       const seedActiveAndInactive = async () => {
         const region = await createTestRegion();
-        if (!region) return null;
+        if (!region) throw new Error("Failed to create region");
 
         const ao = await createTestAO(region.id);
-        if (!ao) return null;
+        if (!ao) throw new Error("Failed to create AO");
 
         const active = await createTestEventInstance(ao.id, {
           isActive: true,
@@ -392,7 +392,8 @@ describe("Event Instance Router", () => {
         const inactive = await createTestEventInstance(ao.id, {
           isActive: false,
         });
-        if (!active || !inactive) return null;
+        if (!active || !inactive)
+          throw new Error("Failed to create active or inactive event instance");
 
         return { ao, active, inactive };
       };
@@ -402,7 +403,6 @@ describe("Event Instance Router", () => {
         await mockAuthWithSession(session);
 
         const seeded = await seedActiveAndInactive();
-        if (!seeded) return;
 
         const client = createTestClient();
         const result = await client.eventInstance.all({
@@ -421,7 +421,6 @@ describe("Event Instance Router", () => {
         await mockAuthWithSession(session);
 
         const seeded = await seedActiveAndInactive();
-        if (!seeded) return;
 
         const client = createTestClient();
         const result = await client.eventInstance.all({
@@ -536,7 +535,6 @@ describe("Event Instance Router", () => {
         await mockAuthWithSession(session);
 
         const seeded = await seedActiveAndInactive();
-        if (!seeded) return;
 
         const client = createTestClient();
         const result = await client.eventInstance.all({
@@ -587,10 +585,10 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       const uniqueName = `SearchableEvent ${uniqueId()}`;
       await createTestEventInstance(ao.id, { name: uniqueName });
@@ -614,13 +612,13 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       const eventInstance = await createTestEventInstance(ao.id);
-      if (!eventInstance) return;
+      if (!eventInstance) throw new Error("Failed to create event instance");
 
       const client = createTestClient();
       const result = await client.eventInstance.all({
@@ -640,13 +638,13 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       const eventInstance = await createTestEventInstance(ao.id);
-      if (!eventInstance) return;
+      if (!eventInstance) throw new Error("Failed to create event instance");
 
       const client = createTestClient();
       const result = await client.eventInstance.all({
@@ -666,10 +664,10 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       const futureDate = new Date();
       futureDate.setDate(futureDate.getDate() + 30);
@@ -678,7 +676,7 @@ describe("Event Instance Router", () => {
       const eventInstance = await createTestEventInstance(ao.id, {
         startDate: futureDateStr,
       });
-      if (!eventInstance) return;
+      if (!eventInstance) throw new Error("Failed to create event instance");
 
       const client = createTestClient();
       const result = await client.eventInstance.all({
@@ -697,10 +695,10 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       const dayAfter = (days: number) => {
         const date = new Date();
@@ -718,7 +716,8 @@ describe("Event Instance Router", () => {
           createTestEventInstance(ao.id, { startDate }),
         ),
       );
-      if (!tooEarly || !onLowerBound || !onUpperBound || !tooLate) return;
+      if (!tooEarly || !onLowerBound || !onUpperBound || !tooLate)
+        throw new Error("Failed to create bounded event instances");
 
       const client = createTestClient();
       const result = await client.eventInstance.all({
@@ -742,10 +741,10 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       const soon = new Date();
       soon.setDate(soon.getDate() + 5);
@@ -761,7 +760,8 @@ describe("Event Instance Router", () => {
       const excluded = await createTestEventInstance(ao.id, {
         startDate: laterStr,
       });
-      if (!included || !excluded) return;
+      if (!included || !excluded)
+        throw new Error("Failed to create event instances");
 
       const client = createTestClient();
       const result = await client.eventInstance.all({
@@ -781,14 +781,14 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       // Create a standalone event instance (no seriesId)
       const eventInstance = await createTestEventInstance(ao.id);
-      if (!eventInstance) return;
+      if (!eventInstance) throw new Error("Failed to create event instance");
 
       const client = createTestClient();
       const result = await client.eventInstance.all({
@@ -809,15 +809,15 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       const eventInstance = await createTestEventInstance(ao.id, {
         seriesException: "closed",
       });
-      if (!eventInstance) return;
+      if (!eventInstance) throw new Error("Failed to create event instance");
 
       const client = createTestClient();
       const result = await client.eventInstance.all({
@@ -840,13 +840,13 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       const eventInstance = await createTestEventInstance(ao.id);
-      if (!eventInstance) return;
+      if (!eventInstance) throw new Error("Failed to create event instance");
 
       const client = createTestClient();
       const result = await client.eventInstance.byId({
@@ -863,17 +863,17 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id, {
         slack_channel_id: "C_AO_DEFAULT",
       });
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       const eventInstance = await createTestEventInstance(ao.id, {
         meta: { slack_channel_id: "C_INSTANCE" },
       });
-      if (!eventInstance) return;
+      if (!eventInstance) throw new Error("Failed to create event instance");
 
       await linkSlackSettingsToRegion(region.id, {
         default_preblast_destination: "specified_channel",
@@ -894,15 +894,15 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id, {
         slack_channel_id: "C_AO_DEFAULT",
       });
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       const eventInstance = await createTestEventInstance(ao.id);
-      if (!eventInstance) return;
+      if (!eventInstance) throw new Error("Failed to create event instance");
 
       const client = createTestClient();
       const explicitFalse = await client.eventInstance.byId({
@@ -923,15 +923,15 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id, { slack_channel_id: " C_AO " });
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       const eventInstance = await createTestEventInstance(ao.id, {
         meta: { slack_channel_id: " C_INSTANCE " },
       });
-      if (!eventInstance) return;
+      if (!eventInstance) throw new Error("Failed to create event instance");
 
       const client = createTestClient();
       const result = await client.eventInstance.byId({
@@ -950,12 +950,12 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id, {
         slack_channel_id: "C_AO_DEFAULT",
       });
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       await linkSlackSettingsToRegion(region.id, {
         default_preblast_destination: "specified_channel",
@@ -967,7 +967,7 @@ describe("Event Instance Router", () => {
       const eventInstance = await createTestEventInstance(ao.id, {
         meta: { slack_channel_id: "C_INSTANCE" },
       });
-      if (!eventInstance) return;
+      if (!eventInstance) throw new Error("Failed to create event instance");
 
       const client = createTestClient();
       const result = await client.eventInstance.byId({
@@ -986,10 +986,10 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id, { slack_channel_id: "C_AO" });
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       await linkSlackSettingsToRegion(region.id, {
         default_preblast_destination: "specified_channel",
@@ -1000,7 +1000,7 @@ describe("Event Instance Router", () => {
       });
 
       const eventInstance = await createTestEventInstance(ao.id);
-      if (!eventInstance) return;
+      if (!eventInstance) throw new Error("Failed to create event instance");
 
       const client = createTestClient();
       const result = await client.eventInstance.byId({
@@ -1023,10 +1023,10 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       await linkSlackSettingsToRegion(region.id, {
         default_preblast_destination: "specified_channel",
@@ -1038,7 +1038,7 @@ describe("Event Instance Router", () => {
       });
 
       const eventInstance = await createTestEventInstance(ao.id);
-      if (!eventInstance) return;
+      if (!eventInstance) throw new Error("Failed to create event instance");
 
       const client = createTestClient();
       await expect(
@@ -1054,10 +1054,10 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion({ isActive: false });
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id, { slack_channel_id: "C_AO" });
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       await linkSlackSettingsToRegion(region.id, {
         default_preblast_destination: "specified_channel",
@@ -1067,7 +1067,7 @@ describe("Event Instance Router", () => {
       });
 
       const eventInstance = await createTestEventInstance(ao.id);
-      if (!eventInstance) return;
+      if (!eventInstance) throw new Error("Failed to create event instance");
 
       const client = createTestClient();
       const result = await client.eventInstance.byId({
@@ -1086,12 +1086,13 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const nonRegionParent = await createTestNonRegionOrg();
-      if (!nonRegionParent) return;
+      if (!nonRegionParent)
+        throw new Error("Failed to create non-region parent org");
 
       const ao = await createTestAO(nonRegionParent.id, {
         slack_channel_id: "C_AO",
       });
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       await linkSlackSettingsToRegion(nonRegionParent.id, {
         default_preblast_destination: "specified_channel",
@@ -1101,7 +1102,7 @@ describe("Event Instance Router", () => {
       });
 
       const eventInstance = await createTestEventInstance(ao.id);
-      if (!eventInstance) return;
+      if (!eventInstance) throw new Error("Failed to create event instance");
 
       const client = createTestClient();
       const result = await client.eventInstance.byId({
@@ -1120,10 +1121,10 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id, { slack_channel_id: "C_AO" });
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       await linkSlackSettingsToRegion(region.id, {
         default_preblast_destination: "specified_channel",
@@ -1133,7 +1134,7 @@ describe("Event Instance Router", () => {
       });
 
       const eventInstance = await createTestEventInstance(ao.id);
-      if (!eventInstance) return;
+      if (!eventInstance) throw new Error("Failed to create event instance");
 
       const client = createTestClient();
       const result = await client.eventInstance.byId({
@@ -1166,13 +1167,13 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id, { slack_channel_id: "C_AO" });
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       const eventInstance = await createTestEventInstance(ao.id);
-      if (!eventInstance) return;
+      if (!eventInstance) throw new Error("Failed to create event instance");
 
       const client = createTestClient();
       const result = await client.eventInstance.byId({
@@ -1191,13 +1192,13 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       const eventInstance = await createTestEventInstance(ao.id);
-      if (!eventInstance) return;
+      if (!eventInstance) throw new Error("Failed to create event instance");
 
       const client = createTestClient();
       const result = await client.eventInstance.byId({
@@ -1216,7 +1217,7 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       await linkSlackSettingsToRegion(region.id, {
         default_preblast_destination: "specified_channel",
@@ -1225,7 +1226,7 @@ describe("Event Instance Router", () => {
       });
 
       const eventInstance = await createTestEventInstance(region.id);
-      if (!eventInstance) return;
+      if (!eventInstance) throw new Error("Failed to create event instance");
 
       const client = createTestClient();
       const result = await client.eventInstance.byId({
@@ -1245,15 +1246,15 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id, { slack_channel_id: "C_AO" });
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       const eventInstance = await createTestEventInstance(ao.id, {
         meta: { slack_channel_id: 123 },
       });
-      if (!eventInstance) return;
+      if (!eventInstance) throw new Error("Failed to create event instance");
 
       const client = createTestClient();
       const result = await client.eventInstance.byId({
@@ -1284,10 +1285,10 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       // Create an event type
       const [eventType] = await db
@@ -1304,7 +1305,8 @@ describe("Event Instance Router", () => {
       }
 
       const eventInstance = await createTestEventInstance(ao.id);
-      if (!eventInstance || !eventType) return;
+      if (!eventInstance || !eventType)
+        throw new Error("Failed to create event instance or event type");
 
       // Link event type to event instance
       await db.insert(schema.eventInstancesXEventTypes).values({
@@ -1327,15 +1329,15 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       const eventInstance = await createTestEventInstance(ao.id, {
         seriesException: "closed",
       });
-      if (!eventInstance) return;
+      if (!eventInstance) throw new Error("Failed to create event instance");
 
       const client = createTestClient();
       const result = await client.eventInstance.byId({
@@ -1353,10 +1355,10 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       const client = createTestClient();
       const eventName = `New Event ${uniqueId()}`;
@@ -1421,13 +1423,13 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       const eventInstance = await createTestEventInstance(ao.id);
-      if (!eventInstance) return;
+      if (!eventInstance) throw new Error("Failed to create event instance");
 
       const client = createTestClient();
       const updatedName = `Updated Event ${uniqueId()}`;
@@ -1645,16 +1647,16 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       const eventInstance = await createTestEventInstance(ao.id, {
         startTime: "0530",
         endTime: "0615",
       });
-      if (!eventInstance) return;
+      if (!eventInstance) throw new Error("Failed to create event instance");
 
       const client = createTestClient();
       const result = await client.eventInstance.crupdate({
@@ -1674,16 +1676,16 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       const eventInstance = await createTestEventInstance(ao.id, {
         startTime: "0530",
         endTime: "0615",
       });
-      if (!eventInstance) return;
+      if (!eventInstance) throw new Error("Failed to create event instance");
 
       const client = createTestClient();
       const result = await client.eventInstance.crupdate({
@@ -1702,16 +1704,16 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       const eventInstance = await createTestEventInstance(ao.id, {
         startTime: "0530",
         endTime: "0615",
       });
-      if (!eventInstance) return;
+      if (!eventInstance) throw new Error("Failed to create event instance");
 
       const client = createTestClient();
       const result = await client.eventInstance.crupdate({
@@ -1731,16 +1733,16 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       const eventInstance = await createTestEventInstance(ao.id, {
         startTime: "0530",
         endTime: "0615",
       });
-      if (!eventInstance) return;
+      if (!eventInstance) throw new Error("Failed to create event instance");
 
       const client = createTestClient();
       const result = await client.eventInstance.crupdate({
@@ -2014,10 +2016,10 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       const client = createTestClient();
       const result = await client.eventInstance.crupdate({
@@ -2040,15 +2042,15 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       const eventInstance = await createTestEventInstance(ao.id, {
         seriesException: "closed",
       });
-      if (!eventInstance) return;
+      if (!eventInstance) throw new Error("Failed to create event instance");
 
       const client = createTestClient();
       const result = await client.eventInstance.crupdate({
@@ -2067,10 +2069,10 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       // Create an event type
       const [eventType] = await db
@@ -2086,7 +2088,7 @@ describe("Event Instance Router", () => {
         createdEventTypeIds.push(eventType.id);
       }
 
-      if (!eventType) return;
+      if (!eventType) throw new Error("Failed to create event type");
 
       const client = createTestClient();
       const result = await client.eventInstance.crupdate({
@@ -2119,14 +2121,15 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       const eventInstance = await createTestEventInstance(ao.id);
       const eventType = await createTestEventType();
-      if (!eventInstance || !eventType) return;
+      if (!eventInstance || !eventType)
+        throw new Error("Failed to create event instance or event type");
 
       await db.insert(schema.eventInstancesXEventTypes).values({
         eventInstanceId: eventInstance.id,
@@ -2159,14 +2162,15 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       const eventInstance = await createTestEventInstance(ao.id);
       const eventType = await createTestEventType();
-      if (!eventInstance || !eventType) return;
+      if (!eventInstance || !eventType)
+        throw new Error("Failed to create event instance or event type");
 
       await db.insert(schema.eventInstancesXEventTypes).values({
         eventInstanceId: eventInstance.id,
@@ -2200,15 +2204,16 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       const eventInstance = await createTestEventInstance(ao.id);
       const original = await createTestEventType();
       const replacement = await createTestEventType();
-      if (!eventInstance || !original || !replacement) return;
+      if (!eventInstance || !original || !replacement)
+        throw new Error("Failed to create event instance or event types");
 
       await db.insert(schema.eventInstancesXEventTypes).values({
         eventInstanceId: eventInstance.id,
@@ -2242,13 +2247,13 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       const eventTag = await createTestEventTag();
-      if (!eventTag) return;
+      if (!eventTag) throw new Error("Failed to create event tag");
 
       const client = createTestClient();
       const result = await client.eventInstance.crupdate({
@@ -2280,14 +2285,15 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       const eventInstance = await createTestEventInstance(ao.id);
       const eventTag = await createTestEventTag();
-      if (!eventInstance || !eventTag) return;
+      if (!eventInstance || !eventTag)
+        throw new Error("Failed to create event instance or event tag");
 
       await db.insert(schema.eventTagsXEventInstances).values({
         eventInstanceId: eventInstance.id,
@@ -2317,14 +2323,15 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       const eventInstance = await createTestEventInstance(ao.id);
       const eventTag = await createTestEventTag();
-      if (!eventInstance || !eventTag) return;
+      if (!eventInstance || !eventTag)
+        throw new Error("Failed to create event instance or event tag");
 
       await db.insert(schema.eventTagsXEventInstances).values({
         eventInstanceId: eventInstance.id,
@@ -2417,13 +2424,13 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       const eventInstance = await createTestEventInstance(ao.id);
-      if (!eventInstance) return;
+      if (!eventInstance) throw new Error("Failed to create event instance");
 
       const client = createTestClient();
       const result = await client.eventInstance.crupdate({
@@ -2479,10 +2486,10 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       // Create session without editor role for this AO
       const noPermSession = {
@@ -2961,10 +2968,10 @@ describe("Event Instance Router", () => {
   describe("delete", () => {
     it("should delete event instance with admin role", async () => {
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       // Create session with admin role on the AO org
       const session = {
@@ -2994,7 +3001,7 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const eventInstance = await createTestEventInstance(ao.id);
-      if (!eventInstance) return;
+      if (!eventInstance) throw new Error("Failed to create event instance");
 
       // Keep in cleanup list since soft delete still leaves the record
       const client = createTestClient();
@@ -3019,17 +3026,17 @@ describe("Event Instance Router", () => {
     // only break its "Deactivate" button for its primary audience.
     it("should deactivate event instance with editor role on the org", async () => {
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       await mockAuthWithSession(
         createEditorSession({ orgId: ao.id, orgName: ao.name ?? "Test AO" }),
       );
 
       const eventInstance = await createTestEventInstance(ao.id);
-      if (!eventInstance) return;
+      if (!eventInstance) throw new Error("Failed to create event instance");
 
       const client = createTestClient();
       const result = await client.eventInstance.delete({
@@ -3048,13 +3055,13 @@ describe("Event Instance Router", () => {
 
     it("should reject deactivation from a session with no role on the org", async () => {
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       const otherRegion = await createTestRegion();
-      if (!otherRegion) return;
+      if (!otherRegion) throw new Error("Failed to create other region");
 
       await mockAuthWithSession(
         createEditorSession({
@@ -3064,7 +3071,7 @@ describe("Event Instance Router", () => {
       );
 
       const eventInstance = await createTestEventInstance(ao.id);
-      if (!eventInstance) return;
+      if (!eventInstance) throw new Error("Failed to create event instance");
 
       const client = createTestClient();
       await expect(
@@ -3099,10 +3106,10 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       // Create events with different dates
       const today = new Date();
@@ -3138,10 +3145,10 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(session);
 
       const region = await createTestRegion();
-      if (!region) return;
+      if (!region) throw new Error("Failed to create region");
 
       const ao = await createTestAO(region.id);
-      if (!ao) return;
+      if (!ao) throw new Error("Failed to create AO");
 
       // Create events with different dates
       const today = new Date();

@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { createContext, useContext, useMemo } from "react";
+import dayjs from "dayjs";
 
 import { DEFAULT_CENTER } from "@acme/shared/app/constants";
 import { RERENDER_LOGS } from "@acme/shared/common/constants";
@@ -160,6 +161,8 @@ export const FilteredMapResultsProvider = (params: { children: ReactNode }) => {
   const allLocationMarkersWithLatLngAndFilterData = useMemo(() => {
     if (!mapEventAndLocationData) return undefined;
 
+    const todayIso = dayjs().format("YYYY-MM-DD");
+
     const instancesBySeriesId = new Map<number, StatusInstanceSummary[]>();
 
     if (upcomingInstancesData) {
@@ -198,7 +201,11 @@ export const FilteredMapResultsProvider = (params: { children: ReactNode }) => {
             };
             return {
               ...eventObj,
-              mapStatus: getMapEventStatus(eventObj, instancesBySeriesId),
+              mapStatus: getMapEventStatus(
+                eventObj,
+                instancesBySeriesId,
+                todayIso,
+              ),
             };
           }),
         };

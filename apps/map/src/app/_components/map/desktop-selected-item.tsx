@@ -57,6 +57,7 @@ const SelectedItemWrapper = () => {
   }, [
     selectedItem.selectedLocation,
     selectedItem.selectedEvent,
+    selectedItem.nextException,
     debouncedSetSelectedItem,
     mapEvent,
   ]);
