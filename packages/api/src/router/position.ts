@@ -147,10 +147,15 @@ export const positionRouter = {
         const result = await getEditableOrgIdsForUser(ctx);
         isNationAdmin = result.isNationAdmin;
 
-        if (!isNationAdmin && result.editableOrgs.length > 0) {
-          const editableIds = result.editableOrgs.map((o) => o.id);
-          const descendantIds = await getDescendantOrgIds(ctx.db, editableIds);
-          editableOrgIds = [...new Set([...editableIds, ...descendantIds])];
+        if (!isNationAdmin && result.editableRootOrgIds.length > 0) {
+          editableOrgIds = await getDescendantOrgIds(
+            ctx.db,
+            result.editableRootOrgIds,
+          );
+        }
+
+        if (!isNationAdmin && editableOrgIds.length === 0) {
+          return { positions: [], totalCount: 0 };
         }
       }
 
@@ -1017,10 +1022,10 @@ export const positionRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
-      const { editableOrgs, isNationAdmin } =
+      const { editableRootOrgIds, isNationAdmin } =
         await getEditableOrgIdsForUser(ctx);
 
-      if (!isNationAdmin && editableOrgs.length === 0) {
+      if (!isNationAdmin && editableRootOrgIds.length === 0) {
         return { assignments: [] };
       }
 
@@ -1028,14 +1033,10 @@ export const positionRouter = {
 
       // Scope to editable orgs (unless nation admin)
       if (!isNationAdmin) {
-        const editableOrgIds = editableOrgs.map((o) => o.id);
-        const descendantOrgIds = await getDescendantOrgIds(
-          ctx.db,
-          editableOrgIds,
-        );
-        const allOrgIds = [
-          ...new Set([...editableOrgIds, ...descendantOrgIds]),
-        ];
+        const allOrgIds = await getDescendantOrgIds(ctx.db, editableRootOrgIds);
+        if (allOrgIds.length === 0) {
+          return { assignments: [] };
+        }
         conditions.push(inArray(schema.positionsXOrgsXUsers.orgId, allOrgIds));
       }
 
