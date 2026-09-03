@@ -1,5 +1,5 @@
 /**
- * Email delivery for the Better Auth emailOTP plugin (#876 Phase 3).
+ * Email delivery for the Better Auth emailOTP plugin.
  *
  * Deliberately separate from apps/auth/src/lib/email-mfa.ts's
  * sendEmailCode: that function generates and stores its own code (for the

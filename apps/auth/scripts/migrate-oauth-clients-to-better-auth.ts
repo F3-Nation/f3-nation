@@ -10,15 +10,16 @@
  * the better_auth_* migration itself has been reviewed and applied (see the
  * "DRAFTED, NOT APPLIED" block comment in packages/db/drizzle/schema.ts).
  * Running this script before that migration is applied will fail outright
- * (the target table won't exist).
+ * (the target table won't exist). One-time use: delete it once the cutover
+ * is complete, tracked in #946.
  *
  * client_id is preserved exactly — every existing registration (apps/admin,
  * apps/me, Digital Weinke) keeps the same client_id it already has, so
  * nothing downstream needs to change its configured client_id when this
  * runs. client_secret is deliberately left unset for confidential clients,
- * NOT copied from oauth_clients.client_secret_hash: team decision (#876
- * thread, 2026-08-28) to prefer Better Auth's own default secret hashing
- * over matching the hand-rolled server's sha256 scheme.
+ * NOT copied from oauth_clients.client_secret_hash: Better Auth's own
+ * default secret hashing is preferred over matching the hand-rolled
+ * server's sha256 scheme.
  *
  * OPEN QUESTION for Phase 4, not solved by this script: how a migrated
  * confidential client (admin, me) actually gets a new secret issued.

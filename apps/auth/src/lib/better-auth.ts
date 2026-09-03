@@ -1,49 +1,45 @@
 /**
- * Better Auth instance for #876 Phase 3 — NOT wired into any live route yet.
+ * Better Auth instance for the F3 SSO server — not wired into any live
+ * route yet; gated behind AUTH_USE_BETTER_AUTH (see apps/auth/src/app/api/
+ * auth2/[...all]/route.ts).
  *
  * This factory is deliberately adapter-injectable (see `createAuthInstance`
  * below) rather than exporting one hardwired instance:
  *   - Production (`auth`, at the bottom of this file) uses `drizzleAdapter`
  *     against the real `db` from `~/lib/db`, so every token this instance
  *     issues is backed by real Postgres rows under the `better_auth_*`
- *     tables drafted in packages/db/drizzle/schema.ts.
+ *     tables in packages/db/drizzle/schema.ts.
  *   - Tests use `memoryAdapter` (see `apps/auth/__tests__/lib/
  *     better-auth.test.ts`) so the plugin/claim-shape/PKCE logic below is
- *     verifiable without a live Postgres — this sandbox has no Docker
- *     daemon available, same constraint noted on #911/#900.
+ *     verifiable without a live Postgres.
  *
- * Plugin order matters and mirrors packages/better-auth-spike's proven
- * config (#906, Phase 1): emailOTP -> jwt -> oauthProvider ->
+ * Plugin order matters: emailOTP -> jwt -> oauthProvider ->
  * accessTokenClaimShapePlugin -> bearer. accessTokenClaimShapePlugin must
  * come after oauthProvider() — extendOAuthProvider() throws otherwise.
  *
  * What this does NOT do (flagged, not silently skipped):
  *   - Does not touch `/api/oauth/*` — those routes still serve every
  *     request from the hand-rolled server in apps/auth/src/lib/oauth.ts,
- *     unconditionally, regardless of AUTH_USE_BETTER_AUTH. This instance is
- *     mounted at an isolated path (apps/auth/src/app/api/auth2/[...all]/
- *     route.ts) that 404s unless the flag is set. Rewiring the real OAuth
- *     endpoints to delegate here is Phase 4 (client cutover) work — it
- *     needs a path-mapping decision (oauth-provider's endpoints live under
- *     its own fixed /oauth2/* sub-path, not at /api/oauth/authorize
- *     directly) that's out of scope for "prove the config issues correct,
- *     DB-backed tokens with no live traffic moved."
+ *     unconditionally, regardless of AUTH_USE_BETTER_AUTH. Rewiring the
+ *     real OAuth endpoints to delegate here needs a path-mapping decision
+ *     (oauth-provider's endpoints live under their own fixed /oauth2/*
+ *     sub-path, not at /api/oauth/authorize directly) that's out of scope
+ *     here.
  *   - Does not implement the onboarding-completed gate that
  *     apps/auth/src/app/api/oauth/authorize/route.ts enforces today
  *     (redirect to /onboarding when `meta.onboarding_completed` is unset).
  *     Better Auth's own authorize flow has no hook for this app-specific
- *     business rule out of the box; adding one is Phase 4 work.
+ *     business rule out of the box.
  *   - Does not migrate existing oauth_clients rows — see
- *     apps/auth/scripts/migrate-oauth-clients-to-better-auth.ts, which is
- *     provided but deliberately not run by anything here.
+ *     apps/auth/scripts/migrate-oauth-clients-to-better-auth.ts, provided
+ *     but not run by anything here.
  *
- * Team direction (#876 thread, 2026-08-28): prefer Better Auth's own
- * defaults over matching the hand-rolled server's exact behavior, even
- * where that means disruption at cutover (forced re-login, confidential
- * clients needing new secrets) — except where a default would be a
- * security regression (PKCE) or would break basic integration with the
- * existing `users` table (the sub/identity bridge below), neither of which
- * this applies to.
+ * Prefers Better Auth's own defaults over matching the hand-rolled server's
+ * exact behavior, even where that means disruption at cutover (forced
+ * re-login, confidential clients needing new secrets) — except where a
+ * default would be a security regression (PKCE) or would break basic
+ * integration with the existing `users` table (the sub/identity bridge
+ * below), neither of which applies here.
  */
 import type { BetterAuthPlugin } from "better-auth";
 import { betterAuth } from "better-auth";
@@ -79,10 +75,8 @@ import {
 // additive (can't override an AS-owned/reserved claim) and is only
 // registrable from a companion plugin's own init() hook — there's no
 // top-level `oauthProvider({ claims })` shortcut. This is that companion
-// plugin. Proven in the Phase 1 spike (#906); reused verbatim here because
-// the claim shape it needs to reproduce (packages/sso's
-// isAccessTokenPayload / apps/auth/src/lib/jwt.ts's signAccessToken) hasn't
-// changed.
+// plugin, reproducing the claim shape packages/sso's isAccessTokenPayload /
+// apps/auth/src/lib/jwt.ts's signAccessToken already expect.
 const accessTokenClaimShapePlugin: BetterAuthPlugin = {
   id: "f3-access-token-claim-shape",
   init(ctx) {
@@ -151,10 +145,9 @@ export interface CreateAuthInstanceOptions {
 /**
  * Split out from createAuthInstance so tests can pre-seed a memoryAdapter's
  * backing object with `getAuthTables(buildBetterAuthOptions(...))` before
- * constructing the instance — the same order-of-operations the Phase 1
- * spike's test used, and required for the same reason: memoryAdapter throws
- * on any findOne() against a model whose array key is entirely absent from
- * the backing object, rather than returning "not found".
+ * constructing the instance: memoryAdapter throws on any findOne() against
+ * a model whose array key is entirely absent from the backing object,
+ * rather than returning "not found".
  */
 export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
   // The one resource this app's Better Auth config registers. Without a
@@ -227,13 +220,13 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
         // apps/auth/src/lib/oauth.ts's exchangeAuthorizationCode). Set
         // explicitly here anyway so the intent is documented, not implicit.
         clientRegistrationRequirePKCE: true,
-        // Deliberately no storeClientSecret override — team decision
-        // (2026-08-28, #876 thread): prefer Better Auth's own default secret
-        // hashing over matching the hand-rolled server's sha256 scheme, even
-        // though it means confidential clients (admin, me) need new secrets
-        // issued at cutover instead of carrying today's forward unchanged.
-        // See apps/auth/scripts/migrate-oauth-clients-to-better-auth.ts,
-        // which no longer copies client_secret_hash for exactly this reason.
+        // Deliberately no storeClientSecret override — prefers Better
+        // Auth's own default secret hashing over matching the hand-rolled
+        // server's sha256 scheme, even though it means confidential clients
+        // (admin, me) need new secrets issued at cutover instead of
+        // carrying today's forward unchanged. See
+        // apps/auth/scripts/migrate-oauth-clients-to-better-auth.ts, which
+        // no longer copies client_secret_hash for exactly this reason.
       }),
       accessTokenClaimShapePlugin,
       // Lets callers authenticate with a plain `Authorization: Bearer
@@ -325,7 +318,6 @@ export async function getAuth() {
 }
 
 // Re-exported so tests can construct an isolated in-memory instance without
-// duplicating the memoryAdapter pre-seeding dance the Phase 1 spike already
-// solved.
+// duplicating the memoryAdapter pre-seeding dance above.
 export { memoryAdapter };
 export type { MemoryDB };

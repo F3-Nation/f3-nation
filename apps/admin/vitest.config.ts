@@ -22,18 +22,6 @@ export default defineConfig({
       exclude: coverageExclude,
       thresholds: {
         autoUpdate: true,
-        // Lowered from the prior commit's floor after removing the OAuth
-        // clients admin UI (page, table, modal) and its tests — that
-        // surface is moving to its own follow-up PR once Better Auth is
-        // actually deployed somewhere. branches/functions are set below
-        // what this suite currently measures locally as slack for the same
-        // pre-existing ~1-branch CI-vs-local flake this repo has seen
-        // before: the same run, repeated back-to-back with no code changes,
-        // is stable locally, but CI's v8 report has occasionally landed a
-        // hair lower than an otherwise byte-identical local report.
-        // autoUpdate will only ever raise these values on a local run with
-        // higher coverage, never lower them, so this manual drop reflects
-        // the deliberate removal of tested code, not a suite regression.
         statements: 8.48,
         branches: 5.87,
         functions: 3.84,

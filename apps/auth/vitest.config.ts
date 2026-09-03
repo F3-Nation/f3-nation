@@ -15,12 +15,6 @@ export default defineConfig({
       exclude: coverageExclude,
       thresholds: {
         autoUpdate: true,
-        // Lowered from the prior commit's floor after removing the OAuth-
-        // client admin API routes (and their tests) — that surface is
-        // moving to its own follow-up PR. autoUpdate only ever raises these
-        // floors on a run with higher coverage, never lowers them, so this
-        // manual drop reflects the actual, deliberate removal of tested
-        // code rather than a suite regression.
         statements: 46.49,
         branches: 44.52,
         functions: 52.7,

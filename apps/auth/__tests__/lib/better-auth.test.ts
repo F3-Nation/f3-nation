@@ -32,10 +32,9 @@ function pkcePair() {
   return { verifier, challenge };
 }
 
-// Mirrors the Phase 1 spike's (packages/better-auth-spike) proven
-// memoryAdapter pre-seeding: memoryAdapter throws on any findOne() against a
-// model whose array key is entirely absent from the backing object, rather
-// than returning "not found".
+// memoryAdapter throws on any findOne() against a model whose array key is
+// entirely absent from the backing object, rather than returning "not
+// found", hence the pre-seeding loop below.
 // The fixed numeric id models "this email already has a real F3 users
 // row" — findF3UserId returning non-null is what lets
 // databaseHooks.user.create.before allow the sign-in through at all (see

@@ -1229,7 +1229,7 @@ export const emailMfaCodes = authProviderSchema.table("email_mfa_codes", {
 });
 
 // ---------------------------------------------------------------------------
-// Better Auth tables (Phase 3, #876) — DRAFTED, NOT APPLIED. See
+// Better Auth tables — DRAFTED, NOT APPLIED. See
 // docs/AI_GUARDRAILS.md's schema-migration sign-off rule for what that means.
 // Included here so the shape can be reviewed alongside the code that depends
 // on it; nothing above this point is touched, and the existing oauth_* tables
@@ -1346,8 +1346,8 @@ export const betterAuthVerification = authProviderSchema.table(
 // Backs the jwt plugin's RS256 signing key. Whether this ends up being the
 // live signing key (self-generated here) or a wrapper around the existing
 // AUTH_JWT_PRIVATE_KEY / fixed "f3-auth-1" kid the hand-rolled server uses
-// today is an open Phase 3/4 question (JWKS continuity across the two
-// issuers) — flagged in the PR description, not resolved by this schema.
+// today is an open question (JWKS continuity across the two issuers), not
+// resolved by this schema.
 export const betterAuthJwks = authProviderSchema.table("better_auth_jwks", {
   id: text().primaryKey().notNull(),
   publicKey: text("public_key").notNull(),
@@ -1365,11 +1365,10 @@ export const betterAuthJwks = authProviderSchema.table("better_auth_jwks", {
 // serving the hand-rolled server unmodified; migrating existing client rows
 // (admin, me, Digital Weinke) into this table is a one-time data migration
 // script, not a schema change — see apps/auth/scripts/migrate-oauth-clients-
-// to-better-auth.ts. Team decision (#876 thread, 2026-08-28): confidential
-// clients' secrets are NOT migrated — Better Auth's own default secret
-// hashing is preferred over matching oauth_clients.client_secret_hash's
-// sha256 scheme, so admin/me need a new secret issued at cutover (open
-// question, see that script's file comment).
+// to-better-auth.ts. Confidential clients' secrets are NOT migrated —
+// Better Auth's own default secret hashing is preferred over matching
+// oauth_clients.client_secret_hash's sha256 scheme, so admin/me need a new
+// secret issued at cutover (open question, see that script's file comment).
 export const betterAuthOauthClient = authProviderSchema.table(
   "better_auth_oauth_client",
   {
