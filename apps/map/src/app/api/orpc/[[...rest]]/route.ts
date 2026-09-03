@@ -6,9 +6,11 @@ import { Client, Header } from "@acme/shared/common/enums";
 
 const PROXY_PREFIX = "/api/orpc";
 
-// Anonymous reads the map's own browse-and-search experience needs — see
-// specs/map-browse-and-search.md AC-1. The map API key is attached to these.
-const ANONYMOUS_READ_PATHS = new Set([
+// Paths that don't require the caller's own session token — see
+// specs/map-browse-and-search.md AC-1. Some (like ping) are truly open;
+// others (like org.byId) still need a token upstream, just not the user's —
+// so the map's own API key is attached to all of them.
+const MAP_KEY_PATHS = new Set([
   "/v1/ping",
   "/v1/map/location/eventsAndLocations",
   "/v1/map/location/getAOsInRegion",
@@ -91,9 +93,9 @@ function getForwardedHeaders(
 async function proxyRequest(request: NextRequest) {
   const proxiedPath = getProxiedPath(request);
 
-  const isAnonymousRead = ANONYMOUS_READ_PATHS.has(proxiedPath);
+  const usesMapKey = MAP_KEY_PATHS.has(proxiedPath);
   const isSignedInOnly = SIGNED_IN_ONLY_PATHS.has(proxiedPath);
-  if (!isAnonymousRead && !isSignedInOnly) {
+  if (!usesMapKey && !isSignedInOnly) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
@@ -103,7 +105,7 @@ async function proxyRequest(request: NextRequest) {
 
   return fetch(getTargetUrl(request, proxiedPath), {
     method,
-    headers: getForwardedHeaders(request, isAnonymousRead),
+    headers: getForwardedHeaders(request, usesMapKey),
     body,
   });
 }

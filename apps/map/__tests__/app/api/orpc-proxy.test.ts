@@ -35,7 +35,7 @@ describe("oRPC proxy route", () => {
     expect(headers.get("cookie")).toContain("authjs.session-token");
   });
 
-  it("sets API key as Authorization for an anonymous-read path", async () => {
+  it("sets API key as Authorization for a map-key path", async () => {
     const { GET } = await import("../../../src/app/api/orpc/[[...rest]]/route");
 
     const request = new NextRequest("http://localhost:3000/api/orpc/v1/ping");
@@ -97,7 +97,7 @@ describe("oRPC proxy route", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it("strips host, content-length, and crafted authorization on an anonymous-read path", async () => {
+  it("strips host, content-length, and crafted authorization on a map-key path", async () => {
     const { GET } = await import("../../../src/app/api/orpc/[[...rest]]/route");
 
     const request = new NextRequest("http://localhost:3000/api/orpc/v1/ping", {
@@ -133,7 +133,7 @@ describe("oRPC proxy route", () => {
     expect(url.searchParams.get("foo")).toBe("bar");
   });
 
-  it("forwards POST requests to upstream for an anonymous-read path", async () => {
+  it("forwards POST requests to upstream for a map-key path", async () => {
     const { POST } =
       await import("../../../src/app/api/orpc/[[...rest]]/route");
 
