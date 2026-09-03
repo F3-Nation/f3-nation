@@ -25,6 +25,18 @@ export type Permissions = (typeof Permissions)[number];
 export const OrgType = ["ao", "region", "area", "sector", "nation"] as const;
 export type OrgType = (typeof OrgType)[number];
 
+// Compile-time pin on OrgType's element order — fails typecheck if a future
+// edit (e.g. an alphabetical re-sort) reorders the tuple.
+type _AssertOrgTypeOrder = typeof OrgType extends readonly [
+  "ao",
+  "region",
+  "area",
+  "sector",
+  "nation",
+]
+  ? true
+  : never;
+
 export const DayOfWeek = [
   "monday",
   "tuesday",
