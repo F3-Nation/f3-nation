@@ -881,12 +881,18 @@ importers:
 
   apps/homepage:
     dependencies:
+      '@acme/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@acme/ui':
         specifier: workspace:*
         version: link:../../packages/ui
       '@f3nation/health':
         specifier: workspace:*
         version: link:../../packages/health
+      leaflet:
+        specifier: ^1.9.4
+        version: 1.9.4
       next:
         specifier: 'catalog:'
         version: 16.3.3(@babel/core@7.29.0(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@playwright/test@1.62.1)(@types/node@24.13.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -921,6 +927,9 @@ importers:
       '@testing-library/react':
         specifier: 'catalog:'
         version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@types/leaflet':
+        specifier: ^1.9.14
+        version: 1.9.22
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.3
@@ -5207,6 +5216,9 @@ packages:
   '@types/json-schema@7.0.15':
     resolution: {integrity: sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA==}
 
+  '@types/leaflet@1.9.22':
+    resolution: {integrity: sha512-h3lhECYEKDasG7LFHu+GiHqAvsgLuQvlJvVZzJDGONo3sEL+wUOqSFLnwkZlK0qVxnxbuGFW8iBlJNYs5wgndA==}
+
   '@types/lodash@4.17.25':
     resolution: {integrity: sha512-+K1NIO8I+F9/wNulfVvu23QYd0Pe9/OCqRrim4NoYIf1VoEDL90Ve4ClzpyqBLc7NpGGWRvYNCKZ1BE/Jpf8dQ==}
 
@@ -7022,6 +7034,9 @@ packages:
   language-tags@1.0.9:
     resolution: {integrity: sha512-MbjN408fEndfiQXbFQ1vnd+1NoLDsnQW41410oQBXiyXDMYH5z505juWa4KUE1LqxRC7DgOgZDbKLxHIwm27hA==}
     engines: {node: '>=0.10'}
+
+  leaflet@1.9.4:
+    resolution: {integrity: sha512-nxS1ynzJOmOlHp+iL3FyWqK89GtNL8U8rvlMOsQdTTssxZwCXh8N2NB3GDQOL+YR3XnWyZAxwQixURb+FA74PA==}
 
   lefthook-darwin-arm64@2.1.10:
     resolution: {integrity: sha512-nw+X8wRNDoUUV6WSteyKBbcLySq+fsmZt5WV/s50ZJpysmsDKJOUMln6SllNfP+60dzUahAO7REco/2633BsLg==}
@@ -11363,6 +11378,10 @@ snapshots:
 
   '@types/json-schema@7.0.15': {}
 
+  '@types/leaflet@1.9.22':
+    dependencies:
+      '@types/geojson': 7946.0.16
+
   '@types/lodash@4.17.25': {}
 
   '@types/node@24.13.3':
@@ -13380,6 +13399,8 @@ snapshots:
     dependencies:
       language-subtag-registry: 0.3.23
 
+  leaflet@1.9.4: {}
+
   lefthook-darwin-arm64@2.1.10:
     optional: true
 
@@ -13695,8 +13716,8 @@ snapshots:
     dependencies:
       '@next/env': 16.3.2
       '@swc/helpers': 0.5.23
-      baseline-browser-mapping: 2.10.16
-      caniuse-lite: 1.0.30001793
+      baseline-browser-mapping: 2.11.20
+      caniuse-lite: 1.0.30001810
       postcss: 8.5.23
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
@@ -13722,8 +13743,8 @@ snapshots:
     dependencies:
       '@next/env': 16.3.2
       '@swc/helpers': 0.5.23
-      baseline-browser-mapping: 2.10.16
-      caniuse-lite: 1.0.30001793
+      baseline-browser-mapping: 2.11.20
+      caniuse-lite: 1.0.30001810
       postcss: 8.5.23
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
