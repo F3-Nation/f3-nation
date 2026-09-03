@@ -24,6 +24,7 @@ import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
 import { moveAOLocsToNewRegion } from "../lib/move-ao-locs-to-new-region";
+import { paginationFields, resolvePagination } from "../lib/pagination";
 import { notifyMapDataChange } from "../lib/webhook-events";
 import type { Context } from "../shared";
 import { adminProcedure, editorProcedure, protectedProcedure } from "../shared";
@@ -67,14 +68,7 @@ type OrgFilterInput = z.infer<typeof orgFilterSchema>;
 
 // Extended schema with pagination and sorting for the `all` endpoint
 const orgAllInputSchema = orgFilterSchema.extend({
-  pageIndex: z.coerce
-    .number()
-    .optional()
-    .describe("Zero-based page index for pagination. Defaults to 0."),
-  pageSize: z.coerce
-    .number()
-    .optional()
-    .describe("Number of organizations per page. Defaults to 10."),
+  ...paginationFields("organizations"),
   sorting: parseSorting().describe(
     "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: id, name, orgType, isActive, created.",
   ),
@@ -83,8 +77,7 @@ const orgAllInputSchema = orgFilterSchema.extend({
 // Schema for the `accessible` endpoint with pagination and sorting
 const orgAccessibleInputSchema = z.object({
   orgTypes: arrayOrSingle(z.enum(OrgType)).optional(),
-  pageIndex: z.coerce.number().optional(),
-  pageSize: z.coerce.number().optional(),
+  ...paginationFields("organizations"),
   sorting: parseSorting(),
 });
 
@@ -254,10 +247,13 @@ export const orgRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
-      const pageSize = input.pageSize ?? 10;
-      const pageIndex = (input.pageIndex ?? 0) * pageSize;
-      const usePagination =
-        input.pageIndex !== undefined && input.pageSize !== undefined;
+      // orgAllInputSchema is a required object (not `.optional()`), same as
+      // the unguarded `input.onlyMine` below — no `?.` needed here.
+      const { limit, offset, usePagination } = resolvePagination({
+        pageSize: input.pageSize,
+        pageIndex: input.pageIndex,
+        defaultPageSize: 10,
+      });
 
       // Resolve editable org IDs for "onlyMine" filter
       const editableResult = await resolveEditableOrgIds({
@@ -325,12 +321,7 @@ export const orgRouter = {
         .where(where);
 
       const orgs_untyped = usePagination
-        ? await withPagination(
-            query.$dynamic(),
-            sortedColumns,
-            pageIndex,
-            pageSize,
-          )
+        ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
         : await query.orderBy(...sortedColumns);
 
       // Something is broken with org to org types
@@ -415,10 +406,11 @@ export const orgRouter = {
         });
       }
 
-      const pageSize = input?.pageSize ?? 10;
-      const pageIndex = (input?.pageIndex ?? 0) * pageSize;
-      const usePagination =
-        input?.pageIndex !== undefined && input?.pageSize !== undefined;
+      const { limit, offset, usePagination } = resolvePagination({
+        pageSize: input?.pageSize,
+        pageIndex: input?.pageIndex,
+        defaultPageSize: 10,
+      });
 
       // Check if user has a role with orgId = 1 (F3 Nation)
       const [nationRole] = await ctx.db
@@ -474,8 +466,8 @@ export const orgRouter = {
           ? await withPagination(
               baseQuery.$dynamic(),
               sortedColumns,
-              pageIndex,
-              pageSize,
+              offset,
+              limit,
             )
           : await baseQuery.orderBy(...sortedColumns);
 
@@ -607,7 +599,7 @@ export const orgRouter = {
       // Apply pagination
       const total = sortedOrgs.length;
       const paginatedOrgs = usePagination
-        ? sortedOrgs.slice(pageIndex, pageIndex + pageSize)
+        ? sortedOrgs.slice(offset, offset + limit)
         : sortedOrgs;
 
       return {

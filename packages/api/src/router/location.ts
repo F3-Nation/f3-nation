@@ -23,6 +23,7 @@ import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
+import { paginationFields, resolvePagination } from "../lib/pagination";
 import { notifyMapDataChange } from "../lib/webhook-events";
 import { adminProcedure, editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
@@ -38,14 +39,7 @@ export const locationRouter = {
             .describe(
               "Search locations by name or description. Case-insensitive partial matching.",
             ),
-          pageIndex: z.coerce
-            .number()
-            .optional()
-            .describe("Zero-based page index for pagination. Defaults to 0."),
-          pageSize: z.coerce
-            .number()
-            .optional()
-            .describe("Number of locations per page. Defaults to 10."),
+          ...paginationFields("locations"),
           sorting: parseSorting().describe(
             "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: id, locationName, regionName, isActive, latitude, longitude, addressStreet, addressCity, addressState, addressZip, created.",
           ),
@@ -122,10 +116,11 @@ export const locationRouter = {
     )
     .handler(async ({ context: ctx, input }) => {
       const regionOrg = aliasedTable(schema.orgs, "region_org");
-      const limit = input?.pageSize ?? 10;
-      const offset = (input?.pageIndex ?? 0) * limit;
-      const usePagination =
-        input?.pageIndex !== undefined && input?.pageSize !== undefined;
+      const { limit, offset, usePagination } = resolvePagination({
+        pageSize: input?.pageSize,
+        pageIndex: input?.pageIndex,
+        defaultPageSize: 10,
+      });
 
       // Determine if filter by editable org IDs is needed
       let editableOrgIds: number[] = [];

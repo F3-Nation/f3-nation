@@ -39,6 +39,7 @@ import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
 import { checkUpdatePermissions } from "../lib/check-update-permissions";
+import { paginationFields, resolvePagination } from "../lib/pagination";
 import type { CreatedEntityIds } from "../lib/update-request-handlers";
 import {
   handleCreateEvent,
@@ -55,8 +56,8 @@ import {
   handleMoveEventToNewLocation,
   recordUpdateRequest,
 } from "../lib/update-request-handlers";
-import { logError } from "../logger";
 import { notifyMapDataChange } from "../lib/webhook-events";
+import { logError } from "../logger";
 import { notifyMapChangeRequest } from "../services/map-request-notification";
 import { editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
@@ -200,14 +201,7 @@ export const requestRouter = {
     .input(
       z
         .object({
-          pageIndex: z.coerce
-            .number()
-            .optional()
-            .describe("Zero-based page index for pagination. Defaults to 0."),
-          pageSize: z.coerce
-            .number()
-            .optional()
-            .describe("Number of requests per page. Defaults to 10."),
+          ...paginationFields("requests"),
           sorting: parseSorting().describe(
             "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: id, status, requestType, regionName, aoName, workoutName, dayOfWeek, startTime, endTime, description, locationAddress, submittedBy, created.",
           ),
@@ -389,10 +383,11 @@ export const requestRouter = {
       const oldEvent = aliasedTable(schema.events, "old_event");
       const newRegionOrg = aliasedTable(schema.orgs, "new_region_org");
 
-      const limit = input?.pageSize ?? 10;
-      const offset = (input?.pageIndex ?? 0) * limit;
-      const usePagination =
-        input?.pageIndex !== undefined && input?.pageSize !== undefined;
+      const { limit, offset, usePagination } = resolvePagination({
+        pageSize: input?.pageSize,
+        pageIndex: input?.pageIndex,
+        defaultPageSize: 10,
+      });
 
       // Determine if filter by region IDs is needed
       let editableOrgs: { id: number; type: OrgType }[] = [];
