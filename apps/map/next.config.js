@@ -1,5 +1,5 @@
 import { fileURLToPath } from "url";
-import { withSentryConfig } from "@sentry/nextjs";
+import { withSentryConfig } from "@sentry/nextjs/config";
 import _jiti from "jiti";
 
 const jiti = _jiti(fileURLToPath(import.meta.url));
