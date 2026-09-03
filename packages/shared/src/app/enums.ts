@@ -26,16 +26,13 @@ export const OrgType = ["ao", "region", "area", "sector", "nation"] as const;
 export type OrgType = (typeof OrgType)[number];
 
 // Compile-time pin on OrgType's element order — fails typecheck if a future
-// edit (e.g. an alphabetical re-sort) reorders the tuple.
-type _AssertOrgTypeOrder = typeof OrgType extends readonly [
-  "ao",
-  "region",
-  "area",
-  "sector",
-  "nation",
-]
-  ? true
-  : never;
+// edit (e.g. an alphabetical re-sort) reorders the tuple. Uses a constrained
+// generic rather than a conditional `? true : never`, which silently
+// resolves to `never` on a mismatch instead of producing a compile error.
+type AssertOrgTypeOrder<
+  T extends readonly ["ao", "region", "area", "sector", "nation"],
+> = T;
+type _AssertOrgTypeOrder = AssertOrgTypeOrder<typeof OrgType>;
 
 export const DayOfWeek = [
   "monday",
