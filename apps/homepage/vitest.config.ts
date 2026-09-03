@@ -21,13 +21,15 @@ export default defineConfig({
         // not testable in Node. Covered by E2E tests instead.
         "**/org-map.tsx",
         "**/org-map-loader.tsx",
+        // Pure TypeScript type declarations — no executable runtime code.
+        "**/org/_lib/types.ts",
       ],
       thresholds: {
         autoUpdate: true,
-        statements: 75.07,
-        branches: 74.23,
+        statements: 75.66,
+        branches: 75,
         functions: 66.66,
-        lines: 76,
+        lines: 76.33,
       },
     },
   },

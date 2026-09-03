@@ -3,6 +3,7 @@ import { fetchOrgChart, fetchOrgById } from "./api";
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 function mockFetch(status: number, body: unknown) {
@@ -54,5 +55,36 @@ describe("fetchOrgById", () => {
   it("throws on a non-ok response", async () => {
     mockFetch(404, {});
     await expect(fetchOrgById(999)).rejects.toThrow("API 404");
+  });
+});
+
+describe("getApiBase (via fetch URL)", () => {
+  it("uses NEXT_PUBLIC_API_URL when configured", async () => {
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "https://custom.api.test");
+    mockFetch(200, { orgs: [] });
+    await fetchOrgChart();
+    const url = (fetch as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as string;
+    expect(url).toContain("https://custom.api.test");
+  });
+
+  it("uses localhost:3001 when NEXT_PUBLIC_LOCAL_DEV is true", async () => {
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_LOCAL_DEV", "true");
+    mockFetch(200, { orgs: [] });
+    await fetchOrgChart();
+    const url = (fetch as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as string;
+    expect(url).toContain("localhost:3001");
+  });
+
+  it("falls back to api.f3nation.com with no env vars", async () => {
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_LOCAL_DEV", "");
+    mockFetch(200, { orgs: [] });
+    await fetchOrgChart();
+    const url = (fetch as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as string;
+    expect(url).toContain("api.f3nation.com");
   });
 });
