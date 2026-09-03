@@ -22,6 +22,7 @@ from typing import Any
 from application.event_instance import EventInstanceData
 from infrastructure.api_client.client import F3ApiClient, get_f3_api_client
 from infrastructure.api_client.exceptions import F3ApiNotFoundError
+from infrastructure.api_client.pagination import fetch_all_pages
 
 PREBLAST_CHANNEL_META_KEY = "preblast_channel_id"
 PREBLAST_POST_CHANNEL_META_KEY = "preblast_post_channel_id"
@@ -267,8 +268,12 @@ class ApiEventInstanceRepository:
         }
         if ao_org_id is not None:
             params["aoOrgId"] = ao_org_id
-        result = self._client.get("/v1/event-instance", params=params)
-        raw_list: list[dict] = result.get("eventInstances") or result.get("results") or []
+        raw_list = fetch_all_pages(
+            self._client,
+            "/v1/event-instance",
+            params=params,
+            items_key="eventInstances",
+        )
         return [_parse_instance(i) for i in raw_list]
 
     def get_by_id(self, instance_id: int) -> EventInstanceData | None:

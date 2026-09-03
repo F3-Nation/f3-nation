@@ -19,6 +19,7 @@ import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
 import { EventTagInsertSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
+import { paginationFields, resolvePagination } from "../lib/pagination";
 import { editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
@@ -33,8 +34,7 @@ export const eventTagRouter = {
         .object({
           orgIds: arrayOrSingle(z.coerce.number()).optional(),
           statuses: arrayOrSingle(z.enum(IsActiveStatus)).optional(),
-          pageIndex: z.coerce.number().optional(),
-          pageSize: z.coerce.number().optional(),
+          ...paginationFields("event tags"),
           searchTerm: z.string().optional(),
           sorting: parseSorting(),
           ignoreNationEventTags: z.coerce.boolean().optional(),
@@ -50,10 +50,11 @@ export const eventTagRouter = {
         "Get a paginated list of event tags with optional filtering by organization",
     })
     .handler(async ({ context: ctx, input }) => {
-      const limit = input?.pageSize ?? 10;
-      const offset = (input?.pageIndex ?? 0) * limit;
-      const usePagination =
-        input?.pageIndex !== undefined && input?.pageSize !== undefined;
+      const { limit, offset, usePagination } = resolvePagination({
+        pageSize: input?.pageSize,
+        pageIndex: input?.pageIndex,
+        defaultPageSize: 10,
+      });
 
       const sortedColumns = input?.sorting?.map((sorting) => {
         const direction = sorting.desc ? desc : asc;
@@ -124,7 +125,7 @@ export const eventTagRouter = {
 
       const eventTags = usePagination
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
-        : await query.orderBy(...sortedColumns);
+        : await query.orderBy(...sortedColumns).limit(limit);
 
       return { eventTags, totalCount };
     }),

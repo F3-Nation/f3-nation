@@ -20,6 +20,7 @@ import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
 import { EventTypeInsertSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
+import { paginationFields, resolvePagination } from "../lib/pagination";
 import { editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
@@ -43,14 +44,7 @@ export const eventTypeRouter = {
             .describe(
               "Filter event types by status. Matches event types with ANY of the given statuses (active, inactive).",
             ),
-          pageIndex: z.coerce
-            .number()
-            .optional()
-            .describe("Zero-based page index for pagination. Defaults to 0."),
-          pageSize: z.coerce
-            .number()
-            .optional()
-            .describe("Number of event types per page. Defaults to 10."),
+          ...paginationFields("event types"),
           searchTerm: z
             .string()
             .optional()
@@ -122,10 +116,11 @@ export const eventTypeRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
-      const limit = input?.pageSize ?? 10;
-      const offset = (input?.pageIndex ?? 0) * limit;
-      const usePagination =
-        input?.pageIndex !== undefined && input?.pageSize !== undefined;
+      const { limit, offset, usePagination } = resolvePagination({
+        pageSize: input?.pageSize,
+        pageIndex: input?.pageIndex,
+        defaultPageSize: 10,
+      });
 
       const sortedColumns = input?.sorting?.map((sorting) => {
         const direction = sorting.desc ? desc : asc;
@@ -214,7 +209,7 @@ export const eventTypeRouter = {
 
       const eventTypes = usePagination
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
-        : await query.orderBy(...sortedColumns);
+        : await query.orderBy(...sortedColumns).limit(limit);
 
       return { eventTypes, totalCount };
     }),

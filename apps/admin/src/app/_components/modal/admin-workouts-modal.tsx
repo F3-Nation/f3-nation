@@ -2,7 +2,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 
 import { EVENT_CATEGORY_LABEL_MAP, Z_INDEX } from "@acme/shared/app/constants";
@@ -49,6 +49,7 @@ import {
 } from "@acme/validators";
 
 import gte from "lodash/gte";
+import { client } from "~/orpc/client";
 import {
   invalidateQueries,
   orpc,
@@ -57,6 +58,7 @@ import {
   useQuery,
 } from "~/orpc/react";
 import type { DataType } from "~/utils/store/modal";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import {
   closeModal,
   DeleteType,
@@ -86,15 +88,48 @@ export default function AdminWorkoutsModal({
 }: {
   data: DataType[ModalType.ADMIN_EVENTS];
 }) {
-  const { data: regions } = useQuery(
-    orpc.org.all.queryOptions({ input: { orgTypes: ["region"] } }),
+  const { data: regionOrgs } = useFetchAllPages({
+    queryKey: ["org.all.everyRegion", "adminWorkoutsModal"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.all({
+        orgTypes: ["region"],
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+  });
+  const regions = useMemo(
+    () => (regionOrgs ? { orgs: regionOrgs } : undefined),
+    [regionOrgs],
   );
-  const { data: locations } = useQuery(
-    orpc.location.all.queryOptions({ input: { statuses: ["active"] } }),
+  const { data: activeLocations } = useFetchAllPages({
+    queryKey: ["location.all.everyActive"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { locations: items, totalCount } = await client.location.all({
+        statuses: ["active"],
+        pageIndex,
+        pageSize,
+      });
+      return { items, total: totalCount };
+    },
+  });
+  const locations = useMemo(
+    () => (activeLocations ? { locations: activeLocations } : undefined),
+    [activeLocations],
   );
-  const { data: aos } = useQuery(
-    orpc.org.all.queryOptions({ input: { orgTypes: ["ao"] } }),
-  );
+  const { data: aoOrgs } = useFetchAllPages({
+    queryKey: ["org.all.everyAo"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.all({
+        orgTypes: ["ao"],
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+  });
+  const aos = useMemo(() => (aoOrgs ? { orgs: aoOrgs } : undefined), [aoOrgs]);
   const { data: eventResponse, isLoading: isLoadingEvent } = useQuery(
     orpc.event.byId.queryOptions({
       input: { id: data.id ?? -1 },
@@ -118,16 +153,25 @@ export default function AdminWorkoutsModal({
   // Watch regionId from form to filter event types
   const formRegionId = form.watch("regionId");
 
-  const { data: eventTypes } = useQuery(
-    orpc.eventType.all.queryOptions({
-      input: {
-        pageSize: 200,
-        // When region is selected: filter to that region's types + Nation types
-        // When no region selected: show all event types (pass undefined to get all)
-        orgIds: formRegionId ? [formRegionId] : undefined,
-      },
-    }),
-  );
+  // This dropdown needs every matching event type, not one page of them —
+  // eventType.all is capped server-side (see pagination.ts), so page
+  // through it instead of relying on an unbounded "omit both params"
+  // request.
+  // The event-type selector below is disabled until a region is picked
+  // (disabled={!formRegionId}), so there's no reason to fetch anything
+  // before then -- only fetch once a region is selected, scoped to it.
+  const { data: eventTypes } = useFetchAllPages({
+    queryKey: ["eventType.all.everyMatching", formRegionId],
+    enabled: !!formRegionId,
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { eventTypes: items, totalCount } = await client.eventType.all({
+        orgIds: [formRegionId],
+        pageIndex,
+        pageSize,
+      });
+      return { items, total: totalCount };
+    },
+  });
 
   useEffect(() => {
     form.reset({
@@ -501,7 +545,7 @@ export default function AdminWorkoutsModal({
                             String,
                           )}
                           options={
-                            eventTypes?.eventTypes.map((type) => ({
+                            eventTypes?.map((type) => ({
                               value: type.id.toString(),
                               label: type.eventCategory
                                 ? `${type.name} (${EVENT_CATEGORY_LABEL_MAP[type.eventCategory] ?? type.eventCategory})`

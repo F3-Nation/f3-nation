@@ -13,20 +13,28 @@ import {
 import { MDTable } from "@acme/ui/md-table";
 import { Cell, Header } from "@acme/ui/table";
 
-import { orpc, useQuery } from "~/orpc/react";
 import type { RouterOutputs } from "~/orpc/types";
+import { client } from "~/orpc/client";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 
 type Nation = RouterOutputs["org"]["all"]["orgs"][number];
 
 export const NationsTable = () => {
-  const { data } = useQuery(
-    orpc.org.all.queryOptions({
-      input: { orgTypes: ["nation"] },
-    }),
-  );
-
-  const nations = data?.orgs;
+  // Exhaustive, not the default single-page org.all response -- this table
+  // paginates client-side over the full list via MDTable's own
+  // paginationOptions below.
+  const { data: nations } = useFetchAllPages({
+    queryKey: ["org.all.everyNation"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.all({
+        orgTypes: ["nation"],
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+  });
 
   return (
     <MDTable

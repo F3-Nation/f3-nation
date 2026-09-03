@@ -20,6 +20,7 @@ import { SeriesException } from "@acme/shared/app/enums";
 import { arrayOrSingle } from "@acme/shared/app/functions";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
+import { paginationFields, resolvePagination } from "../lib/pagination";
 import { logWarn } from "../logger";
 import { editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
@@ -121,8 +122,7 @@ export const eventInstanceRouter = {
     .input(
       z
         .object({
-          pageIndex: z.coerce.number().optional(),
-          pageSize: z.coerce.number().optional(),
+          ...paginationFields("event instances"),
           searchTerm: z.string().optional(),
           statuses: arrayOrSingle(z.enum(["active", "inactive"])).optional(),
           sorting: z
@@ -147,10 +147,11 @@ export const eventInstanceRouter = {
     .handler(async ({ context: ctx, input }) => {
       const regionOrg = aliasedTable(schema.orgs, "region_org");
       const aoOrg = aliasedTable(schema.orgs, "ao_org");
-      const limit = input?.pageSize ?? 40;
-      const offset = (input?.pageIndex ?? 0) * limit;
-      const usePagination =
-        input?.pageIndex !== undefined && input?.pageSize !== undefined;
+      const { limit, offset, usePagination } = resolvePagination({
+        pageSize: input?.pageSize,
+        pageIndex: input?.pageIndex,
+        defaultPageSize: 40,
+      });
 
       const where = and(
         // Active status filter
@@ -221,22 +222,29 @@ export const eventInstanceRouter = {
         )
         .where(where);
 
-      const sortedColumns = input?.sorting?.map((sorting) => {
-        const direction = sorting.desc ? desc : asc;
-        switch (sorting.id) {
-          case "startDate":
-            return direction(schema.eventInstances.startDate);
-          case "startTime":
-            return direction(schema.eventInstances.startTime);
-          case "name":
-            return direction(schema.eventInstances.name);
-          default:
-            return direction(schema.eventInstances.startDate);
-        }
-      }) ?? [
-        asc(schema.eventInstances.startDate),
-        asc(schema.eventInstances.startTime),
-      ];
+      // asc(id) is appended as a final tiebreaker so instances sharing the
+      // same startDate/startTime (or whatever sort field ties) still get a
+      // total order -- without one, offset pagination can return the same
+      // row on two pages or skip one entirely, since the DB is free to break
+      // ties differently between the count query and each page's query.
+      const sortedColumns = (
+        input?.sorting?.map((sorting) => {
+          const direction = sorting.desc ? desc : asc;
+          switch (sorting.id) {
+            case "startDate":
+              return direction(schema.eventInstances.startDate);
+            case "startTime":
+              return direction(schema.eventInstances.startTime);
+            case "name":
+              return direction(schema.eventInstances.name);
+            default:
+              return direction(schema.eventInstances.startDate);
+          }
+        }) ?? [
+          asc(schema.eventInstances.startDate),
+          asc(schema.eventInstances.startTime),
+        ]
+      ).concat(asc(schema.eventInstances.id));
 
       const query = ctx.db
         .select(select)

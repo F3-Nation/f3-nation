@@ -36,6 +36,7 @@ import { toast } from "@acme/ui/toast";
 import { SectorInsertSchema } from "@acme/validators";
 
 import gte from "lodash/gte";
+import { client } from "~/orpc/client";
 import {
   invalidateQueries,
   orpc,
@@ -43,6 +44,7 @@ import {
   useMutation,
   useQuery,
 } from "~/orpc/react";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import type { DataType } from "~/utils/store/modal";
 import {
   closeModal,
@@ -63,9 +65,17 @@ export default function AdminSectorsModal({
     }),
   );
   const sector = sectorResponse?.org;
-  const { data: nations } = useQuery(
-    orpc.org.all.queryOptions({ input: { orgTypes: ["nation"] } }),
-  );
+  const { data: nations } = useFetchAllPages({
+    queryKey: ["org.all.everyNation"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.all({
+        orgTypes: ["nation"],
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+  });
   const router = useRouter();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -210,7 +220,7 @@ export default function AdminSectorsModal({
                           <SelectValue placeholder="Select a nation" />
                         </SelectTrigger>
                         <SelectContent>
-                          {nations?.orgs
+                          {nations
                             ?.slice()
                             .sort((a, b) => a.name.localeCompare(b.name))
                             .map((nation) => (

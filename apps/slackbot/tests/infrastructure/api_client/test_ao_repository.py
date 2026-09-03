@@ -44,7 +44,13 @@ class ApiAoRepositoryTest(unittest.TestCase):
         result = self.repo.get_by_parent_org(10)
         self.client.get.assert_called_once_with(
             "/v1/org",
-            params={"orgTypes": ["ao"], "parentOrgIds": [10], "statuses": ["active"]},
+            params={
+                "orgTypes": ["ao"],
+                "parentOrgIds": [10],
+                "statuses": ["active"],
+                "pageSize": 100,
+                "pageIndex": 0,
+            },
         )
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0].id, 1)

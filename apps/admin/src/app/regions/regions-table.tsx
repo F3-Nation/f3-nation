@@ -16,8 +16,10 @@ import { MDTable, usePagination } from "@acme/ui/md-table";
 import { Cell, Header } from "@acme/ui/table";
 
 import { orpc, useQuery } from "~/orpc/react";
+import { client } from "~/orpc/client";
 import type { RouterOutputs } from "~/orpc/types";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import { MobileFilterSheet } from "../_components/mobile-filter-sheet";
 import { ResetFilter } from "../_components/reset-filter";
 import { StatusFilter } from "../_components/status-filter";
@@ -36,24 +38,33 @@ export const RegionsTable = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [onlyMine, setOnlyMine] = useState(true);
 
-  const { data: sectorsData } = useQuery(
-    orpc.org.all.queryOptions({
-      input: {
+  // Reference lists used to compute parentOrgIds below -- must be
+  // exhaustive (not the default single-page org.all response), or a
+  // sector/area outside the first page would silently drop out of
+  // filtering.
+  const { data: sectors } = useFetchAllPages({
+    queryKey: ["org.all.everySector"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.all({
         orgTypes: ["sector"],
-      },
-    }),
-  );
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+  });
 
-  const { data: areasData } = useQuery(
-    orpc.org.all.queryOptions({
-      input: {
+  const { data: areas } = useFetchAllPages({
+    queryKey: ["org.all.everyArea"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.all({
         orgTypes: ["area"],
-      },
-    }),
-  );
-
-  const sectors = sectorsData?.orgs;
-  const areas = areasData?.orgs;
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+  });
 
   // Compute parentOrgIds for filtering regions
   // If specific areas are selected, use those
@@ -84,6 +95,11 @@ export const RegionsTable = () => {
         onlyMine: onlyMine || undefined,
         parentOrgIds: parentOrgIds.length > 0 ? parentOrgIds : undefined,
       },
+      // While sectors are selected but `areas` hasn't resolved yet,
+      // parentOrgIds falls back to [] (unfiltered) -- without this guard
+      // the table would briefly show regions outside the selected
+      // sector until every area page finishes loading.
+      enabled: selectedSectors.length === 0 || areas !== undefined,
     }),
   );
 

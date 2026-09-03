@@ -14,8 +14,10 @@ import { Textarea } from "@acme/ui/textarea";
 import { toast } from "@acme/ui/toast";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 
+import { client } from "~/orpc/client";
 import { orpc, useQuery } from "~/orpc/react";
 import { useUpdateLocationFormContext } from "~/utils/forms";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import type { AdminRequestFormProps } from "./admin-request-form-props";
 import { DebouncedImage } from "../debounced-image";
 import { CountrySelect } from "../modal/country-select";
@@ -28,13 +30,18 @@ export const EventDetailsFields = () => {
   const form = useUpdateLocationFormContext();
   const formRegionId = form.watch("regionId");
 
-  const { data: eventTypes } = useQuery(
-    orpc.eventType.all.queryOptions({
-      input: {
-        orgIds: formRegionId && formRegionId > 0 ? [formRegionId] : [],
-      },
-    }),
-  );
+  const orgIds = formRegionId && formRegionId > 0 ? [formRegionId] : [];
+  const { data: eventTypes } = useFetchAllPages({
+    queryKey: ["eventType.all.everyMatching", orgIds],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { eventTypes: items, totalCount } = await client.eventType.all({
+        orgIds,
+        pageIndex,
+        pageSize,
+      });
+      return { items, total: totalCount };
+    },
+  });
 
   return (
     <>
@@ -105,7 +112,7 @@ export const EventDetailsFields = () => {
                   defaultValue={(field.value ?? []).map(String)}
                   value={(field.value ?? []).map(String)}
                   options={
-                    eventTypes?.eventTypes.map((type) => ({
+                    eventTypes?.map((type) => ({
                       label: type.eventCategory
                         ? `${type.name} (${EVENT_CATEGORY_LABEL_MAP[type.eventCategory] ?? type.eventCategory})`
                         : type.name,
@@ -297,12 +304,21 @@ export const LocationPickerField = ({
   const formRegionId = form.watch("regionId");
   const formLocationId = form.watch("locationId");
 
-  const { data: locations } = useQuery(orpc.location.all.queryOptions());
+  const { data: locations } = useFetchAllPages({
+    queryKey: ["location.all.everyLocation"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { locations: items, totalCount } = await client.location.all({
+        pageIndex,
+        pageSize,
+      });
+      return { items, total: totalCount };
+    },
+  });
 
   const locationOptions = useMemo(() => {
     const existing =
-      locations?.locations
-        .filter((l) => !(formRegionId > 0) || l.regionId === formRegionId)
+      locations
+        ?.filter((l) => !(formRegionId > 0) || l.regionId === formRegionId)
         .sort((a, b) => a.locationName.localeCompare(b.locationName))
         .map((l) => ({
           labelComponent: (
@@ -343,7 +359,7 @@ export const LocationPickerField = ({
       ];
     }
     return existing;
-  }, [locations?.locations, formRegionId, newLocationLabel]);
+  }, [locations, formRegionId, newLocationLabel]);
 
   const value =
     newLocationLabel && formLocationId == null
@@ -363,9 +379,7 @@ export const LocationPickerField = ({
             return;
           }
 
-          const location = locations?.locations.find(
-            ({ id }) => id.toString() === item,
-          );
+          const location = locations?.find(({ id }) => id.toString() === item);
 
           form.setValue("locationId", location?.id ?? null);
           if (!location) return;

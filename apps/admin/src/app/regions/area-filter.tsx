@@ -13,7 +13,8 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@acme/ui/popover";
 
 import type { RouterOutputs } from "~/orpc/types";
-import { orpc, useQuery } from "~/orpc/react";
+import { client } from "~/orpc/client";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 
 type Area = RouterOutputs["org"]["all"]["orgs"][number];
 type Sector = RouterOutputs["org"]["all"]["orgs"][number];
@@ -27,13 +28,21 @@ export const AreaFilter = ({
   selectedAreas: Area[];
   selectedSectors?: Sector[];
 }) => {
-  const { data: areas } = useQuery(
-    orpc.org.all.queryOptions({ input: { orgTypes: ["area"] } }),
-  );
+  const { data: areas } = useFetchAllPages({
+    queryKey: ["org.all.everyArea"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.all({
+        orgTypes: ["area"],
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+  });
   const [open, setOpen] = useState(false);
 
   const availableAreas = useMemo(() => {
-    return areas?.orgs.filter((area) => {
+    return areas?.filter((area) => {
       return (
         !selectedSectors?.length ||
         selectedSectors.some((sector) => sector.id === area.parentId)
