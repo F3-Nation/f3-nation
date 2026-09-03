@@ -16,6 +16,12 @@ export type UpdateRequestStatus = (typeof UpdateRequestStatus)[number];
 export const Permissions = ["admin", "edit"] as const;
 export type Permissions = (typeof Permissions)[number];
 
+// Ordered leaf (ao) -> root (nation). Array order is load-bearing: rank
+// (see org-hierarchy.ts) derives from index, and the index order must match
+// the Postgres "org_type" enum's declared sort order (packages/db/drizzle
+// schema.ts's `orgType = pgEnum("org_type", OrgType)` reads this array
+// directly). Inserting a new org type requires a migration that recreates
+// the Postgres enum in the new order, not just an edit here.
 export const OrgType = ["ao", "region", "area", "sector", "nation"] as const;
 export type OrgType = (typeof OrgType)[number];
 
@@ -83,14 +89,6 @@ export enum EventTypes {
   // Obstacle Training // Gear
   // Strength/Conditioning/Tabata/WIB // Bootcamp
   // Mobility/Stretch // Mobility
-}
-
-export enum OrgTypes {
-  AO = "AO",
-  Region = "Region",
-  Area = "Area",
-  Sector = "Sector",
-  Nation = "Nation",
 }
 
 export enum EventTags {

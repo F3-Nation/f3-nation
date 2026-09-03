@@ -13,6 +13,8 @@ import {
   schema,
   sql,
 } from "@acme/db";
+import { OrgType } from "@acme/shared/app/enums";
+import { arrayOrSingle } from "@acme/shared/app/functions";
 import {
   AddPositionAssignmentSchema,
   GetAllPositionAssignmentsSchema,
@@ -24,7 +26,6 @@ import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { editorProcedure, protectedProcedure } from "../shared";
-import { arrayOrSingle } from "@acme/shared/app/functions";
 
 export const positionRouter = {
   /**
@@ -48,7 +49,7 @@ export const positionRouter = {
             ),
           /** Filter by org type level (ao, region, etc.) */
           orgType: z
-            .enum(["ao", "region", "area", "sector", "nation"])
+            .enum(OrgType)
             .optional()
             .describe("Filter by org type level (ao, region, etc.)"),
           /** Only get org-specific positions (exclude nation-wide) */
@@ -122,7 +123,7 @@ export const positionRouter = {
                 .nullable()
                 .describe("Organization name (null for national positions)"),
               orgType: z
-                .enum(["ao", "region", "area", "sector", "nation"])
+                .enum(OrgType)
                 .nullable()
                 .describe("Organization type level"),
               isActive: z.boolean().describe("Whether the position is active"),
@@ -264,7 +265,7 @@ export const positionRouter = {
                 .describe("Position description"),
               orgId: z.number().nullable().describe("Organization ID"),
               orgType: z
-                .enum(["ao", "region", "area", "sector", "nation"])
+                .enum(OrgType)
                 .nullable()
                 .describe("Organization type level"),
               isActive: z.boolean().describe("Whether the position is active"),
@@ -323,7 +324,7 @@ export const positionRouter = {
               .nullable()
               .describe("Organization name (resolved from orgId)"),
             orgType: z
-              .enum(["ao", "region", "area", "sector", "nation"])
+              .enum(OrgType)
               .nullable()
               .describe("Organization type level"),
             isActive: z.boolean().describe("Whether the position is active"),
@@ -401,7 +402,7 @@ export const positionRouter = {
                 .describe("Position description"),
               orgId: z.number().nullable().describe("Organization ID"),
               orgType: z
-                .enum(["ao", "region", "area", "sector", "nation"])
+                .enum(OrgType)
                 .nullable()
                 .describe("Organization type level"),
               isActive: z.boolean().describe("Whether the position is active"),
@@ -540,7 +541,7 @@ export const positionRouter = {
             description: z.string().nullable().describe("Position description"),
             orgId: z.number().nullable().describe("Organization ID"),
             orgType: z
-              .enum(["ao", "region", "area", "sector", "nation"])
+              .enum(OrgType)
               .nullable()
               .describe("Organization type level"),
             isActive: z.boolean().describe("Whether the position is active"),
