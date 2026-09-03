@@ -418,7 +418,7 @@ overrides:
   sharp@<0.35.0: 0.35.4
   next@>=16.0.0 <16.3.0: 16.3.3
   postcss@<8.5.12: ^8.5.26
-  nanoid@<3.3.17: ^3.3.18
+  nanoid@<3.3.17: ^6.0.1
   nanoid@>=4.0.0 <5.1.16: ^6.0.1
   browserslist@<=4.28.6: 4.28.8
 
@@ -14213,7 +14213,7 @@ snapshots:
 
   postcss@8.5.23:
     dependencies:
-      nanoid: 3.3.18
+      nanoid: 6.0.1
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
