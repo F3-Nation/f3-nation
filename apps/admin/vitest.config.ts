@@ -10,9 +10,7 @@ export default defineConfig({
     environment: "jsdom",
     env: { NODE_ENV: "test", SKIP_ENV_VALIDATION: "1" },
     include: ["src/**/*.test.{ts,tsx}", "__tests__/**/*.test.{ts,tsx}"],
-    // Ruled out as the fix for the branches flake documented below (same
-    // ~1-branch gap reproduced with this on), but sequential execution is
-    // still the more trustworthy mode for coverage accuracy, so left on.
+    // Sequential execution is more reliable for coverage accuracy.
     fileParallelism: false,
     coverage: {
       provider: "v8",
