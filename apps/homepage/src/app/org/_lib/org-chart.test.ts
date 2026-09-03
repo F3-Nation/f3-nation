@@ -167,8 +167,8 @@ describe("buildOrgHierarchy", () => {
         "region",
         [],
         [
-          { latitude: 35.5, longitude: -80.5, eventCount: 2, aoCount: 1 },
-          { latitude: 36.0, longitude: -81.0, eventCount: 1, aoCount: 1 },
+          { locationId: 101, latitude: 35.5, longitude: -80.5, eventCount: 2, aoCount: 1 },
+          { locationId: 102, latitude: 36.0, longitude: -81.0, eventCount: 1, aoCount: 1 },
         ],
       ),
     ];
@@ -183,8 +183,8 @@ describe("buildOrgHierarchy", () => {
         "region",
         [],
         [
-          { latitude: 35.5, longitude: -80.5, eventCount: 5, aoCount: 2 },
-          { latitude: 36.0, longitude: -81.0, eventCount: 3, aoCount: 1 },
+          { locationId: 201, latitude: 35.5, longitude: -80.5, eventCount: 5, aoCount: 2 },
+          { locationId: 202, latitude: 36.0, longitude: -81.0, eventCount: 3, aoCount: 1 },
         ],
       ),
     ];
@@ -208,8 +208,8 @@ describe("buildOrgHierarchy", () => {
         "region",
         [],
         [
-          { latitude: 35.5, longitude: -80.5, eventCount: 1, aoCount: 1 },
-          { latitude: 35.5, longitude: -80.5, eventCount: 2, aoCount: 1 },
+          { locationId: 301, latitude: 35.5, longitude: -80.5, eventCount: 1, aoCount: 1 },
+          { locationId: 302, latitude: 35.5, longitude: -80.5, eventCount: 2, aoCount: 1 },
         ],
       ),
     ];

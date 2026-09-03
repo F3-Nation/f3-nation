@@ -22,6 +22,7 @@ export interface OrgChartItem {
   /** Parent chain from immediate parent to root: [id, name, orgType] */
   hierarchy: [number, string | null, OrgType][];
   activeLocations: {
+    locationId: number;
     latitude: number;
     longitude: number;
     eventCount: number;
@@ -56,4 +57,25 @@ export interface OrgMetrics {
   events: number;
   aos: number;
   locations: number;
+}
+
+export interface LocationAo {
+  id: number;
+  name: string | null;
+  email: string | null;
+  website: string | null;
+  twitter: string | null;
+  facebook: string | null;
+  instagram: string | null;
+  logoUrl: string | null;
+  eventCount: number;
+  positions: OrgLeaderEntry[];
+}
+
+export interface LocationDetail {
+  locationId: number;
+  locationName: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  aos: LocationAo[];
 }

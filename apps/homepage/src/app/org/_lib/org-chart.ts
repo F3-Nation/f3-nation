@@ -40,6 +40,11 @@ export function buildOrgHierarchy(items: OrgChartItem[]): {
   childrenByParent: Map<number, Org[]>;
   pointsById: Map<number, Point[]>;
   metricsById: Map<number, OrgMetrics>;
+  /** Per-org location entries with IDs — used to render map pins. */
+  orgLocationsById: Map<
+    number,
+    { locationId: number; lat: number; lng: number }[]
+  >;
 } {
   const orgById = new Map<number, Org>();
 
@@ -96,6 +101,10 @@ export function buildOrgHierarchy(items: OrgChartItem[]): {
 
   const pointsById = new Map<number, Point[]>();
   const metricsById = new Map<number, OrgMetrics>();
+  const orgLocationsById = new Map<
+    number,
+    { locationId: number; lat: number; lng: number }[]
+  >();
 
   for (const item of items) {
     const points: Point[] = item.activeLocations.map((loc) => ({
@@ -103,6 +112,13 @@ export function buildOrgHierarchy(items: OrgChartItem[]): {
       lng: loc.longitude,
     }));
     if (points.length > 0) pointsById.set(item.orgId, points);
+
+    const locations = item.activeLocations.map((loc) => ({
+      locationId: loc.locationId,
+      lat: loc.latitude,
+      lng: loc.longitude,
+    }));
+    if (locations.length > 0) orgLocationsById.set(item.orgId, locations);
 
     let events = 0;
     let aos = 0;
@@ -117,5 +133,11 @@ export function buildOrgHierarchy(items: OrgChartItem[]): {
     });
   }
 
-  return { orgById, childrenByParent, pointsById, metricsById };
+  return {
+    orgById,
+    childrenByParent,
+    pointsById,
+    metricsById,
+    orgLocationsById,
+  };
 }

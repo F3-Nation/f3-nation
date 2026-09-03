@@ -1,4 +1,4 @@
-import type { OrgChartItem, OrgDetail } from "./types";
+import type { LocationDetail, OrgChartItem, OrgDetail } from "./types";
 
 function getApiBase(): string {
   const configured = process.env.NEXT_PUBLIC_API_URL;
@@ -39,4 +39,10 @@ export async function fetchOrgChart(): Promise<OrgChartItem[]> {
 
 export async function fetchOrgById(id: number): Promise<OrgDetail> {
   return orgMapFetch<OrgDetail>(`/org-chart/${id}`);
+}
+
+export async function fetchLocationById(
+  locationId: number,
+): Promise<LocationDetail> {
+  return orgMapFetch<LocationDetail>(`/org-chart/location/${locationId}`);
 }
