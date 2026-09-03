@@ -419,7 +419,7 @@ overrides:
   next@>=16.0.0 <16.3.0: 16.3.3
   postcss@<8.5.12: ^8.5.26
   nanoid@<3.3.17: ^3.3.18
-  nanoid@>=4.0.0 <5.1.16: ^5.1.16
+  nanoid@>=4.0.0 <5.1.16: ^6.0.1
   browserslist@<=4.28.6: 4.28.8
 
 packageExtensionsChecksum: sha256-MiHZ3mgtOUb60KfpkAkui5ad/9eLmcQda0MiZKaTRqA=
@@ -7504,9 +7504,9 @@ packages:
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
-  nanoid@5.1.16:
-    resolution: {integrity: sha512-kVrnsrJqMR8+oLJnGEmSWw9BivK5mt7H3FZatVRjrc5wGqFYuBxX1yG7+A7Gi5AefkX6t/oCkizcQgpu0cY1dQ==}
-    engines: {node: ^18 || >=20}
+  nanoid@6.0.1:
+    resolution: {integrity: sha512-3wVS3i51pE2pi1k5FFL/95BGfVS0kSsvDVuGXHOtxox/TywUmtgq+3qiTOTbs9J7KfHaXPiN171k/A6dBnaXFw==}
+    engines: {node: ^22 || ^24 || >=26}
     hasBin: true
 
   napi-postinstall@0.3.4:
@@ -11099,14 +11099,14 @@ snapshots:
   '@scalar/types@0.18.2':
     dependencies:
       '@scalar/helpers': 0.11.1
-      nanoid: 5.1.16
+      nanoid: 6.0.1
       type-fest: 5.8.0
       zod: 4.4.3
 
   '@scalar/types@0.18.3':
     dependencies:
       '@scalar/helpers': 0.11.2
-      nanoid: 5.1.16
+      nanoid: 6.0.1
       type-fest: 5.8.0
       zod: 4.4.3
 
@@ -13838,7 +13838,7 @@ snapshots:
 
   nanoid@3.3.18: {}
 
-  nanoid@5.1.16: {}
+  nanoid@6.0.1: {}
 
   napi-postinstall@0.3.4: {}
 
