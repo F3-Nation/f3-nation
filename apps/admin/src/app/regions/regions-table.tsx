@@ -2,9 +2,9 @@
 
 import { DotsHorizontalIcon } from "@radix-ui/react-icons";
 import type { TableOptions } from "@tanstack/react-table";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useReducer, useState } from "react";
 
-import type { IsActiveStatus } from "@acme/shared/app/enums";
+import { IsActiveStatus } from "@acme/shared/app/enums";
 import { Button } from "@acme/ui/button";
 import {
   DropdownMenu,
@@ -22,56 +22,129 @@ import { MobileFilterSheet } from "../_components/mobile-filter-sheet";
 import { ResetFilter } from "../_components/reset-filter";
 import { StatusFilter } from "../_components/status-filter";
 import { AreaFilter } from "./area-filter";
+import {
+  AdminHierarchyOrgTypes,
+  findAncestorByType,
+  getOrgById,
+  getParentOrgIdsForFilter,
+  isDescendantOfAny,
+  isOrgSelected,
+} from "./org-ancestry";
 import { SectorFilter } from "./sector-filter";
 
 type Org = NonNullable<RouterOutputs["org"]["all"]>["orgs"][number];
 
+interface OrgFilterState {
+  selectedAreas: Org[];
+  selectedSectors: Org[];
+}
+
+type OrgFilterAction =
+  | {
+      type: "toggle-sector";
+      sector: Org;
+      orgById: ReadonlyMap<number, Org>;
+    }
+  | { type: "toggle-area"; area: Org }
+  | { type: "reset" };
+
+const initialOrgFilterState: OrgFilterState = {
+  selectedAreas: [],
+  selectedSectors: [],
+};
+
+const orgFilterReducer = (
+  state: OrgFilterState,
+  action: OrgFilterAction,
+): OrgFilterState => {
+  if (action.type === "reset") return initialOrgFilterState;
+
+  if (action.type === "toggle-area") {
+    const isSelected = isOrgSelected(state.selectedAreas, action.area);
+    return {
+      ...state,
+      selectedAreas: isSelected
+        ? state.selectedAreas.filter((area) => area.id !== action.area.id)
+        : [...state.selectedAreas, action.area],
+    };
+  }
+
+  const isSelected = isOrgSelected(state.selectedSectors, action.sector);
+  const selectedSectors = isSelected
+    ? state.selectedSectors.filter((sector) => sector.id !== action.sector.id)
+    : [...state.selectedSectors, action.sector];
+  const selectedSectorIds = new Set(selectedSectors.map((sector) => sector.id));
+
+  return {
+    selectedSectors,
+    selectedAreas:
+      selectedSectorIds.size === 0
+        ? state.selectedAreas
+        : state.selectedAreas.filter((area) =>
+            isDescendantOfAny(area, selectedSectorIds, action.orgById),
+          ),
+  };
+};
+
 export const RegionsTable = () => {
   const { pagination, setPagination } = usePagination();
-  const [selectedSectors, setSelectedSectors] = useState<Org[]>([]);
-  const [selectedAreas, setSelectedAreas] = useState<Org[]>([]);
+  const [{ selectedAreas, selectedSectors }, dispatchOrgFilter] = useReducer(
+    orgFilterReducer,
+    initialOrgFilterState,
+  );
   const [selectedStatuses, setSelectedStatuses] = useState<IsActiveStatus[]>([
     "active",
   ]);
   const [searchTerm, setSearchTerm] = useState("");
   const [onlyMine, setOnlyMine] = useState(true);
 
-  const { data: sectorsData } = useQuery(
+  const { data: hierarchyData } = useQuery(
     orpc.org.all.queryOptions({
       input: {
-        orgTypes: ["sector"],
+        // This must remain complete: a truncated hierarchy can make valid
+        // descendants disappear. Fetch only areas and their possible ancestors.
+        orgTypes: AdminHierarchyOrgTypes,
+        statuses: IsActiveStatus,
       },
     }),
   );
 
-  const { data: areasData } = useQuery(
-    orpc.org.all.queryOptions({
-      input: {
-        orgTypes: ["area"],
-      },
-    }),
+  const hierarchyOrgs = hierarchyData?.orgs;
+  const sectors = useMemo(
+    () =>
+      hierarchyOrgs?.filter((org) => org.orgType === "sector" && org.isActive),
+    [hierarchyOrgs],
   );
-
-  const sectors = sectorsData?.orgs;
-  const areas = areasData?.orgs;
+  const areas = useMemo(
+    () =>
+      hierarchyOrgs?.filter((org) => org.orgType === "area" && org.isActive),
+    [hierarchyOrgs],
+  );
+  const orgById = useMemo(
+    () => getOrgById(hierarchyOrgs ?? []),
+    [hierarchyOrgs],
+  );
+  const selectedSectorIds = useMemo(
+    () => new Set(selectedSectors.map((sector) => sector.id)),
+    [selectedSectors],
+  );
+  const availableAreas = useMemo(() => {
+    if (selectedSectorIds.size === 0) return areas;
+    return areas?.filter((area) =>
+      isDescendantOfAny(area, selectedSectorIds, orgById),
+    );
+  }, [areas, orgById, selectedSectorIds]);
 
   // Compute parentOrgIds for filtering regions
   // If specific areas are selected, use those
-  // If only sectors are selected, use all areas belonging to those sectors
+  // Otherwise, use every area descended from the selected sectors
   const parentOrgIds = useMemo(() => {
-    if (selectedAreas.length > 0) {
-      return selectedAreas.map((area) => area.id);
-    }
-    if (selectedSectors.length > 0 && areas) {
-      const selectedSectorIds = selectedSectors.map((s) => s.id);
-      return areas
-        .filter(
-          (area) => area.parentId && selectedSectorIds.includes(area.parentId),
-        )
-        .map((area) => area.id);
-    }
-    return [];
-  }, [selectedAreas, selectedSectors, areas]);
+    return getParentOrgIdsForFilter(
+      selectedAreas.map((area) => area.id),
+      selectedSectors.length > 0,
+      availableAreas?.map((area) => area.id),
+    );
+  }, [availableAreas, selectedAreas, selectedSectors]);
 
   const { data: regionsData } = useQuery(
     orpc.org.all.queryOptions({
@@ -82,84 +155,47 @@ export const RegionsTable = () => {
         statuses: selectedStatuses,
         searchTerm: searchTerm || undefined,
         onlyMine: onlyMine || undefined,
-        parentOrgIds: parentOrgIds.length > 0 ? parentOrgIds : undefined,
+        parentOrgIds,
       },
     }),
   );
 
   const regions = regionsData?.orgs;
 
-  // Filter selected areas when sectors change
-  // Only depend on selectedSectors to avoid infinite loops
-  // Access areas from closure - it's stable due to useMemo above
-  useEffect(() => {
-    if (!areas?.length) return;
-    const selectedSectorsIds = selectedSectors.map((sector) => sector.id);
-    setSelectedAreas((selectedAreas) =>
-      selectedAreas.filter(
-        (area) =>
-          !selectedSectorsIds.length ||
-          (!!area.parentId && selectedSectorsIds.includes(area.parentId)),
-      ),
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSectors]); // Only depend on selectedSectors - areas is stable via useMemo
-
-  const idToAreaMap = useMemo(() => {
-    return areas?.reduce<Record<number, Org>>((acc, area) => {
-      acc[area.id] = area;
-      return acc;
-    }, {});
-  }, [areas]);
-
-  const idToSectorMap = useMemo(() => {
-    return sectors?.reduce<Record<number, Org>>((acc, sector) => {
-      acc[sector.id] = sector;
-      return acc;
-    }, {});
-  }, [sectors]);
-
   const regionsWithNames = useMemo(() => {
     return regions?.map((region) => {
-      const area = region.parentId ? idToAreaMap?.[region.parentId] : null;
-      const sector = area?.parentId ? idToSectorMap?.[area.parentId] : null;
+      // Resolve display names through the full ancestor chain rather than the
+      // active-area list: a region under a deactivated area still has one.
+      const area = findAncestorByType(region, "area", orgById);
+      const sector = area
+        ? findAncestorByType(area, "sector", orgById)
+        : undefined;
       return {
         ...region,
         sector: sector?.name,
         area: area?.name,
       };
     });
-  }, [regions, idToAreaMap, idToSectorMap]);
+  }, [regions, orgById]);
 
   const handleSectorSelect = useCallback(
     (sector: Org) => {
-      setSelectedSectors((prev) => {
-        if (prev.includes(sector)) {
-          return prev.filter((s) => s !== sector);
-        }
-        return [...prev, sector];
-      });
+      dispatchOrgFilter({ type: "toggle-sector", sector, orgById });
       setPagination((prev) => ({ ...prev, pageIndex: 0 }));
     },
-    [setPagination],
+    [orgById, setPagination],
   );
 
   const handleAreaSelect = useCallback(
     (area: Org) => {
-      setSelectedAreas((prev) => {
-        if (prev.includes(area)) {
-          return prev.filter((a) => a !== area);
-        }
-        return [...prev, area];
-      });
+      dispatchOrgFilter({ type: "toggle-area", area });
       setPagination((prev) => ({ ...prev, pageIndex: 0 }));
     },
     [setPagination],
   );
 
   const handleResetFilters = useCallback(() => {
-    setSelectedSectors([]);
-    setSelectedAreas([]);
+    dispatchOrgFilter({ type: "reset" });
     setSelectedStatuses(["active"]);
     setOnlyMine(true);
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));
@@ -201,11 +237,12 @@ export const RegionsTable = () => {
             <SectorFilter
               onSectorSelect={handleSectorSelect}
               selectedSectors={selectedSectors}
+              sectors={sectors}
             />
             <AreaFilter
-              selectedSectors={selectedSectors}
               onAreaSelect={handleAreaSelect}
               selectedAreas={selectedAreas}
+              areas={availableAreas}
             />
             <ResetFilter onClick={handleResetFilters} />
           </div>
@@ -231,14 +268,15 @@ export const RegionsTable = () => {
               <SectorFilter
                 onSectorSelect={handleSectorSelect}
                 selectedSectors={selectedSectors}
+                sectors={sectors}
               />
             </div>
             <div>
               <p className="mb-1 text-sm font-medium">Area</p>
               <AreaFilter
-                selectedSectors={selectedSectors}
                 onAreaSelect={handleAreaSelect}
                 selectedAreas={selectedAreas}
+                areas={availableAreas}
               />
             </div>
           </MobileFilterSheet>
