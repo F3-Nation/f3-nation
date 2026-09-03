@@ -1,16 +1,20 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { readLevelFromUrl, readOrgIdFromUrl, writeUrlState } from "./url-state";
 
+const originalReplaceState = window.history.replaceState.bind(window.history);
+
 function setSearch(qs: string) {
-  Object.defineProperty(window, "location", {
-    writable: true,
-    value: { search: qs, href: `http://localhost/${qs}` },
-  });
+  originalReplaceState(null, "", qs || "./");
 }
 
 beforeEach(() => {
   setSearch("");
+  window.history.replaceState = originalReplaceState;
+});
+
+afterEach(() => {
+  window.history.replaceState = originalReplaceState;
 });
 
 describe("readLevelFromUrl", () => {
