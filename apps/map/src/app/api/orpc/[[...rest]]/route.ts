@@ -1,9 +1,51 @@
+import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 import { API_PREFIX_V1 } from "@acme/shared/app/constants";
 import { Client, Header } from "@acme/shared/common/enums";
 
 const PROXY_PREFIX = "/api/orpc";
+
+// Anonymous reads the map's own browse-and-search experience needs — see
+// specs/map-browse-and-search.md AC-1. The map API key is attached to these.
+const ANONYMOUS_READ_PATHS = new Set([
+  "/v1/ping",
+  "/v1/map/location/eventsAndLocations",
+  "/v1/map/location/getAOsInRegion",
+  "/v1/map/location/locationIdToRegionNameLookup",
+  "/v1/map/location/locationWorkout",
+  "/v1/map/location/regionsWithLocation",
+  "/v1/map/location/workoutCount",
+  "/v1/map/submitFeedback",
+  "/v1/event/all",
+  "/v1/event/byId",
+  "/v1/event/eventIdToRegionNameLookup",
+  "/v1/eventType/all",
+  "/v1/location/all",
+  "/v1/org/all",
+  "/v1/org/byId",
+]);
+
+// Signed-in-only paths the map calls — see specs/map-update-request-flow.md
+// AC-1. Forwarded with the caller's own cookie, never the map API key, so an
+// anonymous caller gets UNAUTHORIZED from the API itself.
+const SIGNED_IN_ONLY_PATHS = new Set([
+  "/v1/request/canEditRegions",
+  "/v1/request/all",
+  "/v1/request/rejectSubmission",
+  "/v1/request/submitCreateAOAndLocationAndEventRequest",
+  "/v1/request/submitCreateEventRequest",
+  "/v1/request/submitDeleteAORequest",
+  "/v1/request/submitDeleteEventRequest",
+  "/v1/request/submitEditAOAndLocationRequest",
+  "/v1/request/submitEditEventRequest",
+  "/v1/request/submitMoveAOToDifferentLocationRequest",
+  "/v1/request/submitMoveAOToDifferentRegionRequest",
+  "/v1/request/submitMoveAOToNewLocationRequest",
+  "/v1/request/submitMoveEventToDifferentAoRequest",
+  "/v1/request/submitMoveEventToNewAoRequest",
+  "/v1/request/submitMoveEventToNewLocationRequest",
+]);
 
 function getApiBaseUrl(): string {
   const baseUrl = process.env.F3_API_BASE_URL;
@@ -15,17 +57,22 @@ function getApiBaseUrl(): string {
     : normalized;
 }
 
-function getTargetUrl(request: NextRequest): URL {
+function getProxiedPath(request: NextRequest): string {
   const sourceUrl = new URL(request.url);
-  const proxiedPath = sourceUrl.pathname.slice(PROXY_PREFIX.length);
-  const targetUrl = new URL(
-    `${getApiBaseUrl()}${proxiedPath || API_PREFIX_V1}`,
-  );
+  return sourceUrl.pathname.slice(PROXY_PREFIX.length) || API_PREFIX_V1;
+}
+
+function getTargetUrl(request: NextRequest, proxiedPath: string): URL {
+  const sourceUrl = new URL(request.url);
+  const targetUrl = new URL(`${getApiBaseUrl()}${proxiedPath}`);
   targetUrl.search = sourceUrl.search;
   return targetUrl;
 }
 
-function getForwardedHeaders(request: NextRequest): Headers {
+function getForwardedHeaders(
+  request: NextRequest,
+  attachMapApiKey: boolean,
+): Headers {
   const headers = new Headers(request.headers);
   headers.delete("host");
   headers.delete("content-length");
@@ -34,7 +81,7 @@ function getForwardedHeaders(request: NextRequest): Headers {
   headers.set(Header.Client, Client.ORPC);
 
   const mapApiKey = process.env.F3_MAP_API_KEY;
-  if (mapApiKey) {
+  if (attachMapApiKey && mapApiKey) {
     headers.set(Header.Authorization, `Bearer ${mapApiKey}`);
   }
 
@@ -42,13 +89,21 @@ function getForwardedHeaders(request: NextRequest): Headers {
 }
 
 async function proxyRequest(request: NextRequest) {
+  const proxiedPath = getProxiedPath(request);
+
+  const isAnonymousRead = ANONYMOUS_READ_PATHS.has(proxiedPath);
+  const isSignedInOnly = SIGNED_IN_ONLY_PATHS.has(proxiedPath);
+  if (!isAnonymousRead && !isSignedInOnly) {
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
+
   const method = request.method.toUpperCase();
   const hasBody = method !== "GET" && method !== "HEAD";
   const body = hasBody ? await request.arrayBuffer() : undefined;
 
-  return fetch(getTargetUrl(request), {
+  return fetch(getTargetUrl(request, proxiedPath), {
     method,
-    headers: getForwardedHeaders(request),
+    headers: getForwardedHeaders(request, isAnonymousRead),
     body,
   });
 }
