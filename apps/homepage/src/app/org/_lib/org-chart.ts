@@ -9,7 +9,8 @@ import type { Org, OrgChartItem, OrgMetrics, Point } from "./types";
  * update there; every loop, rank lookup, and level button here adapts
  * automatically.
  */
-export const ORG_TYPE_ORDER: readonly OrgType[] = ORG_TYPES;
+// Not exported — consumers derive what they need from LAYER_TYPES/orgTypeRank.
+const ORG_TYPE_ORDER: readonly OrgType[] = ORG_TYPES;
 
 /** Types shown as navigable map layers (everything between AO and Nation). */
 export const LAYER_TYPES: OrgType[] = ORG_TYPE_ORDER.filter(
