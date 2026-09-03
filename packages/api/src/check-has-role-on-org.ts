@@ -1,9 +1,10 @@
 import type { Session } from "@acme/auth";
 import type { UserRole } from "@acme/shared/app/enums";
-import { aliasedTable, eq, schema } from "@acme/db";
+import { schema, sql } from "@acme/db";
 import type { Context } from "./shared";
 
-import { logDebug } from "./logger";
+import { logDebug, logError } from "./logger";
+import { ORG_TREE_MAX_DEPTH } from "./org-tree";
 
 export const checkHasRoleOnOrg = async ({
   session,
@@ -49,43 +50,51 @@ export const checkHasRoleOnOrg = async ({
       mode: "direct-permission",
     };
 
-  // Next, see if the user has a role for an org that is a parent or ancestor of the org in question
-  // Assume the org is an AO and trace up the hierarchy
-  const level1Org = aliasedTable(schema.orgs, "level_1_org"); // AO
-  const level2Org = aliasedTable(schema.orgs, "level_2_org"); // Region
-  const level3Org = aliasedTable(schema.orgs, "level_3_org"); // Sector
-  const level4Org = aliasedTable(schema.orgs, "level_4_org"); // Area
-  const level5Org = aliasedTable(schema.orgs, "level_5_org"); // Nation
+  const ancestors = await db.execute<{
+    id: number;
+    min_depth: number;
+  }>(sql`
+    WITH RECURSIVE ancestors(id, parent_id, depth, path) AS (
+      SELECT
+        ${schema.orgs.id},
+        ${schema.orgs.parentId},
+        0,
+        ARRAY[${schema.orgs.id}]
+      FROM ${schema.orgs}
+      WHERE ${schema.orgs.id} = ${orgId}
 
-  // TS6.0: aliasedTable complex conditional types require explicit annotation
-  const allParentOrgIds = (await db
-    .select({
-      level1Id: level1Org.id,
-      level2Id: level2Org.id,
-      level3Id: level3Org.id,
-      level4Id: level4Org.id,
-      level5Id: level5Org.id,
-    })
-    .from(level1Org)
-    .leftJoin(level2Org, eq(level1Org.parentId, level2Org.id))
-    .leftJoin(level3Org, eq(level2Org.parentId, level3Org.id))
-    .leftJoin(level4Org, eq(level3Org.parentId, level4Org.id))
-    .leftJoin(level5Org, eq(level4Org.parentId, level5Org.id))
-    .where(eq(level1Org.id, orgId))) as {
-    level1Id: number;
-    level2Id: number | null;
-    level3Id: number | null;
-    level4Id: number | null;
-    level5Id: number | null;
-  }[];
+      UNION ALL
 
-  const allAncestorOrgIds = allParentOrgIds.flatMap((o) => [
-    o.level1Id,
-    o.level2Id,
-    o.level3Id,
-    o.level4Id,
-    o.level5Id,
-  ]) as number[];
+      SELECT
+        parent.${sql.identifier(schema.orgs.id.name)},
+        parent.${sql.identifier(schema.orgs.parentId.name)},
+        ancestors.depth + 1,
+        ancestors.path || parent.${sql.identifier(schema.orgs.id.name)}
+      FROM ${schema.orgs} AS parent
+      INNER JOIN ancestors
+        ON parent.${sql.identifier(schema.orgs.id.name)} = ancestors.parent_id
+      WHERE ancestors.depth <= ${ORG_TREE_MAX_DEPTH}
+        AND NOT parent.${sql.identifier(schema.orgs.id.name)} = ANY(ancestors.path)
+    )
+    SELECT
+      id,
+      min(depth)::integer AS min_depth
+    FROM ancestors
+    GROUP BY id
+  `);
+
+  if (ancestors.some((org) => org.min_depth > ORG_TREE_MAX_DEPTH)) {
+    logError("api.org_tree.depth_limit_reached", {
+      direction: "ancestors",
+      maxDepth: ORG_TREE_MAX_DEPTH,
+      rootCount: 1,
+      source: "role_check",
+    });
+  }
+
+  const allAncestorOrgIds = ancestors
+    .filter((org) => org.min_depth <= ORG_TREE_MAX_DEPTH)
+    .map((org) => org.id);
 
   const matchingPermission = session.roles?.find(
     (r) =>
