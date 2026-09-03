@@ -531,11 +531,23 @@ export default function OrgMap() {
       .filter((o) => o.id !== org.id && o.orgType !== "nation")
       .reverse(); // nearest first
 
-    // Walk cached ancestors for any with admin roles
-    for (const ancestor of ancestors) {
-      const cached = orgInfoCacheRef.current.get(ancestor.id);
-      if (cached) {
-        const admins = cached.roles.filter((r) =>
+    async function climb() {
+      for (const ancestor of ancestors) {
+        if (cancelled) return;
+
+        let detail = orgInfoCacheRef.current.get(ancestor.id);
+        if (!detail) {
+          try {
+            detail = await fetchOrgById(ancestor.id);
+            if (!cancelled) orgInfoCacheRef.current.set(ancestor.id, detail);
+          } catch {
+            continue; // fetch failed — try the next ancestor
+          }
+        }
+
+        if (cancelled) return;
+
+        const admins = detail.roles.filter((r) =>
           r.title.toLowerCase().includes("admin"),
         );
         if (admins.length > 0) {
@@ -546,38 +558,13 @@ export default function OrgMap() {
           });
           return;
         }
+        // No admins here — keep climbing
       }
+
+      if (!cancelled) setNearestAdminOrg(null);
     }
 
-    // Fetch the nearest uncached ancestor
-    const target =
-      ancestors.find((a) => !orgInfoCacheRef.current.has(a.id)) ?? ancestors[0];
-    if (!target) {
-      setNearestAdminOrg(null);
-      return;
-    }
-
-    fetchOrgById(target.id)
-      .then((d) => {
-        if (cancelled) return;
-        orgInfoCacheRef.current.set(target.id, d);
-        const admins = d.roles.filter((r) =>
-          r.title.toLowerCase().includes("admin"),
-        );
-        setNearestAdminOrg({
-          name: target.name,
-          orgType: target.orgType,
-          adminNames: admins.map((a) => a.f3Name ?? "Unknown"),
-        });
-      })
-      .catch(() => {
-        if (!cancelled)
-          setNearestAdminOrg({
-            name: target.name,
-            orgType: target.orgType,
-            adminNames: [],
-          });
-      });
+    void climb();
 
     return () => {
       cancelled = true;
