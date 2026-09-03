@@ -23,7 +23,7 @@ export function SearchBox({ onSelect, getResults, disabled }: SearchBoxProps) {
     }
     const hits = getResults(query);
     setResults(hits);
-    setOpen(hits.length > 0);
+    setOpen(true);
   }, [query, getResults]);
 
   useEffect(() => {
@@ -69,7 +69,7 @@ export function SearchBox({ onSelect, getResults, disabled }: SearchBoxProps) {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={handleKeyDown}
-        onFocus={() => query.trim() && setOpen(results.length > 0)}
+        onFocus={() => query.trim() && setOpen(true)}
         placeholder="Sectors, areas, regions…"
         disabled={disabled}
         autoComplete="off"

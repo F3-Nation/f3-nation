@@ -179,4 +179,29 @@ describe("polygonAreaSqMi", () => {
     ];
     expect(polygonAreaSqMi(large)).toBeGreaterThan(polygonAreaSqMi(small));
   });
+
+  it("normalizes longitude delta > 180 (antimeridian crossing)", () => {
+    // Edge from lng=-179.9 to lng=179.9: raw delta = 359.8, normalized = -0.2
+    // Without normalization the area would be astronomically large.
+    const pts: Point[] = [
+      { lat: 10, lng: -179.9 },
+      { lat: 10, lng: 179.9 },
+      { lat: 10.1, lng: 179.9 },
+    ];
+    const area = polygonAreaSqMi(pts);
+    expect(area).toBeGreaterThan(0);
+    expect(area).toBeLessThan(1_000); // small triangle ≈ single-digit sq mi
+  });
+
+  it("normalizes longitude delta < -180 (antimeridian crossing reversed)", () => {
+    // Edge from lng=179.9 to lng=-179.9: raw delta = -359.8, normalized = 0.2
+    const pts: Point[] = [
+      { lat: 10, lng: 179.9 },
+      { lat: 10, lng: -179.9 },
+      { lat: 10.1, lng: -179.9 },
+    ];
+    const area = polygonAreaSqMi(pts);
+    expect(area).toBeGreaterThan(0);
+    expect(area).toBeLessThan(1_000);
+  });
 });

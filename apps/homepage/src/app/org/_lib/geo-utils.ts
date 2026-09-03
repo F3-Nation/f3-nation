@@ -104,9 +104,15 @@ export function polygonAreaSqMi(points: Point[]): number {
   for (let i = 0; i < n; i++) {
     const p1 = points[i]!;
     const p2 = points[(i + 1) % n]!;
+    const rawDelta = p2.lng - p1.lng;
+    const deltaLng =
+      rawDelta > 180
+        ? rawDelta - 360
+        : rawDelta < -180
+          ? rawDelta + 360
+          : rawDelta;
     area +=
-      toRad(p2.lng - p1.lng) *
-      (2 + Math.sin(toRad(p1.lat)) + Math.sin(toRad(p2.lat)));
+      toRad(deltaLng) * (2 + Math.sin(toRad(p1.lat)) + Math.sin(toRad(p2.lat)));
   }
   return Math.abs((area * R * R) / 2);
 }

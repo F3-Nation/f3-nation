@@ -32,8 +32,8 @@ export function readOrgIdFromUrl(): number | null {
   if (typeof window === "undefined") return null;
   const param = new URLSearchParams(window.location.search).get("org");
   if (!param) return null;
-  const id = parseInt(param, 10);
-  return Number.isFinite(id) ? id : null;
+  const id = Number(param);
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
 }
 
 export function writeUrlState(level: OrgType, orgId: number | null): void {

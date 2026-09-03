@@ -13,14 +13,21 @@ const ORG_MAP_CLIENT = "https://apps.f3nation.com";
 
 async function orgMapFetch<T>(path: string): Promise<T> {
   const url = `${getApiBase()}/v1${path}`;
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${ORG_MAP_API_KEY}`,
-      client: ORG_MAP_CLIENT,
-    },
-  });
-  if (!res.ok) throw new Error(`API ${res.status}: ${path}`);
-  return res.json() as Promise<T>;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${ORG_MAP_API_KEY}`,
+        client: ORG_MAP_CLIENT,
+      },
+    });
+    if (!res.ok) throw new Error(`API ${res.status}: ${path}`);
+    return (await res.json()) as T;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export async function fetchOrgChart(): Promise<OrgChartItem[]> {
