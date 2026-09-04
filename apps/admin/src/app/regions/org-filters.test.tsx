@@ -145,7 +145,13 @@ vi.mock("./area-filter", () => ({
 vi.mock("../_components/mobile-filter-sheet", () => ({
   MobileFilterSheet: () => null,
 }));
-vi.mock("../_components/reset-filter", () => ({ ResetFilter: () => null }));
+vi.mock("../_components/reset-filter", () => ({
+  ResetFilter: ({ onClick }: { onClick: () => void }) => (
+    <button data-testid="reset-filters" onClick={onClick}>
+      Reset
+    </button>
+  ),
+}));
 vi.mock("../_components/status-filter", () => ({ StatusFilter: () => null }));
 vi.mock("~/utils/store/modal", () => ({
   DeleteType: { REGION: "region", AREA: "area" },
@@ -328,6 +334,26 @@ describe("depth-agnostic admin organization filters", () => {
     fireEvent.click(screen.getByTestId(`area-${nestedArea.id}`));
 
     expect(latestResultQuery()?.parentOrgIds).toEqual([nestedArea.id]);
+  });
+
+  it("retains directly selected areas when the last sector is deselected", () => {
+    render(<RegionsTable />);
+
+    fireEvent.click(screen.getByTestId(`sector-${sectorOne.id}`));
+    fireEvent.click(screen.getByTestId(`area-${nestedArea.id}`));
+    fireEvent.click(screen.getByTestId(`sector-${sectorOne.id}`));
+
+    expect(latestResultQuery()?.parentOrgIds).toEqual([nestedArea.id]);
+  });
+
+  it("resets sector and area selections together", () => {
+    render(<RegionsTable />);
+
+    fireEvent.click(screen.getByTestId(`sector-${sectorOne.id}`));
+    fireEvent.click(screen.getByTestId(`area-${nestedArea.id}`));
+    fireEvent.click(screen.getByTestId("reset-filters"));
+
+    expect(latestResultQuery()?.parentOrgIds).toBeUndefined();
   });
 
   it("prunes selected areas when their sector is deselected", () => {
