@@ -102,7 +102,10 @@ async function proxyRequest(request: NextRequest) {
   const usesMapKey = MAP_KEY_PATHS.has(proxiedPath);
   const isSignedInOnly = SIGNED_IN_ONLY_PATHS.has(proxiedPath);
   if (!usesMapKey && !isSignedInOnly) {
-    logWarn("map.orpc_proxy.path_not_allowed", { path: proxiedPath });
+    // proxiedPath is unvalidated caller input precisely because it didn't
+    // match either allowlist — don't let it land in logs as if it were a
+    // trusted server-defined value.
+    logWarn("map.orpc_proxy.path_not_allowed");
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
