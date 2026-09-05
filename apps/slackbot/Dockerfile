@@ -18,6 +18,7 @@ RUN groupadd --gid 1000 slackbot && \
 # Copy source files owned by slackbot (BuildKit --chown is valid on COPY)
 COPY --chown=slackbot:slackbot pyproject.toml uv.lock ./
 COPY --chown=slackbot:slackbot packages/db-python ./packages/db-python
+COPY --chown=slackbot:slackbot apps/analytics/pyproject.toml apps/analytics/README.md ./apps/analytics/
 COPY --chown=slackbot:slackbot apps/slackbot ./apps/slackbot
 
 # uv sync runs as root (build-time); fix venv ownership afterward.

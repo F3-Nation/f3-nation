@@ -14,6 +14,26 @@ on:
         description: "Cloud Run Job name"
         required: true
         type: string
+      staging_job_name:
+        description: "Optional staging Cloud Run Job name"
+        required: false
+        type: string
+        default: ""
+      prod_job_name:
+        description: "Optional production Cloud Run Job name"
+        required: false
+        type: string
+        default: ""
+      staging_runtime_service_account:
+        description: "Optional staging runtime service account"
+        required: false
+        type: string
+        default: ""
+      prod_runtime_service_account:
+        description: "Optional production runtime service account"
+        required: false
+        type: string
+        default: ""
       staging_project:
         description: "GCP project ID for staging"
         required: true
@@ -112,6 +132,7 @@ jobs:
     outputs:
       image: ${{ steps.meta.outputs.image }}
       version: ${{ steps.meta.outputs.version }}
+      digest: ${{ steps.digest.outputs.digest }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1.0.1
         with:
@@ -160,6 +181,16 @@ jobs:
             "${BUILD_CONTEXT}"
           docker push "${{ steps.meta.outputs.image }}"
 
+      - name: Resolve immutable image digest
+        id: digest
+        env:
+          IMAGE: ${{ steps.meta.outputs.image }}
+          PROJECT_ID: ${{ inputs.staging_project }}
+        run: |
+          DIGEST="$(gcloud artifacts docker images describe "${IMAGE}" --project "${PROJECT_ID}" --format='value(image_summary.digest)')"
+          test -n "${DIGEST}"
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+
   deploy-staging:
     needs: build
     runs-on: ubuntu-latest
@@ -180,17 +211,22 @@ jobs:
 
       - name: Deploy Cloud Run Job (staging)
         env:
-          JOB_NAME: ${{ inputs.job_name }}
-          IMAGE: ${{ needs.build.outputs.image }}
+          JOB_NAME: ${{ inputs.staging_job_name || inputs.job_name }}
+          IMAGE: ${{ needs.build.outputs.image }}@${{ needs.build.outputs.digest }}
           REGION: ${{ inputs.region }}
           PROJECT_ID: ${{ inputs.staging_project }}
           FLAGS: ${{ inputs.staging_flags || inputs.flags }}
+          RUNTIME_SERVICE_ACCOUNT: ${{ inputs.staging_runtime_service_account }}
         run: |
           if [[ -n "${FLAGS}" ]]; then
             # shellcheck disable=SC2206
             extra_flags=(${FLAGS})
           else
             extra_flags=()
+          fi
+
+          if [[ -n "${RUNTIME_SERVICE_ACCOUNT}" ]]; then
+            extra_flags+=("--service-account=${RUNTIME_SERVICE_ACCOUNT}")
           fi
 
           gcloud run jobs deploy "${JOB_NAME}" \
@@ -251,28 +287,40 @@ jobs:
           PROD_PROJECT: ${{ inputs.prod_project }}
           AR_REPO: ${{ inputs.ar_repo }}
           IMAGE_NAME: ${{ inputs.image_name }}
+          VERSION: ${{ needs.build.outputs.version }}
         run: |
-          STAGING_IMAGE="${{ needs.build.outputs.image }}"
-          PROD_IMAGE="${REGION}-docker.pkg.dev/${PROD_PROJECT}/${AR_REPO}/${IMAGE_NAME}:${STAGING_IMAGE##*:}"
-          gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
-          docker pull "${STAGING_IMAGE}"
-          docker tag "${STAGING_IMAGE}" "${PROD_IMAGE}"
-          docker push "${PROD_IMAGE}"
-          echo "prod_image=${PROD_IMAGE}" >> "$GITHUB_ENV"
+          STAGING_IMAGE="${{ needs.build.outputs.image }}@${{ needs.build.outputs.digest }}"
+          PROD_IMAGE="${REGION}-docker.pkg.dev/${PROD_PROJECT}/${AR_REPO}/${IMAGE_NAME}:${VERSION}"
+          if [[ "${PROD_PROJECT}" == "${{ inputs.staging_project }}" ]]; then
+            echo "prod_image=${STAGING_IMAGE}" >> "$GITHUB_ENV"
+          else
+            gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+            docker pull "${STAGING_IMAGE}"
+            docker tag "${STAGING_IMAGE}" "${PROD_IMAGE}"
+            docker push "${PROD_IMAGE}"
+            PROD_DIGEST="$(gcloud artifacts docker images describe "${PROD_IMAGE}" --project "${PROD_PROJECT}" --format='value(image_summary.digest)')"
+            test -n "${PROD_DIGEST}"
+            echo "prod_image=${PROD_IMAGE}@${PROD_DIGEST}" >> "$GITHUB_ENV"
+          fi
 
       - name: Deploy Cloud Run Job (prod)
         env:
-          JOB_NAME: ${{ inputs.job_name }}
+          JOB_NAME: ${{ inputs.prod_job_name || inputs.job_name }}
           IMAGE: ${{ env.prod_image }}
           REGION: ${{ inputs.region }}
           PROJECT_ID: ${{ inputs.prod_project }}
           FLAGS: ${{ inputs.prod_flags || inputs.flags }}
+          RUNTIME_SERVICE_ACCOUNT: ${{ inputs.prod_runtime_service_account }}
         run: |
           if [[ -n "${FLAGS}" ]]; then
             # shellcheck disable=SC2206
             extra_flags=(${FLAGS})
           else
             extra_flags=()
+          fi
+
+          if [[ -n "${RUNTIME_SERVICE_ACCOUNT}" ]]; then
+            extra_flags+=("--service-account=${RUNTIME_SERVICE_ACCOUNT}")
           fi
 
           gcloud run jobs deploy "${JOB_NAME}" \

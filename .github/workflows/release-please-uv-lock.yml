@@ -10,6 +10,7 @@ on:
       - reopened
     paths:
       - apps/slackbot/pyproject.toml
+      - apps/analytics/pyproject.toml
 
 concurrency:
   group: uv-lock-${{ github.event.pull_request.number }}
