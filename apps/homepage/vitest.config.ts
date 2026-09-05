@@ -15,13 +15,21 @@ export default defineConfig({
       reporter: ["text", "json", "html"],
       reportsDirectory: "./coverage",
       include: coverageInclude,
-      exclude: coverageExclude,
+      exclude: [
+        ...coverageExclude,
+        // Browser-only Leaflet map component — requires full DOM + Leaflet APIs,
+        // not testable in Node. Covered by E2E tests instead.
+        "**/org-map.tsx",
+        "**/org-map-loader.tsx",
+        // Pure TypeScript type declarations — no executable runtime code.
+        "**/org/_lib/types.ts",
+      ],
       thresholds: {
         autoUpdate: true,
-        statements: 61.53,
-        branches: 63.88,
-        functions: 60,
-        lines: 64.7,
+        statements: 75.66,
+        branches: 75,
+        functions: 66.66,
+        lines: 76.33,
       },
     },
   },
