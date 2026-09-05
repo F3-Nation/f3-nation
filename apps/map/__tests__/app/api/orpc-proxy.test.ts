@@ -238,6 +238,34 @@ describe("oRPC proxy route", () => {
     expect(url.pathname).toBe("/v1/map/location/workoutCount");
   });
 
+  it("sets Cache-Control: no-store on a signed-in-only response", async () => {
+    const { POST } =
+      await import("../../../src/app/api/orpc/[[...rest]]/route");
+
+    const request = new NextRequest(
+      "http://localhost:3000/api/orpc/v1/request/canEditRegions",
+      {
+        method: "POST",
+        body: JSON.stringify({}),
+        headers: { cookie: "authjs.session-token=abc" },
+      },
+    );
+
+    const response = await POST(request);
+
+    expect(response.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("does not force Cache-Control on a map-key response", async () => {
+    const { GET } = await import("../../../src/app/api/orpc/[[...rest]]/route");
+
+    const request = new NextRequest("http://localhost:3000/api/orpc/v1/ping");
+
+    const response = await GET(request);
+
+    expect(response.headers.has("cache-control")).toBe(false);
+  });
+
   it("drops crafted Authorization header when F3_MAP_API_KEY is unset", async () => {
     vi.stubEnv("F3_MAP_API_KEY", "");
 

@@ -110,10 +110,23 @@ async function proxyRequest(request: NextRequest) {
   const hasBody = method !== "GET" && method !== "HEAD";
   const body = hasBody ? await request.arrayBuffer() : undefined;
 
-  return fetch(getTargetUrl(request, proxiedPath), {
+  const upstreamResponse = await fetch(getTargetUrl(request, proxiedPath), {
     method,
     headers: getForwardedHeaders(request, usesMapKey),
     body,
+  });
+
+  if (!isSignedInOnly) return upstreamResponse;
+
+  // These responses can carry PII scoped to the caller's own session
+  // (see SIGNED_IN_ONLY_PATHS above) — never let a shared browser cache or
+  // intermediate proxy retain a copy for the next visitor on this device.
+  const headers = new Headers(upstreamResponse.headers);
+  headers.set("Cache-Control", "no-store");
+  return new Response(upstreamResponse.body, {
+    status: upstreamResponse.status,
+    statusText: upstreamResponse.statusText,
+    headers,
   });
 }
 
