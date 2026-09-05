@@ -4,36 +4,36 @@ import type { NextRequest } from "next/server";
 import { API_PREFIX_V1 } from "@acme/shared/app/constants";
 import { Client, Header } from "@acme/shared/common/enums";
 
+import { logWarn } from "~/lib/logging";
+
 const PROXY_PREFIX = "/api/orpc";
 
 // Paths that don't require the caller's own session token — see
 // specs/map-browse-and-search.md AC-1. Some (like ping) are truly open;
-// others (like org.byId) still need a token upstream, just not the user's —
-// so the map's own API key is attached to all of them.
-const MAP_KEY_PATHS = new Set([
+// others (like eventType.all) still need a token upstream, just not the
+// user's — so the map's own API key is attached to all of them. Every entry
+// here must be safe for a fully anonymous caller: no PII, and no data scoped
+// to "mine" without the caller's own session to define what "mine" means.
+export const MAP_KEY_PATHS = new Set([
   "/v1/ping",
   "/v1/map/location/eventsAndLocations",
-  "/v1/map/location/getAOsInRegion",
   "/v1/map/location/locationIdToRegionNameLookup",
   "/v1/map/location/locationWorkout",
   "/v1/map/location/regionsWithLocation",
   "/v1/map/location/workoutCount",
   "/v1/map/submitFeedback",
-  "/v1/event/all",
-  "/v1/event/byId",
   "/v1/event/eventIdToRegionNameLookup",
   "/v1/eventType/all",
-  "/v1/location/all",
-  "/v1/org/all",
-  "/v1/org/byId",
 ]);
 
 // Signed-in-only paths the map calls — see specs/map-update-request-flow.md
 // AC-1. Forwarded with the caller's own cookie, never the map API key, so an
-// anonymous caller gets UNAUTHORIZED from the API itself.
-const SIGNED_IN_ONLY_PATHS = new Set([
+// anonymous caller gets UNAUTHORIZED from the API itself. This also covers
+// edit-mode-only reads (org/location/event lookups used by the update forms)
+// that return PII (email, phone, address) and aren't scoped per-caller unless
+// the caller's own session says what they're allowed to see.
+export const SIGNED_IN_ONLY_PATHS = new Set([
   "/v1/request/canEditRegions",
-  "/v1/request/all",
   "/v1/request/rejectSubmission",
   "/v1/request/submitCreateAOAndLocationAndEventRequest",
   "/v1/request/submitCreateEventRequest",
@@ -47,6 +47,12 @@ const SIGNED_IN_ONLY_PATHS = new Set([
   "/v1/request/submitMoveEventToDifferentAoRequest",
   "/v1/request/submitMoveEventToNewAoRequest",
   "/v1/request/submitMoveEventToNewLocationRequest",
+  "/v1/map/location/getAOsInRegion",
+  "/v1/event/all",
+  "/v1/event/byId",
+  "/v1/location/all",
+  "/v1/org/all",
+  "/v1/org/byId",
 ]);
 
 function getApiBaseUrl(): string {
@@ -96,6 +102,7 @@ async function proxyRequest(request: NextRequest) {
   const usesMapKey = MAP_KEY_PATHS.has(proxiedPath);
   const isSignedInOnly = SIGNED_IN_ONLY_PATHS.has(proxiedPath);
   if (!usesMapKey && !isSignedInOnly) {
+    logWarn("map.orpc_proxy.path_not_allowed", { path: proxiedPath });
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 

@@ -67,13 +67,71 @@ describe("oRPC proxy route", () => {
     expect(headers.has("authorization")).toBe(false);
   });
 
-  it("rejects a path not on either allowlist without calling fetch", async () => {
+  it("strips a caller-forged Authorization header on a signed-in-only path, keeping only the cookie", async () => {
+    const { POST } =
+      await import("../../../src/app/api/orpc/[[...rest]]/route");
+
+    const request = new NextRequest(
+      "http://localhost:3000/api/orpc/v1/request/canEditRegions",
+      {
+        method: "POST",
+        body: JSON.stringify({}),
+        headers: {
+          cookie: "authjs.session-token=abc",
+          authorization: "Bearer crafted-token",
+        },
+      },
+    );
+
+    await POST(request);
+
+    const headers = fetchSpy.mock.calls[0]![1].headers as Headers;
+
+    expect(headers.has("authorization")).toBe(false);
+    expect(headers.get("cookie")).toContain("authjs.session-token");
+  });
+
+  it.each([
+    "/v1/map/location/getAOsInRegion",
+    "/v1/event/all",
+    "/v1/event/byId",
+    "/v1/location/all",
+    "/v1/org/all",
+    "/v1/org/byId",
+  ])(
+    "moved edit-mode read %s to signed-in-only, not the map key",
+    async (path) => {
+      const { POST } =
+        await import("../../../src/app/api/orpc/[[...rest]]/route");
+
+      const request = new NextRequest(`http://localhost:3000/api/orpc${path}`, {
+        method: "POST",
+        body: JSON.stringify({}),
+        headers: { cookie: "authjs.session-token=abc" },
+      });
+
+      await POST(request);
+
+      const headers = fetchSpy.mock.calls[0]![1].headers as Headers;
+      expect(headers.has("authorization")).toBe(false);
+      expect(headers.get("cookie")).toContain("authjs.session-token");
+    },
+  );
+
+  it("rejects a path not on either allowlist without calling fetch, even with real credentials attached", async () => {
     const { POST } =
       await import("../../../src/app/api/orpc/[[...rest]]/route");
 
     const request = new NextRequest(
       "http://localhost:3000/api/orpc/v1/user/byId",
-      { method: "POST", body: JSON.stringify({}) },
+      {
+        method: "POST",
+        body: JSON.stringify({}),
+        headers: {
+          cookie: "authjs.session-token=abc",
+          authorization: "Bearer crafted-token",
+        },
+      },
     );
 
     const response = await POST(request);
@@ -97,7 +155,36 @@ describe("oRPC proxy route", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it("strips host, content-length, and crafted authorization on a map-key path", async () => {
+  it.each(["/v1/User/byId", "/v1/user/byId/", "/v1//user/byId"])(
+    "rejects near-miss variant %s of an off-list path without calling fetch",
+    async (path) => {
+      const { POST } =
+        await import("../../../src/app/api/orpc/[[...rest]]/route");
+
+      const request = new NextRequest(`http://localhost:3000/api/orpc${path}`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+
+      const response = await POST(request);
+
+      expect(response.status).toBe(404);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    },
+  );
+
+  it("still matches an allowlisted path exactly as written", async () => {
+    const { GET } = await import("../../../src/app/api/orpc/[[...rest]]/route");
+
+    const request = new NextRequest("http://localhost:3000/api/orpc/v1/ping");
+
+    const response = await GET(request);
+
+    expect(response.status).not.toBe(404);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("strips host, content-length, crafted authorization, and crafted x-api-key on a map-key path", async () => {
     const { GET } = await import("../../../src/app/api/orpc/[[...rest]]/route");
 
     const request = new NextRequest("http://localhost:3000/api/orpc/v1/ping", {
@@ -105,6 +192,7 @@ describe("oRPC proxy route", () => {
         host: "localhost:3000",
         "content-length": "0",
         authorization: "Bearer crafted-token",
+        "x-api-key": "attacker-key",
       },
     });
 
@@ -114,6 +202,7 @@ describe("oRPC proxy route", () => {
 
     expect(headers.has("host")).toBe(false);
     expect(headers.has("content-length")).toBe(false);
+    expect(headers.has("x-api-key")).toBe(false);
     expect(headers.get("authorization")).toBe("Bearer test-map-key");
   });
 
@@ -165,5 +254,9 @@ describe("oRPC proxy route", () => {
     const headers = fetchSpy.mock.calls[0]![1].headers as Headers;
 
     expect(headers.has("authorization")).toBe(false);
+
+    // Restore so this test's env stub can't leak into whatever test runs
+    // next if a test is appended after this one in the file.
+    vi.stubEnv("F3_MAP_API_KEY", "test-map-key");
   });
 });
