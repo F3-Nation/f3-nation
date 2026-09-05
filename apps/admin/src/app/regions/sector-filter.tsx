@@ -13,20 +13,19 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@acme/ui/popover";
 
 import type { RouterOutputs } from "~/orpc/types";
-import { orpc, useQuery } from "~/orpc/react";
+import { isOrgSelected } from "./org-ancestry";
 
 type Sector = RouterOutputs["org"]["all"]["orgs"][number];
 
 export const SectorFilter = ({
   onSectorSelect,
   selectedSectors,
+  sectors,
 }: {
   onSectorSelect: (sector: Sector) => void;
   selectedSectors: Sector[];
+  sectors: Sector[] | undefined;
 }) => {
-  const { data: sectors } = useQuery(
-    orpc.org.all.queryOptions({ input: { orgTypes: ["sector"] } }),
-  );
   const [open, setOpen] = useState(false);
 
   return (
@@ -47,10 +46,10 @@ export const SectorFilter = ({
         </PopoverTrigger>
         <PopoverContent className="w-full p-0">
           <Command>
-            <CommandInput placeholder="Search statuses..." />
-            <CommandEmpty>No statuses found.</CommandEmpty>
+            <CommandInput placeholder="Search sectors..." />
+            <CommandEmpty>No sectors found.</CommandEmpty>
             <CommandGroup className="max-h-96 overflow-y-auto">
-              {sectors?.orgs.map((sector) => (
+              {sectors?.map((sector) => (
                 <CommandItem
                   key={sector.id}
                   value={sector.name}
@@ -61,7 +60,7 @@ export const SectorFilter = ({
                   <Check
                     className={cn(
                       "mr-2 h-4 w-4",
-                      selectedSectors.includes(sector)
+                      isOrgSelected(selectedSectors, sector)
                         ? "opacity-100"
                         : "opacity-0",
                     )}
