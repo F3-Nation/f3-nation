@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
 
 import { cn } from "@acme/ui";
@@ -13,33 +13,20 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@acme/ui/popover";
 
 import type { RouterOutputs } from "~/orpc/types";
-import { orpc, useQuery } from "~/orpc/react";
+import { isOrgSelected } from "./org-ancestry";
 
 type Area = RouterOutputs["org"]["all"]["orgs"][number];
-type Sector = RouterOutputs["org"]["all"]["orgs"][number];
 
 export const AreaFilter = ({
   onAreaSelect,
   selectedAreas,
-  selectedSectors,
+  areas,
 }: {
   onAreaSelect: (area: Area) => void;
   selectedAreas: Area[];
-  selectedSectors?: Sector[];
+  areas: Area[] | undefined;
 }) => {
-  const { data: areas } = useQuery(
-    orpc.org.all.queryOptions({ input: { orgTypes: ["area"] } }),
-  );
   const [open, setOpen] = useState(false);
-
-  const availableAreas = useMemo(() => {
-    return areas?.orgs.filter((area) => {
-      return (
-        !selectedSectors?.length ||
-        selectedSectors.some((sector) => sector.id === area.parentId)
-      );
-    });
-  }, [areas, selectedSectors]);
 
   return (
     <div className="max-w-80">
@@ -59,10 +46,10 @@ export const AreaFilter = ({
         </PopoverTrigger>
         <PopoverContent className="w-full p-0">
           <Command>
-            <CommandInput placeholder="Search statuses..." />
-            <CommandEmpty>No statuses found.</CommandEmpty>
+            <CommandInput placeholder="Search areas..." />
+            <CommandEmpty>No areas found.</CommandEmpty>
             <CommandGroup className="max-h-96 overflow-y-auto">
-              {availableAreas?.map((area) => (
+              {areas?.map((area) => (
                 <CommandItem
                   key={area.id}
                   value={area.name}
@@ -73,7 +60,7 @@ export const AreaFilter = ({
                   <Check
                     className={cn(
                       "mr-2 h-4 w-4",
-                      selectedAreas.includes(area)
+                      isOrgSelected(selectedAreas, area)
                         ? "opacity-100"
                         : "opacity-0",
                     )}
