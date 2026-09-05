@@ -554,6 +554,18 @@ export const eventRouter = {
               .nullable()
               .describe("Event metadata"),
             isPrivate: z.boolean().describe("Whether the event is private"),
+            recurrencePattern: z
+              .enum(EventCadence)
+              .nullable()
+              .describe("Recurrence pattern"),
+            recurrenceInterval: z
+              .number()
+              .nullable()
+              .describe("Recurrence interval (e.g. 2 for every 2 weeks)"),
+            indexWithinInterval: z
+              .number()
+              .nullable()
+              .describe("Index within interval (e.g. 3 for 3rd occurrence)"),
             aos: z
               .array(
                 z.object({
@@ -604,6 +616,9 @@ export const eventRouter = {
           created: schema.events.created,
           meta: schema.events.meta,
           isPrivate: schema.events.isPrivate,
+          recurrencePattern: schema.events.recurrencePattern,
+          recurrenceInterval: schema.events.recurrenceInterval,
+          indexWithinInterval: schema.events.indexWithinInterval,
           aos: sql<{ aoId: number; aoName: string }[]>`COALESCE(
             json_agg(
               DISTINCT jsonb_build_object(

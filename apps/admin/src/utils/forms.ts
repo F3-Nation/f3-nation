@@ -21,6 +21,19 @@ export const {
     eventName: z.string().optional().or(z.literal("")),
     aoName: z.string().optional().or(z.literal("")),
     eventTypeIds: z.array(z.number()).optional(),
+    eventIndexWithinInterval: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(4)
+      .nullable()
+      .optional(),
+    eventRecurrenceInterval: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .nullable()
+      .optional(),
   }).superRefine((data, ctx) => {
     // "HH:mm" strings compare correctly lexicographically, so a plain string
     // comparison is enough here without parsing to minutes.
@@ -33,6 +46,16 @@ export const {
         code: "custom",
         message: "End time must be after start time",
         path: ["eventEndTime"],
+      });
+    }
+    if (
+      data.eventRecurrencePattern === "monthly" &&
+      data.eventIndexWithinInterval == null
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["eventIndexWithinInterval"],
+        message: "Select which occurrence of the month",
       });
     }
   }),

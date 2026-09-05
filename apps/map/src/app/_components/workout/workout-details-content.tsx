@@ -247,6 +247,9 @@ export const WorkoutDetailsContent = ({
                 startTime: event.startTime,
                 endTime: event.endTime,
                 eventTypes: event.eventTypes,
+                recurrencePattern: event.recurrencePattern,
+                recurrenceInterval: event.recurrenceInterval,
+                indexWithinInterval: event.indexWithinInterval,
               }}
               location={{
                 lat: location?.lat ?? null,

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
+import { EventCadence } from "@acme/shared/app/enums";
 import {
   convertHH_mmToHHmm,
   convertHHmmToHH_mm,
@@ -307,6 +308,13 @@ export default function AdminRequestsModal({
       eventStartTime: convertHHmmToHH_mm(request.eventStartTime ?? ""),
       eventEndTime: convertHHmmToHH_mm(request.eventEndTime ?? ""),
       eventDayOfWeek: request.eventDayOfWeek ?? "monday",
+      eventRecurrencePattern: (EventCadence as readonly string[]).includes(
+        request.eventRecurrencePattern ?? "",
+      )
+        ? (request.eventRecurrencePattern as EventCadence)
+        : null,
+      eventRecurrenceInterval: request.eventRecurrenceInterval ?? null,
+      eventIndexWithinInterval: request.eventIndexWithinInterval ?? null,
       eventTypeIds: request.eventTypeIds ?? [],
       eventDescription: request.eventDescription ?? "",
       regionId: request.regionId ?? null,

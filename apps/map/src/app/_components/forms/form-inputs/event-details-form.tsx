@@ -1,10 +1,12 @@
 import { Controller, useFormContext } from "react-hook-form";
 import type { EventFieldsType } from "@acme/validators/request-schemas";
 import { DayOfWeek } from "@acme/shared/app/enums";
+import type { EventCadence } from "@acme/shared/app/enums";
 import { Case } from "@acme/shared/common/enums";
 import { convertCase } from "@acme/shared/common/functions";
 import { Input } from "@acme/ui/input";
 import { MultiSelect } from "@acme/ui/multi-select";
+import { ScheduleFields } from "@acme/ui/schedule-select";
 import { ControlledSelect } from "@acme/ui/select";
 import { Textarea } from "@acme/ui/textarea";
 
@@ -20,6 +22,9 @@ interface EventDetailsFormValues {
   eventStartTime?: string;
   eventEndTime?: string;
   eventDescription?: string;
+  eventRecurrencePattern?: EventCadence | null;
+  eventRecurrenceInterval?: number | null;
+  eventIndexWithinInterval?: number | null;
   currentValues?: Partial<EventFieldsType>;
 }
 
@@ -105,6 +110,14 @@ export const EventDetailsForm = <_T extends EventDetailsFormValues>() => {
             {form.formState.errors.eventDayOfWeek?.message}
           </p>
         </div>
+
+        <ScheduleFields
+          control={form.control}
+          recurrencePatternName="eventRecurrencePattern"
+          recurrenceIntervalName="eventRecurrenceInterval"
+          indexWithinIntervalName="eventIndexWithinInterval"
+          wrapperClassName="space-y-2"
+        />
 
         <div className="space-y-2">
           <ControlledTimeInput

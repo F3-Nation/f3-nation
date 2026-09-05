@@ -1,17 +1,28 @@
 import dayjs from "dayjs";
 
-import type { DayOfWeek } from "@acme/shared/app/enums";
+import type { DayOfWeek, EventCadence } from "@acme/shared/app/enums";
 import {
   START_END_TIME_DB_FORMAT,
   START_END_TIME_DISPLAY_FORMAT,
 } from "@acme/shared/app/constants";
 import { getReadableDayOfWeek } from "@acme/shared/app/functions";
 
+const ORDINALS: Record<number, string> = {
+  1: "1st",
+  2: "2nd",
+  3: "3rd",
+  4: "4th",
+  5: "5th",
+};
+
 export const getWhenFromWorkout = (params: {
   startTime: string | null;
   endTime?: string | null;
   dayOfWeek: DayOfWeek | null;
   condensed?: boolean;
+  recurrencePattern?: EventCadence | null;
+  recurrenceInterval?: number | null;
+  indexWithinInterval?: number | null;
 }) => {
   const event = params;
   const condensed = params.condensed ?? false;
@@ -43,7 +54,34 @@ export const getWhenFromWorkout = (params: {
 
   const dayOfTheWeek = getReadableDayOfWeek(event.dayOfWeek);
 
-  const dayOfTheWeekText = dayOfTheWeek ? `${dayOfTheWeek} ` : "";
+  const ordinalPrefix =
+    event.recurrencePattern === "monthly" && event.indexWithinInterval
+      ? `${ORDINALS[event.indexWithinInterval] ?? event.indexWithinInterval} `
+      : "";
+
+  const intervalPrefix =
+    event.recurrencePattern === "weekly" &&
+    event.recurrenceInterval &&
+    event.recurrenceInterval > 1
+      ? event.recurrenceInterval === 2
+        ? "Every other "
+        : `Every ${event.recurrenceInterval} weeks on `
+      : "";
+
+  const monthlyIntervalPrefix =
+    event.recurrencePattern === "monthly"
+      ? event.recurrenceInterval && event.recurrenceInterval > 1
+        ? event.recurrenceInterval === 2
+          ? "Every other month on "
+          : `Every ${event.recurrenceInterval} months on `
+        : event.indexWithinInterval
+          ? ""
+          : "Monthly on "
+      : "";
+
+  const dayOfTheWeekText = dayOfTheWeek
+    ? `${monthlyIntervalPrefix}${ordinalPrefix}${intervalPrefix}${dayOfTheWeek} `
+    : "";
   const timeText =
     startTime && endTime
       ? `${startTime} - ${endTime} `

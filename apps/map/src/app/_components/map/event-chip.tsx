@@ -6,7 +6,7 @@
 
 import { useCallback } from "react";
 
-import type { DayOfWeek } from "@acme/shared/app/enums";
+import type { DayOfWeek, EventCadence } from "@acme/shared/app/enums";
 import { cn } from "@acme/ui";
 
 import { getWhenFromWorkout } from "~/utils/get-when-from-workout";
@@ -29,6 +29,9 @@ export const EventChip = (props: {
     id: number;
     locationId?: number | null;
     eventTypes: { id: number; name: string }[];
+    recurrencePattern?: EventCadence | null;
+    recurrenceInterval?: number | null;
+    indexWithinInterval?: number | null;
   };
   location: {
     id: number | null;
@@ -92,6 +95,9 @@ export const EventChip = (props: {
     startTime: event.startTime,
     endTime: event.endTime,
     condensed: true,
+    recurrencePattern: event.recurrencePattern,
+    recurrenceInterval: event.recurrenceInterval,
+    indexWithinInterval: event.indexWithinInterval,
   });
 
   return (

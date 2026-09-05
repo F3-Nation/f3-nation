@@ -15,7 +15,7 @@ import {
   schema,
   sql,
 } from "@acme/db";
-import { DayOfWeek } from "@acme/shared/app/enums";
+import { DayOfWeek, EventCadence } from "@acme/shared/app/enums";
 import { getFullAddress } from "@acme/shared/app/functions";
 import { isTruthy } from "@acme/shared/common/functions";
 import type { LowBandwidthF3Marker } from "@acme/validators";
@@ -316,6 +316,18 @@ export const mapLocationRouter = os.router({
                   aoLogo: z.string().nullable().describe("AO logo URL"),
                   aoWebsite: z.string().nullable().describe("AO website"),
                   aoName: z.string().nullable().describe("AO name"),
+                  recurrencePattern: z
+                    .enum(EventCadence)
+                    .nullable()
+                    .describe("Recurrence pattern"),
+                  recurrenceInterval: z
+                    .number()
+                    .nullable()
+                    .describe("Recurrence interval (e.g. 2 for every 2 weeks)"),
+                  indexWithinInterval: z
+                    .number()
+                    .nullable()
+                    .describe("Index within interval"),
                 }),
               )
               .describe("Events at this location"),
@@ -397,6 +409,9 @@ export const mapLocationRouter = os.router({
             aoLogo: parentOrg.logoUrl,
             aoWebsite: parentOrg.website,
             aoName: parentOrg.name,
+            recurrencePattern: schema.events.recurrencePattern,
+            recurrenceInterval: schema.events.recurrenceInterval,
+            indexWithinInterval: schema.events.indexWithinInterval,
           },
         })
         .from(schema.locations)

@@ -2,6 +2,7 @@ import { getSession } from "next-auth/react";
 import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
 
+import { EventCadence } from "@acme/shared/app/enums";
 import type { RequestType } from "@acme/shared/app/enums";
 import { requestTypeToTitle } from "@acme/shared/app/functions";
 import { PRESERVED_META_FIELDS } from "@acme/shared/app/types";
@@ -264,6 +265,9 @@ const openRequestModalDefaults = async () => {
     eventDayOfWeek: "monday" as const,
     eventDescription: "",
     eventTypeIds: [] as number[],
+    eventRecurrencePattern: null as EventCadence | null,
+    eventRecurrenceInterval: null as number | null,
+    eventIndexWithinInterval: null as number | null,
 
     aoName: "",
     aoLogo: null,
@@ -343,7 +347,14 @@ const getRequestOverrides = (request: UpdateRequestById) => {
     eventDayOfWeek: request.eventDayOfWeek ?? undefined,
     eventName: request.eventName ?? undefined,
     eventDescription: request.eventDescription ?? undefined,
-    eventRecurrencePattern: request.eventRecurrencePattern,
+    // The request router types this column as a plain string; narrow it back to
+    // the EventCadence union the form schema expects (invalid/legacy values
+    // fall through to null).
+    eventRecurrencePattern: (EventCadence as readonly string[]).includes(
+      request.eventRecurrencePattern ?? "",
+    )
+      ? (request.eventRecurrencePattern as EventCadence)
+      : null,
     eventRecurrenceInterval: request.eventRecurrenceInterval,
     eventIndexWithinInterval: request.eventIndexWithinInterval,
     // eventMeta: request.eventMeta,
@@ -442,6 +453,11 @@ const getFormValues = async (params: {
     eventName: ev?.name ?? de.eventName,
     eventEndTime: ev?.endTime ?? de.eventEndTime,
     eventDayOfWeek: ev?.dayOfWeek ?? de.eventDayOfWeek,
+    eventRecurrencePattern: ev?.recurrencePattern ?? de.eventRecurrencePattern,
+    eventRecurrenceInterval:
+      ev?.recurrenceInterval ?? de.eventRecurrenceInterval,
+    eventIndexWithinInterval:
+      ev?.indexWithinInterval ?? de.eventIndexWithinInterval,
 
     aoName: ev?.aoName ?? de.aoName,
     aoLogo: ev?.aoLogo ?? de.aoLogo,
@@ -476,6 +492,12 @@ const getFormValues = async (params: {
     eventName: req?.eventName ?? cur.eventName,
     eventEndTime: req?.eventEndTime ?? cur.eventEndTime,
     eventDayOfWeek: req?.eventDayOfWeek ?? cur.eventDayOfWeek,
+    eventRecurrencePattern:
+      req?.eventRecurrencePattern ?? cur.eventRecurrencePattern,
+    eventRecurrenceInterval:
+      req?.eventRecurrenceInterval ?? cur.eventRecurrenceInterval,
+    eventIndexWithinInterval:
+      req?.eventIndexWithinInterval ?? cur.eventIndexWithinInterval,
 
     aoName: req?.aoName ?? cur.aoName,
     aoLogo: req?.aoLogo ?? cur.aoLogo,
