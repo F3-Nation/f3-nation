@@ -1,5 +1,27 @@
 # Changelog
 
+## [6.5.0](https://github.com/F3-Nation/f3-nation/compare/api@6.4.0...api@6.5.0) (2026-09-06)
+
+
+### Features
+
+* **api,ci:** add Hono server entry hosting the existing oRPC handlers ([#890](https://github.com/F3-Nation/f3-nation/issues/890)) ([636aaaa](https://github.com/F3-Nation/f3-nation/commit/636aaaa5ce05f9b7def89719d1cb26202c9a5517))
+
+
+### Bug Fixes
+
+* **api:** stop crupdate resetting isActive/highlight/isPrivate on partial updates ([#900](https://github.com/F3-Nation/f3-nation/issues/900)) ([f89b7f7](https://github.com/F3-Nation/f3-nation/commit/f89b7f7e8c0ccb3341ee98c644d7d98836180a4a))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.7.1
+  * devDependencies
+    * @acme/auth bumped to 0.2.3
+    * @acme/db bumped to 0.5.0
+
 ## [6.4.0](https://github.com/F3-Nation/f3-nation/compare/api@6.3.0...api@6.4.0) (2026-08-18)
 
 

@@ -1,5 +1,21 @@
 # Changelog
 
+## [7.2.2](https://github.com/F3-Nation/f3-nation/compare/map@7.2.1...map@7.2.2) (2026-09-06)
+
+
+### Bug Fixes
+
+* **map:** add an endpoint allowlist to the /api/orpc proxy ([#948](https://github.com/F3-Nation/f3-nation/issues/948)) ([5a4b0b7](https://github.com/F3-Nation/f3-nation/commit/5a4b0b721215f3055fa84b522d9e6aeb2ccaaf7a))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.7.1
+    * @acme/auth bumped to 0.2.3
+    * @acme/validators bumped to 0.3.2
+
 ## [7.2.1](https://github.com/F3-Nation/f3-nation/compare/map@7.2.0...map@7.2.1) (2026-08-18)
 
 

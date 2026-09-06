@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.4.1...pkg-db@0.5.0) (2026-09-06)
+
+
+### Features
+
+* **auth,db,admin,api:** better auth config for [#876](https://github.com/F3-Nation/f3-nation/issues/876) phase 3 ([#914](https://github.com/F3-Nation/f3-nation/issues/914)) ([4c77b90](https://github.com/F3-Nation/f3-nation/commit/4c77b904dab9a9864d1c9d98f6356e6f211bb086))
+
 ## [0.4.1](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.4.0...pkg-db@0.4.1) (2026-08-18)
 
 
