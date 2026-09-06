@@ -6,9 +6,10 @@
  * migrations, not a separately-applied step).
  */
 
-import { and, authSchema, eq, schema } from "@acme/db";
+import { authSchema, eq } from "@acme/db";
 import { db } from "@acme/db/client";
 import type { Session } from "@acme/auth";
+import { F3_NATION_ORG_ID } from "@acme/shared/app/constants";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   createAdminSession,
@@ -18,25 +19,12 @@ import {
   uniqueId,
 } from "../__tests__/test-utils";
 
-async function createNationAdminSession(): Promise<Session> {
-  let [f3Nation] = await db
-    .select({ id: schema.orgs.id })
-    .from(schema.orgs)
-    .where(
-      and(eq(schema.orgs.orgType, "nation"), eq(schema.orgs.name, "F3 Nation")),
-    )
-    .limit(1);
-
-  if (!f3Nation) {
-    const [created] = await db
-      .insert(schema.orgs)
-      .values({ name: "F3 Nation", orgType: "nation", isActive: true })
-      .returning();
-    f3Nation = created;
-  }
-
-  if (!f3Nation) throw new Error("F3 Nation org not found");
-
+// isNationAdminFromSession (packages/shared/src/app/role-checks.ts) checks the
+// session's roles directly — orgId === F3_NATION_ORG_ID and orgName containing
+// "f3 nation" — rather than re-querying the orgs table, so the session can
+// carry that literal orgName regardless of what the seeded nation org (id 1,
+// named "Test Nation" — see packages/api/src/testing/index.ts) is called.
+function createNationAdminSession(): Session {
   return {
     id: 1,
     email: "nation-admin@example.com",
@@ -44,9 +32,13 @@ async function createNationAdminSession(): Promise<Session> {
       id: "1",
       email: "nation-admin@example.com",
       name: "Nation Admin",
-      roles: [{ orgId: f3Nation.id, orgName: "F3 Nation", roleName: "admin" }],
+      roles: [
+        { orgId: F3_NATION_ORG_ID, orgName: "F3 Nation", roleName: "admin" },
+      ],
     },
-    roles: [{ orgId: f3Nation.id, orgName: "F3 Nation", roleName: "admin" }],
+    roles: [
+      { orgId: F3_NATION_ORG_ID, orgName: "F3 Nation", roleName: "admin" },
+    ],
     expires: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
   };
 }
@@ -129,7 +121,7 @@ describe("oauth-client router", () => {
         tokenEndpointAuthMethod: "client_secret_basic",
       });
 
-      await mockAuthWithSession(await createNationAdminSession());
+      await mockAuthWithSession(createNationAdminSession());
       const client = createTestClient();
 
       const result = await client.oauthClient.list();
@@ -146,7 +138,7 @@ describe("oauth-client router", () => {
       createdClientIds.push(clientId);
       await insertTestClient({ clientId, tokenEndpointAuthMethod: "none" });
 
-      await mockAuthWithSession(await createNationAdminSession());
+      await mockAuthWithSession(createNationAdminSession());
       const client = createTestClient();
 
       const result = await client.oauthClient.list();
@@ -162,7 +154,7 @@ describe("oauth-client router", () => {
       createdClientIds.push(clientId);
       await insertTestClient({ clientId });
 
-      await mockAuthWithSession(await createNationAdminSession());
+      await mockAuthWithSession(createNationAdminSession());
       const client = createTestClient();
 
       const result = await client.oauthClient.update({
@@ -183,7 +175,7 @@ describe("oauth-client router", () => {
     });
 
     it("throws for a nonexistent client", async () => {
-      await mockAuthWithSession(await createNationAdminSession());
+      await mockAuthWithSession(createNationAdminSession());
       const client = createTestClient();
 
       await expect(
@@ -199,7 +191,7 @@ describe("oauth-client router", () => {
       createdClientIds.push(clientId);
       await insertTestClient({ clientId });
 
-      await mockAuthWithSession(await createNationAdminSession());
+      await mockAuthWithSession(createNationAdminSession());
       const client = createTestClient();
 
       await expect(client.oauthClient.update({ clientId })).rejects.toThrow();
