@@ -9,10 +9,12 @@
 import { authSchema, eq } from "@acme/db";
 import { db } from "@acme/db/client";
 import type { Session } from "@acme/auth";
-import { F3_NATION_ORG_ID } from "@acme/shared/app/constants";
+import {
+  F3_NATION_ORG_ID,
+  TEST_REGION_1_ORG_ID,
+} from "@acme/shared/app/constants";
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  createAdminSession,
   createNoPermissionSession,
   createTestClient,
   mockAuthWithSession,
@@ -38,6 +40,37 @@ function createNationAdminSession(): Session {
     },
     roles: [
       { orgId: F3_NATION_ORG_ID, orgName: "F3 Nation", roleName: "admin" },
+    ],
+    expires: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
+  };
+}
+
+// An admin role at a different, non-nation org — distinct from
+// createNoPermissionSession's no-roles-at-all case, this exercises
+// nationAdminProcedure's orgId check specifically (rather than the F3 Nation
+// org's seeded name happening to mismatch "f3 nation").
+function createOtherOrgAdminSession(): Session {
+  return {
+    id: 2,
+    email: "region-admin@example.com",
+    user: {
+      id: "2",
+      email: "region-admin@example.com",
+      name: "Region Admin",
+      roles: [
+        {
+          orgId: TEST_REGION_1_ORG_ID,
+          orgName: "Test Region 1",
+          roleName: "admin",
+        },
+      ],
+    },
+    roles: [
+      {
+        orgId: TEST_REGION_1_ORG_ID,
+        orgName: "Test Region 1",
+        roleName: "admin",
+      },
     ],
     expires: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
   };
@@ -84,7 +117,7 @@ describe("oauth-client router", () => {
 
   describe("authorization", () => {
     it("rejects list for a non-nation-admin", async () => {
-      await mockAuthWithSession(await createAdminSession());
+      await mockAuthWithSession(createOtherOrgAdminSession());
       const client = createTestClient();
 
       await expect(client.oauthClient.list()).rejects.toThrow();
@@ -102,7 +135,7 @@ describe("oauth-client router", () => {
       createdClientIds.push(clientId);
       await insertTestClient({ clientId });
 
-      await mockAuthWithSession(await createAdminSession());
+      await mockAuthWithSession(createOtherOrgAdminSession());
       const client = createTestClient();
 
       await expect(
