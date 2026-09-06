@@ -83,6 +83,7 @@ catalog:
   drizzle-kit: ^0.31.10
   drizzle-orm: ^0.45.2
   drizzle-zod: ^0.8.3
+  esbuild: ^0.28.1
   esbuild-register: ^3.6.0
   eslint: ^10.9.1
   eslint-config-turbo: ^2.10.12

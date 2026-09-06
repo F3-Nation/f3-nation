@@ -443,6 +443,57 @@ jobs:
         env:
           CHAR_TEST_TARGET: hono
 
+      # The same frozen goldens once more, but against the *built artifact*
+      # rather than the source: esbuild bundle -> real `pnpm install` of the
+      # generated runtime manifest -> booted process -> HTTP over a socket.
+      # The hono leg above proves app.ts is correct; this proves the thing we
+      # actually ship is. It catches what only appears after bundling —
+      # externals missing from the runtime package.json, CJS interop that dies
+      # at module evaluation, a dynamic import esbuild could not follow.
+      - name: Build the server bundle
+        run: pnpm turbo run build:server --filter=f3-api
+      # Standalone install from the generated dist/package.json, exactly as the
+      # container will do it. --ignore-workspace because dist is not a workspace
+      # package; --no-frozen-lockfile because it has no lockfile of its own and
+      # CI=true would otherwise make a frozen install the default and fail.
+      - name: Install the bundle's runtime dependencies
+        working-directory: apps/api/dist
+        run: pnpm install --prod --ignore-workspace --no-frozen-lockfile
+      # NODE_ENV=test, not production: `production` would initialize Sentry with
+      # the real DSN (src/instrument.ts) and ship CI errors to the live project.
+      # `development` is equally wrong — it turns on getSession's dev mock
+      # session, which makes the 401 goldens vacuous.
+      - name: Boot the bundle and run the characterization suite against it
+        working-directory: apps/api
+        env:
+          NODE_ENV: test
+          PORT: 3399
+        run: |
+          node --import ./dist/instrument.js dist/server.js > /tmp/bundle.log 2>&1 &
+          server_pid=$!
+          trap 'kill "${server_pid}" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 30); do
+            if curl -sf -o /dev/null "http://127.0.0.1:${PORT}/health"; then
+              ready=1
+              break
+            fi
+            # A crashed process never becomes ready; fail now rather than
+            # burning the full timeout on a corpse.
+            if ! kill -0 "${server_pid}" 2>/dev/null; then
+              echo "::error::The server bundle exited during startup."
+              cat /tmp/bundle.log
+              exit 1
+            fi
+            sleep 1
+          done
+          if [ -z "${ready:-}" ]; then
+            echo "::error::The server bundle did not become ready within 30s."
+            cat /tmp/bundle.log
+            exit 1
+          fi
+          CHAR_TEST_TARGET=live CHAR_TEST_BASE_URL="http://127.0.0.1:${PORT}" \
+            pnpm --filter f3-api test:characterization
+
   # Builds each app's deploy image the same way the release pipeline does
   # (turbo prune -> frozen install -> turbo build). The `build` job above is
   # affected-scoped on PRs; it cannot catch breakage that is specific to the
