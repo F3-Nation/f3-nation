@@ -4875,12 +4875,90 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {},
-                    {
-                      "not": {}
+                  "properties": {
+                    "eventTags": {
+                      "items": {
+                        "properties": {
+                          "color": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Event tag color"
+                          },
+                          "description": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Event tag description"
+                          },
+                          "id": {
+                            "description": "Event tag ID",
+                            "type": "number"
+                          },
+                          "isActive": {
+                            "description": "Whether the event tag is active",
+                            "type": "boolean"
+                          },
+                          "name": {
+                            "description": "Event tag name",
+                            "type": "string"
+                          },
+                          "specificOrgId": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Org this tag is specific to, if any"
+                          },
+                          "specificOrgName": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Name of the org this tag is specific to, if any"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "description",
+                          "color",
+                          "specificOrgId",
+                          "specificOrgName",
+                          "isActive"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "totalCount": {
+                      "description": "Total number of event tags matching the filter",
+                      "type": "number"
                     }
-                  ]
+                  },
+                  "required": [
+                    "eventTags",
+                    "totalCount"
+                  ],
+                  "type": "object"
                 }
               }
             },
@@ -4969,12 +5047,79 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {},
-                    {
-                      "not": {}
+                  "properties": {
+                    "eventTag": {
+                      "items": {
+                        "properties": {
+                          "color": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "created": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "id": {
+                            "maximum": 2147483647,
+                            "minimum": -2147483648,
+                            "type": "integer"
+                          },
+                          "isActive": {
+                            "type": "boolean"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "specificOrgId": {
+                            "anyOf": [
+                              {
+                                "maximum": 2147483647,
+                                "minimum": -2147483648,
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "updated": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "description",
+                          "color",
+                          "created",
+                          "updated",
+                          "specificOrgId",
+                          "isActive"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
                     }
-                  ]
+                  },
+                  "required": [
+                    "eventTag"
+                  ],
+                  "type": "object"
                 }
               }
             },
@@ -5010,7 +5155,9 @@
               "application/json": {
                 "schema": {
                   "anyOf": [
-                    {},
+                    {
+                      "not": {}
+                    },
                     {
                       "not": {}
                     }
@@ -5047,12 +5194,76 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {},
-                    {
-                      "not": {}
+                  "properties": {
+                    "eventTag": {
+                      "properties": {
+                        "color": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "created": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "id": {
+                          "maximum": 2147483647,
+                          "minimum": -2147483648,
+                          "type": "integer"
+                        },
+                        "isActive": {
+                          "type": "boolean"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "specificOrgId": {
+                          "anyOf": [
+                            {
+                              "maximum": 2147483647,
+                              "minimum": -2147483648,
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "updated": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "description",
+                        "color",
+                        "created",
+                        "updated",
+                        "specificOrgId",
+                        "isActive"
+                      ],
+                      "type": "object"
                     }
-                  ]
+                  },
+                  "required": [
+                    "eventTag"
+                  ],
+                  "type": "object"
                 }
               }
             },
@@ -5096,12 +5307,79 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {},
-                    {
-                      "not": {}
+                  "properties": {
+                    "eventTags": {
+                      "items": {
+                        "properties": {
+                          "color": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "created": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "id": {
+                            "maximum": 2147483647,
+                            "minimum": -2147483648,
+                            "type": "integer"
+                          },
+                          "isActive": {
+                            "type": "boolean"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "specificOrgId": {
+                            "anyOf": [
+                              {
+                                "maximum": 2147483647,
+                                "minimum": -2147483648,
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "updated": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "description",
+                          "color",
+                          "created",
+                          "updated",
+                          "specificOrgId",
+                          "isActive"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
                     }
-                  ]
+                  },
+                  "required": [
+                    "eventTags"
+                  ],
+                  "type": "object"
                 }
               }
             },
