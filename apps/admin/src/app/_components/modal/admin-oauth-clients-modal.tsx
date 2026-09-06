@@ -161,18 +161,18 @@ export default function AdminOauthClientsModal({
                 onSubmit={form.handleSubmit(
                   async (values) => {
                     // Preserve the client's actual scopes rather than
-                    // assuming BASE_SCOPES — a client registered with a
+                    // assuming a fixed baseline — a client registered with a
                     // narrower set (e.g. apps/auth/scripts/add-client.ts's
                     // free-text prompt, or carried over by
                     // migrate-oauth-clients-to-better-auth.ts) shouldn't
-                    // silently gain "profile"/"email" from an unrelated
-                    // edit. openid is the one scope this form guarantees.
-                    const preserved = (existing?.scopes ?? []).filter(
+                    // silently gain "profile"/"email", and a pure-OAuth2
+                    // client that was never granted "openid" shouldn't
+                    // silently become ID-token-capable, either — both from
+                    // an edit to unrelated fields. This form has no control
+                    // that requests "openid", so it never adds it.
+                    const base = (existing?.scopes ?? []).filter(
                       (scope) => scope !== "offline_access",
                     );
-                    const base = preserved.includes("openid")
-                      ? preserved
-                      : ["openid", ...preserved];
                     const scopes = values.offlineAccess
                       ? [...base, "offline_access"]
                       : base;
