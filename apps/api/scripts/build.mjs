@@ -1,7 +1,7 @@
 // Bundles the Hono server entry (src/server.ts) into dist/ with esbuild.
 //
-// Why bundle rather than `pnpm --filter f3-api --prod deploy` + tsx (the
-// alternative recorded in #650): `pnpm deploy` applies `publishConfig`, which
+// Why bundle rather than `pnpm --filter f3-api --prod deploy` + tsx:
+// `pnpm deploy` applies `publishConfig`, which
 // would resolve @f3nation/health to ./dist/index.js. The root AGENTS.md is
 // explicit that those dist artifacts are not guaranteed to exist before a
 // consumer resolves the package. esbuild reads its source entrypoint instead
@@ -102,16 +102,23 @@ function resolveInstalledVersion(name, startDir) {
         join(dir, "node_modules", name, "package.json"),
       );
       const version = manifest.version;
-      if (typeof version === "string") return version;
-    } catch {
+      if (typeof version !== "string") {
+        throw new Error(
+          `${join(dir, "node_modules", name, "package.json")} has no string "version"`,
+        );
+      }
+      return version;
+    } catch (err) {
+      if (err?.code !== "ENOENT") throw err;
       // Not installed at this level; keep walking up.
     }
+    if (dir === repoRoot) break;
     const parent = dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
   throw new Error(
-    `Cannot resolve an installed version of "${name}" from ${startDir}. ` +
+    `Cannot resolve an installed version of "${name}" under ${repoRoot}. ` +
       `It is externalized from the bundle, so the runtime package.json must ` +
       `pin it or the container fails at startup with ERR_MODULE_NOT_FOUND.`,
   );

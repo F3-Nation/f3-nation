@@ -454,28 +454,42 @@ jobs:
       # at module evaluation, a dynamic import esbuild could not follow.
       - name: Build the server bundle
         run: pnpm turbo run build:server --filter=f3-api
+      # Copied outside the workspace tree so Node's module resolution for
+      # server.js can't fall through past this directory's own node_modules
+      # into apps/api/node_modules (or beyond) — the real deployed container
+      # only ever sees the isolated install below, and a bundle booted from
+      # inside the workspace could mask a missing RUNTIME_DEPS entry that
+      # would be ERR_MODULE_NOT_FOUND in production.
+      - name: Relocate the bundle outside the workspace
+        run: cp -r apps/api/dist "${RUNNER_TEMP}/bundle"
       # Standalone install from the generated dist/package.json, exactly as the
       # container will do it. --ignore-workspace because dist is not a workspace
       # package; --no-frozen-lockfile because it has no lockfile of its own and
       # CI=true would otherwise make a frozen install the default and fail.
       - name: Install the bundle's runtime dependencies
-        working-directory: apps/api/dist
+        working-directory: ${{ runner.temp }}/bundle
         run: pnpm install --prod --ignore-workspace --no-frozen-lockfile
+      # The hono leg above already ran test:characterization through turbo,
+      # whose task graph resets f3_test as a dependency. This leg calls
+      # test:characterization directly (see below), bypassing that graph, so
+      # the DB must be reset explicitly or these goldens run against whatever
+      # state the hono leg left behind.
+      - name: Reset the test database before the live characterization run
+        run: pnpm -C packages/db reset-test-db
       # NODE_ENV=test, not production: `production` would initialize Sentry with
       # the real DSN (src/instrument.ts) and ship CI errors to the live project.
       # `development` is equally wrong — it turns on getSession's dev mock
       # session, which makes the 401 goldens vacuous.
       - name: Boot the bundle and run the characterization suite against it
-        working-directory: apps/api
         env:
           NODE_ENV: test
           PORT: 3399
         run: |
-          node --import ./dist/instrument.js dist/server.js > /tmp/bundle.log 2>&1 &
+          (cd "${RUNNER_TEMP}/bundle" && node --import ./instrument.js ./server.js) > /tmp/bundle.log 2>&1 &
           server_pid=$!
           trap 'kill "${server_pid}" 2>/dev/null || true' EXIT
           for _ in $(seq 1 30); do
-            if curl -sf -o /dev/null "http://127.0.0.1:${PORT}/health"; then
+            if curl -sf --max-time 1 -o /dev/null "http://127.0.0.1:${PORT}/health"; then
               ready=1
               break
             fi
@@ -495,6 +509,12 @@ jobs:
           fi
           CHAR_TEST_TARGET=live CHAR_TEST_BASE_URL="http://127.0.0.1:${PORT}" \
             pnpm --filter f3-api test:characterization
+      # The two `cat`s above only cover a crash during startup or a timeout;
+      # a crash mid-characterization-run would otherwise vanish with the
+      # runner. This catches that case too.
+      - name: Dump bundle log on failure
+        if: failure()
+        run: cat /tmp/bundle.log || true
 
   # Builds each app's deploy image the same way the release pipeline does
   # (turbo prune -> frozen install -> turbo build). The `build` job above is
