@@ -10606,7 +10606,7 @@
     },
     "/v1/oauth-client/{clientId}": {
       "patch": {
-        "description": "Update an OAuth client's name, redirect URIs, scopes, or enabled state. Never returns the client secret. Requires F3 Nation admin role.",
+        "description": "Update an OAuth client's name, redirect URIs, scopes, or enabled state. At least one of those fields must be provided in addition to clientId. Never returns the client secret. Requires F3 Nation admin role.",
         "operationId": "oauthClient.update",
         "parameters": [
           {

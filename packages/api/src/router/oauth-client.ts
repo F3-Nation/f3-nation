@@ -110,7 +110,7 @@ export const oauthClientRouter = {
       tags: ["oauth-client"],
       summary: "Update an OAuth client",
       description:
-        "Update an OAuth client's name, redirect URIs, scopes, or enabled state. Never returns the client secret. Requires F3 Nation admin role.",
+        "Update an OAuth client's name, redirect URIs, scopes, or enabled state. At least one of those fields must be provided in addition to clientId. Never returns the client secret. Requires F3 Nation admin role.",
     })
     .output(z.object({ client: oauthClientSchema }))
     .handler(async ({ context: ctx, input }) => {
