@@ -31,6 +31,7 @@ from features.calendar.event_preblast import (
     post_hc_thread_reply,
 )
 from utilities import constants
+from utilities.calendar_constants import MAX_CALENDAR_WEEKS, WEEK_LABELS, WEEK_SCHEDULE_LABELS
 from utilities.constants import GCP_IMAGE_URL, LOCAL_DEVELOPMENT, S3_IMAGE_URL
 from utilities.database.orm import SlackSettings
 from utilities.database.special_queries import CalendarHomeQuery, get_admin_users, get_aoq_users, home_schedule_query
@@ -340,61 +341,40 @@ def build_calendar_image_form(
     context: dict,
     region_record: SlackSettings,
 ):
-    this_week_valid = False
-    next_week_valid = False
-    if LOCAL_DEVELOPMENT:
+    num_weeks = safe_convert(region_record.calendar_weeks_shown, int) or 2
+    num_weeks = max(1, min(num_weeks, MAX_CALENDAR_WEEKS))
+    weeks = WEEK_LABELS[:num_weeks]
+
+    valid_weeks: List[str] = []
+    image_urls: dict[str, str] = {}
+    for week in weeks:
+        image_name = getattr(region_record, f"calendar_image_{week}", None)
+        if not image_name:
+            # No image generated yet - skip the (guaranteed to fail) HEAD request so we stay well
+            # inside the few seconds a Slack trigger_id stays valid.
+            continue
+        if LOCAL_DEVELOPMENT:
+            image_url = S3_IMAGE_URL.format(image_name=image_name)
+        else:
+            image_url = GCP_IMAGE_URL.format(bucket="f3nation-calendar-images", image_name=image_name)
         try:
-            this_week_valid = (
-                requests.head(S3_IMAGE_URL.format(image_name=region_record.calendar_image_current)).status_code == 200
-            )
-            next_week_valid = (
-                requests.head(S3_IMAGE_URL.format(image_name=region_record.calendar_image_next)).status_code == 200
-            )
+            valid = requests.head(image_url, timeout=2).status_code == 200
         except Exception as e:
-            logger.error(f"Error checking S3 image URLs: {e}")
-        if this_week_valid and next_week_valid:
-            this_week_url = S3_IMAGE_URL.format(
-                image_name=region_record.calendar_image_current or "default.png",
-            )
-            next_week_url = S3_IMAGE_URL.format(
-                image_name=region_record.calendar_image_next or "default.png",
-            )
-    else:
-        try:
-            this_week_valid = (
-                requests.head(
-                    GCP_IMAGE_URL.format(
-                        bucket="f3nation-calendar-images",
-                        image_name=region_record.calendar_image_current or "default.png",
-                    )
-                ).status_code
-                == 200
-            )
-            next_week_valid = (
-                requests.head(
-                    GCP_IMAGE_URL.format(
-                        bucket="f3nation-calendar-images",
-                        image_name=region_record.calendar_image_next or "default.png",
-                    )
-                ).status_code
-                == 200
-            )
-        except Exception as e:
-            logger.error(f"Error checking GCP image URLs: {e}")
-        if this_week_valid and next_week_valid:
-            this_week_url = GCP_IMAGE_URL.format(
-                bucket="f3nation-calendar-images",
-                image_name=region_record.calendar_image_current or "default.png",
-            )
-            next_week_url = GCP_IMAGE_URL.format(
-                bucket="f3nation-calendar-images",
-                image_name=region_record.calendar_image_next or "default.png",
-            )
-    if this_week_valid and next_week_valid:
+            logger.error(f"Error checking calendar image URL for {week} week: {e}")
+            valid = False
+        if valid:
+            valid_weeks.append(week)
+            image_urls[week] = image_url
+
+    if valid_weeks:
         blocks = [
-            orm.ImageBlock(label="This week's schedule", alt_text="Current", image_url=this_week_url),
-            orm.ImageBlock(label="Next week's schedule", alt_text="Next", image_url=next_week_url),
+            orm.ImageBlock(
+                label=WEEK_SCHEDULE_LABELS[week], alt_text=WEEK_SCHEDULE_LABELS[week], image_url=image_urls[week]
+            )
+            for week in valid_weeks
         ]
+        if len(valid_weeks) < len(weeks):
+            blocks.append(orm.SectionBlock(label="Some weeks are still generating and will appear here shortly."))
     else:
         blocks = [orm.SectionBlock(label="No calendar images available. Please wait for them to generate.")]
     form = orm.BlockView(blocks=blocks)
