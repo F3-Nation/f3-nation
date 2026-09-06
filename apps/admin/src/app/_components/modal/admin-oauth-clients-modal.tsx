@@ -176,12 +176,19 @@ export default function AdminOauthClientsModal({
                     const scopes = values.offlineAccess
                       ? [...base, "offline_access"]
                       : base;
-                    await updateClient.mutateAsync({
-                      clientId,
-                      name: values.name,
-                      redirectUris: parseRedirectUris(values.redirectUris),
-                      scopes,
-                    });
+                    try {
+                      await updateClient.mutateAsync({
+                        clientId,
+                        name: values.name,
+                        redirectUris: parseRedirectUris(values.redirectUris),
+                        scopes,
+                      });
+                    } catch {
+                      // onError above already shows the failure toast;
+                      // mutateAsync still rejects its own promise, and
+                      // leaving that uncaught here would surface as an
+                      // unhandled rejection on top of it.
+                    }
                   },
                   () => {
                     toast.error("Failed to update OAuth client");

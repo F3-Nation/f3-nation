@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import AdminOauthClientsModal from "~/app/_components/modal/admin-oauth-clients-modal";
@@ -318,5 +324,113 @@ describe("AdminOauthClientsModal", () => {
       });
     });
     expect(closeModalMock).toHaveBeenCalled();
+  });
+
+  it("closes without submitting when Close is clicked in the edit form", () => {
+    useQueryMock.mockReturnValue({
+      data: {
+        clients: [
+          {
+            clientId: "paxvault-client",
+            name: "Paxvault",
+            redirectUris: ["https://paxvault.example.com/callback"],
+            scopes: ["openid"],
+            isPublic: false,
+          },
+        ],
+      },
+    });
+
+    render(<AdminOauthClientsModal data={{ clientId: "paxvault-client" }} />);
+
+    // The dialog's own X button also has an accessible name of "Close" (via
+    // an sr-only span), so scope the query to the form's own button row
+    // (identified via its "Save changes" sibling) rather than matching by
+    // name alone.
+    const buttonRow = screen.getByText("Save changes").closest("div");
+    if (!buttonRow) throw new Error("form button row not found");
+    fireEvent.click(within(buttonRow).getByRole("button", { name: "Close" }));
+
+    expect(closeModalMock).toHaveBeenCalled();
+    expect(updateMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("shows a failure toast and does not submit when a required field is cleared", async () => {
+    useQueryMock.mockReturnValue({
+      data: {
+        clients: [
+          {
+            clientId: "paxvault-client",
+            name: "Paxvault",
+            redirectUris: ["https://paxvault.example.com/callback"],
+            scopes: ["openid"],
+            isPublic: false,
+          },
+        ],
+      },
+    });
+
+    render(<AdminOauthClientsModal data={{ clientId: "paxvault-client" }} />);
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "" },
+    });
+    fireEvent.click(screen.getByText("Save changes"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Name is required")).toBeTruthy();
+    });
+    expect(updateMutateAsync).not.toHaveBeenCalled();
+    expect(closeModalMock).not.toHaveBeenCalled();
+  });
+
+  it("renders a client with a null name and null scopes without crashing", () => {
+    useQueryMock.mockReturnValue({
+      data: {
+        clients: [
+          {
+            clientId: "paxvault-client",
+            name: null,
+            redirectUris: ["https://paxvault.example.com/callback"],
+            scopes: null,
+            isPublic: false,
+          },
+        ],
+      },
+    });
+
+    render(<AdminOauthClientsModal data={{ clientId: "paxvault-client" }} />);
+
+    expect(
+      screen
+        .getByRole("checkbox", { name: /offline_access scope/i })
+        .getAttribute("aria-checked"),
+    ).toBe("false");
+  });
+
+  it("shows a failure toast and leaves the modal open when the update mutation rejects", async () => {
+    useQueryMock.mockReturnValue({
+      data: {
+        clients: [
+          {
+            clientId: "paxvault-client",
+            name: "Paxvault",
+            redirectUris: ["https://paxvault.example.com/callback"],
+            scopes: ["openid"],
+            isPublic: false,
+          },
+        ],
+      },
+    });
+    updateMutateAsync.mockRejectedValue(new Error("network error"));
+
+    render(<AdminOauthClientsModal data={{ clientId: "paxvault-client" }} />);
+
+    fireEvent.click(screen.getByText("Save changes"));
+
+    await waitFor(() => {
+      expect(updateMutateAsync).toHaveBeenCalled();
+    });
+    expect(closeModalMock).not.toHaveBeenCalled();
   });
 });
