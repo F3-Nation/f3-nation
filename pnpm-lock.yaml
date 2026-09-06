@@ -341,6 +341,9 @@ catalogs:
     drizzle-zod:
       specifier: ^0.8.3
       version: 0.8.3
+    esbuild:
+      specifier: ^0.28.1
+      version: 0.28.1
     esbuild-register:
       specifier: ^3.6.0
       version: 3.6.0
@@ -831,6 +834,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.1.11(vitest@4.1.11)
+      esbuild:
+        specifier: 'catalog:'
+        version: 0.28.1
       eslint:
         specifier: 'catalog:'
         version: 10.9.1(jiti@2.7.0)(supports-color@8.1.1)
@@ -6059,7 +6065,7 @@ packages:
       drizzle-orm: ^0.45.2 || >=1.0.0-rc.1 <2.0.0
       mongodb: ^6.0.0 || ^7.0.0
       mysql2: ^3.0.0
-      next: 16.3.2
+      next: 16.3.3
       pg: ^8.0.0
       prisma: ^5.0.0 || ^6.0.0 || ^7.0.0
       react: ^18.0.0 || ^19.0.0
@@ -9608,7 +9614,7 @@ snapshots:
   '@esbuild-kit/esm-loader@2.6.5':
     dependencies:
       '@esbuild-kit/core-utils': 3.3.2
-      get-tsconfig: 4.14.1
+      get-tsconfig: 4.14.3
 
   '@esbuild/aix-ppc64@0.25.12':
     optional: true

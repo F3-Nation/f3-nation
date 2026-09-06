@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "pnpm with-env next build",
-    "clean": "rm -rf .turbo node_modules .next",
+    "build:server": "pnpm with-env node scripts/build.mjs",
+    "clean": "rm -rf .turbo node_modules .next dist",
     "dev": "TZ=UTC pnpm with-env next dev -p 3001",
     "dev:hono": "TZ=UTC pnpm with-env tsx watch --import ./src/instrument.ts src/server.ts",
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
@@ -51,6 +52,7 @@
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitest/coverage-v8": "catalog:",
+    "esbuild": "catalog:",
     "eslint": "catalog:",
     "jiti": "catalog:",
     "jose": "catalog:",
