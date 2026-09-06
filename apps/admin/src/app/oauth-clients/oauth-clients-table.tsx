@@ -25,7 +25,6 @@ import {
 } from "@acme/ui/table";
 import { toast } from "@acme/ui/toast";
 
-import { logError } from "~/lib/logging";
 import { invalidateQueries, orpc, useMutation, useQuery } from "~/orpc/react";
 import { ModalType, openModal } from "~/utils/store/modal";
 
@@ -45,16 +44,14 @@ export const OauthClientsTable = () => {
       // See admin-oauth-clients-modal.tsx's onSuccess for why the invalidate
       // is guarded separately: react-query has no catch around onSuccess
       // itself, so an invalidate failure would otherwise land in onError
-      // even though the PATCH already succeeded.
+      // even though the PATCH already succeeded. Best-effort, not logged —
+      // @acme/logger isn't safe to call from a client component (its
+      // Node-only internals break the browser bundle).
       onSuccess: async (_result, variables) => {
         try {
           await invalidateQueries("oauthClient");
-        } catch (err) {
-          logError(
-            "admin.oauth_client.invalidate_failed",
-            { clientId: variables.clientId },
-            err,
-          );
+        } catch {
+          // best-effort — see comment above
         }
         toast.success(
           variables.disabled ? "Client disabled" : "Client re-enabled",

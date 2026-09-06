@@ -28,7 +28,6 @@ import { Spinner } from "@acme/ui/spinner";
 import { Textarea } from "@acme/ui/textarea";
 import { toast } from "@acme/ui/toast";
 
-import { logError } from "~/lib/logging";
 import { invalidateQueries, orpc, useMutation, useQuery } from "~/orpc/react";
 import type { DataType, ModalType } from "~/utils/store/modal";
 import { closeModal } from "~/utils/store/modal";
@@ -105,12 +104,16 @@ export default function AdminOauthClientsModal({
       // their own), so an unrelated throw here — e.g. closeModal's Zustand
       // persist middleware hitting a disabled/full localStorage — would
       // otherwise land in onError even though the update already succeeded.
+      // @acme/logger isn't safe to call from a client component (its Node-only
+      // internals break the browser bundle), so this is a best-effort refresh
+      // rather than a logged one: a stale cached list is a much smaller
+      // problem than misreporting a successful edit as failed.
       onSuccess: async () => {
         toast.success("OAuth client updated");
         try {
           await invalidateQueries("oauthClient");
-        } catch (err) {
-          logError("admin.oauth_client.invalidate_failed", { clientId }, err);
+        } catch {
+          // best-effort — see comment above
         }
         closeModal();
       },
