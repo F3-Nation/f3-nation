@@ -1087,6 +1087,8 @@ export const eventInstanceRouter = {
             orgName: aoOrg.name,
             seriesId: schema.eventInstances.seriesId,
             seriesName: seriesEvent.name,
+            seriesException: schema.eventInstances.seriesException,
+            meta: schema.eventInstances.meta,
             hasPreblast: sql<boolean>`${schema.eventInstances.preblastTs} IS NOT NULL`,
             eventTypes: sql<{ id: number; name: string }[]>`COALESCE(
               json_agg(
@@ -1152,6 +1154,8 @@ export const eventInstanceRouter = {
             schema.eventInstances.startTime,
             schema.eventInstances.orgId,
             schema.eventInstances.seriesId,
+            schema.eventInstances.seriesException,
+            schema.eventInstances.meta,
             aoOrg.name,
             seriesEvent.name,
           )
@@ -1175,6 +1179,8 @@ export const eventInstanceRouter = {
             orgName: aoOrg.name,
             seriesId: schema.eventInstances.seriesId,
             seriesName: seriesEvent.name,
+            seriesException: schema.eventInstances.seriesException,
+            meta: schema.eventInstances.meta,
             hasPreblast: sql<boolean>`${schema.eventInstances.preblastTs} IS NOT NULL`,
             eventTypes: sql<{ id: number; name: string }[]>`COALESCE(
               json_agg(
@@ -1240,6 +1246,8 @@ export const eventInstanceRouter = {
             schema.eventInstances.startTime,
             schema.eventInstances.orgId,
             schema.eventInstances.seriesId,
+            schema.eventInstances.seriesException,
+            schema.eventInstances.meta,
             aoOrg.name,
             seriesEvent.name,
           )
