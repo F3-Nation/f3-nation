@@ -229,5 +229,41 @@ describe("oauth-client router", () => {
 
       await expect(client.oauthClient.update({ clientId })).rejects.toThrow();
     });
+
+    it.each([
+      ["javascript:", "javascript:alert(1)"],
+      ["data:", "data:text/html,<script>alert(1)</script>"],
+      ["a fragment", "https://example.test/callback#fragment"],
+      ["non-loopback http", "http://example.test/callback"],
+    ])("rejects a redirect URI with %s", async (_label, redirectUri) => {
+      const clientId = `oauth-client-test-${uniqueId()}`;
+      createdClientIds.push(clientId);
+      await insertTestClient({ clientId });
+
+      await mockAuthWithSession(createNationAdminSession());
+      const client = createTestClient();
+
+      await expect(
+        client.oauthClient.update({ clientId, redirectUris: [redirectUri] }),
+      ).rejects.toThrow();
+    });
+
+    it("accepts a loopback http redirect URI for local development", async () => {
+      const clientId = `oauth-client-test-${uniqueId()}`;
+      createdClientIds.push(clientId);
+      await insertTestClient({ clientId });
+
+      await mockAuthWithSession(createNationAdminSession());
+      const client = createTestClient();
+
+      const result = await client.oauthClient.update({
+        clientId,
+        redirectUris: ["http://127.0.0.1:8080/callback"],
+      });
+
+      expect(result.client.redirectUris).toEqual([
+        "http://127.0.0.1:8080/callback",
+      ]);
+    });
   });
 });

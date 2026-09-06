@@ -1,4 +1,5 @@
 import { ORPCError } from "@orpc/server";
+import { SafeUrlSchema } from "@better-auth/core/utils/redirect-uri";
 import { z } from "zod";
 
 import { authSchema, desc, eq, sql } from "@acme/db";
@@ -94,7 +95,7 @@ export const oauthClientRouter = {
       z.object({
         clientId: z.string(),
         name: z.string().min(1).optional(),
-        redirectUris: z.array(z.url()).min(1).optional(),
+        redirectUris: z.array(SafeUrlSchema).min(1).optional(),
         scopes: z.array(z.string()).optional(),
         disabled: z
           .boolean()
