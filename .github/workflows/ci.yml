@@ -481,11 +481,12 @@ jobs:
       # `development` is equally wrong — it turns on getSession's dev mock
       # session, which makes the 401 goldens vacuous.
       - name: Boot the bundle and run the characterization suite against it
+        working-directory: ${{ runner.temp }}/bundle
         env:
           NODE_ENV: test
           PORT: 3399
         run: |
-          (cd "${RUNNER_TEMP}/bundle" && node --import ./instrument.js ./server.js) > /tmp/bundle.log 2>&1 &
+          node --import ./instrument.js ./server.js > /tmp/bundle.log 2>&1 &
           server_pid=$!
           trap 'kill "${server_pid}" 2>/dev/null || true' EXIT
           for _ in $(seq 1 30); do
@@ -507,8 +508,10 @@ jobs:
             cat /tmp/bundle.log
             exit 1
           fi
+          # -C escapes back to the checkout: this step's own working-directory
+          # is the relocated bundle, outside the workspace pnpm needs to see.
           CHAR_TEST_TARGET=live CHAR_TEST_BASE_URL="http://127.0.0.1:${PORT}" \
-            pnpm --filter f3-api test:characterization
+            pnpm -C "${GITHUB_WORKSPACE}" --filter f3-api test:characterization
       # The two `cat`s above only cover a crash during startup or a timeout;
       # a crash mid-characterization-run would otherwise vanish with the
       # runner. This catches that case too.
