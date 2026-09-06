@@ -87,3 +87,7 @@ class SlackSettings:
     kotter_report_split_site_qs: Optional[bool] = None
     kotter_report_day: Optional[int] = None
     kotter_report_hour_cst: Optional[int] = None
+    f3versary_announcements_enabled: Optional[bool] = None
+    f3versary_announcements_channel: Optional[str] = None
+    f3versary_announcements_lead_days: Optional[int] = None
+    f3versary_announcements_last_processed_date: Optional[str] = None
