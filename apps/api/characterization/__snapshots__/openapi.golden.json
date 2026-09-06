@@ -10489,6 +10489,275 @@
         ]
       }
     },
+    "/v1/oauth-client": {
+      "get": {
+        "description": "List every OAuth client registered against the Better Auth instance. Never returns client secrets. Requires F3 Nation admin role.",
+        "operationId": "oauthClient.list",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "clients": {
+                      "items": {
+                        "properties": {
+                          "clientId": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "disabled": {
+                            "anyOf": [
+                              {
+                                "type": "boolean"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "isPublic": {
+                            "type": "boolean"
+                          },
+                          "name": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "redirectUris": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "scopes": {
+                            "anyOf": [
+                              {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "updatedAt": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "clientId",
+                          "name",
+                          "redirectUris",
+                          "scopes",
+                          "isPublic",
+                          "disabled",
+                          "createdAt",
+                          "updatedAt"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "clients"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "List OAuth clients",
+        "tags": [
+          "oauth-client"
+        ]
+      }
+    },
+    "/v1/oauth-client/{clientId}": {
+      "patch": {
+        "description": "Update an OAuth client's name, redirect URIs, scopes, or enabled state. At least one of those fields must be provided in addition to clientId. Never returns the client secret. Requires F3 Nation admin role.",
+        "operationId": "oauthClient.update",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "in": "path",
+            "name": "clientId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "disabled": {
+                    "description": "Enable/disable — the only supported way to deactivate a client. There is no delete: docs/AI_GUARDRAILS.md requires a soft delete when one exists.",
+                    "type": "boolean"
+                  },
+                  "name": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "redirectUris": {
+                    "items": {
+                      "format": "uri",
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  "scopes": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "client": {
+                      "properties": {
+                        "clientId": {
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "disabled": {
+                          "anyOf": [
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "isPublic": {
+                          "type": "boolean"
+                        },
+                        "name": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "redirectUris": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "scopes": {
+                          "anyOf": [
+                            {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "updatedAt": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "clientId",
+                        "name",
+                        "redirectUris",
+                        "scopes",
+                        "isPublic",
+                        "disabled",
+                        "createdAt",
+                        "updatedAt"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "client"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Update an OAuth client",
+        "tags": [
+          "oauth-client"
+        ]
+      }
+    },
     "/v1/org": {
       "get": {
         "description": "Get a paginated list of organizations (regions, areas, AOs, etc.) filtered by type, status, and other criteria. Supports searching, sorting, and pagination. Organizations are organized hierarchically.",
