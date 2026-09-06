@@ -6,6 +6,7 @@ import {
   authAccounts,
   authSessions,
   authVerificationTokens,
+  betterAuthOauthClient,
   emailMfaCodes,
   eventInstances,
   eventInstancesXEventTypes,
@@ -69,6 +70,7 @@ export const schema = {
 
 /** Auth schema tables (auth.*) — kept separate to avoid name collisions */
 export const authSchema = {
+  betterAuthOauthClient,
   emailMfaCodes,
   oauthAccessTokens,
   oauthAuthorizationCodes,
