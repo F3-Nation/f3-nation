@@ -12,8 +12,13 @@ vi.mock("~/env", () => ({
 }));
 
 describe("getAuth", () => {
+  // Importing ~/lib/better-auth pulls in better-auth, @better-auth/oauth-provider,
+  // and the full Drizzle schema before this test ever runs — a transform/import
+  // cost variable enough under CI load to occasionally exceed the default 5s
+  // timeout (observed passing at ~2.5s and timing out at exactly 5000ms on the
+  // same commit). Bump the timeout rather than the default for every test.
   it("throws when BETTER_AUTH_SECRET is not configured", async () => {
     const { getAuth } = await import("~/lib/better-auth");
     await expect(getAuth()).rejects.toThrow(/BETTER_AUTH_SECRET/);
-  });
+  }, 15000);
 });
